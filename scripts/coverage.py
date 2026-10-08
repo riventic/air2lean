@@ -288,6 +288,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/thread-locals/air/{version}': 'tests/roadmap/thread-locals/README.md',
     'tests/roadmap/futures/air/{version}': 'tests/roadmap/futures/check.sh',
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
+    'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/README.md',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
@@ -298,6 +299,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; compiler export pending)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/const-bases/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/pointer-width/air/0.16.0/wasm32-freestanding':
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/0.16.0/wasm32-wasi':

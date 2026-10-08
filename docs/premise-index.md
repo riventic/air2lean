@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2659 theorems in 153 files.
+2681 theorems in 154 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 669 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 501 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 511 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 24 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [ALC-01](premises.md#alc-01) | 91 | Single modelled allocator |
@@ -45,16 +45,16 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2526 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2155 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2548 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2177 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1111 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 92 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2659 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1194 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1194 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2681 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1204 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1204 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 40 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2447,6 +2447,35 @@ File premises: THR-01, THR-07, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01
 | `ClaimFixture.stuck_under_false` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.countdown_under` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.stuck_not_total` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, TRU-01 |
+
+## `tests/roadmap/const-bases/ConstBases/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `ConstBasesClients.resElem_resolve` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.maybeElem_resolve` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.res_resolve` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.resElemPtr_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.maybeElemPtr_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.resCodePtr_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.maybeSlice_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.resElem_runtime` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.maybeElem_runtime` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.projectRes_identity` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.projectMaybe_identity` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.maybeByte_alias` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.maybeByte_alias_model` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.resElem_code_disjoint` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.resPayload_code_disjoint` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.maybe_res_disjoint` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.readResElem_mem0` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.llvm_constant_reads_other` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.llvm_offset_differs` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.fixed_unbacked` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.unknown_global` | SEM-01, SEM-02, TRU-01 |
+| `ConstBasesClients.unbacked_read` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/container-contracts/Clients.lean`
 

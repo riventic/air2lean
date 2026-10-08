@@ -750,6 +750,18 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: bash tests/roadmap/address-reuse/check.sh
 
+      # L06: nested constant pointer bases (ZigLean/Mem/ConstPtr.lean, proof-only): retained
+      # translation, generated-client proofs and CLI rejections; the native stage2_x86_64 run.
+      - name: Nested constant pointer bases (L06)
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Mem.ConstPtr Air2Lean air2lean
+          bash tests/roadmap/const-bases/check.sh
+          bash tests/roadmap/const-bases/check.sh --native
+
       # C01's checked source/export/proof fragment is qualified on 0.16.0.
       # Fresh exports use the pinned patched compiler; native tests use stock Zig.
       - name: Thread tuple source and ownership gate

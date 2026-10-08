@@ -92,6 +92,8 @@ Classification: partial.
 
 resolve each supported base and offset into an explicit object/provenance model. Preserve deliberate rejection for unbacked addresses. Acceptance: nested constant slices, payload pointers and array-element pointers retain identity and offsets; invalid provenance remains an explicit error.
 
+Bounded progress: [Global PR106](https://github.com/riventic/air2lean/pull/106) merged with bounded producer/export/generated alias/read proof and runtime controls. [PR126](https://github.com/riventic/air2lean/pull/126): nested constant bases have an explicit provenance model (`ZigLean/Mem/ConstPtr.lean`) with identity, offset, nesting, alias and disjointness lemmas; hand-written plus fresh 0.16.0 stage2_x86_64 fixtures agree, with generated-client proofs and a native x86_64 run; unbacked, comptime-only, unknown and out-of-object provenance are explicit errors. The LLVM 36/38 discrepancy is resolved as a Zig LLVM-backend `eu_payload` lowering bug (0.14.1 to 0.17.0); that shape is rejected on stage2_llvm. Remaining: 0.15.2/0.14.1 fresh exports (patched rebuilds), legacy-schema LLVM correspondence, and union-member bases.
+
 ## L07 — Aggregate and optional-pointer bitcasts
 
 Classification: partial.
