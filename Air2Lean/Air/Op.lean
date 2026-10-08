@@ -17,6 +17,16 @@ abbrev TyId := Nat
 (`Air2Lean/Air/Canon.lean`'s `renumber`), so the same code has the same IDs in every Zig version. -/
 abbrev InstId := Nat
 
+/-- How `std.mem.Allocator` is translated (`--allocator-model`, `docs/allocator-model.md`).
+`std` (the default): the type is the model's `Zig.Allocator` and calls of `mem.Allocator.*`
+select the built-in `StdModels` rows. `translated`: `mem.Allocator` is an ordinary struct
+`{ptr, vtable}`, its functions are translated from their AIR, vtable calls are ordinary
+indirect calls, and only `posix.mmap`/`munmap`/`mremap` are bound to a trusted model. -/
+inductive AllocatorModel where
+  | std
+  | translated
+  deriving BEq, DecidableEq, Repr, Inhabited
+
 inductive Ty where
   | int (signed : Bool) (bits : Nat)
   /-- An IEEE-754 float type. `bits` is one of `16 32 64 80 128` (`Check.lean`). -/
@@ -278,6 +288,12 @@ inductive Val where
   /-- A pointer constant without a global (`@ptrFromInt`, a comptime-only value): `kind` names
   its base. `Check.lean` rejects it. -/
   | ptrOther (ty : TyId) (kind : String)
+  /-- A comptime integer pointer constant (`@ptrFromInt(addr)`, the exporter's `{"unsupported":
+  "int", "off": addr}`), parsed only under `--allocator-model translated`: a pointer without a
+  block at address `addr` (`⟨none, addr⟩`), so every access through it throws `.illegal`. The
+  zero-length allocation sentinel of `mem.Allocator.allocBytesWithAlignment` is one. Std mode
+  keeps it a `ptrOther` (rejected). -/
+  | ptrInt (ty : TyId) (addr : Nat)
   /-- A slice constant. -/
   | sliceConst (ty : TyId) (ptr : Val) (len : Val)
   deriving Repr, Inhabited, BEq
@@ -287,7 +303,7 @@ field. -/
 def Val.constTy? (v : Val) : Option TyId :=
   match v with
   | .int t _ | .float t _ | .undef t | .optNull t | .optSome t _ | .err t _ | .errUnionErr t _
-  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrNull t | .ptrOther t _
+  | .errUnionOk t _ | .enumTag t _ | .unionVal t .. | .agg t _ | .ptrConst t .. | .ptrNull t | .ptrOther t _ | .ptrInt t _
   | .sliceConst t .. => some t
   | _ => none
 
@@ -575,6 +591,10 @@ inductive Op where
   `"memory"` clobber, and at most one result output (an `=r`/`={reg}` output with no `ref`). -/
   | asm (source : String) (isVolatile : Bool) (clobbers : Array String)
       (outputs inputs : Array AsmOperand)
+  /-- `ret_addr` (`@returnAddress()`), admitted only under `--allocator-model translated`: the
+  next value of the explicit return-address oracle (`Zig.returnAddress`,
+  `ZigLean/Mem/Basic.lean`), an arbitrary `usize` per query. Std mode rejects the tag. -/
+  | retAddr
 
 structure SwitchCase where
   items : Array Val
@@ -613,5 +633,10 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- `--allocator-model` of the run that parsed this function (`AllocatorModel`). -/
+  allocatorModel : AllocatorModel := .std
+  /-- The OS component of the profile's target triple (`linux`, `macos`); empty for a legacy
+  profile. Selects the trusted OS model's ABI (`Zig.Os.Target`). -/
+  targetOs : String := ""
 
 end Air2Lean
