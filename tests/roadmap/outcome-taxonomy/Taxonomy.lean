@@ -5,7 +5,7 @@ Outcome-taxonomy fixtures (V06). The contract type keeps a Zig error return apar
 panic: `E!T` is a returned `Except ErrName T` value, while `Zig.Error` constructors are safety
 failures. A partial triple therefore holds for an error return and fails for every model
 failure class (panic, illegal behavior, unspecified behavior including the no-clock timer
-path, deadlock). Divergence satisfies it vacuously, so it is not a guaranteed-return claim.
+path, deadlock, an allowlisted inline-asm trap). Divergence satisfies it vacuously, so it is not a guaranteed-return claim.
 -/
 
 open Zig Assn
@@ -46,6 +46,10 @@ theorem deadlock_not_triple (P : Assn) (Q : Nat → Assn) (m : Mem) (hP hF : Hea
     (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) :
     ¬ Triple P (fail .deadlock) Q := fail_not_triple .deadlock P Q m hP hF hd hm hp hs
 
+theorem trap_not_triple (P : Assn) (Q : Nat → Assn) (m : Mem) (hP hF : Heap)
+    (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) :
+    ¬ Triple P (fail .trap) Q := fail_not_triple .trap P Q m hP hF hd hm hp hs
+
 /-- Divergence (`none`) satisfies a partial triple with a false postcondition. -/
 def diverge : MemM Nat := fun _ => ExceptT.mk none
 
@@ -57,5 +61,6 @@ theorem diverge_triple (P : Assn) : Triple P diverge (fun _ _ => False) := by
 example : Error.unspecified ≠ Error.panic := by decide
 example : Error.illegal ≠ Error.unspecified := by decide
 example : Error.deadlock ≠ Error.panic := by decide
+example : Error.trap ≠ Error.panic := by decide
 
 end OutcomeTaxonomy

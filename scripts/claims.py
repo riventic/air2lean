@@ -12,6 +12,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 
 NO_PANIC = 'no-panic'
@@ -36,6 +37,24 @@ EXACT_SUCCESS = {NO_PANIC, CORRECT_IF_RETURNED, GUARANTEED_RETURN}
 SUCCESS_MONADS = {'Zig.Result', 'Zig.MemM', 'Zig.MM', 'Zig.M'}
 
 ORDERED = {'safety': 1, 'partial_correctness': 2, 'total_correctness': 3}
+
+# An allowlisted inline-asm opaque in a theorem's dependency closure (docs/premises.md ASM-01).
+ASM_OPAQUE = re.compile(r'(?:^|\.)airAsm_[0-9]+\Z')
+# Claims that the asm entries' fault conditions carry (ASM-03): the model throws `trap` exactly
+# when an entry's `AsmFault` holds, so absence of a failure is only as good as that condition.
+ABSENCE_CLAIMS = frozenset({NO_PANIC, GUARANTEED_RETURN})
+
+
+def premises_of(theorem: dict, claims) -> list[str] | None:
+    """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
+    opaque in its closure, and ASM-03 too if it claims no-panic or guaranteed-return over one.
+    None if the report lacks the closure (`opaque_dependencies`)."""
+    opaques = theorem.get('opaque_dependencies')
+    if not isinstance(opaques, list):
+        return None
+    if not any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
+        return []
+    return ['ASM-01', 'ASM-03'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
 
 
 def _head(shape) -> str | None:
@@ -106,6 +125,7 @@ def classify(report: dict) -> dict:
                          'claims': [c for c in CLAIMS if c in claims],
                          'claim_class': claim_class(claims),
                          'derived_strength': derived_strength(claims),
+                         'premises': premises_of(theorem, claims),
                          'allowed': theorem.get('allowed') is True})
     names = [t['name'] for t in theorems]
     if len(set(names)) != len(names):
@@ -120,9 +140,13 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None) -
     if theorem is None:
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
-    result.update(derived_strength=theorem['derived_strength'], claim_class=theorem['claim_class'])
+    result.update(derived_strength=theorem['derived_strength'], claim_class=theorem['claim_class'],
+                  premises=theorem['premises'])
     if not theorem['allowed']:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
+    if theorem['premises'] is None:
+        return {**result, 'status': 'rejected',
+                'reason': 'assurance report lacks the dependency closure (opaque_dependencies); regenerate it'}
     declared = goal['strength']
     if declared not in ORDERED:
         return {**result, 'status': 'rejected', 'reason': f'{declared} is not derivable from a theorem type'}
@@ -174,6 +198,9 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
             'scope': 'Strength is derived from conclusion head constants only. Preconditions and '
                      'domains are not checked: an unsatisfiable precondition remains vacuous. '
+                     'premises lists what an accepted goal rests on beyond its type: an inline-asm '
+                     'opaque in the closure carries ASM-01, and ASM-03 (allowlist fault conditions) '
+                     'for a no-panic or guaranteed-return claim. '
                      'Differential outcomes (when supplied) can only refuse absence claims: capped, '
                      'fuel-bounded, unsupported or unspecified/timer outcomes and observed failures '
                      'reject a goal; error returns do not. outcomes is null for roots without evidence.'}

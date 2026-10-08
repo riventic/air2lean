@@ -175,14 +175,26 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    and target architecture. A legacy profile without a target is the x86_64 reference model
    (PRF-01). Each entry records its reason and a reviewer note naming the fixture that needs it.
 
-   | Template | Constraints | Clobbers | Target | Semantics | Fixture |
-   | --- | --- | --- | --- | --- | --- |
-   | `bswap %[ret]` | `=r`, `0` | none | x86_64 | opaque | `asm.bswap32` |
-   | `xorl %%edx, %%edx` / `divl %[b]` | `={eax}`, `=&{edx}`, `{eax}`, `r` | none | x86_64 | opaque | `asm.divmod` |
-   | `lzcnt %[x], %[ret]` | `=r`, `r` | `cc` | x86_64 | opaque | `asm.lzcnt64` (volatile) |
-   | `popcnt %[x], %[ret]` | `=r`, `r` | none | x86_64 | opaque | `asm.popcnt64` |
-   | `pause` | none | none | x86_64 | C03 spin hint | `progress.idle` |
-   | `isb` | none | none | aarch64 | C03 spin hint | `docs/progress-hints.md` |
+   | Template | Constraints | Clobbers | Target | Semantics | Faults | Fixture |
+   | --- | --- | --- | --- | --- | --- | --- |
+   | `bswap %[ret]` | `=r`, `0` | none | x86_64 | opaque | never | `asm.bswap32` |
+   | `xorl %%edx, %%edx` / `divl %[b]` | `={eax}`, `=&{edx}`, `{eax}`, `r` | none | x86_64 | opaque | `b = 0` (#DE) | `asm.divmod` |
+   | `lzcnt %[x], %[ret]` | `=r`, `r` | `cc` | x86_64 | opaque | never | `asm.lzcnt64` (volatile) |
+   | `popcnt %[x], %[ret]` | `=r`, `r` | none | x86_64 | opaque | never | `asm.popcnt64` |
+   | `pause` | none | none | x86_64 | C03 spin hint | never | `progress.idle` |
+   | `isb` | none | none | aarch64 | C03 spin hint | never | `docs/progress-hints.md` |
+
+   **Faults (S7).** An opaque is a total function, so the model of a trapping instruction would
+   return a value: `Asm.divmod a 0 = pure …` was provable although `divl` by zero is #DE
+   (SIGFPE). Each entry therefore states its fault condition (`AsmFault`: `never`, or
+   `zeroInput k`), and `Emit.lean` guards the opaque with `Zig.asmTrap (cond) (airAsm_N …)`,
+   which throws `Zig.Error.trap` exactly when the condition holds. `never` is emitted as before
+   (`pure (airAsm_N …)`). `divl` follows `xorl %edx, %edx`, so its dividend is below 2^32 and
+   the quotient always fits: the zero divisor is its only fault. Premise
+   [ASM-03](premises.md#asm-03) states that each condition is the instruction's whole fault
+   set; `scripts/claims.py` lists it for every no-panic or guaranteed-return goal over an asm
+   opaque. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
+   model's `trap` is a `trap_match` ([outcome-taxonomy.md](outcome-taxonomy.md)).
 
 2. **Declared device event.** With `--device-contract`, an `asm` entry
    (`{"template", "constraints", "clobbers"}`, matched exactly) makes a `volatile` asm with at most

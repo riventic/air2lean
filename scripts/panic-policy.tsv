@@ -21,3 +21,4 @@ memcpyAlias	panic
 castToNull	panic
 incorrectAlignment	panic
 panic	panic
+SIGFPE	trap

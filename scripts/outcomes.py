@@ -27,6 +27,8 @@ class Outcome(str, Enum):
     UNSPECIFIED = 'unspecified_behavior'
     UNSUPPORTED = 'unsupported_semantics'
     DEADLOCK = 'deadlock'
+    # A CPU fault of an allowlisted inline-asm instruction (`Zig.Error.trap`, ASM-03).
+    HARDWARE_TRAP = 'hardware_trap'
     # Tests only observe scheduler fuel exhaustion (`bounded_no_result`); it is not divergence.
     DIVERGENCE = 'divergence'
     SEARCH_CAP = 'search_cap'
@@ -34,7 +36,8 @@ class Outcome(str, Enum):
 
 # Model failures. A partial or total triple rules out each of them (`Zig.Error`); a Zig error
 # union value is an ordinary returned value and is not among them.
-SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.DEADLOCK})
+SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.DEADLOCK,
+                             Outcome.HARDWARE_TRAP})
 # Evidence that cannot show a failure is absent, whatever was observed elsewhere.
 INCOMPLETE = frozenset({Outcome.SEARCH_CAP, Outcome.DIVERGENCE, Outcome.UNSPECIFIED, Outcome.UNSUPPORTED})
 # Absence claims (scripts/claims.py names) and the outcomes each one denies.
@@ -55,6 +58,7 @@ DIFF_KINDS = {
     'illegal': Outcome.ILLEGAL,
     'unspecified': Outcome.UNSPECIFIED,
     'deadlock': Outcome.DEADLOCK,
+    'trap': Outcome.HARDWARE_TRAP,
     'bounded_no_result': Outcome.DIVERGENCE,
     'search_cap': Outcome.SEARCH_CAP,
     'native_panic': None,
@@ -67,6 +71,7 @@ DIFF_STATUSES = {
     'value_match': Outcome.VALID,
     'error_return_match': Outcome.ERROR_RETURN,
     'panic_match': Outcome.PANIC,
+    'trap_match': Outcome.HARDWARE_TRAP,
     'illegal_exclusion': Outcome.ILLEGAL,
     'unspecified_exclusion': Outcome.UNSPECIFIED,
     'search_cap': Outcome.SEARCH_CAP,

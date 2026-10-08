@@ -8,7 +8,7 @@ compared by check.sh) or a minimal evidence fixture through the shipped claim to
 Default mode pins the *current* verdicts: every case is EXPOSED (the tooling reports a claim it
 should not). A fix flips its case; update EXPECTED_EXPOSED together with the fix so the
 regression then guards the secure verdict. `--require-fixed` fails on any exposure (use it to
-gate a hardening branch).
+gate a hardening branch); `--findings S7,F3` restricts the run to those findings' cases.
 """
 from __future__ import annotations
 
@@ -52,8 +52,8 @@ LEAN_CASES = {
     'AuditClaims.spin_partial': ('AuditClaims.spin', 'partial_correctness', 'S6'),
     'AuditClaims.asm_divmod_total': ('Asm.divmod', 'total_correctness', 'S7'),
 }
-EXPECTED_EXPOSED = set(LEAN_CASES) | {'receipt-schema-skew', 'host-allowlist-masks-panic',
-                                      'model-illegal-masks-native-value'}
+# Fixed: S7 (asm fault conditions) and F3 (typed host differences, per-input exclusion pins).
+EXPECTED_EXPOSED = (set(LEAN_CASES) - {'AuditClaims.asm_divmod_total'}) | {'receipt-schema-skew'}
 
 
 def coverage_level(theorem_name, definition, strength):
@@ -82,17 +82,29 @@ def coverage_level(theorem_name, definition, strength):
     return level, goals[0]
 
 
+def checked_goal(name, strength):
+    report = {'schema_version': 1, 'status': 'pass', 'theorems': [THEOREMS[name]]}
+    classified = {t['name']: t for t in claims.classify(report)['theorems']}
+    return claims.check_goal({'theorem': name, 'strength': strength, 'domain': 'all inputs'}, classified)
+
+
 def lean_case(name):
     definition, strength, _ = LEAN_CASES[name]
     theorem = THEOREMS[name]
-    report = {'schema_version': 1, 'status': 'pass', 'theorems': [theorem]}
-    classified = {t['name']: t for t in claims.classify(report)['theorems']}
-    goal = claims.check_goal({'theorem': name, 'strength': strength, 'domain': 'all inputs'}, classified)
+    goal = checked_goal(name, strength)
     level, row = coverage_level(name, definition, strength)
     nonstandard = [a for a in theorem['axioms'] if a not in ('propext', 'Classical.choice', 'Quot.sound')]
     exposed = (theorem['allowed'] and not nonstandard and goal['status'] == 'accepted'
                and row['binding'] == 'direct' and level.startswith('functionally_verified'))
-    return exposed, f'claims={goal["status"]}/{goal["derived_strength"]} binding={row["binding"]} level={level}'
+    detail = f'claims={goal["status"]}/{goal["derived_strength"]} binding={row["binding"]} level={level}'
+    if LEAN_CASES[name][2] == 'S7':
+        # The hypothesis-free zero-divisor theorem must not be a claim, and a total claim that
+        # avoids the fault must carry the asm fault-condition premise.
+        nonzero = checked_goal('AuditClaims.asm_divmod_nonzero', strength)
+        carried = nonzero['status'] == 'accepted' and 'ASM-03' in (nonzero['premises'] or ())
+        exposed = exposed or not carried
+        detail += f'; nonzero: claims={nonzero["status"]} premises={nonzero["premises"]}'
+    return exposed, detail
 
 
 def receipt_schema_skew():
@@ -112,30 +124,47 @@ def receipt_schema_skew():
 
 
 def host_allowlist_masks_panic():
-    """Off Linux-x86_64 a function listed in tests/diff/<ex>/host.txt turns *any* disagreement,
-    including a model panic against a native value, into `host_difference`, not `mismatch`."""
+    """Off Linux-x86_64 a function listed in tests/diff/<ex>/host.txt turned *any* disagreement,
+    including a model panic against a native value, into `host_difference`, not `mismatch`.
+    Fixed: only typed float differences of two values are host differences."""
+    every = frozenset(diff_report.HOST_KINDS)
     status = diff_report.classify({'ok': 1}, {'fail': 'Zig.Error.overflow'}, diff_report.Kind.VALUE,
                                   diff_report.Kind.MODEL_PANIC, None, host=True)
-    return status == diff_report.Status.HOST, f'native ok / model overflow panic -> {status.value}'
+    panic = diff_report.host_difference({'ok': '0x3f800000'}, {'fail': 'Zig.Error.overflow'}, every)
+    value = diff_report.host_difference({'ok': '0x3f800000'}, {'ok': '0x40000000'}, every)
+    exposed = status == diff_report.Status.HOST or panic is not None or value is not None
+    return exposed, f'native ok / model overflow panic -> {status.value}; untyped value difference -> {value}'
 
 
 def model_illegal_masks_native_value():
-    """A model `illegal`/`unspecified` result is an exclusion whatever the native side returned;
-    only the per-function count is pinned, so the input it occurs on is not."""
+    """A model `illegal`/`unspecified` result was an exclusion whatever the native side returned;
+    only the per-function count was pinned, so the input it occurs on was not. Fixed: it is an
+    exclusion only on an input pinned by SHA-256 (unspecified.txt), otherwise a mismatch."""
     status = diff_report.classify({'ok': 7}, {'fail': 'Zig.Error.illegal'}, diff_report.Kind.VALUE,
                                   diff_report.Kind.ILLEGAL, None)
-    return status == diff_report.Status.ILLEGAL, f'native ok / model illegal -> {status.value}'
+    pinned = diff_report.classify({'ok': 7}, {'fail': 'Zig.Error.illegal'}, diff_report.Kind.VALUE,
+                                  diff_report.Kind.ILLEGAL, None, pinned=True)
+    return status != diff_report.Status.MISMATCH or pinned != diff_report.Status.ILLEGAL, \
+        f'native ok / model illegal -> {status.value} (pinned input: {pinned.value})'
 
 
-PY_CASES = {'receipt-schema-skew': receipt_schema_skew, 'host-allowlist-masks-panic': host_allowlist_masks_panic,
-            'model-illegal-masks-native-value': model_illegal_masks_native_value}
+PY_CASES = {'receipt-schema-skew': (receipt_schema_skew, 'F1'),
+            'host-allowlist-masks-panic': (host_allowlist_masks_panic, 'F3'),
+            'model-illegal-masks-native-value': (model_illegal_masks_native_value, 'F3')}
 
 
 def main(argv):
     require_fixed = '--require-fixed' in argv
+    findings = None
+    if '--findings' in argv:
+        findings = set(argv[argv.index('--findings') + 1].split(','))
+    selected = lambda finding: findings is None or finding in findings
     failures = []
-    results = {name: lean_case(name) for name in LEAN_CASES}
-    results.update({name: case() for name, case in PY_CASES.items()})
+    results = {name: lean_case(name) for name, case in LEAN_CASES.items() if selected(case[2])}
+    results.update({name: case() for name, (case, finding) in PY_CASES.items() if selected(finding)})
+    if not results:
+        print('FAIL no case selected', file=sys.stderr)
+        return 1
     for name, (exposed, detail) in results.items():
         print(f'{"EXPOSED" if exposed else "fixed  "} {name}: {detail}')
         if require_fixed and exposed:

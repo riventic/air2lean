@@ -15,6 +15,7 @@ case row) onto these outcomes. Names agree with the preflight `outcomes` record 
 | `illegal_behavior` | model `illegal` (unchecked undefined behavior) | both |
 | `unspecified_behavior` | model `unspecified`, including the no-clock timer path ([TMR-01](premises.md#tmr-01)) | both |
 | `deadlock` | model `deadlock` | both |
+| `hardware_trap` | model `trap` (an allowlisted inline-asm fault: `Zig.asmTrap`, [ASM-03](premises.md#asm-03)); `trap_match` against a native `SIGFPE` | both |
 | `divergence` | `bounded_no_result` or a search with a no-result branch: scheduler fuel ran out; divergence is not established | both |
 | `search_cap` | a `capped` schedule search | both |
 | `unsupported_semantics` | exporter-marked unsupported AIR (coverage), or an unknown model kind | both |
@@ -25,7 +26,7 @@ no-result branch counts both `nondeterministic_valid` and `divergence`.
 
 ## Absence claims
 
-`no-panic` denies `panic`, `illegal_behavior`, `unspecified_behavior` and `deadlock`, since
+`no-panic` denies `panic`, `illegal_behavior`, `unspecified_behavior`, `deadlock` and `hardware_trap`, since
 `Zig.Triple` is false on every `Zig.Error`. `guaranteed-return` also denies `divergence`.
 Each claim is also refused by incomplete evidence: `search_cap`, `divergence`,
 `unspecified_behavior` and `unsupported_semantics`. A capped search, a fuel-bounded run or an
@@ -38,7 +39,7 @@ excludes that input: domains are not machine-checked.
 
 `tests/roadmap/outcome-taxonomy/Taxonomy.lean` shows that the contract types already
 keep error returns and model failures apart. A partial triple holds for an `Except ErrName`
-error return and fails for `.panic`, `.illegal`, `.unspecified` and `.deadlock`; divergence
+error return and fails for `.panic`, `.illegal`, `.unspecified`, `.deadlock` and `.trap`; divergence
 satisfies it vacuously. No Lean definitions changed.
 
 ## Validation

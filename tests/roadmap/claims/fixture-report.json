@@ -9,7 +9,8 @@
       "conclusion": {
         "head": "Not"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.diverge_partial",
@@ -17,7 +18,8 @@
       "conclusion": {
         "head": "Zig.Triple"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.panic_pure",
@@ -38,7 +40,8 @@
         ],
         "head": "Eq"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.panic_run",
@@ -51,7 +54,8 @@
         ],
         "head": "Eq"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.panic_some",
@@ -69,7 +73,8 @@
         ],
         "head": "Eq"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.partial_and_returns",
@@ -77,7 +82,8 @@
       "conclusion": {
         "head": "And"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.premise_total",
@@ -85,7 +91,8 @@
       "conclusion": {
         "head": "Zig.TotalTriple"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.ret_partial",
@@ -93,7 +100,8 @@
       "conclusion": {
         "head": "Zig.Triple"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.ret_pure_ok",
@@ -114,7 +122,8 @@
         ],
         "head": "Eq"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.ret_returns",
@@ -122,7 +131,8 @@
       "conclusion": {
         "head": "Zig.Returns"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.ret_run",
@@ -143,7 +153,8 @@
         ],
         "head": "Eq"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.ret_some",
@@ -161,7 +172,8 @@
         ],
         "head": "Eq"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.ret_total",
@@ -169,7 +181,8 @@
       "conclusion": {
         "head": "Zig.TotalTriple"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     },
     {
       "name": "ClaimFixture.wrapped_total",
@@ -177,7 +190,8 @@
       "conclusion": {
         "head": "ClaimFixture.Wrapped"
       },
-      "allowed": true
+      "allowed": true,
+      "opaque_dependencies": []
     }
   ]
 }

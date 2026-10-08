@@ -87,7 +87,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
@@ -476,6 +476,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   that hypothesis holds for the target CPU.
 - Derived from: `statement` rule on `airAsm_<n>` in the theorem's own type.
 - Sources: `Proofs/Asm/Proofs.lean`.
+
+<a id="asm-03"></a>
+### ASM-03 — Allowlisted assembly faults exactly on its entry's condition
+
+- Kind: trusted.
+- Statement: Each entry of the reviewed allowlist (`Air2Lean/AsmAllowlist.lean`) states when
+  its instruction faults (`AsmFault`): `divl` after `xorl %edx, %edx` exactly when the divisor
+  is zero (#DE); `bswap`, `lzcnt` and `popcnt` never. The generated code guards the opaque with
+  `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on that condition. A no-panic or
+  guaranteed-return claim over an asm opaque holds on hardware only if the condition is the
+  instruction's whole fault set on the target CPU, and the CPU has the instruction (`popcnt`
+  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`). `scripts/claims.py` lists ASM-03
+  in the `premises` of every such goal.
+- Derived from: implied by ASM-01.
+- Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
+  [outcome-taxonomy.md](outcome-taxonomy.md).
 
 ## Core runtime semantics
 
