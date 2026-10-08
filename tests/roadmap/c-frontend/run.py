@@ -54,7 +54,7 @@ WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M
 MISMATCH = re.compile(r"expected \d+, found \d+")
 COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: undefined symbol)")
 EXTERN_FN = re.compile(r"^pub extern fn (\w+)\(", re.M)
-BODY_FN = re.compile(r"^(?:pub )?(?:export )?fn (\w+)\(.*\{$", re.M)
+BODY = re.compile(r"^(?:pub )?(?:export )?fn \w+\(.*\{$.*?^\}$", re.M | re.S)  # translated bodies
 
 # Construct families each corpus file targets (the histogram's "by C construct" axis).
 CONSTRUCTS = {
@@ -197,8 +197,10 @@ def stage_translate_c(zig, src, work, out_name, defined):
                        if str(src.name) in m["loc"]})
     externs = set(EXTERN_FN.findall(out))
     demoted = sorted(f for f in (defined or []) if f in externs)
+    bodies = "\n".join(m.group(0) for m in BODY.finditer(out))
+    used = sorted(e for e in externs - set(demoted) if re.search(rf"\b{re.escape(e)}\(", bodies))
     record = {"status": "ok" if not demoted else "demoted", "lines": out.count("\n"),
-              "warnings": warnings, "demoted_functions": demoted}
+              "warnings": warnings, "demoted_functions": demoted, "extern_calls": used}
     return record, zig_file
 
 

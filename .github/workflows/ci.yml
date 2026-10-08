@@ -255,6 +255,12 @@ jobs:
       - name: Fuzz generator and shrinker regressions
         run: tests/roadmap/fuzz/check.sh --light
 
+      # Proposed X01 (docs/c-frontend.md): the committed C front-end coverage record matches the
+      # corpus, its summary and the doc's generated tables; C generator invariants. The heavy
+      # translate-c/AIR/Lean run is local: tests/roadmap/c-frontend/check.sh --heavy OUT_DIR.
+      - name: C front-end coverage record check
+        run: tests/roadmap/c-frontend/check.sh --light
+
       - name: Performance budget gate regressions
         run: |
           set -euo pipefail
