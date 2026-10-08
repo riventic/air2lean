@@ -10,7 +10,7 @@ inductive Code where
   | structureFailure | typeFailure | globalFailure | memoryFailure | instructionFailure
   | constantFailure | signatureFailure | modelFailure | programFailure | profileFailure
   | duplicateFunction | calleeMissing | calleeBlocked | calleeAmbiguous | prerequisiteSkipped
-  | volatileAccess
+  | volatileAccess | paddedAtomic
   deriving BEq, Repr
 
 def Code.text : Code → String
@@ -39,6 +39,7 @@ def Code.text : Code → String
   | .calleeAmbiguous => "CALLEE_AMBIGUOUS"
   | .prerequisiteSkipped => "PREREQUISITE_SKIPPED"
   | .volatileAccess => "VOLATILE_ACCESS"
+  | .paddedAtomic => "PADDED_ATOMIC"
 
 inductive Phase where
   | cli | input | decode | canonicalize | normalize | check | program | profile

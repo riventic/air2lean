@@ -13544,9 +13544,9 @@
       "Air2Lean/Air/Op.lean": "757ffaf526a522247c5d44699f58a00830bb08aac4c295e1eb39ebde1f6cdd31",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "a3097c3a3fefd225a9e57cee497104d470281bd69040a7f13d4efb0015a4595e",
+      "Air2Lean/Check.lean": "a8cf0fe2763c43744dc288e43cd6924e5e38bb902cc5a11d4a5a46a81890ceb3",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
-      "Air2Lean/Diagnostic.lean": "6d52aa00b40712a6b572c462535bbc545d1f48967fc859cbc9d42da36b149c27",
+      "Air2Lean/Diagnostic.lean": "47d455d4342e26e9c8622645ec49263c60c40f205db2e4440d0b6beb9a7a9fda",
       "Air2Lean/Emit.lean": "eacf0b17efdf74d4437dd5aae7f5914bc09b2019efd8be980497a601577f79c6",
       "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
       "Air2Lean/Memory.lean": "f4bb1e4733da1d15c56197cf6c821f5f5f110d3f42ffe9dc82fc9049967cb65d",
@@ -14404,7 +14404,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
       "Air2Lean/Memory.lean": "f4bb1e4733da1d15c56197cf6c821f5f5f110d3f42ffe9dc82fc9049967cb65d",
-      "docs/std-models.md": "84a6511ccfd64e87aae32f376baa2e71c93842b236a3eae3dd29516d39e84e82"
+      "docs/std-models.md": "f16cf7a59ac7aac92b97e598f1ede415bddcaef6645f56efdb1cd55b918db9fa"
     }
   },
   "summary": {
