@@ -34,6 +34,8 @@ KIND = 'air2lean-dependency-closure'
 VERSIONS = ('0.14.1', '0.15.2', '0.16.0')
 OSES = ('linux', 'darwin')
 IDENTITY_MARKER = re.compile(r'__(anon|enum|opaque|union|struct)_[0-9]+')
+# A compiler identity number, raw or normalized (`__anon_N`): not stable across exports.
+PREFIX_STOP = re.compile(r'__(?:anon|enum|opaque|union|struct)_(?:[0-9]+|N)')
 # Air2Lean/Air/Op.lean `panicErrorFor?`: the handlers the emitter maps to a typed error.
 PANIC_PREFIX = "debug.FullPanic((function 'defaultPanic'))."
 PANIC_HANDLERS = frozenset(
@@ -52,6 +54,12 @@ class Invalid(ValueError):
 def instance_base(name):
     """`Air2Lean/StdModels.lean` `stdModelBase`: an instance `<fn>__anon_<n>` names `<fn>`."""
     return name.split('__anon_')[0]
+
+
+def filter_prefix(name):
+    """Export filter prefix for `name`: everything before its first compiler identity number."""
+    match = PREFIX_STOP.search(name)
+    return name[:match.start()] if match else name
 
 
 def normalized(name):
@@ -188,7 +196,10 @@ class Closure:
     def std(self, name):
         return self.models.get(instance_base(name))
 
-    def classify(self, name):
+    def classify(self, name, panic=False):
+        if panic:
+            # Emitted as a typed error (`panicErrorFor?`); a handler body is never translated.
+            return 'modelled', 'panic_handler', None
         model = self.std(name)
         if model is not None:
             status, versions, reason = model
@@ -207,10 +218,10 @@ class Closure:
             return 'exported', 'air', None
         return 'missing', 'no_air', None
 
-    def visit(self, caller, name, edge, instruction, queue):
+    def visit(self, caller, name, edge, instruction, queue, panic=False):
         name = self.key(name)
         if name not in self.nodes:
-            cls, kind, reason = self.classify(name)
+            cls, kind, reason = self.classify(name, panic)
             self.nodes[name] = {'name': name, 'class': cls, 'kind': kind, 'reason': reason, 'references': []}
             if caller is not None:
                 self.parent[name] = caller
@@ -242,8 +253,7 @@ class Closure:
                 target = call['target']
                 if call['noreturn']:
                     if panic_handler(target):
-                        self.visit(caller, target, 'panic_call', call['instruction'], queue).update(
-                            {'class': 'modelled', 'kind': 'panic_handler', 'reason': None})
+                        self.visit(caller, target, 'panic_call', call['instruction'], queue, panic=True)
                     else:
                         self.boundary(caller, call['instruction'], 'unresolvable', 'unmodelled_noreturn_callee', target,
                                       'a noreturn callee other than a recognized panic handler is emitted as a panic')
@@ -279,7 +289,7 @@ class Closure:
         for name in queue:
             for entry in self.functions[self.key(name)]['globals']:
                 if entry['fn_ref']:
-                    refs.setdefault(entry['fn_ref'][0], set()).add(entry['fn_ref'][1])
+                    refs.setdefault(entry['fn_ref'][0], set()).add(self.key(entry['fn_ref'][1]))
         for name in queue:
             for site in self.functions[self.key(name)]['indirect']:
                 targets = sorted(refs.get(site['fn_type'], ())) if site['fn_type'] else []
@@ -305,7 +315,7 @@ class Closure:
 
 def filter_prefixes(names, base_prefixes, models):
     """Prefixes covering `names`; a generic instance is covered by its base name."""
-    prefixes = sorted({p for p in base_prefixes if p} | {instance_base(n) for n in names})
+    prefixes = sorted({p for p in base_prefixes if p} | {filter_prefix(n) for n in names})
     reduced = [p for p in prefixes if not any(q != p and p.startswith(q) for q in prefixes)]
     collisions = sorted({p for p in reduced for symbol in models if symbol.startswith(p)})
     return reduced, collisions
@@ -329,7 +339,7 @@ def report(closure, roots, base_prefixes, existing=None, source=None, unexported
         'functions': nodes,
         'globals': sorted(closure.globals.values(), key=lambda g: g['name']),
         'indirect_calls': closure.indirect,
-        'missing': [{'fqn': n['name'], 'filter_prefix': instance_base(n['name']), 'chain': n['chain'],
+        'missing': [{'fqn': n['name'], 'filter_prefix': filter_prefix(n['name']), 'chain': n['chain'],
                      'references': n['references']} for n in missing],
         'unresolvable': unresolvable,
         'exported_outside_closure': sorted(set(closure.functions) - set(closure.nodes)),
@@ -368,8 +378,8 @@ def _project():
     return module
 
 
-def manifest_closure(path, registry=None, models=None):
-    project = _project()
+def manifest_closure(path, registry=None, models=None, project=None):
+    project = project or _project()
     manifest, _, limits = project.load_manifest(path)
     bindings = load_registry(registry)
     out = {'schema': SCHEMA, 'kind': KIND + '-project', 'roots': [], 'status': 'closed'}

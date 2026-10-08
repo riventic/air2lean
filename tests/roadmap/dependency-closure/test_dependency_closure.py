@@ -132,6 +132,18 @@ class ClassTests(unittest.TestCase):
         self.assertEqual(prefixes, ['mem.', 'proj.a'])
         self.assertIn('mem.', collisions)
 
+    def test_panic_handler_air_is_not_traversed_and_identity_keys(self):
+        handler = "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+        result = run([air('proj.root', [call(1, handler, True)]), air(handler, [call(2, 'debug.dump')])], ['proj.root'])
+        self.assertEqual((result['status'], node(result, handler)['kind']), ('closed', 'panic_handler'))
+        # Golden mode keys identities by normalized name, including qualified indirect targets.
+        indirect = {'id': 5, 'tag': 'call', 'ty': U32, 'callee': {'inst': 0}, 'args': []}
+        functions = {closure.normalized(f['name']): closure.scan(f) for f in
+                     [air('proj.root', [indirect], [fn_global('proj.cb__anon_41')]), air('proj.cb__anon_N', [])]}
+        c = closure.Closure(functions, '0.16.0', None, (), closure.normalized).run(['proj.root'])
+        self.assertEqual(c.indirect[0]['targets'], [{'name': 'proj.cb__anon_N', 'class': 'exported'}])
+        self.assertEqual(closure.filter_prefix('array_list.Aligned(T__enum_N,null).append'), 'array_list.Aligned(T')
+
     def test_std_model_reader_matches_table(self):
         models = closure.std_models()
         coverage = load('coverage_script', SCRIPTS / 'coverage.py')

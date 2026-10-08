@@ -1508,7 +1508,8 @@ def main(argv=None):
             return 0 if result['status'] == 'reproduced' else 1
         if args.command == 'closure':
             closure = _sibling('dependency-closure')
-            result = closure.manifest_closure(args.manifest.resolve(), args.model_registry)
+            result = closure.manifest_closure(args.manifest.resolve(), args.model_registry, project=argparse.Namespace(
+                load_manifest=load_manifest, bounded_json=bounded_json, read_bounded=read_bounded, path_under=path_under))
             print(closure.text_summary(result) if args.format == 'text' else json.dumps(result, indent=2, sort_keys=True) + '\n', end='')
             return 0 if result['status'] == 'closed' else 1
         if args.command == 'check':
