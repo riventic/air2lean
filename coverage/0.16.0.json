@@ -5065,7 +5065,7 @@
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
-        "status": "call-prefix-branch",
+        "status": "explicit-source-branch",
         "constructors": [
           "call"
         ]
@@ -5276,7 +5276,7 @@
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
-        "status": "call-prefix-branch",
+        "status": "explicit-source-branch",
         "constructors": [
           "call"
         ]
@@ -5365,7 +5365,7 @@
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
-        "status": "call-prefix-branch",
+        "status": "explicit-source-branch",
         "constructors": [
           "call"
         ]
@@ -5454,7 +5454,7 @@
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
       },
       "normalization": {
-        "status": "call-prefix-branch",
+        "status": "explicit-source-branch",
         "constructors": [
           "call"
         ]
@@ -7811,7 +7811,6 @@
       "normalization": {
         "status": "explicit-source-branch",
         "constructors": [
-          "loopSwitchBr",
           "switchBr"
         ]
       },
@@ -7882,8 +7881,7 @@
       "normalization": {
         "status": "explicit-source-branch",
         "constructors": [
-          "loopSwitchBr",
-          "switchBr"
+          "loopSwitchBr"
         ]
       },
       "parser": {
@@ -17185,32 +17183,35 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "196b651c6313e2583aeff26ac31de4d6ab597b2195a71b5e6b44bfb15bfb21bc",
+      "scripts/coverage.py": "e4805ef4541bc31dc83734fccdf632642d14be6f26751bac64c79f95b7287ae1",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
       "Air2Lean/Air/Anon.lean": "540b0ecab72478d263e4c0509f388bb72b8db9d6c4ea28df2f55f5e14a406183",
       "Air2Lean/Air/Canon.lean": "1756247add3b63b23182a276102e1270b72cbb0e87fda9a59eeafd5522006ed1",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
+      "Air2Lean/Air/Effects.lean": "6f6d75cd42de7dd6ec360aa654bb9a39446651b5b6bcce22c4b7bcec5e380c0f",
       "Air2Lean/Air/Json.lean": "7cd6342fcc6a0303041d81b216cb77889199079b159b690fcbef3287d4ff84c3",
-      "Air2Lean/Air/Normalize.lean": "59c8c163a73fa6fa635da48480d176818e067dc68ca9b72eeeaf28e43c284528",
+      "Air2Lean/Air/Normalize.lean": "b2e747b5d07477ff3a82bf49e2530f4c65c3af6aaacdea18351a113e402f0c87",
       "Air2Lean/Air/Op.lean": "a9153385221a2d75c53aa9785f7cb0984d33c94b29877e9a07d0d858e15363bb",
       "Air2Lean/Air/Profile.lean": "f5f4fe8064d68ce22ce0136e9277c54d5846cb25be7573b3ef6dfae7c3750da3",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "593ee8f4cd5fcb68e38a30e9a658ec1ee7438cfe30e53a452330ed99093a96ac",
+      "Air2Lean/Check.lean": "92237e72eaefe0d9901731ea2dbe6f990c1b4686a5816899084a40367ed13783",
       "Air2Lean/Diagnose.lean": "a65115cfc20c3d7587fa26ce97109921a2e97ef731f27a5330422ff73af4ee15",
       "Air2Lean/Diagnostic.lean": "c129ba11206952f8c4faac769c77dedc0d4422fb8e009416d20300f1faf9e650",
-      "Air2Lean/Emit.lean": "32bb7fcb9e61cef13d73838346406e170efcc40aac7ac2efa252939f43721fe0",
-      "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
-      "Air2Lean/Memory.lean": "70345d0fde16416e388a4ef89fc1be6eca172eff325c0576136608b09a1b9167",
+      "Air2Lean/Emit.lean": "60ce49bd14c42be33ae5912f6f80ce378149243518e2709d5b2f6429e511493b",
+      "Air2Lean/Main.lean": "29a0df257a0a182e9937971984c1e3dfc4fb8e575b4406e28b0707c5535544d9",
+      "Air2Lean/Memory.lean": "83926db771f35f6370efeaaf59c233d4e3e708d9dab8f4567fd9d264273a0034",
       "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
+      "Air2Lean/OpTable.lean": "1a45305a5b0ee87274c87fb03b15e8188e80b2a805ac146420468ad780d2a2a4",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
       "Air2Lean/SourceMap.lean": "a71d35b7edcbae8c21c8d2a6061be75df48efd974a126fd94f4e1505f3bef9a9",
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
       "Air2Lean/TimedCheck.lean": "690ac922400f0a9b888f9931a5879bbad7995ef27664ebed7fccda389aa171e5",
       "Air2Lean/TimedEmit.lean": "69961957cca4f1280290ccd150e43880bc0a9620a3f0b9220c1dd9d108f32bce",
       "zig-patch/air-json/json.zig": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0",
-      "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
+      "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a",
+      "coverage/op-table/op-table.json": "21c000cf5bc352724902bfecdfedd5752e666f1f1ad63ce5315113b1f303a739"
     },
     "runtime-models": {
       "ZigLean/Basic.lean": "61fadbf0435e81e47eeeb8f3d32ce4c4d8846f53873d9ec1a78307a1cd1e623b",
@@ -18111,7 +18112,7 @@
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
-      "Air2Lean/Memory.lean": "70345d0fde16416e388a4ef89fc1be6eca172eff325c0576136608b09a1b9167",
+      "Air2Lean/Memory.lean": "83926db771f35f6370efeaaf59c233d4e3e708d9dab8f4567fd9d264273a0034",
       "docs/std-models.md": "e5225778dc3dd8dc2a30b750dee3f4d8118e1c425acd3518042c4d2db9d476cb"
     }
   },

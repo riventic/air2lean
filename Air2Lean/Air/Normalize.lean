@@ -60,42 +60,66 @@ def parseRmwOp (fnName : String) (raw : Raw.RawInst) (s : String) : Except Strin
   | "Min" => pure .min
   | _ => throw s!"{fnName}: inst {raw.id}: unknown 'op' value '{s}'"
 
-/-- Known compiler-state/effect tags that remain rejected. This classifies reasons,
-not support or compiler-version membership; the inventory selects actual enum members. -/
+/-- Known compiler-state/effect tags that remain rejected, with their reasons. This classifies
+reasons, not support or compiler-version membership; the inventory selects actual enum members. -/
+def runtimeTagReasons : Array (Array String × String) := #[
+  (#["inferred_alloc", "inferred_alloc_comptime"],
+    "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc"),
+  (#["legalize_vec_store_elem", "legalize_vec_elem_val", "legalize_compiler_rt_call"],
+    "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"),
+  (#["vector_store_elem"],
+    "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"),
+  (#["cmp_lt_errors_len", "cmp_lte_errors_len"],
+    "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"),
+  (#["runtime_nav_ptr"],
+    "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
+  (#["err_return_trace", "set_err_return_trace", "save_err_return_trace_index"],
+    "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics")]
+
+/-- The reason for a tag in `runtimeTagReasons`. -/
 def runtimeTagReason? (tag : String) : Option String :=
-  match tag with
-  | "inferred_alloc" | "inferred_alloc_comptime" => some "unresolved inferred allocation is outside analyzed-AIR translation; inspect the compiler/export stage rather than treating it as alloc"
-  | "legalize_vec_store_elem" | "legalize_vec_elem_val" | "legalize_compiler_rt_call" => some "compiler legalization tags are outside the analyzed-AIR export contract; inspect the exporter hook and profile.export_stage"
-  | "vector_store_elem" => some "vector-element memory writes require checked lane bounds and vector-memory semantics outside the model; immutable array element reads are not a substitute"
-  | "cmp_lt_errors_len" | "cmp_lte_errors_len" => some "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"
-  | "runtime_nav_ptr" => some "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"
-  | "err_return_trace" | "set_err_return_trace" | "save_err_return_trace_index" => some "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics"
-  | _ => none
+  (runtimeTagReasons.find? (·.1.contains tag)).map (·.2)
+
+/-- The suffix of every fast-math tag, rejected before decoding. -/
+def fastMathSuffix : String := "_optimized"
 
 /-- Reason and guidance for every fast-math (`*_optimized`) tag. -/
 def optimizedFloatGuidance : String :=
   "fast-math permits reassociation and value changes the float model does not match; remove @setFloatMode(.optimized) from translated functions"
 
 /-- Reason and guidance (`reason; guidance`) for tags the exporter marks `unsupported`.
-`scripts/coverage.py` requires an arm for every such tag of every supported compiler. -/
+`scripts/coverage.py` requires a reason for every such tag of every supported compiler. -/
+def exporterTagReasons : Array (Array String × String) := #[
+  (#["assembly"],
+    "0.14.1 inline-assembly AIR uses a layout the exporter does not decode; translate assembly wrappers with Zig 0.15.2 or 0.16.0 (docs/generated-code.md, Inline asm)"),
+  (#["breakpoint"],
+    "@breakpoint debugger traps have no modelled effect; remove @breakpoint from translated functions or guard it behind a comptime flag"),
+  (#["ret_addr"],
+    "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument"),
+  (#["frame_addr"],
+    "@frameAddress exposes machine stack addresses outside the memory model; pass any needed identity as an explicit argument"),
+  (#["int_from_float_optimized_safe"],
+    "checked float-to-int conversion under @setFloatMode(.optimized) is fast-math outside the float model; use the default strict float mode in translated functions"),
+  (#["error_set_has_value"],
+    "the @errorCast safety check needs the finalized compiler error set beyond analyzed-AIR export; cast to a superset error set or switch on the error explicitly"),
+  (#["prefetch"],
+    "@prefetch cache hints have no modelled effect; remove @prefetch from translated functions"),
+  (#["wasm_memory_size", "wasm_memory_grow"],
+    "WebAssembly linear-memory builtins are outside the qualified targets; keep them out of translated functions"),
+  (#["addrspace_cast"],
+    "@addrSpaceCast between non-generic address spaces is outside the memory model; use generic address-space pointers in translated functions"),
+  (#["c_va_arg", "c_va_copy", "c_va_end", "c_va_start"],
+    "C variadic argument state is outside the calling-convention model; export fixed-arity functions instead"),
+  (#["work_item_id", "work_group_size", "work_group_id"],
+    "GPU work-item builtins are outside the qualified targets; keep them out of translated functions")]
+
+/-- The reason for a tag in `exporterTagReasons`. -/
 def exporterTagReason? (tag : String) : Option String :=
-  match tag with
-  | "assembly" => some "0.14.1 inline-assembly AIR uses a layout the exporter does not decode; translate assembly wrappers with Zig 0.15.2 or 0.16.0 (docs/generated-code.md, Inline asm)"
-  | "breakpoint" => some "@breakpoint debugger traps have no modelled effect; remove @breakpoint from translated functions or guard it behind a comptime flag"
-  | "ret_addr" => some "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument"
-  | "frame_addr" => some "@frameAddress exposes machine stack addresses outside the memory model; pass any needed identity as an explicit argument"
-  | "int_from_float_optimized_safe" => some "checked float-to-int conversion under @setFloatMode(.optimized) is fast-math outside the float model; use the default strict float mode in translated functions"
-  | "error_set_has_value" => some "the @errorCast safety check needs the finalized compiler error set beyond analyzed-AIR export; cast to a superset error set or switch on the error explicitly"
-  | "prefetch" => some "@prefetch cache hints have no modelled effect; remove @prefetch from translated functions"
-  | "wasm_memory_size" | "wasm_memory_grow" => some "WebAssembly linear-memory builtins are outside the qualified targets; keep them out of translated functions"
-  | "addrspace_cast" => some "@addrSpaceCast between non-generic address spaces is outside the memory model; use generic address-space pointers in translated functions"
-  | "c_va_arg" | "c_va_copy" | "c_va_end" | "c_va_start" => some "C variadic argument state is outside the calling-convention model; export fixed-arity functions instead"
-  | "work_item_id" | "work_group_size" | "work_group_id" => some "GPU work-item builtins are outside the qualified targets; keep them out of translated functions"
-  | _ => none
+  (exporterTagReasons.find? (·.1.contains tag)).map (·.2)
 
 /-- Message suffix for a marked tag: its reviewed reason and guidance, if any. -/
 def markedTagGuidance (tag : String) : String :=
-  if tag.endsWith "_optimized" then s!": {optimizedFloatGuidance}"
+  if tag.endsWith fastMathSuffix then s!": {optimizedFloatGuidance}"
   else match exporterTagReason? tag with
     | some reason => s!": {reason}"
     | none => ""
@@ -112,7 +136,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   -- Most of these the exporter also marks `unsupported`; `reduce_optimized`/`cmp_vector_optimized`
   -- decode fully (same shape as `reduce`/`cmp_vector`) but are rejected here regardless, since
   -- fast-math permits reassociation the model does not claim to match.
-  if raw.tag.endsWith "_optimized" then
+  if raw.tag.endsWith fastMathSuffix then
     throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag}): {optimizedFloatGuidance}"
   rejectRuntimeTag fnName raw
   if raw.unsupported then
@@ -370,13 +394,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let toOperand (o : Raw.RawAsmOperand) : AsmOperand :=
       { constraint := o.constraint, name := o.name, ref := o.ref }
     return .asm a.source a.isVolatile a.clobbers (a.outputs.map toOperand) (a.inputs.map toOperand)
-  | tag =>
-    if tag.startsWith "call" then
-      let some callee := raw.callee
-        | throw s!"{fnName}: inst {raw.id}: '{tag}' needs 'callee'"
-      return .call callee raw.args
-    else
-      throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (not in the tag table)"
+  | "call" | "call_always_tail" | "call_never_tail" | "call_never_inline" =>
+    let some callee := raw.callee
+      | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs 'callee'"
+    return .call callee raw.args
+  -- Fail closed: a tag is decoded only by an explicit arm above (and listed in `decodedTags`).
+  | tag => throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (not in the tag table)"
 
 partial def normalizeInst (fnName : String) (raw : Raw.RawInst) : Except String Inst := do
   -- The exporter deliberately omits ty for temporary inferred allocations. Preserve
@@ -394,6 +417,37 @@ partial def normalizeCase (fnName : String) (raw : Raw.RawCase) :
   return { items := raw.items, ranges := raw.ranges, body }
 
 end
+
+/-- Every tag that `normalizeOp` decodes, in its arm order. `air2lean --print-op-table`
+probes each; `tests/roadmap/op-effects` checks this list against `normalizeOp`'s arms. -/
+def decodedTags : Array String := #[
+  "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
+  "mul", "mul_safe", "mul_wrap", "mul_sat", "div_trunc", "div_floor", "div_exact", "div_float",
+  "rem", "mod", "min", "max", "add_with_overflow", "sub_with_overflow", "mul_with_overflow",
+  "shl_with_overflow", "clz", "ctz", "popcount", "byte_swap", "bit_reverse", "bit_and", "bit_or",
+  "xor", "not", "neg", "abs", "sqrt", "floor", "ceil", "trunc_float", "round", "sin", "cos",
+  "tan", "exp", "exp2", "log", "log2", "log10", "mul_add", "fptrunc", "fpext", "float_from_int",
+  "int_from_float", "int_from_float_safe", "shl", "shl_exact", "shl_sat", "shr", "shr_exact",
+  "cmp_lt", "cmp_lte", "cmp_eq", "cmp_neq", "cmp_gte", "cmp_gt", "cmp_vector", "splat", "select",
+  "reduce", "shuffle_one", "shuffle_two", "shuffle", "bool_and", "bool_or", "intcast",
+  "intcast_safe", "trunc", "bitcast", "is_null", "is_non_null", "optional_payload",
+  "wrap_optional", "is_null_ptr", "is_non_null_ptr", "optional_payload_ptr",
+  "optional_payload_ptr_set", "is_err_ptr", "is_non_err_ptr", "unwrap_errunion_payload_ptr",
+  "errunion_payload_ptr_set", "unwrap_errunion_err_ptr", "is_err", "is_non_err",
+  "unwrap_errunion_payload", "unwrap_errunion_err", "wrap_errunion_payload", "wrap_errunion_err",
+  "is_named_enum_value", "get_union_tag", "union_init", "alloc", "ret_ptr", "struct_field_ptr",
+  "struct_field_ptr_index_0", "struct_field_ptr_index_1", "struct_field_ptr_index_2",
+  "struct_field_ptr_index_3", "field_parent_ptr", "set_union_tag", "ret_load", "load", "store",
+  "store_safe", "atomic_load", "atomic_store_unordered", "atomic_store_monotonic",
+  "atomic_store_release", "atomic_store_seq_cst", "atomic_rmw", "cmpxchg_weak", "cmpxchg_strong",
+  "slice_len", "slice_elem_val", "ptr_add", "ptr_sub", "ptr_elem_ptr", "slice_elem_ptr",
+  "ptr_elem_val", "array_elem_val", "slice", "slice_ptr", "array_to_slice", "ptr_slice_len_ptr",
+  "ptr_slice_ptr_ptr", "memset", "memset_safe", "memcpy", "memmove", "tag_name", "error_name",
+  "struct_field_val", "aggregate_init", "block", "dbg_inline_block", "loop", "br", "repeat",
+  "cond_br", "switch_br", "loop_switch_br", "switch_dispatch", "try", "try_cold", "try_ptr",
+  "try_ptr_cold", "ret", "ret_safe", "unreach", "trap", "dbg_stmt", "dbg_var_ptr", "dbg_var_val",
+  "dbg_arg_inline", "dbg_empty_stmt", "assembly", "call", "call_always_tail", "call_never_tail",
+  "call_never_inline"]
 
 def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 

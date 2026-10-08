@@ -585,28 +585,19 @@ private partial def summarizeTryErrors (insts : Array Inst) (cache : ControlFlow
     let cache := { cache with
       unique := cache.unique && !cache.ids.contains inst.id
       ids := cache.ids.insert inst.id }
-    match inst.op with
-    | .ret _ | .retLoad _ | .unreach | .trap => (⟨true, {}⟩, cache)
-    | .call (.func _ true ..) _ => (⟨true, {}⟩, cache)
-    | .br target _ => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
-    | .«repeat» _ | .switchDispatch .. => (⟨false, {}⟩, cache)
-    | .loop body =>
-      let (_, cache) := summarizeTryErrors body cache
+    match inst.op.effects.control with
+    | .next => (later, cache)
+    | .exit => (⟨true, {}⟩, cache)
+    | .br target => (⟨true, ({} : Std.HashSet InstId).insert target⟩, cache)
+    | .«repeat» _ | .dispatch _ => (⟨false, {}⟩, cache)
+    | .loop bodies =>
+      let cache := bodies.foldl (init := cache) fun cache b => (summarizeTryErrors b cache).2
       (⟨false, {}⟩, cache)
-    | .loopSwitchBr _ cases e =>
-      let (_, cache) := summarizeTryErrors e cache
-      let cache := cases.foldl (init := cache) fun cache c =>
-        (summarizeTryErrors c.body cache).2
-      (⟨false, {}⟩, cache)
-    | .condBr _ t e =>
-      let (thenFlow, cache) := summarizeTryErrors t cache
-      let (elseFlow, cache) := summarizeTryErrors e cache
-      (thenFlow.merge elseFlow, cache)
-    | .switchBr _ cases e =>
-      let (elseFlow, cache) := summarizeTryErrors e cache
-      cases.foldl (init := (elseFlow, cache)) fun (flow, cache) c =>
-        let (caseFlow, cache) := summarizeTryErrors c.body cache
-        (flow.merge caseFlow, cache)
+    | .branch bodies =>
+      -- Every branch has a body (a switch has its `else`), and `⟨true, {}⟩` is `merge`'s unit.
+      bodies.foldl (init := ((⟨true, {}⟩ : TryErrorFlow), cache)) fun (flow, cache) b =>
+        let (bodyFlow, cache) := summarizeTryErrors b cache
+        (flow.merge bodyFlow, cache)
     | .block body =>
       let (inner, cache) := summarizeTryErrors body cache
       let summaries := { cache.summaries with
@@ -617,14 +608,13 @@ private partial def summarizeTryErrors (insts : Array Inst) (cache : ControlFlow
           (⟨inner.valid, inner.branches.erase inst.id⟩ : TryErrorFlow).merge later
         else inner
       (flow, cache)
-    | .«try» _ errBody | .tryPtr _ errBody =>
+    | .«try» errBody =>
       let (errorFlow, cache) := summarizeTryErrors errBody cache
       let summaries := { cache.summaries with
         tryErrorExits := cache.summaries.tryErrorExits.insert inst.id
           (errorFlow.valid && errorFlow.branches.isEmpty) }
       let cache := { cache with summaries }
       (errorFlow.merge later, cache)
-    | _ => (later, cache)
 
 /-- One bottom-up traversal for both control contracts and ID uniqueness. A block may
 exit to an enclosing block; a pointer-try error body must exit the function instead. -/
@@ -652,28 +642,14 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
     not repeatable memory operations; move the access into a function bound by a project model \
     registry entry that lists the volatile pointer parameter in `footprint.writes` \
     (docs/volatile-effects.md)"
-  let accesses : Array (Val × String) := match op with
-    | .load p | .retLoad p | .ptrElemVal p _ | .sliceElemVal p _ => #[(p, "load")]
-    | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
-    | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _ | .cmpxchg _ p .. =>
-      #[(p, "atomic access")]
-    | .memcpy dst src => #[(dst, "store"), (src, "load")]
-    | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p | .tryPtr p _ => #[(p, "load")]
-    | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
-    | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
-    | _ => #[]
-  for (p, kind) in accesses do
+  let effects := op.effects
+  for (p, kind) in effects.access do
     if let some pty := cx.valTy? p then
       if volatilePtrTy cx.types cx.layouts pty then
-        cx.fail line s!"volatile {kind} through pointer type {pty}: {guidance}"
+        cx.fail line s!"volatile {kind.describe} through pointer type {pty}: {guidance}"
   -- Derivations must keep the qualifier: a result without a volatile pointer (a `@volatileCast`
   -- away, `@intFromPtr`) would let a later device access look like an ordinary one.
-  let derived? : Option Val := match op with
-    | .bitcast p | .fieldPtr p _ | .fieldParentPtr p _ | .elemPtr p _ | .ptrAdd _ p _
-    | .slice p _ | .slicePtr p | .arrayToSlice p | .sliceFieldPtr _ p | .optPayloadPtr _ p
-    | .errPayloadPtr _ p | .wrapOptional p => some p
-    | _ => none
-  if let some p := derived? then
+  if let some p := effects.derives then
     if let some pty := cx.valTy? p then
       let keeps := volatilePtrTy cx.types cx.layouts ty || match cx.types[ty]? with
         | some (.optional c) => volatilePtrTy cx.types cx.layouts c
@@ -1009,6 +985,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     checkMemTy fnName cx.types cx.layouts line parent cx.errBits
     pure line
   | .ptrElemVal p _ => cx.itemAccess line p; pure line
+  -- A pure function indexes the items (`Array`); `checkProgram` checks the item type of a
+  -- slice read in a function that uses memory.
+  | .sliceElemVal .. => pure line
+  -- An address only: the access through the field pointer is checked at its `load`/`store`.
+  | .sliceFieldPtr .. => pure line
   | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
     -- The result is a pointer to an item: its child is the item type.
@@ -1087,13 +1068,13 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let nested := errBody.foldl flattenInst #[]
     let emptyTargets : Std.HashSet InstId := {}
     let localTargets := nested.foldl (init := emptyTargets) fun targets i =>
-      match i.op with | .block _ | .loop _ => targets.insert i.id | _ => targets
+      match i.op.effects.control with
+      | .block _ | .loop _ => targets.insert i.id
+      | _ => targets
     for i in nested do
-      match i.op with
-      | .br target _ | .«repeat» target =>
+      if let some target := i.op.effects.control.jumpTarget? then
         unless localTargets.contains target do
           cx.fail line "try_ptr error body must exit the function, not branch outside its body"
-      | _ => pure ()
     let _ ← checkInsts cx line errBody
     pure line
   | .«try» _ errBody => do
@@ -1142,7 +1123,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         throw s!"{fnName}: near line {line}: asm input '{i.name}' is not an integer register \
           value (M21)"
     pure line
-  | _ => pure line
+  -- Pure values, locals, jumps, returns and debug info: `checkTy` of the result and the
+  -- whole-function operand checks (`check`) are their rules. Fail closed on any other op: one
+  -- that accesses memory, uses a place or has a body needs its own arm above.
+  | _ =>
+    let e := op.effects
+    unless e.access.isEmpty && e.places.isEmpty && e.control.bodies.isEmpty do
+      cx.fail line s!"no checker rule for this {e.cls.name} op ({op.ctorName}); it accesses \
+        memory, uses a place or has a body (Air2Lean/Air/Effects.lean)"
+    pure line
 
 partial def checkInsts (cx : CheckCtx) (line : Nat) (insts : Array Inst) : Except String Nat :=
   insts.foldlM (checkInst cx) line
@@ -1172,13 +1161,8 @@ partial def Val.ptrOther? (v : Val) : Option String :=
   | .sliceConst _ p l => p.ptrOther? <|> l.ptrOther?
   | _ => none
 
-/-- The pointer operands that `valueOperands` leaves out. -/
-def ptrOperands (op : Op) : Array Val :=
-  match op with
-  | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
-  | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
-  | .cmpxchg _ p .. => #[p]
-  | _ => #[]
+/-- The pointer operands that `valueOperands` leaves out (`Effects.places`). -/
+def ptrOperands (op : Op) : Array Val := op.effects.places
 
 /-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
 later read could observe. A store writes undefined bytes: a wholly `undefined` value
@@ -1616,6 +1600,8 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
       let some (g, off) := fixedGlobalOrigin? f insts p | reject
       let some global := f.globals[g]? | reject
       unless hasErrorStorage f.types item && homogeneousGlobalItems f global.ty item off do reject
+  -- Keep: these are the pointer-value sinks. A derived pointer result is checked above, and
+  -- the other stored operands (atomics, asm) are integers (`checkOp`).
   | _ => pure ()
 
 private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
@@ -1707,12 +1693,7 @@ partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
         | cx.fail 0 s!"inst {i.id}: dispatch target {target} is not an enclosing loop-switch"
       unless valTy v == some selectorTy do
         cx.fail 0 s!"inst {i.id}: dispatch operand type differs from target selector"
-    | .block b | .loop b | .«try» _ b | .tryPtr _ b => recur b
-    | .condBr _ t e => recur t; recur e
-    | .switchBr _ cases e =>
-      for c in cases do recur c.body
-      recur e
-    | _ => pure ()
+    | op => for b in op.effects.control.bodies do recur b
 
 /-- An unverified bit-pointer parameter (`unverifiedBitPtrError`). -/
 private def checkBitPtrParam (f : Func) (p : TyId) : Except String Unit :=
@@ -1962,9 +1943,7 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
   for i in insts do
     if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
     ids := ids.insert i.id
-    match i.op with
-    | .dbg .. | .line _ => debugIds := debugIds.insert i.id
-    | _ => pure ()
+    if i.op.effects.cls == .debug then debugIds := debugIds.insert i.id
     unless i.ty < f.types.size do throw s!"{f.name}: inst {i.id}: unknown type id {i.ty}"
   let value (root : Val) (checkForm : Bool := true) : Except String Unit := do
     if let some t := root.constTy? then
@@ -2003,12 +1982,8 @@ private def checkFunctionStructure (f : Func) (index : OperandTypes) : Except St
           throw s!"{f.name}: global function initializer must be its named constant function block"
       else checkConstant f index g.ty v
   for i in insts do
-    let extra := match i.op with
-      | .sliceFieldPtr _ p => #[p]
-      | .dbg _ v => v.toArray
-      | .asm _ _ _ outputs _ => outputs.flatMap fun o => o.ref.toArray
-      | _ => #[]
-    for v in valueOperands i.op ++ ptrOperands i.op ++ extra do value v
+    let e := i.op.effects
+    for v in e.values ++ e.places ++ e.debug do value v
     match i.op with
     | .arg k =>
       let some p := f.params[k]? | throw s!"{f.name}: inst {i.id}: unknown parameter {k}"

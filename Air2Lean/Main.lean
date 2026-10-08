@@ -4,6 +4,7 @@ import Air2Lean.Emit
 import Air2Lean.Air.Anon
 import Air2Lean.Diagnose
 import Air2Lean.SourceMap
+import Air2Lean.OpTable
 
 /-!
 # CLI
@@ -28,7 +29,8 @@ namespace Air2Lean
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]\n" ++
+    "       air2lean --print-op-table"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -47,6 +49,7 @@ def help : String :=
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
   "  --source-map-json <json>     Also write source maps for fingerprints; see docs/stable-generation.md.\n" ++
+  "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -311,6 +314,9 @@ private def run (args : List String) : IO UInt32 := do
 def main (args : List String) : IO UInt32 := do
   if args.head? == some "--diagnostics-json" then
     Diagnostics.runCheck args
+  else if args == ["--print-op-table"] then
+    IO.println opTableJson.pretty
+    pure 0
   else if args == ["--help"] || args == ["-h"] then
     IO.println help
     pure 0
