@@ -777,30 +777,30 @@ def export_evidence(manifest_path, repo_root):
 def export_stages(root, links, profile, file_hashes, source_closure):
     """(analyzed, exported) stages for one root from verified export-manifest links.
 
-    The root's AIR and the declared source closure must be byte-identical to files recorded in
-    the manifest's air and source links, and the project profile must equal the profile link."""
+    exported: the root's AIR and the declared source closure are byte-identical to files recorded in
+    the manifest's air and source links, under the same profile name and Zig version.
+    analyzed: additionally the recorded profile exports analyzed AIR and equals the project
+    profile; legacy AIR carries no such evidence and fails closed."""
     def recorded(name):
         return {row['sha256'] for row in links[name]['files']}
-    missing = [n for n in root['air'] if file_hashes.get(n) not in recorded('air')]
-    missing_sources = [n for n in source_closure if file_hashes.get(n) not in recorded('source')]
     export_profile = links['profile']['value']['profile']
-    comparable = {k: v for k, v in export_profile.items() if k != 'schema'}  # the AIR schema is added by the I07 profile link
-    if missing or missing_sources or profile != comparable:
-        reason = ['export manifest does not cover this root:']
-        if missing:
-            reason.append(f'AIR {missing} not among recorded AIR files;')
-        if missing_sources:
-            reason.append(f'sources {missing_sources} not among recorded source files;')
-        if profile != comparable:
-            reason.append('project profile differs from the recorded export profile;')
-        failed = stage('failed', ' '.join(reason))
+    problems = [f'AIR {n} not among recorded AIR files' for n in root['air'] if file_hashes.get(n) not in recorded('air')]
+    problems += [f'source {n} not among recorded source files' for n in source_closure
+                 if file_hashes.get(n) not in recorded('source')]
+    if any((profile or {}).get(k) != export_profile.get(k) for k in ('name', 'zig_version')):
+        problems.append('project profile name/Zig version differ from the recorded export profile')
+    if problems:
+        failed = stage('failed', 'export manifest does not establish this root: ' + '; '.join(problems))
         return failed, failed
     common = dict(manifest_sha256=links['manifest_sha256'], links={n: links[n]['sha256'] for n in EXPORT_LINKS})
     exported = stage('passed', 'root AIR and source closure are byte-identical to files recorded in the export manifest, '
                      'whose source, compiler_patch, air and profile links are current; the exporter was not rerun', **common)
     if export_profile.get('export_stage') != 'analyzed-air':
-        return stage('failed', f'export profile stage is {export_profile.get("export_stage")!r}, not analyzed-air'), exported
-    return stage('passed', 'the bound export profile yields analyzed AIR and the root function is present in it; '
+        return stage('failed', f'export profile {export_profile.get("name")} has stage {export_profile.get("export_stage")!r}, '
+                     'not analyzed-air: legacy AIR carries no analysis evidence'), exported
+    if {k: v for k, v in export_profile.items() if k != 'schema'} != profile:  # the I07 profile link adds the AIR schema
+        return stage('failed', 'project profile differs from the recorded analyzed-AIR export profile'), exported
+    return stage('passed', 'the bound export profile yields analyzed AIR containing the root function; '
                  'compiler analysis itself is trusted', **common), exported
 
 
@@ -810,9 +810,9 @@ def load_receipt(attempt, verifier, limits):
         attempt = attempt.resolve(strict=True)
         receipt, plan, audit, after = (load_evidence(path_under(attempt, name)) for name in
                                        ('receipt.json', 'plan.json', 'audit.json', 'after.json'))
-        if (not isinstance(receipt, dict) or receipt.get('schema') != 1 or receipt.get('status') != 'audited'
+        if (not isinstance(receipt, dict) or receipt.get('schema') != 2 or receipt.get('status') != 'audited'
                 or not all(isinstance(x, dict) for x in (plan, audit, after))):
-            return None, 'receipt is not a sealed audited schema-1 receipt'
+            return None, 'receipt is not a sealed audited schema-2 receipt'
         if audit.get('status') != 'pass' or not isinstance(audit.get('theorems'), list) or not isinstance(audit.get('nodes'), list):
             return None, 'receipt audit did not pass or lacks theorem/declaration inventory'
         if not isinstance(plan.get('modules'), list) or not isinstance(plan.get('root'), str):

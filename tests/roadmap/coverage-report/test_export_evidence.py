@@ -54,9 +54,10 @@ class ExportEvidenceTests(unittest.TestCase):
     def save(self):
         self.path.write_text(json.dumps(self.manifest))
 
-    def stages(self, **kwargs):
-        result = project.coverage(self.path, export_manifest=self.fixture.manifest, repo_root=self.repo, **kwargs)
-        self.assertEqual(result['diagnostics'], [])
+    def stages(self, unchecked=False):
+        result = project.coverage(self.path, export_manifest=self.fixture.manifest, repo_root=self.repo)
+        if not unchecked:
+            self.assertEqual(result['diagnostics'], [])
         return result['roots'][0]['stages']
 
     def assert_failed(self, stages, text):
@@ -87,17 +88,20 @@ class ExportEvidenceTests(unittest.TestCase):
 
     def test_foreign_air_or_source_or_profile_is_not_covered(self):
         (self.base / 'add.json').write_text(fixtures.air('demo.add').replace('"params": []', '"params": [0]'))
-        self.assert_failed(self.stages(), 'AIR [\'add.json\'] not among recorded AIR files')
+        self.assert_failed(self.stages(), 'AIR add.json not among recorded AIR files')
         (self.base / 'add.json').write_bytes((self.repo / 'tests/golden/0.16.0/demo/air/demo.add.json').read_bytes())
         (self.base / 'demo.zig').write_text('other\n')
-        self.assert_failed(self.stages(), 'sources [\'demo.zig\'] not among recorded source files')
+        self.assert_failed(self.stages(), 'source demo.zig not among recorded source files')
 
     def test_profile_difference_fails(self):
-        (self.base / 'demo.zig').write_bytes((self.repo / 'examples/demo/demo.zig').read_bytes())
         (self.base / 'profile.json').write_text(json.dumps(dict(fixtures.PROFILE, cpu='other')))
-        stages = project.coverage(self.path, export_manifest=self.fixture.manifest, repo_root=self.repo)['roots'][0]['stages']
-        for name in ('analyzed', 'exported'):
-            self.assertEqual(stages[name]['status'], 'failed')
+        stages = self.stages(unchecked=True)
+        self.assert_failed(stages, 'declared inputs failed preflight')  # the AIR no longer matches the declared profile
+
+    def test_legacy_profile_has_no_analysis_evidence(self):
+        (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
+        stages = self.stages(unchecked=True)
+        self.assert_failed(stages, 'preflight')
 
     def test_missing_or_tampered_manifest_fails(self):
         def tamper(path):

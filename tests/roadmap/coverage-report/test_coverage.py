@@ -79,7 +79,7 @@ class CoverageTests(unittest.TestCase):
         self.attempt.mkdir(exist_ok=True)
         lib = self.base / '.lake/build/lib/lean'
         write = lambda name, value: (self.attempt / name).write_text(json.dumps(value))
-        write('receipt.json', {'schema': 1, 'status': 'audited', 'authentication': 'not_attested',
+        write('receipt.json', {'schema': 2, 'status': 'audited', 'authentication': 'not_attested',
                                'proof_scope': 'selected compiled Lean theorem dependency policy only',
                                'source_correspondence': 'not_attested', 'native_adequacy': 'not_attested',
                                'attempt': str(self.attempt), 'theorem_count': 1, 'artifacts': []})
