@@ -366,6 +366,17 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/stable-generation/test_cli.py "$PWD/.lake/build/bin/air2lean"
 
+      # V01 slice (docs/air-semantics.md): the certificate flag leaves Gen.lean byte-identical, the
+      # committed Proofs/{Basic,Recursion}/AirCert.lean are current and kernel-check, their AIR is
+      # the decoded golden AIR, and a one-operator AIR mutation breaks that function's theorem.
+      - name: AIR semantics certificates
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main
+          python3 -I -B tests/roadmap/air-semantics/test_lean.py
+
       - name: Stable scalar proof API regressions
         if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
