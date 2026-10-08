@@ -17,6 +17,7 @@
   "import_roots": ["tests/diff"],
   "generated_imports": {
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
+    "Calls": "tests/roadmap/indirect-calls/check.sh compiles the fresh Pipeline.lean translation into Calls.olean at gate time.",
     "Gen": "tests/roadmap/global-payload-pointers/check.sh writes Gen.lean at gate time from a fresh export.",
     "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean.",
     "ErrorWidth16.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 16-bit fixtures into ErrorWidth16/Gen.lean.",
@@ -64,6 +65,7 @@
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Repr": ["SEM-01", "SEM-02"],
     "ZigLean.Mem.NullLemmas": ["SEM-02"],
+    "ZigLean.Mem.Parent": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
     "ZigLean.Mem.Owned": ["ALC-07"],
     "ZigLean.Mem.Thread": ["ORD-01", "THR-01"],

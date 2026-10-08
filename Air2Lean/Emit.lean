@@ -2342,8 +2342,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args)
       (env, some l)
     else if isNoreturn then (env, none)
-    else if let .inst p := callee then
+    else if callee.isIndirectCallee then
       -- An indirect call: the function whose block the pointer points to, at offset 0 (M20).
+      -- A constant address resolves through the same table of address-taken functions of
+      -- the callee's type; any other address throws `.illegal` (L11).
       let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
         | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
         | _ => ""
@@ -2352,7 +2354,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let memCallee := fc.memFuncs.contains nm
         let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
         let call := fc.callOf nm term memCallee
-        s!"if {rv (.inst p)} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
+        s!"if {rv callee} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
       let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
       (env, some l)
     else

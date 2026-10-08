@@ -22,7 +22,11 @@ private def types : Array Json := #[
   obj [("k", .str "void")], obj [("k", .str "noreturn")],
   structTy "Pair" #[("x", 0), ("y", 0)] 8, ptr 3, ptr 0,
   structTy "Outer" #[("tag", 0), ("inner", 3)] 12, ptr 6, ptr 0 true, ptr 3 true,
-  structTy "Other" #[("x", 0), ("y", 0)] 8, ptr 10]
+  structTy "Other" #[("x", 0), ("y", 0)] 8, ptr 10,
+  obj [("k", .str "array"), ("len", num 2), ("child", num 3), ("sentinel", .bool false),
+    ("abi_size", num 16), ("abi_align", num 4)], ptr 12,
+  structTy "Bag" #[("tag", 0), ("items", 12)] 20, ptr 14,
+  obj [("k", .str "int"), ("signed", .bool false), ("bits", num 64), ("abi_size", num 8), ("abi_align", num 8)]]
 private def inst (id : Nat) (tag : String) (ty : Nat) (args : Array Json := #[])
     (extra : List (String × Json) := []) : Json :=
   obj ([("id", num id), ("tag", .str tag), ("ty", num ty), ("args", .arr args)] ++ extra)
@@ -53,6 +57,18 @@ private def writeCase (dir : System.FilePath) (name : String) (j : Json) (expect
   IO.FS.writeFile (dir / s!"{name}.lean") (source ++
     "\nderiving instance DecidableEq for Except\n" ++
     s!"example : (LocalParent.{name}.map BitVec.toNat).run = some (.ok {expected}) := by decide +kernel\n")
+
+/-- A local whose place escapes (an array element, `ptr_elem_ptr`) is a stack block: parent
+recovery subtracts the exported field offset and aliases the original block (L11). -/
+private def writeMemoryCase (dir : System.FilePath) (name : String) (j : Json) (expected : Nat) :
+    IO Unit := do
+  let f ← match process j with | .ok f => pure f | .error e => throw (IO.userError e)
+  require (!(escapingAllocs f).isEmpty) s!"{name}: array-element local unexpectedly stayed a place"
+  let source := emit #[f] "LocalParent" ""
+  require ((source.splitOn "panic!").length == 1) s!"{name}: lost memory recovery"
+  IO.FS.writeFile (dir / s!"{name}.lean") (source ++
+    "\nderiving instance DecidableEq for Except\n" ++
+    s!"example : ((LocalParent.{name}.run \{}).run.map fun r => r.map (·.1.toNat)) = some (.ok {expected}) := by decide +kernel\n")
 
 private def setup : Array Json := #[inst 10 "alloc" 4,
   field 11 10 0, inst 12 "store" 1 #[ref 11, lit 3],
@@ -97,6 +113,25 @@ def main (args : List String) : IO Unit := do
     inst 33 "load" 0 #[ref 12], inst 34 "load" 0 #[ref 31],
     inst 35 "add_wrap" 0 #[ref 33, ref 34], inst 36 "ret" 2 #[ref 35]]
   writeCase dir "nested" (file "nested" nested) 33
+  -- `bag.items[1].b` recovers `bag.items[1]` (a memory parent inside an array inside a
+  -- struct); `bag.items` recovers `bag`. Writes through both parents alias `bag`.
+  writeMemoryCase dir "arrayItem" (file "arrayItem" #[inst 10 "alloc" 15,
+    field 11 10 0, inst 12 "store" 1 #[ref 11, lit 1], field 13 10 1 13,
+    inst 14 "ptr_elem_ptr" 4 #[ref 13, obj [("ty", num 16), ("val", .str "1")]],
+    field 15 14 0, inst 16 "store" 1 #[ref 15, lit 3],
+    field 17 14 1, inst 18 "store" 1 #[ref 17, lit 9],
+    parent 20 17 1, field 21 20 0, inst 22 "store" 1 #[ref 21, lit 27],
+    parent 30 13 1 15, field 31 30 0, inst 32 "store" 1 #[ref 31, lit 6],
+    inst 40 "load" 0 #[ref 15], inst 41 "load" 0 #[ref 11], inst 42 "load" 0 #[ref 17],
+    inst 43 "add_wrap" 0 #[ref 40, ref 41], inst 44 "add_wrap" 0 #[ref 43, ref 42],
+    inst 45 "ret" 2 #[ref 44]]) 42
+  -- Recovery through memory from the first field: `items[0].a` to `items[0]`, then `.b`.
+  writeMemoryCase dir "arrayFirst" (file "arrayFirst" #[inst 10 "alloc" 15,
+    field 13 10 1 13, inst 14 "ptr_elem_ptr" 4 #[ref 13, obj [("ty", num 16), ("val", .str "0")]],
+    field 15 14 0, inst 16 "store" 1 #[ref 15, lit 5], field 17 14 1, inst 18 "store" 1 #[ref 17, lit 7],
+    parent 20 15 0, field 21 20 1, inst 22 "store" 1 #[ref 21, lit 11],
+    inst 40 "load" 0 #[ref 17], inst 41 "load" 0 #[ref 15],
+    inst 42 "add_wrap" 0 #[ref 40, ref 41], inst 45 "ret" 2 #[ref 42]]) 16
   let bad := fun (p : Json) (ts : Array Json) => file "bad" (setup ++ #[p] ++ finish 13) ts
   let matching := "requires the matching terminal ordinary struct field"
   reject (bad (parent 20 11 1) types) matching
@@ -113,7 +148,7 @@ def main (args : List String) : IO Unit := do
   let packed := types.set! 3 ((types[3]!).setObjVal! "layout" (.str "packed"))
   reject (bad (parent 20 11 0) packed) matching
   let union := types.set! 3 (obj [("k", .str "union"), ("name", .str "U"),
-    ("layout", .str "auto"), ("tag", num 12),
+    ("layout", .str "auto"), ("tag", num 17),
     ("fields", .arr #[obj [("name", .str "x"), ("ty", num 0)], obj [("name", .str "y"), ("ty", num 0)]])])
     |>.push (obj [("k", .str "enum"), ("name", .str "Tag"), ("tag", num 0),
       ("exhaustive", .bool true), ("fields", .arr #[obj [("name", .str "x"), ("value", .str "0")],
