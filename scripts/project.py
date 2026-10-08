@@ -862,13 +862,27 @@ def goal_rows(root, binding, reason):
     return [dict(goal, binding=binding, reason=reason, audited_theorem=None) for goal in root['goals']]
 
 
-def bind_receipt(root, base, generated_sha, bundle, file_hashes):
-    """Compiled status plus per-goal theorem bindings for one root."""
-    if generated_sha is None:
+def generated_identity(artifact, stored, root_id):
+    """(whole-file hash, hash without the first-line profile record) of a verified artifact's Gen.lean."""
+    raw = read_bounded(path_under(artifact, f'{root_id}/Gen.lean'), EVIDENCE_JSON['max_file_bytes'])
+    whole = stored['files'][f'generated/{root_id}/Gen.lean']['sha256']
+    if digest(raw) != whole:
+        raise Invalid(f'generated Lean of {root_id} changed after verification')
+    return whole, digest(normalize_generated().split_generated(raw)[1])
+
+
+def bind_receipt(root, base, generated, bundle, file_hashes):
+    """Compiled status plus per-goal theorem bindings for one root.
+
+    The receipt's committed generated module must equal the artifact's, or equal it without the
+    first-line profile record when the committed module has none (the legacy layout that
+    `check` also accepts)."""
+    if generated is None:
         reason = 'no verified translation artifact; generated Lean cannot be bound to the receipt'
         return stage('not_run', reason), goal_rows(root, 'unbound', reason)
-    matches = sorted(path for path, entry in bundle['profiles'].items()
-                     if isinstance(entry, dict) and entry.get('sha256') == generated_sha)
+    whole, body = generated
+    matches = sorted(path for path, entry in bundle['profiles'].items() if isinstance(entry, dict)
+                     and (entry.get('sha256') == whole or (entry.get('metadata') is None and entry.get('sha256') == body)))
     gen_modules = sorted({module_of(p) for p in matches} - {None})
     if not gen_modules:
         reason = 'source hash mismatch: receipt compiled no generated Lean byte-identical to the translation artifact'
@@ -1076,7 +1090,7 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
         try:
             verify(path, artifact)
             stored = load_evidence(path_under(artifact, 'report.json'))
-            generated = {r['id']: stored['files'][f'generated/{r["id"]}/Gen.lean']['sha256'] for r in manifest['roots']}
+            generated = {r['id']: generated_identity(artifact, stored, r['id']) for r in manifest['roots']}
             translated = stage('passed', 'translation artifact hashes match current inputs and translator',
                                artifact=str(artifact))
         except (OSError, ValueError, KeyError, TypeError, UnicodeError) as error:
