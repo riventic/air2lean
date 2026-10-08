@@ -52,6 +52,7 @@
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
     "ZigLean.Mem.Lemmas": ["SEM-02"],
+    "ZigLean.Mem.ConstPtr": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
     "ZigLean.Mem.Owned": ["ALC-07"],

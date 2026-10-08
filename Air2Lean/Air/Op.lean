@@ -601,5 +601,9 @@ structure Func where
   /-- `layouts[i]` is the layout of `types[i]`. -/
   layouts : Array Layout
   globals : Array Global
+  /-- The schema-12 profile's code generator (`stage2_llvm`, `stage2_x86_64`, …); legacy
+  schemas and constructed functions are `unverified`. Backend-specific constant lowering
+  checks (`Check.lean`) read it. -/
+  backend : String := "unverified"
 
 end Air2Lean
