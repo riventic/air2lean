@@ -49,13 +49,17 @@ lake env lean tutorials/cross-target/Main.lean
 the running thread is still `t`. It weakens the postcondition of `lock_spec` and never names the
 contended value, so the same file is the proof for both targets.
 
-To run it against macOS, copy the golden over the generated module and rebuild (this is what CI
-does; restore the file afterwards):
+To run it against macOS, copy the golden over the generated module and rebuild, then restore
+the file. The CI step "Build threadsync proofs (macOS translation)" does exactly this on the
+0.15.2 job (with a trap that restores `Gen.lean` on failure) and also elaborates `Main.lean` and
+`Solution.lean` against it:
 
 ```sh
 cp tests/golden/0.15.2/threadsync/Gen-darwin.lean Proofs/Threadsync/Gen.lean
 lake build Proofs.Threadsync.Lock
 lake env lean tutorials/cross-target/Main.lean
+lake env lean tutorials/cross-target/Solution.lean
+lake env lean tutorials/cross-target/NegativeMacos.lean   # must fail
 git checkout Proofs/Threadsync/Gen.lean
 ```
 
@@ -82,6 +86,9 @@ A solution is in [`Solution.lean`](Solution.lean).
 [`Negative.lean`](Negative.lean) states the hypothesis with the macOS value (`L.c = 1`) against
 the committed Linux translation, whose `mutexC` is 3. Lean must reject it with an application
 type mismatch: a lock proof does not move between targets by editing the constant.
+[`NegativeMacos.lean`](NegativeMacos.lean) is the mirror image for the macOS translation (the
+Linux constant 3 must fail there); only the CI macOS step runs it, because it elaborates on the
+Linux translation.
 
 ```sh
 lake env lean tutorials/cross-target/Negative.lean   # must fail
@@ -109,8 +116,7 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering for the
   target.
 
-Remaining obligations: this tutorial runs from a clean environment against the Linux
-translation only; the macOS run needs the golden swap above (CI does it natively on
-aarch64-macos). Each proof is about one recorded profile, and nothing transfers a proof between
+Remaining obligations: the clean container runs the Linux translation only; the macOS
+translation is checked by the CI golden-swap step, not in a macOS clean container. Each proof is about one recorded profile, and nothing transfers a proof between
 profiles. WASM, 32-bit and big-endian targets are not modelled, and there is no cross-target
 proof run in the clean container (Q05).
