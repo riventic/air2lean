@@ -449,7 +449,8 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
            body, types := raw.types, layouts, globals := raw.globals,
            errorSetBits := raw.profile.errorSetBits, backend := raw.profile.backend,
            targetArch := if raw.profile.targetTriple == "unverified" then ""
-             else (raw.profile.targetTriple.splitOn "-").headD "" }
+             else (raw.profile.targetTriple.splitOn "-").headD "",
+           bigEndian := raw.profile.endian == "big" }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do

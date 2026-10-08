@@ -297,6 +297,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/const-locals/air-fuzz_s19/{version}': 'tests/roadmap/const-locals/provenance.json',
     'tests/roadmap/volatile-effects/air/{version}': 'tests/roadmap/volatile-effects/air/provenance.json',
     'tests/roadmap/volatile-effects/air-asm/{version}': 'tests/roadmap/volatile-effects/air-asm/provenance.json',
+    # T03: patched-compiler exports of big_endian.zig/reject.zig (check.sh --export, README).
+    'tests/roadmap/big-endian/air/{version}/s390x-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/x86_64-linux': 'tests/roadmap/big-endian/README.md',
+    'tests/roadmap/big-endian/air/{version}/s390x-reject': 'tests/roadmap/big-endian/README.md',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',

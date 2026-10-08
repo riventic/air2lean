@@ -645,5 +645,8 @@ structure Func where
   /-- The profile's target architecture (`x86_64`, `aarch64`); empty for a legacy profile, whose
   reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
   targetArch : String := ""
+  /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
+  (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
+  bigEndian : Bool := false
 
 end Air2Lean

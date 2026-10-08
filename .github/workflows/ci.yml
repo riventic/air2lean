@@ -1036,6 +1036,34 @@ jobs:
           bash tests/roadmap/pointer-width/check.sh
           bash tests/roadmap/pointer-width/check.sh --native
 
+      # T03: s390x (big endian) and x86_64 translations of one source, both-order proofs, the
+      # big-endian rejections, and the native program on s390x under qemu-user and on the host.
+      - name: Byte order (s390x big endian, x86_64)
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          AIR2LEAN_S390X_RUN: qemu-s390x-static
+          AIR2LEAN_X86_64_RUN: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user-static
+          lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
+          bash tests/roadmap/big-endian/check.sh --native
+          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-big-endian-source.XXXXXX")
+          trap 'rm -rf "$fresh"' EXIT
+          bash tests/roadmap/big-endian/check.sh --export "$fresh"
+          # A fresh export translates to the retained Gen.lean files byte for byte.
+          for pair in S390x:s390x-linux X64:x86_64-linux; do
+            "$AIR2LEAN_TRANSLATOR" "$fresh/${pair#*:}" -o "$fresh/${pair%%:*}.lean" \
+              --namespace "BigEndian.${pair%%:*}" --prefix big_endian.
+            cmp "$fresh/${pair%%:*}.lean" "tests/roadmap/big-endian/BigEndian/${pair%%:*}/Gen.lean"
+          done
+          diff <(ls "$fresh/s390x-reject") <(ls tests/roadmap/big-endian/air/0.16.0/s390x-reject)
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:

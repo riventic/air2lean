@@ -1,0 +1,12 @@
+< PROFILE
+> PROFILE
+< namespace BigEndian.S390x
+< 
+< open scoped Zig.BigEndian
+> namespace BigEndian.X64
+<     let i17 ← Zig.loadBitsOf .big (BitVec 12) 4 4 4 i16
+>     let i17 ← Zig.loadBits (BitVec 12) 4 4 4 i16
+<     Zig.storeBitsOf .big (α := BitVec 12) 4 4 4 i5 p1
+>     Zig.storeBits (α := BitVec 12) 4 4 4 i5 p1
+< end BigEndian.S390x
+> end BigEndian.X64

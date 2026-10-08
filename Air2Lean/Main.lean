@@ -40,7 +40,7 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
 
 def help : String :=
@@ -177,7 +177,7 @@ def parseArgs (args : List String) : Except String Args := do
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
-    unless p == BuildProfile.legacyName || p == BuildProfile.currentName do
+    unless p == BuildProfile.legacyName || p == BuildProfile.currentName || p == BuildProfile.bigEndianName do
       throw s!"invalid --profile '{p}'\n{usage}"
   pure a
 

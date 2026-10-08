@@ -2858,6 +2858,8 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Bit.lean",
+          "ZigLean/Endian.lean",
+          "ZigLean/EndianLemmas.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
@@ -2951,6 +2953,8 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Bit.lean",
+          "ZigLean/Endian.lean",
+          "ZigLean/EndianLemmas.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
@@ -3344,6 +3348,8 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Bit.lean",
+          "ZigLean/Endian.lean",
+          "ZigLean/EndianLemmas.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
@@ -3464,6 +3470,7 @@
           "ZigLean/Conc/WeakCas.lean",
           "ZigLean/Conc/WeakCasLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Endian.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
@@ -9762,6 +9769,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Basic.lean",
+          "ZigLean/Endian.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
@@ -10943,6 +10951,8 @@
           "ZigLean/Conc/Capture.lean",
           "ZigLean/Conc/Total.lean",
           "ZigLean/Conc/Transfer.lean",
+          "ZigLean/Endian.lean",
+          "ZigLean/EndianLemmas.lean",
           "ZigLean/Env.lean",
           "ZigLean/External.lean",
           "ZigLean/Mem/Alloc.lean",

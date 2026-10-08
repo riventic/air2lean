@@ -2,10 +2,10 @@ import Lean.Data.Json
 import Std.Data.HashSet
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
-Only the little-endian memory model is admitted, with 64-bit pointers (x86_64-linux,
-aarch64-macos) or 32-bit pointers (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`).
-Schema 12 makes the facts mandatory; schemas 1–11 retain the explicitly named, unverified
-legacy 64-bit profile. -/
+Admitted: the little-endian memory model with 64-bit pointers (x86_64-linux, aarch64-macos) or
+32-bit pointers (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`), and the 64-bit
+big-endian model (s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory;
+schemas 1–11 retain the explicitly named, unverified legacy 64-bit little-endian profile. -/
 namespace Air2Lean
 
 open Lean (Json)
@@ -33,6 +33,13 @@ namespace BuildProfile
 
 def legacyName : String := "legacy-abi64-le"
 def currentName : String := "abi64-le-v1"
+/-- The big-endian model profile (T03). The exporter writes `currentName` as the raw
+`profile.name` of every target; the translator names a qualified big-endian profile by its byte
+order, so a generated header and `--profile` distinguish the two models. -/
+def bigEndianName : String := "abi64-be-v1"
+
+/-- The profile's byte order is big endian (`profile.endian`). -/
+def isBigEndian (p : BuildProfile) : Bool := p.endian == "big"
 
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
@@ -63,7 +70,8 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
     return none
   if let .ok endian := j.getObjVal? "target_endian" then
     if let some endian ← take? endian.getStr? then
-      unless endian == "little" do
+      -- Big endian needs a schema-12 profile of a qualified big-endian target (below).
+      unless endian == "little" || (endian == "big" && schema == 12) do
         report s!"target_endian '{endian}' is outside the little-endian memory model"
   if schema < 12 then
     if (j.getObjVal? "profile").toOption.isSome then
@@ -88,8 +96,8 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       report s!"profile.pointer_bits {pointerBits} is outside the 32/64-bit memory model"
   let endian ← take? (strField p "endian")
   if let some endian := endian then
-    unless endian == "little" do
-      report s!"profile.endian '{endian}' is outside the little-endian memory model"
+    unless endian == "little" || endian == "big" do
+      report s!"profile.endian '{endian}' is outside the little/big-endian memory model"
   let abi ← take? (strField p "abi")
   if let some triple := targetTriple then
     -- Zig triples have arch-os-abi components (version suffixes are permitted).
@@ -101,17 +109,31 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       let osName := (os.splitOn ".").head!
       let native := (arch == "x86_64" && osName == "linux") || (arch == "aarch64" && osName == "macos")
       let wasm := arch == "wasm32" && (osName == "freestanding" || osName == "wasi")
-      if !(native || wasm) then
-        report "profile.target_triple: outside the x86_64-linux/aarch64-macos/wasm32-freestanding/wasm32-wasi model ABI scope"
-      else if let some pointerBits := pointerBits then
-        unless pointerBits == (if wasm then 32 else 64) do
-          report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
-            {if wasm then 32 else 64}-bit pointer width"
+      let big := arch == "s390x" && osName == "linux"
+      if !(native || wasm || big) then
+        report "profile.target_triple: outside the x86_64-linux/aarch64-macos/s390x-linux/wasm32-freestanding/wasm32-wasi model ABI scope"
+      else
+        if let some pointerBits := pointerBits then
+          unless pointerBits == (if wasm then 32 else 64) do
+            report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
+              {if wasm then 32 else 64}-bit pointer width"
+        let targetEndian := if big then "big" else "little"
+        if let some endian := endian then
+          unless endian == targetEndian do
+            report s!"profile.endian '{endian}' differs from the {arch} target's {targetEndian}-endian byte order"
     | _ => report "profile.target_triple: expected arch-os-abi"
+  if let (.ok te, some endian) := (j.getObjVal? "target_endian", endian) then
+    unless (match te.getStr? with | .ok s => s == endian | .error _ => false) do
+      report "target_endian differs from profile.endian"
   if let some profileVersion ← take? (strField p "zig_version") then
     unless profileVersion == zigVersion do
       report "profile.zig_version differs from top-level zig_version"
   let backend ← take? (strField p "backend")
+  -- The big-endian bit-pointer host is the `(bits + 7) / 8`-byte integer of the LLVM backend
+  -- (`Zig.loadBitsOf`), and its vector lanes are LLVM's; no other backend targets s390x.
+  if let (some "big", some backend) := (endian, backend) then
+    unless backend == "stage2_llvm" do
+      report s!"profile.backend '{backend}' is outside the big-endian model (stage2_llvm only)"
   let cpu ← take? (strField p "cpu")
   let features ← take? do
     let fs ← ((p.getObjVal? "features").bind Json.getArr?).mapError fun e => s!"profile.features: {e}"
@@ -147,7 +169,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       report "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"
   let base : BuildProfile := { name := legacyName, schema, zigVersion }
   return some {
-    name := name.getD base.name
+    name := if endian == some "big" then bigEndianName else name.getD base.name
     schema
     zigVersion
     targetTriple := targetTriple.getD base.targetTriple

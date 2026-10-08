@@ -718,8 +718,10 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
         referenced.update(ids)
     for pid in sorted(set(premises) - referenced):
         errors.append(f"premise {pid} is referenced by no rule, runtime module or report")
-    if set(config["profiles"]) != {"absent", "legacy-abi64-le", "abi64-le-v1", "gate-time"}:
-        errors.append(f"{CONFIG}: profiles must map absent, legacy-abi64-le, abi64-le-v1 and gate-time")
+    # `abi64-be-v1` (the big-endian model profile, T03) is optional for fixture configurations.
+    if set(config["profiles"]) - {"abi64-be-v1"} != {"absent", "legacy-abi64-le", "abi64-le-v1", "gate-time"}:
+        errors.append(f"{CONFIG}: profiles must map absent, legacy-abi64-le, abi64-le-v1 and gate-time "
+                      "(and optionally abi64-be-v1)")
     repo = load_repository(root, config)
     errors += repo.errors + runtime_errors(repo)
     entries, index_errors = build_index(repo)

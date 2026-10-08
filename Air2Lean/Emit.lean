@@ -662,6 +662,8 @@ structure FCtx where
   floatSemantics : FloatSemantics
   /-- The profile's `error_set_bits` (`Func.errorSetBits`), for error storage (`errOp`). -/
   errBits : Nat := 16
+  /-- The profile is big endian (`Func.bigEndian`): bit-pointer accesses take `.big`. -/
+  bigEndian : Bool := false
   spawnSemantics : SpawnSemantics := .available
   /-- Typed caller execution of each complete capture, including pure slice adapters. -/
   spawnFallbacks : Array (String × String) := #[]
@@ -1140,6 +1142,11 @@ def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) (baseBit : Nat := 0) :
 /-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
 def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
 
+/-- The bit-pointer access `name` (`ZigLean/Packed.lean`), or its byte-order form at `.big`
+(`ZigLean/Endian.lean`) for a big-endian profile. -/
+def FCtx.bitsFn (fc : FCtx) (name : String) : String :=
+  if fc.bigEndian then s!"Zig.{name}Of .big" else s!"Zig.{name}"
+
 /-- A bit-pointer type's bit offset in its host; 0 for every other type. -/
 def FCtx.bitOffset (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.bitPtrOffset)).getD 0
 
@@ -1223,7 +1230,7 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
   match fc.valTyId? ptr with
   | some t =>
     if fc.hostSize t != 0 then
-      let f := if fc.laneBitPtr t then "Zig.loadLane" else "Zig.loadBits"
+      let f := if fc.laneBitPtr t then "Zig.loadLane" else fc.bitsFn "loadBits"
       s!"{f} ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
         {fc.bitOffset t} {p}"
     else fc.pointeeStorageExpr ptr s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
@@ -2290,7 +2297,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .undef _ =>
         if host != 0 then
           let bits := ((ptrTy?.bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
-          (env, some s!"Zig.storeUndefBits {bits} {host} {align} {bitOff} {rv ptr}")
+          (env, some s!"{fc.bitsFn "storeUndefBits"} {bits} {host} {align} {bitOff} {rv ptr}")
         else
         -- `undefined`: every byte of the value becomes undefined.
         (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeUndef ({ty}) {align} {rv ptr}"))
@@ -2309,7 +2316,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else
         if host != 0 then
           let f := if ((fc.valTyId? ptr).map fc.laneBitPtr).getD false then "Zig.storeLane"
-            else "Zig.storeBits"
+            else fc.bitsFn "storeBits"
           (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))
     else (env, some (fc.storePlace ptr (rv v)))
@@ -2926,7 +2933,7 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blockLoopTys allInsts,
       allInsts, brT := brTargets allInsts, repT := repTargets allInsts,
       retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
-      exitName := mangleField s!"{plain}Exit", floatSemantics, errBits := f.errorSetBits,
+      exitName := mangleField s!"{plain}Exit", floatSemantics, errBits := f.errorSetBits, bigEndian := f.bigEndian,
       zigVersion := f.zigVersion, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
@@ -3793,7 +3800,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (names, callees, text)
   { header := ["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else [])
-    opens := wasm32Open funcs
+    -- A big-endian profile: the big-endian encodings (`ZigLean/Endian.lean`, T03).
+    opens := wasm32Open funcs ++ (if funcs.any (·.bigEndian) then ["open scoped Zig.BigEndian"] else [])
     preamble := structsStr ++ asmStr ++ modelStr ++ (device.map DeviceContract.emitDef).toList ++
       globalsStr ++ tgtStr
     groups
