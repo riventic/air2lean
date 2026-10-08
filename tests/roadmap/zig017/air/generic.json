@@ -46,6 +46,7 @@
     }
    ],
    "callee": {
+    "ty": 2,
     "func": "zig017.double__func_812",
     "noreturn": false
    }
@@ -71,6 +72,10 @@
   },
   {
    "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) u32"
   }
  ],
  "globals": []
