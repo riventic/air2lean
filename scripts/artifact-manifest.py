@@ -282,6 +282,13 @@ def native_link(native, links, overrides):
     return link_record(None, [], value)
 
 
+def receipt_files(root, attempt):
+    """The receipt, plan and audit are required; after.json (MBs, hash-bound by receipt.json) may be omitted."""
+    base = absolute(root, attempt)
+    names = [n for n in RECEIPT_FILES if n != 'after.json' or (base / n).exists()]
+    return [base / n for n in names]
+
+
 def compute_links(root, inputs, overrides=None):
     """Return {link: record or {'error': text}} for every link applicable to these inputs."""
     links, state = {}, {}
@@ -328,7 +335,7 @@ def compute_links(root, inputs, overrides=None):
     attempt('proofs', lambda: link_record(root, proof_files))
     attempt('theorems', theorems)
     if inputs['receipt'] is not None:
-        attempt('receipt', lambda: link_record(root, [absolute(root, inputs['receipt']) / n for n in RECEIPT_FILES]))
+        attempt('receipt', lambda: link_record(root, receipt_files(root, inputs['receipt'])))
     if inputs.get('native') is not None:
         attempt('native', lambda: native_link(inputs['native'], links, overrides or {}))
     return links
