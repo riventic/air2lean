@@ -113,10 +113,10 @@ theorem access_dead {m : Mem} {p : Ptr} {b : BlockId} {n a : Nat} (hb : p.block 
   | some blk =>
     simp only
     by_cases hc : blk.live = true ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧
-        (blk.addr + p.off.toNat) % a = 0
+        (blk.addr + p.off.toNat) % a = 0 ∧ blk.kind.mappedLo ≤ p.off.toNat
     · exfalso
       simp only [Mem.heap, hblk] at hh
-      simp [hc.1, show p.off.toNat < blk.bytes.size by omega] at hh
+      simp [hc.1, hc.2.2.2.2, show p.off.toNat < blk.bytes.size by omega] at hh
     · simp only [hc, ↓reduceIte]
 
 /-- After `push` then `freeAll`, the node's 16 bytes are dead. -/
