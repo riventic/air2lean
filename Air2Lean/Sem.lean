@@ -678,7 +678,7 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   Int.reduceLT Int.reduceNeg Int.reduceToNat BitVec.ofNat_eq_ofNat List.cons_append
   List.nil_append List.foldr_cons List.foldr_nil true_and and_true Bool.and_true
   Bool.true_and beq_self_eq_true List.toList_toArray
-  Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ
+  Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
 
 end Cert
 

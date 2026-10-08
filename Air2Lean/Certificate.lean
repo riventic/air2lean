@@ -157,23 +157,24 @@ namespace Air2Lean.Certificate
 the oracle decodes argument `i`. -/
 structure Scalar where
   lean : String
-  enc : String
+  /-- The `Sem.Value` of a Lean term of this type. -/
+  enc : String → String
   dec : Nat → String
   /-- `valOk` inversion lemma, and the decoded argument of `v<i>`. -/
   inv : String
   decVar : Nat → String
 
 def scalar? : Ty → Option Scalar
-  | .int s w => some { lean := s!"BitVec {w}", enc := s!"(Value.int {bool s} {w} ·)",
+  | .int s w => some { lean := s!"BitVec {w}", enc := fun v => s!"(Value.int {bool s} {w} {v})",
                        dec := fun i => s!"((args.getD {i} .void).toBV {w})",
                        inv := "valOk_int", decVar := fun i => s!"(v{i}.toBV {w})" }
-  | .bool => some { lean := "Bool", enc := "Value.bool",
+  | .bool => some { lean := "Bool", enc := fun v => s!"(Value.bool {v})",
                     dec := fun i => s!"((args.getD {i} .void).toBool)",
                     inv := "valOk_bool", decVar := fun i => s!"v{i}.toBool" }
   | _ => none
 
 def retScalar? : Ty → Option Scalar
-  | .void => some { lean := "Unit", enc := "(fun _ => Value.void)", dec := fun _ => "()",
+  | .void => some { lean := "Unit", enc := fun _ => "Value.void", dec := fun _ => "()",
                     inv := "valOk_void", decVar := fun _ => "()" }
   | t => scalar? t
 
@@ -292,12 +293,12 @@ structure Sig where
   argNames : String
 
 def sig (f : Func) : Sig :=
-  let blank : Scalar := { lean := "", enc := "", dec := fun _ => "", inv := "", decVar := fun _ => "" }
+  let blank : Scalar := { lean := "", enc := fun _ => "", dec := fun _ => "", inv := "", decVar := fun _ => "" }
   let ret := (f.types[f.ret]?.bind retScalar?).getD blank
   let ps := f.params.mapIdx fun i p => (i, (f.types[p]?.bind scalar?).getD ret)
   { ret, ps,
     binders := " ".intercalate (ps.toList.map fun (i, s) => s!"(p{i} : {s.lean})"),
-    encArgs := ", ".intercalate (ps.toList.map fun (i, s) => s!"{s.enc} p{i}"),
+    encArgs := ", ".intercalate (ps.toList.map fun (i, s) => s.enc s!"p{i}"),
     argNames := " ".intercalate (ps.toList.map fun (i, _) => s!"p{i}") }
 
 /-- The certificate file for `funcs` (the translated program, emission order). `declNames`
@@ -334,14 +335,14 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   for f in frag do
     let s := sig f
     let args := s.ps.map fun (i, sc) => sc.dec i
-    lines := lines.push s!"  | {str f.name}, args => {s.ret.enc} <$> {genName f} {" ".intercalate args.toList}"
-  lines := lines.push "  | _, _ => stuck\n"
+    lines := lines.push s!"  | {str f.name}, args =>\n    StateT.lift ((fun v => {s.ret.enc "v"}) <$> {genName f} {" ".intercalate args.toList})"
+  lines := lines.push "  | _, _ => StateT.lift stuck\n"
   let callees := (frag.flatMap callsIn).toList.eraseDups
-  let mut panicLemmas : Array String := #[]
+  let mut panicLemmas : Array (String × String) := #[]
   for (n, k) in callees.toArray.zipIdx do
     let rhs := match panicCallee? n with | some e => s!"some {e}" | none => "none"
     lines := lines.push s!"theorem callee_{k} : panicOf? {str n} = {rhs} := rfl"
-    panicLemmas := panicLemmas.push s!"callee_{k}"
+    panicLemmas := panicLemmas.push (n, s!"callee_{k}")
   lines := lines.push ""
   let mut fixes : Array String := #[]
   for f in frag do
@@ -351,13 +352,15 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     let oracle := if calls then "gen" else "call"
     let callBinder := if calls then "" else "(call : Oracle) "
     let simpSet := ", ".intercalate
-      ([airName f, "air_sem"] ++ panicLemmas.toList ++ (if calls then ["gen"] else []))
+      ([airName f, "air_sem"] ++ (panicLemmas.filter fun (n, _) => (callsIn f).contains n).toList.map (·.2) ++
+        (if calls then ["gen"] else []))
     let what := if calls then ", with the generated program answering its calls,"
       else " (under any call oracle)"
     lines := lines ++ #[
       s!"/-- `{f.name}`: the AIR semantics of the decoded function{what} equals the generated definition. -/",
-      s!"theorem {d}_step {callBinder}{s.binders} :",
-      s!"    execFunc {oracle} {airName f} [{s.encArgs}] = {s.ret.enc} <$> {genName f} {s.argNames} := by",
+      s!"theorem {d}_step {callBinder}{s.binders} (m : Zig.Mem) :",
+      s!"    (execFunc {oracle} {airName f} [{s.encArgs}]).run m =",
+      s!"      (fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} := by",
       s!"  conv => rhs; rw [{genName f}]",
       s!"  simp only [{simpSet}]", ""]
     let paramList := "[" ++ ", ".intercalate (f.params.toList.map toString) ++ "]"
@@ -373,7 +376,9 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
       fix := fix ++ #[s!"  replace h{i} : valOk {printTy (f.types[f.params[i]!]!)} v{i} = true := h{i}",
         s!"  rw [{sc.inv} h{i}]"]
     let stepArgs := " ".intercalate (s.ps.toList.map fun (i, sc) => sc.decVar i)
-    fix := fix ++ #[s!"  rw [{d}_step {if calls then "" else "gen "}{stepArgs}]",
+    fix := fix ++ #["  funext m",
+      s!"  show (execFunc gen {airName f} _).run m = (gen _ _).run m",
+      s!"  rw [{d}_step {if calls then "" else "gen "}{stepArgs}]",
       "  simp only [gen, air_sem]", ""]
     lines := lines ++ fix
     fixes := fixes.push s!"{d}_fix"
@@ -386,15 +391,29 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     "theorem run_le_gen : Lean.Order.PartialOrder.rel (run (progOf table)) gen :=",
     "  run_le_of_table gen_fixpoint", ""]
   for f in frag do
+    unless calling f do continue
+    let d := declOf f.name
+    let s := sig f
+    lines := lines ++ #[
+      s!"/-- `{f.name}` calls certified functions: every terminating AIR run is the generated definition's. -/",
+      s!"theorem {d}_sound {s.binders} (m : Zig.Mem) :",
+      s!"    Lean.Order.PartialOrder.rel ((run (progOf table) {str f.name} [{s.encArgs}]).run m)",
+      s!"      ((fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames}) := by",
+      s!"  have h : Lean.Order.PartialOrder.rel ((run (progOf table) {str f.name} [{s.encArgs}]).run m)",
+      s!"      ((gen {str f.name} [{s.encArgs}]).run m) := run_le_gen {str f.name} [{s.encArgs}] m",
+      "  simp only [gen, air_sem] at h",
+      "  exact h", ""]
+  for f in frag do
     if calling f then continue
     let d := declOf f.name
     let s := sig f
     lines := lines ++ #[
       s!"/-- `{f.name}` makes no certified call: its AIR semantics equals the generated definition. -/",
-      s!"theorem {d}_run {s.binders} :",
-      s!"    run (progOf table) {str f.name} [{s.encArgs}] = {s.ret.enc} <$> {genName f} {s.argNames} := by",
+      s!"theorem {d}_run {s.binders} (m : Zig.Mem) :",
+      s!"    (run (progOf table) {str f.name} [{s.encArgs}]).run m =",
+      s!"      (fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} := by",
       "  rw [run_of_lookup (by rfl)]",
-      s!"  exact {d}_step _ {s.argNames}", ""]
+      s!"  exact {d}_step _ {s.argNames} m", ""]
   lines := lines.push s!"end {ns}.AirCert"
   pure ("\n".intercalate lines.toList ++ "\n")
 
