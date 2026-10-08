@@ -40,7 +40,7 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -57,6 +57,7 @@ def help : String :=
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
+  "  --unit-diagnostic-limit <n>  Diagnostics to report per input file in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
   "  --source-map-json <json>     Also write source maps for fingerprints; see docs/stable-generation.md.\n" ++
   "  --split-modules <Module>     Write one module per call group; -o is the umbrella <Module>.\n" ++

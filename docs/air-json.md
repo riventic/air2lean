@@ -27,6 +27,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
     "export_stage": "analyzed-air"
   },
   "name": "basic.scale",
+  "src": { "file": "basic.zig", "module": "root", "decl_line": 14 },
   "params": [0, 1],
   "ret": 3,
   "body": [ Inst, ... ],
@@ -40,6 +41,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata; schema 1–11 select the named `legacy-abi64-le` assumptions. Unsupported/future schemas fail closed. |
 | `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
 | `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
+| `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name, e.g. `root` or `std`) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
@@ -101,7 +103,9 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `callee` | `call*`: a Ref |
 | `index` | `struct_field_val`, `struct_field_ptr`, `union_init`: field index |
 | `name` | `dbg_var_ptr`, `dbg_var_val`, `dbg_arg_inline`: variable name |
-| `line` | `dbg_stmt`: 1-based source line |
+| `line` | `dbg_stmt`: 1-based line relative to the enclosing function's declaration (`1` is the declaration line), so the absolute line is `src.decl_line + line - 1`. Inside a `dbg_inline_block` it is relative to the inlined callee's declaration. |
+| `column` | `dbg_stmt`: 1-based source column (additive provenance; older exports omit it) |
+| `src` | `dbg_inline_block`: the inlined callee's declaration site, shaped like the function-level `src` (additive provenance) |
 | `op` | `atomic_rmw`: `std.builtin.AtomicRmwOp` field name (schema 10); `reduce`, `reduce_optimized`: `std.builtin.ReduceOp` tag name (`And`, `Or`, `Xor`, `Min`, `Max`, `Add`, `Mul`); `cmp_vector`, `cmp_vector_optimized`: `std.math.CompareOperator` tag name (`lt`, `lte`, `eq`, `gte`, `gt`, `neq`) (schema 9) |
 | `mask` | `shuffle`, `shuffle_one`, `shuffle_two`: the shuffle mask, one entry per output lane (schema 9) |
 | `order` | `atomic_load`, `atomic_rmw`: `std.builtin.AtomicOrder` field name (schema 10) |

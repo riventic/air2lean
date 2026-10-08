@@ -13,7 +13,8 @@ emitted function the sidecar keeps:
 * `air_name`, `air_file`: the exporter's original identity and storage file;
 * `definition`: the emitted Lean declaration (and the `--proof-api` names, if any);
 * `callees`: every function the body references (calls, function values, spawn targets);
-* `canonical`: the AIR body with every debug instruction removed and instruction IDs
+* `canonical`: the AIR body with every debug instruction and every inlined callee's
+  declaration site (`src`) removed, and instruction IDs
   renumbered `0, 1, …` in pre-order, so that exporter renumbering and source-line
   shifts do not change it;
 * `lines`: `[instruction, line]` pairs mapping canonical IDs to the latest preceding
@@ -77,6 +78,10 @@ partial def canonicalBody (ids : Std.HashMap Nat Nat) (body : Array Json) : Json
   .arr ((body.filter (!isDebug ·)).map (canonicalInst ids))
 
 partial def canonicalInst (ids : Std.HashMap Nat Nat) (inst : Json) : Json :=
+  -- An inlined callee's declaration site (`src`) is source provenance, like `dbg_stmt`.
+  let inst := match inst with
+    | .obj kvs => Json.mkObj (kvs.foldl (fun acc k v => if k == "src" then acc else acc.push (k, v)) #[]).toList
+    | other => other
   mapObject inst fun k v =>
     if k == "id" || k == "target" then remap ids v
     else if k == "body" || k == "then" || k == "else" then

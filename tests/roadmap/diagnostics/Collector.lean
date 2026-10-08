@@ -203,12 +203,15 @@ private def collectorChecks : IO Unit := do
     observed := 1
     failed := true
     complete := false
-    truncated := true }
+    truncated := true
+    exhausted := true }
   let afterDependency := collectProgram #[
     { file := "calls.json", function := some call.name, normalized := some call, structureValid := true, localPassed := true },
     { file := "target.json", function := some target.name, normalized := some target, structureValid := true, localPassed := true }] beforeDependency
-  require (afterDependency.observed == 4 && afterDependency.failed && afterDependency.truncated && !afterDependency.complete)
-    "pre-truncated dependency phase must preserve both call additions and the authoritative program addition"
+  -- Both call signature findings are observed (and dropped); the collected whole-program
+  -- validator does not count the same two call sites again.
+  require (afterDependency.observed == 3 && afterDependency.failed && afterDependency.truncated && !afterDependency.complete)
+    "pre-truncated dependency phase must preserve both call additions without duplicate program additions"
   require (afterDependency.items.map (·.code) == #[.inputLimit]) "pre-truncated report cannot add dependency items"
   let malformedType := { (mkFunc "prerequisite") with
     types := (mkFunc "").types.push (.other "unsupported")

@@ -536,6 +536,10 @@ jobs:
           python3 tests/roadmap/diagnostics/test_cli.py --self-test 2>&1 | tee "$diagnostics_evidence_dir/harness.log"
           python3 tests/roadmap/diagnostics/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/cli.log"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/blocker-collection/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$diagnostics_evidence_dir/blockers.log"
+          # I05 source spans: real exports of the fixture must locate each marked statement.
+          bash tests/roadmap/diagnostics-complete/export.sh "$PWD/zig-air-${{ matrix.zig }}/bin/zig" "$diagnostics_evidence_dir/air"
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/diagnostics-complete/test_cli.py "$PWD/.lake/build/bin/air2lean" \
+            --export-air "$diagnostics_evidence_dir/air" 2>&1 | tee "$diagnostics_evidence_dir/complete.log"
       # L13: synthetic exporter-schema fixtures only; the real export check needs a patched
       # compiler (docs/volatile-effects.md §Commands).
       - name: Reject volatile and device effects

@@ -587,6 +587,23 @@ const W = struct {
         try w.j.endObject();
     }
 
+    /// The declaration site of a function (`src`): its file relative to the owning module's
+    /// root, the module name, and the 1-based line of the declaration. A `dbg_stmt` line is
+    /// relative to it (line 1 is the declaration line), as in the LLVM backend's `base_line`.
+    fn writeSrc(w: *W, nav: InternPool.Nav.Index) Error!void {
+        const zcu = w.pt.zcu;
+        const file = zcu.navFileScope(nav);
+        const mod = if (Compat.v14) file.mod else file.mod.?;
+        try w.j.beginObject();
+        try w.field("file");
+        try w.j.write(file.sub_file_path);
+        try w.field("module");
+        try w.j.write(mod.fully_qualified_name);
+        try w.field("decl_line");
+        try w.j.write(zcu.navSrcLine(nav) + 1);
+        try w.j.endObject();
+    }
+
     fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, owner_nav: InternPool.Nav.Index) Error!void {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
@@ -601,6 +618,8 @@ const W = struct {
         try w.writeProfile(owner_nav);
         try w.field("name");
         try w.j.write(fqn);
+        try w.field("src");
+        try w.writeSrc(owner_nav);
         try w.field("params");
         try w.j.beginArray();
         const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
@@ -846,6 +865,9 @@ const W = struct {
             },
             .dbg_inline_block => {
                 const extra = w.air.extraData(Air.DbgInlineBlock, w.data(inst).ty_pl.payload);
+                // The body's `dbg_stmt` lines are relative to the inlined function's declaration.
+                try w.field("src");
+                try w.writeSrc(w.pt.zcu.funcInfo(extra.data.func).owner_nav);
                 try w.field("body");
                 try w.writeBody(@ptrCast(Compat.extra(w.air)[extra.end..][0..extra.data.body_len]));
             },
@@ -965,6 +987,8 @@ const W = struct {
                 const d = w.data(inst).dbg_stmt;
                 try w.field("line");
                 try w.j.write(d.line + 1);
+                try w.field("column");
+                try w.j.write(d.column + 1);
             },
             .assembly => if (Compat.v14) {
                 // M21: no inline asm support for 0.14.1.
