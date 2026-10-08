@@ -149,10 +149,13 @@ def racePair (a b : AccessKind) : Option Error :=
 /-- Who owns the join handle of thread `id`: the thread that spawned it, until an explicit
 `Thread.transferHandle` (C07) moves it; and whether the handle was consumed, by `Thread.join` or
 by `Thread.detach` (a detached thread may still run). Index 0 (main) is unused: nothing ever
-joins it. -/
+joins it. `tls`: the thread's own instance of each `threadlocal` global, as
+`(key, instance block)` (`ZigLean/Mem/Tls.lean`); empty for a program without `threadlocal`
+globals and for a thread that has not started. -/
 structure ThreadRec where
   spawner : ThreadId
   joined : Bool
+  tls : Array (BlockId × BlockId) := #[]
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/

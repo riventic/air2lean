@@ -1439,7 +1439,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .isNamedEnum a => #[a]
   | .unionTag a => #[a]
   | .unionInit _ a => #[a]
-  | .alloc => #[]
+  | .alloc | .runtimeNavPtr _ => #[]
   | .fieldPtr base _ => if fc.isMemPtr base then #[base] else #[]
   | .fieldParentPtr fieldPtr _ => if fc.isMemPtr fieldPtr then #[fieldPtr] else #[]
   | .setUnionTag p tag => if fc.isMemPtr p then #[p, tag] else #[]
@@ -2100,6 +2100,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | _, some (u, f, false) => s!"pure ({u}.{fc.memberName (fc.tyOfId inst.ty) f} {rv a})"
       | _, none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .runtimeNavPtr g =>
+    -- The current thread's instance of the `threadlocal` global whose key (the block of the
+    -- main thread's instance) is `globalIds[g]` (§Thread-local storage).
+    let (env, l) := bindLet fc env inst.id s!"Zig.tlsPtr {fc.globalIds[g]!}"; (env, some l)
   | .alloc =>
     if fc.escaping.contains inst.id then
       -- The pointer to the local's stack block (made at function entry: `emitFunctionDef`).
@@ -2906,9 +2910,16 @@ structure ProgGlobal where
   isVar : Bool := false
   /-- An `extern` global: its `ExternInit` field and Lean type; `bytes` encode that field. -/
   externField : Option (String × String) := none
+  /-- A `threadlocal` global: the block is the main thread's instance, and its index is the
+  global's TLS key (§Thread-local storage). -/
+  tls : Bool := false
 
 /-- The structure of the explicit external initial state that `mem0` takes (§Globals). -/
 def externInitName : String := "ExternInit"
+
+/-- The name reserved for the initial bytes of the `threadlocal` globals, only if there is one. -/
+def tlsReservedNames (funcs : Array Func) : Array String :=
+  if funcs.any (·.globals.any (·.threadlocal)) then #["tlsInit"] else #[]
 
 /-- Program names reserved for explicit external initial state, only if a global is `extern`. -/
 def externReservedNames (funcs : Array Func) : Array String :=
@@ -2967,7 +2978,8 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
     if let some field := externField then fields := fields.push field
     out := out.push { label := n, bytes := fc.globalBytes g externField,
                       align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst,
-                      externField := externField.map (·, emitTy fc.structNames fc.types (fc.tyOfId g.ty)) }
+                      externField := externField.map (·, emitTy fc.structNames fc.types (fc.tyOfId g.ty)),
+                      tls := g.threadlocal }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   return (out, ids)
@@ -3023,15 +3035,26 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
   let lines := gs.toList.zipIdx.map fun (g, k) =>
     let source := match g.externField with
       | some (field, _) => s!" (extern: initial value `ext.{field}`)"
-      | none => ""
+      | none => if g.tls then " (threadlocal: the main thread's instance)" else ""
     s!"  -- {k}: {g.label}{source}\n  ({g.bytes}, {g.align}, {kind g})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
+  let keys := gs.toList.zipIdx.filterMap fun (g, k) => if g.tls then some s!"{k}" else none
+  let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals {body}" else
+    s!"(Zig.Mem.ofGlobals {body}).mainTls #[{", ".intercalate keys}]"
+  let tlsDoc := if keys.isEmpty then "" else
+    " The main thread's instance of a `threadlocal` global is its block (its TLS key)."
+  let tlsInit := if keys.isEmpty then "" else
+    let items := gs.toList.zipIdx.filterMap fun (g, k) =>
+      if g.tls then some s!"  -- {g.label}\n  ({k}, {g.bytes}, {g.align})" else none
+    s!"\n\n/-- The `threadlocal` globals: key, initial bytes and alignment. A spawned thread \
+      makes its own instance of each from these (`Zig.ConcM.tlsThread`). -/\n\
+      def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [\n{",\n".intercalate items}]"
   let externs := gs.toList.zipIdx.filterMap fun (g, k) => g.externField.map fun (field, ty) =>
     let access := if g.isVar then "`var`, writable" else "`const`, read-only"
     s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
   if externs.isEmpty then
-    s!"/-- The memory at program start: block `k` is global `k`. -/\n\
-      def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
+    s!"/-- The memory at program start: block `k` is global `k`.{tlsDoc} -/\n\
+      def mem0 : Zig.Mem := {body}{tlsInit}"
   else
     s!"/-- External initial state: the initial value of each `extern` global, which this program \
       does not define. Fields follow block (initialization) order. Contract: the external \
@@ -3039,8 +3062,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
       other assumption about external storage is a hypothesis on this value. -/\n\
       structure {externInitName} where\n{"\n".intercalate externs}\n\n\
       /-- The memory at program start: block `k` is global `k`. Blocks are added in order; an \
-      `extern` block holds its `ext` field, never a default. -/\n\
-      def mem0 (ext : {externInitName}) : Zig.Mem := Zig.Mem.ofGlobals {body}"
+      `extern` block holds its `ext` field, never a default.{tlsDoc} -/\n\
+      def mem0 (ext : {externInitName}) : Zig.Mem := {body}{tlsInit}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
@@ -3245,7 +3268,7 @@ source order, adapting every slice argument for a pure worker in the child threa
 classifies every field as `other`. -/
 def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCapture : Bool)
     (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
-    (captureClasses : Array (Array CaptureClass) := #[]) :
+    (captureClasses : Array (Array CaptureClass) := #[]) (tls : Bool := false) :
     List String × List String :=
   let ctors := targets.toList.map fun (n, args, _) =>
     let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
@@ -3261,9 +3284,11 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
   let arms := targets.toList.map fun (n, args, k) =>
     let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
     let call := emitCapturedCallWithStorage n args k
-    if args.size ≤ 1 then s!"  | .{n} a => discard ({call})" else
+    -- With `threadlocal` globals the thread makes and frees its own instances around the target.
+    let run := if tls then s!"Zig.ConcM.tlsThread tlsInit (discard ({call}))" else s!"discard ({call})"
+    if args.size ≤ 1 then s!"  | .{n} a => {run}" else
       let binders := (List.range args.size).map arg
-      s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    discard ({call})"
+      s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    {run}"
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
@@ -3457,7 +3482,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let apiNames := if proofApi then funcs.flatMap (fun f =>
     if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
-    (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
+    (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs ++ tlsReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
@@ -3512,7 +3537,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
-      (targets.map fun (_, f, fields) => fields.map (captureClass f.types))
+      (targets.map fun (_, f, fields) => fields.map (captureClass f.types)) (globals.any (·.tls))
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
   let groups := (callGroups funcs).map fun (members, recursive) =>

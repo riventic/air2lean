@@ -488,6 +488,10 @@ inductive Op where
   | unionInit (index : Nat) (a : Val)
   /-- A local: `alloc`, or `ret_ptr` (the place the result is built in). -/
   | alloc
+  /-- `runtime_nav_ptr`: the address of global `global` (an index into `Func.globals`) at run
+  time. `Check.lean` admits only a `threadlocal` global: the current thread's instance
+  (`Zig.tlsPtr`, `docs/generated-code.md` §Thread-local storage). -/
+  | runtimeNavPtr (global : Nat)
   /-- `struct_field_ptr*`: the pointer to field `index` of the struct or union at `base`. -/
   | fieldPtr (base : Val) (index : Nat)
   /-- `field_parent_ptr` (`@fieldParentPtr`): the pointer to the struct that has `fieldPtr` at

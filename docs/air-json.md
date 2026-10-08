@@ -155,15 +155,23 @@ subset and is rejected before normalization; compiler-exported constants contain
 
 ## Global
 
-Schema 6. One entry per global that a pointer constant points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
+Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
 
 | Field | Meaning |
 |---|---|
 | `name` | fully qualified name of a container-level `var` or `const`. Missing for an unnamed constant (a string literal, the value behind `&.{…}`). |
 | `ty` | type ID of the value |
 | `const` | `false` only for a `var` |
-| `threadlocal`, `extern` | a named global only |
+| `threadlocal`, `extern` | a named global only. A `threadlocal` global is also listed when a `runtime_nav_ptr` names it. |
 | `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
+
+`runtime_nav_ptr` (0.15.2+, `ty_nav`) has no `args`; `global` is the global's entry in
+`globals` (an additive field of the current exporter). Zig emits it for a `threadlocal var`, an
+`extern threadlocal var`, a DLL-imported or PC-relative `@extern`; the entry's flags say which,
+and the translator admits only a non-`extern` `threadlocal` global
+(`docs/generated-code.md` §Thread-local storage). An export without `global` (an older exporter
+writes `"unsupported": true`) stays rejected. 0.14.1 has no such tag: it writes the address of a
+`threadlocal` global as a pointer constant, which the translator rejects.
 
 `try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On

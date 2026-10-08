@@ -100,7 +100,14 @@ def markedTagGuidance (tag : String) : String :=
     | some reason => s!": {reason}"
     | none => ""
 
+/-- A `runtime_nav_ptr` that names its global (the current exporter): `Check.lean` admits it
+for a `threadlocal` global only (`docs/generated-code.md` §Thread-local storage). Without the
+global, or with the exporter's unsupported marker, it keeps its rejection. -/
+def runtimeNavGlobal? (raw : Raw.RawInst) : Option Nat :=
+  if raw.tag == "runtime_nav_ptr" && !raw.unsupported then raw.global else none
+
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
+  if (runtimeNavGlobal? raw).isSome then return
   if let some reason := runtimeTagReason? raw.tag then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}': {reason}"
 
@@ -241,6 +248,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
       | throw s!"{fnName}: inst {raw.id}: 'union_init' needs 'index'"
     return .unionInit idx a
   | "alloc" | "ret_ptr" => return .alloc
+  | "runtime_nav_ptr" =>
+    let some g := runtimeNavGlobal? raw
+      | throw s!"{fnName}: inst {raw.id}: 'runtime_nav_ptr' needs 'global'"
+    unless raw.args.isEmpty do
+      throw s!"{fnName}: inst {raw.id}: 'runtime_nav_ptr' has no args"
+    return .runtimeNavPtr g
   | "struct_field_ptr" =>
     let a ← arg1 fnName raw
     let some idx := raw.index

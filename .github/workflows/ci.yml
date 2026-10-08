@@ -629,6 +629,15 @@ jobs:
         if: ${{ matrix.full && !matrix.mutate }}
         run: bash tests/roadmap/idle-loops/check.sh
 
+      # C02: thread-local storage. Retained 0.16.0/0.15.2 exports translate unchanged; per-thread
+      # counters over every schedule; a use after the owning thread ended never returns.
+      - name: Thread-local storage instances, initialization and lifetime
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Conc.TlsLemmas
+          bash tests/roadmap/thread-locals/check.sh
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: matrix.full && matrix.zig == '0.16.0'

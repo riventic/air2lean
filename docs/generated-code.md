@@ -194,7 +194,7 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   ...
 ```
 
-`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` globals are outside the subset.
+`errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. A `threadlocal` global has one instance per thread (§Thread-local storage).
 
 **Initial values are never defaulted.** A wholly `undefined` global (`var x: T = undefined`) is
 `Zig.Enc.size T` undefined bytes, so a load before the first store throws `.unspecified`. A
@@ -231,6 +231,57 @@ structs, tuples and optionals of these); an `extern` function, pointer, union or
 an `extern` with an `init`, and an unnamed `extern` are rejected (`GLOBAL_FAILURE`). A name
 shared by several files must agree on `extern`. Without an `extern` global, `mem0 : Zig.Mem` is
 unchanged.
+
+### Thread-local storage
+
+A `threadlocal var` is a block of `mem0` like any global: that block is the **main thread's
+instance**, and its index is the global's **key**. The exporter writes each use as
+`runtime_nav_ptr` with the global's entry (`docs/air-json.md`); the translator emits
+`Zig.tlsPtr key`, the current thread's instance at offset 0 (`ZigLean/Mem/Tls.lean`):
+
+```lean
+def mem0 : Zig.Mem := (Zig.Mem.ofGlobals [
+  -- 0: thread_locals.counter (threadlocal: the main thread's instance)
+  (Zig.Enc.encode ((7 : BitVec 32) : BitVec 32), 4, .global)]).mainTls #[0]
+
+def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [
+  -- thread_locals.counter
+  (0, Zig.Enc.encode ((7 : BitVec 32) : BitVec 32), 4)]
+
+  | .bumpTwice a => Zig.ConcM.tlsThread tlsInit (discard (Zig.ConcM.liftMem (bumpTwice a)))
+```
+
+- **Per-thread instances and initialization.** `Mem.mainTls` registers the key blocks as the
+  main thread's instances (`ThreadRec.tls`). Every spawned thread first runs `tlsEnter tlsInit`
+  (`Zig.ConcM.tlsThread`, the dispatcher): one new block per `threadlocal` global, written by
+  the thread with the global's initial bytes. Instances are never shared: the same name in two
+  threads is two blocks (`TlsWF.no_alias`), and a new thread's instances hold exactly the initial
+  bytes whatever other threads did to theirs (`tlsEnter_init`,
+  `ZigLean/Conc/TlsLemmas.lean`).
+- **Address identity.** `tlsPtr` reads only the thread's record; it is not a memory access.
+  The pointer it returns is an ordinary pointer to the instance's block: it can be stored,
+  compared and passed to another thread. Every access through it is an ordinary access with
+  the race check, liveness, bounds and alignment checks.
+- **Lifetime.** A spawned thread's instances are freed when its target returns (`tlsExit`), so
+  a pointer that escaped to another thread and is used after the owner ended throws `.illegal`
+  (a use after free). The main thread's instances live until the run ends. A target that throws
+  ends the run.
+- **Ownership.** An instance belongs to its thread. Passing its address to another thread
+  transfers nothing: a concurrent access without a happens-before edge is a data race
+  (`.illegal`), and a proof hands the cells over explicitly, as for any captured pointer
+  (`Zig.Conc.Capture.grant`, `ZigLean/Conc/Transfer.lean`).
+
+The checker accepts a named, non-`extern` `threadlocal var` with an initial value (wholly
+defined or wholly `undefined`) of a pointer-free, error-free type that the model encodes, and a
+`runtime_nav_ptr` that is a plain single-item pointer to such a global's type with at most its
+alignment. It rejects with `GLOBAL_FAILURE` an `extern threadlocal`, a `threadlocal` global of
+any other type, a constant pointer into a `threadlocal` global (0.14.1 writes the address of a
+thread-local as a constant; a constant has one address in every thread), and a
+`runtime_nav_ptr` of a global that is not `threadlocal` (an `extern` the compiler reaches at run
+time, a DLL import, a PC-relative `@extern`). An AIR file from an exporter without the
+`runtime_nav_ptr` operand keeps the earlier rejection. The `Io.Group` caller fallback runs the
+target on the caller's thread, so it uses the caller's instances. A detached thread is outside
+the subset. `tests/roadmap/thread-locals` has the proofs over all schedules.
 
 ### Casts, layout and function pointers
 

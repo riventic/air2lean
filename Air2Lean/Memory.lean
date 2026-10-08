@@ -125,7 +125,7 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
 `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag`, `ret_load`, and `dbg`. -/
 def valueOperands (op : Op) : Array Val :=
   match op with
-  | .arg _ | .alloc | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
+  | .arg _ | .alloc | .runtimeNavPtr _ | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
   | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
   | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
@@ -416,6 +416,7 @@ def memoryOp (op : Op) : Bool :=
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
+  | .runtimeNavPtr _ => true
   | .call (.func name ..) _ => modelledStdFn name
   | _ => false
 

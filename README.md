@@ -160,12 +160,12 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 
 The supported subset includes checked, wrapping and saturating arithmetic; control flow and recursion; structs, enums, unions, optionals and error unions; pointers, slices and byte-level memory; heap allocation; floats and vectors; selected atomics, threads and std synchronization primitives. Inline asm is modeled as opaque functions with register operands on x86_64. See the [subset reference](PLAN.md#subset), [generated-code guide](docs/generated-code.md), and [std models](docs/std-models.md) for restrictions.
 
-Unsupported features include `threadlocal` globals, `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
+Unsupported features include `threadlocal` globals outside pointer-free, error-free storage ([docs](docs/generated-code.md#thread-local-storage)), `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
 
 | In | Out |
 |---|---|
 | integers of any width, `bool`, floats (`f16`…`f128`) | |
-| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `threadlocal` globals; `extern` globals holding pointers, unions or errors |
+| checked, wrapping (`+%`), saturating (`+\|`) arithmetic | `extern` or pointer-, union- or error-holding `threadlocal` globals; `extern` globals holding pointers, unions or errors |
 | `if`, `switch`, `while`, `for` | a std function that is not translated and has no model ([docs/std-models.md](docs/std-models.md)) |
 | local `var`, also one whose address escapes; `@ptrCast`, `packed` and `extern` layout | |
 | enums (also non-exhaustive), tagged, bare, `extern` and `packed` unions | |
