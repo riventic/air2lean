@@ -131,7 +131,7 @@ theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ)
 
 /-- A futex wait (`futexWaitC`, the bits `e'` of `e`): the thread stops with the ghost value
 `g`. It begins not in the queue; if it sleeps, it keeps the invariant with `g`; when it goes on,
-`Q` holds. In strict mode it keeps `Live` and does not throw. -/
+`Q` holds, also after a spurious return in place of the sleep (the memory before the wait). In strict mode it keeps `Live` and does not throw. -/
 theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e : ε} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
@@ -140,7 +140,8 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
         (P.strict = true → ∃ b m',
           ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
         ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
-          if b then P.inv G₁ m' else Q ((), s) G₁ m' k)) :
+          if b then P.inv G₁ m' ∧ Q ((), s) G₁ { m₁ with current := t } k
+          else Q ((), s) G₁ m' k)) :
     P.WP t ((futexWaitC io p e : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt)
     (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
@@ -151,7 +152,7 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
   have := ((hc G₁ m₁ hg hi₁).2 hq).2 b m' hr
   cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
   · exact WP.pure' this
-  · exact this
+  · exact ⟨this.1, WP.pure' this.2⟩
 
 /-- A futex wake (`futexWakeC`): the thread stops with the ghost value `g`; `Q` holds after the
 wake. -/
@@ -166,6 +167,9 @@ theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
   refine WP.bind (WP.map (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ m' hw => WP.pure' (hc G₁ m₁ hg hi₁ m' hw)⟩
+
+/-- `Thread.isTask`: whether the current thread is an `Io` task; the memory stays. -/
+theorem isTask_run (m : Mem) : (Thread.isTask.run m).run = some (.ok (m.current != 0, m)) := rfl
 
 /-- `Thread.Futex.wait` is the futex wait of `Io.futexWait` (0.15.2 has no `Io`). -/
 theorem threadFutexWaitC_eq (p : Ptr) (e : BitVec 32) :

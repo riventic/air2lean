@@ -52,6 +52,13 @@ def main : IO Unit := do
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
   require (threadFn? "Thread.Futex.timedWait" == some .futexTimedWait) "clock projection"
   require ((rejectedThreadFn? "Thread.detach").isSome) "rejection projection"
+  -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
+  -- modelled cancelation points stay models.
+  for name in #["Io.checkCancel", "Io.recancel", "Io.swapCancelProtection", "Io.sleep",
+      "Io.operate", "Io.Batch.awaitAsync", "Io.Batch.cancel"] do
+    require ((rejectedThreadFn? name).isSome) s!"{name}: cancelable API not rejected"
+  for name in #["Io.futexWait", "Io.Group.cancel", "Io.Group.await"] do
+    require (modelledStdFn name) s!"{name}: cancelation point not modelled"
 
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/client.json")
   let f ← get <| normalize raw

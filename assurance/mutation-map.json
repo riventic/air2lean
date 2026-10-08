@@ -628,7 +628,20 @@
     },
     "C05": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "Proofs/Cancel/Spurious.lean",
+          "anchor": "theorem waitOnce_spurious"
+        },
+        {
+          "path": "tests/roadmap/cancellation/Runtime.lean",
+          "anchor": "no sampled spurious schedule broke waitOnce"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "cancelable API not rejected"
+        }
+      ],
       "mutants": []
     },
     "C06": {

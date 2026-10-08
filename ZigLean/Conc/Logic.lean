@@ -28,7 +28,8 @@ invariant and ghost values.
   no deadlock (`ready_ne`). No result (out of fuel) is still allowed.
 - **Futex.** The futex queue is in the memory (`Mem.waiters`, `Mem.woken`), so the invariant can
   name it. A wait that sleeps keeps the invariant with the thread's ghost value; the thread goes
-  on when a wake woke it.
+  on when a wake woke it. A wait that would sleep may instead return spuriously
+  (`Sched.spuriousWake`), so its continuation must also hold from the memory before the wait.
 
 The rules for generated code are on `WP` (the weakest precondition of a `ConcM` run): `pure`,
 `bind`, a step in `MemM` (`WP.liftMem`), a sync op (`WP.sync`), and a loop (`WP.loop`). The post
@@ -80,7 +81,8 @@ def Live (t : ThreadId) (G : ThreadId → γ) (m : Mem) : Prop :=
 /-- Thread `t` goes on at `op`, with the ghost values `G` and the memory `m` at that time: `K`
 holds of each response and the memory after the scheduler's part of the op
 (`Sched.turn`). A futex wait begins with the thread not in the queue; one that sleeps keeps the
-invariant. In strict mode a join handle is valid already while its target runs, because the
+invariant, and `K` also holds of a spurious return in its place (`Sched.spuriousWake`): the
+memory before the wait. In strict mode a join handle is valid already while its target runs, because the
 scheduler rejects invalid handles without waiting for `fin`. -/
 def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
     (K : op.Resp → (ThreadId → γ) → Mem → Prop) : Prop :=
@@ -102,7 +104,7 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
       (P.strict = true → ∃ b m',
         ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
       ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
-        if b then P.inv G m' else K () G m')
+        if b then P.inv G m' ∧ K () G { m with current := t } else K () G m')
   | .wake p n, K => ∀ m',
       ((Thread.futexWake p n).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
@@ -117,7 +119,7 @@ theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Me
     have := (hs.2 hq).2 b m' hr
     cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
     · exact h _ _ _ this
-    · exact this
+    · exact ⟨this.1, h _ _ _ this.2⟩
   | choose | pick => exact fun c hc => h _ _ _ (hs c hc)
   | spawn tgt =>
     obtain ⟨g, hg, hk⟩ := hs
@@ -527,6 +529,8 @@ theorem choice_lt (n k : Nat) : (if n = 0 then 0 else k % n) < n ∨
   · exact .inr ⟨h, by simp [h]⟩
   · exact .inl (by simp only [h, ↓reduceIte]; exact Nat.mod_lt _ (Nat.pos_of_ne_zero h))
 
+theorem two_ne_zero_nat : ((2 : Nat) = 0) = False := by decide
+
 /-- One turn of thread `t` keeps the protocol. -/
 theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
     {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {s : Sched.State Tgt α}
@@ -556,7 +560,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_turnPost h (hstep m₁ hw) hsz rfl rfl (congrArg Array.size hth)
   | wait ptr e =>
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem] at h
     match hw : ((Thread.futexWait ptr e).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error _) => simp [hw] at h
@@ -568,10 +572,13 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
       have hth : m₁.threads.size = s.mem.threads.size := by rw [futexWait_threads hw]
       cases b with
       | true =>
-        simp only [↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at h hK
-        obtain ⟨rfl, rfl, rfl⟩ := h
-        refine ⟨G, fun _ _ => rfl, rfl, by rw [hth, hsz], .inl rfl,
-          .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK, hp⟩⟩
+        simp only [↓reduceIte, Sched.State.choose, two_ne_zero_nat] at h hK
+        split at h
+        · exact settle_turnPost h hK.2 hsz rfl rfl rfl
+        · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl, rfl⟩ := h
+          refine ⟨G, fun _ _ => rfl, rfl, by rw [hth, hsz], .inl rfl,
+            .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK.1, hp⟩⟩
       | false =>
         simp only [Bool.false_eq_true, ↓reduceIte] at h hK
         exact settle_turnPost h hK hsz rfl rfl hth
@@ -641,9 +648,13 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
       simpa [Sched.canGo] using hgo
     obtain ⟨b, m₁, hw⟩ := (hstep.2 hq0).1 hstr
     have hK := (hstep.2 hq0).2 b m₁ hw
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, hw] at h
     cases b with
-    | true => simp at h
+    | true =>
+      simp only [↓reduceIte, Sched.State.choose, two_ne_zero_nat] at h hK
+      split at h
+      · exact settle_safe hstr hK.2 hQ e h
+      · simp at h
     | false =>
       simp only [Bool.false_eq_true, ↓reduceIte] at h hK
       exact settle_safe hstr hK hQ e h
