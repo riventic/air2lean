@@ -353,6 +353,29 @@ theorem mul_error {fmt : FloatFmt} {x y : Float fmt} {a b A : Rat} (hx : x.toRat
     cases sa <;> cases sb <;> (try simp only [finiteToRat_true_eq] at hlt) <;>
       first | rfl | (exfalso; grind)
 
+/-! ## Products of bounded values -/
+
+/-- `|a·b| ≤ A·B` for `|a| ≤ A` and `|b| ≤ B`. -/
+theorem mul_abs_le {a b A B : Rat} (ha : -A ≤ a ∧ a ≤ A) (hb : -B ≤ b ∧ b ≤ B) :
+    -(A * B) ≤ a * b ∧ a * b ≤ A * B := by
+  have h1 := Rat.mul_nonneg (show 0 ≤ A - a by grind) (show 0 ≤ B - b by grind)
+  have h2 := Rat.mul_nonneg (show 0 ≤ A + a by grind) (show 0 ≤ B + b by grind)
+  have h3 := Rat.mul_nonneg (show 0 ≤ A - a by grind) (show 0 ≤ B + b by grind)
+  have h4 := Rat.mul_nonneg (show 0 ≤ A + a by grind) (show 0 ≤ B - b by grind)
+  constructor <;> grind
+
+/-- A perturbed product: `|a·b - a'·b'| ≤ A·δb + δa·B'` for `|a| ≤ A`, `|b'| ≤ B'`,
+`|a - a'| ≤ δa` and `|b - b'| ≤ δb`. Propagates an earlier rounding error through `*`. -/
+theorem mul_sub_mul_le {a b a' b' A B' δa δb : Rat} (ha : -A ≤ a ∧ a ≤ A)
+    (hb' : -B' ≤ b' ∧ b' ≤ B') (hda : -δa ≤ a - a' ∧ a - a' ≤ δa)
+    (hdb : -δb ≤ b - b' ∧ b - b' ≤ δb) :
+    -(A * δb + δa * B') ≤ a * b - a' * b' ∧ a * b - a' * b' ≤ A * δb + δa * B' := by
+  have e : a * b - a' * b' = a * (b - b') + (a - a') * b' := by grind
+  obtain ⟨p1, p2⟩ := mul_abs_le ha hdb
+  obtain ⟨q1, q2⟩ := mul_abs_le hda hb'
+  rw [e]
+  constructor <;> grind
+
 /-! ## `-` -/
 
 /-- Flipping bit `w - 1` leaves every bit field below it unchanged. -/
