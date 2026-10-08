@@ -643,4 +643,173 @@ theorem Os.mremapLive_grow {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (
         MonadStateOf.set, ExceptT.bindCont, modify, modifyGet, MonadStateOf.modifyGet,
         StateT.modifyGet]
 
+/-- The heap after a new block `nb` at index `X.blocks.size`. -/
+theorem Mem.heap_pushBlock (X : Mem) (nb : Block) (a : Nat) :
+    ({ X with blocks := X.blocks.push nb, nextAddr := a } : Mem).heap =
+      liveCells X.blocks.size nb ∪ X.heap := by
+  funext ⟨x, y⟩
+  rw [Mem.heap_push, Heap.union_apply]
+  by_cases hx : x = X.blocks.size
+  · subst hx; simp only [↓reduceIte, liveCells, Mem.heap_none_size, Option.or_none]
+  · simp [hx, liveCells]
+
+theorem extract_clamp {a : Array Byte} {i j : Nat} (h : a.size ≤ j) :
+    a.extract i j = a.extract i a.size := by
+  apply Array.ext
+  · simp; omega
+  · intro k h1 h2; simp only [Array.getElem_extract]
+
+/-- The live bytes after an append: the old live bytes, then the appended ones. -/
+theorem extract_append_live {a f bs : Array Byte} {lo : Nat} (hlo : lo ≤ a.size)
+    (hx : a.extract lo a.size = bs) : (a ++ f).extract lo (a ++ f).size = bs ++ f := by
+  rw [Array.extract_append, extract_clamp (a := a) (by simp), hx,
+    show lo - a.size = 0 by omega, show (a ++ f).size - a.size = f.size by simp,
+    Array.extract_size]
+
+/-- What `mremap` returns for a growth: the grown mapping, in place or moved, or an
+`MRemapError` and the old mapping. -/
+def mremapPost (P : Nat) (p : Ptr) (A lo : Nat) (bs : Array Byte) (n : Nat) (newLen : BitVec 64) :
+    Except ErrName Slice → Assn
+  | .ok s => fun h => s.len = newLen ∧ ∃ A' lo', mapping P s.ptr A' lo' (bs ++ mremapFill P bs.size n) h
+  | .error e => fun h => e ∈ mremapErrorNames ∧ mapping P p A lo bs h
+
+/-- **mremap, shrink.** In place: the permission of the cut bytes is consumed, the first
+`newLen` bytes stay a mapping at the same pointer. -/
+theorem Triple.mremapShrink (os : Os.Profile) (hhas : os.hasMremap = true)
+    {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
+    (hn0 : 0 < newLen.toNat) (hn : newLen.toNat ≤ bs.size) :
+    Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
+      (fun r => ⌜r = .ok ⟨p, newLen⟩⌝ ∗ mapping os.pageSize p A lo (bs.extract 0 newLen.toNat)) :=
+  Triple.of_run fun m h hF hd hm hp hst => by
+    have hA0 := hp.2.2.1
+    have hlo0 := hp.2.2.2.1
+    obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, hh⟩ := mapping_block hp hm hd
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+    have hcur : blk.bytes.size - lo = bs.size := by omega
+    rw [Os.mremap_eq os hhas hfl hblk hl hK (by omega) (by rw [hcur]; exact hold),
+      Os.mremapLive_shrink os _ b blk lo newLen flags (by omega) (by omega) hst.single]
+    let nb : Block := { blk with bytes := blk.bytes.extract 0 (lo + newLen.toNat) }
+    have hnbs : nb.bytes.size = lo + newLen.toNat := by simp [nb, hS]; omega
+    have hm' : ((m.recordAt b (lo + newLen.toNat) (blk.bytes.size - (lo + newLen.toNat)) .write).mremapShrunk
+        b blk lo newLen.toNat).heap = liveCells b nb ∪ hF := heap_replace hm hlt rfl hFb hh
+    refine ⟨_, _, liveCells b nb, rfl, liveCells_disjoint hFb, hm', sep_lift.mpr ⟨rfl, rfl,
+      by simp; omega, hA0, hlo0, ?_⟩, Mem.Seq.replace hst
+        (singleThread_recordAt hst.single _ _ _ _) (Nat.le_refl _) hm' (frame_sub hm hd) fun _ => ?_⟩
+    · have hc := liveCells_bytesAt (b := b) (nb := nb) hl hK (by rw [hnbs]; omega)
+      rw [hnbs, show nb.addr = A from hA] at hc
+      rw [show nb.bytes = blk.bytes.extract 0 (lo + newLen.toNat) from rfl,
+        extract_pre hx (by omega) (by omega)] at hc
+      rw [show lo + (bs.extract 0 newLen.toNat).size = lo + newLen.toNat by simp; omega]
+      exact hc
+    · have := mapping_below hst hblk hl hK (by omega)
+      rw [hnbs]; show blk.addr + (lo + newLen.toNat) < m.nextAddr; omega
+
+/-- **mremap, new length 0.** `error.InvalidSyscallParameters`; the mapping is unchanged. -/
+theorem Triple.mremapZero (os : Os.Profile) (hhas : os.hasMremap = true)
+    {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
+    (hn0 : newLen.toNat = 0) :
+    Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
+      (fun r => ⌜r = .error "InvalidSyscallParameters"⌝ ∗ mapping os.pageSize p A lo bs) :=
+  Triple.of_run fun m h hF hd hm hp hst => by
+    obtain ⟨b, blk, rfl, hblk, hl, hK, -, hS, -, -, -⟩ := mapping_block hp hm hd
+    have hcur : blk.bytes.size - lo = bs.size := by omega
+    rw [Os.mremap_eq os hhas hfl hblk hl hK (by omega) (by rw [hcur]; exact hold),
+      Os.mremapLive_zero os _ b blk lo newLen flags hn0]
+    exact ⟨_, m, h, rfl, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
+
+/-- **mremap, growth.** For every failure, move and placement decision: the grown mapping (the
+old bytes, then `mremapFill`), in place at the same pointer or moved to a fresh page-aligned
+block (the old block ends), or an `MRemapError` with the old mapping unchanged. -/
+theorem Triple.mremapGrow (os : Os.Profile) (hP : 0 < os.pageSize) (hhas : os.hasMremap = true)
+    {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
+    {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
+    (hn : bs.size < newLen.toNat) :
+    Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
+      (mremapPost os.pageSize p A lo bs newLen.toNat newLen) :=
+  Triple.of_run fun m h hF hd hm hp hst => by
+    have hpos := hp.2.1
+    have hA0 := hp.2.2.1
+    have hlo0 := hp.2.2.2.1
+    obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, hh⟩ := mapping_block hp hm hd
+    have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+    have hcur : blk.bytes.size - lo = bs.size := by omega
+    have hx' : blk.bytes.extract lo blk.bytes.size = bs := by rw [hS]; exact hx
+    rw [Os.mremap_eq os hhas hfl hblk hl hK (by omega) (by rw [hcur]; exact hold),
+      Os.mremapLive_grow os _ b blk lo newLen flags (by omega) hst.single]
+    have hst₁ : ({ m with allocs := m.allocs + 1 } : Mem).Seq := ⟨hst.single, hst.addr⟩
+    let n := newLen.toNat
+    let fill := mremapFill os.pageSize (blk.bytes.size - lo) n
+    have hfill : fill = mremapFill os.pageSize bs.size n := by simp only [fill, hcur]
+    have hfs : fill.size = n - bs.size := by rw [hfill, mremapFill_size]
+    by_cases hd₁ : m.mapDenied n
+    · rw [if_pos hd₁]
+      exact ⟨_, _, h, rfl, hd, hm, ⟨MremapError.name_mem _, hp⟩, hst₁⟩
+    rw [if_neg hd₁]
+    by_cases hmv : flags = Os.mremapMayMove ∧
+        (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingOnTop b blk = false)
+    · rw [if_pos hmv]
+      -- The move: the old block ends, the new one is pushed.
+      let m₁ : Mem := { m with allocs := m.allocs + 1 }
+      let mr := m₁.recordAt b lo (blk.bytes.size - lo) .write
+      let mid : Mem := { mr with blocks := mr.blocks.set! b { blk with live := false } }
+      let nnb : Block :=
+        { bytes := blk.bytes.extract lo blk.bytes.size ++ fill, align := os.pageSize,
+          kind := .mapped 0, live := true, addr := alignUp m.nextAddr os.pageSize }
+      have hmid : mid.heap = hF := by
+        rw [heap_replace (m := m) hm hlt rfl hFb hh, liveCells_dead rfl, Heap.empty_union]
+      have hN : mid.blocks.size = m.blocks.size := by simp [mid, mr, m₁, Mem.recordAt]
+      have hfree : ∀ y, hF (m.blocks.size, y) = none := by
+        intro y; have := congrFun hm (m.blocks.size, y)
+        rw [Mem.heap_none_size] at this
+        exact (Option.or_eq_none_iff.mp this.symm).2
+      have hm' : (mr.mremapMoved os.pageSize b blk lo n).heap = liveCells m.blocks.size nnb ∪ hF := by
+        have := Mem.heap_pushBlock mid nnb (alignUp m.nextAddr os.pageSize + alignUp n os.pageSize + 1)
+        rw [hmid, hN] at this; exact this
+      have hnbs : nnb.bytes.size = n := by
+        simp [nnb, hfs, hS]; omega
+      refine ⟨_, _, liveCells m.blocks.size nnb, rfl, liveCells_disjoint hfree, hm', ⟨rfl,
+        alignUp m.nextAddr os.pageSize, 0, rfl, by simp; omega, alignUp_mod_self hP, Nat.zero_mod _,
+        ?_⟩, Mem.Seq.replace hst (singleThread_recordAt hst.single _ _ _ _) ?_ hm'
+          (frame_sub hm hd) fun _ => ?_⟩
+      · have hc := liveCells_bytesAt (b := m.blocks.size) (nb := nnb) rfl rfl (Nat.zero_le _)
+        rw [Array.extract_size] at hc
+        rw [show nnb.bytes = bs ++ mremapFill os.pageSize bs.size n by
+          simp only [nnb, hx', hfill]] at hc
+        rw [Nat.zero_add]
+        exact hc
+      · show m.nextAddr ≤ alignUp m.nextAddr os.pageSize + alignUp n os.pageSize + 1
+        have := le_alignUp m.nextAddr os.pageSize; omega
+      · show alignUp m.nextAddr os.pageSize + nnb.bytes.size <
+          alignUp m.nextAddr os.pageSize + alignUp n os.pageSize + 1
+        have := le_alignUp n os.pageSize; omega
+    rw [if_neg hmv]
+    by_cases ht : m.mappingOnTop b blk = false
+    · rw [if_pos ht]
+      exact ⟨_, _, h, rfl, hd, hm, ⟨MremapError.name_mem _, hp⟩, hst₁⟩
+    rw [if_neg ht]
+    -- In place.
+    let nb : Block := { blk with bytes := blk.bytes ++ fill }
+    have hnbs : nb.bytes.size = lo + n := by simp [nb, hfs, hS]; omega
+    have hm' : (({ m with allocs := m.allocs + 1 } : Mem).mremapGrown os.pageSize b blk lo n).heap =
+        liveCells b nb ∪ hF := heap_replace hm hlt rfl hFb hh
+    refine ⟨_, _, liveCells b nb, rfl, liveCells_disjoint hFb, hm', ⟨rfl, A, lo, rfl, by simp; omega,
+      hA0, hlo0, ?_⟩, Mem.Seq.replace hst hst.single (Nat.le_max_left _ _) hm' (frame_sub hm hd)
+        fun _ => ?_⟩
+    · have hc := liveCells_bytesAt (b := b) (nb := nb) hl hK (by rw [hnbs]; omega)
+      rw [show nb.bytes.extract lo nb.bytes.size = bs ++ mremapFill os.pageSize bs.size n by
+          rw [show nb.bytes = blk.bytes ++ fill from rfl, extract_append_live (by omega) hx', hfill],
+        show nb.addr = A from hA] at hc
+      rw [show lo + (bs ++ mremapFill os.pageSize bs.size n).size = nb.bytes.size by
+        rw [hnbs]; simp [mremapFill_size]; omega]
+      exact hc
+    · show blk.addr + nb.bytes.size < Nat.max m.nextAddr (blk.addr + lo + alignUp n os.pageSize + 1)
+      have := le_alignUp n os.pageSize
+      refine Nat.lt_of_lt_of_le ?_ (Nat.le_max_right _ _)
+      rw [hnbs]; omega
+
 end Zig
