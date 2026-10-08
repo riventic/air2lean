@@ -304,7 +304,7 @@ A manifest with an `export` section may give `"air": []` for its roots; `report`
 | `export` key | Meaning |
 |---|---|
 | `zig_version` | `0.16.0`, `0.15.2` or `0.14.1`; `zig version` of the compiler must match |
-| `flags` | compiler flags, passed **verbatim and in order** after `build-obj -fno-emit-bin` (target, `-mcpu`, `-O` mode, `-fllvm`, `-fno-error-tracing`, …). Rejected: `@file`, `-femit-bin`/`-fno-emit-bin`, `-M`/`--dep`/`-o` and `.zig`/`.c`/`.o`/`.a` sources |
+| `flags` | compiler flags, passed **verbatim and in order** after `build-obj -fno-emit-bin` (target, `-mcpu`, `-O` mode, `-fllvm`, `-fno-error-tracing`, …). Rejected: `@file`, `-femit-*`/`-fno-emit-bin`, `-M`/`--dep`/`-o` and `.zig`/`.c`/`.o`/`.a` sources |
 | `modules` | `{name, path, deps?, env?, sha256?}`; the first is the main module. `path` is relative to the manifest or absolute (an external checkout); `env` names a variable that overrides it; `sha256` pins the bytes, checked before and after every compiler run |
 | `options` | `{"module": "build_options", "values": {NAME: {"type", "value"}}}`: the generated module a `build.zig` `addOptions` step would provide (`bool`, `iN`/`uN`, `usize`, `isize`, `[]const u8`); `-D NAME=VALUE` overrides a declared value |
 | `references` | `MODULE.decl` paths: a generated main module `comptime { _ = &@import("MODULE").decl; }` selects library roots without a hand-written wrapper |

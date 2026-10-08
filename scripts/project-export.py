@@ -59,7 +59,7 @@ def check_flag(flag):
     """Flags pass through verbatim; reject those that would change what is exported or where."""
     if flag.startswith('@'):
         raise Invalid(f'export flag {flag!r}: response files can hide emission overrides')
-    if flag.startswith(('-femit-bin', '-fno-emit-bin', '-M', '--dep', '-o')) or flag in ('--', '--mod'):
+    if flag.startswith(('-femit-', '-fno-emit-bin', '-M', '--dep', '-o')) or flag in ('--', '--mod'):
         raise Invalid(f'export flag {flag!r}: emission and modules are set by the export section')
     if flag.endswith(('.zig', '.c', '.o', '.a')):
         raise Invalid(f'export flag {flag!r}: sources must be declared as modules')
@@ -304,6 +304,8 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
         raise Invalid('--out must be a fresh or empty directory (--replace: or a previous export artifact)')
     out.parent.mkdir(parents=True, exist_ok=True)
     roots = [r['function'] for r in manifest['roots']]
+    if any(r['id'] == 'air' for r in manifest['roots']):
+        raise Invalid('root id "air" collides with the artifact\'s air/ directory')
     report = {'schema': SCHEMA, 'kind': KIND, 'manifest_sha256': project.digest(raw), 'status': 'failed',
               'zig': {'path': str(zig), 'version': found}, 'translator': {'path': str(translator)},
               'flags': list(spec['flags']), 'options': {k: v['value'] for k, v in sorted(values.items())},
@@ -320,8 +322,8 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
         generated = write_generated(spec, values, work)
         prefixes, _ = closure.filter_prefixes([], roots + list(spec.get('filter', [])), {})
         functions = files = None
-        results = {}
-        for iteration in range(1, spec.get('max_iterations', 8) + 1):
+        bound = spec.get('max_iterations', 8)
+        for iteration in range(1, bound + 1):
             air_dir = work / f'air-{iteration}'
             air_dir.mkdir()
             argv = compiler_argv(zig, spec, paths, generated)
@@ -345,7 +347,7 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
                 report['reason'] = f'exported AIR rejected: {error}'
                 return finish(report, None)
             record['exported'] = sorted(functions)
-            missing = set()
+            missing, results = set(), {}
             for fqn in roots:
                 if fqn not in functions:
                     continue
@@ -367,9 +369,9 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
             prefixes, _ = closure.filter_prefixes([], prefixes + new, {})
             record['outcome'] = 're-export'
         else:
-            report['reason'] = f'closure not closed after {spec.get("max_iterations", 8)} export iterations'
-        report['filter'] = {'value': ','.join(prefixes), 'std_model_collisions':
-                            sorted({p for p in prefixes for symbol in models if symbol.startswith(p)})}
+            report['reason'] = f'closure not closed after {bound} export iterations'
+        report['filter'] = {'value': ','.join(prefixes),
+                            'std_model_collisions': closure.filter_prefixes([], prefixes, models)[1]}
         report['unexported_roots'] = [unexported_root(fqn, functions, paths) for fqn in roots if fqn not in functions]
         report['exported_outside_closure'] = sorted(set(functions) - {
             n['name'] for r in results.values() for n in r['functions']})
@@ -411,7 +413,6 @@ def translate_root(project, manifest, root, entry, files, translator, stage, pro
             '--spawn-policy', project.spawn_policy(manifest), '--profile', profile['name']]
     result = project.run_translation(argv, rootdir, limits)
     shutil.rmtree(air_dir)
-    result.pop('argv', None)
     result['argv'] = [a.replace(str(stage), '${EXPORT_OUT}') for a in argv]
     if result['status'] == 'passed':
         data = output.read_bytes() if output.is_file() else b''
