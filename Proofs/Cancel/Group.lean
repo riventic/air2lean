@@ -289,4 +289,111 @@ theorem inv_task_step {G : ThreadId → Gh} {m m' : Mem} {h h' : Heap} {W : Word
         fun w hw => hnone w hw (hn w hw)⟩
   · rw [ht]; exact hi.t0
 
+/-! ## Steps that change no heap byte -/
+
+theorem cancelPending_run (m : Mem) : (Thread.cancelPending.run m).run =
+    some (.ok (m.current != 0 && m.cancels.contains m.current, m)) := rfl
+
+theorem takeCancel_run (m : Mem) : (Thread.takeCancel.run m).run =
+    some (.ok ((), { m with cancels := m.cancels.erase m.current })) := rfl
+
+theorem requestCancel_run (tids : Array ThreadId) (m : Mem) :
+    ((Thread.requestCancel tids).run m).run = some (.ok ((), { m with
+      cancels := m.cancels ++ tids.filter (· != 0),
+      waiters := m.waiters.filter (fun w => !tids.contains w.1),
+      woken := m.woken ++ (m.waiters.filter (fun w => tids.contains w.1)).map (·.1) })) := rfl
+
+theorem dropCancels_run (tids : Array ThreadId) (m : Mem) :
+    ((Thread.dropCancels tids).run m).run = some (.ok ((), { m with
+      cancels := m.cancels.filter (fun u => !tids.contains u) })) := rfl
+
+/-- A `callMC` step whose run is known and keeps the threads. -/
+theorem WP.callMC_keep {σ α : Type} {t : ThreadId} {G : ThreadId → Gh} {m m' : Mem} {n : Nat}
+    {x : MemM α} {s : σ} {a₀ : α} {Q : α × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hx : (x.run m).run = some (.ok (a₀, m'))) (h : Q (a₀, s) G m' n)
+    (hth : m'.threads = m.threads) : proto.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
+  WP.callMC (fun e he => by rw [hx] at he; cases he) fun a m'' hr => by
+    rw [hx] at hr
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+    obtain ⟨rfl, rfl⟩ := hr
+    exact ⟨by rw [hth], h⟩
+
+theorem not_strict : ¬ proto.strict = true := by decide
+
+/-! ## The task's cancelation point -/
+
+/-- The rest of `futexWaitCancelableC` after its futex wait. -/
+def afterWait {σ : Type} : CM Tgt σ (Except ErrName Unit) := do
+  if ← callMC Thread.cancelPending then
+    if (← pickC (fun _ => 2)) = cancelDelivered then
+      callMC Thread.takeCancel
+      pure (.error "Canceled")
+    else pure (.ok ())
+  else pure (.ok ())
+
+theorem futexWaitCancelableC_eq {σ : Type} (p : Ptr) (e : BitVec 32) :
+    (futexWaitCancelableC ⟨⟩ p e : CM Tgt σ (Except ErrName Unit)) = (do
+      if ← callMC Thread.cancelPending then
+        callMC Thread.takeCancel
+        pure (.error "Canceled")
+      else
+        futexWaitC ⟨⟩ p e
+        afterWait) := rfl
+
+theorem wp_afterWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : Words}
+    {d : BitVec 32} (hc : m.current = 1) (hi : Inv G m) (hg : G 1 = .task h W 0 d false)
+    {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hQ : ∀ r G' m' k, m'.current = 1 → Inv G' m' → G' 1 = .task h W 0 d false →
+      Q (r, ()) G' m' k) :
+    proto.WP 1 ((afterWait : CM Tgt Unit _).run ()) Q G m n := by
+  unfold afterWait
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callMC_keep (cancelPending_run m) ?_ rfl)
+  dsimp only
+  split
+  · simp only [StateT.run_bind]
+    refine WP.bind (WP.pickC (P := proto) fun k _ => ⟨G 1, by rw [upd_same]; exact hi,
+      fun G₂ m₂ hg₂ hi₂ c _ => ?_⟩)
+    dsimp only
+    split
+    · simp only [StateT.run_bind]
+      refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
+      exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂ rfl rfl rfl rfl rfl) (by rw [hg₂, hg]))
+    · exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂ rfl rfl rfl rfl rfl) (by rw [hg₂, hg]))
+  · exact WP.pure' (hQ _ _ _ _ hc hi hg)
+
+/-- The task's cancelation point (`io.futexWait(u32, status, 7)`): whatever it returns, the task
+keeps its words and the invariant. It may sleep (if another value were there), return
+spuriously, see the value differ, observe a pending request, or have one delivered. -/
+theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : Words}
+    {d : BitVec 32} (hc : m.current = 1) (hi : Inv G m) (hg : G 1 = .task h W 0 d false)
+    {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hQ : ∀ r G' m' k, m'.current = 1 → Inv G' m' → G' 1 = .task h W 0 d false →
+      Q (r, ()) G' m' k) :
+    proto.WP 1 ((futexWaitCancelableC ⟨⟩ W.st (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
+  rw [futexWaitCancelableC_eq]
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callMC_keep (cancelPending_run m) ?_ rfl)
+  dsimp only
+  split
+  · simp only [StateT.run_bind]
+    refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
+    exact WP.pure' (hQ _ _ _ _ hc (inv_keep hi rfl rfl rfl rfl rfl) hg)
+  · simp only [StateT.run_bind]
+    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨G 1, by rw [upd_same]; exact hi,
+      fun G₁ m₁ hg₁ hi₁ => ⟨fun h => absurd h not_strict, fun _ =>
+        ⟨fun h => absurd h not_strict, fun b m' hr => ?_⟩⟩⟩)
+    have hg' : G₁ 1 = .task h W 0 d false := by rw [hg₁, hg]
+    rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, -, -, -, -, -, -, ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+    all_goals simp only [Bool.false_eq_true, ↓reduceIte]
+    · refine wp_afterWait ?_ ?_ hg' hQ
+      · rfl
+      · exact inv_keep hi₁ rfl rfl rfl rfl rfl
+    · refine ⟨inv_keep hi₁ rfl rfl rfl rfl rfl, wp_afterWait ?_ ?_ hg' hQ⟩
+      · rfl
+      · exact inv_keep hi₁ rfl rfl rfl rfl rfl
+    · refine wp_afterWait ?_ ?_ hg' hQ
+      · rfl
+      · exact inv_keep hi₁ rfl rfl rfl rfl rfl
+
 end Cancel.Group
