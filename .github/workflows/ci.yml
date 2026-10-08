@@ -729,6 +729,8 @@ jobs:
           bash tests/roadmap/vector-layouts/lanes.sh --native
           bash tests/roadmap/vector-layouts/lanes.sh --export "$RUNNER_TEMP/vector-lanes"
           bash tests/roadmap/vector-layouts/lanes.sh
+          host-zig/zig test -fllvm -OReleaseSafe tests/roadmap/vector-layouts/lane_reads.zig
+          python3 tests/roadmap/vector-layouts/test_lane_reads.py "$PWD/.lake/build/bin/air2lean"
 
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations

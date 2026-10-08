@@ -148,3 +148,13 @@ bit-cast integer, lane 0 in the low bits on little-endian targets); the translat
 only where the probe and `lanes.zig` run natively: an LLVM-backend profile on x86_64 or aarch64.
 Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, float lanes (`f80`) and 0.14.1/0.15.2 runtime lanes stay
 rejected. An `undefined` store through a lane pointer is rejected, as for a packed field.
+
+Lane reads. `v.*[i]` through a pointer to a bit-packed vector is a lane pointer and a `load` in
+0.16.0 (`Zig.loadLane`), and a whole-vector `load` then `array_elem_val` in 0.15.2; canonicalization
+(`itemReads`) folds neither into a byte-strided `ptr_elem_val` when the lanes are `bool` or not a
+power-of-two number of bytes, so 0.15.2 reads the vector with its bit-packed encoding and picks the
+lane. `lane_reads.zig` checks both translations against its native values
+(`test_lane_reads.py`). A `ptr_elem_val` through such a vector pointer, with a comptime or runtime
+index, is rejected (`CheckCtx.itemAccess`), as is a `ptr_elem_ptr` with a runtime index (as a lane
+pointer, a 0.14.1/0.15.2 `"runtime"` lane pointer or a plain item pointer), for every supported
+version; Zig 0.16.0 itself rejects a runtime lane index of a vector.

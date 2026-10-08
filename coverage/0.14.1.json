@@ -13537,7 +13537,7 @@
     },
     "translation": {
       "Air2Lean/Air/Anon.lean": "540b0ecab72478d263e4c0509f388bb72b8db9d6c4ea28df2f55f5e14a406183",
-      "Air2Lean/Air/Canon.lean": "72225d91262a002fee4d3a436f5bb9320726a7aea0ceb0ec7fb855251c5ac546",
+      "Air2Lean/Air/Canon.lean": "52dd8bccf58183b1adf133350eb8baca0567f22b0ed23e06bf00cab07a888a6b",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "7cd6342fcc6a0303041d81b216cb77889199079b159b690fcbef3287d4ff84c3",
       "Air2Lean/Air/Normalize.lean": "d737e717367858a48c4518a23cc57addc0f5c81aaa5cfa158fdabe5aa0082eb6",

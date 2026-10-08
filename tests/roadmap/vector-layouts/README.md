@@ -13,7 +13,10 @@ checks the translator's backend gate and lane-pointer rejection. The theorems ar
 (`lanes_checks.py`) kernel-checked runs of the native test's inputs. `lanes.sh` retranslates both
 versions, compares the 0.16.0 translation with `Lanes/Gen.lean` and checks the proofs and runs;
 `--native` runs the test with a stock Zig and `--export DIR` exports fresh AIR with the patched
-0.16.0 and compares its translation.
+0.16.0 and compares its translation. `lane_reads.zig` (`air-reads/<version>`) reads lanes through a
+vector pointer; `test_lane_reads.py BINARY` checks its translations against the native values and
+that byte-strided `ptr_elem_val` reads and runtime-index lane pointers into bit-packed vectors are
+rejected.
 
 ```sh
 lake build ZigLean Air2Lean
