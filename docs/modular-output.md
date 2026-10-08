@@ -21,7 +21,7 @@ combine the flag with `--model-registry-template`.
 | `Gen/F_<decl>.lean` | `<Module>.F_<decl>` | One call group: a strongly connected component of the call graph (`callGroups`), with its locals, exits, loops and `--proof-api` facts |
 | `Gen/Dispatch.lean` | `<Module>.Dispatch` | `dispatch`, only when the program spawns threads |
 | `Gen.lean` | `<Module>` | The umbrella: the profile header, then an import of every part |
-| `Gen.modules.json` | | The manifest (`air2lean-module-split-v1`) |
+| `Gen.modules.json` | | The manifest (`air2lean-module-split-v2`), with the translator revision |
 
 Each group module imports `<Module>.Types` and the modules of the groups it calls,
 spawns or references as a function value. `Dispatch` imports the spawn targets' groups.
@@ -48,10 +48,13 @@ python3 scripts/module-split.py compare old/Gen.modules.json new/Gen.modules.jso
   --old-source-map old.source-map.json --new-source-map new.source-map.json
 ```
 
-A module's key (`air2lean-module-keys-v1`) is SHA-256 over:
+A module's key (`air2lean-module-keys-v2`) is SHA-256 over:
 
 * its Lean text;
 * the profile metadata;
+* the translator revision (`Air2Lean/Revision.lean`, the same object as the source map's
+  `translator`): a translator change invalidates every key, also without a source map. A
+  source map with another revision than the manifest is rejected;
 * the semantic fingerprints of its functions (with a source map). These already cover
   the float semantics, spawn policy, model registry and callee fingerprints;
 * the keys of the generated modules it imports.

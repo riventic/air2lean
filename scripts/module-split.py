@@ -2,8 +2,9 @@
 """Invalidation keys for `air2lean --split-modules` output (`docs/modular-output.md`).
 
 `air2lean AIR -o Proofs/Ex/Gen.lean --namespace Ex --split-modules Proofs.Ex.Gen` writes one
-Lean module per call group plus `Gen.modules.json` (`air2lean-module-split-v1`). Each
-module's key hashes its own Lean text, the profile metadata, the semantic fingerprints of its
+Lean module per call group plus `Gen.modules.json` (`air2lean-module-split-v2`). Each
+module's key hashes its own Lean text, the profile metadata, the translator revision that wrote
+it (`Air2Lean/Revision.lean`; an emitter change invalidates every key), the semantic fingerprints of its
 functions (`scripts/semantic-fingerprints.py`, when a source map is given) and the keys of the
 generated modules it imports. A changed key means the module, and hence every module importing
 it, must be rebuilt; an unchanged key means its inputs are identical.
@@ -20,8 +21,8 @@ import json
 from pathlib import Path
 import sys
 
-FORMAT = "air2lean-module-split-v1"
-KEYS = "air2lean-module-keys-v1"
+FORMAT = "air2lean-module-split-v2"
+KEYS = "air2lean-module-keys-v2"
 COMPARISON = "air2lean-module-comparison-v1"
 KINDS = {"types", "group", "dispatch", "umbrella"}
 MODULE_FIELDS = {"module", "file", "kind", "functions", "definitions", "imports"}
@@ -37,9 +38,11 @@ def load_manifest(path):
     path = Path(path)
     doc = fp.parse_json(path.read_text(encoding="utf-8"))
     if (not isinstance(doc, dict) or doc.get("format") != FORMAT or
-            set(doc) != {"format", "namespace", "root", "metadata", "modules"} or
+            set(doc) != {"format", "namespace", "root", "metadata", "translator", "modules"} or
             not isinstance(doc["modules"], list)):
         raise ValueError(f"{path}: not an {FORMAT} manifest")
+    if not fp.valid_translator(doc["translator"]):
+        raise ValueError(f"{path}: malformed or inconsistent translator revision")
     names = set()
     for m in doc["modules"]:
         if (not isinstance(m, dict) or set(m) != MODULE_FIELDS or m["kind"] not in KINDS or
@@ -63,7 +66,8 @@ def keys(manifest, source_map=None):
     prints = {}
     if source_map is not None:
         if (source_map["namespace"] != manifest["namespace"] or
-                source_map["metadata"] != manifest["metadata"]):
+                source_map["metadata"] != manifest["metadata"] or
+                source_map["translator"]["revision"] != manifest["translator"]["revision"]):
             raise ValueError("source map and module manifest describe different translations")
         prints = fp.fingerprints(source_map)
         listed = [s for m in modules.values() for s in m["functions"]]
@@ -81,7 +85,7 @@ def keys(manifest, source_map=None):
         m = modules[name]
         key = fp.digest(dict(
             format=KEYS, module=name, kind=m["kind"], text=m["text_sha256"],
-            metadata=manifest["metadata"],
+            metadata=manifest["metadata"], translator=manifest["translator"]["revision"],
             functions=[[s, prints[s]["fingerprint"] if prints else None] for s in m["functions"]],
             imports=[[i, result[i]["key"] if i in result else None] for i in sorted(m["imports"])]))
         result[name] = dict(module=name, kind=m["kind"], file=m["file"], functions=m["functions"],

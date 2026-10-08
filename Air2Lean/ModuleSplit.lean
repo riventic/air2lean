@@ -19,14 +19,15 @@ same declarations as the single-file output, split along the call graph
   an `import <Root>` sees exactly the declarations of the single-file output.
 
 Each group's text is the single-file text of that group, so the definitions are identical.
-`Gen.modules.json` beside the umbrella (`air2lean-module-split-v1`) lists every module with its functions,
-declarations and imports; `scripts/module-split.py` derives invalidation keys from it.
+`Gen.modules.json` beside the umbrella (`air2lean-module-split-v2`) lists every module with its functions,
+declarations and imports, and the translator revision (`Air2Lean/Revision.lean`) that wrote
+them; `scripts/module-split.py` derives invalidation keys from it.
 -/
 
 namespace Air2Lean.ModuleSplit
 open Lean
 
-def format : String := "air2lean-module-split-v1"
+def format : String := "air2lean-module-split-v2"
 
 /-- First line of every generated part: stale parts carrying it are removed on the next run. -/
 def marker : String := "-- air2lean-split-part"
@@ -122,10 +123,12 @@ def modules (parts : EmitParts) (ns root stem header : String) : Array Module :=
     text := header ++ String.intercalate "\n" (all.toList.map ("import " ++ ·)) ++ "\n" }
   return out
 
-def manifest (ns root : String) (metadata : Json) (mods : Array Module) : Json :=
+/-- `translator`: the revision object of the source-map sidecar (`lean`, `revision`, `modules`),
+so every module key is bound to the translator that wrote the parts. -/
+def manifest (ns root : String) (metadata translator : Json) (mods : Array Module) : Json :=
   let strs (a : Array String) : Json := .arr (a.map Json.str)
   Json.mkObj [("format", .str format), ("namespace", .str ns), ("root", .str root),
-    ("metadata", metadata),
+    ("metadata", metadata), ("translator", translator),
     ("modules", .arr (mods.map fun m => Json.mkObj [("module", .str m.name),
       ("file", .str m.file), ("kind", .str m.kind), ("functions", strs m.functions),
       ("definitions", strs m.definitions), ("imports", strs m.imports)]))]

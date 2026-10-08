@@ -32,6 +32,11 @@ namespace Air2Lean
 /-- The sources this CLI was built from (`Air2Lean/Revision.lean`). -/
 def translator : Revision.Translator := translator_revision%
 
+/-- `translator` as recorded in the source-map sidecar and the module manifest. -/
+def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean),
+  ("revision", .str translator.revision),
+  ("modules", .arr (translator.modules.map fun (m, h) => .arr #[.str m, .str h]))]
+
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>]\n" ++
@@ -321,7 +326,7 @@ private def run (args : List String) : IO UInt32 := do
               let base := a.outPath.parent.getD "."
               let mods := ModuleSplit.modules parts a.ns root stem header
               ModuleSplit.write (base / stem) base mods
-              let manifest := ModuleSplit.manifest a.ns root metadata mods
+              let manifest := ModuleSplit.manifest a.ns root metadata translatorJson mods
               let manifestPath := ModuleSplit.manifestPath a.outPath
               try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
                 throw (IO.userError s!"writing module manifest {manifestPath}: {e}")
@@ -344,9 +349,7 @@ private def run (args : List String) : IO UInt32 := do
               let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
               let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v2"),
                 ("namespace", .str a.ns), ("metadata", metadata),
-                ("translator", Lean.Json.mkObj [("lean", .str translator.lean),
-                  ("revision", .str translator.revision),
-                  ("modules", .arr (translator.modules.map fun (m, h) => .arr #[.str m, .str h]))]),
+                ("translator", translatorJson),
                 ("options", Lean.Json.mkObj [("spawn_policy", .str spawn),
                   ("models", if models.isEmpty then .null else ModelRegistry.report models)]),
                 ("functions", .arr records)]

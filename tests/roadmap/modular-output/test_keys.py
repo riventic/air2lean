@@ -1,8 +1,9 @@
 """Pure checks of scripts/module-split.py on synthetic manifests (no translator, Lean or Zig).
 
 Keys propagate along imports (a changed callee invalidates exactly its transitive importers),
-profile metadata and semantic fingerprints enter every key, and malformed manifests, import
-cycles, escaping paths and mismatched source maps are rejected.
+profile metadata, the translator revision and semantic fingerprints enter every key, and
+malformed manifests, import cycles, escaping paths, inconsistent translator revisions and
+mismatched source maps are rejected.
 """
 import copy
 import importlib.util
@@ -19,6 +20,15 @@ spec = importlib.util.spec_from_file_location('module_split', SCRIPT)
 ms = importlib.util.module_from_spec(spec); spec.loader.exec_module(ms)
 
 METADATA = {'profile': {'name': 'test'}, 'float_semantics': 'ieee', 'correspondence': 'model'}
+
+
+def translator(emit='e' * 64):
+    t = dict(lean='4.34.0', modules=[['Air2Lean.Emit', emit], ['Air2Lean.Main', 'a' * 64]], revision='')
+    t['revision'] = ms.fp.translator_revision(t)
+    return t
+
+
+TRANSLATOR = translator()
 # a <- b <- c, a <- d; e independent.
 GROUPS = dict(a=[], b=['a'], c=['b'], d=['a'], e=[])
 
@@ -28,7 +38,7 @@ def module(name, kind='group', imports=(), functions=()):
                 functions=list(functions), definitions=list(functions), imports=list(imports))
 
 
-def write(directory, texts=None, metadata=METADATA, extra=()):
+def write(directory, texts=None, metadata=METADATA, extra=(), revision=TRANSLATOR):
     texts = texts or {}
     mods = [module('Types', 'types', ['ZigLean'])]
     for g, callees in GROUPS.items():
@@ -38,7 +48,8 @@ def write(directory, texts=None, metadata=METADATA, extra=()):
     (directory / 'R').mkdir(parents=True, exist_ok=True)
     for m in mods:
         (directory / m['file']).write_text(texts.get(m['module'], f'-- {m["module"]}\n'))
-    doc = dict(format=ms.FORMAT, namespace='Ex', root='R', metadata=metadata, modules=mods)
+    doc = dict(format=ms.FORMAT, namespace='Ex', root='R', metadata=metadata, translator=revision,
+               modules=mods)
     path = directory / 'Gen.modules.json'
     path.write_text(json.dumps(doc))
     return path
@@ -50,8 +61,8 @@ def sidecar(directory, changed=()):
                       canonical={'body': ['changed' if g in changed else 'same']}, lines=[])
                  for g, callees in GROUPS.items()]
     path = directory / 'map.json'
-    path.write_text(json.dumps(dict(format='air2lean-source-map-v1', namespace='Ex', metadata=METADATA,
-                                    options={}, functions=functions)))
+    path.write_text(json.dumps(dict(format=ms.fp.SIDECAR, namespace='Ex', metadata=METADATA,
+                                    options={}, translator=TRANSLATOR, functions=functions)))
     return ms.fp.load_sidecar(path)
 
 
@@ -92,6 +103,11 @@ def main():
         profile = ms.compare(old, ms.keys(ms.load_manifest(write(work / 'profile', metadata=other))))
         assert profile['changed'] == [] and profile['unaffected'] == [], profile
 
+        # A translator (emitter) change invalidates every module even with identical text and
+        # without a source map.
+        emitter = ms.compare(old, ms.keys(ms.load_manifest(write(work / 'emitter', revision=translator('f' * 64)))))
+        assert emitter['changed'] == [] and emitter['unaffected'] == [], emitter
+
         # A semantic fingerprint change with identical text still invalidates (source map bound).
         manifest = ms.load_manifest(write(work / 'sem'))
         base = ms.keys(manifest, sidecar(work))
@@ -110,12 +126,16 @@ def main():
         bad(lambda d: d['modules'].append(copy.deepcopy(d['modules'][1])), 'duplicate module', 'dup')
         bad(lambda d: d['modules'][1].update(file='../../escape.lean'), 'escapes', 'escape')
         bad(lambda d: d['modules'][1]['imports'].append('R.F_c'), 'import cycle', 'cycle')
+        bad(lambda d: d.pop('translator'), 'not an', 'no-translator')
+        bad(lambda d: d['translator']['modules'][0].__setitem__(1, 'f' * 64), 'translator revision', 'forged')
         mismatch = sidecar(work); mismatch['functions'].pop()
         expect_error(lambda: ms.keys(manifest, mismatch), 'different functions')
         renamed = sidecar(work); renamed['functions'][0]['definition'] = 'other'
         expect_error(lambda: ms.keys(manifest, renamed), 'declarations differ')
         moved = sidecar(work); moved['metadata'] = other
         expect_error(lambda: ms.keys(manifest, moved), 'different translations')
+        rebuilt = ms.load_manifest(write(work / 'rebuilt', revision=translator('f' * 64)))
+        expect_error(lambda: ms.keys(rebuilt, sidecar(work)), 'different translations')
 
         # CLI: malformed input exits 2.
         result = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), 'keys', str(work / 'old/cycle.json')],
