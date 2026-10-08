@@ -248,6 +248,43 @@ correspondence, backend lowering or native adequacy (see the receipt's trust fie
 python3 -m unittest discover -s tests/roadmap/coverage-report -p 'test_*.py' -v
 ```
 
+## Dependency closure
+
+The exporter writes only functions matching `ZIG_AIR_JSON_FILTER`, so a translation can
+silently lack a transitive callee. `project.py closure` (equivalently
+`scripts/dependency-closure.py manifest`) computes, for each root, the closure of its
+`function` over the root's `air` list and classifies every target:
+
+| Class | Meaning |
+|---|---|
+| `exported` | AIR present (a global: its initial value is embedded in the referencing AIR) |
+| `modelled` | boundary: `std_model` (`Air2Lean/StdModels.lean`, qualified for the AIR's Zig version), `registry_binding` (`--model-registry`), `panic_handler` (`panicErrorFor?`), `extern_initial_state` (extern global) |
+| `missing` | required function without AIR: exact FQN, the chain from the root, and the filter prefix (a generic instance `f__anon_<n>` by its base `f`) |
+| `unresolvable` | `runtime_function_pointer` (indirect call with no address-taken function of its type in the closure), `non_function_pointer_callee`, `rejected_std_model`, `std_model_not_qualified`, `std_model_air_conflict`, `unmodelled_noreturn_callee`, `threadlocal_global`, `unresolved_global_initializer`; each with function and instruction |
+
+Edges are direct calls, function values, functions in global initial values, the comptime
+function argument of a non-exported generic instance (a spawn worker), and qualified
+indirect targets (the closure's address-taken functions with the callee's function type,
+as `fnRefs`). Each root report carries `filter.value` (the minimal prefix list covering
+every exported or missing function plus the root prefix, with `std_model_collisions` for a
+prefix that would also export a modelled std name) and a `reexport` command:
+
+```sh
+python3 scripts/project.py closure project.json --format text   # exit 1 unless closed
+ZIG_AIR_JSON_DIR="$AIR_DIR" ZIG_AIR_JSON_FILTER='lib.deep.leaf,proj.' \
+  zig-air-0.16.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing src.zig
+```
+
+Calls inside a missing function are unknown until it is exported: iterate export and
+closure until the status is `closed`. `dependency-closure.py goldens` checks every example
+over its committed golden AIR for each supported Zig version and host overlay (the
+`check.sh` overlay order) and also requires `examples/<ex>/filter` to cover the closure.
+
+```sh
+python3 scripts/dependency-closure.py goldens --format text
+python3 -m unittest discover -s tests/roadmap/dependency-closure -v
+```
+
 ## Reproducible project check
 
 `check` reproduces translation and proof checking from one committed manifest and writes
