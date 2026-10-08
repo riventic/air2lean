@@ -133,7 +133,8 @@ theorem Mem.heap_resetOwned (m : Mem) (a : AllocId) :
   cases m.blocks[b]? with
   | none => rfl
   | some blk =>
-    by_cases hk : blk.kind = .owned a <;> by_cases hc : blk.live ∧ o < blk.bytes.size <;>
+    by_cases hk : blk.kind = .owned a <;>
+      by_cases hc : blk.live ∧ o < blk.bytes.size ∧ blk.kind.mappedLo ≤ o <;>
       simp [hk, hc]
 
 /-- A reset of `a` invalidates every byte of `a`'s blocks. -/
@@ -164,8 +165,9 @@ theorem Mem.resetOwned_access_own {m : Mem} {a : AllocId} {p : Ptr} {n al : Nat}
 theorem Mem.resetOwned_access_other {m : Mem} {a : AllocId} {p : Ptr} {n al : Nat} {b : BlockId}
     {blk : Block} {o : Nat} (h : m.access p n al = pure (b, blk, o)) (hk : blk.kind ≠ .owned a) :
     (m.resetOwned a).access p n al = pure (b, blk, o) := by
+  have hlo := access_lo h
   obtain ⟨hpb, hblk, hl, h0, hn, ha, rfl⟩ := access_eq h
-  exact access_of hpb (by simp [Mem.resetOwned, hblk, hk]) hl h0 hn ha
+  exact access_of hpb (by simp [Mem.resetOwned, hblk, hk]) hl h0 hn ha hlo
 
 theorem Mem.Seq.resetOwned {m : Mem} (hst : m.Seq) (a : AllocId) : (m.resetOwned a).Seq :=
   ⟨hst.single, hst.addr.of_heap rfl fun l c hc => by

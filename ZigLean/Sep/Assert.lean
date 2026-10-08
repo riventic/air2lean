@@ -163,6 +163,9 @@ theorem bytesAt_access (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {q :
     have := access_of (m := m) (p := q) (n := n) (a := a) (by subst hq; simpa [Ptr.add] using hpb)
       hblk hlive (by subst hq; simp [Ptr.add]; omega) (by subst hq; simp [Ptr.add]; omega)
       (by rw [hoff, ← hA]; simpa [Nat.add_assoc] using ha)
+      (by
+        obtain ⟨blk₂, hblk₂, hlo⟩ := Mem.heap_some_lo c0
+        rw [hblk] at hblk₂; cases hblk₂; rw [hoff]; exact hlo)
     rw [hoff] at this; exact this
   · apply Array.ext
     · simp; omega
@@ -193,6 +196,7 @@ theorem bytesAt_store_core (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
         ((m.recordAt b (p.off.toNat + k) bs'.size .write).write b blk (p.off.toNat + k) bs').heap =
           h' ∪ hF ∧ bytesAt p A S K (writeBytes bs k bs') h' := by
   obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access hb hm hq hn hk ha
+  have hlo := access_lo hacc
   obtain ⟨hqb, -, hl, hq0, hbound, -, -⟩ := access_eq hacc
   obtain ⟨b', hpb, h0, hown⟩ := id hb
   have hbb : b' = b := by
@@ -207,7 +211,7 @@ theorem bytesAt_store_core (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
   have hws := writeBytes_size bs k bs' hk
   have hqo : q.off.toNat = p.off.toNat + k := by subst hq; simp [Ptr.add]; omega
   have hpbq := hpb
-  generalize ho : p.off.toNat = o at hown hqo ha hacc hnr' ⊢
+  generalize ho : p.off.toNat = o at hown hqo ha hacc hnr' hlo ⊢
   let h' : Heap := fun l =>
     if l.1 = b' ∧ o ≤ l.2 ∧ l.2 < o + (writeBytes bs k bs').size
     then some ⟨(writeBytes bs k bs')[l.2 - o]!, A, S, K⟩ else none
@@ -222,7 +226,7 @@ theorem bytesAt_store_core (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF)
   · funext ⟨x, y⟩
     have hbsz : o + k + bs'.size ≤ blk.bytes.size := by rw [← hqo]; omega
     have hblk_r : (m.recordAt b' (o + k) bs'.size AccessKind.write).blocks[b']? = some blk := hblk
-    rw [Mem.heap_write hblk_r hl hbsz, Mem.heap_recordAt]
+    rw [Mem.heap_write hblk_r hl hbsz hlo, Mem.heap_recordAt]
     have hmx := congrFun hm (x, y)
     simp only [Heap.union_apply] at hmx ⊢
     rw [hown (x, y)] at hmx
@@ -289,7 +293,8 @@ theorem bytesAt_store (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd :
 
 /-- The live block `b` as owned bytes, and the rest of the memory. -/
 theorem Mem.heap_split {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live) :
+    (hl : blk.live)
+    (hlo : blk.kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     ∃ h hF, Heap.Disjoint h hF ∧ m.heap = h ∪ hF ∧
       bytesAt ⟨some b, 0⟩ blk.addr blk.bytes.size blk.kind blk.bytes h := by
   refine ⟨fun l => if l.1 = b then m.heap l else none, fun l => if l.1 = b then none else m.heap l,
@@ -299,8 +304,8 @@ theorem Mem.heap_split {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? 
   · rintro ⟨x, y⟩
     by_cases e : x = b
     · subst e
-      simp only [↓reduceIte, Mem.heap, hb, hl, true_and, Int.toNat_zero, Nat.zero_le, Nat.zero_add,
-        Nat.sub_zero]
+      simp only [↓reduceIte, Mem.heap, hb, hl, hlo, true_and, Int.toNat_zero, Nat.zero_le, Nat.zero_add,
+        Nat.sub_zero, and_true]
       by_cases hy : y < blk.bytes.size
       · simp [hy, getElem!_pos]
       · simp [hy]

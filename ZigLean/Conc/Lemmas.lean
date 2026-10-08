@@ -1812,7 +1812,7 @@ theorem access_blk {m : Mem} {b size a' o len a : Nat} (h : BlkAt m b size a')
   subst hp
   refine ⟨blk, hb, by rw [hk]; decide, hs, ?_⟩
   have := access_of (m := m) (p := ⟨some b, ((o : Nat) : Int)⟩) (n := len) (a := a) rfl hb hl
-    (by simp) (by simp; omega) (by simpa using hal _ ha)
+    (by simp) (by simp; omega) (by simpa using hal _ ha) (by simp [hk])
   simpa using this
 
 /-- A write inside block `b` keeps `BlkAt` of every block. -/

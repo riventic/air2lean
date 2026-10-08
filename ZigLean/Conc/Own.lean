@@ -511,14 +511,15 @@ theorem StepIn.sameThreads {m' : Mem} (hs : m.SameThreads m') (hb : m.blocks.siz
   fp e he := .inl (hs.footprint ▸ he)
   fpc e he := .inl (hs.footprint ▸ he)
 
-theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align) :
+theorem TTriple.alloc (kind : BlockKind) (size align : Nat) (ha : 0 < align)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     TTriple emp (Zig.alloc kind size align) (fun p => Assn.ex fun A =>
       ⌜p.off = 0 ∧ A % align = 0⌝ ∗ bytesAt p A size kind (Array.replicate size .undef)) :=
   TTriple.of_run fun m hP hF hd hm hp _ ho => by
     have hP0 : hP = Heap.empty := hp
     subst hP0
     obtain ⟨p, m', h', hr, h0, hpb, hsz, hd', hm', -, hs, A, -, hA, hb⟩ :=
-      alloc_run_core hd hm kind size align ha
+      alloc_run_core hd hm kind size align ha hk
     simp only [Heap.empty_union] at hd' hm'
     refine ⟨p, m', h', hr, hd', hm', ⟨A, sep_lift.mpr ⟨⟨h0, hA⟩, hb⟩⟩, ?_,
       StepIn.sameThreads hs (by omega)⟩
