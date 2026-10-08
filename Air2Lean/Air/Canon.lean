@@ -74,22 +74,60 @@ def RawInst.uses (i : RawInst) : Array InstId :=
     i.cases.flatMap (fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b) ++
     (i.asm.map fun a => (a.outputs ++ a.inputs).flatMap fun o => (o.ref.map ids).getD #[]).getD #[]
 
-/-- Reject invalid references before renumbering can turn an absent old ID into a fresh ID.
-Branch targets must be enclosing blocks; repeats must name an enclosing loop; dispatches
+/-- Instruction references inside a value, constants included. -/
+partial def valRefs (v : Val) : Array InstId :=
+  match v with
+  | .inst id => #[id]
+  | .agg _ vs => vs.flatMap valRefs
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => valRefs v
+  | .sliceConst _ p n => valRefs p ++ valRefs n
+  | _ => #[]
+
+/-- One malformed-input finding, anchored at an exported instruction when it has one. -/
+structure Violation where
+  inst : Option InstId
+  message : String
+
+/-- Branch targets must be enclosing blocks; repeats must name an enclosing loop; dispatches
 must name an enclosing loop-switch (including an outer one across nested control flow). -/
-partial def validateRefs (f : RawFunc) : Except String Unit := do
+private partial def targetViolations (fnName : String) (ids : Std.HashSet InstId) (body : Array RawInst)
+    (blocks loops dispatches : Array InstId) (available : Std.HashSet InstId)
+    (acc : Array Violation) : Array Violation := Id.run do
+  let mut acc := acc
+  let mut available := available
+  for i in body do
+    -- An unknown reference was already reported; only a known one can be out of scope.
+    for r in i.uses do
+      unless available.contains r || !ids.contains r do
+        acc := acc.push ⟨some i.id, s!"{fnName}: inst {i.id}: instruction ref {r} is not available in this scope"⟩
+    if i.tag == "br" || i.tag == "repeat" || i.tag == "switch_dispatch" then
+      let (targetKind, allowed) := match i.tag with
+        | "repeat" => ("loop", loops)
+        | "switch_dispatch" => ("loop-switch", dispatches)
+        | _ => ("block", blocks)
+      match i.target with
+      | none => acc := acc.push ⟨some i.id, s!"{fnName}: inst {i.id}: missing target"⟩
+      | some t =>
+        unless allowed.contains t do
+          acc := acc.push ⟨some i.id, s!"{fnName}: inst {i.id}: target {t} is not an enclosing {targetKind}"⟩
+    let nestedBlocks := if i.tag == "block" || i.tag == "dbg_inline_block" || i.tag == "loop"
+      then blocks.push i.id else blocks
+    let nestedLoops := if i.tag == "loop" then loops.push i.id else loops
+    let nestedDispatches := if i.tag == "loop_switch_br" then dispatches.push i.id else dispatches
+    for b in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
+      acc := targetViolations fnName ids b nestedBlocks nestedLoops nestedDispatches available acc
+    available := available.insert i.id
+  return acc
+
+/-- Every invalid reference, in the order `validateRefs` meets them. A check that depends on
+an already reported finding of the same operand is skipped; independent findings are not. -/
+def refViolations (f : RawFunc) : Array Violation := Id.run do
   let all := flatten f.body
+  let mut acc : Array Violation := #[]
   let mut ids : Std.HashSet InstId := {}
   for i in all do
-    if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
+    if ids.contains i.id then acc := acc.push ⟨some i.id, s!"{f.name}: duplicate instruction id {i.id}"⟩
     ids := ids.insert i.id
-  let rec valRefs (v : Val) : Array InstId :=
-    match v with
-    | .inst id => #[id]
-    | .agg _ vs => vs.flatMap valRefs
-    | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => valRefs v
-    | .sliceConst _ p n => valRefs p ++ valRefs n
-    | _ => #[]
   for i in all do
     let values := i.args ++ i.callee.toArray ++
       i.cases.flatMap (fun c => c.items ++ c.ranges.flatMap fun (a, b) => #[a, b]) ++
@@ -100,46 +138,29 @@ partial def validateRefs (f : RawFunc) : Except String Unit := do
       -- Exported constants contain constants, never SSA references. Renumbering and use
       -- analysis operate on instruction operands; reject a hidden dynamic operand before
       -- those passes can lose its use or leave its original ID embedded in a constant.
-      match v with
-      | .inst _ => pure ()
-      | _ => do
-        if let some r := refs[0]? then
-          throw s!"{f.name}: inst {i.id}: nested instruction ref {r} inside a constant is outside the subset"
-      for r in refs do
-        unless ids.contains r do throw s!"{f.name}: inst {i.id}: unknown instruction ref {r}"
+      if let .inst _ := v then
+        for r in refs do
+          unless ids.contains r do acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: unknown instruction ref {r}"⟩
+      else if let some r := refs[0]? then
+        acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: nested instruction ref {r} inside a constant is outside the subset"⟩
     -- Shuffle masks are comptime values; an SSA lane would need use tracking and ID
     -- rewriting, and cannot occur in an ordinary compiler export.
     for lane in i.mask do
       if let .value v := lane then
         if let some r := (valRefs v)[0]? then
-          throw s!"{f.name}: inst {i.id}: instruction ref {r} inside a shuffle mask is outside the subset"
+          acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: instruction ref {r} inside a shuffle mask is outside the subset"⟩
   for g in f.globals do
     if let some v := g.init then
       if let some r := (valRefs v)[0]? then
-        throw s!"{f.name}: instruction ref {r} inside a global initializer is outside the subset"
-  let rec targets (body : Array RawInst) (blocks loops dispatches : Array InstId)
-      (available : Std.HashSet InstId) : Except String Unit := do
-    let mut available := available
-    for i in body do
-      for r in i.uses do
-        unless available.contains r do
-          throw s!"{f.name}: inst {i.id}: instruction ref {r} is not available in this scope"
-      if i.tag == "br" || i.tag == "repeat" || i.tag == "switch_dispatch" then
-        let some t := i.target | throw s!"{f.name}: inst {i.id}: missing target"
-        let (targetKind, allowed) := match i.tag with
-          | "repeat" => ("loop", loops)
-          | "switch_dispatch" => ("loop-switch", dispatches)
-          | _ => ("block", blocks)
-        unless allowed.contains t do
-          throw s!"{f.name}: inst {i.id}: target {t} is not an enclosing {targetKind}"
-      let nestedBlocks := if i.tag == "block" || i.tag == "dbg_inline_block" || i.tag == "loop"
-        then blocks.push i.id else blocks
-      let nestedLoops := if i.tag == "loop" then loops.push i.id else loops
-      let nestedDispatches := if i.tag == "loop_switch_br" then dispatches.push i.id else dispatches
-      for b in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
-        targets b nestedBlocks nestedLoops nestedDispatches available
-      available := available.insert i.id
-  targets f.body #[] #[] #[] {}
+        acc := acc.push ⟨none, s!"{f.name}: instruction ref {r} inside a global initializer is outside the subset"⟩
+  return targetViolations f.name ids f.body #[] #[] #[] {} acc
+
+/-- Reject invalid references before renumbering can turn an absent old ID into a fresh ID:
+the first of `refViolations`. -/
+def validateRefs (f : RawFunc) : Except String Unit :=
+  match (refViolations f)[0]? with
+  | some v => throw v.message
+  | none => pure ()
 
 def isDbgTag (tag : String) : Bool :=
   tag == "dbg_stmt" || tag == "dbg_empty_stmt" || tag == "dbg_var_ptr" || tag == "dbg_var_val" ||
@@ -422,19 +443,34 @@ partial def onePossibleValue (types : Array Ty) (id : TyId) (seen : Array TyId :
     | _ => false
   | _ => false
 
-/-- Rank source indexes against non-OPV runtime slots, preserving omitted OPV parameters. -/
-def argRanks (f : RawFunc) : Except String RawFunc := do
+private def argRanking (f : RawFunc) : Array Nat × Array Nat :=
   let ps := ((flatten f.body).filterMap fun i => if i.tag == "arg" then i.param else none)
   let ranks := (ps.qsort (· < ·)).toList.eraseDups.toArray
   let slots := (Array.range f.params.size).filter fun k => !onePossibleValue f.types f.params[k]!
+  (ranks, slots)
+
+/-- Every `arg` that cannot be ranked. A count mismatch makes every rank meaningless, so it
+is reported alone; otherwise each malformed `arg` is reported. -/
+def argViolations (f : RawFunc) : Array Violation := Id.run do
+  let (ranks, slots) := argRanking f
   unless ranks.size == slots.size do
-    throw s!"{f.name}: AIR args do not match non-OPV runtime parameters ({ranks.size} args, {slots.size} slots)"
+    return #[⟨none, s!"{f.name}: AIR args do not match non-OPV runtime parameters ({ranks.size} args, {slots.size} slots)"⟩]
   let rank (p : Nat) : Nat := slots[(ranks.idxOf? p).getD slots.size]!
+  let mut acc := #[]
   for i in flatten f.body do
     if i.tag == "arg" then
-      let some p := i.param | throw s!"{f.name}: inst {i.id}: 'arg' needs 'param'"
-      unless i.ty == some f.params[rank p]! do
-        throw s!"{f.name}: inst {i.id}: arg type does not match its runtime parameter"
+      match i.param with
+      | none => acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: 'arg' needs 'param'"⟩
+      | some p =>
+        unless i.ty == some f.params[rank p]! do
+          acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: arg type does not match its runtime parameter"⟩
+  return acc
+
+/-- Rank source indexes against non-OPV runtime slots, preserving omitted OPV parameters. -/
+def argRanks (f : RawFunc) : Except String RawFunc := do
+  if let some v := (argViolations f)[0]? then throw v.message
+  let (ranks, slots) := argRanking f
+  let rank (p : Nat) : Nat := slots[(ranks.idxOf? p).getD slots.size]!
   let body := rewriteBody (body := f.body) fun i =>
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
   pure { f with body }

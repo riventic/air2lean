@@ -1908,34 +1908,64 @@ def programUsedTypes (f : Func) (index : OperandTypes := f.operandTypes) : Std.H
     if let some v := g.init then seen := scan v seen
   return seen
 
+/-- Which boundary reports a whole-program finding. The diagnostic collector separately
+collects call signatures, model signatures, spawn tuples, missing callees and indirect
+callee types per call; the other kinds exist only in the whole-program validator. -/
+inductive ProgramIssueKind where
+  | model | structure | sharedDefinition | stdConflict | indirectCallee | indirectTarget
+  | callSignature | progressHint | modelSignature | spawnTarget | spawnWorker | threadSpawn
+  | callee | memory | fallibleSpawn
+  deriving BEq, Repr
+
+def ProgramIssueKind.collectedPerCall : ProgramIssueKind → Bool
+  | .indirectCallee | .callSignature | .modelSignature | .spawnWorker | .threadSpawn | .callee => true
+  | _ => false
+
+/-- One independent whole-program finding: each comes from a first-error validator of one
+definition, call site or memory item. -/
+structure ProgramIssue where
+  kind : ProgramIssueKind
+  function : Option String := none
+  instruction : Option Nat := none
+  message : String
+
 /-- Definitions which emission shares by name must agree across every file. -/
-private def checkSharedDefinitions (funcs : Array Func) : Except String (Array OperandTypes) := do
+private def sharedDefinitionIssues (funcs : Array Func) : Array OperandTypes × Array ProgramIssue := Id.run do
+  let mut issues : Array ProgramIssue := #[]
   let mut functions : Std.HashSet String := {}
   let mut indexes : Array OperandTypes := #[]
   for f in funcs do
-    if functions.contains f.name then throw s!"duplicate function name '{f.name}'"
+    if functions.contains f.name then
+      issues := issues.push { kind := .sharedDefinition, function := f.name, message := s!"duplicate function name '{f.name}'" }
     functions := functions.insert f.name
     let index := f.operandTypes
-    checkFunctionStructure f index
+    if let .error message := checkFunctionStructure f index then
+      issues := issues.push { kind := .structure, function := f.name, message }
     indexes := indexes.push index
+  -- Later checks index structurally valid functions only.
+  if issues.any (·.kind == .structure) then return (indexes, issues)
   let mut globals : Std.HashMap String (Nat × Nat) := {}
   let mut globalComparisons : Std.HashMap (Nat × Nat) (Std.HashSet (Nat × Nat)) := {}
   let mut namedTypes : Std.HashMap String (Func × TyId) := {}
   for (f, fileIndex) in funcs.zipIdx do
+    let shared (message : String) : ProgramIssue := { kind := .sharedDefinition, function := f.name, message }
     for (g, k) in f.globals.zipIdx do
       if let some n := g.name then
         if functions.contains n then
           unless (match g.init with | some (.func nm ..) => nm == n | _ => false) do
-            throw s!"{f.name}: global '{n}' collides with a function name"
+            issues := issues.push (shared s!"{f.name}: global '{n}' collides with a function name")
         if let some (previousIndex, id) := globals[n]? then
-          let some previous := funcs[previousIndex]?
-            | throw s!"{f.name}: shared global '{n}' refers to unknown function table {previousIndex}"
-          let key := (fileIndex, previousIndex)
-          let completed : Std.HashSet (Nat × Nat) := globalComparisons[key]?.getD {}
-          globalComparisons := globalComparisons.erase key
-          let some completed := compatibleGlobalCached f previous k id completed
-            | throw s!"{f.name}: inconsistent shared global '{n}' (previous definition in '{previous.name}')"
-          globalComparisons := globalComparisons.insert key completed
+          match funcs[previousIndex]? with
+          | none =>
+            issues := issues.push (shared s!"{f.name}: shared global '{n}' refers to unknown function table {previousIndex}")
+          | some previous =>
+            let key := (fileIndex, previousIndex)
+            let completed : Std.HashSet (Nat × Nat) := globalComparisons[key]?.getD {}
+            globalComparisons := globalComparisons.erase key
+            match compatibleGlobalCached f previous k id completed with
+            | some completed => globalComparisons := globalComparisons.insert key completed
+            | none =>
+              issues := issues.push (shared s!"{f.name}: inconsistent shared global '{n}' (previous definition in '{previous.name}')")
         else globals := globals.insert n (fileIndex, k)
     let used := programUsedTypes f indexes[fileIndex]!
     for (t, k) in f.types.zipIdx do
@@ -1946,9 +1976,9 @@ private def checkSharedDefinitions (funcs : Array Func) : Except String (Array O
       if let some n := name then
         if let some (previous, id) := namedTypes[n]? then
           unless compatibleType f previous k id do
-            throw s!"{f.name}: inconsistent shared type '{n}' (previous definition in '{previous.name}')"
+            issues := issues.push (shared s!"{f.name}: inconsistent shared type '{n}' (previous definition in '{previous.name}')")
         else namedTypes := namedTypes.insert n (f, k)
-  return indexes
+  return (indexes, issues)
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`): the pointers and slices in its
 arguments and result have a known item size and `ptr_align`, and a slice that it remaps or
@@ -2233,32 +2263,44 @@ inductive SpawnSemantics where
 /-- The fallible boundary accepts only the audited std versions and a constant
 SpawnConfig requesting 1 MiB or the default 16 MiB and a null custom allocator. Other sizes, runtime configs
 and allocator-specific semantics remain outside this model. -/
-def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
+private def checkFallibleSpawnCall (f : Func) (kind : ThreadFn) (args : Array Val) : Except String Unit := do
+  unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
+    throw s!"{f.name}: fallible spawn requires an audited Zig version"
+  if kind == .spawn then
+    let some (Val.agg ty fields) := (args[0]? : Option Val)
+      | throw s!"{f.name}: fallible Thread.spawn requires a constant SpawnConfig"
+    let some (.struct "Thread.SpawnConfig" _ names) := f.types[ty]?
+      | throw s!"{f.name}: fallible Thread.spawn requires Thread.SpawnConfig"
+    unless names.size == 2 && names[0]!.1 == "stack_size" && names[1]!.1 == "allocator" do
+      throw s!"{f.name}: fallible Thread.spawn has an unaudited SpawnConfig layout"
+    unless fields.size == 2 do
+      throw s!"{f.name}: fallible Thread.spawn has an incomplete SpawnConfig"
+    let .int _ stack := fields[0]!
+      | throw s!"{f.name}: fallible Thread.spawn requires a constant stack_size"
+    unless stack == 1048576 || stack == 16777216 do
+      throw s!"{f.name}: fallible Thread.spawn supports only audited 1 MiB or default 16 MiB stack_size requests"
+    let .optNull _ := fields[1]!
+      | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
+  else
+    unless f.zigVersion == "0.16.0" do
+      throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+
+/-- The first unsupported configuration of every spawn call under the fallible policy. -/
+def fallibleSpawnIssues (funcs : Array Func) : Array ProgramIssue := Id.run do
+  let mut issues := #[]
   for f in funcs do
     for i in f.allInsts do
       if let .call (.func name _ _) args := i.op then
         if let some kind := threadFn? name then
           if kind.spawnArgs?.isSome then
-            unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
-              throw s!"{f.name}: fallible spawn requires an audited Zig version"
-            if kind == .spawn then
-              let some (Val.agg ty fields) := (args[0]? : Option Val)
-                | throw s!"{f.name}: fallible Thread.spawn requires a constant SpawnConfig"
-              let some (.struct "Thread.SpawnConfig" _ names) := f.types[ty]?
-                | throw s!"{f.name}: fallible Thread.spawn requires Thread.SpawnConfig"
-              unless names.size == 2 && names[0]!.1 == "stack_size" && names[1]!.1 == "allocator" do
-                throw s!"{f.name}: fallible Thread.spawn has an unaudited SpawnConfig layout"
-              unless fields.size == 2 do
-                throw s!"{f.name}: fallible Thread.spawn has an incomplete SpawnConfig"
-              let .int _ stack := fields[0]!
-                | throw s!"{f.name}: fallible Thread.spawn requires a constant stack_size"
-              unless stack == 1048576 || stack == 16777216 do
-                throw s!"{f.name}: fallible Thread.spawn supports only audited 1 MiB or default 16 MiB stack_size requests"
-              let .optNull _ := fields[1]!
-                | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
-            else
-              unless f.zigVersion == "0.16.0" do
-                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+            if let .error message := checkFallibleSpawnCall f kind args then
+              issues := issues.push { kind := .fallibleSpawn, function := f.name, instruction := i.id, message }
+  return issues
+
+def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit :=
+  match (fallibleSpawnIssues funcs)[0]? with
+  | some issue => throw issue.message
+  | none => pure ()
 
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
@@ -2280,21 +2322,31 @@ def parseSpawnPolicy (value : String) : Except String SpawnSemantics :=
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
 function or has a built-in std model (`stdModel?`, `Air2Lean/StdModels.lean`); a translated
-function cannot reuse the qualified name of a built-in std model. -/
-def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
+function cannot reuse the qualified name of a built-in std model.
+
+Every independent whole-program finding is returned, in the order the fail-fast
+`checkProgram` meets them. Model-binding and structural failures stop collection: later
+checks need them. -/
+def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     (profile : Option BuildProfile := none)
-    (selectedCallees : Array String := #[]) : Except String Unit := do
+    (selectedCallees : Array String := #[]) : Array ProgramIssue := Id.run do
+  let mut issues : Array ProgramIssue := #[]
   unless models.isEmpty do
-    let some profile := profile | throw "external model bindings require a checked program profile"
-    ModelRegistry.check models profile funcs
+    let some profile := profile
+      | return #[{ kind := .model, message := "external model bindings require a checked program profile" }]
+    if let .error message := ModelRegistry.check models profile funcs then
+      return #[{ kind := .model, message }]
   let modelSymbols := models.foldl (fun symbols m => symbols.insert m.symbol) ({} : Std.HashSet String)
-  let indexes ← checkSharedDefinitions funcs
+  let (indexes, shared) := sharedDefinitionIssues funcs
+  issues := issues ++ shared
+  if shared.any (·.kind == .structure) then return issues
   let targets := referenceTargets (fnRefs funcs)
   let mem := memoryFunctions funcs (models.map (·.symbol) ++ selectedCallees)
   let mut functionNames : Std.HashMap String Nat := {}
   for (f, fileIndex) in funcs.zipIdx do
     if let some model := stdModel? f.name then
-      throw s!"{f.name}: translated function conflicts with built-in std model '{model.symbol}' (narrow the example's `filter`, docs/std-models.md)"
+      issues := issues.push { kind := .stdConflict, function := f.name, message :=
+        s!"{f.name}: translated function conflicts with built-in std model '{model.symbol}' (narrow the example's `filter`, docs/std-models.md)" }
     functionNames := functionNames.insert f.name fileIndex
   let lookupFunction (name : String) : Option (Nat × Func) := do
     let index ← functionNames[name]?
@@ -2303,35 +2355,49 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   let mut signatures : SignaturePairs := {}
   for ((f, index), fileIndex) in (funcs.zip indexes).zipIdx do
     for i in index.insts do
+      let issue (kind : ProgramIssueKind) (message : String) : ProgramIssue :=
+        { kind, function := f.name, instruction := i.id, message }
       if let .call (.inst p) args := i.op then
-        let some tn := index.calleeFnTy? f p
-          | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
-        for callee in targets.getD tn #[] do
-          let some (targetIndex, target) := lookupFunction callee
-            | throw s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file"
-          signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
+        match index.calleeFnTy? f p with
+        | none => issues := issues.push (issue .indirectCallee s!"{f.name}: inst {i.id}: indirect callee is not a function pointer")
+        | some tn =>
+          for callee in targets.getD tn #[] do
+            match lookupFunction callee with
+            | none => issues := issues.push (issue .indirectTarget s!"{f.name}: inst {i.id}: indirect target '{callee}' has no AIR file")
+            | some (targetIndex, target) =>
+              match checkCallSignatureCached f target fileIndex targetIndex i args index signatures with
+              | .ok cache => signatures := cache
+              | .error message => issues := issues.push (issue .callSignature message)
       if let .call (.func callee noreturn _) _ := i.op then
         if let some fn := threadFn? callee then
           if fn == .yield || fn == .spinLoopHint then
-            if noreturn then throw s!"{f.name}: progress hint '{callee}' cannot be noreturn"
+            if noreturn then issues := issues.push (issue .progressHint s!"{f.name}: progress hint '{callee}' cannot be noreturn")
       if let .call (.func callee false spawnFn) args := i.op then
-        checkModelSignature f callee args i.ty index
+        if let .error message := checkModelSignature f callee args i.ty index then
+          issues := issues.push (issue .modelSignature message)
         if !modelledStdFn callee then
           if let some (targetIndex, target) := lookupFunction callee then
-            signatures ← checkCallSignatureCached f target fileIndex targetIndex i args index signatures
+            match checkCallSignatureCached f target fileIndex targetIndex i args index signatures with
+            | .ok cache => signatures := cache
+            | .error message => issues := issues.push (issue .callSignature message)
         if let some kind := threadFn? callee then
           if let some k := kind.spawnArgs? then
-            let some worker := spawnFn
-              | throw s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target"
-            let some (_, target) := lookupFunction worker
-              | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
-            checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
-              k args index
+            match spawnFn with
+            | none => issues := issues.push (issue .spawnTarget s!"{f.name}: a call to '{callee}' has no comptime_fn spawn target")
+            | some worker =>
+              match lookupFunction worker with
+              | none => issues := issues.push (issue .spawnWorker
+                  s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)")
+              | some (_, target) =>
+                if let .error message := checkThreadSpawn f target
+                    (if kind == .spawn then "Thread.spawn" else "Io.Group.async") k args index then
+                  issues := issues.push (issue .threadSpawn message)
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
           if let some reason := rejectedThreadFn? callee then
-            throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
-          unless modelledStdFn callee do
-            throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
+            issues := issues.push (issue .callee s!"{f.name}: the callee '{callee}' is outside the subset: {reason}")
+          else if !modelledStdFn callee then
+            issues := issues.push (issue .callee
+              s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)")
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -2354,7 +2420,16 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             else if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
-          checkMemTy f.name f.types f.layouts 0 c
+          if let .error message := checkMemTy f.name f.types f.layouts 0 c then
+            issues := issues.push { kind := .memory, function := f.name, instruction := i.id, message }
+  return issues
+
+def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
+    (profile : Option BuildProfile := none)
+    (selectedCallees : Array String := #[]) : Except String Unit :=
+  match (programIssues funcs models profile selectedCallees)[0]? with
+  | some issue => throw issue.message
+  | none => pure ()
 
 /-! Collection reuses validators without constructing partial IR. Failed units retain
 their first error, but cannot suppress independent siblings. -/

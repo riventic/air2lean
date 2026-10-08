@@ -37,6 +37,15 @@ structure RawAsm where
   outputs : Array RawAsmOperand
   inputs : Array RawAsmOperand
 
+/-- A function's declaration site (`src`, additive exporter metadata): its file relative to the
+owning module's root, the module name and the 1-based declaration line. Provenance only:
+translation never reads it. -/
+structure RawSrc where
+  file : String
+  module : String
+  declLine : Nat
+  deriving BEq, Repr
+
 mutual
 
 structure RawInst where
@@ -65,6 +74,10 @@ structure RawInst where
   name : Option String
   /-- `dbg_stmt`. -/
   line : Option Nat
+  /-- `dbg_stmt`: 1-based column (additive provenance; absent in older exports). -/
+  column : Option Nat := none
+  /-- `dbg_inline_block`: the inlined function's declaration site (additive provenance). -/
+  src : Option RawSrc := none
   /-- `atomic_load`, `atomic_rmw`'s ordering. -/
   order : Option String
   /-- `atomic_rmw`'s `AtomicRmwOp`. -/
@@ -100,6 +113,8 @@ structure RawFunc where
   types : Array Ty
   layouts : Array Layout
   globals : Array Global
+  /-- The function's declaration site (additive provenance; absent in older exports). -/
+  src : Option RawSrc := none
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -582,6 +597,16 @@ def parseAsm (fnName : String) (types : Array Ty) (j : Json) : Except String Raw
   let inputs ← inputsJ.mapM (parseAsmOperand fnName types)
   return { source, isVolatile, clobbers, outputs, inputs }
 
+/-- Provenance fields are read leniently: a missing or malformed `src`/`column` yields no
+source span, never a translation error or a guessed location. -/
+def parseSrc? (j : Json) : Option RawSrc := do
+  let s ← optField j "src"
+  let file ← (s.getObjValAs? String "file").toOption
+  let module ← (s.getObjValAs? String "module").toOption
+  let declLine ← (s.getObjValAs? Nat "decl_line").toOption
+  guard (declLine ≥ 1 && file.length ≤ 4096 && module.length ≤ 1024)
+  pure { file, module, declLine }
+
 mutual
 
 partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except String RawInst := do
@@ -651,8 +676,10 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
     | some _ => some <$> parseAsm fnName types j
     | none => pure none
   let unsupported ← boolField j "unsupported"
+  let column := (optField j "column").bind (·.getNat?.toOption) |>.filter (· ≥ 1)
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
-           line, order, rmwOp, successOrder, failureOrder, op, mask, asm, unsupported }
+           line, column, src := parseSrc? j, order, rmwOp, successOrder, failureOrder, op, mask,
+           asm, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?
@@ -684,11 +711,17 @@ def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String 
   return { name, ty, isConst := ← bool "const",
            threadlocal := ← bool "threadlocal", isExtern := ← bool "extern", init }
 
-def parseFunc (j : Json) : Except String RawFunc := do
+/-- The identity fields every later decode step needs. -/
+def parseHeader (j : Json) : Except String (String × Nat × String) := do
   let name ← (← j.getObjVal? "name").getStr?
   let schema ← (← j.getObjVal? "schema").getNat?
   let zigVersion ← (← j.getObjVal? "zig_version").getStr?
-  let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
+  return (name, schema, zigVersion)
+
+/-- Decode everything but the profile, given an already validated (or, for diagnostics, a
+placeholder) profile. -/
+def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc := do
+  let (name, schema, zigVersion) ← parseHeader j
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
   validateTypeGraph name types
@@ -713,7 +746,13 @@ def parseFunc (j : Json) : Except String RawFunc := do
     types
     layouts
     globals
+    src := parseSrc? j
   }
+
+def parseFunc (j : Json) : Except String RawFunc := do
+  let (name, schema, zigVersion) ← parseHeader j
+  let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
+  parseFuncWith j profile
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do

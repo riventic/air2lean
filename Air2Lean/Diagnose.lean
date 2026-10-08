@@ -13,6 +13,7 @@ structure CheckArgs where
   directory : System.FilePath
   profile : Option String := none
   limit : Nat := 256
+  unitLimit : Nat := 64
   spawnPolicy : SpawnSemantics := .available
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
@@ -27,12 +28,16 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     let some limit := value.toNat? | throw "--diagnostic-limit must be an integer"
     unless 1 ≤ limit && limit ≤ 4096 do throw "--diagnostic-limit must be from 1 through 4096"
     parseOptions rest { out with limit } spawnPolicySeen
+  | "--unit-diagnostic-limit" :: value :: rest =>
+    let some unitLimit := value.toNat? | throw "--unit-diagnostic-limit must be an integer"
+    unless 1 ≤ unitLimit && unitLimit ≤ 4096 do throw "--unit-diagnostic-limit must be from 1 through 4096"
+    parseOptions rest { out with unitLimit } spawnPolicySeen
   | "--spawn-policy" :: value :: rest =>
     if spawnPolicySeen then throw "duplicate --spawn-policy"
     let spawnPolicy ← parseSpawnPolicy value
     parseOptions rest { out with spawnPolicy } true
   | ["--spawn-policy"] => throw "missing value for --spawn-policy"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit and --spawn-policy; emission flags are incompatible"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --unit-diagnostic-limit and --spawn-policy; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -40,7 +45,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 structure FileResult where
   file : String
@@ -135,6 +140,45 @@ private def shallow (i : Raw.RawInst) : Raw.RawInst :=
   { i with body := #[], thenBody := #[], elseBody := #[],
            cases := i.cases.map fun c => { c with body := #[] } }
 
+/-- A location in `src`'s scope: the statement of a `dbg_stmt` (line relative to the
+declaration, 1 = the declaration line) or, without one, the declaration itself. -/
+def spanAt (src : Raw.RawSrc) (stmt : Option (Nat × Option Nat)) : SourceSpan :=
+  match stmt with
+  | some (line, column) =>
+    { file := src.file, module := src.module, line := src.declLine + line - 1, column,
+      granularity := "statement" }
+  | none =>
+    { file := src.file, module := src.module, line := src.declLine, granularity := "declaration" }
+
+/-- Every instruction's nearest preceding `dbg_stmt` in its own inline scope. Branch bodies
+start from their parent's statement and do not leak into siblings; `block`/`loop` bodies
+continue lexically; an inlined body starts from its callee's declaration, and is unresolved
+when the export has no `src` for it. -/
+partial def spanMap (src : Option Raw.RawSrc) (body : Array Raw.RawInst)
+    (stmt : Option (Nat × Option Nat)) (acc : Std.HashMap Nat SourceSpan) :
+    Option (Nat × Option Nat) × Std.HashMap Nat SourceSpan := Id.run do
+  let mut stmt := stmt
+  let mut acc := acc
+  for i in body do
+    if i.tag == "dbg_stmt" then
+      if let some line := i.line then
+        if line ≥ 1 then stmt := some (line, i.column)
+    if let some src := src then
+      acc := acc.insert i.id (spanAt src stmt)
+    if i.tag == "dbg_inline_block" then
+      acc := (spanMap i.src i.body none acc).2
+    else if i.tag == "block" || i.tag == "loop" then
+      let (inner, nested) := spanMap src i.body stmt acc
+      stmt := inner
+      acc := nested
+    else
+      for nested in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
+        acc := (spanMap src nested stmt acc).2
+  return (stmt, acc)
+
+private def register (log : Log) (file : String) (index : SpanIndex) : Log :=
+  { log with spans := log.spans.insert file index }
+
 /-- After the composed normalizer failed, normalize each canonical instruction on its own so
 one rejected tag cannot hide independent siblings. Only the version gate is unit-wide. Marked
 instructions were already reported. Successfully normalized direct calls are retained for
@@ -144,7 +188,7 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
   let name := some canonical.name
   let context := boundary file name .normalizationFailure .normalize .validationFailure
   if !supportedVersions.contains canonical.zigVersion then
-    return (#[], initial.record context whole)
+    return (#[], initial.record { context with fatal := true } whole)
   let mut log := initial
   let mut calls : Array Inst := #[]
   let mut found := false
@@ -163,24 +207,47 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
   if !found && !hasMarkers then log := log.record context whole
   return (calls, log)
 
-/-- Pure per-file boundary used by both the CLI and kernel-checked regressions. -/
+/-- Pure per-file boundary used by both the CLI and kernel-checked regressions. Fatal
+malformed input (JSON syntax, undecodable AIR, a structurally unusable profile, invalid
+references) stops the unit; within each phase, independent findings are all reported. -/
 def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.run do
   let mut log := initial
   let empty : FileResult := { file }
   let parsed := StrictJson.parse contents
   let .ok json := parsed
-    | log := log.record (boundary file none .jsonSyntax .decode .malformedInput) parsed
+    | log := log.record { boundary file none .jsonSyntax .decode .malformedInput with fatal := true } parsed
       return (empty, log.add (skipped file none .normalize "decoded_AIR"))
   let name := (json.getObjValAs? String "name").toOption
   if (name.map (fun n => decide (n.length > 1024))).getD false then
-    log := log.add (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters")
+    log := log.add { (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters") with
+      fatal := true }
     return (empty, log.add (skipped file none .normalize "bounded_function_identity"))
   let unit := { empty with function := name }
-  let decoded := Raw.parseFunc json
-  let .ok raw := decoded
-    | log := log.record (boundary file name .airDecode .decode .validationFailure) decoded
+  let decodeFailure := { boundary file name .airDecode .decode .validationFailure with fatal := true }
+  let header := Raw.parseHeader json
+  let .ok (fnName, schema, zigVersion) := header
+    | log := log.record decodeFailure header
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))
-  let unit := { unit with function := some raw.name, decodedProfile := some raw.profile }
+  let src := Raw.parseSrc? json
+  log := register log file { declaration := src.map (spanAt · none) }
+  -- Every independent profile violation; a structurally unusable profile is fatal. Otherwise
+  -- the body is still inspected under a placeholder of the valid fields, but the unit can
+  -- neither pass nor join the cross-file profile comparison.
+  let (profile?, profileErrors) := (BuildProfile.collect json schema zigVersion).run #[]
+  for message in profileErrors do
+    log := log.add { (boundary file name .profileFailure .profile .validationFailure s!"{fnName}: {message}") with
+      fatal := profile?.isNone }
+  let some profile := profile?
+    | return (unit, log.add (skipped file name .normalize "decoded_AIR_profile"))
+  let decoded := Raw.parseFuncWith json profile
+  let .ok raw := decoded
+    | log := log.record decodeFailure decoded
+      return (unit, log.add (skipped file name .normalize "decoded_AIR"))
+  let profileValid := profileErrors.isEmpty
+  let unit := { unit with function := some raw.name,
+                          decodedProfile := if profileValid then some raw.profile else none }
+  log := register log file { declaration := src.map (spanAt · none),
+                             exported := (spanMap src raw.body none {}).2 }
   let mut hasMarkers := false
   for i in Raw.flatten raw.body do
     if marked i then
@@ -192,12 +259,22 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
         (if i.tag.endsWith "_optimized" then .optimizedUnsupported else .exporterUnsupported)
         .normalize .unsupportedSemantics message) with
         anchor := { idSpace := .exported, instruction := some i.id } }
-  -- Markers do not stop canonicalization (its rewrites match specific supported tags); a
-  -- canonical failure stays its own fatal error. Unmarked siblings are normalized below.
+  -- Malformed references and parameter ranks: each independent finding is reported, and the
+  -- unit stops (no canonical function exists to inspect further).
+  let violations := Raw.refViolations raw ++ Raw.argViolations raw
+  unless violations.isEmpty do
+    for v in violations do
+      log := log.add { (boundary file name .canonicalFailure .canonicalize .malformedInput v.message) with
+        anchor := { idSpace := if v.inst.isSome then .exported else .unavailable, instruction := v.inst }
+        fatal := true }
+    return (unit, log.add (skipped file name .check "canonicalized_AIR"))
+  -- Markers do not stop canonicalization (its rewrites match specific supported tags). A
+  -- remaining canonical failure (a rewrite invariant) stays one fatal error.
   let rewritten := Raw.canonicalize raw
   let .ok canonical := rewritten
-    | log := log.record (boundary file name .canonicalFailure .canonicalize .validationFailure) rewritten
+    | log := log.record { boundary file name .canonicalFailure .canonicalize .validationFailure with fatal := true } rewritten
       return (unit, log.add (skipped file name .check "canonicalized_AIR"))
+  log := register log file { (log.spans.getD file {}) with canonical := (spanMap src canonical.body none {}).2 }
   let normalized := normalizeCanonical canonical
   let .ok f := normalized
     | let (blockedCalls, collected) := collectNormalization file canonical hasMarkers normalized log
@@ -213,7 +290,7 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     normalized := some f
     index := some checked.index
     structureValid := checked.structureValid
-    localPassed := checked.structureValid && log.observed == before }, log)
+    localPassed := profileValid && checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log)
     (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
@@ -261,24 +338,46 @@ def collectProgram (units : Array FileResult) (initial : Log)
                 (unsupported.getD "named dependency is absent, ambiguous or blocked; see diagnostic code")) with
                 anchor := { idSpace := .canonical, instruction := some edge.instruction }
                 dependencyChain := chain.push edge.callee }
-  -- Retain the authoritative whole-program validator. Its first-error boundary
-  -- includes shared definitions and memory effects not independently collected.
+  -- The authoritative whole-program validator, collected: every independent shared
+  -- definition, call site and memory item finding. A finding of a kind the per-call
+  -- collection above already reports is skipped when that call site already has a
+  -- program-phase diagnostic, so one blocker is not reported twice.
   if !funcs.isEmpty then
-    let program := checkProgram funcs
-    log := log.record {
-      code := .programFailure
-      phase := .program
-      category := .validationFailure
-      message := ""
-      prerequisites := #["structurally_valid_selected_functions"] } program
+    let issues := programIssues funcs
+    let reported := log.programAnchors
+    let mut fileOf : Std.HashMap String String := {}
+    for u in safe do
+      if let some f := u.normalized then
+        if !fileOf.contains f.name then fileOf := fileOf.insert f.name u.file
+    for issue in issues do
+      if issue.kind.collectedPerCall then
+        if let (some function, some instruction) := (issue.function, issue.instruction) then
+          if reported.contains (function, instruction) then continue
+      log := log.add {
+        code := .programFailure
+        phase := .program
+        category := .validationFailure
+        message := issue.message
+        file := issue.function.bind (fileOf[·]?)
+        function := issue.function
+        anchor := match issue.instruction with
+          | some instruction => { idSpace := .canonical, instruction := some instruction }
+          | none => {}
+        prerequisites := #["structurally_valid_selected_functions"]
+        firstErrorInUnit := true }
     if spawnPolicy == .fallible then
-      if program.toOption.isSome then
-        log := log.record {
-          code := .modelFailure
-          phase := .program
-          category := .unsupportedSemantics
-          message := ""
-          prerequisites := #["validated_selected_program"] } (checkFallibleSpawnCalls funcs)
+      if issues.isEmpty then
+        for issue in fallibleSpawnIssues funcs do
+          log := log.add {
+            code := .modelFailure
+            phase := .program
+            category := .unsupportedSemantics
+            message := issue.message
+            file := issue.function.bind (fileOf[·]?)
+            function := issue.function
+            anchor := { idSpace := .canonical, instruction := issue.instruction }
+            prerequisites := #["validated_selected_program"]
+            firstErrorInUnit := true }
       else
         log := log.add {
           code := .prerequisiteSkipped
@@ -291,12 +390,23 @@ def collectProgram (units : Array FileResult) (initial : Log)
     log := { log with complete := false }
   return log
 
+/-- Every bound that can drop or truncate reported diagnostics, stated in the report. -/
+def caps (log : Log) : Json := Json.mkObj [
+  ("diagnostics", Lean.toJson log.limit), ("diagnostics_per_unit", Lean.toJson log.unitLimit),
+  ("payload_bytes", Lean.toJson maxPayloadBytes), ("message_chars", Lean.toJson maxMessageChars),
+  ("files", Lean.toJson maxFiles), ("input_bytes", Lean.toJson maxInputBytes),
+  ("function_name_chars", Lean.toJson (1024 : Nat)),
+  ("dependency_chain_names", Lean.toJson (maxFiles + 1))]
+
 def report (units : Array FileResult) (log : Log) : Json := Json.mkObj [
-  ("schema", Lean.toJson (1 : Nat)), ("kind", Lean.toJson "air2lean-check-diagnostics"),
+  ("schema", Lean.toJson (2 : Nat)), ("kind", Lean.toJson "air2lean-check-diagnostics"),
   ("status", Lean.toJson (if log.failed then "rejected" else "checked")),
   ("complete", Lean.toJson log.complete), ("truncated", Lean.toJson log.truncated),
   ("diagnostic_limit", Lean.toJson log.limit), ("diagnostics_observed", Lean.toJson log.observed),
   ("diagnostic_payload_bytes", Lean.toJson log.payloadBytes),
+  ("caps", caps log),
+  ("capped_units", Json.arr (log.cappedUnits.map fun (file, dropped) =>
+    Json.mkObj [("file", Lean.toJson file), ("dropped", Lean.toJson dropped)])),
   ("diagnostics", Json.arr (log.items.map Diagnostic.toJson)),
   ("files", Json.arr (units.map FileResult.toJson)),
   ("scope", Lean.toJson "selected AIR validation; first error within opaque prerequisite units"),
@@ -336,12 +446,13 @@ private def readInput (path : System.FilePath) (charged : IO.Ref Nat) : IO (Exce
   catch error => return .error (.read error.toString)
 
 private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
-  let mut log : Log := { limit := a.limit }
+  let mut log : Log := { limit := a.limit, unitLimit := a.unitLimit }
   let entries ← a.directory.readDir
   let paths := ((entries.filter fun e => e.fileName.endsWith ".json").qsort
     (fun x y => decide (x.fileName < y.fileName))).map (·.path)
   if paths.isEmpty then
-    return (#[], log.add (boundary a.directory.toString none .inputRead .input .ioFailure "no *.json files found"))
+    return (#[], log.add { (boundary a.directory.toString none .inputRead .input .ioFailure "no *.json files found") with
+      fatal := true })
   if paths.size > maxFiles then
     log := log.add { (boundary a.directory.toString none .inputLimit .input .resourceLimit
       s!"selected input exceeds {maxFiles} files; only the first sorted files are inspected") with
@@ -355,11 +466,12 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     | .error .limit =>
       log := log.add { (boundary path.toString none .inputLimit .input .resourceLimit
         "AIR input exceeds remaining aggregate 64 MiB budget") with
-        firstErrorInUnit := true }
+        firstErrorInUnit := true, fatal := true }
       units := units.push { file := path.toString }
       log := log.add (skipped path.toString none .decode "readable_input_within_aggregate_budget")
     | .error (.read message) =>
-      log := log.add { (boundary path.toString none .inputRead .input .ioFailure message) with firstErrorInUnit := true }
+      log := log.add { (boundary path.toString none .inputRead .input .ioFailure message) with
+        firstErrorInUnit := true, fatal := true }
       units := units.push { file := path.toString }
       log := log.add (skipped path.toString none .decode "readable_UTF8_input")
     | .ok contents =>
@@ -373,8 +485,8 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile
       firstProfile := some baseline
-      log := log.record (boundary file result.1.function .profileFailure .profile .validationFailure)
-        (BuildProfile.checkProgram #[baseline, profile] a.profile)
+      for message in BuildProfile.programViolations #[baseline, profile] a.profile do
+        log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
   return (units, collectProgram units log a.spawnPolicy)
@@ -386,15 +498,17 @@ def runCheck (args : List String) : IO UInt32 := do
         phase := .cli
         category := .malformedInput
         message
-        firstErrorInUnit := true })
+        firstErrorInUnit := true
+        fatal := true })
     | .ok a =>
       try scan a catch error =>
-        pure (#[], ({ limit := a.limit } : Log).add {
+        pure (#[], ({ limit := a.limit, unitLimit := a.unitLimit } : Log).add {
           code := .inputRead
           phase := .input
           category := .ioFailure
           message := error.toString
-          firstErrorInUnit := true })
+          firstErrorInUnit := true
+          fatal := true })
   IO.println (report result.1 result.2).compress
   return if result.2.failed then 1 else 0
 
