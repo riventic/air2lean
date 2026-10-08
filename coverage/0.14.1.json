@@ -13766,7 +13766,7 @@
       "tests/diff/basic/inputs/totalWeightedTardiness.jsonl": "2ff2802f365df24b219339123d50005d68dd45d68248354a16a09b27b7d70e29",
       "tests/diff/basic/inputs/weightedTardiness.jsonl": "562940a5845f18637ad36aaf34454d1ba62d10754b18e9dabb386b7765853f4f",
       "tests/diff/common.zig": "fee1a00d4d01339034a80daf740743461757693bbf05890b072359cc6455549c",
-      "tests/diff/compat.zig": "505e8ddbd1b71ce1f29ead8c0c5de927d6e7a3f75c17d3e448c7078dc70759a1",
+      "tests/diff/compat.zig": "e08b36666946ddd8dcf95d65b2fd64d00eb2a3bee698e286472d93f667ff14bc",
       "tests/diff/errors/harness.zig": "22e5e9e8d2489741cfa084199d0494629188595d489158bce869b9ce438a13f7",
       "tests/diff/errors/inputs/digitOrZero.jsonl": "12131092f5f8f6b42647096c3b285db00b2980909d45954e54156f1a26b93a97",
       "tests/diff/errors/inputs/parseDigit.jsonl": "8a22d33c0ce12ba478ce26a0b3bcc5e1b5d641ef61469a1116d1eadf9bedda9e",
