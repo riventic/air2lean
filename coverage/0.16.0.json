@@ -2759,6 +2759,10 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Sep/Alloc.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/ArenaClient.lean",
           "ZigLean/Sep/Block.lean",
           "ZigLean/Sep/Cost.lean",
@@ -3083,6 +3087,10 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Sep/Alloc.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/ArenaClient.lean",
           "ZigLean/Sep/Block.lean",
           "ZigLean/Sep/Cost.lean",
@@ -3867,6 +3875,9 @@
           "ZigLean/PackedLemmas.lean",
           "ZigLean/ReprCast.lean",
           "ZigLean/Sep/Alloc.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Automation.lean",
@@ -4207,6 +4218,9 @@
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Sep/Alloc.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/ArenaClient.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
@@ -5099,6 +5113,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5310,6 +5327,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5399,6 +5419,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5488,6 +5511,9 @@
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Lemmas.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -8764,6 +8790,9 @@
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Sep/Alloc.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/ArenaClient.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
@@ -9846,6 +9875,7 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/PackedLemmas.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Total.lean",
@@ -10107,6 +10137,9 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Extract.lean",
@@ -10203,6 +10236,9 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Sep/AllocSpec.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Extract.lean",
@@ -10650,6 +10686,9 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/PackedLemmas.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/Array.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
@@ -10792,6 +10831,9 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Packed.lean",
           "ZigLean/PackedLemmas.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Toy.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/Array.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Assert.lean",
@@ -12945,6 +12987,7 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/ArenaClient.lean",
           "ZigLean/Sep/Owned.lean",
           "ZigLean/Sep/RawAlloc.lean",
@@ -13908,6 +13951,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Lemmas.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Vec.lean"
         ]
       },
@@ -14269,6 +14313,8 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/NullLemmas.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/Triple.lean"
         ]
       },
@@ -14333,6 +14379,8 @@
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/NullLemmas.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean",
           "ZigLean/Sep/Triple.lean"
         ]
       },
@@ -14393,7 +14441,9 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Mem/Basic.lean"
+          "ZigLean/Mem/Basic.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean"
         ]
       },
       "emission": {
@@ -14454,7 +14504,9 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Mem/Basic.lean"
+          "ZigLean/Mem/Basic.lean",
+          "ZigLean/Sep/AllocSpec/Region.lean",
+          "ZigLean/Sep/AllocSpec/Wrappers.lean"
         ]
       },
       "emission": {
@@ -17276,6 +17328,10 @@
       "ZigLean/Range.lean": "5e186493f18715774e89e0794cadf759cf24af3b0dc854b578931ffd8db9602a",
       "ZigLean/ReprCast.lean": "49a795e3577d7dcbc158410e36014190308a7494d112c2701eb53c4ba6f2ebce",
       "ZigLean/Sep/Alloc.lean": "c43c2853025961522b64827f09c45923695fbca031e9f8c0f4590e83e0d70c0d",
+      "ZigLean/Sep/AllocSpec/Region.lean": "9f768d78cd67e1c99caba17a717641663c6aa75a9777323bfe815badc682b0bd",
+      "ZigLean/Sep/AllocSpec/Toy.lean": "6aec1ed239aa4e40be765b526c4cc7cd8095d96325f513f1812653c82cf57dde",
+      "ZigLean/Sep/AllocSpec/Wrappers.lean": "c0162d5070a0ada5dafe89bc21729c89432ed08eefeebf3a372f1da0e748462a",
+      "ZigLean/Sep/AllocSpec.lean": "55f8c914f00d96716d2d07700e858318b4407a074a4777e53c95ea8a4a5673c1",
       "ZigLean/Sep/ArenaClient.lean": "1b53c8872ec8606ab3974e6fa221c5072c82ccd35bb9972cfb1adfd8ad9e1f4a",
       "ZigLean/Sep/Array/Reassemble.lean": "f98c475227121c4bd51111005eb8b9dacc061100a91817be373fa0e57be7fc36",
       "ZigLean/Sep/Array.lean": "b8fd8b72407b1486e8bbe841591c03a6decd258e0de3ac7b2ddd0d2967e936fd",
