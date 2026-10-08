@@ -14,7 +14,9 @@ Round trips and lane-write frames for the bit-packed vector encoding (`Vec.packe
   `Vec (Float fmt) n`: a vector stored and loaded back is the same vector;
 * `packLanes_set_mod`/`packLanes_set_shiftRight`: a lane write leaves every bit below and above
   the written lane's bits of the memory image unchanged; `Vec.set_lane_ne` and
-  `Vec.storeLane_run`/`Vec.load_storeLane_ne` state that frame on lanes and through memory.
+  `Vec.storeLane_run`/`Vec.load_storeLane` state that frame on lanes and through memory;
+* §Lane pointers: a load or store through `&v[i]` as a bit-pointer (`Zig.loadLane`,
+  `Zig.storeLane`) reads lane `i`, and writes exactly the host bytes of `v.set i x`.
 -/
 
 namespace Zig
