@@ -3,7 +3,7 @@
 [`assurance/theorem-inventory.json`](../assurance/theorem-inventory.json) lists the headline
 theorems of `Proofs/` (the [proved examples](proofs.md#proved-examples), the
 [vector proofs](vector-proofs.md), the `floatops` selector theorems, the C14 RwLock client and
-its rules, and the single-schedule and single-step facts) with:
+its rules, the C14 contract clients, and the single-schedule and single-step facts) with:
 
 - the Lean name and module, and the example whose translation the module imports;
 - a scope class (below) and the precise domain of the statement;
@@ -63,16 +63,16 @@ committed goldens.
 
 ## Remaining scope
 
-- F05: `op128_spec` still excludes the `f128` selectors 3, 5, 6 and 9 (`/`, `@divTrunc`,
-  `@divFloor`, `@sqrt`); `op128_spec_full` covers them with the helpers of each translation's
-  profile. For 0.16.0 `f128` division with operand exponents differing by −16382 or less, the
-  specification is the `divtf3.zig` port itself, not a closed IEEE form; for 0.14.1/0.15.2
-  `@sqrt` of a finite nonzero operand it is the `f64` route of `Float.sqrtF128ViaF64`
-  ([floats.md](floats.md#per-version-differences)).
+- F05: `op128_spec` excludes the `f128` selectors 3, 5, 6 and 9 (`/`, `@divTrunc`,
+  `@divFloor`, `@sqrt`), which call a different model function per Zig version. They stay
+  excluded; the theorem's domain says so.
 - C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol of
   `Proofs/Sync/RwLockContract.lean` (one fixed client: main reader, one writer, writer count
-  at most 2). There is no reusable RwLock contract for arbitrary readers, resources, fairness
-  or native adequacy ([rwlock-contracts.md](rwlock-contracts.md)).
+  at most 2). `cache_spec`/`cache_safe` and `mailbox_spec`/`mailbox_safe` are Lean model
+  clients proved only against the reusable `MutexContract`/`SemContract` of
+  `Proofs/Sync/Contracts.lean`; they have no Zig source or native/model differential. There is
+  no reusable RwLock contract for arbitrary readers or resources, no Event/WaitGroup contract,
+  and no fairness or native adequacy claim ([rwlock-contracts.md](rwlock-contracts.md)).
 
 ## Inventory
 
@@ -140,8 +140,8 @@ committed goldens.
 | `Sync.RwLockContract.held_pair_wp` | `Proofs.Sync.RwLockContract` | single-step | `WP` rule for the two protected loads of one shared hold, under the restricted RwLock protocol and the semaphore premise `E.Spec`; a step lemma composed into `snapshotPair_spec`, not a program theorem | 0.16.0/linux: pass, run `committed-linux-all` |
 | `Sync.RwLockContract.acquire_shared` | `Proofs.Sync.RwLockContract` | single-step | `WP` rule: the shared acquire under the restricted protocol gives the protected counter facts (`ProtectedFacts`), premise `E.Spec`; one operation, not a program theorem | 0.16.0/linux: pass, run `committed-linux-all` |
 | `Sync.RwLockSnapshotPair.result_of_same_snapshot` | `Proofs.Sync.RwLockSnapshotPair` | sequential | arithmetic: two equal observations `first ≤ 2` give 0, 11 or 22; equality is a premise, not derived from the lock | 0.16.0/linux: pass, run `committed-linux-all` |
-| `Sync.MutexOps.lock_spec` | `Proofs.Sync.Lock` | single-step | `WP` of the translated 0.16.0 `Io.Mutex.lock` for every protocol with the lock (`Lock.Fits`): the thread takes the lock and its resource; one operation, not a program theorem | 0.16.0/linux: pass, run `committed-linux-all` |
-| `Sync.MutexOps.unlock_spec` | `Proofs.Sync.Lock` | single-step | `WP` of the translated 0.16.0 `Io.Mutex.unlock` for every protocol with the lock: the resource goes back to the lock; one operation | 0.16.0/linux: pass, run `committed-linux-all` |
+| `Sync.MutexOps.lock_spec` | `Proofs.Sync.Lock` | single-step | `WP` of the translated 0.16.0 `Io.Mutex.lock` for every protocol with the lock (`Lock.Fits`): the thread takes the lock and its resource; one operation, not a program theorem | 0.16.0/linux: pass, run `c14-sync-contracts-linux` |
+| `Sync.MutexOps.unlock_spec` | `Proofs.Sync.Lock` | single-step | `WP` of the translated 0.16.0 `Io.Mutex.unlock` for every protocol with the lock: the resource goes back to the lock; one operation | 0.16.0/linux: pass, run `c14-sync-contracts-linux` |
 | `Zig.noRace_of_atomic` | `Proofs.Threads.Proofs` | single-step | one access: an atomic access does not race when every earlier access to its block is atomic | 0.16.0/linux: pass, run `committed-linux-all`<br>0.15.2/linux: pass, run `0.15.2-linux-goldens` |
 | `Zig.readOpts_zero` | `Proofs.Threads.Proofs` | single-step | one read step: option 0 of an atomic read is the newest message | 0.16.0/linux: pass, run `committed-linux-all`<br>0.15.2/linux: pass, run `0.15.2-linux-goldens` |
 | `sb_sc` | `Proofs.Atomics.Proofs` | single-schedule | `sbRelaxed` returns 2 under the sequentially consistent schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules | 0.16.0/linux: pass, run `committed-linux-all`<br>0.15.2/linux: pass, run `0.15.2-linux-goldens` |
@@ -149,11 +149,15 @@ committed goldens.
 | `twoPlusTwoW_weak` | `Proofs.Atomics.Proofs` | single-schedule | `twoPlusTwoW` returns 11 (weak-memory result) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules | 0.16.0/linux: pass, run `committed-linux-all`<br>0.15.2/linux: pass, run `0.15.2-linux-goldens` |
 | `mp_sees_data` | `Proofs.Atomics.Proofs` | single-schedule | `mpRelAcq` returns 42 under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules | 0.16.0/linux: pass, run `committed-linux-all`<br>0.15.2/linux: pass, run `0.15.2-linux-goldens` |
 | `mpRelaxed_race` | `Proofs.Atomics.Proofs` | single-schedule | `mpRelaxed` ends in a data race (`.illegal`) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules | 0.16.0/linux: pass, run `committed-linux-all`<br>0.15.2/linux: pass, run `0.15.2-linux-goldens` |
-| `tryLock_new` | `Proofs.Sync.Proofs` | single-schedule | `Io.Mutex.tryLock` of a new mutex succeeds; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: pass, run `committed-linux-all` |
-| `tryLock_twice` | `Proofs.Sync.Proofs` | single-schedule | a second `tryLock` of a taken mutex fails; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: pass, run `committed-linux-all` |
-| `wait_alone_deadlock` | `Proofs.Sync.Proofs` | single-schedule | the only thread waiting at an unwoken futex is `.deadlock`; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: pass, run `committed-linux-all` |
-| `wait_other_value` | `Proofs.Sync.Proofs` | single-schedule | a futex wait on a different value goes on; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: pass, run `committed-linux-all` |
-| `snapshot_without_clock_edge_rejected` | `Proofs.Sync.Proofs` | single-schedule | one fixed `MemM` run (child write, parent read without acquire or join) ends in `.illegal` (C14 race negative) | 0.16.0/linux: pass, run `committed-linux-all` |
+| `tryLock_new` | `Proofs.Sync.Proofs` | single-schedule | `Io.Mutex.tryLock` of a new mutex succeeds; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: none |
+| `tryLock_twice` | `Proofs.Sync.Proofs` | single-schedule | a second `tryLock` of a taken mutex fails; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: none |
+| `wait_alone_deadlock` | `Proofs.Sync.Proofs` | single-schedule | the only thread waiting at an unwoken futex is `.deadlock`; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: none |
+| `wait_other_value` | `Proofs.Sync.Proofs` | single-schedule | a futex wait on a different value goes on; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only | 0.16.0/linux: none |
+| `snapshot_without_clock_edge_rejected` | `Proofs.Sync.Proofs` | single-schedule | one fixed `MemM` run (child write, parent read without acquire or join) ends in `.illegal` (C14 race negative) | 0.16.0/linux: none |
+| `Sync.SnapshotCache.cache_spec` | `Proofs.Sync.SnapshotCache` | all-schedules | the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): every completed run returns 10; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness | 0.16.0/linux: none |
+| `Sync.SnapshotCache.cache_safe` | `Proofs.Sync.SnapshotCache` | all-schedules | the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness | 0.16.0/linux: none |
+| `Sync.Mailbox.mailbox_spec` | `Proofs.Sync.Mailbox` | all-schedules | the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness | 0.16.0/linux: none |
+| `Sync.Mailbox.mailbox_safe` | `Proofs.Sync.Mailbox` | all-schedules | the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness | 0.16.0/linux: none |
 
 | Run | Translation | Build | Result | Revision | Started (UTC) | Log SHA-256 |
 |---|---|---|---|---|---|---|
@@ -162,5 +166,6 @@ committed goldens.
 | `0.15.2-linux-floatops` | 0.15.2/linux: `tests/golden/0.15.2/floatops/Gen.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.15.2/floatops/Gen.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `70951cf89ece` | 2026-10-07T23:19:13 | `d445b23f1048a300` |
 | `0.15.2-linux-goldens` | 0.15.2/linux: `tests/golden/0.15.2/atomics/Gen.lean`, `tests/golden/0.15.2/floatops/Gen.lean`, `tests/golden/0.15.2/lists/Gen.lean`, `tests/golden/0.15.2/slices/Gen.lean`, `tests/golden/0.15.2/threads/Gen.lean` | `python3 scripts/theorem-inventory.py swap-build --swap atomics=tests/golden/0.15.2/atomics/Gen.lean --swap floatops=tests/golden/0.15.2/floatops/Gen.lean --swap lists=tests/golden/0.15.2/lists/Gen.lean --swap slices=tests/golden/0.15.2/slices/Gen.lean --swap threads=tests/golden/0.15.2/threads/Gen.lean -- Proofs.Atomics.Proofs Proofs.Atomics.MessagePassing Proofs.Atomics.Relaxed Proofs.Atomics.Stack Proofs.Floatops.Proofs Proofs.Lists.Sep Proofs.Lists.Append Proofs.Lists.Container Proofs.Slices.Proofs Proofs.Slices.Sep Proofs.Threads.Proofs Proofs.Threads.Counter Proofs.Threads.Disjoint` | success (exit 0) | `a3d71df9dca6` | 2026-10-07T23:13:07 | `d1f486e31cbd5d9a` |
 | `0.16.0-linux-floatops` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `lake build Proofs.Floatops.Proofs` | success (exit 0) | `70951cf89ece` | 2026-10-07T23:14:51 | `cab4092901c14d51` |
+| `c14-sync-contracts-linux` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `lake build Proofs.Sync.Proofs` | success (exit 0) | `6fddf68371a3` | 2026-10-08T08:05:05 | `1331b22e02e195ab` |
 | `committed-linux-all` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `lake build Proofs` | success (exit 0) | `a3d71df9dca6` | 2026-10-07T23:02:33 | `88c9d3bce23ed2b0` |
 <!-- END theorem-inventory -->

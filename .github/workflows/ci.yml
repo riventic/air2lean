@@ -912,6 +912,7 @@ jobs:
           lake env lean tests/roadmap/container-contracts/Clients.lean
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
+            lake env lean --run tests/roadmap/sync-contracts/Runtime.lean
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
           fi
 
