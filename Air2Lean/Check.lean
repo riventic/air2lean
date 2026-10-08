@@ -273,6 +273,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     let (s, a) ← modelLayout types layouts c
     pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
+    -- The vector memory images are qualified on the 64-bit LLVM targets only (L09).
+    if pb != 8 then throw "a vector in memory is outside the 32-bit pointer model"
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
       let (s, _) ← modelLayout types layouts c
