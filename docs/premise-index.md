@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-1983 theorems in 109 files.
+1990 theorems in 110 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -30,19 +30,19 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 14 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 70 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 75 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 21 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1863 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1541 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1867 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1545 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 918 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 55 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 1983 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 1990 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -1876,6 +1876,20 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 | `FlowTime.timestamp64_exact` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `FlowTime.timestamp32_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `FlowTime.timestamp64_error_iff` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/aarch64-abi/Model.lean`
+
+File premises: MTH-01, SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `T04.linuxGnu_layouts` | MTH-01, TRU-01 |
+| `T04.macosNone_layouts` | MTH-01, TRU-01 |
+| `example@L77` | SEM-01, SEM-02, TRU-01 |
+| `example@L78` | MTH-01, SEM-01, SEM-02, TRU-01 |
+| `example@L79` | SEM-01, SEM-02, TRU-01 |
+| `example@L81` | MTH-01, SEM-01, SEM-02, TRU-01 |
+| `example@L82` | MTH-01, TRU-01 |
 
 ## `tests/roadmap/bitops/Bitset.lean`
 
