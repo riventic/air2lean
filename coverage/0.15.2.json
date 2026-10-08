@@ -2902,7 +2902,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Asm.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -2922,6 +2924,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Effects.lean",
           "Proofs/Asm/Proofs.lean"
         ]
       },
@@ -3491,6 +3494,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Basic.lean",
           "ZigLean/Conc/Call.lean",
@@ -3807,6 +3811,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Csl.lean",
           "ZigLean/Conc/Lemmas.lean",
@@ -3967,6 +3972,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Effects.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/Relaxed.lean",
@@ -4639,6 +4645,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
@@ -4830,6 +4837,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
@@ -4913,6 +4921,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
@@ -4996,6 +5005,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Lemmas.lean",
@@ -8015,6 +8025,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Csl.lean",
           "ZigLean/Conc/Lemmas.lean",
@@ -8093,6 +8104,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Effects.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/Relaxed.lean",
@@ -9016,6 +9028,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
@@ -9171,6 +9184,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Effects.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/Proofs.lean",
@@ -9720,6 +9734,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
@@ -9778,6 +9793,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Effects.lean",
           "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
@@ -9846,6 +9862,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Asm.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
@@ -10002,6 +10019,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Effects.lean",
           "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
@@ -15677,13 +15695,14 @@
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "7cd6342fcc6a0303041d81b216cb77889199079b159b690fcbef3287d4ff84c3",
       "Air2Lean/Air/Normalize.lean": "d4c50aa0e246efd95daf6d7842a4b77f8b89e5f518b9e6fd33707ec91834bdac",
-      "Air2Lean/Air/Op.lean": "757ffaf526a522247c5d44699f58a00830bb08aac4c295e1eb39ebde1f6cdd31",
+      "Air2Lean/Air/Op.lean": "35e4aa9b115f9c655955c5ea7ade58ebbcb90cafa1e922750e0397d0b0dee1a6",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "a3097c3a3fefd225a9e57cee497104d470281bd69040a7f13d4efb0015a4595e",
+      "Air2Lean/AsmContract.lean": "02cbfba9847446a1b11f3e9d38d756ef854a17c6b5f66e70539aa845714c9ec2",
+      "Air2Lean/Check.lean": "495ddc54a2c6298cd45712871cd9818db39c642e8d1f584bc58681f559faadbe",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
       "Air2Lean/Diagnostic.lean": "6d52aa00b40712a6b572c462535bbc545d1f48967fc859cbc9d42da36b149c27",
-      "Air2Lean/Emit.lean": "eacf0b17efdf74d4437dd5aae7f5914bc09b2019efd8be980497a601577f79c6",
+      "Air2Lean/Emit.lean": "d98ebff173a182ccaf3eb31fa8165946ee4537713078523766162b7e9d16ce62",
       "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
       "Air2Lean/Memory.lean": "f4bb1e4733da1d15c56197cf6c821f5f5f110d3f42ffe9dc82fc9049967cb65d",
       "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
@@ -15696,6 +15715,7 @@
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {
+      "ZigLean/Asm.lean": "dfb3513d59db15e20173cfd3f82de6e7365da83e4f288835df625b39268b7705",
       "ZigLean/Basic.lean": "61fadbf0435e81e47eeeb8f3d32ce4c4d8846f53873d9ec1a78307a1cd1e623b",
       "ZigLean/Bit.lean": "e723daf6d3f5d118cbbf1380bc821cb744a03efcdfc85014e57bc8b3af2dce44",
       "ZigLean/Conc/Basic.lean": "0eb0b455238adb1c0e2c8c68248cf3e0e5c91243c60e0c8a75a780ab77083a77",
@@ -15787,6 +15807,7 @@
       "ZigLean/VecMem.lean": "c20b6386f4b1a9eb15775b694dac5ca6a9a5be8448c43b2c6590d8794ac78ee5"
     },
     "proof-sources": {
+      "Proofs/Asm/Effects.lean": "c1775f83bb860c7dd7d7089945db69e79776c2ed5f4ff58f694b6b387def394c",
       "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",
       "Proofs/Asm/Proofs.lean": "a61fe3cba03c5af350da81b0b65fdcdb24be1f3a87debe7a924c69f0356ff87d",
       "Proofs/Atomics/Gen.lean": "0ef02d7aef29b77fd9c6fe74d1ed04bbbf58c9c412071b5389ea42531ed4146e",
