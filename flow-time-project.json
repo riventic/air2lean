@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "profile": "case-studies/profile-x86_64-linux-musl-releasesafe.json",
+  "float_semantics": "ieee",
+  "source_closure": [
+    "case-studies/flow-time/flow_time.zig"
+  ],
+  "components": {
+    "compiler_patch": [
+      "zig-patch/air-json/json.zig",
+      "zig-patch/0.16.0/hook.patch"
+    ],
+    "runtime": [
+      "ZigLean.lean",
+      "ZigLean/Basic.lean"
+    ],
+    "toolchain": [
+      "lean-toolchain",
+      "lakefile.toml",
+      "lake-manifest.json"
+    ]
+  },
+  "allowed_assumptions": [
+    "trusted-air-translation"
+  ],
+  "export": {
+    "zig_version": "0.16.0",
+    "flags": [
+      "-fllvm",
+      "-OReleaseSafe",
+      "-fno-error-tracing",
+      "-target",
+      "x86_64-linux-musl",
+      "-mcpu=baseline"
+    ],
+    "modules": [
+      {
+        "name": "flow_time",
+        "path": "case-studies/flow-time/flow_time.zig",
+        "deps": [
+          "flow_time_original"
+        ]
+      },
+      {
+        "name": "flow_time_original",
+        "path": "/opt/dev/boxhub/optimizer/engine/src/des/time.zig",
+        "env": "FLOW_TIME_SOURCE",
+        "sha256": "66342662aa865d35617e83dfbad777de337be1b588aa5de38549c45f84322ed1"
+      }
+    ],
+    "max_iterations": 4
+  },
+  "roots": [
+    {
+      "id": "timestamp32",
+      "function": "flow_time.timestamp32",
+      "air": [],
+      "namespace": "FlowTime",
+      "prefix": "flow_time.",
+      "contracts": [
+        "case-studies/flow-time/FlowTime/Proofs.lean"
+      ],
+      "goals": [
+        {
+          "theorem": "timestamp32_error_iff",
+          "strength": "total_correctness",
+          "domain": "all pairs of u32 inputs"
+        }
+      ],
+      "assumptions": [
+        "trusted-air-translation"
+      ],
+      "exclusions": [
+        "the committed proofs are checked against case-studies/flow-time/FlowTime/Gen.lean, not this export"
+      ]
+    },
+    {
+      "id": "timestamp64",
+      "function": "flow_time.timestamp64",
+      "air": [],
+      "namespace": "FlowTime",
+      "prefix": "flow_time.",
+      "contracts": [
+        "case-studies/flow-time/FlowTime/Proofs.lean"
+      ],
+      "goals": [
+        {
+          "theorem": "timestamp64_error_iff",
+          "strength": "total_correctness",
+          "domain": "all pairs of u64 inputs"
+        }
+      ],
+      "assumptions": [
+        "trusted-air-translation"
+      ],
+      "exclusions": [
+        "the committed proofs are checked against case-studies/flow-time/FlowTime/Gen.lean, not this export"
+      ]
+    }
+  ]
+}

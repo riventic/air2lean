@@ -337,8 +337,12 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
                 report['reason'] = 'AIR export failed' if not EXPORT_WARNING.search(stderr) \
                     else 'AIR export incomplete (exporter warning)'
                 return finish(report, None)
-            source_hashes(spec, paths)  # the sources must not change while the compiler reads them
-            functions, files = load_air(project, air_dir, limits, spec['zig_version'], profile)
+            try:
+                source_hashes(spec, paths)  # the sources must not change while the compiler reads them
+                functions, files = load_air(project, air_dir, limits, spec['zig_version'], profile)
+            except (OSError, ValueError) as error:
+                report['reason'] = f'exported AIR rejected: {error}'
+                return finish(report, None)
             record['exported'] = sorted(functions)
             missing = set()
             for fqn in roots:
