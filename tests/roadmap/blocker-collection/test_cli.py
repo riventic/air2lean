@@ -108,7 +108,9 @@ def run(binary):
         assert files["ok.json"]["local_check"] == "passed" and files["main.json"]["local_check"] == "passed"
         assert len(blockers(report, "NORMALIZATION_FAILURE", "traced.json")) == 1
         assert len(blockers(report, "NORMALIZATION_FAILURE", "unknown.json")) == 2
-        assert len(blockers(report, "INSTRUCTION_FAILURE")) == 2
+        # The `memory`-clobber asm is off the reviewed allowlist (L13): its own stable code.
+        assert len(blockers(report, "INSTRUCTION_FAILURE")) == 1
+        assert len(blockers(report, "ASM_VOLATILE_EFFECT")) == 1
         chains = sorted(d["dependency_chain"] for d in blockers(report, "CALLEE_BLOCKED"))
         assert ["main", "traced"] in chains and ["main", "unknown"] in chains, chains
         assert ["main", "ok"] not in chains

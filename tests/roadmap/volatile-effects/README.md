@@ -25,7 +25,26 @@ every pointer type has a boolean `volatile`, each accessing function is rejected
 `VOLATILE_ACCESS`, and `keepVolatile` is checked. The export needs the patched compiler; see
 `docs/volatile-effects.md` §Commands.
 
+The opt-in device contract (`--device-contract uart.json`) is tested too. `test_cli.py` checks
+which fixtures become device events (`Zig.vload`/`Zig.vstore`) and which stay rejected, that the
+default output has no device definitions, and the contract parser's rejections.
+`device_effects.zig` is a UART-style driver; `air/0.16.0` is its real export (filter
+`device-filter`), `DeviceEffects/Gen.lean` its translation and `DeviceEffects/Proofs.lean` the
+trace theorems on it. `check-device.sh` pins the translation, checks the default rejection of the
+same AIR, builds the proofs and requires Lean to reject the four mutants of
+`device-mutants.py`; `check-device.sh --export DIR` re-exports with `$AIR2LEAN_ZIG_AIR` and
+requires the same translation (all three versions translate identically except for the profile
+header).
+
+Inline asm (§Inline asm of the doc): `test_cli.py` checks the reviewed allowlist and
+`ASM_VOLATILE_EFFECT` on exporter-schema fixtures for every version (`rdtsc` twice, `rdrand`, an
+output-less asm, a `memory` clobber, non-volatile `rdtsc`, allowlisted `lzcnt` and `pause`), and
+the device asm events under `tsc.json`. `device_asm.zig` is the real-export fixture
+(`air-asm/0.16.0`). Only its `elapsed` is a declared device event (`DeviceAsm/Gen.lean`,
+`DeviceAsm/Proofs.lean`), and `check-device.sh` also requires its rejections and two asm mutants.
+
 ```sh
 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+bash tests/roadmap/volatile-effects/check-device.sh
 ```

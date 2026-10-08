@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2338 theorems in 133 files.
+2363 theorems in 135 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 648 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 437 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 452 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -39,17 +39,18 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2209 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1865 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2231 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1887 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1065 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2363 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1118 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1118 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
+| [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 
@@ -3129,6 +3130,45 @@ File premises: MTH-01, SEM-01, SEM-02, TRU-01
 | `example@L23` | SEM-01, SEM-02, TRU-01 |
 | `example@L24` | MTH-01, SEM-01, SEM-02, TRU-01 |
 | `example@L25` | SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01
+
+| Theorem | Premises |
+|---|---|
+| `DeviceAsmProofs.after_append` | SEM-01, SEM-02, TRU-01 |
+| `DeviceAsmProofs.declared` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.tsc_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.elapsed_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.elapsed_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.merged_is_zero` | TRU-01 |
+
+## `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01
+
+| Theorem | Premises |
+|---|---|
+| `DeviceEffectsProofs.widen_toNat` | TRU-01 |
+| `DeviceEffectsProofs.after_nil` | SEM-01, SEM-02, TRU-01 |
+| `DeviceEffectsProofs.after_append` | SEM-01, SEM-02, TRU-01 |
+| `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.loop_ready` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.poll_run` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_trace` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.answers_of_ready` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.putc_eventually` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_ne_merged` | TRU-01 |
+| `DeviceEffectsProofs.clearStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 
 ## `tests/roadmap/weak-cas/Messages.lean`
 

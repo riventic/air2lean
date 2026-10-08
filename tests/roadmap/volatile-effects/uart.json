@@ -1,0 +1,3 @@
+{"schema": 1, "device": "uart", "registers": [
+  {"name": "status", "address": 268435456, "bits": 32, "access": "read"},
+  {"name": "data", "address": 268435460, "bits": 32, "access": "write"}]}

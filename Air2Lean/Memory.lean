@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Air2Lean.Air.Op
 import Air2Lean.StdModels
+import Air2Lean.AsmAllowlist
 
 /-!
 # Memory analysis
@@ -274,9 +275,10 @@ partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
 
 /-- A parameter that a pure function can have: pointer-free, or a top-level `[]const T` with a
 pointer-free `T`. -/
-def pureParam (types : Array Ty) (id : TyId) : Bool :=
+def pureParam (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.ptr "slice" true c) => !hasPtr types c
+  -- A `[]const volatile T` is device memory (L13): its items are events, never an `Array` value.
+  | some (.ptr "slice" true c) => !hasPtr types c && !volatilePtrTy types layouts id
   | _ => !hasPtr types id
 
 /-- The instruction list of `body` and of each nested body. -/
@@ -410,6 +412,23 @@ def Op.isSpinHint : Op → Bool
     (source == "pause" || source == "isb") && clobbers.isEmpty && outputs.isEmpty && inputs.isEmpty
   | _ => false
 
+/-- The ordered constraints of an asm op: outputs, then inputs (`Air2Lean/AsmAllowlist.lean`). -/
+def asmConstraints (outputs inputs : Array AsmOperand) : List String :=
+  (outputs.map (·.constraint) ++ inputs.map (·.constraint)).toList
+
+/-- The reviewed allowlist entry of an asm op on the target `arch`, if any. -/
+def Op.asmAllowEntry? (arch : String) : Op → Option AsmAllowEntry
+  | .asm source _ clobbers outputs inputs =>
+    asmAllowed? arch source (asmConstraints outputs inputs) clobbers.toList
+  | _ => none
+
+/-- An inline asm op that is not on the reviewed allowlist for the target `arch`. The checker
+accepts one only as a declared device event (`Zig.vasm`, L13), which runs in `Zig.MemM`. -/
+def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
+  match op with
+  | .asm .. => (op.asmAllowEntry? arch).isNone
+  | _ => false
+
 /-- An op that only a function that uses memory has. -/
 def memoryOp (op : Op) : Bool :=
   op.isSpinHint || match op with
@@ -429,8 +448,9 @@ partial def Val.pointsToMem (v : Val) : Bool :=
 
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
-  !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+  !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
+    f.allInsts.any fun i => memoryOp i.op || i.op.isDeviceAsm f.targetArch ||
+      (valueOperands i.op).any Val.pointsToMem ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
       nullablePtrTy f.types f.layouts i.ty ||

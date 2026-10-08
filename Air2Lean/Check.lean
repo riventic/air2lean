@@ -7,6 +7,8 @@ import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
 import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
+import Air2Lean.Device
+import Air2Lean.AsmAllowlist
 
 /-!
 # Subset checker
@@ -442,6 +444,11 @@ structure CheckCtx where
   /-- The function's `zig_version`: up to 0.16.0 `@bitCast` reinterprets memory
   (`memoryBitCastVersion`). Empty in bare contexts, which then reject representation casts. -/
   zigVersion : String := ""
+  /-- `--device-contract` (L13): integer volatile loads and stores, and the declared
+  `asm volatile`, are device events. -/
+  device : Option DeviceContract := none
+  /-- `Func.targetArch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
+  targetArch : String := ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -638,20 +645,40 @@ def tryErrorBodyExits (body : Array Inst) : Bool :=
   let flow := (summarizeTryErrors body {}).1
   flow.valid && flow.branches.isEmpty
 
+/-- A device event under `--device-contract` (L13): a load (also of an item of a volatile
+slice or many-pointer) or a store through the volatile pointer `p` (type `pty`) of an
+8/16/32/64-bit integer, with a byte-aligned (non-bit) pointer
+into memory, not a local place; a stored value must not be `undefined`. -/
+def CheckCtx.checkDeviceAccess (cx : CheckCtx) (line : Nat) (p : Val) (pty : TyId)
+    (value : Option Val) : Except String Unit := do
+  let reject (why : String) : Except String Unit :=
+    cx.fail line s!"volatile access through pointer type {pty} is outside the device contract: \
+      {why} (docs/volatile-effects.md)"
+  if let .inst i := p then
+    if cx.places.contains i || cx.localRoots.any (·.1 == i) then
+      reject "it points into a local, not a device register"
+  if ((cx.layouts[pty]?.map (·.hostSize)).getD 0) != 0 then reject "a bit-pointer"
+  match (ptrChild cx.types pty).bind (cx.types[·]?) with
+  | some (.int _ bits) =>
+    unless [8, 16, 32, 64].contains bits do reject s!"a {bits}-bit integer register"
+  | _ => reject "the pointee is not an integer"
+  if let some (.undef _) := value then reject "a store of `undefined`"
+
 /-- Volatile and device effects (L13). A volatile access is an observable effect that may
 read or change device state, so it is never an ordinary repeatable memory operation. The
 memory model has no such effect: every volatile load, store, atomic, item access, `@memcpy`,
 `@memset`, pointer-state test/set and asm lvalue output is rejected. So is dropping `volatile`
 in a pointer cast and passing a volatile pointer to a built-in std model. Forming, casting to,
 comparing, passing and returning a volatile pointer value remains supported: it is address
-metadata only. The only declared contract is a project model registry binding whose
-volatile pointer parameter is in its `footprint.writes` (`ModelRegistry.check`). -/
+metadata only. A declared contract is a project model registry binding whose volatile pointer
+parameter is in its `footprint.writes` (`ModelRegistry.check`), or, with `--device-contract`
+(`cx.device`), an integer load or store that `checkDeviceAccess` admits as a device event. -/
 def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
     Except String Unit := do
   let guidance := "volatile accesses are device-facing effects outside the memory model, \
     not repeatable memory operations; move the access into a function bound by a project model \
-    registry entry that lists the volatile pointer parameter in `footprint.writes` \
-    (docs/volatile-effects.md)"
+    registry entry that lists the volatile pointer parameter in `footprint.writes`, or declare \
+    the device with `--device-contract` (docs/volatile-effects.md)"
   let accesses : Array (Val × String) := match op with
     | .load p | .retLoad p | .ptrElemVal p _ | .sliceElemVal p _ => #[(p, "load")]
     | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
@@ -662,9 +689,22 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
     | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
     | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
     | _ => #[]
+  -- With a device contract, an integer load or store through a volatile pointer to memory is a
+  -- device event (`Zig.vload`/`Zig.vstore`); every other volatile access stays rejected.
+  let deviceAccess? : Option (Val × Option Val) := if cx.device.isNone then none else match op with
+    | .load p | .ptrElemVal p _ | .sliceElemVal p _ => some (p, none)
+    | .store p v => some (p, some v)
+    | _ => none
   for (p, kind) in accesses do
     if let some pty := cx.valTy? p then
       if volatilePtrTy cx.types cx.layouts pty then
+        if let some (dp, value) := deviceAccess? then
+          if dp == p then
+            cx.checkDeviceAccess line p pty value
+            continue
+        let guidance := if cx.device.isSome then
+          "the device contract covers only an 8/16/32/64-bit integer load or store through a \
+            volatile pointer to memory (docs/volatile-effects.md)" else guidance
         cx.fail line s!"volatile {kind} through pointer type {pty}: {guidance}"
   -- Derivations must keep the qualifier: a result without a volatile pointer (a `@volatileCast`
   -- away, `@intFromPtr`) would let a later device access look like an ordinary one.
@@ -688,6 +728,44 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
           if containsVolatilePtr cx.types cx.layouts aty then
             cx.fail line s!"built-in std model '{name}' has no volatile contract (argument \
               type {aty}): {guidance}"
+
+/-- Inline asm effects (L13, A01). An M21 `opaque` asm op is a repeatable function of its
+inputs, which is sound only for input-determined instructions. So every asm must match the
+reviewed allowlist (`Air2Lean/AsmAllowlist.lean`: template, ordered constraints, clobbers,
+target), or, with `--device-contract`, a declared device asm: a `volatile` asm with at most one
+output, which must be the expression's result, and no `memory` clobber (DEV-01), emitted as one
+`Zig.vasm` event. Everything else, also non-volatile asm, is `ASM_VOLATILE_EFFECT`: `rdtsc`,
+`rdrand`, port I/O, barriers, output-less asm and `memory` clobbers. The operand shapes are
+checked by `checkOp` (M21). -/
+def CheckCtx.checkAsmEffect (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let .asm source isVolatile clobbers outputs inputs := op | return
+  let constraints := asmConstraints outputs inputs
+  if let some entry := op.asmAllowEntry? cx.targetArch then
+    if entry.semantics == .spinHint && !op.isSpinHint then
+      cx.fail line s!"asm {source.quote} is allowlisted as a spin hint, which has no operands"
+    return
+  -- A spin hint off its target's list stays rejected: the emitter would make it a hint, not an event.
+  if op.isSpinHint then
+    cx.fail line s!"spin hint {source.quote} is not allowlisted for target \
+      '{if cx.targetArch.isEmpty then "x86_64" else cx.targetArch}' (Air2Lean/AsmAllowlist.lean)"
+  let guidance := "an opaque asm is a repeatable function of its inputs, which is unsound for \
+    effects and nondeterministic outputs (rdtsc, rdrand, port I/O, barriers, output-less asm, \
+    memory clobbers); declare it as a device event with an `asm` entry of `--device-contract`, \
+    or add a reviewed entry to Air2Lean/AsmAllowlist.lean if its outputs depend only on its \
+    inputs (docs/volatile-effects.md)"
+  let some contract := cx.device
+    | cx.fail line s!"asm {source.quote} (constraints {constraints}, clobbers {clobbers.toList}) is \
+        not on the reviewed asm allowlist: {guidance}"
+  let some _ := contract.asm? source constraints clobbers.toList
+    | cx.fail line s!"asm {source.quote} (constraints {constraints}, clobbers {clobbers.toList}) is \
+        neither on the reviewed asm allowlist nor declared by the device contract: {guidance}"
+  if clobbers.contains "memory" then
+    cx.fail line s!"asm {source.quote}: a 'memory' clobber is outside the device contract (DEV-01)"
+  unless isVolatile do
+    cx.fail line s!"asm {source.quote} is not `volatile`: the compiler may merge or delete it, so it \
+      cannot be one device event"
+  if outputs.size > 1 || outputs.any (·.ref.isSome) then
+    cx.fail line s!"device asm {source.quote}: only one output, the expression's result, is supported"
 
 /-- The pointer to field `idx` of a packed struct (L08), from the pointer type `base` to it:
 `(host size, bit offset)` of a bit-pointer, or `(0, byte offset)` of a byte pointer. The
@@ -770,6 +848,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   cx.checkVolatile line ty op
+  cx.checkAsmEffect line op
   cx.checkPackedLayout line ty op
   match op with
   | .arith _ mode _ _ =>
@@ -1727,8 +1806,9 @@ private def checkBitPtrConstant (f : Func) (v : Val) : Except String Unit :=
     else pure ()
   | none => pure ()
 
-/-- Reject anything `Emit.lean` cannot translate: see the module doc. -/
-def check (f : Func) : Except String Unit := do
+/-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
+`--device-contract` (`CheckCtx.device`). -/
+def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
   validateTypeGraph f.name f.types
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
@@ -1779,7 +1859,7 @@ def check (f : Func) : Except String Unit := do
                          errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
-                         zigVersion := f.zigVersion }
+                         zigVersion := f.zigVersion, device, targetArch := f.targetArch }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -2559,6 +2639,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     let packedCheck := cx.checkPackedLayout line i.ty i.op
     log := log.record { (checkDiagnostic file f .packedLayout anchor) with
       category := .unsupportedSemantics } packedCheck
+    -- L13: inline asm off the reviewed allowlist and not a declared device event.
+    let asmCheck := cx.checkAsmEffect line i.op
+    log := log.record { (checkDiagnostic file f .asmVolatileEffect anchor) with
+      category := .unsupportedSemantics } asmCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2572,7 +2656,8 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome &&
+          asmCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
@@ -2582,7 +2667,8 @@ structure FunctionChecks where
   log : Diagnostics.Log
 
 /-- Return the actual structural result and index alongside collected diagnostics. -/
-def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnostics.Log) : FunctionChecks := Id.run do
+def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnostics.Log)
+    (device : Option DeviceContract := none) : FunctionChecks := Id.run do
   let index := f.operandTypes
   let mut log := initial
   match checkFunctionStructure f index with
@@ -2645,12 +2731,15 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     places
     localRoots
     localPaths := localPlacePaths f.types f.layouts insts
-    zigVersion := f.zigVersion }
+    zigVersion := f.zigVersion
+    device
+    targetArch := f.targetArch }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/
-def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log) : Diagnostics.Log :=
-  (collectFunctionChecksDetailed file f initial).log
+def collectFunctionChecks (file : String) (f : Func) (initial : Diagnostics.Log)
+    (device : Option DeviceContract := none) : Diagnostics.Log :=
+  (collectFunctionChecksDetailed file f initial device).log
 
 structure CallChecksSnapshot where
   references : Array (String × String)

@@ -150,6 +150,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | AIR, through a pointer to memory | Lean |
 |---|---|
 | `load` | `Zig.load T align p` |
+| `load`, `store`, `ptr_elem_val`, `slice_elem_val` through a volatile pointer (only with `--device-contract`; rejected otherwise) | `Zig.vload air2lean_device bits align p`, `Zig.vstore air2lean_device bits align p v`: one event of the device trace ([volatile-effects.md](volatile-effects.md#device-contract)) |
 | `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p`; a partly `undefined` array, struct or tuple constant is `Zig.storeBytes p align (Zig.writeBytes (Zig.Enc.encode (v : T)) off (Array.replicate len .undef))`, one `writeBytes` per `undefined` item or field (below) |
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
@@ -396,7 +397,14 @@ opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec
 
 A read-write output (`+r`) is outside the subset. The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
 
-`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see." In particular a volatile asm (port I/O, counters) is modelled as a repeatable function of its inputs; see [volatile-effects.md](volatile-effects.md) §Residuals. Volatile *memory* accesses are rejected there.
+Every accepted asm op matches the reviewed allowlist `Air2Lean/AsmAllowlist.lean`: template,
+constraints, clobbers and target (L13, A01). An opaque is a repeatable function of its inputs,
+which is sound only for input-determined instructions. Any other asm, `volatile` or not, is
+`ASM_VOLATILE_EFFECT`. This covers `rdtsc`, `rdrand`, port I/O, output-less asm and `memory`
+clobbers. With `--device-contract`, a declared `asm volatile` is instead `Zig.vasm`, one event of
+the device trace. See [volatile-effects.md](volatile-effects.md#inline-asm), which also explains
+why non-volatile asm needs the list. `volatile` and `clobbers` do not change the translation of an
+allowlisted op.
 
 ### Differential-test implementation
 

@@ -255,6 +255,44 @@ structure OwnedAlloc where
   starts : List (BlockId × Nat) := []
   deriving DecidableEq, Repr, Inhabited
 
+/-! ## Device effects (L13, `ZigLean/Mem/Device.lean`, `docs/volatile-effects.md`)
+
+Only the opt-in device semantics (`air2lean --device-contract`) reads or writes `Mem.dev`. The
+default translation rejects every volatile access, so its programs never touch it. -/
+
+/-- One observable device event: a volatile load (`read`) or store (`write`) of a declared
+register `bits` wide at address `addr`, with the value read or written. -/
+inductive DevEvent where
+  | read (addr bits value : Nat)
+  | write (addr bits value : Nat)
+  /-- A declared `asm volatile` (by its template) with its register inputs and its output
+  (`bits = 0`, `value = 0`: no output). -/
+  | asm (template : String) (inputs : List Nat) (bits value : Nat)
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The device's answer to a volatile read of `bits` bits at `addr`, given every event so far
+(oldest first). It is arbitrary: a theorem quantifies over it. `none`: the device gives no
+answer, and the read throws `.unspecified`. -/
+abbrev DevOracle := List DevEvent → Nat → (bits : Nat) → Option (BitVec bits)
+
+/-- The device's answer to a declared `asm volatile` with the template and register inputs,
+given every event so far. -/
+abbrev AsmOracle := List DevEvent → String → List Nat → (bits : Nat) → Option (BitVec bits)
+
+/-- The environment and the observable trace of the device effects. -/
+structure DevState where
+  /-- The default oracle never answers: a device read needs an explicitly chosen oracle. -/
+  oracle : DevOracle := fun _ _ _ => none
+  /-- The same for the outputs of declared asm; the default never answers either. -/
+  asmOracle : AsmOracle := fun _ _ _ _ => none
+  /-- Every device event so far, in program order (oldest first). -/
+  trace : List DevEvent := []
+  deriving Inhabited
+
+/-- The oracle is a function, so it is shown opaquely. -/
+instance : Repr DevState where
+  reprPrec d _ := f!"\{ oracle := <oracle>, asmOracle := <oracle>, trace := {repr d.trace} }"
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
@@ -293,6 +331,8 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
+  /-- The device oracle and the trace of device events (`ZigLean/Mem/Device.lean`). -/
+  dev : DevState := {}
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
