@@ -1,4 +1,4 @@
-import ZigLean.Basic
+import ZigLean.Mem
 import Air2Lean.Air.Op
 import Air2Lean.SemAttr
 
@@ -12,15 +12,17 @@ about the translation (`docs/air-semantics.md`).
 
 The fragment:
 
-* values: integers of any width with their signedness, `bool`, `void`, and a pointer to a
-  function-local cell (`alloc`);
+* values: integers of any width with their signedness, `bool`, `void`, and a pointer
+  (`Zig.Ptr`) to a stack local;
 * integer arithmetic (`add`/`sub`/`mul` checked, wrapping and saturating; division and
   remainder; `min`/`max`; bitwise `and`/`or`/`xor`/`not`), comparisons, `bool_and`/`bool_or`,
   `intcast` and `trunc`;
 * control flow: `block`/`br`, `cond_br`, `switch_br` on an integer, `loop`/`repeat`, `ret`,
   `unreach`, `trap`, and a call to a safety-panic handler;
-* locals: `alloc`, then whole-value `load`/`store` through the cell pointer;
-* direct calls through an oracle (`Ctx.call`); `runFn` ties the oracle to the program;
+* locals over ZigLean's byte-level memory (`Zig.Mem`, `Zig.MemM`): `alloc` makes a stack block
+  (`Zig.allocStack`) freed when the function returns, `load`/`store` of an integer or `bool`
+  go through `Zig.load`/`Zig.store` (`store` of `undefined`: `Zig.storeUndef`);
+* direct calls through an oracle (`Ctx.call`); `run` ties the oracle to the program;
 * debug instructions have no effect.
 
 Every other instruction, value or shape is *stuck*: it denotes `⊥` (no behaviour, `Option`'s
@@ -29,9 +31,7 @@ the meaning of the AIR *program structure* (SSA dataflow, operand typing, contro
 calls) over those primitives. The primitives' own fidelity to Zig is a separate premise
 (`docs/air-semantics.md` §Trusted base).
 
-Locals are value cells, not `Zig.Mem` bytes: a fragment local is only allocated, stored and
-loaded as a whole value through its own pointer, never escaping. `docs/air-semantics.md`
-§Gap states what a byte-level (`Zig.Mem`) refinement would add.
+There is one memory model: the one the generated code of a memory-using function runs in.
 -/
 
 namespace Air2Lean.Sem
@@ -43,8 +43,8 @@ inductive Value where
   | int (signed : Bool) (w : Nat) (v : BitVec w)
   | bool (b : Bool)
   | void
-  /-- The pointer to the cell of the local that `alloc` instruction `id` created. -/
-  | cell (id : InstId)
+  /-- A pointer, with the alignment its AIR pointer type guarantees (`align(N)`). -/
+  | ptr (p : Zig.Ptr) (align : Nat)
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
@@ -54,8 +54,8 @@ def stuck {α : Type} : Result α := ExceptT.mk none
 /-- SSA environment: the value of each instruction that has run. -/
 abbrev Env := InstId → Option Value
 
-/-- Local cells, keyed by their `alloc` instruction. `none`: not allocated or not yet written. -/
-abbrev Store := InstId → Option Value
+/-- The stack blocks the running function has allocated, in allocation order. -/
+abbrev Frame := List Zig.Ptr
 
 def Env.set (env : Env) (id : InstId) (v : Value) : Env :=
   fun j => if j = id then some v else env j
@@ -67,13 +67,16 @@ inductive Exit where
   | ret (v : Value)
   deriving DecidableEq, Inhabited
 
+/-- A call oracle: the meaning of a direct call by fully qualified name. -/
+abbrev Oracle := String → List Value → MemM Value
+
 /-- Everything a body needs besides its environment: the function (its type table) and a
 call oracle for direct calls by fully qualified name. -/
 structure Ctx where
   func : Func
   /-- The runtime arguments, in parameter order. -/
   args : List Value
-  call : String → List Value → Result Value
+  call : Oracle
 
 def tyOf (f : Func) (t : TyId) : Ty := f.types[t]?.getD .void
 
@@ -197,9 +200,8 @@ def panicOf? : String → Option Zig.Error
   | "debug.FullPanic((function 'defaultPanic')).incorrectAlignment" => some .panic
   | _ => none
 
-/-- The value of one straight-line instruction (no control flow, no locals). -/
-def evalPure (c : Ctx) (env : Env) (i : Inst) : Result Value :=
-  let f := c.func
+/-- The value of one straight-line instruction (no control flow, memory or calls). -/
+def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
   match i.op with
   | .arith op mode a b => intBin f env i.ty a b fun s _ x y => arithFn op mode s x y
   | .div op a b => intBin f env i.ty a b fun s _ x y => divFn op s x y
@@ -245,10 +247,6 @@ def evalPure (c : Ctx) (env : Env) (i : Inst) : Result Value :=
       | .int _ _ x => pure (.int s₂ m (Zig.trunc m x))
       | _ => stuck
     | none => stuck
-  | .call (.func name _ _) args => do
-    match panicOf? name with
-    | some e => throw e
-    | none => c.call name (← args.toList.mapM (operand f env))
   | _ => stuck
 
 /-- Does the integer `x` select this `switch_br` case (an item equal, or inside a range)? -/
@@ -266,7 +264,8 @@ def Exit.again (id : InstId) : Exit → Bool
   | .rep t => t == id
   | _ => false
 
-abbrev SM := Zig.M Store
+/-- A body runs over the memory, with its stack frame. -/
+abbrev SM := Zig.MM Frame
 
 theorem sizeOf_toList {α : Type} [SizeOf α] (a : Array α) : sizeOf a.toList = sizeOf a - 1 := by
   cases a; simp
@@ -274,7 +273,44 @@ theorem sizeOf_toList {α : Type} [SizeOf α] (a : Array α) : sizeOf a.toList =
 theorem sizeOf_case_body (sc : SwitchCase) : sizeOf sc.body < sizeOf sc := by
   cases sc; simp; omega
 
-def liftR {α : Type} (x : Result α) : SM α := StateT.lift x
+def liftR {α : Type} (x : Result α) : SM α := StateT.lift (StateT.lift x)
+
+def liftMem {α : Type} (x : MemM α) : SM α := StateT.lift x
+
+/-- The size and ABI alignment of a type, from the export's layout table. -/
+def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
+  let l ← f.layouts[t]?
+  pure (← l.size, ← l.align)
+
+/-- The `align(N)` of a pointer type. -/
+def ptrAlignOf (f : Func) (t : TyId) : Option Nat := (f.layouts[t]?).bind (·.ptrAlign)
+
+/-- Load a value of the AIR type `t`. -/
+def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
+  match tyOf f t with
+  | .int s w => do pure (.int s w (← Zig.load (BitVec w) align p))
+  | .bool => do pure (.bool (← Zig.load Bool align p))
+  | _ => StateT.lift stuck
+
+/-- Store the operand `v` (an integer or `bool`); `undefined` makes the bytes of its type
+undefined. -/
+def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM Unit :=
+  match v with
+  | .undef t => match tyOf f t with
+    | .int _ w => Zig.storeUndef (BitVec w) align p
+    | .bool => Zig.storeUndef Bool align p
+    | _ => StateT.lift stuck
+  | v => do
+    match ← StateT.lift (operand f env v) with
+    | .int _ _ x => Zig.store align p x
+    | .bool b => Zig.store align p b
+    | _ => StateT.lift stuck
+
+/-- The pointee type of a pointer type. -/
+def pointee? (f : Func) (t : TyId) : Option TyId :=
+  match tyOf f t with
+  | .ptr _ _ c => some c
+  | _ => none
 
 mutual
 
@@ -312,24 +348,36 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
     match ← liftR (operand c.func env v) with
     | .int s _ x => execSwitch c s x cases.toList el env
     | _ => liftR stuck
-  | .alloc => execBody c rest (env.set i.id (.cell i.id))
+  | .alloc => do
+    match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
+    | some (size, align), some palign => do
+      let p ← liftMem (Zig.allocStack size align)
+      modify (· ++ [p])
+      execBody c rest (env.set i.id (.ptr p palign))
+    | _, _ => liftR stuck
   | .load p => do
     match ← liftR (operand c.func env p) with
-    | .cell a => match (← get) a with
-      | some v => execBody c rest (env.set i.id v)
-      | none => liftR stuck
+    | .ptr q align => do
+      let v ← liftMem (loadAs c.func i.ty q align)
+      execBody c rest (env.set i.id v)
     | _ => liftR stuck
   | .store p v => do
     match ← liftR (operand c.func env p) with
-    | .cell a => do
-      let x ← liftR (operand c.func env v)
-      modify fun s j => if j = a then some x else s j
+    | .ptr q align => do
+      liftMem (storeAs c.func env q align v)
       execBody c rest env
     | _ => liftR stuck
+  | .call (.func name _ _) args => do
+    match panicOf? name with
+    | some e => liftR (throw e)
+    | none => do
+      let vs ← liftR (args.toList.mapM (operand c.func env))
+      let v ← liftMem (c.call name vs)
+      execBody c rest (env.set i.id v)
   | .line _ => execBody c rest env
   | .dbg _ _ => execBody c rest env
   | _ => do
-    let v ← liftR (evalPure c env i)
+    let v ← liftR (evalPure c.func env i)
     execBody c rest (env.set i.id v)
 termination_by (sizeOf i + sizeOf rest, 1)
 decreasing_by
@@ -374,14 +422,15 @@ def argsOk (f : Func) : List TyId → List Value → Bool
 /-- Run a function on its argument values: an empty SSA environment (each `arg` instruction
 binds its parameter) and no local cells. A call whose arguments do not match the parameter
 types, and a function that ends other than by `ret`, are stuck. -/
-def execFunc (call : String → List Value → Result Value) (f : Func) (args : List Value) :
-    Result Value :=
+def execFunc (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
   if argsOk f f.params.toList args then do
-    let e ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run' (fun _ => none)
+    let (e, frame) ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run []
+    -- The stack frame ends at the return (a panic leaves the memory behind).
+    frame.forM Zig.free
     match e with
     | .ret v => pure v
-    | _ => stuck
-  else stuck
+    | _ => StateT.lift stuck
+  else StateT.lift stuck
 
 /-- The integer an `int` value holds, at width `w` (`0` for any other value). -/
 def Value.toBV (w : Nat) : Value → BitVec w
@@ -415,23 +464,30 @@ theorem valOk_void {v : Value} (h : valOk .void v = true) : v = .void := by
 
 /-! ## Programs -/
 
-/-- A call oracle: the meaning of a direct call by fully qualified name. -/
-abbrev Oracle := String → List Value → Result Value
-
 section Monotone
 open Lean.Order
 
-theorem evalPure_mono (f : Func) (args : List Value) (env : Env) (i : Inst) :
-    monotone (fun o : Oracle => evalPure ⟨f, args, o⟩ env i) := by
-  unfold evalPure
-  split <;> (try exact monotone_const _) <;> (try (dsimp only; exact monotone_const _))
-  split
-  · exact monotone_const _
-  · apply monotone_bind
-    · dsimp only; exact monotone_const _
-    · apply monotone_of_monotone_apply; intro a
-      dsimp only
-      exact monotone_apply a _ (monotone_apply _ _ monotone_id)
+theorem monotone_liftMem {γ α : Type} [PartialOrder γ] (g : γ → MemM α) (hg : monotone g) :
+    monotone (fun x => liftMem (g x)) := by
+  apply monotone_of_monotone_apply; intro fr
+  show monotone (fun x => (g x) >>= fun a => pure (a, fr))
+  exact monotone_bind _ _ _ hg (monotone_const _)
+
+/-- `Zig.monotone_loop` for a body over memory (`Zig.MM`). -/
+theorem monotone_loopMM {σ ε γ : Type} [PartialOrder γ] (f : γ → Zig.MM σ ε) (again : ε → Bool)
+    (hmono : monotone f) : monotone (fun (x : γ) => Zig.loop (f x) again) := by
+  intro x1 x2 hx
+  have hle : f x1 ⊑ f x2 := hmono x1 x2 hx
+  apply Zig.loop.fixpoint_induct (f x1) again (motive := fun v => v ⊑ Zig.loop (f x2) again)
+  · exact fun _ hc h => csup_le hc h
+  · intro l hl
+    rw [Zig.loop.eq_1 (f x2) again]
+    apply PartialOrder.rel_trans (MonoBind.bind_mono_left hle)
+    apply MonoBind.bind_mono_right
+    intro e
+    split
+    · exact hl
+    · exact PartialOrder.rel_refl
 
 local macro "mono_step" : tactic => `(tactic| first
   | exact monotone_const _
@@ -439,8 +495,7 @@ local macro "mono_step" : tactic => `(tactic| first
   | assumption
   | (apply_assumption <;> rfl)
   | (apply monotone_apply; first | assumption | apply_assumption)
-  | exact evalPure_mono _ _ _ _
-  | (apply Zig.monotone_loop)
+  | (apply monotone_loopMM)
   | (apply monotone_bind)
   | (apply monotone_ite)
   | split
@@ -450,20 +505,37 @@ local macro "mono_step" : tactic => `(tactic| first
 caller. -/
 theorem execBody_mono (f : Func) (args : List Value) :
     ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o⟩ l env) := by
-  apply execBody.induct ⟨f, args, fun _ _ => stuck⟩
+  apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck⟩
     (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o⟩ i rest env))
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o⟩ s x cs el env))
   case case1 => intros; simp only [execBody]; exact monotone_const _
   case case2 => intros; simp only [execBody]; assumption
-  case case20 => intros; simp only [execSwitch]; assumption
-  case case21 => intros; unfold execSwitch; repeat' mono_step
-  case case19 =>
-    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 ih
+  case case23 => intros; simp only [execSwitch]; assumption
+  case case24 => intros; unfold execSwitch; repeat' mono_step
+  case case22 =>
+    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 n16 ih
     unfold execInst
-    split <;> (try (exfalso; simp_all; done))
-    rename_i m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15
-    clear n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15
-    repeat' mono_step
+    split <;> (try (exfalso; first
+      | exact n1 _ ‹_› | exact n2 _ ‹_› | exact n3 _ ‹_› | exact n4 _ _ ‹_› | exact n5 _ ‹_›
+      | exact n6 _ ‹_› | exact n7 ‹_› | exact n8 ‹_› | exact n9 _ _ _ ‹_› | exact n10 _ _ _ ‹_›
+      | exact n11 ‹_› | exact n12 _ ‹_› | exact n13 _ _ ‹_› | exact n14 _ _ _ _ ‹_›
+      | exact n15 _ ‹_› | exact n16 _ _ ‹_›))
+    apply monotone_bind
+    · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
+    · apply monotone_of_monotone_apply; intro v; exact ih v
+  case case19 =>
+    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+    simp only at *
+    subst_vars
+    simp only [execInst]
+    try simp only [*]
+    apply monotone_bind
+    · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
+    · apply monotone_of_monotone_apply; intro vs
+      apply monotone_bind
+      · apply monotone_liftMem
+        exact monotone_apply _ _ (monotone_apply _ _ monotone_id)
+      · apply monotone_of_monotone_apply; intro v; apply_assumption
   all_goals
     intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
     simp only at *
@@ -479,40 +551,87 @@ theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : mo
   apply monotone_ite _ _ _ _ (monotone_const _)
   apply monotone_bind
   · exact monotone_compose (g := fun o : Oracle =>
-      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run' (fun _ => none)) hg
-      (Zig.monotone_run' _ (execBody_mono f args _ _) _)
+      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run []) hg
+      (monotone_stateTRun _ (execBody_mono f args _ _) _)
   · exact monotone_const _
 
 end Monotone
+
 
 /-- A program: its functions by fully qualified name. -/
 abbrev Prog := String → Option Func
 
 /-- The semantics of a program: the least oracle that each function's body satisfies (the
-least fixpoint of `execFunc`, in `Zig.Result`'s order where non-termination and stuck states
+least fixpoint of `execFunc`, in `Zig.MemM`'s order where non-termination and stuck states
 are the bottom). A call to a name outside the program is stuck. -/
-def run (p : Prog) (name : String) (args : List Value) : Result Value :=
+def run (p : Prog) (name : String) (args : List Value) : MemM Value :=
   match p name with
   | some f => execFunc (run p) f args
-  | none => stuck
+  | none => StateT.lift stuck
 partial_fixpoint
 
 open Lean.Order in
-/-- Soundness of any fixpoint: if an oracle `G` satisfies every function's equation
-(`execFunc G f = G f.name`), the program semantics is below it. So every terminating
-AIR behaviour (a value or a panic) is `G`'s behaviour too. -/
+/-- Soundness of any fixpoint: if an oracle `G` satisfies every function's equation on
+well-typed arguments (`execFunc G f args = G name args`), the program semantics is below it.
+So every terminating AIR behaviour (a value or a panic) is `G`'s behaviour too
+(`Result.eq_of_le`). -/
 theorem run_le_of_fixpoint (p : Prog) (G : Oracle)
-    (hG : ∀ name f args, p name = some f → execFunc G f args = G name args) :
+    (hG : ∀ name f args, p name = some f → argsOk f f.params.toList args = true →
+      execFunc G f args = G name args) :
     run p ⊑ G := by
   apply run.fixpoint_induct p (motive := fun r => r ⊑ G)
   · exact fun c hc h => csup_le hc h
   · intro r hr name args
-    show (match p name with | some f => execFunc r f args | none => stuck) ⊑ G name args
+    show (match p name with | some f => execFunc r f args | none => StateT.lift stuck) ⊑ G name args
     split
     · rename_i f hf
-      rw [← hG name f args hf]
-      exact execFunc_mono (fun o : Oracle => o) monotone_id f args _ _ hr
-    · exact FlatOrder.rel.bot
+      by_cases ht : argsOk f f.params.toList args = true
+      · rw [← hG name f args hf ht]
+        exact execFunc_mono (fun o : Oracle => o) monotone_id f args _ _ hr
+      · simp only [execFunc, ht]
+        intro m; exact FlatOrder.rel.bot
+    · intro m; exact FlatOrder.rel.bot
+
+theorem run_of_lookup {p : Prog} {name : String} {f : Func} (h : p name = some f)
+    (args : List Value) : run p name args = execFunc (run p) f args := by
+  rw [run]; simp only [h]
+
+open Lean.Order in
+/-- In `Zig.Result`'s order a defined result is maximal: below means equal. -/
+theorem Result.eq_of_le {α : Type} {x y : Result α} (h : x ⊑ y) (hx : x ≠ stuck) : x = y := by
+  cases h with
+  | bot => exact absurd rfl hx
+  | refl => rfl
+
+/-- A program as a table of fully qualified names and functions (`progOf`). -/
+abbrev Table := List (String × Func)
+
+def progOf (t : Table) : Prog := fun name => (t.find? (·.1 == name)).map (·.2)
+
+/-- Every function of the table satisfies its equation under `G` on well-typed arguments. -/
+def Fixpoint (G : Oracle) : Table → Prop
+  | [] => True
+  | (n, f) :: t =>
+    (∀ args, argsOk f f.params.toList args = true → execFunc G f args = G n args) ∧ Fixpoint G t
+
+theorem run_le_of_table {t : Table} {G : Oracle} (h : Fixpoint G t) :
+    Lean.Order.PartialOrder.rel (run (progOf t)) G := by
+  apply run_le_of_fixpoint
+  intro name f args hp
+  induction t with
+  | nil => simp [progOf] at hp
+  | cons e t ih =>
+    obtain ⟨n, g⟩ := e
+    obtain ⟨hn, ht⟩ := h
+    simp only [progOf, List.find?_cons] at hp
+    by_cases he : n = name
+    · subst he
+      simp only [beq_self_eq_true, Option.map_some, Option.some.injEq] at hp
+      subst hp
+      exact hn args
+    · have : (n == name) = false := by simp [he]
+      simp only [this] at hp
+      exact ih ht hp
 
 /-! ## Normalization lemmas for certificates -/
 
@@ -524,8 +643,16 @@ theorem throw_bind {α β : Type} (e : Zig.Error) (f : α → Result β) :
 theorem run_throw {σ α : Type} (e : Zig.Error) (s : σ) :
     (throw e : Zig.M σ α).run s = throw e := rfl
 
+theorem run_throwMM {σ α : Type} (e : Zig.Error) (s : σ) :
+    (throw e : Zig.MM σ α).run s = throw e := rfl
+
+theorem run_throwMem {α : Type} (e : Zig.Error) (s : Zig.Mem) :
+    (throw e : Zig.MemM α).run s = throw e := rfl
+
 theorem map_throw {α β : Type} (e : Zig.Error) (f : α → β) :
     f <$> (throw e : Result α) = throw e := rfl
+
+theorem free_nil : List.forM ([] : Frame) Zig.free = pure () := rfl
 
 theorem bind_ite {m : Type → Type} [Monad m] {α β : Type} (c : Prop) [Decidable c]
     (a b : m α) (f : α → m β) : (if c then a else b) >>= f = if c then a >>= f else b >>= f := by
@@ -535,13 +662,13 @@ theorem map_ite {m : Type → Type} [Functor m] {α β : Type} (c : Prop) [Decid
     (a b : m α) (f : α → β) : f <$> (if c then a else b) = if c then f <$> a else f <$> b := by
   split <;> rfl
 
-theorem run_ite' {σ α : Type} (c : Prop) [Decidable c] (a b : Zig.M σ α) (s : σ) :
+theorem run_ite' {m : Type → Type} {σ α : Type} (c : Prop) [Decidable c] (a b : StateT σ m α) (s : σ) :
     (if c then a else b).run s = if c then a.run s else b.run s := by
   split <;> rfl
 
 attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
   operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
-  bind_ite map_ite run_ite' throw_bind map_throw run_throw Zig.call
+  bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some
   List.getElem_cons_zero StateT.run'_eq StateT.run_bind StateT.run_pure StateT.run_map
   StateT.run_lift StateT.run_monadLift StateT.run_get StateT.run_modify liftM monadLift
@@ -551,6 +678,7 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   Int.reduceLT Int.reduceNeg Int.reduceToNat BitVec.ofNat_eq_ofNat List.cons_append
   List.nil_append List.foldr_cons List.foldr_nil true_and and_true Bool.and_true
   Bool.true_and beq_self_eq_true List.toList_toArray
+  Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ
 
 end Cert
 

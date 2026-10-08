@@ -4,6 +4,7 @@ import Air2Lean.Emit
 import Air2Lean.Air.Anon
 import Air2Lean.Diagnose
 import Air2Lean.SourceMap
+import Air2Lean.Certificate
 
 /-!
 # CLI
@@ -21,13 +22,16 @@ file, or a function outside the checked subset.
 run (`docs/perf-budgets.md`). It only observes the stages; the Lean output is unchanged.
 `--source-map-json <path>` likewise writes a per-function source map and canonical bodies
 for semantic fingerprints (`docs/stable-generation.md`, `Air2Lean/SourceMap.lean`).
+`--air-certificate <path> --air-certificate-import <Module>` likewise writes a Lean file of
+AIR semantics certificates against the generated module `<Module>`
+(`docs/air-semantics.md`, `Air2Lean/Certificate.lean`).
 -/
 
 namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 def help : String :=
@@ -47,6 +51,8 @@ def help : String :=
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
   "  --source-map-json <json>     Also write source maps for fingerprints; see docs/stable-generation.md.\n" ++
+  "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
+  "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -73,6 +79,10 @@ structure Args where
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
   sourceMapJson : Option String := none
+  /-- `--air-certificate`: AIR semantics certificate path (`docs/air-semantics.md`). -/
+  airCertificate : Option String := none
+  /-- `--air-certificate-import`: the Lean module of the `-o` output, for the certificate. -/
+  airCertificateImport : Option String := none
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -112,7 +122,15 @@ private partial def parseArgsGo (args : List String)
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
     if a.sourceMapJson.isSome then .error s!"duplicate --source-map-json\n{usage}"
     else .ok { a with sourceMapJson := some v }
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] =>
+  | "--air-certificate" :: v :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.airCertificate.isSome then .error s!"duplicate --air-certificate\n{usage}"
+    else .ok { a with airCertificate := some v }
+  | "--air-certificate-import" :: v :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.airCertificateImport.isSome then .error s!"duplicate --air-certificate-import\n{usage}"
+    else .ok { a with airCertificateImport := some v }
+  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] | ["--air-certificate"] | ["--air-certificate-import"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
     if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
@@ -132,6 +150,13 @@ def parseArgs (args : List String) : Except String Args := do
       throw s!"--source-map-json must not name the -o output or the --timing-json report\n{usage}"
     if a.registryTemplate then
       throw "--source-map-json cannot be combined with --model-registry-template"
+  if a.airCertificate.isSome != a.airCertificateImport.isSome then
+    throw s!"--air-certificate and --air-certificate-import go together\n{usage}"
+  if let some path := a.airCertificate then
+    if path == a.outPath.toString || a.timingJson == some path || a.sourceMapJson == some path then
+      throw s!"--air-certificate must not name another output\n{usage}"
+    if a.registryTemplate || a.modelRegistry.isSome then
+      throw "--air-certificate cannot be combined with model registries"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -284,6 +309,10 @@ private def run (args : List String) : IO UInt32 := do
             times := { times with write := (← IO.monoNanosNow) - writeStart }
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
+            if let (some path, some genModule) := (a.airCertificate, a.airCertificateImport) then
+              let cert := Certificate.emit emissionFuncs a.ns declNames genModule
+              try IO.FS.writeFile path cert catch e =>
+                throw (IO.userError s!"writing AIR certificate {path}: {e}")
             if let some path := a.sourceMapJson then
               -- Path order matches `funcs`: every file reached emission. Records follow
               -- the same identity order as emission.
