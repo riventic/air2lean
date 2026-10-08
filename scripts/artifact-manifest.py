@@ -272,9 +272,10 @@ def native_link(native, links, overrides):
     if overrides.get('compiler') is not None:
         value['compiler_sha256'] = stock_compiler(overrides['compiler'])
     profile = links['profile']['value']['profile']
-    target = value['target'].split('-')
-    triple = profile['target_triple'].split('-')
-    value['profile_agreement'] = {'target': target[:2] == triple[:2], 'mode': value['mode'] == profile['build_mode'],
+    def arch_os(text):  # 'x86_64-linux.5.10...6.19-musl' and 'x86_64-linux' both name x86_64 + linux.
+        parts = text.split('-')
+        return parts[0], parts[1].split('.')[0] if len(parts) > 1 else ''
+    value['profile_agreement'] = {'target': arch_os(value['target']) == arch_os(profile['target_triple']), 'mode': value['mode'] == profile['build_mode'],
                                   'zig_version': value['compiler_version'] == profile['zig_version']}
     value['source_link_sha256'] = links['source']['sha256']
     value['profile_sha256'] = links['profile']['value']['profile_sha256']
