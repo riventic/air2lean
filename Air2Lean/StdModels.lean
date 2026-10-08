@@ -66,8 +66,9 @@ def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
 private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
     (zigVersions : Array String := #[]) : StdModel :=
   { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·) }
-private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String) : StdModel :=
-  { symbol, kind := .thread fn, dependencies := deps.map ("Zig." ++ ·) }
+private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
+    (zigVersions : Array String := #[]) : StdModel :=
+  { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
 
 /-- The one table of built-in std models. -/
 def stdModels : Array StdModel := #[
@@ -82,7 +83,7 @@ def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
   threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"],
   threadModel "Thread.join" .join #["joinC"],
-  { threadModel "Thread.detach" .detach #["detachC"] with zigVersions := #["0.16.0"] },
+  threadModel "Thread.detach" .detach #["detachC"] #["0.16.0"],
   threadModel "Thread.yield" .yield #["threadYieldC"],
   threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
   threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],

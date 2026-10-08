@@ -101,7 +101,7 @@ verification. `dependencies` is the project's explicit semantic dependency inven
 automatically inferred proof-dependency closure. Each entry must be unique and name another
 binding in the same registry, a modelled built-in std model qualified for the binding's Zig
 version (for example `mem.Allocator.create`; `mem.Allocator.allocSentinel` needs 0.16.0), or
-a Lean identifier. A rejected std name (`Thread.detach`) and any cycle between bindings,
+a Lean identifier. A rejected std name (`Io.futexWaitTimeout`) and any cycle between bindings,
 including a self-dependency, are rejected before output is written.
 
 ## Memory footprints (E01)

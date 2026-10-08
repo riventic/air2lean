@@ -12,7 +12,7 @@ Translate a subset of Zig into Lean 4, then prove properties of the code in Lean
 | `pointers`, `slices`, `lists` | byte-level memory, pointer aliasing, heap memory, an allocator, translated std code |
 | `layout`, `vectors`, `asm` | casts, `packed` and `extern` layout, function pointers, unions in memory; `@Vector`; inline asm with register operands (x86_64 only) |
 | `floatops`, `floatconv`, `floats` | f16 to f128, bit-exact on x86_64-linux, IEEE-754 rounding ([docs/floats.md](docs/floats.md)) |
-| `threads`, `atomics` | atomics and fork-join threads that take turns at sync ops, with a data-race check; the RC11 memory model (message passing, store buffering, 2+2W, a lock-free stack) ([docs/std-models.md](docs/std-models.md)) |
+| `threads`, `atomics` | atomics and fork-join threads that take turns at sync ops, with a data-race check; `Thread.detach` (0.16.0) with one join owner per handle; the RC11 memory model (message passing, store buffering, 2+2W, a lock-free stack) ([docs/std-models.md](docs/std-models.md)) |
 | `sync`, `iogroup` (0.16.0) | `Io.Mutex`, `Io.Condition`, `Io.Event`, `Io.Semaphore`, `Io.RwLock`, translated from their std code, on a futex model; `Io.Group` (a model: a task is a thread) |
 | `threadsync` (0.15.2) | `Thread.Mutex`, `Thread.Condition`, `Thread.ResetEvent`, `Thread.WaitGroup`, translated from their std code |
 
@@ -160,7 +160,7 @@ The float model follows x86_64-linux. On another host (for example an arm64 Mac)
 
 The supported subset includes checked, wrapping and saturating arithmetic; control flow and recursion; structs, enums, unions, optionals and error unions; pointers, slices and byte-level memory; heap allocation; floats and vectors; selected atomics, threads and std synchronization primitives. Inline asm is modeled as opaque functions with register operands on x86_64. See the [subset reference](PLAN.md#subset), [generated-code guide](docs/generated-code.md), and [std models](docs/std-models.md) for restrictions.
 
-Unsupported features include `threadlocal` globals, `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, detached threads and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
+Unsupported features include `threadlocal` globals, `extern` globals other than pointer-free and error-free storage (taken as an explicit `ExternInit` initial state, [docs](docs/generated-code.md#globals)), std functions without a translation or model, and the excluded async/thread operations listed in the references. Translation rejects AIR outside the checked subset; it does not establish properties of arbitrary Zig programs.
 
 | In | Out |
 |---|---|
@@ -170,7 +170,7 @@ Unsupported features include `threadlocal` globals, `extern` globals other than 
 | local `var`, also one whose address escapes; `@ptrCast`, `packed` and `extern` layout | |
 | enums (also non-exhaustive), tagged, bare, `extern` and `packed` unions | |
 | slices `[]T`, many-pointers `[*]T`, sentinel pointers, arrays (also `[N:s]T`) | |
-| atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model); yield and audited spin hints with no fairness guarantee ([model](docs/progress-hints.md)) | `Thread.detach`, `Io.futexWaitTimeout`, `Io.async`/`Future` |
+| atomics on an integer, enum, `bool` or packed struct pointee, fork-join threads that take turns at sync ops, with a data-race check; futex waits and wakes; std sync primitives translated from their std code (`Io.*` 0.16.0, `Thread.*` 0.15.2); `Io.Group` (a model); yield and audited spin hints with no fairness guarantee ([model](docs/progress-hints.md)) | `Io.futexWaitTimeout`, `Io.async`/`Future` |
 | structs and unions passed and returned by value | |
 | calls, recursion, mutual recursion, optionals (`?T`), error unions (`E!T`); unions and error unions in memory | |
 | `@Vector(N, T)` over integers, floats and `bool`: `splat`, `select`, `shuffle`, `reduce`, and every lane-wise op (arithmetic, division, `@min`/`@max`, `@addWithOverflow`, bitwise, shifts, comparisons, casts, float ops) | a pointer to an individual lane of a `bool` vector or of a vector whose lanes have a non-byte width or scalar ABI padding (`u9`, `u24`, `u40`, `f80`); such vectors in memory outside a schema-12 LLVM-backend profile ([layouts](docs/vector-proofs.md#memory-layout)) |

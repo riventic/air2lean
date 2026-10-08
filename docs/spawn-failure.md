@@ -49,9 +49,9 @@ assert on invalid pthread sizes or overflow stack-map arithmetic. These two size
 are accepted as audited resource requests, but
 there is no quantitative stack/quota model or native allocation adequacy theorem.
 Custom allocators and runtime configuration are rejected in fallible mode. Group
-tasks retain the existing void/noreturn worker subset; cancellation, detached threads,
-transferred join responsibilities, `Io.Future`, and arbitrary Io vtables remain
-outside this foundation. Project manifests select `spawn_policy` explicitly when
+tasks retain the existing void/noreturn worker subset; cancellation, `Io.Future`, and
+arbitrary Io vtables remain outside this foundation. Detached threads and explicit
+handle transfer are modelled separately ([std-models.md](std-models.md#thread-model), C07). Project manifests select `spawn_policy` explicitly when
 fallible behavior is required; omission preserves the historical available default.
 Both ordinary translation and diagnostic checks pass and record the effective policy.
 Receipt verification rejects contradictory policy evidence and historical available

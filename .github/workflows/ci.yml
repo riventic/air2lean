@@ -858,6 +858,12 @@ jobs:
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
+            # C07: detached threads and handle ownership (kernel witnesses; detach admission
+            # and emission, whose generated module must elaborate).
+            lake env lean tests/roadmap/detached-threads/Runtime.lean
+            detach_dir=$(mktemp -d "$RUNNER_TEMP/detached-threads.XXXXXX")
+            lake env lean --run tests/roadmap/detached-threads/Pipeline.lean "$detach_dir/Detached.lean"
+            lake env lean -R "$detach_dir" "$detach_dir/Detached.lean"
           fi
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
