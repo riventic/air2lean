@@ -366,6 +366,34 @@
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
+      "name": "Sync.SnapshotCache.cache_spec",
+      "module": "Proofs.Sync.SnapshotCache",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): every completed run returns 10; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.SnapshotCache.cache_safe",
+      "module": "Proofs.Sync.SnapshotCache",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.Mailbox.mailbox_spec",
+      "module": "Proofs.Sync.Mailbox",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.Mailbox.mailbox_safe",
+      "module": "Proofs.Sync.Mailbox",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
       "name": "Atomics.MP.mpRelAcq_spec",
       "module": "Proofs.Atomics.MessagePassing",
       "example": "atomics",
