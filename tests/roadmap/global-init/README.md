@@ -11,7 +11,7 @@ initial value explicitly or rejects it with a stable diagnostic:
 | no `init`, not `extern` (Sema had not resolved it) | rejected: "the AIR file has no initial value" (`STRUCTURE_FAILURE` in `--diagnostics-json`) |
 | `extern`, pointer-free and error-free | a field of `ExternInit`; `mem0 (ext : ExternInit)` encodes `ext.<field>` |
 | `extern` holding a pointer, union, function or error storage; `extern` with an `init`; unnamed `extern` | rejected, `GLOBAL_FAILURE` |
-| `threadlocal` | rejected, `GLOBAL_FAILURE` |
+| `threadlocal` | per-thread instances (`docs/generated-code.md` §Thread-local storage, `tests/roadmap/thread-locals`); `extern threadlocal` rejected, `GLOBAL_FAILURE` |
 
 `ExternInit` lists the `extern` globals in block order, which is also `mem0`'s initialization
 order (`Mem.ofGlobals` adds the blocks in order, so addresses do not depend on external

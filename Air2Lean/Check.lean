@@ -13,9 +13,10 @@ import ZigLean.Vec
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
 an unsupported nullable-pointer representation, a memory access to a value that the memory model cannot
-encode (`modelLayout`), a pointer constant without a global, a global that is `threadlocal`,
-has no initial value or a partly `undefined` one, and an `extern` global outside
-`checkExternGlobal`'s storage. `checkProgram` checks the slice items that a function that
+encode (`modelLayout`), a pointer constant without a global or into a `threadlocal` global, a
+`threadlocal` global outside `checkThreadlocalGlobal`'s storage, a `runtime_nav_ptr` of a global
+that is not `threadlocal`, a global that has no initial value or a partly `undefined` one, and an
+`extern` global outside `checkExternGlobal`'s storage. `checkProgram` checks the slice items that a function that
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
@@ -1487,13 +1488,81 @@ private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except S
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty
 
+/-- A `threadlocal var` (`docs/generated-code.md` §Thread-local storage): one instance per
+thread, initialized from the global's initial value. Only a named, non-`extern` `var` with a
+resolved, wholly defined or wholly `undefined` initial value of a pointer-free, error-free type
+that the model encodes qualifies. -/
+private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
+  let fail (why : String) : Except String Unit :=
+    throw s!"{f.name}: `threadlocal` global {what}: {why}; a thread-local instance is modelled \
+      only for a named, non-`extern` `var` with an initial value in pointer-free, error-free \
+      storage"
+  if g.name.isNone then fail "it has no name"
+  if g.isExtern then fail "it is `extern` (its instances are defined outside the program)"
+  if g.isConst then fail "it is `const`"
+  let some init := g.init | fail "the AIR file has no initial value"
+  if init.hasNestedUndef then fail "a partly `undefined` initial value"
+  if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
+  if (pointerFreeInitializerType f g.ty 1024).isNone then
+    fail "its type can hold a pointer, a union or an unresolved type"
+  if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  checkNullConstants f.name f.types f.layouts init
+  checkTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty
+
+/-- The globals that the pointer constants of `v` point into, at any depth. -/
+partial def Val.ptrGlobals (v : Val) : Array Nat :=
+  match v with
+  | .ptrConst _ g _ => #[g]
+  | .agg _ elems => elems.flatMap Val.ptrGlobals
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.ptrGlobals
+  | .sliceConst _ p l => p.ptrGlobals ++ l.ptrGlobals
+  | _ => #[]
+
+/-- A constant pointer has one address in every thread, so it cannot point into a `threadlocal`
+global (0.14.1 writes the address of a thread-local as a constant). -/
+private def checkNoThreadlocalConstant (f : Func) (v : Val) : Except String Unit := do
+  for g in v.ptrGlobals do
+    if let some global := f.globals[g]? then
+      if global.threadlocal then
+        throw s!"{f.name}: a constant pointer to the `threadlocal` global \
+          {global.name.getD "an unnamed global"} is outside the subset (each thread has its own \
+          instance; only `runtime_nav_ptr` addresses it)"
+
+/-- `runtime_nav_ptr` (`Op.runtimeNavPtr`): the current thread's instance of a `threadlocal`
+global, as a single-item pointer to the global's type with at most its alignment. A run-time
+address of anything else (an `extern` the compiler reaches at run time, a DLL import, a
+PC-relative `@extern`) is outside the subset. -/
+private def checkRuntimeNavPtr (f : Func) (i : Inst) (g : Nat) : Except String Unit := do
+  let some global := f.globals[g]?
+    | throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` names no global (malformed input in the \
+        AIR file)"
+  unless global.threadlocal do
+    throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` of {global.name.getD "an unnamed global"}, \
+      which is not `threadlocal` (a run-time address of an `extern`, a DLL import or a \
+      PC-relative `@extern`), is outside the subset"
+  let some (.ptr "one" _ child) := f.types[i.ty]?
+    | throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` must have a single-item pointer type"
+  unless child == global.ty do
+    throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` must point to its global's type"
+  let some l := f.layouts[i.ty]?
+    | throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` has no pointer layout"
+  if l.isVolatile || l.allowzero || l.sentinel || l.hostSize != 0 then
+    throw s!"{f.name}: inst {i.id}: a volatile, allowzero, sentinel or bit-pointer to a \
+      `threadlocal` global is outside the subset"
+  let pa := l.ptrAlign.getD 1
+  let ga := (f.layouts[global.ty]?.bind (·.align)).getD 1
+  if pa > ga then
+    throw s!"{f.name}: inst {i.id}: a pointer with `align({pa})` to a `threadlocal` global of \
+      alignment {ga} is outside the subset"
+
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
 type that the model encodes, or an `extern` global (`checkExternGlobal`). An array with a
 sentinel is encoded with the sentinel. A wholly `undefined` initial value is undefined bytes; a
 partly `undefined` one is rejected, never replaced by a default. -/
 def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let what := g.name.getD "an unnamed constant"
-  if g.threadlocal then throw s!"{f.name}: global {what}: `threadlocal` is outside the subset"
+  if g.threadlocal then return ← checkThreadlocalGlobal f g what
   if g.isExtern then return ← checkExternGlobal f g what
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
@@ -1593,8 +1662,10 @@ def check (f : Func) : Except String Unit := do
           checkMemTy f.name f.types f.layouts 0 c
   for g in f.globals do
     checkGlobal f g
+    if let some init := g.init then checkNoThreadlocalConstant f init
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
+    if let .runtimeNavPtr g := i.op then checkRuntimeNavPtr f i g
     checkErrorGlobalInstruction errorGlobals f insts i
     checkUndefOperands f (fun v => match v with
       | .inst id => (insts.find? (·.id == id)).map (·.ty)
@@ -1606,6 +1677,7 @@ def check (f : Func) : Except String Unit := do
           checkedConstTypes := checkedConstTypes.insert vty
       checkBitPtrConstant f v
       checkNullConstants f.name f.types f.layouts v
+      checkNoThreadlocalConstant f v
       checkPointerConstant f v
         (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
         (fun pa ga => s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
@@ -2454,8 +2526,12 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
             { idSpace := .canonical, instruction := some i.id, typeId := some c })
             (checkMemTy f.name f.types f.layouts 0 c)
   for (g, id) in f.globals.zipIdx do
-    log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
+    log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id })
+      (do checkGlobal f g; if let some init := g.init then checkNoThreadlocalConstant f init)
   for i in insts do
+    if let .runtimeNavPtr g := i.op then
+      log := log.record (checkDiagnostic file f .globalFailure
+        { idSpace := .canonical, instruction := some i.id, globalId := some g }) (checkRuntimeNavPtr f i g)
     log := log.record (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
     log := log.record { (checkDiagnostic file f .constantFailure
@@ -2465,6 +2541,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       let result := do
         checkNullConstants f.name f.types f.layouts v
         checkBitPtrConstant f v
+        checkNoThreadlocalConstant f v
         checkPointerConstant f v
           (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
           (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")

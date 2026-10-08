@@ -79,6 +79,8 @@ structure RawInst where
   mask : Array ShuffleLane
   /-- `assembly`. -/
   asm : Option RawAsm
+  /-- `runtime_nav_ptr`: the global's entry in the `globals` table. -/
+  global : Option Nat := none
   unsupported : Bool
 
 /-- One case of a `switch_br`/`loop_switch_br`, before tag interpretation. -/
@@ -650,9 +652,12 @@ partial def parseInst (fnName : String) (types : Array Ty) (j : Json) : Except S
   let asm ← match optField j "source" with
     | some _ => some <$> parseAsm fnName types j
     | none => pure none
+  let global ← match optField j "global" with
+    | some gj => some <$> gj.getNat?
+    | none => pure none
   let unsupported ← boolField j "unsupported"
   return { id, tag, ty, args, body, thenBody, elseBody, cases, target, param, callee, index, name,
-           line, order, rmwOp, successOrder, failureOrder, op, mask, asm, unsupported }
+           line, order, rmwOp, successOrder, failureOrder, op, mask, asm, global, unsupported }
 
 partial def parseCase (fnName : String) (types : Array Ty) (j : Json) : Except String RawCase := do
   let itemsJ ← (← j.getObjVal? "items").getArr?

@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2210 theorems in 127 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 402 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -19,17 +19,17 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1163 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 111 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1192 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 120 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 760 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 968 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 991 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 956 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 956 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 969 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 969 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 320 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
@@ -39,16 +39,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2089 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1743 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 987 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2210 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1023 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1023 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2726,6 +2726,73 @@ File premises: THR-01, THR-03, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
 | `eagerCallerBody` | THR-01, THR-03, SEM-01, SEM-02, TRU-01 |
 | `failedSpawnOwnership` | THR-01, THR-03, THR-08, SEM-01, SEM-02, TRU-01 |
 | `refusedSecondThenJoin` | THR-01, THR-03, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/thread-locals/Check.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `example@L9` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `example@L13` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `example@L18` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `example@L25` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L28` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L32` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L38` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L42` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/thread-locals/ThreadLocals/Counters.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `ThreadLocals.Counters.enc_u32` | SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.decode_u32` | SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.kid_live` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.ownOf_upd` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.spawner0` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.setTls_get_ne` | THR-01, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.setTls_kidRec` | THR-01, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.joinedB_of_threads` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.mem_setTls_spawner` | THR-01, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.tlsInit_eq` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.bumpTwice_eq` | PRF-02, THR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.bumpTwice_spec` | PRF-02, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.dispatch_spec` | PRF-02, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.add7` | SEM-01, TRU-01 |
+| `ThreadLocals.Counters.mul9a` | SEM-01, TRU-01 |
+| `ThreadLocals.Counters.mul9b` | SEM-01, TRU-01 |
+| `ThreadLocals.Counters.add9` | SEM-01, TRU-01 |
+| `ThreadLocals.Counters.add8` | SEM-01, TRU-01 |
+| `ThreadLocals.Counters.ownOf_main` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.cnt_hcnt` | SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.mem0_blocks` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.hcnt_sub` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.mem0_t0` | PRF-02, THR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.mem0_size` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.ho₀` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.enc_zero` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `ThreadLocals.Counters.wr` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `ThreadLocals.Counters.free_front` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.main_inst` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Counters.main_spec` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.twoCounters_spec` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Counters.twoCounters_safe` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `ThreadLocals.Leak.leak_eq` | PRF-02, THR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Leak.decode_ptr` | SEM-01, SEM-02, TRU-01 |
+| `ThreadLocals.Leak.dispatch_spec` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Leak.mem0_threads` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Leak.main_spec` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ThreadLocals.Leak.leaked_never_ok` | PRF-02, THR-01, THR-02, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean`
 

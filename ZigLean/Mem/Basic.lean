@@ -140,10 +140,14 @@ def racePair (a b : AccessKind) : Option Error :=
   if (a.isWrite || b.isWrite) && !(a.isAtomic && b.isAtomic) then some .illegal else none
 
 /-- Who spawned thread `id` (the parent thread's own `ThreadId` at the time), and whether
-`Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. -/
+`Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. `tls`: the
+thread's own instance of each `threadlocal` global, as `(key, instance block)`
+(`ZigLean/Mem/Tls.lean`); empty for a program without `threadlocal` globals and for a thread
+that has not started. -/
 structure ThreadRec where
   spawner : ThreadId
   joined : Bool
+  tls : Array (BlockId × BlockId) := #[]
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/

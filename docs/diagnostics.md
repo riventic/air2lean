@@ -185,8 +185,9 @@ the exporter omits their type, and the normalizer gives the inference-stage reas
 before its missing-type check. Other missing-type and malformed-input checks are unchanged.
 Zig 0.16's `legalize_vec_store_elem`, `legalize_vec_elem_val` and
 `legalize_compiler_rt_call` belong to later code generation, beyond the accepted
-`analyzed-air` export stage. `runtime_nav_ptr` (0.15/0.16) requires TLS or external
-runtime pointer identity and lifetime semantics. Error-return-trace tags in all three
+`analyzed-air` export stage. `runtime_nav_ptr` (0.15/0.16) without the current exporter's `global`
+operand requires TLS or external runtime pointer identity and lifetime semantics; with it,
+a `threadlocal` global is translated (`docs/generated-code.md` §Thread-local storage). Error-return-trace tags in all three
 versions require mutable trace semantics; a recorded tracing setting supplies no such model.
 The structured collector retains its existing codes and exported instruction anchors,
 while using the same reasons for explicit exporter markers.
