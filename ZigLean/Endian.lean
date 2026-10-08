@@ -35,12 +35,6 @@ inductive ByteOrder where
 
 namespace ByteOrder
 
-/-- The profile's `endian` text, if the model has that order. -/
-def ofString? : String → Option ByteOrder
-  | "little" => some .little
-  | "big" => some .big
-  | _ => none
-
 /-- The value bytes of an integer at this order, from its little-endian value bytes. -/
 @[inline] def arrange : ByteOrder → Array Byte → Array Byte
   | .little, bs => bs
