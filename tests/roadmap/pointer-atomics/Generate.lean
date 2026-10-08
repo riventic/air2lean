@@ -3,7 +3,7 @@ import Air2Lean.Check
 import Air2Lean.Emit
 
 /-! C09 offline AIR/checker/emitter regressions for pointer atomics. Generates one standalone
-Lean file whose kernel-checked examples run the emitted pointer ops (`Zig.atomicLoadPtrC`, …)
+Lean file whose `native_decide` examples run the emitted pointer ops (`Zig.atomicLoadPtrC`, …)
 and checks the rejections of other atomic formats. No compiler is invoked. -/
 open Lean Air2Lean
 private def obj := Json.mkObj
@@ -95,28 +95,28 @@ private def err? {α : Type} (r : Zig.Result (α × Zig.Mem)) : Option Zig.Error
 
 -- A load returns the pointer with its block; a read through it reaches node 2.
 example : ok? (run1 (withSlot fun s _ _ => PtrAtomics.loadPtr s)) = some ⟨some 2, 0⟩ := by
-  decide +kernel
+  native_decide
 example : ok? (run1 (withSlot fun s _ _ => do
     let p ← PtrAtomics.loadPtr s
-    (Zig.load (BitVec 32) 4 p : Zig.MemM _))) = some 7 := by decide +kernel
+    (Zig.load (BitVec 32) 4 p : Zig.MemM _))) = some 7 := by native_decide
 -- A store, then a load: node 1.
 example : ok? (run1 (withSlot fun s a _ => do
     PtrAtomics.storePtr s a
-    PtrAtomics.loadPtr s)) = some ⟨some 1, 0⟩ := by decide +kernel
+    PtrAtomics.loadPtr s)) = some ⟨some 1, 0⟩ := by native_decide
 -- `xchg` returns the old pointer.
 example : ok? (run1 (withSlot fun s a _ => PtrAtomics.xchgPtr s a)) = some ⟨some 2, 0⟩ := by
-  decide +kernel
+  native_decide
 -- CAS with the same identity succeeds; with another block it fails and returns the pointer read.
 example : ok? (run1 (withSlot fun s a b => PtrAtomics.casPtr s b a)) = some none := by
-  decide +kernel
+  native_decide
 example : ok? (run1 (withSlot fun s a _ => PtrAtomics.casPtr s a a)) = some (some ⟨some 2, 0⟩) := by
-  decide +kernel
+  native_decide
 -- Node 1 plus 8 has node 2's address, but another block: no success, `.unspecified`.
 example : err? (run1 (withSlot fun s a _ => PtrAtomics.casPtr s (a.add 8) a)) =
-    some .unspecified := by decide +kernel
+    some .unspecified := by native_decide
 -- A raw address equal to node 2's has no block: `.unspecified`, not success.
 example : err? (run1 (withSlot fun s a _ => PtrAtomics.casPtr s ⟨none, 4116⟩ a)) =
-    some .unspecified := by decide +kernel
+    some .unspecified := by native_decide
 -- `?*u32`: a `null` slot loads `null`; a weak CAS from `null` may succeed or fail spuriously.
 open Zig in
 private def withNull {α : Type} (f : Ptr → Ptr → ConcM PtrAtomics.Tgt α) : ConcM PtrAtomics.Tgt α := do
@@ -124,14 +124,14 @@ private def withNull {α : Type} (f : Ptr → Ptr → ConcM PtrAtomics.Tgt α) :
   let a ← (alloc .heap 4 4 : MemM Ptr)
   (store 8 s (none : Option Ptr) : MemM Unit)
   f s a
-example : ok? (run1 (withNull fun s _ => PtrAtomics.loadOpt s)) = some none := by decide +kernel
+example : ok? (run1 (withNull fun s _ => PtrAtomics.loadOpt s)) = some none := by native_decide
 example : ok? (run1 (withNull fun s a => do
     let r ← PtrAtomics.casWeakOpt s none (some a)
     let v ← PtrAtomics.loadOpt s
-    pure (r, v))) = some (none, some ⟨some 1, 0⟩) := by decide +kernel
-example : ok? (Zig.Sched.run PtrAtomics.dispatch 100 (fun i => if i = 0 then 1 else 0)
+    pure (r, v))) = some (none, some ⟨some 1, 0⟩) := by native_decide
+example : ok? (Zig.Sched.run PtrAtomics.dispatch 100 (fun _ => 1)
     (withNull fun s a => PtrAtomics.casWeakOpt s none (some a)) {}) = some (some none) := by
-  decide +kernel
+  native_decide
 "
 
 def main (args : List String) : IO Unit := do

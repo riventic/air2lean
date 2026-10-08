@@ -1082,7 +1082,7 @@ theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 0 = .r
   obtain ⟨t0, tc, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr, hsp, hj⟩, -, g1, gp, g2⟩⟩ := hi.thr
   · rw [hg] at hp; cases hp
   exact {
-    thr := ⟨t0, tc, .inr ⟨hs2, ⟨r, hr, hsp, by rw [hj, hg, h0]⟩, .inr (.inl h0), by rw [h1]; exact g1,
+    thr := ⟨t0, tc, .inr ⟨hs2, ⟨r, hr, hsp, by rw [hj, hg, h0]; decide⟩, .inr (.inl h0), by rw [h1]; exact g1,
       fun hp => absurd (h0.symm.trans hp) (by decide),
       fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact g2 u hu⟩⟩
     b0 := hi.b0
@@ -1112,15 +1112,15 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .
     (hfin : G 1 = .fin)
     (hj : ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m'))) :
     m'.current = 0 ∧ Inv (upd G 0 .post) m' := by
-  obtain ⟨rec, hr, hjf, rfl⟩ := join_eq hj
+  obtain ⟨jr, hr, hjf, rfl⟩ := join_eq hj
   obtain ⟨h00, hcs, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr', hsp, hj'⟩, -, -, -, g2⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
-  have hrr : r = rec := by rw [hr'] at hr; exact Option.some.inj hr
-  subst hrr
+  have hrr : r = jr := Option.some.inj (hr'.symm.trans hr)
+  have hsp' : jr.spawner = 0 := hrr ▸ hsp
   have e1 : upd G 0 Gh.post 1 = G 1 := upd_ne _ _ (by decide)
   have e0 : upd G 0 Gh.post 0 = .post := upd_self _ _ _
   have hc0 : 0 < m.clocks.size := by rw [hcs, hs2]; decide
-  have hcl : ∀ u, VClock.le (m.clocks[u]!) ((m.clocks.set! 0
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) ((m.clocks.set! 0
       (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[1]!)))[u]!) = true := by
     intro u
     rw [getElem!_set!_ite]
@@ -1134,13 +1134,13 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .
       (VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[1]!)))[0]!) = true := by
     rw [getElem!_set!_ite]; simp only [true_and, hc0, ↓reduceIte]
     exact VClock.le_merge_right _ _
-  have hthr0 : (m.threads.set! 1 { rec with joined := true })[0]? = m.threads[0]? := by
+  have hthr0 : (m.threads.set! 1 { jr with joined := true })[0]? = m.threads[0]? := by
     simp [Array.set!_eq_setIfInBounds]
   refine ⟨rfl, {
     thr := ⟨by rw [hthr0]; exact h00, by simp [hcs], .inr ⟨by simp [hs2],
-      ⟨{ rec with joined := true }, by
+      ⟨{ jr with joined := true }, by
         simp only [Array.set!_eq_setIfInBounds]
-        exact Array.getElem?_setIfInBounds_self_of_lt (by omega), hsp, by rw [e0]; rfl⟩,
+        exact Array.getElem?_setIfInBounds_self_of_lt (by omega), hsp', by rw [e0]; rfl⟩,
       .inr (.inr e0), by rw [e1, hfin]; exact .inr (.inr rfl), fun _ => by rw [e1]; exact hfin,
       fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact g2 u hu⟩⟩
     b0 := hi.b0
@@ -1282,7 +1282,7 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
   obtain ⟨hq₁, hm₁⟩ := alloc_ok ha₁
   have e0 : s0 = sPtr := by rw [hq₁]; rfl
   subst e0
-  refine ⟨by rw [hm₁]; rfl, ?_⟩
+  refine ⟨by rw [hm₁] <;> rfl, ?_⟩
   have hp₁ : Pre m₁ := by
     rw [hm₁]
     exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0] at he⟩
@@ -1330,7 +1330,7 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
       exact ⟨rfl, .inr rfl, hc₆, hi₇, hg₂⟩
   rintro ⟨r, _⟩ G₃ m₇ d₃ ⟨hr, -, hi₇, hg₃⟩
   dsimp only
-  simp only [StateT.run_bind]
+  try simp only [StateT.run_bind]
   -- the join
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨.joins, hi₇.retag0 hg₃, fun G₄ m₈ hg₄ hi₈ =>
     ⟨fun _ => ⟨by decide, by rw [(thr_of hi₈.thr (.inr (.inl hg₄))).1]; decide, rfl, by
@@ -1339,7 +1339,7 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
       ⟨fun _ => join_ok hi₈ hg₄, fun m₉ hj => ?_⟩⟩⟩)
   obtain ⟨hc₉, hi₉⟩ := inv_join hi₈ hg₄ hfin hj
   dsimp only
-  simp only [StateT.run_bind, bind_assoc, atomicLoadPtrC]
+  try simp only [StateT.run_bind, bind_assoc, atomicLoadPtrC]
   -- the load after the join
   refine WP.bind (WP.pickC fun k₃ hk₃ => ⟨.post, hi₉, fun G₅ m₁₀ hg₅ hi₁₀ c' hcr' => ?_⟩)
   have hi₁₀' : Inv G₅ { m₁₀ with current := 0 } := (hi₁₀ : Inv G₅ m₁₀).grow (grows_current _ _)
@@ -1369,7 +1369,7 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
         by rw [hbk 0 (by decide)]; exact hb0⟩
   rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', blk, hb, hl⟩
   simp only [StateT.run_pure]
-  refine WP.pure' (WP.pure' ?_)
+  refine WP.pure' ?_
   -- the free of the slot
   refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl e he).elim) fun _ m₁₃ hf => ?_)
   obtain ⟨b, blk', hb', -, rfl⟩ := free_ok hf
