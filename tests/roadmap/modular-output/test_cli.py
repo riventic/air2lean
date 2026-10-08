@@ -41,8 +41,9 @@ EXAMPLES = dict(recursion='recursion.isEven', pointers='pointers.addTo', errors=
 
 
 def translate(binary, air, work, label, ex, *flags, split_modules=True):
-    root = f'{label.replace("-", "_").capitalize()}.Gen'
-    out = work / label / f'{label.replace("-", "_").capitalize()}/Gen.lean'
+    # One module root for every translation, in separate directories, so they compare directly.
+    root = 'Base.Gen'
+    out = work / label / 'Base/Gen.lean'
     out.parent.mkdir(parents=True, exist_ok=True)
     command = [str(binary), str(air), '-o', str(out), '--namespace', ex.capitalize(), '--prefix', ex + '.',
                '--source-map-json', str(work / f'{label}.source-map.json'), *flags]
@@ -80,8 +81,9 @@ def check_example(binary, ex, target, work):
     # (a) the default single file is unchanged; the split holds the same declarations.
     single, _ = translate(binary, golden, work, f'{ex}-single', ex, split_modules=False)
     committed = (ROOT / 'Proofs' / ex.capitalize() / 'Gen.lean').read_bytes()
-    assert single.read_bytes().split(b'\n', 1)[1] == committed.split(b'\n', 1)[1] if committed.startswith(b'-- air2lean-profile') \
-        else single.read_bytes().split(b'\n', 1)[1] == committed, f'{ex}: default output changed'
+    if committed.startswith(b'-- air2lean-profile: '):  # committed with the reference host's header
+        committed = committed.split(b'\n', 1)[1]
+    assert single.read_bytes().split(b'\n', 1)[1] == committed, f'{ex}: default output changed'
     assert not (single.parent / 'Gen').exists() and not single.with_name('Gen.modules.json').exists()
     base, root = translate(binary, golden, work, f'{ex}-base', ex)
     manifest = json.loads(base.with_name('Gen.modules.json').read_text())
@@ -90,7 +92,7 @@ def check_example(binary, ex, target, work):
     parts = [m for m in manifest['modules'] if m['kind'] != 'umbrella']
     assert umbrella.split('\n', 1)[1] == ''.join(f'import {m["module"]}\n' for m in parts)
     sources = sorted(s for m in parts for s in m['functions'])
-    assert sources == sorted(doc['name'] for doc in docs if '__anon_' not in doc['name']) or ex == 'threads', sources
+    assert sources == sorted(r['source'] for r in fp.load_sidecar(work / f'{ex}-base.source-map.json')['functions'])
     # Every declaration of the single file appears in exactly one part, in the same order.
     decls = lambda text: [line for line in text.splitlines() if line.startswith(('def ', 'structure ', 'inductive ', 'theorem '))]
     in_parts = [d for m in parts for d in decls((base.parent / m['file']).read_text())]
@@ -100,21 +102,13 @@ def check_example(binary, ex, target, work):
     rng = random.Random(ex)
     stable.write_air(work / f'{ex}-harmless-air', [stable.renumber(doc, rng) for doc in docs], hashed=True)
     harmless, _ = translate(binary, work / f'{ex}-harmless-air', work, f'{ex}-base2', ex)
-    assert {k: v.replace(b'Base2.Gen', b'Base.Gen') for k, v in files(harmless).items()} == files(base), \
+    assert files(harmless) == files(base), \
         f'{ex}: split output is not deterministic'
 
     # (c) one semantic edit: changed text and invalidation closure.
     stable.write_air(work / f'{ex}-changed-air', [stable.mutate(doc) if doc['name'] == target else doc for doc in docs])
     changed, _ = translate(binary, work / f'{ex}-changed-air', work, f'{ex}-changed', ex)
-    # Same module names in both translations, so rename the scratch roots before comparing.
-    changed_dir = work / f'{ex}-changed-as-base'
-    changed_dir.mkdir()
-    for rel, data in files(changed).items():
-        path = changed_dir / 'Base' / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data.replace(b'Changed.Gen', b'Base.Gen'))
-    renamed = changed_dir / 'Base/Gen.lean'
-    report = compare(base, renamed, work / f'{ex}-base.source-map.json', work / f'{ex}-changed.source-map.json')
+    report = compare(base, changed, work / f'{ex}-base.source-map.json', work / f'{ex}-changed.source-map.json')
     entries = modules_of(base)
     owner = {s: name for name, e in entries.items() for s in e['functions']}
     assert report['changed'] == [owner[target]], (ex, report)

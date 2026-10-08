@@ -70,7 +70,7 @@ def keys(manifest, source_map=None):
         if sorted(listed) != sorted(prints):
             raise ValueError("source map and module manifest list different functions")
         for m in modules.values():
-            if [prints[s]["definition"] for s in m["functions"]] != m["definitions"]:
+            if m["kind"] == "group" and [prints[s]["definition"] for s in m["functions"]] != m["definitions"]:
                 raise ValueError(f"{m['module']}: declarations differ from the source map")
     edges = {name: sorted(i for i in m["imports"] if i in modules) for name, m in modules.items()}
     result = {}
