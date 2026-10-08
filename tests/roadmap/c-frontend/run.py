@@ -103,8 +103,8 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def corpus_files():
-    return sorted(p.stem for p in CORPUS.glob("*.c"))
+def corpus_files(corpus=CORPUS):
+    return sorted(p.stem for p in Path(corpus).glob("*.c"))
 
 
 def run(cmd, timeout, cwd=None, env=None):
@@ -290,12 +290,12 @@ def stage_lean(binary, air, stem, expected, work):
     return {"status": status, "log": tail(out)}
 
 
-def run_file(stem, tools, out_dir):
-    src = CORPUS / f"{stem}.c"
+def run_file(stem, tools, out_dir, corpus=CORPUS):
+    src = Path(corpus) / f"{stem}.c"
     work = out_dir / stem
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    entry = {"source_sha256": sha256(src), "constructs": CONSTRUCTS.get(stem, ["unclassified"]),
+    entry = {"source_sha256": sha256(src), "constructs": CONSTRUCTS.get(stem, ["generated" if stem.startswith("gen_") else "unclassified"]),
              "stages": {}}
     stages = entry["stages"]
     stages["c_native"], expected = stage_c_native(tools["native"], src, work)
@@ -407,10 +407,16 @@ def cmd_heavy(args):
     record_path = Path(args.record)
     old = json.loads(record_path.read_text()) if record_path.exists() and args.files else None
     files = dict(old["files"]) if old else {}
-    for stem in args.files or corpus_files():
-        files[stem] = run_file(stem, tools, out_dir)
+    names = corpus_files(args.corpus)
+    for stem in args.files or names:
+        try:
+            files[stem] = run_file(stem, tools, out_dir, args.corpus)
+        except Exception as error:  # a harness bug must not lose the other files' results
+            files[stem] = {"source_sha256": sha256(Path(args.corpus) / f"{stem}.c"),
+                           "constructs": CONSTRUCTS.get(stem, ["generated"]),
+                           "stages": {}, "harness_error": repr(error)[:500]}
         print(f"{stem}: {outcome(files[stem])}", flush=True)
-    files = {k: files[k] for k in sorted(files) if k in corpus_files()}
+    files = {k: files[k] for k in sorted(files) if k in names}
     version = lambda z: run([z, "version"], 60)[1].strip() if z else None  # noqa: E731
     record = {"schema": SCHEMA, "kind": "air2lean-c-frontend-coverage",
               "inputs": INPUTS, "translate_c_target": TC_TARGET, "air_target": " ".join(AIR_TARGET),
@@ -474,6 +480,7 @@ def main(argv=None):
     heavy.add_argument("--files", nargs="*")
     heavy.add_argument("--record", default=str(RECORD))
     heavy.add_argument("--no-build", action="store_true")
+    heavy.add_argument("--corpus", default=str(CORPUS), help="directory of .c files (default: corpus/)")
     for name in ("check", "tables"):
         p = sub.add_parser(name)
         p.add_argument("--record", default=str(RECORD))
