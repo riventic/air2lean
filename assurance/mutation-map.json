@@ -1230,7 +1230,16 @@
     },
     "F06": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/diff/floats/harness.zig",
+          "anchor": "floats.fitness"
+        },
+        {
+          "path": "tests/roadmap/float-semantics/test_labels.py",
+          "anchor": "def test_unlabeled_numerical_theorem_fails_and_plain_theorem_passes"
+        }
+      ],
       "mutants": [
         {
           "name": "d",
@@ -1443,7 +1452,7 @@
           "name": "frame-atom-dropped",
           "path": "tests/roadmap/proof-tools/Steps.lean",
           "category": "other",
-          "anchor": "Triple (pts p 4 x ∗ R) (load (BitVec 32) 4 p) (fun r => ⌜r = x⌝ ∗ pts p 4 x)"
+          "anchor": "Triple (pts p 4 x \u2217 R) (load (BitVec 32) 4 p) (fun r => \u231cr = x\u231d \u2217 pts p 4 x)"
         }
       ],
       "note": "Mutated specifications of the sep_* step tactics (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (Steps.lean, CI proof-tools step)."
@@ -1664,8 +1673,23 @@
     },
     "I05": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/project-diagnostics/test_project_diagnostics.py",
+          "anchor": "def test_invalid_protocol_controls"
+        },
+        {
+          "path": "tests/roadmap/diagnostics-complete/test_cli.py",
+          "anchor": "def blockers(report):"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "diagnostics-source-span-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I06": {
       "categories": [],
@@ -2101,7 +2125,13 @@
           "anchor": "def test_negative_controls_are_excluded_from_premises"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "tutorial-expected-error-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     }
   }
 }

@@ -38,10 +38,10 @@
     },
     "ae": {
       "killed_by": {
-        "kind": "diff",
-        "target": "iogroup"
+        "kind": "proof",
+        "target": "Proofs.Iogroup.Counter"
       },
-      "block_sha256": "88fc531b6cd0141b585dc3540f06519b9da46a73a4e8a35fa360ef66d43465a6"
+      "block_sha256": "5f5146b440eb8350cb78e4540aa47b756611a3cf7a0c5d4ea6e480da661c1dfe"
     },
     "af": {
       "killed_by": {
