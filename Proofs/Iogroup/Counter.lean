@@ -782,7 +782,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
   obtain ⟨blk', hblk', -, -, -, -, hx⟩ := bytesAt_blk (m := m) hw hsW rfl
     (by rw [enc_mutex, enc_u32]; decide)
   rw [hblk] at hblk'; cases hblk'
-  obtain ⟨blkG, hblkG, hlG, -, hSG, -, -⟩ := bytesAt_blk (m := m) hg hsG rfl
+  obtain ⟨blkG, hblkG, hlG, -, hSG, hKG, -⟩ := bytesAt_blk (m := m) hg hsG rfl
     (by rw [enc_group]; decide)
   have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
   have h0 : L.U32 m 0 := by
@@ -832,7 +832,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
     subst this; exact VClock.le_refl _
   · refine ⟨⟨by rw [hth]; rfl, fun u hu1 hu => by rw [h1] at hu; unfold ThreadId at *; omega,
       fun u hu => ?_, .inl ⟨0, by decide, ?_, h1, by rw [hgr]; simp [grp], hjb⟩⟩,
-      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG⟩,
+      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG, by rw [hKG]; rfl⟩,
       fun v hv => by rw [hjb v] at hv; cases hv⟩
     · show (upd G0 0 (gSpawn 0) u).2 = _
       rw [hGu u (by rw [h1] at hu; unfold ThreadId at *; omega)]; rfl

@@ -3166,9 +3166,10 @@ theorem tally_read {G : ThreadId → Gh} {m : Mem} {e1 : Bool} (hi : proto.inv G
     (hg : G 0 = gM Heap.empty { ph := .rd, e1 := e1 }) :
     ∃ (blk : Block) (v : Tally), m.blocks[0]? = some blk ∧ m.access bPtr (Enc.size Tally) 8 = pure (0, blk, 0) ∧
       Enc.decode (blk.bytes.extract 0 (0 + Enc.size Tally)) = pure v ∧ v.n = 2 := by
-  obtain ⟨blk, h1, hlive, hsz, haddr, -⟩ := hi.2.blk
+  obtain ⟨blk, h1, hlive, hsz, haddr, hk⟩ := hi.2.blk
   have hacc : m.access bPtr (Enc.size Tally) 8 = pure (0, blk, 0) :=
     access_of rfl h1 hlive (by decide) (by simp [bPtr, hsz]; exact Int.le_refl 24) (by simp [bPtr, haddr])
+      (by simp [hk])
   have hp := hi.2.pre (by rw [hg]; show Ph.rd.rank ≤ 7; decide)
   obtain ⟨a, ha⟩ := hp.wg.val
   rw [Word.holds_bytes (W := WG) h1] at ha
