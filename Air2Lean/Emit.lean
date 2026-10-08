@@ -1092,6 +1092,18 @@ def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
 def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
   ((fc.valTyId? v).bind fun t => fc.layouts[t]?.bind (·.ptrAlign)).getD 1
 
+/-- The alignment of the pointer type `tid`, or of an optional pointer's child. -/
+def FCtx.ptrAlignOf (fc : FCtx) (tid : TyId) : Nat :=
+  let t := match fc.tyOfId tid with | .optional c => c | _ => tid
+  (fc.layouts[t]?.bind (·.ptrAlign)).getD 1
+
+/-- `Zig.checkAddr … >>= fun _ => ` for `@ptrFromInt` of `n` to the pointer type `tid` (empty
+if no address can be illegal): the prefix of the conversion it guards. -/
+def FCtx.checkAddr (fc : FCtx) (tid : TyId) (nonNull : Bool) (n : String) : String :=
+  let align := fc.ptrAlignOf tid
+  if align ≤ 1 && !nonNull then "" else
+  s!"Zig.checkAddr {align} {nonNull} ({n}).toNat >>= fun _ => "
+
 /-- The Lean term of an atomic ordering (`Zig.AtomicOrder`; `Check.lean` rejects `unordered`). -/
 def orderTerm : AtomicOrder → String
   | .unordered | .monotonic => "Zig.AtomicOrder.relaxed"
@@ -1959,9 +1971,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let expr := s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && dstPtr then
-      -- `@ptrFromInt`.
-      let fromAddr := if nullablePtrTy fc.types fc.layouts inst.ty then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
-      let expr := s!"{fc.callMName} ({fromAddr} ({rv a}).toNat)"
+      -- `@ptrFromInt`, after its own address check (`Zig.checkAddr`).
+      let nullable := nullablePtrTy fc.types fc.layouts inst.ty
+      let fromAddr := if nullable then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
+      let expr := s!"{fc.callMName} ({fc.checkAddr inst.ty (!nullable) (rv a)}{fromAddr} ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && fc.nullableVal a && fc.isOptScalarPtr (fc.tyOfId inst.ty) then
       -- A C/allowzero pointer to `?*T`: address zero is the explicit `none`.
@@ -1983,7 +1996,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && optSinglePtrTy fc.types fc.layouts inst.ty then
       -- `@ptrFromInt` to `?*T`: 0 is null.
-      let expr := s!"{fc.callMName} (Zig.optPtrFromAddr ({rv a}).toNat)"
+      let expr := s!"{fc.callMName} ({fc.checkAddr inst.ty false (rv a)}Zig.optPtrFromAddr ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && dstPtr && fc.nullableVal a &&
         !(nullablePtrTy fc.types fc.layouts inst.ty) then
@@ -1995,6 +2008,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr :=
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
+      else if srcPtr && dstPtr && fc.isMemPtr a && fc.ptrAlignOf inst.ty > fc.ptrAlign a then
+        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`).
+        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {rv a} >>= fun _ => pure {rv a})"
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
@@ -2617,7 +2633,9 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
       if fc.rawRet then
         s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
       else s!"pure (.ret {v})"
-  | .unreach => "throw .unreachable"
+  -- A bare `unreach` (no panic call before it, which would end the body first) is
+  -- `unreachable` without a safety check: unchecked illegal behaviour.
+  | .unreach => "throw .illegal"
   | .trap => "throw .panic"
   | .condBr c thenBody elseBody =>
     s!"if {rv c} then {doBlock (emitStmts fc env thenBody.toList)}\nelse \

@@ -121,7 +121,7 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
     refine ⟨.rep15, { { s with i := s.i + 1#64 } with j := s.j - 1#64 }, m₂, h₂, ?_, hd₂, hm₂, hst₂,
       ?_⟩
     · simp [reverse.loop15, zig_unfold, Zig.lt, BitVec.ult, Zig.add, Zig.sub, hlt, hil, hjl, l1, l2,
-        s₁, s₂, hio, hjo]
+        s₁, s₂, hio, hjo, checkIndex]
     · have hi1 : (s.i + 1#64).toNat = s.i.toNat + 1 := by
         rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
       have hj1 : (s.j - 1#64).toNat = s.j.toNat - 1 := by

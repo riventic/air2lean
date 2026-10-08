@@ -16,6 +16,17 @@ state describes an object at zero. Nonzero casts use the existing provenance res
 def ptrFromAddrNullable (n : Nat) : MemM Ptr :=
   if n == 0 then pure Ptr.null else ptrFromAddr n
 
+/-- `@ptrFromInt` to a pointer type of alignment `align`: address zero (if `nonNull`, the type does
+not allow it) and a misaligned address are illegal behaviour that only Sema's safety checks
+(`castToNull`, `incorrectAlignment`) catch, so the model checks them itself: `.illegal`. -/
+def checkAddr (align : Nat) (nonNull : Bool) (n : Nat) : MemM Unit :=
+  if (nonNull && n == 0) || n % align != 0 then throw .illegal else pure ()
+
+/-- `@alignCast` (a pointer cast to a stricter alignment `align`): a misaligned pointer is
+illegal behaviour that only Sema's check (`incorrectAlignment`) catches: `.illegal`. -/
+def checkAlign (align : Nat) (p : Ptr) : MemM Unit := do
+  if (← ptrAddr p) % align != 0 then throw .illegal
+
 /-- Null tests observe the address and do not dereference the pointer. -/
 def ptrIsNull (p : Ptr) : MemM Bool := do
   pure (decide ((← ptrAddr p) = 0))
