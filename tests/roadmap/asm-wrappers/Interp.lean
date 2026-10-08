@@ -14,9 +14,16 @@ instruction (source template, constraints, operand widths). `exec`:
 2. fills every register with a junk pattern, then writes each input into the low bits of its
    register, so a template that reads unspecified upper bits or an unbound register sees junk;
 3. expands `%%`, `%[name]` and `%<n>` and runs the AT&T instructions `bswap`, `popcnt`,
-   `lzcnt`, `xor` and `div` (optional `l`/`q` width suffix);
+   `lzcnt`, `xor`, `div`, `inc`, `add`, `mov` and `xchg` (optional `l`/`q` width suffix);
 4. rejects a write to any register that is neither an output nor a named clobber, and reads
    each output from the low `width` bits of its register.
+
+A01 operands: a read-write output (`+r`, `+{reg}`, `+m`) starts with its old value, which the
+caller passes after the inputs (the opaque's trailing parameters). A memory output (`=m`, `+m`)
+is a memory slot (machine index `16 + k` for output `k`), written `@<index>/<width>` in the
+expanded template; an `=m` slot starts with junk that differs between the three allocations, so
+a template that reads it before writing it is rejected as allocation-dependent. A slot is
+written only by the instructions that name it: any other memory access is unsupported syntax.
 
 `run` executes under three allocations (two pools, and one where an `r` input shares a plain
 `=r` output's register) and rejects a result that depends on the allocation.
@@ -55,6 +62,7 @@ def lookupReg (s : String) : Option (Nat × Nat) :=
   | none, none => none
 
 def regName (r w : Nat) : Except String String :=
+  if r ≥ 16 then pure s!"@{r}/{w}" else
   match w, names64[r]?, names32[r]? with
   | 64, some n, _ => pure n
   | 32, _, some n => pure n
@@ -78,7 +86,11 @@ def stripOutput (c : String) : Except String String :=
   match c.toList with
   | '=' :: '&' :: rest => pure (String.ofList rest)
   | '=' :: rest => pure (String.ofList rest)
+  | '+' :: rest => pure (String.ofList rest)
   | _ => throw s!"unsupported output constraint {c}"
+
+/-- A read-write output (`+r`, `+{reg}`, `+m`): its old value is an extra argument. -/
+def Operand.readWrite (o : Operand) : Bool := o.constraint.startsWith "+"
 
 def pick (pool used : List Nat) : Except String Nat :=
   match pool.find? (!used.contains ·) with
@@ -98,8 +110,9 @@ def allocate (spec : Spec) (pool : List Nat) (share : Bool) : Except String (Lis
     match ← pinned c with
     | some r => regs := regs ++ [r]
     | none =>
-      if c != "r" then throw s!"unsupported output constraint {o.constraint}"
-      regs := regs ++ [← pick pool (pins ++ regs)]
+      if c == "m" then regs := regs ++ [16 + regs.length]
+      else if c != "r" then throw s!"unsupported output constraint {o.constraint}"
+      else regs := regs ++ [← pick pool (pins ++ regs)]
   let outRegs := regs
   for i in spec.inputs do
     match ← pinned i.constraint, i.constraint.toNat? with
@@ -139,7 +152,7 @@ def expand (spec : Spec) (regs : List Nat) : Except String String := do
   let ops := operands spec
   let rename (k : Nat) : Except String String := do
     match ops[k]?, regs[k]? with
-    | some o, some r => return "%" ++ (← regName r o.width)
+    | some o, some r => return (if r ≥ 16 then "" else "%") ++ (← regName r o.width)
     | _, _ => throw s!"template operand {k} out of range"
   return String.ofList (← expandChars ops rename spec.source.toList)
 
@@ -153,7 +166,8 @@ def splitOn (sep : Char → Bool) (cs : List Char) : List (List Char) :=
     fun (cur, done) c => if sep c then ([], cur.reverse :: done) else (c :: cur, done)
   (cur.reverse :: done).reverse
 
-/-- Machine state: sixteen 64-bit registers and the registers written so far. -/
+/-- Machine state: sixteen 64-bit registers, then one memory slot per output (A01), and the
+registers and slots written so far. -/
 structure Machine where
   regs : Array Nat
   written : List Nat
@@ -175,7 +189,7 @@ def bitLength (v : Nat) : Nat := if v = 0 then 0 else v.log2 + 1
 
 /-- Mnemonic base and width suffix (`l` = 32, `q` = 64). -/
 def mnemonic (m : String) : Except String (String × Option Nat) := do
-  for base in ["bswap", "popcnt", "lzcnt", "xor", "div"] do
+  for base in ["bswap", "popcnt", "lzcnt", "xor", "div", "inc", "add", "mov", "xchg"] do
     if m == base then return (base, none)
     if m == base ++ "l" then return (base, some 32)
     if m == base ++ "q" then return (base, some 64)
@@ -186,6 +200,12 @@ def parseReg (cs : List Char) : Except String (Nat × Nat) :=
   | '%' :: name => match lookupReg (String.ofList name) with
     | some r => pure r
     | none => throw s!"unknown register {String.ofList name}"
+  | '@' :: slot =>
+    match (String.ofList slot).splitOn "/" with
+    | [i, w] => match i.toNat?, w.toNat? with
+      | some i, some w => pure (i, w)
+      | _, _ => throw s!"bad memory operand @{String.ofList slot}"
+    | _ => throw s!"bad memory operand @{String.ofList slot}"
   | other => throw s!"unsupported operand {String.ofList other}"
 
 def step (m : Machine) (line : List Char) : Except String Machine := do
@@ -212,16 +232,36 @@ def step (m : Machine) (line : List Char) : Except String Machine := do
     if divisor = 0 then throw "#DE: division by zero"
     if dividend / divisor ≥ 2 ^ w then throw "#DE: quotient overflow"
     return (m.write 0 w (dividend / divisor)).write 2 w (dividend % divisor)
+  | "inc", [(d, _)] => return m.write d w (m.read d w + 1)
+  | "add", [(s, _), (d, _)] =>
+    if s ≥ 16 && d ≥ 16 then throw s!"{mn}: two memory operands" else
+    return m.write d w (m.read s w + m.read d w)
+  | "mov", [(s, _), (d, _)] =>
+    if s ≥ 16 && d ≥ 16 then throw s!"{mn}: two memory operands" else
+    return m.write d w (m.read s w)
+  | "xchg", [(s, _), (d, _)] =>
+    if s ≥ 16 && d ≥ 16 then throw s!"{mn}: two memory operands" else
+    let a := m.read s w
+    return (m.write s w (m.read d w)).write d w a
   | _, _ => throw s!"{mn}: wrong operand count"
 
-/-- Execute `spec` on `args` (one natural number per input) under one allocation. -/
-def exec (spec : Spec) (pool : List Nat) (share : Bool) (args : List Nat) :
+/-- Execute `spec` on `args` (one natural number per input, then one old value per read-write
+output) under one allocation; `seed` varies the junk of memory slots between allocations. -/
+def exec (spec : Spec) (pool : List Nat) (share : Bool) (seed : Nat) (args : List Nat) :
     Except String (List Nat) := do
-  if args.length != spec.inputs.length then throw "argument count differs from inputs"
+  let rwOuts := spec.outputs.filter (·.readWrite)
+  if args.length != spec.inputs.length + rwOuts.length then
+    throw "argument count differs from inputs and read-write outputs"
   let regs ← allocate spec pool share
   let inRegs := regs.drop spec.outputs.length
-  let mut m : Machine := { regs := Array.ofFn (n := 16) (junk ·.val), written := [] }
+  let slots := spec.outputs.length
+  let mut m : Machine := { regs := Array.ofFn (n := 16 + slots) fun r =>
+    if r.val < 16 then junk r.val else junk r.val + 0x9E37 * (seed + 1), written := [] }
   for ((r, o), x) in (inRegs.zip spec.inputs).zip args do
+    let old := m.regs.getD r 0
+    m := { m with regs := m.regs.set! r (old - old % 2 ^ o.width + x % 2 ^ o.width) }
+  let rwRegs := ((regs.take spec.outputs.length).zip spec.outputs).filter (·.2.readWrite)
+  for ((r, o), x) in rwRegs.zip (args.drop spec.inputs.length) do
     let old := m.regs.getD r 0
     m := { m with regs := m.regs.set! r (old - old % 2 ^ o.width + x % 2 ^ o.width) }
   let text ← expand spec regs
@@ -236,7 +276,8 @@ def exec (spec : Spec) (pool : List Nat) (share : Bool) (args : List Nat) :
 
 /-- The interpretation the harness binds to an opaque: three allocations must agree. -/
 def run (spec : Spec) (args : List Nat) : List Nat :=
-  match [(poolA, false), (poolB, false), (poolA, true)].mapM fun (p, s) => exec spec p s args with
+  match [(poolA, false, 0), (poolB, false, 1), (poolA, true, 2)].mapM fun (p, s, seed) =>
+      exec spec p s seed args with
   | .ok (a :: rest) =>
     if rest.all (· == a) then a
     else panic! s!"asm result depends on register allocation: {spec.source}"

@@ -395,9 +395,42 @@ opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec
     modify (fun s => { s with rem := a4.2 })
 ```
 
-A read-write output (`+r`) is outside the subset. The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
+The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
 
-`volatile` and `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see." In particular a volatile asm (port I/O, counters) is modelled as a repeatable function of its inputs; see [volatile-effects.md](volatile-effects.md) §Residuals. Volatile *memory* accesses are rejected there.
+### Effect contract: read-write and memory operands, aliases, clobbers (A01)
+
+A01 extends the accepted constraints only where the effect is explicit (`Air2Lean/AsmContract.lean`, `ZigLean/Asm.lean`, premise [ASM-03](premises.md#asm-03)). Register-only ops keep their exact translation and `airAsm_<hash>` name (`Proofs/Asm/Gen.lean` is byte-identical). An op with a read-write output, a memory output or a registry-approved `"memory"` clobber is named `airAsmFx_<hash>` (same hash):
+
+| Constraint | Operand | Translation |
+|---|---|---|
+| `+r`, `+{reg}` | lvalue output | the old value is read before the call (a local's field, or `Zig.load` through a pointer), passed after the inputs, and the new value is stored after |
+| `=m` | lvalue output | the opaque's output is stored to the pointee: the footprint is exactly `Enc.size` bytes at the pointer (a 1, 2, 4 or 8 byte integer) |
+| `+m` | lvalue output | as `+r`, through the memory operand |
+
+The opaque's type is the contract: it takes the register inputs and the old values of the read-write outputs and returns the outputs, so it cannot touch memory or the locals. Every memory effect is in the wrapper, in this order: `Zig.Asm.guard` (when two or more outputs are written through memory pointers), the read-write loads in output order, the call, the stores in output order:
+
+```lean
+opaque airAsmFx_3102165980 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec 32
+
+    Zig.Asm.guard [(p0, 4), (p1, 4)]
+    let a2o0 ← Zig.load (BitVec 32) 4 p0
+    let a2o1 ← Zig.load (BitVec 32) 4 p1
+    let a2 := airAsmFx_3102165980 a2o0 a2o1
+    Zig.store (α := BitVec 32) 4 p0 a2.1
+    Zig.store (α := BitVec 32) 4 p1 a2.2
+```
+
+- **Frame.** A wrapper writes only its declared locations: `Proofs/Asm/Effects.lean`'s `Zig.Asm.Frame` (every block keeps its shape, every byte outside the locations its value) composes over loads and stores, and inverts any successful run. `tests/roadmap/asm-effects` proves it for the generated `+m`, `=m` and two-`+m` wrappers.
+- **Aliases.** Two written locations that overlap would make the result depend on the instructions' store order, which the opaque does not fix: `Zig.Asm.guard` throws `.unspecified` (the model picks no order). Two outputs with the same pointer value or the same local are rejected statically. A successful run therefore had disjoint operands (`swapm_disjoint`).
+- **Clobbers.** `cc`, flags and named registers have no Lean-visible state and are accepted, but a clobber may not name the register of a pinned operand (`{eax}` with a `rax` clobber: the x86_64 sub-register families are one register), two outputs or two inputs may not pin one register, and an input may not pin the register of an early-clobber or read-write output. A matching input may tie only to a write-only register output.
+- **`"memory"` clobber.** Rejected (the block may write any memory) unless the whole block is an entry of the reviewed `asmPureRegistry`. The only entry is the compiler barrier `asm volatile ("" ::: "memory")`: no instruction, so no effect in a model that runs accesses in program order.
+- **Still rejected.** `m` and immediate inputs, `rm`/`g` alternatives, `=&m`, `+&r`, a read-write or memory result (`-> T`), a memory operand of another width, an output through a `const` pointer.
+
+Zig source names a variable as an output operand, so real `=m`/`+m` refs are local `alloc`s (a `Locals` field, or a stack block if the local escapes). The translator accepts any pointer ref the AIR names; `tests/roadmap/asm-effects` reaches the memory-pointer path with hand-written AIR. Zig 0.16.0's LLVM backend fails module verification for `+m` (`Elementtype attribute can only be applied for indirect constraints`); the self-hosted x86_64 backend compiles it.
+
+Register-only support does not make arbitrary asm safe: ASM-03 is the premise that the instructions behave like the wrapper (read only the declared inputs and read-write locations, write every declared output and nothing else, including through an integer input that holds an address).
+
+`volatile` and register/flag `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see." In particular a volatile asm (port I/O, counters) is modelled as a repeatable function of its inputs; see [volatile-effects.md](volatile-effects.md) §Residuals. Volatile *memory* accesses are rejected there.
 
 ### Differential-test implementation
 
