@@ -134,7 +134,28 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 ## Memory
 
-`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers. The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects an explicit non-little-endian value or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices. A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
+`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers, or 32-bit pointers for a wasm32 profile (§Pointer width). The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects an explicit non-little-endian value or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices (4 and 8 bytes for a 32-bit profile). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
+
+### Pointer width
+
+The profile's `pointer_bits` (`docs/profiles.md`) selects a `Zig.PtrWidth` (`ZigLean/Mem/Width.lean`): `.w64` for x86_64-linux and aarch64-macos, `.w32` for wasm32-freestanding and wasm32-wasi. It fixes the size and alignment of a pointer, `?*T`, `usize` and `isize` (`bytes`: 8 or 4), a slice (pointer at offset 0, length at offset `bytes`), `std.mem.Allocator` (two pointers) and the bound `2 ^ bits` of every address and byte count. The checker computes these sizes from the profile (`Layout.ptrBytes`, set by `normalize`, never by the exporter) and compares them, and every struct, optional and error-union layout built from them, with the exporter's sizes for that target.
+
+A 64-bit translation is unchanged: it uses the definitions of `ZigLean/Mem/Basic.lean`, `Enc.lean` and `Alloc.lean`, and each width-parameterized definition is proved equal to them at `.w64` (`ptrEnc_w64`, `optPtrEnc_w64`, `sliceEnc_w64_encode`/`_decode`, `allocatorEnc_w64`, `Allocator.allocOf_w64`, `Allocator.createOf_w64`, `Allocator.freeOf_64`, `zeroAllocPtrOf_w64`, `Ptr.elemOf_64`, `memsetOf_64`, `memmoveOf_64`, `readSliceOf_64`, `indexOf_64`, `lenOf_64`). A 32-bit translation:
+
+| 64-bit | 32-bit |
+|---|---|
+| `usize` is `BitVec 64` | `BitVec 32` (the AIR's own integer type) |
+| `Zig.Slice` | `Zig.Slice32` (`Zig.SliceOf 32`; pointer, then a 4-byte length) |
+| `Enc Ptr`, `Enc (Option Ptr)`, `Enc Allocator` (8, 8, 16 bytes) | `open scoped Zig.Wasm32` after the namespace: 4, 4, 8 bytes |
+| `p.elem`, `p.elemSub`, `Zig.index`, `Zig.vindex`, `Zig.len` | `p.elemOf`, `p.elemSubOf`, `Zig.indexOf`, `Zig.vindexOf`, `Zig.lenOf 32` |
+| `Zig.memset`, `Zig.memmove`, `Zig.readSlice` | `Zig.memsetOf`, `Zig.memmoveOf`, `Zig.readSliceOf` |
+| `Zig.Allocator.create`, `.alloc`, `.free` | `.createOf .w32`, `.allocOf .w32`, `.freeOf` (`.destroy` is width-independent) |
+| `@intFromPtr`: `BitVec.ofInt 64 (← Zig.ptrAddr p)` | `Zig.ptrAddrOf .w32 p`: `.unspecified` for a model address outside `0 ≤ a < 2 ^ 32` |
+| a slice's length field at offset 8 | offset 4 |
+
+`alloc(T, n)` returns `error.OutOfMemory` when `n * @sizeOf(T) ≥ 2 ^ bits` (`math.mul` overflow) before any allocator decision (`Allocator.allocOf_overflow`); a successful allocation has a byte count below the bound (`Allocator.allocOf_ok`). A zero-byte allocation's pointer has the highest aligned address below `2 ^ bits` (`zeroAllocPtrOf`). The model's block addresses are not bounded by the target's address space: a proof about a 32-bit `@intFromPtr` shows that the address fits.
+
+`main` refuses a 32-bit output that still names a 64-bit runtime term (`width64Leak`). The checker rejects, for a 32-bit profile, `std.Thread`/`std.Io` values and every thread, futex and `Io.Group` model, vectors in memory, atomic ops, `@tagName`, `@errorName`, inline assembly, allocator models other than `create`/`alloc`/`alignedAlloc`/`destroy`/`free`, and external model registries. Fixtures and proofs: `tests/roadmap/pointer-width/`.
 
 A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 

@@ -419,7 +419,10 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   let body ← raw.body.mapM (normalizeInst raw.name)
   -- The bit-packed vector layout is the LLVM backend's (`tests/roadmap/vector-layouts`).
   let llvm := raw.profile.backend == "stage2_llvm"
+  -- The pointer width is the profile's (`BuildProfile.parse` admits 32 and 64 bits).
+  let ptrBytes := raw.profile.pointerBits / 8
   let layouts := raw.layouts.mapIdx fun i l =>
+    let l := { l with ptrBytes }
     match raw.types[i]? with
     | some (.vector ..) => { l with packedLanes := llvm }
     | _ => l

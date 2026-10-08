@@ -164,12 +164,19 @@ def floatFmtName (n : Nat) : String :=
   | 16 => "Zig.F16" | 32 => "Zig.F32" | 64 => "Zig.F64" | 80 => "Zig.F80" | 128 => "Zig.F128"
   | _ => s!"Zig.Float .f{n}" -- unreachable: Check.lean restricts `n`
 
+/-- The Lean type of a slice for a profile with `ptrBits`-bit pointers. -/
+def sliceTyName (ptrBits : Nat) : String :=
+  if ptrBits == 64 then "Zig.Slice" else s!"Zig.Slice{ptrBits}"
+
 /-- `TyId → Lean type` as source text. `structNames` maps the Zig name of a struct, enum or
 union to its Lean name. `pureSlice`: `ty` is the type of a value of a pure function, where a
 `[]const T` is an `Array` (`docs/generated-code.md` §Memory); everywhere else a slice is a
-`Zig.Slice`. -/
+`Zig.Slice`, or `Zig.Slice32` for a 32-bit profile (`ptrBits`, `ZigLean/Mem/Width.lean`). -/
 partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty)
-    (pureSlice : Bool := false) : String :=
+    (pureSlice : Bool := false) (ptrBits : Nat := 64) : String :=
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
+    emitTy structNames types ty (ptrBits := ptrBits)
+  let slice := sliceTyName ptrBits
   match ty with
   | .int _ bits => s!"BitVec {bits}"
   | .float bits => floatFmtName bits
@@ -177,8 +184,8 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .void => "Unit"
   | .noreturn => "Unit"
   | .ptr "slice" true child =>
-    if pureSlice then s!"Array ({emitTy structNames types types[child]!})" else "Zig.Slice"
-  | .ptr "slice" .. => "Zig.Slice"
+    if pureSlice then s!"Array ({emitTy structNames types types[child]!})" else slice
+  | .ptr "slice" .. => slice
   | .ptr .. => "Zig.Ptr"
   | .array len child s =>
     s!"Vector ({emitTy structNames types types[child]!}) {len + if s then 1 else 0}"
@@ -216,7 +223,11 @@ error width every error union also gets an explicit dictionary, since the regist
 allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes (`Check.lean` rejects
 an optional of one, which would need a separate flag). -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
-    (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) : Option String :=
+    (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) :
+    Option String :=
+  let emitStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
+      (id : TyId) (layouts : Array Layout) :=
+    emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits)
   match types[id]? with
   | some (.ptr ..) => if nullablePtrTy types layouts id then some "Zig.nullablePtrEnc" else none
   | some (.errorSet (some names)) => some s!"{errOp errBits "errorEnc"} {emitErrorDomain names}"
@@ -230,7 +241,7 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
   | some (.errorUnion set payload) =>
     let payloadEnc := emitStorageEnc structNames types errBits payload layouts
     let enc := payloadEnc.getD
-      s!"(inferInstance : Zig.Enc ({emitTy structNames types types[payload]!}))"
+      s!"(inferInstance : Zig.Enc ({emitTy structNames types types[payload]! (ptrBits := ptrBits)}))"
     match types[set]? with
     | some (.errorSet (some names)) => some s!"{errOp errBits "errorUnionEnc"} {emitErrorDomain names} ({enc})"
     | _ =>
@@ -238,17 +249,17 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
       else some s!"Zig.Enc.errorUnionWithW {errBits} ({enc})"
   | some (.future r) =>
     (emitStorageEnc structNames types errBits r layouts).map fun enc =>
-      s!"@Zig.Future.instEnc ({emitTy structNames types types[r]!}) ({enc})"
+      s!"@Zig.Future.instEnc ({emitTy structNames types types[r]! (ptrBits := ptrBits)}) ({enc})"
   | _ => none
 
 /-- Bind a dictionary only around the storage operation that needs it. This preserves the
 public semantic types (`ErrName`, `Option ErrName`, `Except ErrName`) and pure APIs. -/
 def withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
-    (id : TyId) (expr : String) (layouts : Array Layout := #[]) : String :=
-  match emitStorageEnc structNames types errBits id layouts with
+    (id : TyId) (expr : String) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) : String :=
+  match emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) with
   | none => expr
   | some enc =>
-    s!"(letI : Zig.Enc ({emitTy structNames types types[id]!}) := {enc}; {expr})"
+    s!"(letI : Zig.Enc ({emitTy structNames types types[id]! (ptrBits := ptrBits)}) := {enc}; {expr})"
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
 
@@ -373,6 +384,11 @@ def rawUnionInit (u layout : String) (size : Nat) (v t : String) : String :=
 /-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
 the size, alignment and field offsets from the exporter. -/
 def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
+  let ptrBits := 8 * ptrBytesOf s.srcLayouts
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
+    emitTy structNames types ty (ptrBits := ptrBits)
+  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (id : TyId)
+      (expr : String) := withStorageEnc structNames types id expr (ptrBits := ptrBits)
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
   let hn := helperLookup s.ty (structNames.map (·.2))
@@ -424,6 +440,11 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   | _ => ""
 
 def emitNamedType (structNames : Array (String × String)) (s : NamedType) : String :=
+  let ptrBits := 8 * ptrBytesOf s.srcLayouts
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
+    emitTy structNames types ty (ptrBits := ptrBits)
+  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (id : TyId)
+      (expr : String) := withStorageEnc structNames types id expr (ptrBits := ptrBits)
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
@@ -698,11 +719,22 @@ def FCtx.memberName (fc : FCtx) (ty : Ty) (raw : String) : String :=
 def FCtx.helperName (fc : FCtx) (ty : Ty) (raw : String) : String :=
   Air2Lean.helperName ty raw (fc.structNames.map (·.2))
 
+/-- The profile's pointer width in bits (`Layout.ptrBytes`): 64, or 32 for wasm32. -/
+def FCtx.ptrBits (fc : FCtx) : Nat := 8 * ptrBytesOf fc.layouts
+
+/-- The 64-bit runtime name `name`, or its width-parameterized form (`ZigLean/Mem/Width.lean`)
+for another pointer width. -/
+def FCtx.widthFn (fc : FCtx) (name wide : String) : String :=
+  if fc.ptrBits == 64 then name else wide
+
+/-- The `Zig.PtrWidth` term of the profile. -/
+def FCtx.ptrWidthTerm (fc : FCtx) : String := if fc.ptrBits == 64 then ".w64" else ".w32"
+
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
-  emitTy fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
+  emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
 def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
-  withStorageEnc fc.structNames fc.types fc.errBits tid expr fc.layouts
+  withStorageEnc (ptrBits := fc.ptrBits) fc.structNames fc.types fc.errBits tid expr fc.layouts
 
 def FCtx.tyBits (fc : FCtx) (tid : TyId) : Nat := match fc.tyOfId tid with | .int _ b => b | _ => 0
 def FCtx.tySigned (fc : FCtx) (tid : TyId) : Bool :=
@@ -839,7 +871,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => "(panic! \"air2lean: a pointer constant without a global\")"
-  | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : Zig.Slice)"
+  | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : {sliceTyName fc.ptrBits})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
@@ -869,7 +901,7 @@ def FCtx.structFieldNamesFor (fc : FCtx) (ty : Ty) : Array String :=
 
 /-- The Lean type of `v`. -/
 def FCtx.emitValTy (fc : FCtx) (v : Val) : String :=
-  emitTy fc.structNames fc.types (fc.valTy v) (pureSlice := !fc.mem)
+  emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.valTy v) (pureSlice := !fc.mem)
 
 def isEnumTy (t : Ty) : Bool := match t with | .enum .. => true | _ => false
 
@@ -1083,7 +1115,7 @@ def FCtx.atomicPtr (fc : FCtx) (ptr : Val) : Bool :=
   | _ => false
 
 /-- The Lean type of the value that the pointer `v` points to. -/
-def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
+def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.pointeeOf v)
 
 /-- The byte offset of field `idx` of the struct that the pointer `base` points to. `baseBit`:
 the bit offset of `base` if it is a bit-pointer (its address is its host's). -/
@@ -1138,7 +1170,7 @@ def FCtx.isSlice (fc : FCtx) (v : Val) : Bool :=
 def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
   if fc.isSlice v then (s!"{rv}.ptr", s!"{rv}.len")
   else match fc.pointeeOf v with
-    | .array len .. | .vector len _ => (rv, s!"({len} : BitVec 64)")
+    | .array len .. | .vector len _ => (rv, s!"({len} : BitVec {fc.ptrBits})")
     | _ => (rv, "(panic! \"air2lean: items of a pointer without a length\")")
 
 /-- `v` is a pointer to memory: not a place. -/
@@ -1210,8 +1242,8 @@ def FCtx.computeRawInsts (fc : FCtx) (canRet : Bool) : Array InstId :=
 /-- A call argument. A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`). -/
 def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool) (a : Val) : String :=
   if fc.mem && !memCallee && fc.isSlice a then
-    let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
-    s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"Zig.readSlice ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
+    let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
+    s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"{fc.widthFn "Zig.readSlice" "Zig.readSliceOf"} ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
   else fc.resolveVal env a
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
@@ -1228,8 +1260,13 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   let argSize := fc.sizeOf (((fc.valTyId? (arg 1)).bind (ptrChild fc.types)).getD 0)
   let a := rv (arg 0)
   match fn with
-  | .create => s!"Zig.Allocator.create {a} {size} {align}"
-  | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+  -- `Check.lean` admits only create, alloc, alignedAlloc, destroy and free for a 32-bit profile.
+  | .create =>
+    if fc.ptrBits == 64 then s!"Zig.Allocator.create {a} {size} {align}"
+    else s!"Zig.Allocator.createOf {fc.ptrWidthTerm} {a} {size} {align}"
+  | .alloc | .alignedAlloc =>
+    if fc.ptrBits == 64 then s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+    else s!"Zig.Allocator.allocOf {fc.ptrWidthTerm} {a} {size} {align} {rv (arg 1)}"
   | .allocSentinel =>
     let sentinel := (fc.layouts[p]?.bind (·.sentinelByte)).getD 0
     s!"Zig.Allocator.allocSentinel {a} {rv (arg 1)} ({sentinel}#8)"
@@ -1237,7 +1274,7 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
   | .free =>
     let sentinel := ((fc.valTyId? (arg 1)).bind (fc.layouts[·]?) |>.map (·.sentinel)).getD false
-    s!"Zig.Allocator.{if sentinel then "freeSentinel" else "free"} {a} {argSize} {rv (arg 1)}"
+    s!"Zig.Allocator.{if sentinel then "freeSentinel" else fc.widthFn "free" "freeOf"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
   | .realloc => s!"Zig.Allocator.realloc {a} {rv (arg 1)} {rv (arg 2)}"
 
@@ -1319,8 +1356,8 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
 `p`. -/
 def FCtx.loadItem (fc : FCtx) (v : Val) (p i : String) : String :=
   let item := fc.itemTyId v
-  fc.storageExpr item s!"Zig.load ({emitTy fc.structNames fc.types (fc.tyOfId item)}) {fc.itemAlign v} \
-    ({p}.elem {fc.sizeOf item} {i})"
+  fc.storageExpr item s!"Zig.load ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId item)}) {fc.itemAlign v} \
+    ({p}.{fc.widthFn "elem" "elemOf"} {fc.sizeOf item} {i})"
 
 /-! ## `alloc` → `<Fn>Locals` field prepass -/
 
@@ -1360,8 +1397,10 @@ def collectAllocs (types : Array Ty) (allInsts : Array Inst) (reserved : Array S
 memory. -/
 def emitLocalsStruct (structNames : Array (String × String)) (types : Array Ty)
     (localsName : String) (allocs : Array (InstId × String × TyId)) (escaping : Array InstId)
-    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (byteLocals : Array InstId := #[]) :
-    String :=
+    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (byteLocals : Array InstId := #[])
+    (ptrBits : Nat := 64) : String :=
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) (pureSlice : Bool) :=
+    emitTy structNames types ty pureSlice ptrBits
   let lines := (allocs.map fun (aid, nm, cty) =>
     if escaping.contains aid then s!"  {nm} : Zig.Ptr"
     else if byteLocals.contains aid then
@@ -1397,7 +1436,10 @@ def repTargets (allInsts : Array Inst) : Array InstId :=
 
 def emitExitInductive (structNames : Array (String × String)) (types : Array Ty)
     (exitName : String) (retTy : TyId) (blTys : Array (InstId × TyId)) (brT repT : Array InstId)
-    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (rawRet : Bool := false) : String :=
+    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (rawRet : Bool := false)
+    (ptrBits : Nat := 64) : String :=
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) (pureSlice : Bool) :=
+    emitTy structNames types ty pureSlice ptrBits
   let retLine := match types[retTy]! with
     | .void => "  | ret"
     | rt =>
@@ -1968,7 +2010,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
     if srcPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr`.
-      let expr := s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+      let expr := if fc.ptrBits == 64 || fc.tyBits inst.ty != fc.ptrBits then
+          s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+        -- The address must fit the target's address space (`Zig.ptrAddrOf`).
+        else s!"{fc.callMName} (Zig.ptrAddrOf {fc.ptrWidthTerm} {rv a})"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && dstPtr then
       -- `@ptrFromInt`.
@@ -2061,7 +2106,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .optional c => match fc.tyOfId c with
         | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
         | .errorSet (some names) => s!"{errOp fc.errBits "optionalErrorIsSome"} {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
-        | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy fc.structNames fc.types ct}) {rv p}"
+        | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
       | _ => "(panic! \"air2lean: is_null_ptr of a non-optional\")"
     let expr := if isNull then s!"(!·) <$> {some'}" else some'
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2070,13 +2115,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | true, .optional c =>
         match fc.tyOfId c with
         | .ptr .. | .errorSet _ => s!"pure {rv p}"
-        | ct => fc.storageExpr c s!"Zig.optSetSome ({emitTy fc.structNames fc.types ct}) {rv p}"
+        | ct => fc.storageExpr c s!"Zig.optSetSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
       | _, _ => s!"pure {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p =>
     -- `Zig.errIsErrAt` & co. (`ZigLean/Mem/Enc.lean`) take the payload type.
     let payload := match fc.pointeeOf p with
-      | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+      | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
       | _ => "(panic! \"air2lean: an error-union pointer op on another type\")"
     let a := fc.ptrAlign p
     let domain := match fc.pointeeOf p with
@@ -2163,7 +2208,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       match fc.pointeeOf ptr with
       | .union _ _ (some tagTy) fields =>
         let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2)) fc.errBits).map (·.1)).getD 0
-        let ty := emitTy fc.structNames fc.types (fc.tyOfId tagTy)
+        let ty := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tagTy)
         let align := Nat.min (fc.ptrAlign ptr) ((fc.layouts[tagTy]?.bind (·.align)).getD 1)
         (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
       | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
@@ -2271,43 +2316,46 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
-    let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
+    let expr := if fc.mem then s!"pure {rv s}.len"
+      else s!"pure ({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them.
     let expr := if fc.mem then s!"{fc.callMName} ({fc.loadItem s s!"{rv s}.ptr" (rv i)})"
-      else fc.liftR s!"Zig.index {rv s} {rv i}"
+      else fc.liftR s!"{fc.widthFn "Zig.index" "Zig.indexOf"} {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
-    let f := if sub then "elemSub" else "elem"
+    let f := if sub then fc.widthFn "elemSub" "elemSubOf" else fc.widthFn "elem" "elemOf"
     let (env, l) := bindLet fc env inst.id (fc.projectExpr p (rv p) s!"{f} {size} {rv n}"); (env, some l)
   | .elemPtr p i =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
-    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.elem {size} {rv i})"
-      else fc.projectExpr p (rv p) s!"elem {size} {rv i}"
+    let elem := fc.widthFn "elem" "elemOf"
+    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.{elem} {size} {rv i})"
+      else fc.projectExpr p (rv p) s!"{elem} {size} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
     (env, some l)
   | .arrayElemVal a i =>
-    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.vindex {rv a} {rv i}"); (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.widthFn "Zig.vindex" "Zig.vindexOf"} {rv a} {rv i}"); (env, some l)
   | .slice p len =>
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : Zig.Slice)"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : {sliceTyName fc.ptrBits})"; (env, some l)
   | .slicePtr sl => let (env, l) := bindLet fc env inst.id s!"pure {rv sl}.ptr"; (env, some l)
   | .arrayToSlice p =>
     let (ptr, len) := fc.itemsOf p (rv p)
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{ptr}, {len}⟩ : Zig.Slice)"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure (⟨{ptr}, {len}⟩ : {sliceTyName fc.ptrBits})"; (env, some l)
   | .sliceFieldPtr len p =>
     if fc.isMemPtr p then
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.add {if len then 8 else 0})"
+      -- The length follows the pointer: `Zig.PtrWidth.bytes` (`ZigLean/Mem/Width.lean`).
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.add {if len then fc.ptrBits / 8 else 0})"
       (env, some l)
     else (env, none)
   | .memset dst v =>
     let (ptr, n) := fc.itemsOf dst (rv dst)
-    let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
+    let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
     let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
-    (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
+    (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"{fc.widthFn "Zig.memset" "Zig.memsetOf"} (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
   | .memcpy dst src =>
     -- The item count of the operand that has one (the AIR checks that both agree).
     let hasLen (v : Val) : Bool :=
@@ -2316,7 +2364,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let n := if hasLen dst then n else (fc.itemsOf src (rv src)).2
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
-    (env, some s!"{fc.callMName} (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
+    (env, some s!"{fc.callMName} ({fc.widthFn "Zig.memmove" "Zig.memmoveOf"} {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
   | .tagName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.{fc.helperName (fc.valTy a) "tagName"} {rv a}")
     (env, some l)
@@ -2594,7 +2642,7 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
           | .ok {vname} => {doBlock restStr}"
       | .tryPtr p errBody =>
         let payload := match fc.pointeeOf p with
-          | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+          | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
           | _ => "(panic! \"air2lean: try_ptr of a non-error-union pointer\")"
         let errStr := emitStmts fc env errBody.toList
         let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
@@ -2863,9 +2911,9 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let exitName := fc.exitName
   let escaping := fc.escaping
   let localsStr := emitLocalsStruct structNames f.types localsName allocs escaping fc.mem
-    fc.dispatchTys fc.byteLocals
+    fc.dispatchTys fc.byteLocals fc.ptrBits
   let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT fc.mem
-    fc.dispatchTys fc.rawRet
+    fc.dispatchTys fc.rawRet fc.ptrBits
   -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node
   -- before its children (pre-order), so a parent loop always precedes a nested one; reversing
   -- flips that to child-before-parent, which is what "the inner loop's def is emitted before
@@ -2962,7 +3010,7 @@ def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
 /-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. An
 `extern` global (`externField = some field`) is the encoding of `ext.field`, never a default. -/
 def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := none) : String :=
-  let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
+  let ty := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId g.ty)
   if let some field := externField then fc.storageExpr g.ty (encodeTerm s!"ext.{field}" ty) else
   match g.init with
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
@@ -3009,7 +3057,7 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
     if let some field := externField then fields := fields.push field
     out := out.push { label := n, bytes := fc.globalBytes g externField,
                       align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst,
-                      externField := externField.map (·, emitTy fc.structNames fc.types (fc.tyOfId g.ty)),
+                      externField := externField.map (·, emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId g.ty)),
                       tls := g.threadlocal }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
@@ -3506,12 +3554,36 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
     footprintDef ++ [evidence])
 
+/-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
+(`ZigLean/Mem/Width.lean`); a 64-bit program keeps the global ones. -/
+def wasm32Open (funcs : Array Func) : List String :=
+  if funcs.any (fun f => ptrBytesOf f.layouts == 4) then ["open scoped Zig.Wasm32"] else []
+
+/-- Runtime names of the 64-bit model that a 32-bit translation must not contain: each has a
+width-parameterized form (`ZigLean/Mem/Width.lean`). `Main` refuses such an output. -/
+def width64Names : List String :=
+  ["Zig.readSlice ", "Zig.memset ", "Zig.memmove ", "Zig.len ", "Zig.index ", "Zig.vindex ",
+   "Zig.ptrAddr ", "Zig.Allocator.alloc ", "Zig.Allocator.create ", "Zig.Allocator.free ",
+   ".elem ", ".elemSub "]
+
+/-- `Zig.Slice` as a whole identifier (not `Zig.Slice32`/`Zig.SliceOf`), or a name of
+`width64Names`, in a 32-bit translation's source. -/
+def width64Leak (src : String) : Option String :=
+  let parts := src.splitOn "Zig.Slice"
+  let wholeSlice := parts.drop 1 |>.any fun rest =>
+    match rest.toList.head? with
+    | some c => !(c.isAlphanum || c == '_')
+    | none => true
+  if wholeSlice then some "Zig.Slice" else width64Names.find? fun n => (src.splitOn n).length > 1
+
 /-- One emitted program in the pieces that `emitWithNames` concatenates. `groups` are the
 call groups (`callGroups`) in emission order: each group's member source names, the source
 names of the functions it references outside itself (`calleesOf`), and its declarations. -/
 structure EmitParts where
   /-- `import` lines and the spawn-policy comment, before `namespace`. -/
   header : List String
+  /-- Scoped instances every module opens right after its `namespace` (`wasm32Open`). -/
+  opens : List String := []
   /-- Types, inline assembly, models, globals and `Tgt`: everything the functions share. -/
   preamble : List String
   groups : Array (Array String × Array String × String)
@@ -3635,6 +3707,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (names, callees, text)
   { header := ["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else [])
+    opens := wasm32Open funcs
     preamble := structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr
     groups
     dispatch := dispatchStr
@@ -3643,7 +3716,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
 
 /-- The single-file output: every part in order under one `namespace`. -/
 def EmitParts.render (p : EmitParts) (ns : String) : String :=
-  String.intercalate "\n\n" (p.header ++ [s!"\nnamespace {ns}"] ++ p.preamble ++
+  String.intercalate "\n\n" (p.header ++ [s!"\nnamespace {ns}"] ++ p.opens ++ p.preamble ++
     (p.groups.map (·.2.2)).toList ++ p.dispatch ++ [s!"end {ns}"])
 
 /-- `funcs → one Lean source file` (`emitParts`). Also returns each function's declaration name. -/

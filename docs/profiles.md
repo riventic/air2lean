@@ -1,10 +1,12 @@
 # Target and build profiles
 
-The current runtime models a reference 64-bit, little-endian ABI. Profile metadata
+The current runtime models a little-endian ABI with 64-bit pointers, or 32-bit pointers
+for wasm32 ([generated-code.md](generated-code.md#pointer-width)). Profile metadata
 makes the source assumptions visible; it does not prove correspondence with a
 shipping executable. Existing type, pointer, layout, and unsupported-instruction
-checks still apply. Pointer-width and endian generalization remain separate work. Schema 12 retains
-the existing Linux x86_64 reference and macOS aarch64 model workflows. These are
+checks still apply. Endian generalization remains separate work. Schema 12 retains
+the existing Linux x86_64 reference and macOS aarch64 model workflows, and admits
+wasm32-freestanding and wasm32-wasi with the 32-bit pointer model. These are
 accepted model ABI scopes with per-type layout checks, not hardware or binary
 qualification claims.
 
@@ -20,9 +22,9 @@ Every schema-12 function has a mandatory `profile` object:
 
 | Field | Accepted value or meaning |
 | --- | --- |
-| `name` | `"abi64-le-v1"` |
-| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>` and `aarch64-macos-<abi>` (OS and ABI version suffixes are retained) |
-| `pointer_bits` | `64`; narrower targets are rejected |
+| `name` | `"abi64-le-v1"` (the exporter's profile name, also for a 32-bit target) |
+| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
+| `pointer_bits` | `64` for x86_64/aarch64, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
 | `endian` | `"little"`; big endian is rejected |
 | `abi` | Target ABI tag; must equal the triple's ABI component before a version suffix |
 | `zig_version` | Must equal the file's top-level `zig_version`; normal supported-version checks still apply |

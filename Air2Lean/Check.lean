@@ -258,17 +258,27 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     match layouts[id]? with
     | some { size := some s, align := some a, .. } => pure (s, a)
     | _ => throw s!"type {id} has no layout in the AIR file"
+  -- The pointer size of the profile (`Layout.ptrBytes`, `Zig.PtrWidth.bytes`).
+  let pb := (layouts[id]?.map (·.ptrBytes)).getD 8
   match types[id]? with
   | some (.int _ bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
   -- A C/allowzero pointer is stored with `Zig.nullablePtrEnc` (null = eight zero bytes).
-  | some (.ptr size ..) => pure (if size == "slice" then 16 else 8, 8)
-  | some .allocator => pure (16, 8)
-  | some .thread => pure (8, 8)
-  | some .io => pure (16, 8)
+  | some (.ptr size ..) =>
+    if pb != 8 && nullablePtrTy types layouts id then
+      throw "a C/allowzero pointer is outside the 32-bit pointer model"
+    pure (if size == "slice" then 2 * pb else pb, pb)
+  | some .allocator => pure (2 * pb, pb)
+  | some .thread =>
+    if pb != 8 then throw "a std.Thread handle is outside the 32-bit pointer model"
+    pure (8, 8)
+  | some .io =>
+    if pb != 8 then throw "a std.Io value is outside the 32-bit pointer model"
+    pure (16, 8)
   | some (.future r) =>
+    if pb != 8 then throw "an Io.Future is outside the 32-bit pointer model"
     -- `Zig.Future`: `any_future` at 0, the result at `Zig.Future.resultOff`.
     let (s, a) ← modelLayout types layouts r
     let off := Zig.alignUp 8 a
@@ -279,8 +289,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     if nullablePtrTy types layouts c then
       throw "an optional C/allowzero pointer needs a separate null flag"
     match types[c]? with
-    | some (.ptr "slice" ..) => pure (16, 8)
-    | some (.ptr ..) => pure (8, 8)
+    | some (.ptr "slice" ..) => pure (2 * pb, pb)
+    | some (.ptr ..) => pure (pb, pb)
     | some (.errorSet _) => modelLayout types layouts c errBits
     | _ =>
       let (s, a) ← modelLayout types layouts c errBits
@@ -289,6 +299,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     let (s, a) ← modelLayout types layouts c errBits
     pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
+    -- The vector memory images are qualified on the 64-bit LLVM targets only (L09).
+    if pb != 8 then throw "a vector in memory is outside the 32-bit pointer model"
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
       let (s, _) ← modelLayout types layouts c errBits
@@ -1990,6 +2002,19 @@ def check (f : Func) : Except String Unit := do
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
+  -- The 32-bit pointer model (`ZigLean/Mem/Width.lean`) parameterizes pointers, slices,
+  -- `usize` and allocation; the ops below remain 64-bit only.
+  let ptrBytes := ptrBytesOf f.layouts
+  if ptrBytes != 8 then
+    for i in insts do
+      let what? : Option String := match i.op with
+        | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => some "an atomic op"
+        | .tagName _ => some "`@tagName`"
+        | .errorName _ => some "`@errorName`"
+        | .asm .. => some "inline assembly"
+        | _ => none
+      if let some what := what? then
+        throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -2195,7 +2220,7 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
     let some (.ptr "many" _ item) := f.types[pty]? | fail
     unless localTypeCompatible f child item do fail
     let some nty := n.constTy? | fail
-    unless f.types[nty]? == some (.int false 64) do fail
+    unless f.types[nty]? == some (.int false (8 * ptrBytesOf f.layouts)) do fail
     recur pty p
     recur nty n
   | _, _ => fail
@@ -2521,7 +2546,8 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
   let require (ok : Bool) (what : String) := if ok then pure () else fail what
   let isPtr (size : String) (t : Option Ty) := match t with
     | some (.ptr s ..) => s == size | _ => false
-  let isSize (t : Option Ty) := t == some (.int false 64)
+  let usizeBits := 8 * ptrBytesOf f.layouts
+  let isSize (t : Option Ty) := t == some (.int false usizeBits)
   let isCode (t : Option Ty) := t == some (.int false 32)
   let errorPayload := match result with
     | some (.errorUnion s p) =>
@@ -2551,6 +2577,11 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     unless model.qualifies f.zigVersion do
       fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
   if let some fn := allocFn? callee then
+    -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
+    if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
+        fn == .destroy || fn == .free) then
+      throw s!"{f.name}: model callee '{callee}' is outside the {usizeBits}-bit pointer model \
+        (only create, alloc, alignedAlloc, destroy and free are width-parameterized)"
     count (if fn == .create then 1 else if fn == .remap || fn == .realloc then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
     if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .allocSentinel || fn == .dupe ||
@@ -2605,6 +2636,9 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
         require (l.hostSize == 0 && l.bitOffset == 0) "ordinary byte slice without packed metadata"
     checkAllocCall f fn args ret index
   else if let some fn := threadFn? callee then
+    if usizeBits != 64 then
+      throw s!"{f.name}: model callee '{callee}' is outside the {usizeBits}-bit pointer model \
+        (thread handles, futexes and Io groups are modelled for 64-bit targets only)"
     match fn with
     | .spawn =>
       count 2

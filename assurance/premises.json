@@ -69,6 +69,8 @@
     "ZigLean.Mem.Parent": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
     "ZigLean.Mem.Owned": ["ALC-07"],
+    "ZigLean.Mem.Width": ["SEM-02"],
+    "ZigLean.Mem.WidthLemmas": ["SEM-02"],
     "ZigLean.Mem.Thread": ["ORD-01", "THR-01"],
     "ZigLean.Conc.Basic": ["THR-01"],
     "ZigLean.Conc.Call": ["THR-01"],
@@ -170,6 +172,7 @@
     {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
     {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm(?:Fx)?_[0-9]+$"},
     {"premise": "ASM-03", "scope": "closure", "pattern": "(?:^|\\.)airAsmFx_[0-9]+$"},
+    {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
   ],
   "implies": {

@@ -2,8 +2,10 @@ import Lean.Data.Json
 import Std.Data.HashSet
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
-Only the existing 64-bit little-endian memory model is admitted. Schema 12 makes the
-facts mandatory; schemas 1–11 retain the explicitly named, unverified legacy profile. -/
+Only the little-endian memory model is admitted, with 64-bit pointers (x86_64-linux,
+aarch64-macos) or 32-bit pointers (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`).
+Schema 12 makes the facts mandatory; schemas 1–11 retain the explicitly named, unverified
+legacy 64-bit profile. -/
 namespace Air2Lean
 
 open Lean (Json)
@@ -63,8 +65,8 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless name == currentName do throw s!"unsupported profile '{name}' (want '{currentName}')"
   let targetTriple ← strField p "target_triple"
   let pointerBits ← natField p "pointer_bits"
-  unless pointerBits == 64 do
-    throw s!"profile.pointer_bits {pointerBits} is outside the 64-bit memory model"
+  unless pointerBits == 64 || pointerBits == 32 do
+    throw s!"profile.pointer_bits {pointerBits} is outside the 32/64-bit memory model"
   let endian ← strField p "endian"
   unless endian == "little" do
     throw s!"profile.endian '{endian}' is outside the little-endian memory model"
@@ -75,9 +77,13 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless !arch.isEmpty && !os.isEmpty && (tripleAbi.splitOn ".").head! == abi do
     throw "profile.target_triple: empty component or ABI differs from profile.abi"
   let osName := (os.splitOn ".").head!
-  unless (arch == "x86_64" && osName == "linux") ||
-      (arch == "aarch64" && osName == "macos") do
-    throw "profile.target_triple: outside the x86_64-linux/aarch64-macos model ABI scope"
+  let native := (arch == "x86_64" && osName == "linux") || (arch == "aarch64" && osName == "macos")
+  let wasm := arch == "wasm32" && (osName == "freestanding" || osName == "wasi")
+  unless native || wasm do
+    throw "profile.target_triple: outside the x86_64-linux/aarch64-macos/wasm32-freestanding/wasm32-wasi model ABI scope"
+  unless pointerBits == (if wasm then 32 else 64) do
+    throw s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
+      {if wasm then 32 else 64}-bit pointer width"
   let profileVersion ← strField p "zig_version"
   unless profileVersion == zigVersion do
     throw "profile.zig_version differs from top-level zig_version"

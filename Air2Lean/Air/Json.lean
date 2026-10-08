@@ -541,9 +541,10 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       unless (match p.constTy?.bind (types[·]?) with
         | some (.ptr "many" _ c) => types[c]? == types[child]?
         | _ => false) do throw s!"{fnName}: slice constant has an incompatible pointer"
+      -- The profile's exact `usize` width is checked with the normalized layouts (`Check.lean`).
       unless (match n.constTy?.bind (types[·]?) with
-        | some (.int false 64) => true | _ => false) do
-        throw s!"{fnName}: slice constant length is not a 64-bit unsigned integer"
+        | some (.int false 64) | some (.int false 32) => true | _ => false) do
+        throw s!"{fnName}: slice constant length is not a 32- or 64-bit unsigned integer"
       return .sliceConst tyId p n
     else if let some fbitsJ := optField j "fbits" then
       let s ← fbitsJ.getStr?

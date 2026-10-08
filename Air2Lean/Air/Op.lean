@@ -187,7 +187,15 @@ structure Layout where
   /-- The type entry has a `vector_index` field (`null` for a packed field pointer). An older
   export has none, so its bit-pointers may be lane pointers. -/
   vectorIndexExported : Bool := false
+  /-- The profile's pointer size in bytes (`Zig.PtrWidth.bytes`): the model's size of a pointer,
+  slice, `usize` and allocator in `modelLayout`. Set by `normalize` from the profile, never by the
+  exporter, as `packedLanes`. -/
+  ptrBytes : Nat := 8
   deriving Repr, Inhabited, BEq
+
+/-- The profile's pointer size in bytes, as `normalize` set it in every layout (8 when there is
+no type). -/
+def ptrBytesOf (layouts : Array Layout) : Nat := (layouts[0]?.map (·.ptrBytes)).getD 8
 
 /-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
 def Layout.isLanePtr (l : Layout) : Bool :=

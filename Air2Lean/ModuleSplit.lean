@@ -81,9 +81,10 @@ def allocate (reps : Array String) : Array String := Id.run do
     out := out.set! i name
   return out
 
-private def render (imports : Array String) (ns : String) (body : List String) : String :=
+private def render (imports : Array String) (ns : String) (body : List String)
+    (opens : List String := []) : String :=
   String.intercalate "\n" (marker :: imports.toList.map ("import " ++ ·)) ++ "\n\n" ++
-    String.intercalate "\n\n" ([s!"namespace {ns}"] ++ body ++ [s!"end {ns}"]) ++ "\n"
+    String.intercalate "\n\n" ([s!"namespace {ns}"] ++ opens ++ body ++ [s!"end {ns}"]) ++ "\n"
 
 /-- The modules of `parts` under `root`, whose directory is `stem` (the umbrella's file name
 without `.lean`). The umbrella comes last; `header` is its profile comment. -/
@@ -103,18 +104,18 @@ def modules (parts : EmitParts) (ns root stem header : String) : Array Module :=
   let mut out := #[{
     name := typesName, file := s!"{stem}/Types.lean", kind := "types"
     imports := headerImports.toArray
-    text := render headerImports.toArray ns (comments ++ parts.preamble) : Module }]
+    text := render headerImports.toArray ns (comments ++ parts.preamble) parts.opens : Module }]
   for ((members, callees, text), name) in parts.groups.zip names do
     out := out.push {
       name := s!"{root}.{name}", file := s!"{stem}/{name}.lean", kind := "group"
       functions := members, definitions := members.map decl
       imports := importsOf callees
-      text := render (importsOf callees) ns [text] }
+      text := render (importsOf callees) ns [text] parts.opens }
   if !parts.dispatch.isEmpty then
     let imports := importsOf parts.dispatchTargets
     out := out.push {
       name := s!"{root}.Dispatch", file := s!"{stem}/Dispatch.lean", kind := "dispatch"
-      definitions := #["dispatch"], imports, text := render imports ns parts.dispatch }
+      definitions := #["dispatch"], imports, text := render imports ns parts.dispatch parts.opens }
   let all := out.map (·.name)
   out := out.push {
     name := root, file := s!"{stem}.lean", kind := "umbrella", imports := all

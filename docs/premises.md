@@ -79,7 +79,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 | Category | IDs |
 |---|---|
-| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
+| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
@@ -123,6 +123,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   The committed client source does not fix it.
 - Derived from: an import listed in `generated_imports`.
 - Sources: [global-payload-pointers README](../tests/roadmap/global-payload-pointers/README.md).
+
+<a id="prf-04"></a>
+### PRF-04 — Parameterized pointer width
+
+- Kind: environment.
+- Statement: The theorem uses the width-parameterized memory model (`Zig.PtrWidth`): pointers,
+  `?*T`, `usize`, slices and `std.mem.Allocator` of `PtrWidth.bytes` bytes, and allocation
+  byte counts bounded by `2 ^ bits`. For `.w32` it concerns the wasm32 layouts that the
+  exporter recorded for the generated module's profile; the model's block addresses are not
+  bounded by the 32-bit address space, so `@intFromPtr` of an address outside it is
+  `.unspecified`. Every `.w64` definition is proved equal to the 64-bit model.
+- Derived from: the runtime module `ZigLean.Mem.Width` or its width names (`PtrWidth`,
+  `Slice32`, `SliceOf`, `Wasm32`).
+- Sources: [generated-code.md](generated-code.md#pointer-width), `ZigLean/Mem/Width.lean`.
 
 ## Allocator policies
 

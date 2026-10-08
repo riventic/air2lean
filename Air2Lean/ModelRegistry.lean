@@ -366,6 +366,8 @@ Function pointers and concurrent clients remain outside this selected extension 
 def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array Func) :
     Except String Unit := do
   if models.isEmpty then return
+  unless profile.pointerBits == 64 do
+    throw "model registry: external models are qualified for the 64-bit pointer model only"
   unless funcs.all (·.zigVersion == profile.zigVersion) do
     throw "model registry: function Zig version differs from checked profile"
   let completedShapes ← funcs.mapM fun f => preflightShapes f.types f.layouts
