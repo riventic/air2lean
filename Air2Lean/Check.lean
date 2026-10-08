@@ -377,7 +377,9 @@ def optSinglePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Boo
 an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@sizeOf(E) +
 @bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts). `none`
 for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
-storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out. -/
+storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out, and
+for a pointer or optional pointer at any depth: the model's pointer bytes carry provenance and
+are not integer bits, so a pointer-bearing representation cast is rejected (fail closed). -/
 partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) : Option Nat := do
   let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
   match ← types[id]? with
@@ -385,8 +387,6 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | .bool => pure 1
   | .enum _ tag _ _ => reprBitSize types layouts tag
   | .struct _ "packed" _ => packedBits types id
-  | .ptr .. => if singlePtrTy types layouts id then pure 64 else none
-  | .optional _ => if optSinglePtrTy types layouts id then pure 64 else none
   | .struct _ "extern" fields | .union _ "extern" none fields =>
     for (_, t) in fields do let _ ← reprBitSize types layouts t
     abiBits
@@ -947,9 +947,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             array, `extern` struct or `extern` union is outside the subset"
         let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
             reprBitSize cx.types cx.layouts ty)
-          | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a type without a \
-              guaranteed in-memory layout (an `auto` struct, tuple, tagged union, packed union, \
-              slice, vector, sentinel array or error storage, at any depth) is outside the subset"
+          | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
+              pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
+              tagged union, packed union, slice, vector, sentinel array or error storage, at any \
+              depth) is outside the subset"
         unless abits == bbits do
           cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
             {bbits} bits (`@bitSizeOf`) is outside the subset"

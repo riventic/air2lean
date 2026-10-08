@@ -27,9 +27,11 @@ array, `extern` struct or `extern` union, every part has a guaranteed in-memory 
 both sides have the same 0.16.0 `@bitSizeOf` (`reprBitSize`). For an array, the size is
 `(len-1)·8·@sizeOf(E) + @bitSizeOf(E)`; for an `extern` type, the ABI size in bits. It rejects
 casts that involve these parts at any depth: an `auto` struct, a tuple (no guaranteed layout,
-which Sema also rejects), a tagged or packed union, a slice, a vector, a sentinel array, or
-error storage. It also rejects casts whose bit sizes differ. Enums, pointers and optionals on
-the outer side are rejected as before.
+which Sema also rejects), a tagged or packed union, a slice, a vector, a sentinel array,
+error storage, or a pointer or optional pointer. Pointer-bearing repr casts are rejected (fail
+closed): the model's pointer bytes carry provenance and are not integer bits, so it could not
+give Zig's address there. It also rejects casts whose bit sizes differ. Enums, pointers and
+optionals on the outer side are rejected as before.
 
 ## Round trips: stated condition
 
