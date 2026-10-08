@@ -523,6 +523,14 @@ def ThreadFn.taskArgs? : ThreadFn → Option Nat
   | .futureAsync => some 1
   | fn => fn.spawnArgs?
 
+/-- The field types of the args tuple `v` of a call in `f`. -/
+def Func.tupleFields? (f : Func) (v : Option Val) : Option (Array TyId) :=
+  (v.bind fun v => match v with
+    | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
+    | v => v.constTy?).bind fun t => match f.types[t]? with
+      | some (.tuple fs) => some fs
+      | _ => none
+
 /-- The spawn targets of `funcs`: each function that a `Thread.spawn` or an `Io.Group.async` runs,
 with all captured argument types in source order, in first-use order. -/
 def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
@@ -531,12 +539,7 @@ def spawnTargets (funcs : Array Func) : Array (String × Func × Array TyId) :=
     | .call (.func name _ (some sf)) args =>
       if let some k := (threadFn? name).bind (·.spawnArgs?) then
         if acc.any (·.1 == sf) then acc else
-        let argTys := ((args[k]? : Option Val).bind fun v => match v with
-          | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
-          | v => v.constTy?).bind fun t => match f.types[t]? with
-            | some (.tuple fs) => some fs
-            | _ => none
-        match argTys with
+        match f.tupleFields? (args[k]?) with
         | some fields => acc.push (sf, f, fields)
         | none => acc
       else acc
@@ -551,12 +554,7 @@ def futureTargets (funcs : Array Func) : Array (String × Func × Array TyId × 
     | .call (.func name _ (some sf)) args =>
       if threadFn? name == some .futureAsync then
         if acc.any (·.1 == sf) then acc else
-        let argTys := ((args[1]? : Option Val).bind fun v => match v with
-          | .inst p => (f.allInsts.find? (·.id == p)).map (·.ty)
-          | v => v.constTy?).bind fun t => match f.types[t]? with
-            | some (.tuple fs) => some fs
-            | _ => none
-        match argTys, f.types[i.ty]? with
+        match f.tupleFields? (args[1]?), f.types[i.ty]? with
         | some fields, some (.future r) => acc.push (sf, f, fields, r)
         | _, _ => acc
       else acc
