@@ -79,7 +79,8 @@ pointers, slices or other integers stay rejected (`docs/null-pointers.md`).
   - the `extern` union field reads;
   - the optional-pointer null and wrap/unwrap rules, for every memory state.
 - `Model.lean`: compares the model's result bytes with `probe.zig`'s output from stock Zig 0.16.0
-  on aarch64-macos (`aarch64-macos-ReleaseSafe.txt`; Debug and ReleaseFast print the same).
+  on aarch64-macos (`aarch64-macos-ReleaseSafe.txt`; Debug and ReleaseFast print the same; no
+  qualified claim for those modes, [build-modes.md](build-modes.md)).
   Every defined byte agrees. A model padding byte (`--`) matches any native byte, which was
   `00` in this run but is unspecified. The three casts the model leaves `.unspecified` are only
   recorded.
