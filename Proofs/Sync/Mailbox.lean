@@ -465,4 +465,323 @@ theorem wp_msg {σ β : Type} {c : MemM β} {s : σ} {t : ThreadId} {G : ThreadI
     · rw [upd_ne _ _ e] at hu' ⊢; have := hu.wx u (by rw [upd_ne _ _ e]; exact hu')
       rwa [upd_ne _ _ e] at this
 
+/-! ## The semaphore contract's obligations for this protocol -/
+
+theorem msg_cell {k : Nat} {h : Heap} (hm : Msg k h) : h (0, 24) ≠ none := by
+  obtain ⟨h₁, h₂, -, rfl, ⟨A, Sz, K, bs, -, hs, -, hb, -⟩, -⟩ := hm
+  have := bytesAt_in hb rfl (by simp [aPtr, cPtr, Ptr.add]) (by
+    rw [hs, show Enc.size (BitVec 32) = 4 from rfl]; simp [aPtr, cPtr, Ptr.add]) (x := 24)
+  simp only [Heap.union_apply]
+  cases e : h₁ (0, 24) with
+  | none => exact absurd e this
+  | some c => simp
+
+theorem Msg0 : Msg 0 = (pts aPtr 4 (0 : BitVec 32) ∗ pts bPtr 4 (0 : BitVec 32)) := by simp [Msg]
+theorem Msg1 : Msg 1 = (pts aPtr 4 (3 : BitVec 32) ∗ pts bPtr 4 (0 : BitVec 32)) := by simp [Msg]
+theorem Msg2 : Msg 2 = (pts aPtr 4 (3 : BitVec 32) ∗ pts bPtr 4 (4 : BitVec 32)) := by simp [Msg]
+
+/-- A change of thread `t`'s place (and parts) keeps `U` with the new shape and part. -/
+theorem U_retag {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g g' : Gh} (hu : U (upd G t g) m)
+    (hsh : Shape (XG (upd G t g')) m) (hpt : PartOk g'.2.2 g'.1.part)
+    (hwx : g'.2.1.waits = true → g'.2.2 = .wt) : U (upd G t g') m := by
+  refine ⟨hsh, fun u => ?_, hu.blk, hu.q, fun u hu' => ?_⟩
+  · by_cases e : u = t
+    · subst e; simp only [XG, upd_self]; exact hpt
+    · have := hu.parts u; simp only [XG, upd_ne _ _ e] at this ⊢; exact this
+  · by_cases e : u = t
+    · subst e; rw [upd_self] at hu' ⊢; exact hwx hu'
+    · rw [upd_ne _ _ e] at hu' ⊢; have := hu.wx u (by rw [upd_ne _ _ e]; exact hu')
+      rwa [upd_ne _ _ e] at this
+
+/-- A new place `p` of thread `t` (0 or 1) with two threads. -/
+theorem shape_set {X : ThreadId → Ph} {m : Mem} {t : ThreadId} (h : Shape X m)
+    (h2 : m.threads.size = 2) (p : Ph)
+    (hp0 : t = 0 → p = .wt ∨ p = .got ∨ p = .joins)
+    (hp1 : t = 1 → p = .fin ∨ p = .pd ∨ ∃ k ≤ 2, p = .pr k) (ht : t = 0 ∨ t = 1)
+    (htook : (upd X t p 0).took = true → (upd X t p 1).posted = true) : Shape (upd X t p) m := by
+  obtain ⟨h00, ⟨hs1, -, -⟩ | ⟨-, hr, h0, h1, -, hn⟩⟩ := h
+  · omega
+  refine ⟨h00, .inr ⟨h2, hr, ?_, ?_, htook, fun u hu => ?_⟩⟩
+  · rcases ht with rfl | rfl
+    · rw [upd_self]; exact hp0 rfl
+    · rw [upd_ne _ _ (by decide)]; exact h0
+  · rcases ht with rfl | rfl
+    · rw [upd_ne _ _ (by decide)]; exact h1
+    · rw [upd_self]; exact hp1 rfl
+  · rw [upd_ne _ _ (by rcases ht with rfl | rfl <;> unfold ThreadId at * <;> omega)]; exact hn u hu
+
+section Specs
+
+/-- In `wait`, no other thread waits at the condition: only `main` ever waits there. -/
+theorem hone_w : ∀ G' m', proto.inv G' m' → (G' 0).2.2 = .wt → (G' 0).1.ph = .holds → S.PZ m' →
+    ∀ u, u ≠ 0 → ∀ i jr sn e, (G' u).2.1 ≠ .reg i jr sn e := by
+  intro G' m' hi _ _ _ u hu i jr sn e hr
+  exact hu (shape_wt hi.2.2.shape (hi.2.2.wx u (by rw [hr]; rfl))).1
+
+/-- `wait` takes the free permit and the message. -/
+theorem hmv_w : ∀ Y : ThreadId → Ph, Y 0 = .wt → S.pv Y ≠ 0 →
+    S.pv (upd Y 0 .got) = S.pv Y - 1 ∧
+    ∀ hr, S.Res Y hr → ∃ h₁ h₂, hr = h₁ ∪ h₂ ∧ Heap.Disjoint h₁ h₂ ∧
+      S.Res (upd Y 0 .got) h₁ ∧ Msg 2 h₂ := by
+  intro Y _ hpv
+  have ha : avail Y = true := by
+    cases h : avail Y
+    · exact absurd (by show (if avail Y then (1 : BitVec 64) else 0) = 0; rw [h]; rfl) hpv
+    · rfl
+  have hn : avail (upd Y 0 .got) = false := by simp [avail, Ph.took]
+  refine ⟨?_, fun hr hR => ⟨Heap.empty, hr, (Heap.empty_union hr).symm,
+    (Heap.disjoint_empty _).symm, ?_, ?_⟩⟩
+  · show (if avail _ then (1 : BitVec 64) else 0) = (if avail Y then (1 : BitVec 64) else 0) - 1
+    rw [hn, ha]; rfl
+  · show (if avail _ then Msg 2 else emp) Heap.empty; rw [hn]; rfl
+  · have : (if avail Y then Msg 2 else emp) hr := hR
+    rw [ha] at this; exact this
+
+theorem hU_w : ∀ G m h₁ h₂ h₃ h₄, Msg 2 h₃ → Heap.Disjoint h₄ h₃ →
+    S.Res (Sem.xs fun u => (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt) u).2) (h₄ ∪ h₃) →
+    U (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt)) m →
+    U (upd G 0 (⟨.holds, Heap.empty ∪ h₃, h₂⟩, .none, .got)) m := by
+  intro G m h₁ h₂ h₃ h₄ hm _ hR hu
+  have hR' : (if avail (XG (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt))) then Msg 2 else emp)
+      (h₄ ∪ h₃) := hR
+  have ha : avail (XG (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt))) = true := by
+    cases h : avail (XG (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt)))
+    · exfalso; rw [h] at hR'
+      have := congrFun hR' (0, 24)
+      simp only [Heap.union_apply, Heap.empty, Option.or_eq_none_iff] at this
+      exact msg_cell hm this.2
+    · rfl
+  have hX' : XG (upd G 0 (⟨.holds, Heap.empty ∪ h₃, h₂⟩, .none, .got)) =
+      upd (XG (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt))) 0 .got := by
+    rw [XG_upd, XG_upd, upd_upd]
+  have hx0 : XG (upd G 0 (⟨.holds, Heap.empty, h₁⟩, .none, .wt)) 0 = .wt := by
+    simp only [XG, upd_self]
+  refine U_retag hu (by
+      rw [hX']
+      refine shape_set hu.shape (shape_wt hu.shape hx0).2 .got (fun _ => .inr (.inl rfl))
+        (fun h => by cases h) (.inl rfl) fun _ => ?_
+      rw [upd_ne _ _ (by decide)]
+      simp only [avail, Bool.and_eq_true] at ha
+      exact ha.1)
+    (by show Msg 2 (Heap.empty ∪ h₃); rw [Heap.empty_union]; exact hm) (fun h => by cases h)
+
+/-- `post` by the producer at `pr 2`, with the message `h₃`: the permit becomes free. -/
+theorem hmv_p {h₃ : Heap} (hm : Msg 2 h₃) : ∀ G m hL,
+    proto.inv (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2)) m →
+    S.pv (upd (Sem.xs fun u => (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2) u).2) 1 .pd) =
+      S.pv (Sem.xs fun u => (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2) u).2) + 1 ∧
+    (S.pv (Sem.xs fun u => (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2) u).2)).toNat
+      + 1 < 2 ^ 64 ∧
+    ∀ hr, S.Res (Sem.xs fun u => (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2) u).2) hr →
+      Heap.Disjoint h₃ hr →
+      S.Res (upd (Sem.xs fun u => (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2) u).2) 1
+        .pd) (h₃ ∪ hr) := by
+  intro G m hL hi
+  have hu := hi.2.2
+  have hx1 : XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2)) 1 = .pr 2 := by
+    simp only [XG, upd_self]
+  have hy : avail (XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2))) = false := by
+    unfold avail; rw [hx1]; rfl
+  have htk : (XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2)) 0).took = false := by
+    obtain ⟨-, ⟨-, h0, -⟩ | ⟨-, -, -, -, ht, -⟩⟩ := hu.shape
+    · rw [h0]; rfl
+    · cases e : (XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2)) 0).took
+      · rfl
+      · have := ht e; rw [hx1] at this; cases this
+  have hn : avail (upd (XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2))) 1 .pd) = true := by
+    simp only [avail, upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), htk]; rfl
+  have hxs : (Sem.xs fun u => (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2) u).2) =
+      XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2)) := rfl
+  rw [hxs]
+  refine ⟨?_, ?_, fun hr hR _ => ?_⟩
+  · show (if avail _ then (1 : BitVec 64) else 0) = (if avail _ then (1 : BitVec 64) else 0) + 1
+    rw [hn, hy]; rfl
+  · show (if avail _ then (1 : BitVec 64) else 0).toNat + 1 < _
+    rw [hy]; decide
+  · have hR' : (if avail (XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, hL⟩, .pst, .pr 2))) then Msg 2
+        else emp) hr := hR
+    rw [hy] at hR'
+    change hr = Heap.empty at hR'
+    subst hR'
+    show (if avail _ then Msg 2 else emp) (h₃ ∪ Heap.empty)
+    rw [hn, Heap.union_empty]; exact hm
+
+theorem hU_p (h₃ : Heap) : ∀ G m h₁ h₂,
+    U (upd G 1 (⟨.holds, Heap.empty ∪ h₃, h₁⟩, .pst, .pr 2)) m →
+    U (upd G 1 (⟨.holds, Heap.empty, h₂⟩, .pst, .pd)) m := by
+  intro G m h₁ h₂ hu
+  have hx1 : XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, h₁⟩, .pst, .pr 2)) 1 = .pr 2 := by
+    simp only [XG, upd_self]
+  have hX' : XG (upd G 1 (⟨.holds, Heap.empty, h₂⟩, .pst, .pd)) =
+      upd (XG (upd G 1 (⟨.holds, Heap.empty ∪ h₃, h₁⟩, .pst, .pr 2))) 1 .pd := by
+    rw [XG_upd, XG_upd, upd_upd]
+  refine U_retag hu (by
+      rw [hX']
+      exact shape_set hu.shape (shape_pr hu.shape hx1).2.1 .pd (fun h => by cases h)
+        (fun _ => .inr (.inl rfl)) (.inr rfl) fun _ => by rw [upd_self]; rfl)
+    rfl (fun h => by cases h)
+
+end Specs
+
+/-! ## Out-of-code changes of a thread's place -/
+
+/-- Thread `t`, out of the semaphore's code, goes to the ghost value `g` with the same permit
+state; its part stays, or it ends with no part. -/
+theorem inv_ghost {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {h : Heap} {x : Ph} {g : Gh}
+    (hi : proto.inv (upd G t (⟨.out, h, Heap.empty⟩, .none, x)) m)
+    (hg : g.1 = ⟨.out, h, Heap.empty⟩ ∨ (g.1 = ⟨.gone, Heap.empty, Heap.empty⟩ ∧ h = Heap.empty))
+    (hg2 : g.2.1 = .none)
+    (hav : avail (upd (XG G) t g.2.2) = avail (upd (XG G) t x))
+    (hsh : Shape (upd (XG G) t g.2.2) m) (hpt : PartOk g.2.2 g.1.part) :
+    proto.inv (upd G t g) m := by
+  obtain ⟨hl, hs, hu⟩ := hi
+  have hR : ∀ hL, S.L.R (upd G t (⟨.out, h, Heap.empty⟩, .none, x)) hL →
+      S.L.R (upd (upd G t (⟨.out, h, Heap.empty⟩, .none, x)) t g) hL := by
+    intro hL hR
+    rw [upd_upd]
+    change (pts S.ptr 8 (if avail (XG (upd G t _)) then (1 : BitVec 64) else 0) ∗
+      (if avail (XG (upd G t _)) then Msg 2 else emp)) hL at hR
+    change (pts S.ptr 8 (if avail (XG (upd G t g)) then (1 : BitVec 64) else 0) ∗
+      (if avail (XG (upd G t g)) then Msg 2 else emp)) hL
+    rw [XG_upd] at hR ⊢
+    rw [hav]; exact hR
+  have hl' := hl.ghost (t := t) (g := g) (by rw [upd_self]; rfl)
+    (by rcases hg with h' | ⟨h', -⟩ <;> simp [Lock.prod, h'])
+    (by rw [upd_self]; rcases hg with h' | ⟨h', rfl⟩ <;> simp [Lock.prod, h'])
+    (by rcases hg with h' | ⟨h', -⟩ <;> simp [Lock.prod, h'])
+    (fun _ => hl.live t (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))) hR
+  rw [upd_upd] at hl'
+  have hs' : S.Inv (upd G t g) m := by
+    have := hs.congrG (G' := upd G t g) (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, upd_self, hg2]
+      · rw [upd_ne _ _ e, upd_ne _ _ e]) (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, upd_self]; rcases hg with h' | ⟨h', -⟩ <;> simp [h']
+      · rw [upd_ne _ _ e, upd_ne _ _ e]) (fun u y h1 h2 => by
+      by_cases e : u = t
+      · subst e; rw [upd_self]; exact partOk_off hpt (by simp [S] at h2; omega)
+      · rw [upd_ne _ _ e]; have := hs.off u y h1 h2; rwa [upd_ne _ _ e] at this)
+    exact this
+  exact ⟨hl', hs', U_retag hu (by rw [XG_upd]; exact hsh) hpt (fun h' => by rw [hg2] at h'; cases h')⟩
+
+/-! ## The producer -/
+
+section Proofs
+
+variable {waitOp postOp : Ptr → Io → ConcM Tgt Unit} (C : SemContract S waitOp postOp)
+
+/-- A thread out of the semaphore's code, with part `h`, at place `x`. -/
+def gK (h : Heap) (x : Ph) : Gh := (⟨.out, h, Heap.empty⟩, .none, x)
+
+theorem shape_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
+    (hi : proto.inv (upd G t g) m) : Shape (upd (XG G) t g.2.2) m := by
+  have := hi.2.2.shape; rwa [XG_upd] at this
+
+/-- The producer's place goes from `pr k` to `p`. -/
+theorem shape_kid {G : ThreadId → Gh} {m : Mem} {k : Nat} {p : Ph}
+    (hp : p = .fin ∨ p = .pd ∨ ∃ k ≤ 2, p = .pr k)
+    (hpost : (upd (XG G) 1 p 0).took = true → (upd (XG G) 1 p 1).posted = true)
+    (hs : Shape (upd (XG G) 1 (.pr k)) m) : Shape (upd (XG G) 1 p) m := by
+  have := shape_set hs (shape_pr hs (upd_self _ _ _)).2.1 p (fun h => by cases h) (fun _ => hp)
+    (.inr rfl) (by rw [upd_upd]; exact hpost)
+  rwa [upd_upd] at this
+
+/-- The producer's place `pr k` is not posted, so `main` has not taken the permit. -/
+theorem took_pr {X : ThreadId → Ph} {m : Mem} {k : Nat} (hs : Shape (upd X 1 (.pr k)) m) :
+    (X 0).took = false := by
+  obtain ⟨-, ⟨-, h0, -⟩ | ⟨-, -, -, -, ht, -⟩⟩ := hs
+  · rw [upd_ne _ _ (by decide)] at h0; rw [h0]; rfl
+  · rw [upd_ne _ _ (by decide), upd_self] at ht
+    cases e : (X 0).took
+    · rfl
+    · have := ht e; cases this
+
+include C in
+theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : Heap)
+    (hi : proto.inv (upd G 1 (gK h (.pr 0))) m) (hc : m.current = 1) :
+    proto.WP 1 (producer postOp cPtr) (fun _ G' m' _ => m'.current = 1 ∧
+      proto.inv (upd G' 1 (gK Heap.empty .pd)) m') G m d := by
+  unfold producer
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  have hav : ∀ (X : ThreadId → Ph) (k k' : Nat), avail (upd X 1 (.pr k')) = avail (upd X 1 (.pr k)) :=
+    fun X k k' => by simp [avail, Ph.posted]
+  -- `a = 3`
+  refine WP.bind (wp_msg (x' := .pr 1) (P₁ := Msg 0) (P₂ := Msg 1) (r₀ := ()) hi hc (fun h => h)
+    (fun _ h => h)
+    (by
+      rw [Msg0, Msg1]
+      exact ((TTriple.store (p := aPtr) (v := (0 : BitVec 32)) (by decide) 3).frame).conseq
+        (fun _ h => h) (fun _ _ hq => sep_lift.mpr ⟨Subsingleton.elim _ _, hq⟩))
+    (fun _ hm y hy => msg_off hm hy) (hav _ 0 1)
+    (shape_kid (.inr (.inr ⟨1, by decide, rfl⟩)) (fun h => by
+      rw [upd_ne _ _ (by decide)] at h; exact absurd h (by rw [took_pr (shape_of hi)]; decide)))
+    fun m₁ h₁ hc₁ _ hi₁ => ?_)
+  -- `b = 4`
+  refine WP.bind (wp_msg (x' := .pr 2) (P₁ := Msg 1) (P₂ := Msg 2) (r₀ := ()) hi₁ hc₁ (fun h => h)
+    (fun _ h => h)
+    (by
+      rw [Msg1, Msg2]
+      exact ((TTriple.store (p := bPtr) (v := (0 : BitVec 32)) (by decide) 4).frameL).conseq
+        (fun _ h => h) (fun _ _ hq => sep_lift.mpr ⟨Subsingleton.elim _ _, hq⟩))
+    (fun _ hm y hy => msg_off hm hy) (hav _ 1 2)
+    (shape_kid (.inr (.inr ⟨2, by decide, rfl⟩)) (fun h => by
+      rw [upd_ne _ _ (by decide)] at h; exact absurd h (by rw [took_pr (shape_of hi₁)]; decide)))
+    fun m₂ h₂ hc₂ _ hi₂ => ?_)
+  -- `post`
+  have hm₂ : Msg 2 h₂ := by have := hi₂.2.2.parts 1; simp only [XG, upd_self] at this; exact this
+  exact WP.callC (WP.mono (fun _ G' m' _ ⟨_, hc', hi'⟩ => ⟨hc', hi'⟩)
+    (C.post fits 1 Heap.empty h₂ (.pr 2) .pd ⟨⟩ trivial trivial (hmv_p hm₂) (hU_p h₂)
+      (fun _ => .inl rfl) G m₂ d (by rw [Heap.empty_union]; exact hi₂)))
+
+/-- The producer spawned no thread. -/
+theorem joinedAll_kid {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : proto.inv G m)
+    (hu : 0 < u) : joinedAll u m := by
+  intro r hr hs
+  obtain ⟨h0, h⟩ := hi.2.2.shape
+  obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
+  have h0' : ∀ h : 0 < m.threads.size, (m.threads[0]'h).spawner = 0 := by
+    intro h; rw [Array.getElem?_eq_getElem h] at h0; rw [Option.some.inj h0]
+  rcases h with ⟨h1, -, -⟩ | ⟨h2, h1, -⟩
+  · have : i = 0 := by omega
+    subst this
+    rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+  · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · rw [h0' hi'] at hs; exact absurd hs (Nat.ne_of_lt hu)
+    · rw [Array.getElem?_eq_getElem hi'] at h1
+      rw [Option.some.inj h1] at hs; exact absurd hs (Nat.ne_of_lt hu)
+
+include C in
+/-- The spawned producer keeps the protocol. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch postOp tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | semWork p =>
+    obtain ⟨rfl, h, rfl⟩ := hg
+    have hx : XG G u = .pr 0 := by show (G u).2.2 = _; rw [hgu]
+    obtain ⟨rfl, -, -⟩ := shape_pr hi.2.2.shape hx
+    show proto.WP 1 (producer postOp cPtr) _ G _ d
+    refine WP.mono ?_ (producer_spec C G _ d h (by
+      rw [show gK h (.pr 0) = G 1 from hgu.symm, upd_same]; exact fits.cur 1 1 m.woken hi) rfl)
+    rintro _ G' m' _ ⟨-, hi'⟩
+    refine ⟨_, inv_ghost (g := (⟨.gone, Heap.empty, Heap.empty⟩, .none, .fin)) hi' (.inr ⟨rfl, rfl⟩)
+      rfl (by unfold avail; rw [upd_self, upd_self, upd_ne _ _ (by decide), upd_ne _ _ (by decide)]; rfl)
+      ?_ rfl, ⟨rfl, rfl⟩, fun _ => joinedAll_kid hi' hu⟩
+    have hs := shape_of hi'
+    have h2 : m'.threads.size = 2 := by
+      obtain ⟨-, ⟨-, -, h1⟩ | ⟨h2, -⟩⟩ := hs
+      · have := h1 1 (Nat.le_refl _); rw [upd_self] at this; cases this
+      · exact h2
+    have := shape_set hs h2 .fin (fun h => by cases h) (fun _ => .inl rfl) (.inr rfl)
+      (fun _ => by rw [upd_upd, upd_self]; rfl)
+    rwa [upd_upd] at this
+  | producer p => cases hg
+  | work p => cases hg
+  | writer p => cases hg
+
+end Proofs
+
 end Sync.Mailbox
