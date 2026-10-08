@@ -13,6 +13,7 @@ Asserted: the declared theorem binds directly and reaches a functional level, wh
 or unrelated theorem, a sampled differential run alone, and any missing/legacy export
 evidence under --require-export-evidence never count as fully functionally verified.
 """
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -38,7 +39,8 @@ def load(name):
 project = load('project')
 
 
-def goals_variant(goals):
+@contextlib.contextmanager
+def declared_goals(goals):
     """Replace every root's declared goals in memory, leaving all evidence untouched."""
     original = project.load_manifest
 
@@ -47,18 +49,16 @@ def goals_variant(goals):
         for root in manifest['roots']:
             root['goals'] = goals
         return manifest, raw, limits
-    return original, patched
+    project.load_manifest = patched
+    try:
+        yield
+    finally:
+        project.load_manifest = original
 
 
 def coverage(goals=None, **kwargs):
-    original, patched = goals_variant(goals) if goals is not None else (None, None)
-    if patched:
-        project.load_manifest = patched
-    try:
+    with declared_goals(goals) if goals is not None else contextlib.nullcontext():
         return project.coverage(PROJECT, **kwargs)['roots'][0]
-    finally:
-        if original:
-            project.load_manifest = original
 
 
 def check(condition, message):
@@ -92,6 +92,40 @@ def exported_manifest(work, attempt):
                           '--receipt', str(attempt)], capture_output=True, text=True, timeout=600, cwd=ROOT)
     check(run.returncode == 0, 'recorded a real artifact manifest chained to the receipt: ' + run.stderr.strip()[:200])
     return path
+
+
+def analyzed_idle_loop(work):
+    """Analyzed/exported evidence from the retained schema-12 AIR of tests/roadmap/idle-loops.
+
+    The project directory holds byte copies; binding is by hash to a real I07 manifest of the repository."""
+    sources = {'progress.zig': 'tests/roadmap/progress/progress.zig', 'idle.json': 'tests/roadmap/idle-loops/air/progress.idle.json',
+               'patch': 'zig-patch/air-json/json.zig', 'runtime': 'ZigLean.lean', 'toolchain': 'lean-toolchain'}
+    project_dir = work / 'idle'
+    project_dir.mkdir()
+    for name, source in sources.items():
+        (project_dir / name).write_bytes((ROOT / source).read_bytes())
+    (project_dir / 'profile.json').write_text(json.dumps(json.loads((project_dir / 'idle.json').read_text())['profile']))
+    manifest = project_dir / 'project.json'
+    manifest.write_text(json.dumps({
+        'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['progress.zig'],
+        'components': {'compiler_patch': ['patch'], 'runtime': ['runtime'], 'toolchain': ['toolchain']},
+        'allowed_assumptions': [], 'roots': [{'id': 'idle', 'function': 'progress.idle', 'air': ['idle.json'],
+                                              'namespace': 'IdleLoop', 'prefix': 'progress.', 'contracts': [],
+                                              'goals': [], 'assumptions': [], 'exclusions': []}]}))
+    recorded = work / 'idle-manifest.json'
+    run = subprocess.run([sys.executable, str(VERIFIER), 'manifest', str(recorded), '--example', 'progress',
+                          '--zig-version', '0.16.0', '--air-dir', 'tests/roadmap/idle-loops/air',
+                          '--generated', 'tests/roadmap/idle-loops/IdleLoop/Gen.lean',
+                          '--source', 'tests/roadmap/progress/progress.zig',
+                          '--proof', 'tests/roadmap/idle-loops/IdleLoop/Total.lean'],
+                         capture_output=True, text=True, timeout=600, cwd=ROOT)
+    check(run.returncode == 0, 'recorded a real artifact manifest for the schema-12 idle-loop AIR: ' + run.stderr.strip()[:200])
+    stages = project.coverage(manifest, export_manifest=recorded, repo_root=ROOT)['roots'][0]['stages']
+    check(stages['exported']['status'] == stages['analyzed']['status'] == 'passed',
+          f'schema-12 AIR bound by hash: analyzed {stages["analyzed"]["status"]}, exported {stages["exported"]["status"]}')
+    (project_dir / 'idle.json').write_text((project_dir / 'idle.json').read_text().replace('"progress.idle"', '"progress.idle" ', 1))
+    stages = project.coverage(manifest, export_manifest=recorded, repo_root=ROOT)['roots'][0]['stages']
+    check(stages['exported']['status'] == stages['analyzed']['status'] == 'failed', 'edited AIR is not covered by the recorded export')
 
 
 def main(argv):
@@ -135,6 +169,7 @@ def main(argv):
         not_functional(row, 'failed analyzed evidence')
         row = coverage(require_export=True, **evidence)
         check(row['level'] == 'proved_scoped', 'no export manifest under --require-export-evidence is not functional')
+        analyzed_idle_loop(work)
     print('coverage real-receipt run passed')
     return 0
 
