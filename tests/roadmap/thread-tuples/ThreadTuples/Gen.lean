@@ -312,6 +312,7 @@ structure groupMixedLocals where
 inductive groupMixedExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s7 ← Zig.allocStack 16 8
   let s3 ← Zig.allocStack 4 4

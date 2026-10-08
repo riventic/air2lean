@@ -14,6 +14,17 @@ built-in model is one row plus its typed signature and emission cases, not a new
 This API cannot override those models or translated AIR, and a translated AIR function that
 reuses a built-in std model name is rejected.
 
+A project cannot hand-model other std code either (W4 of the
+[models audit](architecture-audit/models.md)). A binding whose symbol starts with a top-level
+`lib/std` namespace (`mem.`, `heap.`, `fmt.`, `Io.`, `posix.`, ...; `stdNamespaces`) is
+rejected unless it is one of the OS primitives in `osPrimitiveBindings` (`os.linux.read`,
+`write`, `close`, `mmap`, `munmap`, `mremap`, `clock_gettime`, the futex calls,
+`sched_yield`, and `posix.mmap`/`munmap`/`mremap`): everything above them is translated from
+its source or is a reviewed `stdModels` row. The template does not offer such a symbol. AIR
+names do not yet carry module identity (B1, `codex/fix-module-identity`), so the match is on
+the first name component: a user root module named like a std namespace (`posix.zig`) is
+refused too, and any other user module is never affected.
+
 Generate an authoring template from checked AIR first:
 
 ```sh
@@ -245,9 +256,11 @@ obligations, mandatory fields, missing models and preservation of existing outpu
 Template mode produces JSON authoring data and intentionally does not certify program calls.
 `tests/roadmap/models/StdModels.lean` checks the built-in table (unique names, every typed
 model has a row, anonymous-instance lookup), rejection of a std call with an incompatible
-runtime signature, of an unqualified Zig version, of a translated function or project binding
-reusing a std name, of a same-name project binding with a different second call site, and the
-semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the
+runtime signature, of an unqualified Zig version (every modelled row lists its reviewed
+versions; 0.17.0 is unreviewed), of a translated function or project binding reusing a std
+name, of a project binding that hand-models std code (and acceptance of the OS-primitive
+allowlist and of user-module names), of a same-name project binding with a different second
+call site, and the semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the
 `ZigLean` umbrella and fails if any row's dependency is not a declaration there.
 
 The gate explicitly builds the `ZigLean` umbrella imported by generated source, compiles the

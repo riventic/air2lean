@@ -42,7 +42,8 @@ ENTRY = """\
 
 TITLES = {"PRF-01": "Legacy", "PRF-02": "Recorded", "PRF-03": "Gate", "ASM-01": "Opaque asm",
           "ASM-02": "Asm hypothesis", "THR-01": "Scheduler", "SEM-01": "Semantics",
-          "EXT-02": "Axiom", "TRU-01": "Kernel", "TRU-02": "Translator"}
+          "EXT-02": "Axiom", "TRU-01": "Kernel", "TRU-02": "Translator",
+          "ALC-09": "Caller allocator", "IOM-01": "Caller Io"}
 
 PROFILE = ('-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee",'
            '"profile":{"name":"abi64-le-v1","schema":12}}\n')
@@ -55,6 +56,7 @@ def fixture_config():
         "excluded": {"Proofs/Bad/": "negative fixture"},
         "generated_imports": {"Fresh.Gen": "gate-time"},
         "generated_premises": ["TRU-02"],
+        "generated_markers": {"ALC-09": "allocator parameter", "IOM-01": "Io parameter"},
         "profiles": {"absent": "PRF-01", "legacy-abi64-le": "PRF-01", "abi64-le-v1": "PRF-02",
                      "gate-time": "PRF-03"},
         "float_semantics": {"ieee": []}, "source_axiom": ["EXT-02"],
@@ -229,6 +231,38 @@ class FixtureTests(unittest.TestCase):
         self.assertIn("PRF-03", entries["fresh_spec"]["premises"])
         self.assertIn("TRU-02", entries["fresh_spec"]["premises"])
 
+    def marked(self, marker='{"ALC-09":[0]}', before="def wrap"):
+        gen = textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        self.fixture.files["Proofs/Asm/Gen.lean"] = gen.replace(
+            before, f"-- air2lean-premises: {marker}\n{before}", 1)
+
+    def test_interface_marker_reaches_theorems(self):
+        """W1: a generated def's Allocator/Io parameter is a premise of every theorem reaching it."""
+        self.marked('{"ALC-09":[0],"IOM-01":[1]}')
+        entries = self.written()
+        self.assertIn("ALC-09", entries["wrap_spec"]["premises"])
+        self.assertIn("IOM-01", entries["wrap_spec"]["premises"])
+        self.assertEqual(entries["wrap_spec"]["via"]["ALC-09"], ["marker on Asm.wrap (parameters 0)"])
+        # A sibling definition without a marker, and theorems not reaching `wrap`, stay clean.
+        for name in ("plain_spec", "via_helper", "pure_fact"):
+            self.assertNotIn("ALC-09", entries[name]["premises"], name)
+
+    def test_interface_marker_fails_closed(self):
+        for marker, before, message in [
+                ('{"ALC-09":[]}', "def wrap", "malformed air2lean-premises marker"),
+                ('{"ALC-09":[true]}', "def wrap", "malformed air2lean-premises marker"),
+                ('ALC-09', "def wrap", "malformed air2lean-premises marker"),
+                ('{"ASM-01":[0]}', "def wrap", "marker names ASM-01, not a generated_markers premise"),
+                ('{"ALC-09":[0]}', "opaque airAsm_17", "air2lean-premises marker does not precede a def"),
+                ('{"ALC-09":[0]}', "end Asm", "air2lean-premises marker does not precede a def")]:
+            with self.subTest(marker=marker, before=before):
+                temp = tempfile.TemporaryDirectory()
+                self.addCleanup(temp.cleanup)
+                self.fixture = Fixture(Path(temp.name))
+                self.marked(marker, before)
+                errors, _ = self.fixture.check(write=True)
+                self.assertTrue(any(message in e for e in errors), errors)
+
     def test_unknown_profile_fails(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace("abi64-le-v1", "wasm32") + \
             textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -375,6 +409,13 @@ class CompiledTests(unittest.TestCase):
         result = premises.compiled(report, self.fixture.root, self.config, None)
         self.assertEqual(result["status"], "fail")
         self.assertIn("wrap_spec: dependency Gone.decl is unresolved in the checked environment", result["errors"])
+
+    def test_compiled_interface_marker(self):
+        gen = self.fixture.root / "Proofs/Asm/Gen.lean"
+        gen.write_text(gen.read_text().replace("def wrap", '-- air2lean-premises: {"IOM-01":[0]}\ndef wrap'))
+        result = premises.compiled(self.report(), self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("IOM-01", result["theorems"][0]["premises"])
 
     def test_compiled_rejects_error_report(self):
         with self.assertRaises(ValueError):

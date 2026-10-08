@@ -136,6 +136,20 @@ MUTANTS = {
         '                errors.append(f"{theorem[\'name\']}: runtime module {module} has no premise mapping")\n',
         '                pass\n', PREMISES, 'premises',
         ('CompiledTests.test_compiled_unmapped_module_and_axiom',)),
+    # D03 (W1): a generated def's Allocator/Io caller obligation must reach every theorem using it.
+    'premises-interface-marker-dropped': (
+        'scripts/premises.py', '        apply_markers(via, target.name, target.markers)\n', '',
+        PREMISES, 'premises', ('FixtureTests.test_interface_marker_reaches_theorems',)),
+    # D03 (W1): a marker that is not directly above a def must fail, not silently vanish.
+    'premises-interface-marker-misplaced-accepted': (
+        'scripts/premises.py',
+        '    lean.errors += [f"{lean.rel}:{number - 1}: air2lean-premises marker does not precede a def"\n'
+        '                    for number in markers]\n', '',
+        PREMISES, 'premises', ('FixtureTests.test_interface_marker_fails_closed',)),
+    # D03 (W1): the kernel-graph derivation applies the same markers.
+    'premises-compiled-interface-marker-dropped': (
+        'scripts/premises.py', '                apply_markers(via, user(name), marker_of(module, user(name)))\n', '',
+        PREMISES, 'premises', ('CompiledTests.test_compiled_interface_marker',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
         'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch'):\n",

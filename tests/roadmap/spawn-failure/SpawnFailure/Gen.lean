@@ -71,6 +71,7 @@ structure groupAsyncLocals where
 inductive groupAsyncExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def groupAsync (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 4 4
   let s4 ← Zig.allocStack 16 8
@@ -105,6 +106,7 @@ structure groupConcurrentLocals where
 inductive groupConcurrentExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def groupConcurrent (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 4 4
   let s4 ← Zig.allocStack 16 8

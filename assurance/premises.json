@@ -25,6 +25,10 @@
     "ErrorWidth17.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 17-bit fixtures into ErrorWidth17/Gen.lean."
   },
   "generated_premises": ["TRU-02"],
+  "generated_markers": {
+    "ALC-09": "Air2Lean/Emit.lean interfacePremiseMarker: a parameter type contains std.mem.Allocator (Ty.allocator).",
+    "IOM-01": "Air2Lean/Emit.lean interfacePremiseMarker: a parameter type contains std.Io (Ty.io)."
+  },
   "profiles": {
     "absent": "PRF-01",
     "legacy-abi64-le": "PRF-01",
@@ -162,6 +166,7 @@
     "ALC-05": ["ALC-01", "ALC-03"],
     "ALC-06": ["ALC-01", "ALC-03"],
     "ALC-07": ["ALC-01", "ALC-02"],
+    "ALC-09": ["ALC-01"],
     "THR-02": ["THR-01"],
     "THR-03": ["THR-01"],
     "THR-04": ["THR-02"],

@@ -10,8 +10,9 @@ The checker rejects a non-void payload, a result error set excluding
 `SystemCannotYield`, runtime arguments, or a `noreturn` callee annotation.
 
 The supported source spin API is `std.atomic.spinLoopHint()`, an inline function.
-`std.Thread.spinLoopHint` is not a declaration in these versions. Its historical
-model boundary name remains recognized, together with `atomic.spinLoopHint`,
+`std.Thread.spinLoopHint` is not a declaration in these versions, so its historical
+model boundary name is a rejected row of `stdModels` (it cannot be reviewed against a std
+source, `docs/std-models.md` §Version qualification). `atomic.spinLoopHint` is recognized
 with zero runtime arguments and a void result. Real source normally exports
 assembly directly: exact volatile `pause` and `isb`, with a void result and no
 inputs, outputs or clobbers, become `Zig.spinLoopHintC`. Identical user-written

@@ -522,6 +522,7 @@ jobs:
         run: |
           python3 tests/roadmap/models/test_gate.py
           python3 -B tests/roadmap/models/test_external_contracts.py
+          python3 -B tests/roadmap/models/test_std_sources.py
           scripts/model-contracts.sh
 
       # E03: selected environment-operation contract and its write-all client; the
