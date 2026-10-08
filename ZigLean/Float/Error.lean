@@ -1,4 +1,5 @@
 import ZigLean.Float.RoundTrip
+import ZigLean.Float.CompilerRt
 
 /-!
 # Rounding error, finite closure and accumulated error
@@ -352,6 +353,250 @@ theorem mul_error {fmt : FloatFmt} {x y : Float fmt} {a b A : Rat} (hx : x.toRat
     cases sa <;> cases sb <;> (try simp only [finiteToRat_true_eq] at hlt) <;>
       first | rfl | (exfalso; grind)
 
+/-! ## `-` -/
+
+/-- Flipping bit `w - 1` leaves every bit field below it unchanged. -/
+private theorem xor_top_field {v w R k : Nat} (h : R + k ≤ w - 1) :
+    ((v ^^^ 2 ^ (w - 1)) >>> R) % 2 ^ k = (v >>> R) % 2 ^ k := by
+  rw [Nat.shiftRight_xor_distrib, Nat.xor_mod_two_pow, Nat.shiftRight_eq_div_pow (2 ^ (w - 1)),
+    Nat.pow_div (by omega) (by decide)]
+  have : 2 ^ (w - 1 - R) % 2 ^ k = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.pow_dvd_pow 2 (by omega))
+  rw [this, Nat.xor_zero]
+
+private theorem neg_bits_toNat {fmt : FloatFmt} (x : Float fmt) :
+    (Float.neg x).bits.toNat = x.bits.toNat ^^^ 2 ^ (fmt.width - 1) := by
+  have hw : 1 ≤ fmt.width := by cases fmt <;> decide
+  have hlt := x.bits.isLt
+  have hp : (2 : Nat) ^ (fmt.width - 1) < 2 ^ fmt.width := Nat.pow_lt_pow_right (by decide) (by omega)
+  unfold Float.neg
+  rw [BitVec.toNat_ofNat, Nat.one_shiftLeft]
+  exact Nat.mod_eq_of_lt (Nat.xor_lt_two_pow hlt hp)
+
+/-- `neg` is `pack` of the flipped sign bit and the unchanged exponent field and low bits. -/
+theorem neg_eq_pack {fmt : FloatFmt} (x : Float fmt) :
+    Float.neg x = Float.pack fmt (!x.bits.msb)
+      ((x.bits.toNat >>> (fmt.width - 1 - fmt.expBits)) % 2 ^ fmt.expBits)
+      (x.bits.toNat % 2 ^ (fmt.width - 1 - fmt.expBits)) := by
+  have hw : 1 ≤ fmt.width := by cases fmt <;> decide
+  have hEb : fmt.expBits ≤ fmt.width - 1 := by cases fmt <;> decide
+  obtain ⟨_, hmsb, hexpEq, hrestEq⟩ := pack_bits_spec fmt (!x.bits.msb)
+    (Nat.mod_lt _ (Nat.two_pow_pos fmt.expBits)) (Nat.mod_lt _ (Nat.two_pow_pos _))
+  apply Float.eq_of_fields
+  · have hb : (Float.neg x).bits = x.bits ^^^ BitVec.ofNat fmt.width (1 <<< (fmt.width - 1)) := by
+      unfold Float.neg
+      rw [BitVec.ofNat_xor, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+    have hp : (2 : Nat) ^ (fmt.width - 1) < 2 ^ fmt.width :=
+      Nat.pow_lt_pow_right (by decide) (by omega)
+    have htop : (BitVec.ofNat fmt.width (1 <<< (fmt.width - 1))).msb = true := by
+      rw [BitVec.msb_eq_decide, BitVec.toNat_ofNat, Nat.one_shiftLeft, Nat.mod_eq_of_lt hp]
+      simp
+    rw [hmsb, hb, BitVec.msb_xor, htop]
+    simp
+  · rw [hexpEq, neg_bits_toNat, xor_top_field (by omega)]
+  · rw [hrestEq, neg_bits_toNat]
+    have := xor_top_field (v := x.bits.toNat) (w := fmt.width) (R := 0)
+      (k := fmt.width - 1 - fmt.expBits) (by omega)
+    simpa using this
+
+private theorem classify_pack_neg {fmt : FloatFmt} (s : Bool) {E F : Nat}
+    (hE : E < 2 ^ fmt.expBits) (hF : F < 2 ^ (fmt.width - 1 - fmt.expBits)) :
+    (Float.pack fmt (!s) E F).classify = match (Float.pack fmt s E F).classify with
+      | .nan => .nan
+      | .inf t => .inf (!t)
+      | .finite t m e => .finite (!t) m e := by
+  by_cases hf80 : fmt = .f80
+  · subst hf80
+    rw [restW_eq_fracBits_succ_f80] at hF
+    rw [classify_pack_f80' s hE hF, classify_pack_f80' (!s) hE hF]
+    by_cases h1 : E = 2 ^ FloatFmt.f80.expBits - 1 <;> by_cases h2 : F / 2 ^ 63 = 0 <;>
+      by_cases h3 : F % 2 ^ 63 = 0 <;> by_cases h4 : E = 0 <;>
+      simp [h1, h2, h3, h4, show (0 : Nat) ≠ 2 ^ FloatFmt.f80.expBits - 1 by decide]
+  · rw [restW_eq_fracBits fmt hf80] at hF
+    rw [classify_pack_of_ne_f80' hf80 s hE hF, classify_pack_of_ne_f80' hf80 (!s) hE hF]
+    by_cases h1 : E = 2 ^ fmt.expBits - 1 <;> by_cases h2 : F = 0 <;> by_cases h4 : E = 0 <;>
+      simp [h1, h2, h4, show (0 : Nat) ≠ 2 ^ fmt.expBits - 1 by cases fmt <;> decide]
+
+/-- `neg` flips the sign of the class and keeps NaN a NaN. -/
+theorem classify_neg {fmt : FloatFmt} (x : Float fmt) :
+    (Float.neg x).classify = match x.classify with
+      | .nan => .nan
+      | .inf t => .inf (!t)
+      | .finite t m e => .finite (!t) m e := by
+  rw [neg_eq_pack x]
+  conv => rhs; rw [Float.eq_pack_fields x]
+  exact classify_pack_neg _ (Nat.mod_lt _ (Nat.two_pow_pos _)) (Nat.mod_lt _ (Nat.two_pow_pos _))
+
+theorem toRat?_neg {fmt : FloatFmt} {x : Float fmt} {a : Rat} (h : x.toRat? = some a) :
+    (Float.neg x).toRat? = some (-a) := by
+  obtain ⟨s, m, e, hc, rfl⟩ := exists_finite_of_toRat? h
+  unfold Float.toRat?
+  rw [classify_neg, hc]
+  cases s <;> simp [finiteToRat]
+
+theorem isNaN_neg {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) :
+    (Float.neg x).isNaN = true := by
+  rw [isNaN_iff, classify_neg, (isNaN_iff x).mp h]
+
+/-- **Finite closure and error of `-`.** Finite operands whose exact difference has magnitude
+at most `A < 2^emax` subtract to a finite value within `u·A + η` of the exact difference
+(`Float.sub x y` is `x + (-y)` by definition). -/
+theorem sub_error {fmt : FloatFmt} {x y : Float fmt} {a b A : Rat} (hx : x.toRat? = some a)
+    (hy : y.toRat? = some b) (hlo : -A ≤ a - b) (hhi : a - b ≤ A)
+    (hov : A < fmt.overflowBound) :
+    ∃ r, (Float.sub x y).toRat? = some r ∧
+      r - (a - b) ≤ fmt.unitRoundoff * A + fmt.underflowError ∧
+      (a - b) - r ≤ fmt.unitRoundoff * A + fmt.underflowError := by
+  rw [Rat.sub_eq_add_neg a b] at hlo hhi ⊢
+  exact add_error hx (toRat?_neg hy) hlo hhi hov
+
+/-! ## `/` -/
+
+/-- **Finite closure and error of `/`.** Finite operands with a nonzero divisor whose exact
+quotient has magnitude at most `A < 2^emax` divide to a finite value within `u·A + η` of the
+exact quotient. `b ≠ 0` is needed: a zero divisor gives an infinity, or NaN for `0 / 0`. -/
+theorem div_error {fmt : FloatFmt} {x y : Float fmt} {a b A : Rat} (hx : x.toRat? = some a)
+    (hy : y.toRat? = some b) (hb : b ≠ 0) (hlo : -A ≤ a / b) (hhi : a / b ≤ A)
+    (hov : A < fmt.overflowBound) :
+    ∃ r, (Float.div x y).toRat? = some r ∧
+      r - a / b ≤ fmt.unitRoundoff * A + fmt.underflowError ∧
+      a / b - r ≤ fmt.unitRoundoff * A + fmt.underflowError := by
+  obtain ⟨sa, ma, ea, hxc, rfl⟩ := exists_finite_of_toRat? hx
+  obtain ⟨sb, mb, eb, hyc, rfl⟩ := exists_finite_of_toRat? hy
+  have hmb : mb ≠ 0 := fun h => hb (by rw [h, finiteToRat_zero])
+  rw [div_of_finite hxc hyc hmb]
+  refine roundRat_error fmt (fun hq => ?_) hlo hhi hov
+  have hma : ma ≠ 0 := fun h => hq (by rw [h, finiteToRat_zero, Rat.div_def, Rat.zero_mul])
+  have hinv : ∀ q : Rat, (-q)⁻¹ = -q⁻¹ := fun q => by grind
+  have hpa := finiteToRat_false_pos hma ea
+  have hpb := Rat.inv_pos.mpr (finiteToRat_false_pos hmb eb)
+  have hpp := Rat.mul_pos hpa hpb
+  rw [Rat.div_def] at hq ⊢
+  by_cases hlt : finiteToRat sa ma ea * (finiteToRat sb mb eb)⁻¹ < 0
+  · rw [decide_eq_true hlt]
+    cases sa <;> cases sb <;> (try simp only [finiteToRat_true_eq, hinv] at hlt) <;>
+      first | rfl | (exfalso; grind)
+  · rw [decide_eq_false hlt]
+    cases sa <;> cases sb <;> (try simp only [finiteToRat_true_eq, hinv] at hlt) <;>
+      first | rfl | (exfalso; grind)
+
+/-! ## `@floatCast` -/
+
+/-- **Finite closure and error of `@floatCast`.** A finite value of magnitude at most `A`,
+`A` below the target format's `2^emax`, converts to a finite value within `u·A + η` of it
+(the target format's constants). -/
+theorem conv_error {fmt fmt2 : FloatFmt} {x : Float fmt} {a A : Rat} (hx : x.toRat? = some a)
+    (hlo : -A ≤ a) (hhi : a ≤ A) (hov : A < fmt2.overflowBound) :
+    ∃ r, (Float.conv fmt2 x).toRat? = some r ∧
+      r - a ≤ fmt2.unitRoundoff * A + fmt2.underflowError ∧
+      a - r ≤ fmt2.unitRoundoff * A + fmt2.underflowError := by
+  obtain ⟨s, m, e, hxc, rfl⟩ := exists_finite_of_toRat? hx
+  unfold Float.conv
+  rw [hxc]
+  refine roundRat_error fmt2 (fun hq => ?_) hlo hhi hov
+  have hm : m ≠ 0 := fun h => hq (by rw [h, finiteToRat_zero])
+  have := finiteToRat_lt_zero_iff s hm e
+  cases s <;> simp_all
+
+/-! ## `@mulAdd` -/
+
+/-- `fma` of three finite operands: one rounding of the exact `a·b + c` at the format's own
+rounding schedule, with a sign that matches the exact value whenever it is nonzero. -/
+private theorem fma_of_finite {fmt : FloatFmt} {x y z : Float fmt} {sa sb sc : Bool}
+    {ma mb mc : Nat} {ea eb ec : Int} (hxc : x.classify = .finite sa ma ea)
+    (hyc : y.classify = .finite sb mb eb) (hzc : z.classify = .finite sc mc ec) :
+    ∃ neg : Bool, (finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec ≠ 0 →
+        neg = decide (finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec < 0)) ∧
+      Float.fma x y z =
+        if h : fmt = .f16 then h ▸ Float.conv .f16 (Float.roundRat .f32 neg
+          (finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec))
+        else if h : fmt = .f80 then h ▸ Float.conv .f80 (Float.roundRat .f128 neg
+          (finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec))
+        else Float.roundRat fmt neg
+          (finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec) := by
+  refine ⟨if finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec = 0 then
+      ((sa != sb) && (ma == 0 || mb == 0)) && (sc && mc == 0)
+    else decide (finiteToRat sa ma ea * finiteToRat sb mb eb + finiteToRat sc mc ec < 0),
+    fun hq => by simp only [hq, ↓reduceIte], ?_⟩
+  unfold Float.fma
+  rw [hxc, hyc, hzc]
+
+/-- **Finite closure and error of `@mulAdd`** for `f32`, `f64` and `f128`, which round once:
+finite operands whose exact `a·b + c` has magnitude at most `A < 2^emax` give a finite value
+within `u·A + η` of it. -/
+theorem fma_error {fmt : FloatFmt} (h16 : fmt ≠ .f16) (h80 : fmt ≠ .f80) {x y z : Float fmt}
+    {a b c A : Rat} (hx : x.toRat? = some a) (hy : y.toRat? = some b) (hz : z.toRat? = some c)
+    (hlo : -A ≤ a * b + c) (hhi : a * b + c ≤ A) (hov : A < fmt.overflowBound) :
+    ∃ r, (Float.fma x y z).toRat? = some r ∧
+      r - (a * b + c) ≤ fmt.unitRoundoff * A + fmt.underflowError ∧
+      (a * b + c) - r ≤ fmt.unitRoundoff * A + fmt.underflowError := by
+  obtain ⟨sa, ma, ea, hxc, rfl⟩ := exists_finite_of_toRat? hx
+  obtain ⟨sb, mb, eb, hyc, rfl⟩ := exists_finite_of_toRat? hy
+  obtain ⟨sc, mc, ec, hzc, rfl⟩ := exists_finite_of_toRat? hz
+  obtain ⟨neg, hneg, heq⟩ := fma_of_finite hxc hyc hzc
+  rw [heq, dite_eq_right h16, dite_eq_right h80]
+  exact roundRat_error fmt hneg hlo hhi hov
+
+/-- Two roundings: to `mid`, then `@floatCast` to `fmt`. The errors add up; the second is
+relative to the bound `A' = A + u_mid·A + η_mid` of the intermediate value. -/
+private theorem roundRat_conv_error (fmt mid : FloatFmt) {neg : Bool} {q A : Rat}
+    (hsign : q ≠ 0 → neg = decide (q < 0)) (hlo : -A ≤ q) (hhi : q ≤ A)
+    (hovm : A < mid.overflowBound)
+    (hov : A + (mid.unitRoundoff * A + mid.underflowError) < fmt.overflowBound) :
+    ∃ r, (Float.conv fmt (Float.roundRat mid neg q)).toRat? = some r ∧
+      r - q ≤ (mid.unitRoundoff * A + mid.underflowError) +
+        (fmt.unitRoundoff * (A + (mid.unitRoundoff * A + mid.underflowError)) +
+          fmt.underflowError) ∧
+      q - r ≤ (mid.unitRoundoff * A + mid.underflowError) +
+        (fmt.unitRoundoff * (A + (mid.unitRoundoff * A + mid.underflowError)) +
+          fmt.underflowError) := by
+  obtain ⟨r1, hr1, e1, e2⟩ := roundRat_error mid hsign hlo hhi hovm
+  obtain ⟨r, hr, e3, e4⟩ := conv_error (fmt2 := fmt) hr1
+    (A := A + (mid.unitRoundoff * A + mid.underflowError)) (by grind) (by grind) hov
+  exact ⟨r, hr, by grind, by grind⟩
+
+/-- **`@mulAdd` on `f16`**: rounded to `f32`, then to `f16` (`docs/floats.md` §Semantics). The
+error is that of the two roundings, the second relative to `A' = A + u₃₂·A + η₃₂`. -/
+theorem fma_error_f16 {x y z : Float .f16} {a b c A : Rat} (hx : x.toRat? = some a)
+    (hy : y.toRat? = some b) (hz : z.toRat? = some c) (hlo : -A ≤ a * b + c)
+    (hhi : a * b + c ≤ A) (hov32 : A < FloatFmt.f32.overflowBound)
+    (hov : A + (FloatFmt.f32.unitRoundoff * A + FloatFmt.f32.underflowError) <
+      FloatFmt.f16.overflowBound) :
+    ∃ r, (Float.fma x y z).toRat? = some r ∧
+      r - (a * b + c) ≤ (FloatFmt.f32.unitRoundoff * A + FloatFmt.f32.underflowError) +
+        (FloatFmt.f16.unitRoundoff * (A + (FloatFmt.f32.unitRoundoff * A +
+          FloatFmt.f32.underflowError)) + FloatFmt.f16.underflowError) ∧
+      (a * b + c) - r ≤ (FloatFmt.f32.unitRoundoff * A + FloatFmt.f32.underflowError) +
+        (FloatFmt.f16.unitRoundoff * (A + (FloatFmt.f32.unitRoundoff * A +
+          FloatFmt.f32.underflowError)) + FloatFmt.f16.underflowError) := by
+  obtain ⟨sa, ma, ea, hxc, rfl⟩ := exists_finite_of_toRat? hx
+  obtain ⟨sb, mb, eb, hyc, rfl⟩ := exists_finite_of_toRat? hy
+  obtain ⟨sc, mc, ec, hzc, rfl⟩ := exists_finite_of_toRat? hz
+  obtain ⟨neg, hneg, heq⟩ := fma_of_finite hxc hyc hzc
+  rw [heq, dite_eq_left rfl]
+  exact roundRat_conv_error .f16 .f32 hneg hlo hhi hov32 hov
+
+/-- **`@mulAdd` on `f80`**: rounded to `f128`, then to `f80` (`docs/floats.md` §Semantics). The
+error is that of the two roundings, the second relative to `A' = A + u₁₂₈·A + η₁₂₈`. -/
+theorem fma_error_f80 {x y z : Float .f80} {a b c A : Rat} (hx : x.toRat? = some a)
+    (hy : y.toRat? = some b) (hz : z.toRat? = some c) (hlo : -A ≤ a * b + c)
+    (hhi : a * b + c ≤ A) (hov128 : A < FloatFmt.f128.overflowBound)
+    (hov : A + (FloatFmt.f128.unitRoundoff * A + FloatFmt.f128.underflowError) <
+      FloatFmt.f80.overflowBound) :
+    ∃ r, (Float.fma x y z).toRat? = some r ∧
+      r - (a * b + c) ≤ (FloatFmt.f128.unitRoundoff * A + FloatFmt.f128.underflowError) +
+        (FloatFmt.f80.unitRoundoff * (A + (FloatFmt.f128.unitRoundoff * A +
+          FloatFmt.f128.underflowError)) + FloatFmt.f80.underflowError) ∧
+      (a * b + c) - r ≤ (FloatFmt.f128.unitRoundoff * A + FloatFmt.f128.underflowError) +
+        (FloatFmt.f80.unitRoundoff * (A + (FloatFmt.f128.unitRoundoff * A +
+          FloatFmt.f128.underflowError)) + FloatFmt.f80.underflowError) := by
+  obtain ⟨sa, ma, ea, hxc, rfl⟩ := exists_finite_of_toRat? hx
+  obtain ⟨sb, mb, eb, hyc, rfl⟩ := exists_finite_of_toRat? hy
+  obtain ⟨sc, mc, ec, hzc, rfl⟩ := exists_finite_of_toRat? hz
+  obtain ⟨neg, hneg, heq⟩ := fma_of_finite hxc hyc hzc
+  rw [heq, dite_eq_right (by decide), dite_eq_left rfl]
+  exact roundRat_conv_error .f80 .f128 hneg hlo hhi hov128 hov
+
 /-! ## NaN propagation -/
 
 theorem add_isNaN_left {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) (y : Float fmt) :
@@ -377,6 +622,53 @@ theorem mul_isNaN_right {fmt : FloatFmt} (x : Float fmt) {y : Float fmt} (h : y.
   unfold Float.mul
   rw [(isNaN_iff y).mp h]
   cases x.classify <;> exact isNaN_nan
+
+theorem sub_isNaN_left {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) (y : Float fmt) :
+    (Float.sub x y).isNaN = true :=
+  add_isNaN_left h _
+
+theorem sub_isNaN_right {fmt : FloatFmt} (x : Float fmt) {y : Float fmt} (h : y.isNaN = true) :
+    (Float.sub x y).isNaN = true :=
+  add_isNaN_right x (isNaN_neg h)
+
+theorem div_isNaN_left {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) (y : Float fmt) :
+    (Float.div x y).isNaN = true := by
+  unfold Float.div
+  rw [(isNaN_iff x).mp h]
+  exact isNaN_nan
+
+theorem div_isNaN_right {fmt : FloatFmt} (x : Float fmt) {y : Float fmt} (h : y.isNaN = true) :
+    (Float.div x y).isNaN = true := by
+  unfold Float.div
+  rw [(isNaN_iff y).mp h]
+  cases x.classify <;> exact isNaN_nan
+
+/-- `@mulAdd` propagates NaN from any operand (all formats, both rounding schedules). -/
+theorem fma_isNaN {fmt : FloatFmt} {x y z : Float fmt}
+    (h : x.isNaN = true ∨ y.isNaN = true ∨ z.isNaN = true) : (Float.fma x y z).isNaN = true := by
+  unfold Float.fma
+  rcases h with h | h | h <;> rw [(isNaN_iff _).mp h]
+  · exact isNaN_nan
+  · cases x.classify <;> exact isNaN_nan
+  · cases x.classify <;> cases y.classify <;> exact isNaN_nan
+
+theorem sqrt_isNaN {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) :
+    (Float.sqrt x).isNaN = true := by
+  unfold Float.sqrt Float.sqrt.sqrtCore
+  rw [(isNaN_iff x).mp h]
+  exact isNaN_nan
+
+/-- `@sqrt` of a negative nonzero finite value is NaN. -/
+theorem sqrt_isNaN_of_neg {fmt : FloatFmt} {x : Float fmt} {a : Rat} (hx : x.toRat? = some a)
+    (ha : a < 0) : (Float.sqrt x).isNaN = true := by
+  obtain ⟨s, m, e, hc, rfl⟩ := exists_finite_of_toRat? hx
+  have hm : m ≠ 0 := fun h => by rw [h, finiteToRat_zero] at ha; exact Rat.lt_irrefl ha
+  have hs : s = true := (finiteToRat_lt_zero_iff s hm e).mp ha
+  subst hs
+  unfold Float.sqrt Float.sqrt.sqrtCore
+  rw [hc]
+  simp only [hm, ↓reduceIte]
+  exact isNaN_nan
 
 /-! ## Left-fold sums -/
 
@@ -554,5 +846,336 @@ theorem gt_of_error {fmt : FloatFmt} {y z : Float fmt} {q w s e : Rat}
     Float.lt y z = true := by
   rw [lt_of_toRat hy hz]
   exact decide_eq_true (by grind)
+
+/-! ## `@sqrt` -/
+
+private theorem sqrt_round_bounds (S M : Nat)
+    (hM : M = if S - S.sqrt * S.sqrt ≤ S.sqrt then S.sqrt else S.sqrt + 1) :
+    4 * S ≤ (2 * M + 1) * (2 * M + 1) ∧ (0 < S → 1 ≤ M ∧ (2 * M - 1) * (2 * M - 1) ≤ 4 * S) ∧
+      M ≤ S.sqrt + 1 := by
+  have h1 := Nat.sqrt_le S
+  have h2 := Nat.lt_succ_sqrt S
+  obtain ⟨r, hr⟩ : ∃ r, S.sqrt = r := ⟨_, rfl⟩
+  rw [hr] at h1 h2 hM ⊢
+  split at hM <;> rw [hM]
+  · refine ⟨by grind, fun hS => ⟨?_, ?_⟩, by omega⟩
+    · rcases Nat.eq_zero_or_pos r with h | h
+      · subst h; simp at h2; omega
+      · omega
+    · rcases Nat.eq_zero_or_pos r with h | h
+      · subst h; simp at h2; omega
+      · obtain ⟨k, rfl⟩ : ∃ k, r = k + 1 := ⟨r - 1, by omega⟩
+        grind
+  · refine ⟨by grind, fun _ => ⟨by omega, by grind⟩, by omega⟩
+
+private theorem sq_lt_sq {c s : Rat} (hc : 0 ≤ c) (h : c < s) : c * c < s * s := by
+  have h1 := Rat.mul_le_mul_of_nonneg_left (Rat.le_of_lt h) hc
+  have h2 := Rat.mul_lt_mul_of_pos_right h (by grind : (0 : Rat) < s)
+  grind
+
+/-- The rounding step of `sqrtCore` for a positive finite `m·2^e`, with its exponent `te`,
+scaled radicand `S = m·2^(e - 2·te)` and rounded root `M` named: the result is finite and
+nonnegative, and within `u·A + η` of `√(m·2^e)` for every `A ≥ 0` with `m·2^e ≤ A²`, stated
+without irrationals: `s - r ≤ u·A + η` for `s² ≤ m·2^e`, `r - s ≤ u·A + η` for `m·2^e ≤ s²`. -/
+private theorem sqrt_final (fmt : FloatFmt) {m S M : Nat} {e te : Int} (hm : m ≠ 0)
+    (hmlt : m < 2 ^ fmt.prec) (hlo : fmt.emin - fmt.fracBits ≤ e)
+    (hhi : e + (fmt.prec - 1 : Int) ≤ fmt.emax)
+    (hte : te = Min.min (Max.max (((Nat.log2 m : Int) + e).ediv 2 - ((fmt.prec : Int) - 1))
+      (fmt.emin - ((fmt.prec : Int) - 1))) (e.ediv 2))
+    (hS : S = m <<< (e - 2 * te).toNat)
+    (hM : M = if S - S.sqrt * S.sqrt ≤ S.sqrt then S.sqrt else S.sqrt + 1)
+    {A : Rat} (hA : 0 ≤ A) (haA : finiteToRat false m e ≤ A * A) :
+    ∃ r, (Float.finalizeRounded fmt false (M : Int) te).toRat? = some r ∧ 0 ≤ r ∧
+      (∀ s, 0 ≤ s → s * s ≤ finiteToRat false m e →
+        s - r ≤ fmt.unitRoundoff * A + fmt.underflowError) ∧
+      (∀ s, 0 ≤ s → finiteToRat false m e ≤ s * s →
+        r - s ≤ fmt.unitRoundoff * A + fmt.underflowError) := by
+  have hpf : ((fmt.prec : Int) - 1) = fmt.fracBits := by simp only [FloatFmt.prec]; omega
+  have hp1 : 1 ≤ fmt.prec := by cases fmt <;> decide
+  have hfb : 1 ≤ fmt.fracBits := by cases fmt <;> decide
+  have hY0 : fmt.emin - fmt.fracBits ≤ 0 := by cases fmt <;> decide
+  have hemax : 2 ≤ fmt.emax := by cases fmt <;> decide
+  have hemin : fmt.emin + 1 ≤ fmt.emax := by cases fmt <;> decide
+  have hL : (Nat.log2 m : Int) ≤ fmt.fracBits := by
+    have := (Nat.log2_lt hm).mpr hmlt
+    simp only [FloatFmt.prec] at this; omega
+  have hediv : ∀ x : Int, x.ediv 2 = x / 2 := fun _ => rfl
+  simp only [hediv, hpf] at hte
+  generalize hL' : (Nat.log2 m : Int) = L at hL hte
+  -- `sqrtCore`'s outer `min` never binds: `te` is the clamped `max`.
+  have hte' : te = Max.max ((L + e) / 2 - fmt.fracBits) (fmt.emin - fmt.fracBits) := by omega
+  have hk0 : 0 ≤ e - 2 * te := by omega
+  generalize hk : (e - 2 * te).toNat = k at hS
+  have hS' : S = m * 2 ^ k := by rw [hS, Nat.shiftLeft_eq]
+  have hSpos : 0 < S := by rw [hS']; exact Nat.mul_pos (by omega) (Nat.two_pow_pos _)
+  obtain ⟨hb1, hb2, hb3⟩ := sqrt_round_bounds S M hM
+  obtain ⟨hM1, hb2⟩ := hb2 hSpos
+  -- `M ≤ 2^prec`: the root of a radicand below `2^(2·prec)`.
+  have hroot : S.sqrt < 2 ^ fmt.prec := by
+    apply sqrt_lt_of_lt_mul
+    have h2p : (2 : Nat) ^ (2 * fmt.prec) = 2 ^ fmt.prec * 2 ^ fmt.prec := by
+      rw [Nat.two_mul, Nat.pow_add]
+    rw [← h2p, hS]
+    rw [← hk]
+    apply sqrt_shiftedM_lt (p := fmt.prec) <;> (try simp only [hpf, hL']) <;> omega
+  have hMle : (M : Int) ≤ 2 ^ fmt.prec := by
+    have : M ≤ 2 ^ fmt.prec := by omega
+    exact_mod_cast this
+  -- Normal, or at the subnormal exponent.
+  have hnorm : 2 ^ fmt.fracBits ≤ (M : Int) ∨ te = fmt.emin - fmt.fracBits := by
+    by_cases hY : te = fmt.emin - fmt.fracBits
+    · exact Or.inr hY
+    · left
+      have hX : te = (L + e) / 2 - fmt.fracBits := by omega
+      have hlog : 2 ^ m.log2 ≤ m := Nat.log2_self_le hm
+      have hLk : 2 * fmt.fracBits ≤ m.log2 + k := by omega
+      have hS2 : 2 ^ fmt.fracBits * 2 ^ fmt.fracBits ≤ S := by
+        rw [← Nat.pow_add, hS', ← Nat.two_mul]
+        calc 2 ^ (2 * fmt.fracBits) ≤ 2 ^ (m.log2 + k) := Nat.pow_le_pow_right (by decide) hLk
+          _ = 2 ^ m.log2 * 2 ^ k := Nat.pow_add _ _ _
+          _ ≤ m * 2 ^ k := Nat.mul_le_mul_right _ hlog
+      have hsq : 2 ^ fmt.fracBits ≤ S.sqrt := by
+        apply Nat.not_lt.mp
+        intro hlt
+        have h1 := Nat.lt_succ_sqrt S
+        have h2 : S.sqrt.succ * S.sqrt.succ ≤ 2 ^ fmt.fracBits * 2 ^ fmt.fracBits :=
+          Nat.mul_le_mul hlt hlt
+        omega
+      have : 2 ^ fmt.fracBits ≤ M := by
+        rw [hM]; split <;> omega
+      have hc : ((2 ^ fmt.fracBits : Nat) : Int) = (2 : Int) ^ fmt.fracBits := by push_cast; rfl
+      rw [← hc]; exact_mod_cast this
+  have hov : te + fmt.prec ≤ fmt.emax := by simp only [FloatFmt.prec] at hhi ⊢; omega
+  obtain ⟨r, hr⟩ := finalizeRounded_isSome fmt false hMle (by omega) hnorm hov
+  have hrv := finalizeRounded_toRat fmt false hMle (by omega) hnorm hr
+  rw [Int.toNat_natCast, finiteToRat_false_eq_zpow] at hrv
+  refine ⟨r, hr, ?_⟩
+  -- Values: `r = M·P`, `m·2^e = S·P·P` with `P = 2^te`.
+  have hP := two_zpow_pos te
+  have ha : finiteToRat false m e = (S : Rat) * (2 : Rat) ^ te * (2 : Rat) ^ te := by
+    rw [finiteToRat_false_eq_zpow, hS']
+    have he : e = (k : Int) + te + te := by omega
+    rw [he, Rat.zpow_add (by decide), Rat.zpow_add (by decide), Rat.zpow_natCast]
+    push_cast
+    grind
+  have hu := FloatFmt.unitRoundoff_pos fmt
+  have hη := FloatFmt.underflowError_pos fmt
+  have huA := Rat.mul_nonneg (Rat.le_of_lt hu) hA
+  -- `2^te ≤ 2·(u·A + η)`: `2η` at the subnormal exponent, else `2u·2^⌊(L+e)/2⌋ ≤ 2u·A`.
+  have hPb : (2 : Rat) ^ te ≤ 2 * (fmt.unitRoundoff * A + fmt.underflowError) := by
+    by_cases hY : te = fmt.emin - fmt.fracBits
+    · have : te = (fmt.emin - fmt.prec) + 1 := by simp only [FloatFmt.prec]; omega
+      rw [this, Rat.zpow_add_one (by decide)]
+      unfold FloatFmt.underflowError at hη ⊢
+      grind
+    · have hQ : (2 : Rat) ^ ((L + e) / 2) ≤ A := by
+        apply Rat.not_lt.mp
+        intro hlt
+        have h1 := sq_lt_sq hA hlt
+        have h2 : (2 : Rat) ^ ((L + e) / 2) * (2 : Rat) ^ ((L + e) / 2) ≤ (2 : Rat) ^ (L + e) := by
+          rw [← Rat.zpow_add (by decide)]; exact two_zpow_le (by omega)
+        have h3 : (2 : Rat) ^ (L + e) ≤ finiteToRat false m e := by
+          rw [finiteToRat_false_eq_zpow, Rat.zpow_add (by decide), ← hL', Rat.zpow_natCast]
+          have : ((2 ^ m.log2 : Nat) : Rat) ≤ (m : Rat) :=
+            Rat.natCast_le_natCast.mpr (Nat.log2_self_le hm)
+          push_cast at this
+          exact Rat.mul_le_mul_of_nonneg_right this (Rat.le_of_lt (two_zpow_pos e))
+        grind
+      have : te = ((L + e) / 2 + -(fmt.prec : Int)) + 1 := by simp only [FloatFmt.prec]; omega
+      rw [this, Rat.zpow_add_one (by decide), Rat.zpow_add (by decide)]
+      have h2 := Rat.mul_le_mul_of_nonneg_right hQ (Rat.le_of_lt hu)
+      unfold FloatFmt.unitRoundoff at h2 hu huA ⊢
+      grind
+  rw [ha] at haA ⊢
+  generalize (2 : Rat) ^ te = P at hP hrv ha hPb
+  have hPP := Rat.mul_nonneg (Rat.le_of_lt hP) (Rat.le_of_lt hP)
+  have hM0 : (0 : Rat) ≤ M := Rat.natCast_nonneg
+  refine ⟨?_, fun s hs hsa => ?_, fun s hs hsa => ?_⟩
+  · rw [hrv]; exact Rat.mul_nonneg hM0 (Rat.le_of_lt hP)
+  · -- `s ≤ (M + 1/2)·P`, since `S ≤ (M + 1/2)²`.
+    apply Rat.not_lt.mp
+    intro hgt
+    have hc0 : 0 ≤ ((M : Rat) + 1 / 2) * P := Rat.mul_nonneg (by grind) (Rat.le_of_lt hP)
+    have hlt : ((M : Rat) + 1 / 2) * P < s := by grind
+    have h1 := sq_lt_sq hc0 hlt
+    have hb1' : (4 : Rat) * S ≤ (2 * M + 1) * (2 * M + 1) := by exact_mod_cast hb1
+    have h2 := Rat.mul_le_mul_of_nonneg_right hb1' hPP
+    grind
+  · -- `(M - 1/2)·P ≤ s`, since `(M - 1/2)² ≤ S`.
+    apply Rat.not_lt.mp
+    intro hgt
+    have hM1' : (1 : Rat) ≤ M := by exact_mod_cast hM1
+    have hc0 : 0 ≤ ((M : Rat) - 1 / 2) * P := Rat.mul_nonneg (by grind) (Rat.le_of_lt hP)
+    have hlt : s < ((M : Rat) - 1 / 2) * P := by grind
+    have h1 := sq_lt_sq hs hlt
+    have hb2' : ((2 * M - 1 : Nat) : Rat) * ((2 * M - 1 : Nat) : Rat) ≤ 4 * S := by
+      exact_mod_cast hb2
+    have hcast : ((2 * M - 1 : Nat) : Rat) = 2 * M - 1 := by
+      have : 2 * M - 1 + 1 = 2 * M := by omega
+      have h := congrArg (fun n : Nat => (n : Rat)) this
+      push_cast at h
+      grind
+    rw [hcast] at hb2'
+    have h2 := Rat.mul_le_mul_of_nonneg_right hb2' hPP
+    grind
+
+/-- **Finite closure and error of `@sqrt`.** A finite operand with value `a ≥ 0` (also `-0`)
+has a finite, nonnegative square root `r`. For every `A ≥ 0` with `a ≤ A²`, `r` is within
+`u·A + η` of `√a`; since `√a` is in general irrational, both sides are stated through
+squares: `s - r ≤ u·A + η` for every `s ≥ 0` with `s² ≤ a`, and `r - s ≤ u·A + η` for
+every `s ≥ 0` with `a ≤ s²`. No overflow condition: the root of a finite value is finite. A
+negative nonzero operand gives NaN (`sqrt_isNaN_of_neg`). -/
+theorem sqrt_error {fmt : FloatFmt} {x : Float fmt} {a A : Rat} (hx : x.toRat? = some a)
+    (ha : 0 ≤ a) (hA : 0 ≤ A) (haA : a ≤ A * A) :
+    ∃ r, (Float.sqrt x).toRat? = some r ∧ 0 ≤ r ∧
+      (∀ s, 0 ≤ s → s * s ≤ a → s - r ≤ fmt.unitRoundoff * A + fmt.underflowError) ∧
+      (∀ s, 0 ≤ s → a ≤ s * s → r - s ≤ fmt.unitRoundoff * A + fmt.underflowError) := by
+  have hu := FloatFmt.unitRoundoff_pos fmt
+  have hη := FloatFmt.underflowError_pos fmt
+  have huA := Rat.mul_nonneg (Rat.le_of_lt hu) hA
+  obtain ⟨sg, m, e, hc, rfl⟩ := exists_finite_of_toRat? hx
+  unfold Float.sqrt Float.sqrt.sqrtCore
+  rw [hc]
+  by_cases hm : m = 0
+  · subst hm
+    simp only [↓reduceIte, finiteToRat_zero]
+    refine ⟨0, by simp [Float.toRat?, classify_zero, finiteToRat_zero], Rat.le_refl,
+      fun s hs hss => ?_, fun s hs _ => by grind⟩
+    rcases Rat.le_iff_lt_or_eq.mp hs with hpos | hz
+    · have := sq_lt_sq Rat.le_refl hpos
+      grind
+    · grind
+  have hsg : sg = false := by
+    cases sg
+    · rfl
+    · exfalso
+      have := (finiteToRat_lt_zero_iff true hm e).mpr rfl
+      grind
+  subst hsg
+  simp only [hm, ↓reduceIte, Bool.false_eq_true]
+  obtain ⟨hlo, hhi, -⟩ := classify_finite_range hc
+  obtain ⟨r, hr, h0, h1, h2⟩ := sqrt_final fmt hm (classify_mantissa_lt hc) hlo hhi rfl rfl rfl
+    hA haA
+  refine ⟨r, ?_, h0, h1, h2⟩
+  rw [← hr]
+  congr 1
+  split <;> simp
+
+/-! ## `compiler-rt` helpers
+
+The `--float-semantics compiler-rt` ports (`CompilerRt.lean`, `docs/floats.md` groups A, B,
+E–H) for which a bound follows from the IEEE lemmas above. The other ports stay out of scope:
+see `docs/floats.md` §Numerical bounds. -/
+
+/-- `@floatCast` to a format with at least the precision and exponent range is exact. -/
+theorem conv_toRat_of_wider {fmt fmt2 : FloatFmt} (hp : fmt.fracBits ≤ fmt2.fracBits)
+    (hlo : fmt2.emin - fmt2.fracBits ≤ fmt.emin - fmt.fracBits)
+    (hhi : fmt.emax - fmt.fracBits ≤ fmt2.emax - fmt2.fracBits) {x : Float fmt} {a : Rat}
+    (hx : x.toRat? = some a) : (Float.conv fmt2 x).toRat? = some a := by
+  obtain ⟨s, m, e, hc, rfl⟩ := exists_finite_of_toRat? hx
+  unfold Float.conv
+  rw [hc]
+  by_cases hm : m = 0
+  · subst hm
+    simp [Float.toRat?, classify_zero, finiteToRat_zero]
+  obtain ⟨he_lo, he_hi, -⟩ := classify_finite_range hc
+  have hmlt := classify_mantissa_lt hc
+  have hmlt2 : m < 2 ^ fmt2.prec :=
+    Nat.lt_of_lt_of_le hmlt (Nat.pow_le_pow_right (by decide) (by simp only [FloatFmt.prec]; omega))
+  exact roundRat_finiteToRat_toRat fmt2 s s (Nat.pos_of_ne_zero hm) hmlt2 (by omega)
+    (by simp only [FloatFmt.prec] at he_hi ⊢; omega)
+
+/-- **`@mulAdd` on `f32`, `compiler-rt` (`fmaf`).** The port computes the product in `f64`, adds
+`c` in `f64` and rounds to `f32`: three roundings. With `|a·b| ≤ B`, `|a·b + c| ≤ A`,
+`e₁ = u₆₄·B + η₆₄`, `A₁ = A + e₁`, `e₂ = u₆₄·A₁ + η₆₄` and `A₂ = A₁ + e₂`, the result is
+finite and within `e₁ + e₂ + u₃₂·A₂ + η₃₂` of `a·b + c` when `B, A₁ < 2^1023` and
+`A₂ < 2^127`. -/
+theorem fmaRt_error_f32 {x y z : Float .f32} {a b c B A : Rat} (hx : x.toRat? = some a)
+    (hy : y.toRat? = some b) (hz : z.toRat? = some c) (hblo : -B ≤ a * b) (hbhi : a * b ≤ B)
+    (hlo : -A ≤ a * b + c) (hhi : a * b + c ≤ A)
+    (hovB : B < FloatFmt.f64.overflowBound)
+    (hov1 : A + (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError) <
+      FloatFmt.f64.overflowBound)
+    (hov2 : A + (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError) +
+      (FloatFmt.f64.unitRoundoff * (A + (FloatFmt.f64.unitRoundoff * B +
+        FloatFmt.f64.underflowError)) + FloatFmt.f64.underflowError) <
+      FloatFmt.f32.overflowBound) :
+    ∃ r, (Float.fmaRt x y z).toRat? = some r ∧
+      r - (a * b + c) ≤ (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError) +
+        (FloatFmt.f64.unitRoundoff * (A + (FloatFmt.f64.unitRoundoff * B +
+          FloatFmt.f64.underflowError)) + FloatFmt.f64.underflowError) +
+        (FloatFmt.f32.unitRoundoff * (A + (FloatFmt.f64.unitRoundoff * B +
+          FloatFmt.f64.underflowError) + (FloatFmt.f64.unitRoundoff * (A +
+            (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError)) +
+              FloatFmt.f64.underflowError)) + FloatFmt.f32.underflowError) ∧
+      (a * b + c) - r ≤ (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError) +
+        (FloatFmt.f64.unitRoundoff * (A + (FloatFmt.f64.unitRoundoff * B +
+          FloatFmt.f64.underflowError)) + FloatFmt.f64.underflowError) +
+        (FloatFmt.f32.unitRoundoff * (A + (FloatFmt.f64.unitRoundoff * B +
+          FloatFmt.f64.underflowError) + (FloatFmt.f64.unitRoundoff * (A +
+            (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError)) +
+              FloatFmt.f64.underflowError)) + FloatFmt.f32.underflowError) := by
+  have hw {w : Float .f32} {v : Rat} (h : w.toRat? = some v) :
+      (Float.conv .f64 w).toRat? = some v :=
+    conv_toRat_of_wider (by decide) (by decide) (by decide) h
+  have hu := Rat.le_of_lt (FloatFmt.unitRoundoff_pos .f64)
+  have hη := Rat.le_of_lt (FloatFmt.underflowError_pos .f64)
+  have huB := Rat.mul_nonneg hu (show 0 ≤ B by grind)
+  obtain ⟨p, hp, p1, p2⟩ := mul_error (hw hx) (hw hy) hblo hbhi hovB
+  obtain ⟨q, hq, q1, q2⟩ := add_error hp (hw hz)
+    (A := A + (FloatFmt.f64.unitRoundoff * B + FloatFmt.f64.underflowError))
+    (by grind) (by grind) hov1
+  have huA := Rat.mul_nonneg hu (show 0 ≤ A + (FloatFmt.f64.unitRoundoff * B +
+    FloatFmt.f64.underflowError) by grind)
+  obtain ⟨r, hr, r1, r2⟩ := conv_error (fmt2 := .f32) hq (by grind) (by grind) hov2
+  exact ⟨r, (rfl : Float.fmaRt x y z = _) ▸ hr, by grind, by grind⟩
+
+/-- **`/` on `f128`, `compiler-rt` before Zig 0.16.0 (`__divtf3`, group A).** The port flushes a
+nonzero subnormal quotient to a signed zero, so the error of `div_error` grows by at most the
+smallest normal magnitude `2^emin` (`2^-16382`). -/
+theorem divRt_error_f128 {x y : Float .f128} {a b A : Rat} (hx : x.toRat? = some a)
+    (hy : y.toRat? = some b) (hb : b ≠ 0) (hlo : -A ≤ a / b) (hhi : a / b ≤ A)
+    (hov : A < FloatFmt.f128.overflowBound) :
+    ∃ r, (Float.divRt x y).toRat? = some r ∧
+      r - a / b ≤ FloatFmt.f128.unitRoundoff * A + FloatFmt.f128.underflowError +
+        (2 : Rat) ^ FloatFmt.f128.emin ∧
+      a / b - r ≤ FloatFmt.f128.unitRoundoff * A + FloatFmt.f128.underflowError +
+        (2 : Rat) ^ FloatFmt.f128.emin := by
+  obtain ⟨q, hq, e1, e2⟩ := div_error hx hy hb hlo hhi hov
+  have hm2 := two_zpow_pos FloatFmt.f128.emin
+  obtain ⟨s, m, e, hc, rfl⟩ := exists_finite_of_toRat? hq
+  show ∃ r, (match (Float.div x y).classify with
+    | .finite s m _ => if m ≠ 0 ∧ m < 2 ^ FloatFmt.f128.fracBits then Float.zero s
+        else Float.div x y
+    | _ => Float.div x y).toRat? = some r ∧ _
+  rw [hc]
+  simp only []
+  by_cases hsub : m ≠ 0 ∧ m < 2 ^ FloatFmt.f128.fracBits
+  · rw [ite_eq_left hsub]
+    refine ⟨0, by simp [Float.toRat?, classify_zero, finiteToRat_zero], ?_⟩
+    -- The flushed value is subnormal: `|q| < 2^fracBits · 2^(emin - fracBits) = 2^emin`.
+    obtain ⟨-, -, hnorm⟩ := classify_finite_range hc
+    have he : e = FloatFmt.f128.emin - FloatFmt.f128.fracBits := by
+      rcases hnorm with h | h
+      · omega
+      · exact h
+    have hmag : finiteToRat false m e < (2 : Rat) ^ FloatFmt.f128.emin := by
+      rw [finiteToRat_false_eq_zpow, he]
+      have hlt : (m : Rat) < ((2 ^ FloatFmt.f128.fracBits : Nat) : Rat) :=
+        Rat.natCast_lt_natCast.mpr hsub.2
+      have h2 : ((2 ^ FloatFmt.f128.fracBits : Nat) : Rat) * (2 : Rat) ^
+          (FloatFmt.f128.emin - FloatFmt.f128.fracBits) = (2 : Rat) ^ FloatFmt.f128.emin := by
+        push_cast
+        rw [← Rat.zpow_natCast, ← Rat.zpow_add (by decide)]
+        congr 1
+      rw [← h2]
+      exact Rat.mul_lt_mul_of_pos_right hlt (two_zpow_pos _)
+    have h0 := finiteToRat_nonneg m e
+    cases s
+    · constructor <;> grind
+    · rw [finiteToRat_true_eq] at e1 e2
+      constructor <;> grind
+  · rw [ite_eq_right hsub]
+    exact ⟨_, hq, by grind, by grind⟩
 
 end Zig
