@@ -69,11 +69,15 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
     (seen : Array TyId := #[]) : Option (Nat × Bool) := do
   if fuel == 0 || seen.contains id then none
   let ty ← types[id]?
+  -- A function pointer stored as data is a code address: its pointee is no data storage
+  -- (`Emit.lean`'s 1-byte function block, L11). A view of code itself stays unresolved.
+  let fnPointer := match ty with
+    | .ptr _ _ c => (types[c]?.map isFnTy).getD false
+    | _ => false
   let count ← match ty with
-    -- Code: a function block has no data storage (`Emit.lean`, L11).
-    | .other n => if isFnTy (.other n) then some 0 else none
-    | .errorSet none => none
-    | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => some 1
+    | .other _ | .errorSet none => none
+    | .ptr .. => some (if fnPointer then 0 else 1)
+    | .array .. | .vector .. | .optional .. | .enum .. => some 1
     | .errorUnion .. => some 2
     | .struct _ _ fields => some fields.size
     | .union _ _ tag fields => some (tag.toArray.size + fields.size)
@@ -82,7 +86,7 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   let mut remaining := fuel - 1
   if count > remaining then none
   let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
-  for child in childTys ty do
+  for child in if fnPointer then #[] else childTys ty do
     let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id)
     remaining := next
     symbolic := symbolic || childCap
@@ -754,19 +758,24 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         return pid == aty && a.size.isSome && a.align.isSome &&
           a.ptrAlign.isSome && b.ptrAlign.isNone &&
           a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
+      -- A code address carries no data storage: a function pointer may be reinterpreted,
+      -- and a call through it dispatches over the table of its type (`.illegal` for any
+      -- other block, L11).
+      let castCapability (t : TyId) : Option Bool :=
+        if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
         unless qualifierOnly || optionalWrapOnly do
-          let some sourceCap := hasErrorCapability cx.types source
+          let some sourceCap := castCapability source
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
-          let some targetCap := hasErrorCapability cx.types target
+          let some targetCap := castCapability target
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           if sourceCap != targetCap ||
               hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
               ((sourceCap || targetCap) && source != target) then
             cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
       | none, some target =>
-        unless hasErrorCapability cx.types target == some false do
+        unless castCapability target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
