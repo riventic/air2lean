@@ -4,6 +4,7 @@ import Air2Lean.Emit
 import Air2Lean.Air.Anon
 import Air2Lean.Diagnose
 import Air2Lean.SourceMap
+import Air2Lean.Device
 
 /-!
 # CLI
@@ -27,8 +28,8 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--device-contract <json>]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -43,6 +44,7 @@ def help : String :=
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
+  "  --device-contract <json>     Model volatile integer accesses as device events; see docs/volatile-effects.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
@@ -73,6 +75,8 @@ structure Args where
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
   sourceMapJson : Option String := none
+  /-- `--device-contract`: the declared device (`docs/volatile-effects.md`, L13). -/
+  deviceContract : Option String := none
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -112,7 +116,11 @@ private partial def parseArgsGo (args : List String)
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
     if a.sourceMapJson.isSome then .error s!"duplicate --source-map-json\n{usage}"
     else .ok { a with sourceMapJson := some v }
-  | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] =>
+  | "--device-contract" :: v :: rest => do
+    let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
+    if a.deviceContract.isSome then .error s!"duplicate --device-contract\n{usage}"
+    else .ok { a with deviceContract := some v }
+  | ["--device-contract"] | ["-o"] | ["--namespace"] | ["--prefix"] | ["--float-semantics"] | ["--profile"] | ["--model-registry"] | ["--spawn-policy"] | ["--timing-json"] | ["--source-map-json"] =>
     .error s!"missing value for {args.head!}\n{usage}"
   | v :: rest =>
     if v.startsWith "-" then .error s!"unknown option: '{v}'\n{usage}"
@@ -132,6 +140,8 @@ def parseArgs (args : List String) : Except String Args := do
       throw s!"--source-map-json must not name the -o output or the --timing-json report\n{usage}"
     if a.registryTemplate then
       throw "--source-map-json cannot be combined with --model-registry-template"
+  if a.registryTemplate && a.deviceContract.isSome then
+    throw "--device-contract cannot be combined with --model-registry-template"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -209,6 +219,12 @@ private def run (args : List String) : IO UInt32 := do
           match ModelRegistry.parse contents with
           | .ok models => pure models
           | .error error => throw (IO.userError error)
+      let device ← match a.deviceContract with
+        | none => pure none
+        | some path =>
+          match DeviceContract.parse (← StrictJson.readFile path) with
+          | .ok contract => pure (some contract)
+          | .error error => throw (IO.userError s!"{path}: {error}")
       times := { times with read := (← IO.monoNanosNow) - readStart }
       -- Preserve the historical <full name>.json emission order even when storage
       -- uses hashes or project staging names. Cache before anonymous renumbering.
@@ -235,7 +251,7 @@ private def run (args : List String) : IO UInt32 := do
             match normalized with
             | .error e => err := some s!"{path}: {e}"
             | .ok f =>
-              let (checkedOne, checkNs) ← timed fun _ => check f
+              let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
               match checkedOne with
               | .error e => err := some s!"{path}: {e}"
@@ -272,10 +288,13 @@ private def run (args : List String) : IO UInt32 := do
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
             let ((src, declNames), emitNs) ← timed fun _ =>
               let (body, declNames) :=
-                emitWithNames emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
+                emitWithNames emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi device
               ("-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
                 (if models.isEmpty then "" else
-                  "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++ body,
+                  "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++
+                (match device with
+                  | none => ""
+                  | some c => "-- air2lean-device: " ++ c.report.compress ++ "\n") ++ body,
                 declNames)
             times := { times with emit := emitNs }
             let writeStart ← IO.monoNanosNow
@@ -301,8 +320,9 @@ private def run (args : List String) : IO UInt32 := do
               let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
               let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v1"),
                 ("namespace", .str a.ns), ("metadata", metadata),
-                ("options", Lean.Json.mkObj [("spawn_policy", .str spawn),
-                  ("models", if models.isEmpty then .null else ModelRegistry.report models)]),
+                ("options", Lean.Json.mkObj ([("spawn_policy", .str spawn),
+                  ("models", if models.isEmpty then .null else ModelRegistry.report models)] ++
+                  (match device with | none => [] | some c => [("device", c.report)]))),
                 ("functions", .arr records)]
               try IO.FS.writeFile path (sidecar.compress ++ "\n") catch e =>
                 throw (IO.userError s!"writing source map {path}: {e}")

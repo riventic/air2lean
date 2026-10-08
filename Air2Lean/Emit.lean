@@ -1,6 +1,7 @@
 import Std.Data.HashSet
 import Air2Lean.Check
 import Air2Lean.ProofApi
+import Air2Lean.Device
 
 /-!
 # Emitter
@@ -666,6 +667,8 @@ structure FCtx where
   bytePlaces : Array (InstId × InstId × Nat) := #[]
   /-- The functions that return `Zig.Bytes T` (`rawFunctions`). -/
   rawFuncs : Array String := #[]
+  /-- `Func.targetArch`: an asm op off the allowlist is a device event (`Op.isDeviceAsm`). -/
+  targetArch : String := ""
   /-- The instructions whose value is `Zig.Bytes T` (`FCtx.computeRawInsts`). -/
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
@@ -1151,6 +1154,14 @@ def FCtx.pointeeStorageExpr (fc : FCtx) (ptr : Val) (expr : String) : String :=
   | some tid => fc.storageExpr tid expr
   | none => expr
 
+/-- `v` is a volatile pointer (L13: a device access with `--device-contract`). -/
+def FCtx.isVolatileVal (fc : FCtx) (v : Val) : Bool :=
+  (fc.valTyId? v |>.map (volatilePtrTy fc.types fc.layouts)).getD false
+
+/-- The bit width of `ptr`'s integer pointee (a device register access). -/
+def FCtx.pointeeBits (fc : FCtx) (ptr : Val) : Nat :=
+  ((fc.valTyId? ptr).bind (ptrChild fc.types)).map fc.tyBits |>.getD 0
+
 /-- A load through a pointer to memory. -/
 def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
   match fc.valTyId? ptr with
@@ -1275,6 +1286,10 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
 `p`. -/
 def FCtx.loadItem (fc : FCtx) (v : Val) (p i : String) : String :=
   let item := fc.itemTyId v
+  -- L13 device mode: a volatile item read is one device event.
+  if fc.isVolatileVal v then
+    s!"Zig.vload {deviceDefName} {fc.tyBits item} {fc.itemAlign v} ({p}.elem {fc.sizeOf item} {i})"
+  else
   fc.storageExpr item s!"Zig.load ({emitTy fc.structNames fc.types (fc.tyOfId item)}) {fc.itemAlign v} \
     ({p}.elem {fc.sizeOf item} {i})"
 
@@ -1615,7 +1630,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   let mut defs : Array AsmDef := #[]
   for f in funcs do
     for i in f.allInsts do
-      if i.op.isSpinHint then continue
+      if i.op.isSpinHint || i.op.isDeviceAsm f.targetArch then continue
       if let .asm source _ _ outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
@@ -2117,6 +2132,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let (env, l) := bindLet fc env inst.id
           (fc.storageExpr child s!"Zig.Bytes.get ({fc.pointeeTy ptr}) (← get).{field} {off}")
         (env, some l)
+    else if fc.isMemPtr ptr && fc.isVolatileVal ptr then
+      -- L13 device mode (the checker admits it only with `--device-contract`): an event.
+      let expr := s!"Zig.vload {deviceDefName} {fc.pointeeBits ptr} {fc.ptrAlign ptr} {rv ptr}"
+      -- An unused read is still one event (`bindLet` names it `_iN`).
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if fc.isMemPtr ptr then
       if !fc.isReferenced inst.id then
         -- Keep the full access/read record, but do not decode a value with no runtime use.
@@ -2138,6 +2158,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | v => if isRaw then s!"Zig.Bytes.copy s.{field} {off} {rv v}"
           else s!"Zig.Bytes.set s.{field} {off} ({rv v} : {ty})"
       (env, some (fc.pointeeStorageExpr ptr s!"modify (fun s => \{ s with {field} := {new} })"))
+    else if fc.isMemPtr ptr && fc.isVolatileVal ptr then
+      (env, some s!"Zig.vstore {deviceDefName} {fc.pointeeBits ptr} {fc.ptrAlign ptr} {rv ptr} {rv v}")
     else if fc.isMemPtr ptr then
       let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
       -- A copy of a value with undefined parts: its bytes (`rawUseOk`).
@@ -2340,6 +2362,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .asm source _ _ outputs inputs =>
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
+      (env, some l)
+    else if inst.op.isDeviceAsm fc.targetArch then
+      -- L13: a declared device asm (the checker admits no other): one `asm` trace event.
+      let ins := "[" ++ ", ".intercalate (inputs.toList.map fun i => s!"({rv i.ref.get!}).toNat") ++ "]"
+      let expr := if outputs.isEmpty then s!"Zig.vasmEffect {deviceDefName} {source.quote} {ins}"
+        else s!"Zig.vasm {deviceDefName} {source.quote} {ins} {fc.tyBits inst.ty}"
+      let (env, l) := bindLet fc env inst.id expr
       (env, some l)
     else
     -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
@@ -2742,7 +2771,7 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
-      rawRet := rawFuncs.contains f.name }
+      rawRet := rawFuncs.contains f.name, targetArch := f.targetArch }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
   { fc with rawInsts := fc.computeRawInsts fc.rawRet }
 
@@ -3375,7 +3404,8 @@ stripped from every Zig name (function or struct) before mangling. `floatSemanti
 `--float-semantics` (default `ieee`). Also returns each function's declaration name. -/
 def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
-    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false)
+    (device : Option DeviceContract := none) :
     String × Array (String × String) :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
@@ -3395,7 +3425,8 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
-    (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
+    (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name) ++
+    (if device.isSome then #[deviceDefName] else #[])
   let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed targets extendedCapture
   let funcNames := ownFuncNames ++ models.mapIdx (fun i m => (m.symbol, s!"air2lean_model_{i}"))
   let structNames := structs.map fun s => (s.zigName, s.leanName)
@@ -3468,7 +3499,8 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   (String.intercalate "\n\n"
     (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
-      [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr ++
+      [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ modelStr ++
+      (device.map DeviceContract.emitDef).toList ++ globalsStr ++ tgtStr ++
       funcsStr ++ dispatchStr ++ [s!"end {ns}"]), ownFuncNames)
 
 /-- `emitWithNames`'s Lean source only. -/

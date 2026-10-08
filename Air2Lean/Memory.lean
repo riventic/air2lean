@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Air2Lean.Air.Op
 import Air2Lean.StdModels
+import Air2Lean.AsmAllowlist
 
 /-!
 # Memory analysis
@@ -410,6 +411,15 @@ def Op.isSpinHint : Op → Bool
     (source == "pause" || source == "isb") && clobbers.isEmpty && outputs.isEmpty && inputs.isEmpty
   | _ => false
 
+/-- An inline asm op that is not on the reviewed allowlist (`Air2Lean/AsmAllowlist.lean`) for
+the target `arch`. The checker accepts one only as a declared device event (`Zig.vasm`, L13),
+which runs in `Zig.MemM`. -/
+def Op.isDeviceAsm (arch : String) : Op → Bool
+  | .asm source _ clobbers outputs inputs =>
+    (asmAllowed? arch source (outputs.map (·.constraint) ++ inputs.map (·.constraint)).toList
+      clobbers.toList).isNone
+  | _ => false
+
 /-- An op that only a function that uses memory has. -/
 def memoryOp (op : Op) : Bool :=
   op.isSpinHint || match op with
@@ -430,7 +440,8 @@ partial def Val.pointsToMem (v : Val) : Bool :=
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+    f.allInsts.any fun i => memoryOp i.op || i.op.isDeviceAsm f.targetArch ||
+      (valueOperands i.op).any Val.pointsToMem ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
       nullablePtrTy f.types f.layouts i.ty ||

@@ -613,5 +613,8 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- The profile's target architecture (`x86_64`, `aarch64`); empty for a legacy profile, whose
+  reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
+  targetArch : String := ""
 
 end Air2Lean
