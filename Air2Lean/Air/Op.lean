@@ -174,10 +174,12 @@ structure Layout where
   bitOffset : Nat := 0
   /-- A vector type of an AIR file whose schema-12 profile names the LLVM backend
   (`stage2_llvm`): its lanes are bit-packed in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`).
+  A lane pointer of such a file (x86_64 or aarch64 only) whose `hostSize`/`bitOffset`
+  `normalize` rewrote to the bit-pointer into the vector's integer (`lanePtrLayout`).
   Set by `normalize`, never by the exporter; other backends lay out lanes differently. -/
   packedLanes : Bool := false
   /-- A pointer to one lane of a vector (`&v[i]`): the lane. Its `hostSize` is then the vector
-  length, not a byte count. -/
+  length, not a byte count, until `normalize` rewrites it (`packedLanes`). -/
   vectorIndex : Option Nat := none
   /-- A lane pointer whose lane is runtime-known (`vector_index: "runtime"`, 0.14.1/0.15.2). -/
   runtimeLane : Bool := false
@@ -186,9 +188,15 @@ structure Layout where
   vectorIndexExported : Bool := false
   deriving Repr, Inhabited, BEq
 
-/-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
+/-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`). The checker rejects it unless it is a
+`laneBitPtr`. -/
 def Layout.isLanePtr (l : Layout) : Bool :=
   l.vectorIndex.isSome || l.runtimeLane
+
+/-- A lane pointer that `normalize` made a bit-pointer into the vector's integer
+(`Zig.loadLane`/`Zig.storeLane`). -/
+def Layout.laneBitPtr (l : Layout) : Bool :=
+  l.vectorIndex.isSome && l.packedLanes
 
 /-- A bit-pointer whose export has no `vector_index`. It can be a packed field pointer or a lane
 pointer. -/

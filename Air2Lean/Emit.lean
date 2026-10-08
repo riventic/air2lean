@@ -1062,6 +1062,9 @@ def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
 /-- A bit-pointer type's host integer size in bytes; 0 for every other type. -/
 def FCtx.hostSize (fc : FCtx) (ptrTy : TyId) : Nat := (fc.layouts[ptrTy]?.map (·.hostSize)).getD 0
 
+/-- `ptrTy` is a lane pointer into a bit-packed vector (`Layout.laneBitPtr`). -/
+def FCtx.laneBitPtr (fc : FCtx) (ptrTy : TyId) : Bool := (fc.layouts[ptrTy]?.map (·.laneBitPtr)).getD false
+
 /-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
 (`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
 def FCtx.fieldOffsetOfPtrTy (fc : FCtx) (ptrTy : TyId) (idx : Nat) : Nat :=
@@ -1107,7 +1110,8 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
   match fc.valTyId? ptr with
   | some t =>
     if fc.hostSize t != 0 then
-      s!"Zig.loadBits ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
+      let f := if fc.laneBitPtr t then "Zig.loadLane" else "Zig.loadBits"
+      s!"{f} ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
         {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
     else fc.pointeeStorageExpr ptr s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
   | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
@@ -2085,7 +2089,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
         if host != 0 then
           let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0
-          (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
+          let f := if ((fc.valTyId? ptr).map fc.laneBitPtr).getD false then "Zig.storeLane"
+            else "Zig.storeBits"
+          (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))
     else (env, some (fc.storePlace ptr (rv v)))
   -- An atomic op is a sync op: the oracle picks the message or the place, and another thread can
@@ -2129,7 +2135,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let f := if sub then "elemSub" else "elem"
     let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.{f} {size} {rv n})"; (env, some l)
+  -- `&v[i]` of a bit-packed vector: the vector's address; the lane is in the type.
   | .elemPtr p i =>
+    if fc.laneBitPtr inst.ty then
+      let (env, l) := bindLet fc env inst.id s!"pure {rv p}"; (env, some l)
+    else
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let base := if fc.isSlice p then s!"{rv p}.ptr" else rv p
     let (env, l) := bindLet fc env inst.id s!"pure ({base}.elem {size} {rv i})"; (env, some l)
@@ -2137,7 +2147,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
     (env, some l)
   | .arrayElemVal a i =>
-    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.vindex {rv a} {rv i}"); (env, some l)
+    -- A vector's lanes are a `Vector` (`Zig.Vec.lanes`).
+    let items := match fc.valTy a with | .vector .. => s!"{rv a}.lanes" | _ => rv a
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.vindex {items} {rv i}"); (env, some l)
   | .slice p len =>
     let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : Zig.Slice)"; (env, some l)
   | .slicePtr sl => let (env, l) := bindLet fc env inst.id s!"pure {rv sl}.ptr"; (env, some l)

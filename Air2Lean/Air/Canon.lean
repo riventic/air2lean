@@ -22,7 +22,8 @@ supported version, so one translation (and the proofs over it) serves all versio
 2. `itemReads`. A read of one item through a pointer is `ptr_elem_val` in 0.15.2, and
    `ptr_elem_ptr` then `load` in 0.16.0. A read of one item of a local array is a `load` of the
    whole array then `array_elem_val` in 0.15.2, and the same `ptr_elem_ptr` and `load` in 0.16.0.
-   The pass changes both pairs to one `ptr_elem_val`, if the first instruction has no other use.
+   The pass changes both pairs to one `ptr_elem_val`, if the first instruction has no other use
+   and is not a lane pointer (`vector_index`), which stays a bit-pointer.
    A `slice_elem_ptr`/`load` pair similarly becomes `slice_elem_val` at the load's position.
    For the second pair, the `array_elem_val` must come directly after the `load` in its body, so
    no write comes between them.
@@ -375,7 +376,9 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
       if u.tag == "load" && u.args[0]? == some (.inst x.id) then
         repl := repl.insert u.id ("slice_elem_val", s, idx); gone := gone.insert x.id
     | "ptr_elem_ptr", some p, some i, some u =>
-      if u.tag == "load" && u.args[0]? == some (.inst x.id) then
+      -- A lane pointer (`&v[i]` of a bit-packed vector) is a bit-pointer, not an item.
+      let lane := ((x.ty.bind (f.layouts[·]?)).map (·.isLanePtr)).getD false
+      if !lane && u.tag == "load" && u.args[0]? == some (.inst x.id) then
         repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | "load", some p, _, some u =>
       if u.tag == "array_elem_val" && u.args[0]? == some (.inst x.id) && next[x.id]? == some u.id then
