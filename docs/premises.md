@@ -308,6 +308,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: token `Cooperative`.
 - Sources: [progress-hints.md](progress-hints.md#worker-idle-loop),
   `tests/roadmap/idle-loops/IdleLoop/Theorems.lean`.
+
+<a id="thr-10"></a>
+### THR-10 — `Io.Future` tasks and cancelation (0.16.0)
+
+- Kind: environment.
+- Statement: `Io.async` allocates a runtime record and spawns the task as a model thread (or,
+  under `fallible`, runs it in the caller). `await`/`cancel` join it and return the result
+  that it wrote. Only the spawner may consume a future, and an unconsumed future is `.illegal`.
+  A cancelation request is delivered only at `Io.checkCancel`. Programs with `Future.cancel`
+  whose tasks reach another cancelation point are rejected. Group support does not imply
+  future support.
+- Derived from: `ZigLean.Conc.Future`, `ZigLean.Conc.FutureLemmas`; tokens `asyncC`, `awaitC`,
+  `cancelC`, `checkCancelC`, `futureProto`.
+- Sources: [futures.md](futures.md).
 ## Memory ordering
 
 <a id="ord-01"></a>

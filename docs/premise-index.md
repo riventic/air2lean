@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2197 theorems in 125 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 407 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -19,17 +19,18 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1163 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 111 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1191 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 118 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 5 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 760 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 968 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 985 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 956 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 956 | No load buffering in compiled code |
+| [THR-10](premises.md#thr-10) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
+| [ORD-01](premises.md#ord-01) | 969 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 969 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 320 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
@@ -39,16 +40,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2076 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1733 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2197 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1028 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1028 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2207,6 +2208,46 @@ File premises: SEM-01, SEM-02, TRU-01
 | `example@L16` | SEM-01, SEM-02, TRU-01 |
 | `example@L17` | SEM-01, SEM-02, TRU-01 |
 | `example@L25` | SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/futures/Futures/Proofs.lean`
+
+File premises: PRF-02, THR-01, THR-02, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `Futures.Proofs.square_dispatch` | PRF-02, THR-01, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.fill_dispatch` | PRF-02, THR-01, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.fill_captures` | PRF-02, THR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.square_captures` | PRF-02, THR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.cancellable_captures` | PRF-02, THR-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.square_run` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.square_task` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.no_task` | PRF-02, THR-01, THR-08, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.only_child` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.pending_size` | THR-01, THR-08, THR-10, SEM-01, SEM-02, TRU-01 |
+| `Futures.Proofs.reads_pending` | THR-01, THR-08, THR-10, SEM-01, SEM-02, TRU-01 |
+| `Futures.Proofs.awaitValue_wp` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.awaitValue_result` | PRF-02, THR-01, THR-02, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.errorUnionEnc_lawful` | SEM-01, SEM-02, TRU-01 |
+| `Futures.Proofs.checked_run` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.checked_dispatch` | PRF-02, THR-01, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.checkedSpec_lawful` | SEM-01, SEM-02, TRU-01 |
+| `Futures.Proofs.checked_task` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.awaitError_wp` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.awaitError_result` | PRF-02, THR-01, THR-02, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.awaitError_zero` | PRF-02, THR-01, THR-02, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.cancellable_dispatch` | PRF-02, THR-01, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.cancelSpec_lawful` | SEM-01, SEM-02, TRU-01 |
+| `Futures.Proofs.cancellable_body` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.cancellable_task` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.cancelValue_wp` | PRF-02, THR-01, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.cancelValue_result` | PRF-02, THR-01, THR-02, THR-08, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.second_await` | PRF-02, THR-01, THR-08, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.consumed_reads_back` | THR-01, THR-08, THR-10, SEM-01, SEM-02, TRU-01 |
+| `Futures.Proofs.leak_illegal` | PRF-02, THR-01, THR-02, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.foreignAwait_illegal` | PRF-02, THR-01, THR-02, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.doubleAwait_illegal` | PRF-02, THR-01, THR-02, THR-10, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Futures.Proofs.join_foreign_illegal` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/global-init/GlobalInit/Proofs.lean`
 

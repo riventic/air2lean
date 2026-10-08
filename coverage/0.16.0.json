@@ -2567,6 +2567,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -2858,6 +2859,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -3531,6 +3533,8 @@
           "ZigLean/Conc/Call.lean",
           "ZigLean/Conc/Capture.lean",
           "ZigLean/Conc/Csl.lean",
+          "ZigLean/Conc/Future.lean",
+          "ZigLean/Conc/FutureLemmas.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
@@ -4720,6 +4724,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedBudget.lean",
           "ZigLean/Conc/TimedCall.lean",
@@ -4918,6 +4923,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedBudget.lean",
           "ZigLean/Conc/TimedCall.lean",
@@ -5001,6 +5007,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedBudget.lean",
           "ZigLean/Conc/TimedCall.lean",
@@ -5084,6 +5091,7 @@
         "paths": [
           "ZigLean/Basic.lean",
           "ZigLean/Conc/Call.lean",
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/TimedBudget.lean",
           "ZigLean/Conc/TimedCall.lean",
@@ -9119,6 +9127,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
+          "ZigLean/Conc/FutureLemmas.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Own.lean",
@@ -9845,6 +9855,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
+          "ZigLean/Conc/FutureLemmas.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
@@ -9977,6 +9989,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
+          "ZigLean/Conc/FutureLemmas.lean",
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
@@ -13341,6 +13355,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Mem/Basic.lean"
         ]
       },
@@ -13400,6 +13415,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Conc/Future.lean",
           "ZigLean/Mem/Basic.lean"
         ]
       },
@@ -15832,6 +15848,18 @@
       "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
     },
     {
+      "name": "Io.Future.await",
+      "recognizer": "threadFn?",
+      "disposition": "recognized-model-boundary",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Future.cancel",
+      "recognizer": "threadFn?",
+      "disposition": "recognized-model-boundary",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
       "name": "Io.Group.async",
       "recognizer": "threadFn?",
       "disposition": "recognized-model-boundary",
@@ -15851,6 +15879,18 @@
     },
     {
       "name": "Io.Group.concurrent",
+      "recognizer": "threadFn?",
+      "disposition": "recognized-model-boundary",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.async",
+      "recognizer": "threadFn?",
+      "disposition": "recognized-model-boundary",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.checkCancel",
       "recognizer": "threadFn?",
       "disposition": "recognized-model-boundary",
       "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
@@ -15946,7 +15986,91 @@
       "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
     },
     {
+      "name": "Io.Batch.awaitAsync",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Batch.awaitConcurrent",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Batch.cancel",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Select.async",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Select.await",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Select.cancel",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Select.cancelDiscard",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.Select.concurrent",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.concurrent",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
       "name": "Io.futexWaitTimeout",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.operate",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.operateTimeout",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.recancel",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.sleep",
+      "recognizer": "rejectedThreadFn?",
+      "disposition": "translation-rejected",
+      "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
+    },
+    {
+      "name": "Io.swapCancelProtection",
       "recognizer": "rejectedThreadFn?",
       "disposition": "translation-rejected",
       "qualification": "source-only; contracts and target/version restrictions require docs/std-models.md and Check.lean review"
@@ -15966,22 +16090,22 @@
     "translation": {
       "Air2Lean/Air/Anon.lean": "540b0ecab72478d263e4c0509f388bb72b8db9d6c4ea28df2f55f5e14a406183",
       "Air2Lean/Air/Canon.lean": "1756247add3b63b23182a276102e1270b72cbb0e87fda9a59eeafd5522006ed1",
-      "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
-      "Air2Lean/Air/Json.lean": "7cd6342fcc6a0303041d81b216cb77889199079b159b690fcbef3287d4ff84c3",
+      "Air2Lean/Air/Compat.lean": "7acd50392627d71dc54fe91ffcca6eaca524ee6b39147d801b51c3877017325c",
+      "Air2Lean/Air/Json.lean": "ee5193a9ae8510c4e9bc7949db0354a7cac26311ce5f907b2ca4b9064833d223",
       "Air2Lean/Air/Normalize.lean": "d4c50aa0e246efd95daf6d7842a4b77f8b89e5f518b9e6fd33707ec91834bdac",
-      "Air2Lean/Air/Op.lean": "757ffaf526a522247c5d44699f58a00830bb08aac4c295e1eb39ebde1f6cdd31",
+      "Air2Lean/Air/Op.lean": "d8a40bc02416729100bc94995875f69e77a57832d5a397b349abaa565f11ff15",
       "Air2Lean/Air/Profile.lean": "2ba42bbcb01722212f666ab80b11f4f23fd19a2d905c21a33a580d564e958e27",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "a3097c3a3fefd225a9e57cee497104d470281bd69040a7f13d4efb0015a4595e",
+      "Air2Lean/Check.lean": "7b589f27c11c663a97574134a0cfb2fa5575d6fcbb5ca4684d6e4259733499e4",
       "Air2Lean/Diagnose.lean": "02a9c9ff79f8cfb148b872e3bf57c09987d320bacbe63d42f822894af868bf77",
       "Air2Lean/Diagnostic.lean": "6d52aa00b40712a6b572c462535bbc545d1f48967fc859cbc9d42da36b149c27",
-      "Air2Lean/Emit.lean": "eacf0b17efdf74d4437dd5aae7f5914bc09b2019efd8be980497a601577f79c6",
+      "Air2Lean/Emit.lean": "b77777d884d3b8451b16ea60f1a3964b567bcc18a02f83aa09278554b28fe4c8",
       "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
-      "Air2Lean/Memory.lean": "f4bb1e4733da1d15c56197cf6c821f5f5f110d3f42ffe9dc82fc9049967cb65d",
+      "Air2Lean/Memory.lean": "234f0f05e72acb7c976a2f63008e9bba4713c98f091202e0bd85d3260b364787",
       "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
       "Air2Lean/ProofApi.lean": "9c4eacafe0e2b124fb80ff2834763e417d2f77b2961f61fe2143af5594f8be41",
       "Air2Lean/SourceMap.lean": "a71d35b7edcbae8c21c8d2a6061be75df48efd974a126fd94f4e1505f3bef9a9",
-      "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
+      "Air2Lean/StdModels.lean": "3d8a722e93d4c2b3dd897e21f41f830b4d5a4308a8c429a2ca96311faf7454d4",
       "Air2Lean/TimedCheck.lean": "690ac922400f0a9b888f9931a5879bbad7995ef27664ebed7fccda389aa171e5",
       "Air2Lean/TimedEmit.lean": "69961957cca4f1280290ccd150e43880bc0a9620a3f0b9220c1dd9d108f32bce",
       "zig-patch/air-json/json.zig": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0",
@@ -15994,6 +16118,8 @@
       "ZigLean/Conc/Call.lean": "1c280d4d4b16aca8a52d4290998209110f9c3b98da5431d9208846d088db6f50",
       "ZigLean/Conc/Capture.lean": "a790eab8da1e7379c4f12ced5732259a41b04d9a1a75b4073d70bed209319c9b",
       "ZigLean/Conc/Csl.lean": "e96e73fed694439b4fa8dc46926668da1d9b5d3a74927e1b6d0c595d7c1df505",
+      "ZigLean/Conc/Future.lean": "f371d3619f0af3fb93743af62a4707b4c54206288dc7dfda23322747c4e25973",
+      "ZigLean/Conc/FutureLemmas.lean": "fe99440972928902f5ae4230b242c0fc9c4240481902786fb35952fddf87ae21",
       "ZigLean/Conc/Lemmas.lean": "669b4b671b4b562529cbc946437b10950faae116a54b9439ef1e057add527e49",
       "ZigLean/Conc/Lock.lean": "37be51baa59ba0731d5051ce7496cf5f0f5148dc1600f48ccae73b285691a095",
       "ZigLean/Conc/LockRules.lean": "9167af8d18f89f5f567c3aa8041c19ae0f53ae9de41d1a87e8429b8394ca37c2",
@@ -16016,7 +16142,7 @@
       "ZigLean/Conc/WeakCasLemmas.lean": "30dc9a347ab14fffc953e9e9a15e834ca0f6179e6e5341e5a011ecbf674733ac",
       "ZigLean/Conc/WeakWord.lean": "02f7185bda76281a86290f678902ab140848194cb793133192ad610f99c3a245",
       "ZigLean/Conc/Word.lean": "59661315491f6ecaf2fdba5df8728bbdd4506fae5c4d21cad9bc8a38e8569543",
-      "ZigLean/Conc.lean": "6d6fcff53307469d0327868e053f8340279149eeca0686206e818113bbce2234",
+      "ZigLean/Conc.lean": "41191130002f309d0a30dbd9bf5900da56cc13737d16936a572ac7c549a40587",
       "ZigLean/Env.lean": "d6c733c2e60381c487995155f198b5c47254375579265238502e8337c1d11229",
       "ZigLean/External/Callback.lean": "28574fab3f472dffb951d08f1eae59e84b3e6f61b594f04876f8a202deb3d0f0",
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
@@ -16034,7 +16160,7 @@
       "ZigLean/Lemmas.lean": "1fb0ae49b9ea33ad0caadec7bb61378c06539088e95a014e117d91debd491634",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
       "ZigLean/Mem/Alloc.lean": "3764ceb7f6cbffeb9806db02f5d359fba3e9120f93c70d3e6d393bebf60ccfdc",
-      "ZigLean/Mem/Basic.lean": "0260dd6a448f44b6f4b0a50c9b65f9fa3ec14c081edf44aa4190bf11e5cc278a",
+      "ZigLean/Mem/Basic.lean": "cb4b43185fa0a08a6f7018b2d6affb46ccb9a65959fe2b554fdf7f6e89b37193",
       "ZigLean/Mem/Enc.lean": "9c823b860da4d569beae7ea55ab04827370fab81532db5f9fea2558a1bb368e5",
       "ZigLean/Mem/Lemmas.lean": "9add6a53b0f078fe0b342e2b4168e1401b9344db7dc67e7e88c394ac94a33f65",
       "ZigLean/Mem/Null.lean": "ce3a714180a3adeb4864af0d534f85f871371e2f00fd8624d9f4dbc907fa1e8f",
@@ -16830,9 +16956,9 @@
       "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730"
     },
     "model-boundaries": {
-      "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
-      "Air2Lean/Memory.lean": "f4bb1e4733da1d15c56197cf6c821f5f5f110d3f42ffe9dc82fc9049967cb65d",
-      "docs/std-models.md": "84a6511ccfd64e87aae32f376baa2e71c93842b236a3eae3dd29516d39e84e82"
+      "Air2Lean/StdModels.lean": "3d8a722e93d4c2b3dd897e21f41f830b4d5a4308a8c429a2ca96311faf7454d4",
+      "Air2Lean/Memory.lean": "234f0f05e72acb7c976a2f63008e9bba4713c98f091202e0bd85d3260b364787",
+      "docs/std-models.md": "bc26cde57394155d9bd9cbb5806e058cc5504b6ccb7ac5bd126fc3757fa85996"
     }
   },
   "summary": {

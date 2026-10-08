@@ -18,7 +18,8 @@
   "generated_imports": {
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Gen": "tests/roadmap/global-payload-pointers/check.sh writes Gen.lean at gate time from a fresh export.",
-    "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean."
+    "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean.",
+    "FuturesFallible.Gen": "tests/roadmap/futures/check.sh translates the committed AIR with --spawn-policy fallible into FuturesFallible/Gen.lean at gate time."
   },
   "generated_premises": ["TRU-02"],
   "profiles": {
@@ -61,6 +62,8 @@
     "ZigLean.Conc.Sched": ["THR-01", "THR-02"],
     "ZigLean.Conc.Spawn": ["THR-03"],
     "ZigLean.Conc.SpawnLemmas": ["THR-03", "THR-08"],
+    "ZigLean.Conc.Future": ["THR-10"],
+    "ZigLean.Conc.FutureLemmas": ["THR-10", "THR-08"],
     "ZigLean.Conc.Logic": ["THR-08"],
     "ZigLean.Conc.Own": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Csl": ["THR-08"],

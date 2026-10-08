@@ -50,8 +50,9 @@ are accepted as audited resource requests, but
 there is no quantitative stack/quota model or native allocation adequacy theorem.
 Custom allocators and runtime configuration are rejected in fallible mode. Group
 tasks retain the existing void/noreturn worker subset; cancellation, detached threads,
-transferred join responsibilities, `Io.Future`, and arbitrary Io vtables remain
-outside this foundation. Project manifests select `spawn_policy` explicitly when
+transferred join responsibilities and arbitrary Io vtables remain outside this foundation;
+`Io.async` futures (with their eager fallback under `fallible`) are qualified separately in
+[futures.md](futures.md). Project manifests select `spawn_policy` explicitly when
 fallible behavior is required; omission preserves the historical available default.
 Both ordinary translation and diagnostic checks pass and record the effective policy.
 Receipt verification rejects contradictory policy evidence and historical available
