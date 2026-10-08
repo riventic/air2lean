@@ -58,7 +58,9 @@ def asm_ops(air_dir: Path = AIR) -> dict[str, dict]:
             outs = ("none" if not outputs else f"(some {outputs[0]})" if len(outputs) == 1
                     else "[" + ", ".join(map(str, outputs)) + "]")
             constraints = [o["constraint"] for o in inst["outputs"] + inst["inputs"]]
-            key = "\x01".join([inst["source"], *constraints, "[" + ", ".join(map(str, inputs)) + "]", outs])
+            # `asmKey`: the constraints are one field (empty when there are none).
+            key = "\x01".join([inst["source"], "\x01".join(constraints),
+                                "[" + ", ".join(map(str, inputs)) + "]", outs])
             name = f"airAsm_{fnv1a(key)}"
             op = {"function": func["name"].rsplit(".", 1)[-1], "source": inst["source"],
                   "outputs": [[o["constraint"], o["name"], w] for o, w in zip(inst["outputs"], outputs)],
