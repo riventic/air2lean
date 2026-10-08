@@ -1926,10 +1926,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- Only f80's legacy extension changes rounding; vector lanes carry their scalar type here.
     let legacyRt := fc.zigBefore016 && fc.floatSemantics == .compilerRt &&
       fc.tyOfId inst.ty == .float 80
+    -- Zig 0.17.0's f80 `@trunc` keeps a pseudo-denormal whose f128 extension is zero.
+    let trunc017 := fc.zigVersion == "0.17.0" && fc.floatSemantics == .compilerRt &&
+      fc.tyOfId inst.ty == .float 80
     let f := match op with
       | .floor => if legacyRt then "Zig.Float.floorRtLegacyChk" else "Zig.Float.floorChk"
       | .ceil => if legacyRt then "Zig.Float.ceilRtLegacyChk" else "Zig.Float.ceilChk"
-      | .trunc => "Zig.Float.truncChk" | .round => "Zig.Float.roundChk"
+      | .trunc => if trunc017 then "Zig.Float.truncRt017Chk" else "Zig.Float.truncChk"
+      | .round => "Zig.Float.roundChk"
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a}"; (env, some l)
   | .sqrt a =>
     let f := if fc.zigBefore016 && fc.valTy a == .float 128 then "Zig.Float.sqrtF128ViaF64"
