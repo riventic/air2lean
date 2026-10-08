@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "origin": "retained AIR exported once from nested.zig by a patched Zig 0.16.0 (zig-patch/0.16.0); not re-exported by this gate",
+  "source": "tests/roadmap/loop-tactics/nested/nested.zig",
+  "source_sha256": "fb72e5d37ab5042dec5fd283aa6ec3305dd5418aa53deddc7aa93db789faaf41",
+  "function": "nested.pairs",
+  "profile": {
+    "zig_version": "0.16.0",
+    "air_schema": 12,
+    "profile": "abi64-le-v1",
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "export_revision": "9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee",
+  "export_command": "ZIG_AIR_JSON_DIR=air ZIG_AIR_JSON_FILTER=nested. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline nested.zig",
+  "artifacts": {
+    "air/nested.pairs.json": "8b76d1aa5e064b80d46f9d417e001f7af8bb874731568b158ef8ce20cbb09736"
+  },
+  "translation": {
+    "command": "air2lean tests/roadmap/loop-tactics/nested/air -o Nested/Gen.lean --namespace Nested --prefix nested.",
+    "committed": "Nested/Gen.lean",
+    "check": "tests/roadmap/loop-tactics/nested/check.sh retranslates and compares byte for byte"
+  }
+}

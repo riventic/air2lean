@@ -180,6 +180,7 @@ structure Facts where
   locals : FVarIdSet := {}
   writes : Array (Name × Src) := #[]
   guards : Array (Name × Bool × Src × Src) := #[]
+  seen : Array Expr := #[]
   nested : Array Expr := #[]
 
 abbrev InferM := StateRefT Facts MetaM
@@ -244,7 +245,10 @@ partial def walk (structName ctor : Name) (e : Expr) : InferM Unit := do
       if c == ``Zig.loop && args.size == 7 then
         modify fun st => { st with nested := st.nested.push args[5]! }
         return
-      if [``Zig.lt, ``Zig.le, ``Zig.gt, ``Zig.ge].contains c && args.size == 4 then
+      -- A guard appears in both the `if` condition and its `Decidable` instance; record it once.
+      if [``Zig.lt, ``Zig.le, ``Zig.gt, ``Zig.ge].contains c && args.size == 4 &&
+          !(← get).seen.contains e then
+        modify fun st => { st with seen := st.seen.push e }
         if let some signed := args[1]!.constName? then
           let a ← classify structName args[2]!
           let b ← classify structName args[3]!

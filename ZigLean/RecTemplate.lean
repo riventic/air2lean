@@ -42,10 +42,10 @@ def scaffold (g : MVarId) (μ : Expr) : MetaM (MVarId × Expr) := g.withContext 
   let nat := mkConst ``Nat
   -- `μ ȳ`, checked against the goal's binders.
   let measureAt (ys : Array Expr) : MetaM Expr := do
-    let e := (mkAppN μ ys).headBeta
-    unless ← isDefEq (← inferType e) nat do
-      throwError "rec_template: the measure does not fit the goal's binders"
-    pure e
+    let e := mkAppN μ ys
+    let fits ← try check e; isDefEq (← inferType e) nat catch _ => pure false
+    unless fits do throwError "rec_template: the measure does not fit the goal's binders"
+    pure e.headBeta
   let telescope {β} (k' : Array Expr → Expr → MetaM β) : MetaM β :=
     forallBoundedTelescope tgt k fun ys b => do
       unless ys.size == k do
