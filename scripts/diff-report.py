@@ -51,6 +51,8 @@ class Status(str, Enum):
     INPUT_FAILURE = 'input_failure'
     NATIVE_HARNESS_FAILURE = 'native_harness_failure'
     SKIPPED = 'skipped'
+    # ReleaseFast/ReleaseSmall only: the model throws on the input, so the build has illegal behavior.
+    UB_EXCLUDED = 'ub_excluded'
 
 ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock'}
 IDENT = re.compile(r'[a-zA-Z0-9_-]+\Z')
@@ -238,25 +240,26 @@ MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH)
 def capped_search(search):
     return bool(search) and search['status'] == 'capped'
 
-def legacy_bucket(native, model, host, values_match=None, search=None):
-    bucket=_legacy_bucket(native,model,host,values_match)
+def legacy_bucket(native, model, host, values_match=None, search=None, ub_kinds=False):
+    bucket=_legacy_bucket(native,model,host,values_match,ub_kinds)
     # A capped search never contributes a legacy agreement counter.
     return 'capped' if capped_search(search) and bucket in {'ok','fail_match'} else bucket
 
-def _legacy_bucket(native, model, host, values_match=None):
+def _legacy_bucket(native, model, host, values_match=None, ub_model=False):
     if values_match is None:values_match=same_value(native,model)
     if values_match: return 'ok'
     if model.get('fail') in {'Zig.Error.illegal','Zig.Error.unspecified'}: return 'unspecified'
     if model.get('fail') == 'Zig.Error.capped': return 'capped'
+    if ub_model and model.get('fail','').startswith('Zig.Error.') and model['fail'] != 'Zig.Error.deadlock': return 'ub_excluded'
     if 'fail' in native and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return 'fail_match'
     return 'host' if host else 'mismatch'
 
-def classify(native, model, nkind, mkind, search, host=False, values_match=None):
-    status=_classify(native,model,nkind,mkind,search,host,values_match)
+def classify(native, model, nkind, mkind, search, host=False, values_match=None, exclude_ub=False):
+    status=_classify(native,model,nkind,mkind,search,host,values_match,exclude_ub)
     # Truncated exploration is never demonstrated correspondence, whatever it observed.
     return Status.SEARCH_CAP if status in MATCHES and capped_search(search) else status
 
-def _classify(native, model, nkind, mkind, search, host=False, values_match=None):
+def _classify(native, model, nkind, mkind, search, host=False, values_match=None, exclude_ub=False):
     if Kind.INPUT_FAILURE in (nkind,mkind): return Status.INPUT_FAILURE
     if Kind.NATIVE_HARNESS_FAILURE in (nkind,mkind): return Status.NATIVE_HARNESS_FAILURE
     if values_match is None:values_match=same_value(native,model)
@@ -266,6 +269,7 @@ def _classify(native, model, nkind, mkind, search, host=False, values_match=None
     if mkind == Kind.ILLEGAL: return Status.ILLEGAL
     if mkind == Kind.UNSPECIFIED: return Status.UNSPECIFIED
     if mkind == Kind.SEARCH_CAP: return Status.SEARCH_CAP
+    if exclude_ub and mkind == Kind.MODEL_PANIC: return Status.UB_EXCLUDED
     if nkind == Kind.NATIVE_PANIC and mkind == Kind.MODEL_PANIC and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return Status.PANIC_MATCH
     if mkind == Kind.BOUNDED_NO_RESULT or (search and search['saw_no_result']): return Status.BOUNDED_NO_RESULT
     if nkind == Kind.NATIVE_SIGNAL: return Status.MISMATCH
@@ -437,11 +441,16 @@ def source_hashes(root):
         result[str(path.relative_to(root))]=digest.hexdigest()
     return result
 
-def compare(root, examples, version, host, summary, schedule_receipts=()):
-    return compare_summary(root,examples,version,host,summary,schedule_receipts)[0]
+def compare(root, examples, version, host, summary, schedule_receipts=(), build=None):
+    return compare_summary(root,examples,version,host,summary,schedule_receipts,build)[0]
 
-def compare_summary(root, examples, version, host, summary, schedule_receipts=()):
-    """Write the summary and return (exit code, summary dict)."""
+def compare_summary(root, examples, version, host, summary, schedule_receipts=(), build=None):
+    """Write the summary and return (exit code, summary dict).
+
+    `build` is the (optimize mode, backend) of the native side when it is not the default
+    ReleaseSafe/LLVM reference. ReleaseFast and ReleaseSmall remove the safety checks, so an
+    input on which the model throws is illegal behavior there and is excluded, not compared."""
+    exclude_ub=bool(build) and build[0] in ('ReleaseFast','ReleaseSmall')
     if not examples or len(set(examples))!=len(examples) or any(not IDENT.fullmatch(ex) for ex in examples):
         raise Invalid('invalid selected examples')
     sources=source_hashes(root);exploration=Exploration()
@@ -487,8 +496,8 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                     native=wire(zline);model=wire(lline)
                     nkind,_=observation(zmeta,native,'native');mkind,search=observation(lmeta,model,'model')
                     values_match=same_value(native,model)
-                    status=classify(native,model,nkind,mkind,search,fn in allowed_host,values_match)
-                    bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search)
+                    status=classify(native,model,nkind,mkind,search,fn in allowed_host,values_match,exclude_ub)
+                    bucket=legacy_bucket(native,model,fn in allowed_host,values_match,search,exclude_ub)
                     count+=1;case_count+=1
                     if case_count>MAX_CASES:raise Invalid('case bound exceeded')
                     totals[status.value]+=1;statuses[status]+=1;local[bucket]+=1;legacy_totals[bucket]+=1
@@ -510,7 +519,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                         # Search-cap changes are budget evidence, not semantic mutation detections.
                         if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]
-    result={'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host},
+    result={'schema':SCHEMA,'complete':True,'qualified':False,'profile':{'zig_version':version,'host':host,**({'optimize':build[0],'backend':build[1]} if build else {})},
                          'case_count':case_count,'skipped_examples':len(skipped),'skipped_functions':sum(len(row['functions']) for row in skipped),
                          'exact_matches':sum(totals[s.value] for s in MATCHES),
                          'proof_applicability':'not_evaluated_by_differential_runner',
@@ -550,6 +559,8 @@ def main():
     parser.add_argument('--version',default='unavailable')
     parser.add_argument('--host',default='unavailable')
     parser.add_argument('--phase',default='setup')
+    parser.add_argument('--optimize',default='',help='native build mode when not the ReleaseSafe reference')
+    parser.add_argument('--backend',default='',help='native backend (llvm or stage2_x86_64)')
     parser.add_argument('--schedule-receipts',default='',help='space-separated scripts/schedules.py receipts')
     args=parser.parse_args()
     try:
@@ -574,7 +585,7 @@ def main():
             value=result.get('mutation_eligible')
             if type(value) is not int or value<0:raise Invalid('invalid mutation accounting')
             print(value);return 0
-        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split())
+        code,result=compare_summary(args.root,args.examples.split(),args.version,args.host,args.summary,args.schedule_receipts.split(),(args.optimize,args.backend or 'llvm') if args.optimize else None)
         print(headline(result));return code
     except (Invalid,OSError,UnicodeError,RecursionError) as exc:
         if args.action!='eligible':summary_failure(args.summary,args.phase,str(exc),Failure.UNSUPPORTED if isinstance(exc,Unsupported) else Failure.SETUP)
