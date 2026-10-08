@@ -9,6 +9,7 @@ import ZigLean.Lemmas
 import ZigLean.Loop
 import ZigLean.Mem
 import ZigLean.Packed
+import ZigLean.PackedLemmas
 import ZigLean.Simp
 import ZigLean.Union
 import ZigLean.Vec

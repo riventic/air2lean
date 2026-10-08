@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": "tests/roadmap/try-pointers/try_aliases.zig",
+  "source_sha256": "4f0675dc9859a006f40d8a69919116153f4ceb62294f1af1a4b24161204c2710",
+  "air_origin": "hand-written",
+  "functions": [
+    "twoPaths",
+    "resetOnError"
+  ],
+  "artifacts": {
+    "air/0.16.0/try_aliases.resetOnError.json": "e3c8e4b04a195d9d7ff99ee1b0201ed55db0c62356707fe7f4e1990acca18170",
+    "air/0.16.0/try_aliases.twoPaths.json": "54463d8d2dac056e4fb1516a76eb97828be424cdadc184ea4bba40f5ff0bb082",
+    "TryAliases/Gen.lean": "f372ede4edcb2a98a8ce388ed112fdb9acf094b6953ebb5d0d63964a538f6be4"
+  },
+  "qualification": {
+    "compiler_export": "pending",
+    "native": "pending",
+    "lean": "pending"
+  }
+}

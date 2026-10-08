@@ -23,6 +23,20 @@ failure. This model abstracts those internal resources: failure creates no model
 child, handle, group entry, or ownership transfer. It does not represent worker-pool
 allocation accounting or quantify native failure frequencies.
 
+## Resource budget
+
+`Mem.spawnLimit` (default `none`) is a per-caller thread budget for the fallible policy, an
+environment parameter like `Mem.allocPolicy`. It bounds the assigned children of the calling
+thread that no join has reclaimed (`Mem.liveChildren`). At an exhausted budget the oracle range
+excludes assignment: `Thread.spawn` returns one of the five declared errors, `Group.async` runs the
+task in the caller, and `Group.concurrent` returns `ConcurrencyUnavailable`. Below the budget
+every outcome remains possible, so several assignments in one run can fail, by budget, by oracle
+choice, or both. The budget is read in the memory at which the caller resumes after the choice,
+with no scheduling point before assignment; only the caller creates or joins its own children,
+so no interleaving can change its count in between. The `available` policy ignores the field,
+and the default reproduces the previous fallible outcomes exactly. The budget is not a
+process-wide quota, stack accounting, or a native frequency claim.
+
 Every outcome is an oracle choice at an existing scheduling point. Other threads
 may run first. Preservation statements therefore refer to the resumed memory and
 the concurrency invariant, rather than claiming the complete memory stays equal
@@ -36,12 +50,39 @@ with child dispatch, including slice adapters for pure workers. Supplying a cust
 fallback directly to the runtime API requires the caller to justify its agreement
 with the intended task; generated calls use the audited worker and captures.
 
-`ZigLean.Conc.SpawnLemmas` provides all-choice WP rules, a failure frame rule, and a
-cleanup continuation rule. A successful branch must establish the existing child
+`ZigLean.Conc.SpawnLemmas` provides all-choice WP rules (`WP.assignmentChoiceC`, which
+requires the assignment branch only where the budget admits it), a failure frame rule, the
+ownership rule `WP.spawnFailureRetains`, and a cleanup continuation rule. A successful branch must establish the existing child
 protocol and disjoint ownership transfer. A failed branch retains caller ownership.
 An eager branch must prove the caller task body. The same declared result contract
 can therefore be proved for assigned and eager execution without granting child
 ownership to the eager path.
+
+## Checked proofs over translated clients
+
+`tests/roadmap/spawn-failure/air/0.16.0` retains the fresh Zig 0.16.0 AIR of
+`spawn_failure.zig` from a passed `--full` qualification; `air/provenance.json` binds it to the
+source and file hashes. `SpawnFailure/Gen.lean` is its `--spawn-policy fallible` translation. The
+synthetic gate retranslates the AIR, requires the checked body, and kernel-checks the proofs; the
+0.16.0 `--full` gate also requires fresh AIR to translate to the same body.
+
+- `SpawnFailure/Pair.lean` (`threadPair`): each spawn hands its child exactly the C01
+  `Capture.grant` of the generated `Tgt.captures`. `WP.spawnFailureRetains` keeps the caller's
+  ownership split and grant on failure, so `main` frees the refused capture itself, after the
+  errdefer join in the second-failure path. `threadPair_spec` and `threadPair_safe` hold under
+  every schedule, every resource outcome of both spawns and every initial budget: the result is
+  `v +% (v +% 1)` or a declared spawn error, every child is joined, and no run reports an error.
+- `SpawnFailure/Group.lean` (`groupAsync`): `afterAsync_spec` proves that assignment (thread 1,
+  recorded in the group, owns `out`) and caller fallback (`main` writes `out`) establish one
+  post, and `await_spec` derives the declared contract from it. `groupAsync_spec` and
+  `groupAsync_safe` state `.ok v`, all children joined and no error, for every schedule,
+  outcome and budget.
+- `SpawnFailure/Budget.lean` executes the checked translation under budgets 0, 1 and 2: several
+  failures in one run, an always-failing second spawn at budget 1, forced fallback and
+  concurrency failure at budget 0, and equal fallback/assignment results.
+
+These are model proofs about the translated code. They do not establish native adequacy,
+fairness, termination, or a contract for `groupConcurrent`.
 
 The qualified boundary accepts constant `Thread.SpawnConfig` values requesting 1 MiB or the default
 16 MiB and a null allocator. Other sizes are rejected: native implementations can

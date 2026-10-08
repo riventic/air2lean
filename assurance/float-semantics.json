@@ -74,6 +74,15 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "Proofs.Floatops.Proofs::op128_eq_opSpec_of_special": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
     "Proofs.Floatops.Proofs::op128_other": {
       "semantics": "compiler-rt",
       "zig_versions": [
@@ -84,6 +93,15 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op128_spec": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "Proofs.Floatops.Proofs::op128_spec_full": {
       "semantics": "compiler-rt",
       "zig_versions": [
         "0.14.1",
@@ -156,6 +174,15 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op80_spec": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "Proofs.Floatops.Proofs::opSpec128_of_ne": {
       "semantics": "compiler-rt",
       "zig_versions": [
         "0.14.1",
@@ -440,11 +467,84 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.Float.CompilerRt::Zig.Float.divRt016_eq_div_of_exp": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.Float.divRt016_eq_div_of_special": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.Float.divRt_eq_div_of_not_subnormal": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.Float.divRt_eq_div_of_special": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.Float.divRt_of_subnormal": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.Float.CompilerRt::Zig.Float.floorRtLegacyChk_eq": {
       "semantics": "compiler-rt",
       "zig_versions": [
         "0.14.1",
         "0.15.2"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.divtf3Subnormal_of_exp": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.divtf3Subnormal_of_special": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.effExp_eq": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.f128_fields": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.f128_finite_of_fields": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.16.0"
       ],
       "correspondence": "model"
     },
@@ -1154,6 +1254,10 @@
     },
     "ZigLean.Float.RoundTrip::Zig.shiftLe_mono": {
       "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.RoundTrip::Zig.sqrtF128ViaF64_eq_sqrt_of_special": {
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "ZigLean.Float.RoundTrip::Zig.toNat_decomp": {

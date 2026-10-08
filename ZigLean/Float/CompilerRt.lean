@@ -527,4 +527,249 @@ def Float.fmaRtChk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=
     throw .unspecified
   else pure (Float.fmaRt a b c)
 
+/-! ## `f128` division per Zig version: what each port computes
+
+How the two division helpers relate to IEEE `Float.div`:
+
+- `Float.divRt` (Zig 0.14.1 and 0.15.2): `Float.div`, except that a nonzero subnormal quotient
+  becomes the signed zero of its sign (`Float.divRt_eq_div_of_not_subnormal`,
+  `Float.divRt_of_subnormal`; NaN, infinity, zero and normal quotients are in the first, and
+  a NaN, infinite or zero operand gives one of those: `Float.divRt_eq_div_of_special`).
+- `Float.divRt016` (Zig 0.16.0): `Float.div` when an operand is NaN, infinite or zero
+  (`Float.divRt016_eq_div_of_special`), and when the binary exponents `log2 m + e` of the
+  operands differ by at least −16381, which holds whenever `|a / b| ≥ 2^-16381`
+  (`Float.divRt016_eq_div_of_exp`). Otherwise the quotient can be subnormal and
+  `divtf3Subnormal` itself is the specification: its rounding reads the truncated
+  Newton-Raphson quotient and a deep underflow wraps its shift amount, so it has no closed
+  IEEE form here (`docs/floats.md` §Per-version differences).
+
+These are theorems about the ports; the 0.16.0 port's normal range is `Float.div` by
+construction (see `divtf3Subnormal`). -/
+
+/-- The exponent and fraction fields of a finite `f128`, read off `classify`. -/
+private theorem f128_fields {x : Float .f128} {s : Bool} {m : Nat} {e : Int}
+    (h : x.classify = .finite s m e) :
+    (x.bits.toNat >>> 112) % 2 ^ 15 ≠ 0x7fff ∧
+    ((x.bits.toNat >>> 112) % 2 ^ 15 = 0 → m = x.bits.toNat % 2 ^ 112 ∧ e = -16494) ∧
+    ((x.bits.toNat >>> 112) % 2 ^ 15 ≠ 0 → m = 2 ^ 112 + x.bits.toNat % 2 ^ 112 ∧
+      e = ((x.bits.toNat >>> 112) % 2 ^ 15 : Nat) - 16495) := by
+  unfold Float.classify at h
+  simp only [FloatFmt.expBits, FloatFmt.fracBits, FloatFmt.emin, FloatFmt.bias,
+    show (2:Nat) ^ 15 - 1 + 1 = 2 ^ 15 from rfl] at h
+  generalize (x.bits.toNat >>> 112) % 2 ^ 15 = E at h ⊢
+  by_cases h1 : E = 2 ^ 15 - 1
+  · rw [ite_eq_left h1] at h; by_cases hf : x.bits.toNat % 2 ^ 112 = 0 <;> simp [hf] at h
+  · rw [ite_eq_right h1] at h
+    refine ⟨fun h' => h1 (by simp [h']), ?_, ?_⟩
+    · intro h0; subst h0; simp at h; omega
+    · intro h0; rw [ite_eq_right h0] at h; simp at h; omega
+
+/-- A finite f128 that is not a signed zero has a finite, non-zero field pair. -/
+private theorem f128_finite_of_fields {x : Float .f128}
+    (h1 : (x.bits.toNat >>> 112) % 2 ^ 15 ≠ 0x7fff)
+    (h2 : ¬((x.bits.toNat >>> 112) % 2 ^ 15 = 0 ∧ x.bits.toNat % 2 ^ 112 = 0)) :
+    ∃ s m e, x.classify = .finite s m e ∧ m ≠ 0 := by
+  unfold Float.classify
+  simp only [FloatFmt.expBits, FloatFmt.fracBits, FloatFmt.emin, FloatFmt.bias,
+    show (2:Nat) ^ 15 - 1 + 1 = 2 ^ 15 from rfl]
+  generalize (x.bits.toNat >>> 112) % 2 ^ 15 = E at h1 h2 ⊢
+  rw [ite_eq_right (by simpa using h1)]
+  by_cases h0 : E = 0
+  · rw [ite_eq_left h0]; exact ⟨_, _, _, rfl, fun h => h2 ⟨h0, h⟩⟩
+  · rw [ite_eq_right h0]; exact ⟨_, _, _, rfl, by omega⟩
+
+/-- NaN, infinity or zero on either side: `divtf3.zig` returns before its subnormal path. -/
+private theorem divtf3Subnormal_of_special {a b : Float .f128}
+    (h : (∀ s m e, a.classify = .finite s m e → m = 0) ∨
+      (∀ s m e, b.classify = .finite s m e → m = 0)) :
+    divtf3Subnormal a b = none := by
+  have key : ∀ x : Float .f128, (∀ s m e, x.classify = .finite s m e → m = 0) →
+      (x.bits.toNat >>> 112) % 2 ^ 15 = 0x7fff ∨
+        ((x.bits.toNat >>> 112) % 2 ^ 15 = 0 ∧ x.bits.toNat % 2 ^ 112 = 0) := by
+    intro x hx
+    by_cases h1 : (x.bits.toNat >>> 112) % 2 ^ 15 = 0x7fff
+    · exact .inl h1
+    by_cases h2 : (x.bits.toNat >>> 112) % 2 ^ 15 = 0 ∧ x.bits.toNat % 2 ^ 112 = 0
+    · exact .inr h2
+    obtain ⟨s, m, e, hc, hm⟩ := f128_finite_of_fields h1 h2
+    exact absurd (hx s m e hc) hm
+  unfold divtf3Subnormal
+  rcases h with h | h <;> rcases key _ h with h | ⟨h, h'⟩
+  · simp [h]
+  · simp [h, h']
+  · simp [h]
+  · simp [h, h']
+
+/-- `divtf3.zig`'s quotient exponent before its normalization step, biased: the exponent
+field, or `normalize128`'s scale for a subnormal operand. -/
+private def effExp (x : Float .f128) : Int :=
+  if (x.bits.toNat >>> 112) % 2 ^ 15 = 0 then (normalize128 (x.bits.toNat % 2 ^ 112)).2
+  else ((x.bits.toNat >>> 112) % 2 ^ 15 : Nat)
+
+/-- The quotient exponent after normalization is `effExp a - effExp b` or one less, so a
+difference of at least `2 - 16383` keeps the written exponent at 1 or above. -/
+private theorem divtf3Subnormal_of_exp (a b : Float .f128)
+    (ha : (a.bits.toNat >>> 112) % 2 ^ 15 ≠ 0x7fff)
+    (hb : (b.bits.toNat >>> 112) % 2 ^ 15 ≠ 0x7fff)
+    (he : 2 ≤ effExp a - effExp b + 16383) :
+    divtf3Subnormal a b = none := by
+  unfold divtf3Subnormal
+  show Id.run _ = _
+  extract_lets m64 m128 implicit mask A B aExp bExp sign aSig bSig scale residual jp1
+  have haE : aExp = (a.bits.toNat >>> 112) % 2 ^ 15 := rfl
+  have hbE : bExp = (b.bits.toNat >>> 112) % 2 ^ 15 := rfl
+  have haS : aSig = a.bits.toNat % 2 ^ 112 := rfl
+  have hbS : bSig = b.bits.toNat % 2 ^ 112 := rfl
+  unfold effExp at he
+  rw [← haE, ← hbE, ← haS, ← hbS] at he
+  clear_value m64 m128 mask sign implicit A B aExp bExp aSig bSig
+  split
+  next h => simp only [Bool.or_eq_true, beq_iff_eq] at h; omega
+  split
+  · rfl
+  have k1 : ∀ t sc,
+      2 ≤ (aExp : Int) - bExp + sc - (if bExp = 0 then (normalize128 bSig).2 else 0) + 16383 →
+        jp1 () t sc = none := by
+    intro t sc hsc
+    dsimp -zeta only [jp1]
+    extract_lets aSig1 jp2 bSig2 scale2
+    have k2 : ∀ u sc', 2 ≤ (aExp : Int) - bExp + sc' + 16383 → jp2 () u sc' = none := by
+      intro u sc' hsc
+      dsimp -zeta only [jp2]
+      extract_lets bSig3 qExp q63b recip64 q127blo jp3 qExpm1
+      have hbind : ∀ {α : Type} (x : Id α) (f : α → Id (Option (Float .f128))),
+          (∀ v, f v = pure none) → x >>= f = pure none := fun x f h => h x
+      apply hbind
+      intro v
+      extract_lets
+      have hj : ∀ q x y, 1 ≤ q + 16383 → jp3 () q x y = pure none := by
+        intro q x y hq
+        dsimp -zeta only [jp3]
+        extract_lets w
+        exact ite_eq_left hq
+      split
+      · exact hj _ _ _ (by simp only [qExpm1, qExp]; omega)
+      · exact hj _ _ _ (by simp only [qExp]; omega)
+    by_cases h2 : bExp = 0
+    · rw [ite_eq_left h2] at hsc
+      rw [ite_eq_left (by simpa using h2)]
+      exact k2 _ _ (by simp only [scale2]; omega)
+    · rw [ite_eq_right h2] at hsc
+      rw [ite_eq_right (by simpa using h2)]
+      exact k2 _ _ (by omega)
+  show (if (aExp == 0) = true then _ else _) = none
+  have hs0 : scale = 0 := rfl
+  clear_value scale
+  generalize normalize128 bSig = nb at k1 he
+  by_cases h1 : aExp = 0
+  · rw [ite_eq_left (by simpa using h1)]
+    rw [ite_eq_left h1] at he
+    generalize normalize128 aSig = na at he ⊢
+    obtain ⟨s, k⟩ := na
+    refine k1 s (scale + k) ?_
+    by_cases h2 : bExp = 0
+    · rw [ite_eq_left h2] at he ⊢; simp only at he; omega
+    · rw [ite_eq_right h2] at he ⊢; simp only at he; omega
+  · rw [ite_eq_right (by simpa using h1)]
+    rw [ite_eq_right h1] at he
+    refine k1 _ _ ?_
+    by_cases h2 : bExp = 0
+    · rw [ite_eq_left h2] at he ⊢; omega
+    · rw [ite_eq_right h2] at he ⊢; omega
+
+/-- `effExp` is the binary exponent `log2 m + e` plus the bias. -/
+private theorem effExp_eq {x : Float .f128} {s : Bool} {m : Nat} {e : Int}
+    (h : x.classify = .finite s m e) (hm : m ≠ 0) :
+    effExp x = (Nat.log2 m : Int) + e + 16383 := by
+  obtain ⟨-, h0, h1⟩ := f128_fields h
+  unfold effExp
+  by_cases hE : (x.bits.toNat >>> 112) % 2 ^ 15 = 0
+  · obtain ⟨rfl, rfl⟩ := h0 hE
+    rw [ite_eq_left hE]
+    have hlt : Nat.log2 (x.bits.toNat % 2 ^ 112) < 112 :=
+      (Nat.log2_lt hm).2 (Nat.mod_lt _ (Nat.two_pow_pos _))
+    simp only [normalize128]
+    omega
+  · obtain ⟨rfl, rfl⟩ := h1 hE
+    rw [ite_eq_right hE]
+    have hlo : 112 ≤ Nat.log2 (2 ^ 112 + x.bits.toNat % 2 ^ 112) :=
+      (Nat.le_log2 (by omega)).2 (by omega)
+    have hhi : Nat.log2 (2 ^ 112 + x.bits.toNat % 2 ^ 112) < 113 :=
+      (Nat.log2_lt (by omega)).2 (by have := Nat.mod_lt x.bits.toNat (Nat.two_pow_pos 112); omega)
+    omega
+
+/-- Zig 0.16.0 `f128` division with a NaN, infinite or zero operand (no finite class with a
+nonzero mantissa) is IEEE division. -/
+theorem Float.divRt016_eq_div_of_special {a b : Float .f128}
+    (h : (∀ s m e, a.classify = .finite s m e → m = 0) ∨
+      (∀ s m e, b.classify = .finite s m e → m = 0)) :
+    Float.divRt016 a b = Float.div a b := by
+  show (divtf3Subnormal a b).getD _ = _
+  rw [divtf3Subnormal_of_special h]; rfl
+
+/-- Zig 0.16.0 `f128` division of finite nonzero operands whose binary exponents differ by at
+least −16381 is IEEE division. -/
+theorem Float.divRt016_eq_div_of_exp {a b : Float .f128} {sa sb : Bool} {ma mb : Nat}
+    {ea eb : Int} (ha : a.classify = .finite sa ma ea) (hb : b.classify = .finite sb mb eb)
+    (hma : ma ≠ 0) (hmb : mb ≠ 0)
+    (h : -16381 ≤ ((Nat.log2 ma : Int) + ea) - ((Nat.log2 mb : Int) + eb)) :
+    Float.divRt016 a b = Float.div a b := by
+  show (divtf3Subnormal a b).getD _ = _
+  rw [divtf3Subnormal_of_exp a b (f128_fields ha).1 (f128_fields hb).1
+    (by rw [effExp_eq ha hma, effExp_eq hb hmb]; omega)]
+  rfl
+
+/-- Zig 0.14.1/0.15.2 `f128` division is IEEE division unless the IEEE quotient is a nonzero
+subnormal. -/
+theorem Float.divRt_eq_div_of_not_subnormal {a b : Float .f128}
+    (h : ∀ s m e, (Float.div a b).classify = .finite s m e → m = 0 ∨ 2 ^ 112 ≤ m) :
+    Float.divRt a b = Float.div a b := by
+  show flushSubnormalResult (Float.div a b) = Float.div a b
+  unfold flushSubnormalResult
+  split
+  · rename_i s m e hc
+    rw [ite_eq_right]
+    rcases h s m e hc with h | h <;> simp [FloatFmt.fracBits] <;> omega
+  · rfl
+
+/-- Zig 0.14.1/0.15.2 `f128` division flushes a nonzero subnormal IEEE quotient to the signed
+zero of its sign. -/
+theorem Float.divRt_of_subnormal {a b : Float .f128} {s : Bool} {m : Nat} {e : Int}
+    (h : (Float.div a b).classify = .finite s m e) (hm0 : m ≠ 0) (hm : m < 2 ^ 112) :
+    Float.divRt a b = Float.zero s := by
+  show flushSubnormalResult (Float.div a b) = _
+  unfold flushSubnormalResult
+  rw [h]; exact ite_eq_left ⟨hm0, hm⟩
+
+
+/-- Zig 0.14.1/0.15.2 `f128` division with a NaN, infinite or zero operand is IEEE division:
+the IEEE quotient is then a NaN, an infinity or a signed zero, never a nonzero subnormal. -/
+theorem Float.divRt_eq_div_of_special {a b : Float .f128}
+    (h : (∀ s m e, a.classify = .finite s m e → m = 0) ∨
+      (∀ s m e, b.classify = .finite s m e → m = 0)) :
+    Float.divRt a b = Float.div a b := by
+  apply Float.divRt_eq_div_of_not_subnormal
+  intro s m e hc
+  left
+  have hz : ∀ t : Bool, (Float.zero t : Float .f128).classify = .finite t 0 (-16494) := by
+    intro t; cases t <;> decide
+  have hn : (Float.nan : Float .f128).classify = .nan := by decide
+  have hi : ∀ t : Bool, (Float.inf t : Float .f128).classify = .inf t := by
+    intro t; cases t <;> decide
+  have hr : ∀ (t : Bool) (q : Rat), q = 0 → Float.roundRat .f128 t q = Float.zero t := by
+    intro t q hq; subst hq; unfold Float.roundRat; simp
+  unfold Float.div at hc
+  split at hc <;> (try simp only [hn, hi, hz] at hc)
+  case h_1 | h_2 | h_3 | h_4 => cases hc
+  case h_5 => cases hc; rfl
+  case h_6 sa ma ea sb mb eb hca hcb =>
+    split at hc
+    · split at hc <;> simp only [hn, hi] at hc <;> cases hc
+    · rename_i hmb
+      rcases h with h | h
+      · rw [hr _ _ (by rw [h _ _ _ hca]; unfold finiteToRat; split <;> split <;>
+          simp [Rat.div_def]), hz] at hc
+        cases hc; rfl
+      · exact absurd (h _ _ _ hcb) hmb
+
 end Zig

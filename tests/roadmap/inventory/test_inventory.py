@@ -128,6 +128,48 @@ end
             self.assertTrue(all(row['derivation']['method'] == 'reviewed-override' and row['derivation']['reason']
                                 for row in overridden), path.name)
 
+    def test_committed_inventories_pass_l14_gate(self):
+        for path in sorted((ROOT/'coverage').glob('*.json')):
+            inventory = json.loads(path.read_text())
+            self.assertEqual(coverage.l14_problems(inventory), [], path.name)
+            for row in inventory['tags']:
+                if row['disposition'] == 'emitted-unqualified':
+                    self.assertTrue(all(coverage.compiler_fixture_path(p) for p in row['tests']['paths']), row['tag'])
+                if row['disposition'].startswith('rejected-'):
+                    self.assertIn(row['rejection']['reason'], row['guidance'])
+
+    def test_l14_gate_fails_closed(self):
+        inventory = json.loads((ROOT/'coverage/0.16.0.json').read_text())
+        rows = {row['tag']: row for row in inventory['tags']}
+        # A supported tag whose only fixture is hand-written or missing AIR has no witness.
+        rows['add']['tests']['paths'] = ['tests/roadmap/global-init/air/0.16.0/x.json', 'tests/golden/missing.json']
+        # An unfixtured tag needs a current request; a rejected tag needs the current reason.
+        rows['sub_sat']['fixture_request'] = None
+        rows['prefetch']['rejection']['reason'] = 'stale text'
+        rows['add_optimized']['rejection'] = None
+        # A reason recorded under the wrong translator definition is not current.
+        rows['breakpoint']['rejection']['definition'] = 'runtimeTagReason?'
+        problems = coverage.l14_problems(inventory)
+        self.assertEqual(len(problems), 5, problems)
+        for tag in ('add', 'sub_sat', 'prefetch', 'add_optimized', 'breakpoint'):
+            self.assertTrue(any(f': {tag}:' in p for p in problems), tag)
+        self.assertIsNone(coverage.fixture_request('no_such_tag', ''))
+        with patch.dict(coverage.FIXTURE_REQUESTS, {'sub_sat': 'missingFunction'}):
+            self.assertIsNone(coverage.fixture_request('sub_sat', (ROOT/coverage.FIXTURE_SOURCE).read_text()))
+        self.assertFalse(coverage.compiler_fixture_path('tests/roadmap/undef-operands/air/0.16.0/a.json'))
+        self.assertTrue(coverage.compiler_fixture_path('tests/roadmap/try-pointers/air/0.16.0/a.json'))
+
+    def test_every_roadmap_air_directory_is_reviewed(self):
+        self.assertEqual(coverage.unreviewed_air_roots(), [])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stray = root/'tests/roadmap/new-case/air/0.16.0/f.json'
+            stray.parent.mkdir(parents=True)
+            stray.write_text(json.dumps({'zig_version': '0.16.0', 'body': []}))
+            (root/'tests/roadmap/new-case/other.json').write_text('{"schema": 1}')
+            with patch.object(coverage, 'ROOT', root):
+                self.assertEqual(coverage.unreviewed_air_roots(), ['tests/roadmap/new-case/air/0.16.0'])
+
     def test_disposition_problems_fail_closed(self):
         inventory = {'universe': {'air_tags': ['a', 'b'], 'types': [], 'intern_keys': [], 'pointer_bases': []},
                      'tags': [{'tag': 'a', 'disposition': 'emitted-unqualified'}], 'types': [], 'constants': [], 'pointer_bases': []}
@@ -263,13 +305,13 @@ end
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)
             for relative, data in {
-                'src/Air.zig': 'pub const Inst = struct { pub const Tag = enum(u8) { add, new_tag, }; };',
+                'src/Air.zig': 'pub const Inst = struct { pub const Tag = enum(u8) { add, prefetch, }; };',
                 'lib/std/builtin.zig': 'pub const Type = union(enum) { int: Int, @"struct": Struct, };',
                 'src/InternPool.zig': 'pub const Key = union(enum) { int_type: IntType, int: Int, pub const Ptr = struct { pub const BaseAddr = union(enum) { nav: Nav, int: u64, }; }; };',
             }.items():
                 path = source/relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_text(data)
             universe, fingerprints = coverage.compiler_inventory(source)
-            self.assertEqual(universe['air_tags'], ['add', 'new_tag'])
+            self.assertEqual(universe['air_tags'], ['add', 'prefetch'])
             self.assertEqual(universe['types'], ['int', 'struct'])
             self.assertEqual(universe['intern_keys'], ['int_type', 'int'])
             self.assertEqual(universe['pointer_bases'], ['nav', 'int'])
@@ -277,12 +319,16 @@ end
             self.assertIsNone(fingerprints['lib/std/Io.zig'])
             report = coverage.generate('synthetic-no-goldens', source)
             self.assertEqual(len(report['tags']), 2)
-            new = next(row for row in report['tags'] if row['tag'] == 'new_tag')
-            # An unknown tag reaches the real exporter's unsupported fallback in every version branch.
+            new = next(row for row in report['tags'] if row['tag'] == 'prefetch')
+            # An unnamed tag reaches the real exporter's unsupported fallback in every version branch
+            # and carries the translator's reviewed reason (L14).
             self.assertEqual(new['exporter']['status'], 'fallback-unsupported-marker')
             self.assertEqual(new['disposition'], 'rejected-exporter-unsupported')
+            self.assertIn('@prefetch', new['rejection']['reason'])
+            self.assertEqual(new['rejection']['definition'], 'exporterTagReason?')
             self.assertEqual(new['tests']['paths'], [])
             self.assertEqual(coverage.disposition_problems(report), [])
+            self.assertEqual(coverage.l14_problems(report), [])
             self.assertTrue(all(row['proofs']['status'] == 'symbol-index-only-not-proof-coverage' for row in report['tags']))
             snapshot = source/'inventory.json'
             command = [sys.executable, str(ROOT/'scripts/coverage.py')]
@@ -305,7 +351,10 @@ end
             upgraded = coverage.generate('synthetic-next', source)
             delta = coverage.changes(report, upgraded)
             self.assertEqual(delta['universes']['air_tags']['added'], ['renamed_tag'])
-            self.assertEqual(delta['universes']['air_tags']['removed'], ['new_tag'])
+            self.assertEqual(delta['universes']['air_tags']['removed'], ['prefetch'])
+            # A new exporter-rejected tag without a reviewed translator reason is forbidden.
+            renamed = next(row for row in upgraded['tags'] if row['tag'] == 'renamed_tag')
+            self.assertEqual(renamed['disposition'], coverage.FORBIDDEN)
             self.assertTrue(delta['compiler_sources_changed'])
             stale = subprocess.run(command + ['check'] + arguments, capture_output=True, text=True)
             self.assertEqual(stale.returncode, 1, stale.stderr)

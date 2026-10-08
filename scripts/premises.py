@@ -261,6 +261,16 @@ def binders(text: str) -> list[tuple[str, str]]:
     return [(name, match.group(2)) for match in BINDER_RE.finditer(text) for name in match.group(1).split()]
 
 
+def type_head(decl: Decl) -> str:
+    """The head name of a binder-free constant's declared type, `def S : Sem Ph where` -> `Sem`."""
+    text = re.split(r":=|\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
+    colon = top_level(text, ":")
+    if colon < 0 or binders(text[:colon]):
+        return ""
+    match = TOKEN_RE.search(text[colon + 1:])
+    return match.group(0) if match else ""
+
+
 def instance_type(decl: Decl) -> frozenset:
     """Names in an instance's type, `instance [Enc α] : Enc (Array α) where` -> {Enc, Array}.
     Binder names and single-letter (auto-bound) variables are dropped."""
@@ -472,13 +482,20 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
     if decl.targets is not None:
         return decl.targets
     visible = repo.visible(decl.file)
-    bases = prefixes(decl.namespaces)
-    for opened in decl.opens:
-        bases += [f"{b}.{opened}" if b else opened for b in prefixes(decl.namespaces)]
 
-    def lookup(name: str) -> list[Decl]:
-        return [t for base in bases for t in repo.table.get(f"{base}.{name}" if base else name, ())
-                if t.file.rel in visible]
+    def scope_bases(d: Decl) -> list[str]:
+        bases = prefixes(d.namespaces)
+        for opened in d.opens:
+            bases += [f"{b}.{opened}" if b else opened for b in prefixes(d.namespaces)]
+        return bases
+
+    bases = scope_bases(decl)
+
+    def lookup(name: str, scope: Decl | None = None) -> list[Decl]:
+        """`name` in `decl`'s scope, or in `scope`'s (its namespaces, opens and imports)."""
+        names, vis = (bases, visible) if scope is None else (scope_bases(scope), repo.visible(scope.file))
+        return [t for base in names for t in repo.table.get(f"{base}.{name}" if base else name, ())
+                if t.file.rel in vis]
 
     def typed(token: str, depth: int = 0) -> list[Decl]:
         """`x.f` on a bound `x : T ...` is generalized field notation for `T.f x`."""
@@ -507,6 +524,15 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
             hits = lookup(".".join(parts))
             if hits:
                 found.update((id(t), t) for t in hits if t is not decl)
+                rest = token.split(".")[len(parts):]
+                if rest:
+                    # `c.f` on a constant `c : T ...` is generalized field notation for `T.f c`;
+                    # `T` is named in the constant's own scope, not the referencing one.
+                    for hit in hits:
+                        head = type_head(hit)
+                        for owner in lookup(head, hit) if head else ():
+                            found.update((id(t), t) for t in repo.table.get(f"{owner.name}.{rest[0]}", ())
+                                         if t.file.rel in visible and t is not decl)
                 break
             parts.pop()
     decl.targets = sorted(found.values(), key=lambda d: (d.file.rel, d.line))

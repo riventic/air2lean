@@ -46,13 +46,20 @@ inductive Byte where
   | int (b : BitVec 8)
   /-- Byte `i` (little-endian) of the 8-byte pointer `p`. -/
   | ptrFrag (p : Ptr) (i : Fin 8)
-  /-- Byte `i` of the 2-byte code of the error `e`. The compiler numbers the errors per
-  compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
-  | errFrag (e : ErrName) (i : Fin 2)
+  /-- Byte `i` of the code of the error `e`: 2 bytes by default, 1 to 4 bytes for the error
+  integer that `--error-limit` selects (`ZigLean/Mem/ErrWidth.lean`). The compiler numbers the
+  errors per compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
+  | errFrag (e : ErrName) (i : Fin 4)
   /-- The low `m` bits of `b` are defined (`0 < m < 8`, `b`'s bits above are 0); the bits above
   are undefined: the last byte of a `uN` with `N % 8 ≠ 0` (`intBytes`). A read that needs a
   bit above `m` throws `.unspecified` (`intOfBytes`). -/
   | part (m : Nat) (b : BitVec 8)
+  /-- The bits set in `d` are defined, with the values of `b`; the others are undefined (`b`'s
+  bits there are 0). Only for a mask that is not all, none or the low bits (`.int`, `.undef`,
+  `.part`): a bit-pointer store of a field or of `undefined` next to undefined bits
+  (`Byte.ofDefBits`, `ZigLean/Packed.lean`). A read that needs a bit outside `d` throws
+  `.unspecified` (`intOfBytes`). -/
+  | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
 /-- The identity of an allocator other than the model's `std.mem.Allocator`: an index into
@@ -282,6 +289,10 @@ structure Mem where
   groups : Array (Ptr × ThreadId) := #[]
   /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
   allocators : Array OwnedAlloc := #[]
+  /-- The thread-assignment budget of the `fallible` spawn policy (`ZigLean/Conc/Spawn.lean`):
+  at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
+  no budget. The `available` policy ignores it. -/
+  spawnLimit : Option Nat := none
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

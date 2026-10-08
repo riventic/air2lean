@@ -107,9 +107,13 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   let floatMode ← strField p "float_mode"
   unless floatMode == "per-instruction" do
     throw "profile.float_mode: expected 'per-instruction'; optimized AIR remains unsupported"
+  -- `Zcu.errorSetBits`: `log2(--error-limit) + 1` (16 by default), 0 for `--error-limit 0`.
+  -- The error model is parameterized by this width (`ZigLean/Mem/ErrWidth.lean`); only the
+  -- default 16 bits has native evidence (`docs/profiles.md` §Error-code width).
   let errorSetBits ← natField p "error_set_bits"
-  unless errorSetBits == 16 do
-    throw s!"profile.error_set_bits {errorSetBits} is outside the 16-bit error model"
+  unless 0 < errorSetBits && errorSetBits ≤ 32 do
+    throw s!"profile.error_set_bits {errorSetBits} is outside the 1..32-bit error model \
+      (`--error-limit 0` has no error storage; the error integer is at most u32)"
   let errorLayout ← strField p "error_layout"
   unless errorLayout == "type-table" do throw "profile.error_layout: expected 'type-table'"
   let tracing ← ((p.getObjVal? "error_tracing").bind Json.getBool?).mapError

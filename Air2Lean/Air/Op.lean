@@ -201,10 +201,19 @@ the same sentinel contract. Callers separately compare presence and the child ty
 def Layout.sameKnownSentinel (a b : Layout) : Bool :=
   a.sentinelByte == b.sentinelByte
 
+/-- A bit-pointer's bit offset in its host integer; 0 for every other pointer. -/
+def Layout.bitPtrOffset (l : Layout) : Nat := if l.hostSize != 0 then l.bitOffset else 0
+
 /-- C and allowzero pointers can carry address zero as a value. -/
 def nullablePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
   match types[id]? with
   | some (.ptr size _ _) => size == "c" || (layouts[id]?.map (·.allowzero)).getD false
+  | _ => false
+
+/-- An ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr` in the model:
+the type a C/allowzero pointer converts to and from with explicit null mapping. -/
+def optScalarPtr (types : Array Ty) : Ty → Bool
+  | .optional c => match types[c]? with | some (.ptr size ..) => size != "slice" | _ => false
   | _ => false
 
 /-- A pointer type whose exported `volatile` flag is set. -/
@@ -604,5 +613,8 @@ structure Func where
   /-- `layouts[i]` is the layout of `types[i]`. -/
   layouts : Array Layout
   globals : Array Global
+  /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
+  Legacy profiles and hand-built functions keep the default 16. -/
+  errorSetBits : Nat := 16
 
 end Air2Lean

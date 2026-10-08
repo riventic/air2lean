@@ -142,6 +142,7 @@ class PlanTests(Base):
     def test_l01_dispositions_rank_from_coverage_vocabulary(self):
         known, forbidden = q.vocabulary()
         self.assertIn('emitted-unqualified', known['tags'])
+        self.assertIn('emitted-unfixtured', known['tags'])  # L14: emitted, no compiler fixture yet
         # Every L01 name is known: none ranks as an unknown (always-expansion) disposition.
         for category, names in known.items():
             for name in names:
@@ -153,10 +154,13 @@ class PlanTests(Base):
                                       inventory(tags=[tag('add', after, golden)]))[1])
         # Rejection -> emitted is an expansion; between rejections or between supported forms is not.
         self.assertIn('support:tags:add', plan_tags('rejected-unknown-tag', 'emitted-unqualified'))
+        self.assertIn('support:tags:add', plan_tags('rejected-unknown-tag', 'emitted-unfixtured'))
         self.assertIn('support:tags:add', plan_tags(forbidden, 'erased-at-emission'))
         for before, after in (('rejected-unknown-tag', 'unreachable-at-export'),
                               ('rejected-exporter-unsupported', 'rejected-compiler-state-or-effect'),
                               ('emitted-unqualified', 'erased-at-emission'),
+                              ('emitted-unfixtured', 'emitted-unqualified'),
+                              ('emitted-unqualified', 'emitted-unfixtured'),
                               ('emitted-unqualified', 'rejected-fast-math'),
                               (CANDIDATE, 'emitted-unqualified'),  # legacy inventory -> L01 names
                               (REJECTED, 'rejected-unknown-tag')):

@@ -1,0 +1,405 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "packed_fields.undefField",
+ "params": [],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 12,
+   "args": [
+    {
+     "ty": 10,
+     "ptr": {
+      "off": 0,
+      "global": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 14,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 2,
+     "val": "7"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "store_safe",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 2,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "load",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "ret_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "packed_fields.reg",
+   "ty": 9,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 9,
+    "undef": true
+   }
+  },
+  {
+   "name": "packed_fields.word",
+   "ty": 19,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 19,
+    "undef": true
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 5,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "enum",
+   "name": "packed_fields.Mode",
+   "tag": 6,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "off",
+     "value": "0"
+    },
+    {
+     "name": "low",
+     "value": "1"
+    },
+    {
+     "name": "high",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "packed_fields.Inner",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "b",
+     "ty": 2
+    },
+    {
+     "name": "c",
+     "ty": 3
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "struct",
+   "name": "packed_fields.Reg",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 2
+    },
+    {
+     "name": "inner",
+     "ty": 8
+    },
+    {
+     "name": "s",
+     "ty": 4
+    },
+    {
+     "name": "on",
+     "ty": 5
+    },
+    {
+     "name": "mode",
+     "ty": 7
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 9,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 0
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 16
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 21
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 22
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 24,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "union",
+   "name": "packed_fields.Word",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "reg",
+     "ty": 9
+    },
+    {
+     "name": "raw",
+     "ty": 18
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 19,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 18,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 4,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 0
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 4,
+   "abi_size": 8,
+   "abi_align": 8,
+   "bit_offset": 4
+  }
+ ]
+}

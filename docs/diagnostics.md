@@ -47,7 +47,7 @@ The schema vocabulary is fixed independently of message text:
 
 | Field | Values |
 | --- | --- |
-| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS` |
+| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT` |
 | `phase` | `cli`, `input`, `decode`, `canonicalize`, `normalize`, `check`, `program`, `profile` |
 | `category` | `malformed_input`, `unsupported_semantics`, `validation_failure`, `resource_limit`, `io_failure`, `skipped_prerequisite` |
 | `anchor.id_space` | `unavailable`, `exported`, `canonical` |
@@ -56,6 +56,12 @@ The schema vocabulary is fixed independently of message text:
 instruction anchor) marks a volatile load, store, atomic or item access, a dropped
 `volatile` qualifier, or a volatile argument to a built-in std model
 ([volatile-effects.md](volatile-effects.md)). It replaces the generic
+`INSTRUCTION_FAILURE` check of that instruction.
+
+`PACKED_LAYOUT` (phase `check`, category `unsupported_semantics`, canonical instruction anchor)
+marks a pointer to a packed struct field (`struct_field_ptr`, or `@fieldParentPtr` back) whose
+exporter `host_size`/`bit_offset`, or byte pointer, is not the layout the model computes from the
+struct's field bit sizes (`docs/generated-code.md` §Casts, layout and function pointers). It also replaces the generic
 `INSTRUCTION_FAILURE` check of that instruction.
 
 `diagnostics_observed` counts attempted diagnostic additions; it is not the total
@@ -203,3 +209,12 @@ currently known count. Their version-dependent comparison also precludes treatin
 the rename as identical semantics. Nested synthetic CLI fixtures retain exported IDs
 and rejection reasons for every actual version/tag member, including untyped
 inferred allocations. No source feature is newly accepted by these classifications.
+
+Exporter-marked and fast-math tags likewise carry a reviewed reason and guidance:
+`exporterTagReason?` (for example `@breakpoint`, `@returnAddress`, C variadics,
+GPU/wasm builtins, the 0.14.1 assembly layout) and `optimizedFloatGuidance` (every
+`*_optimized` tag) in `Air2Lean/Air/Normalize.lean`. Both the normalizer error and
+the `EXPORTER_UNSUPPORTED`/`OPTIMIZED_UNSUPPORTED` message append that text after the
+tag. `scripts/coverage.py l14` fails when an inventory's rejected row lacks the
+current text ([coverage.md](coverage.md#l14-runtime-and-control-tags)).
+`RuntimeTags.lean` checks each family's guidance in both paths.

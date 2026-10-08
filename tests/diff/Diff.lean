@@ -726,6 +726,10 @@ def byteStr : Zig.Byte → String
   | .errFrag .. => "??"
   -- Only the low `m` bits are defined: `?` for the high hex digit, and for the low one if `m < 4`.
   | .part m x => if 4 ≤ m then "?" ++ natToHex (x.toNat % 16) 1 else "??"
+  -- Only the bits of `d` are defined: a hex digit only where all four of its bits are.
+  | .mask d x =>
+    let digit (k : Nat) := if (d.toNat >>> k) % 16 = 15 then natToHex ((x.toNat >>> k) % 16) 1 else "?"
+    digit 4 ++ digit 0
 
 /-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
 a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer (a
