@@ -461,6 +461,14 @@ def run_workload(workload, args, work, log):
             require_success(step, f"proof build ({cache})")
             phases[f"proof.{cache}"] = wall_and_rss(step)
         phases["proof.cold"]["artifacts_removed"] = removed
+        if args.per_module:
+            result_modules = {}
+            for module in modules:
+                remove_module_artifacts(ROOT, [module])
+                step = measure([args.lake, "build", module], ROOT, log, args.timeout)
+                require_success(step, f"cold build of {module}")
+                result_modules[module] = wall_and_rss(step)
+            return {"status": "ok", "phases": phases, "output": output, "modules": result_modules}
     return {"status": "ok", "phases": phases, "output": output}
 
 
@@ -553,6 +561,8 @@ def main(argv=None):
     rec.add_argument("--no-build", action="store_true")
     rec.add_argument("--skip-elaborate", action="store_true")
     rec.add_argument("--skip-proof", action="store_true")
+    rec.add_argument("--per-module", action="store_true",
+                     help="also time each proof module's module-local cold build (informational)")
     rec.add_argument("--keep", action="store_true")
     rec.add_argument("--allow-unserialized", action="store_true", help=argparse.SUPPRESS)
     base = sub.add_parser("baseline", help="write limits derived from a measurement")
