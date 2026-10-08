@@ -53,8 +53,9 @@ python3 scripts/theorem-inventory.py write
 ```
 
 `swap-build` copies each translation over `Proofs/<Ex>/Gen.lean`, runs `lake build` and puts
-the committed file back. `record` checks the log against the report and stores the outcome,
-revision and hashes. `check` (CI, offline) needs no Lean.
+the committed file back. `record` checks the log against the report, refuses a translation
+file that `scripts/gen-integrity.py attest` does not find to be a fresh translation of its
+committed AIR (so it needs the built translator), and stores the outcome, revision and hashes. `check` (CI, offline) needs no Lean.
 
 A check result says that Lean's kernel accepts the theorem for that translation file. It is
 not an assumption audit ([assumptions-audit.md](assumptions-audit.md)), a proof receipt

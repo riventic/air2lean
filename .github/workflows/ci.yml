@@ -394,6 +394,13 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      # Before check.sh rewrites Proofs/<Ex>/Gen.lean: every tracked generated module must be
+      # the current translator's output for its committed AIR (docs/generated-code.md).
+      - name: Generated modules are fresh translations of committed AIR
+        run: |
+          python3 -B tests/roadmap/gen-integrity/test_gen_integrity.py
+          python3 -B scripts/gen-integrity.py check
+
       # --timing-json observes translator phases only: emitted Lean must stay byte-identical.
       - name: Translator timing flag preservation
         if: ${{ !matrix.mutate }}
