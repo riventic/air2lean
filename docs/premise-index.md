@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2166 theorems in 124 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -39,14 +39,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2045 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1703 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 979 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2166 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2562,12 +2562,14 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 | `OutcomeTaxonomy.fail_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.panic_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.unspecified_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `OutcomeTaxonomy.unsupportedTimer_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.illegal_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.deadlock_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.diverge_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L57` | SEM-01, TRU-01 |
-| `example@L58` | SEM-01, TRU-01 |
-| `example@L59` | SEM-01, TRU-01 |
+| `example@L61` | SEM-01, TRU-01 |
+| `example@L62` | SEM-01, TRU-01 |
+| `example@L63` | SEM-01, TRU-01 |
+| `example@L65` | SEM-01, TRU-01 |
 
 ## `tests/roadmap/progress/Runtime.lean`
 
