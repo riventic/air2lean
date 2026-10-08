@@ -52,13 +52,16 @@ def inspect(repo=REPO, case=CASE, record=False, fresh_air=None):
     if len(names) != len(expected) or set(names) != expected:
         raise ValueError('AIR function inventory differs')
     tags = []
+    profiles = []
     for item in data:
         if fresh_air is not None:
-            HELPERS['fresh_linux_profile'](item, '0.16.0')
+            profiles.append(HELPERS['fresh_linux_profile'](item, '0.16.0'))
         elif (item.get('schema') != 11 or item.get('zig_version') != '0.16.0' or
               item.get('target_endian') != 'little'):
             raise ValueError('AIR profile differs')
         walk_tags(item.get('body', []), tags)
+    if any(profile != profiles[0] for profile in profiles):
+        raise ValueError('fresh AIR has mixed profiles')
     if 'try_ptr' not in tags:
         raise ValueError('pointer-try tag must occur in AIR')
     if fresh_air is not None:
