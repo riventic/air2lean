@@ -60,14 +60,21 @@ def profile_for_air(doc):
     string_fields = RAW_FIELDS - {"pointer_bits", "error_set_bits", "error_tracing", "features"}
     if any(not isinstance(p[k], str) or not p[k] for k in string_fields):
         raise ValueError("profile string fields must not be empty or malformed")
+    # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos or
+    # 32-bit wasm32-freestanding/wasm32-wasi pointers, and a 1..32-bit error integer.
     if (p["name"] != "abi64-le-v1" or p["zig_version"] != version or
-            type(p["pointer_bits"]) is not int or p["pointer_bits"] != 64 or
-            p["endian"] != "little" or type(p["error_set_bits"]) is not int or p["error_set_bits"] != 16):
+            type(p["pointer_bits"]) is not int or p["pointer_bits"] not in (32, 64) or
+            p["endian"] != "little" or type(p["error_set_bits"]) is not int or
+            not 0 < p["error_set_bits"] <= 32):
         raise ValueError("incompatible target profile")
     triple = p["target_triple"].split("-")
+    target = (triple[0], triple[1].split(".")[0]) if len(triple) == 3 else None
     if (len(triple) != 3 or triple[2].split(".")[0] != p["abi"] or
-            (triple[0], triple[1].split(".")[0]) not in {("x86_64", "linux"), ("aarch64", "macos")}):
+            target not in {("x86_64", "linux"), ("aarch64", "macos"),
+                           ("wasm32", "freestanding"), ("wasm32", "wasi")}):
         raise ValueError("target triple is outside the supported model ABI scope")
+    if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
+        raise ValueError("incompatible target profile")
     fs = p["features"]
     if (not isinstance(fs, list) or any(not isinstance(f, str) or not f for f in fs) or
             len(fs) != len(set(fs)) or type(p["error_tracing"]) is not bool):

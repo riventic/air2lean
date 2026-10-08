@@ -61,6 +61,18 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incompatible target profile"):
             HELPER["profile_for_air"](changed)
 
+    def test_pointer_width_follows_the_target(self):
+        # T02: wasm32 profiles have 32-bit pointers; every other target stays 64-bit.
+        wasm = copy.deepcopy(CURRENT)
+        wasm["profile"].update(target_triple="wasm32-wasi.0.1.0...0.1.0-musl", abi="musl", pointer_bits=32)
+        self.assertEqual(HELPER["profile_for_air"](wasm)["pointer_bits"], 32)
+        for triple, abi, bits in (("wasm32-wasi.0.1.0...0.1.0-musl", "musl", 64),
+                                  (CURRENT["profile"]["target_triple"], CURRENT["profile"]["abi"], 32)):
+            changed = copy.deepcopy(CURRENT)
+            changed["profile"].update(target_triple=triple, abi=abi, pointer_bits=bits)
+            with self.assertRaisesRegex(ValueError, "incompatible target profile"):
+                HELPER["profile_for_air"](changed)
+
     def test_future_schema_fails_closed(self):
         changed = copy.deepcopy(CURRENT)
         changed["schema"] = 13
