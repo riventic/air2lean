@@ -913,9 +913,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- typed storage, like an integer: the target must be provably error-free.
       let fromOpaque := cx.allocatorModel == .translated &&
         ((pointerChild aty).bind (cx.types[·]?)) == some (.other "anyopaque")
-      -- Erasing to `*anyopaque` exposes no bytes: every recovery passes `fromOpaque`.
+      -- Erasing an error-free pointer to `*anyopaque` (an allocator's `ctx`); every recovery
+      -- passes `fromOpaque`.
       let toOpaque := cx.allocatorModel == .translated &&
-        ((pointerChild ty).bind (cx.types[·]?)) == some (.other "anyopaque")
+        ((pointerChild ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
+        ((pointerChild aty).bind (hasErrorCapability cx.types)) == some false
       if fromOpaque then
         if let some target := pointerChild ty then
           unless hasErrorCapability cx.types target == some false do

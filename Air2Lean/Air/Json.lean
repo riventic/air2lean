@@ -530,7 +530,7 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
         -- rejects it exactly as `ptrOther` outside `--allocator-model translated`.
         if kind == "int" then
           if let some offJ := optField ptrJ "off" then
-            return .ptrInt tyId (← offJ.getNat?)
+            if let .ok addr := offJ.getNat? then return .ptrInt tyId addr
         return .ptrOther tyId kind
       return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)
     else if let some pJ := optField j "slice_ptr" then
