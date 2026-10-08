@@ -59,7 +59,7 @@ class Scratch(unittest.TestCase):
 
 
 class CommittedMatrix(Scratch):
-    def test_every_declared_path_is_backed_or_records_a_gap(self):
+    def test_every_declared_path_is_backed_without_gaps(self):
         code, output = run('check', '--root', self.root, '--json')
         self.assertEqual(code, 0, output)
         report = json.loads(output)
@@ -71,10 +71,22 @@ class CommittedMatrix(Scratch):
             '0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1',
             '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1'})
         self.assertEqual(paths['0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1']['job'], 'macos')
-        self.assertEqual(paths['0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1']['status'], 'backed')
+        self.assertEqual({row['status'] for row in paths.values()}, {'backed'})
+        self.assertEqual([row['gaps'] for row in paths.values()], [[]] * 5)
         self.assertEqual(report['input_only_profiles'], ['legacy-abi64-le'])
 
+    def test_committed_matrix_passes_strict(self):
+        code, output = run('check', '--root', self.root, '--strict')
+        self.assertEqual(code, 0, output)
+
     def test_strict_mode_rejects_recorded_gaps(self):
+        def change(data):
+            for zig, host in (('0.14.1', 'x86_64-linux'), DARWIN_15):
+                entry = self.entry(data, zig, host)
+                entry['evidence'].pop('target_probe')
+                entry['gaps'] = {'target_probe': 'later'}
+        self.edit_json(TM['MAP'], change)
+        self.assertEqual(run('check', '--root', self.root)[0], 0)
         self.check_fails('0.14.1/x86_64-linux/x86_64-linux/abi64-le-v1: --strict',
                          '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1: --strict', strict=True)
 
@@ -140,9 +152,25 @@ class Evidence(Scratch):
         def change(data):
             entry = self.entry(data, '0.14.1', 'x86_64-linux')
             entry['evidence']['target_probe'] = ['Float target probe']
-            del entry['gaps']
         self.edit_json(TM['MAP'], change)
         self.check_fails("'Float target probe': its `if` is false for this row")
+
+    def test_version_specific_abi_probes_back_only_their_version(self):
+        def change(data):
+            self.entry(data, '0.15.2', 'x86_64-linux')['evidence']['target_probe'] = [
+                'ABI target probe (0.14.1)']
+            self.entry(data, '0.16.0', 'aarch64-macos')['evidence']['target_probe'] = [
+                'macOS ABI target probe (0.15.2)']
+        self.edit_json(TM['MAP'], change)
+        self.check_fails("0.15.2/x86_64-linux/x86_64-linux/abi64-le-v1: target_probe step "
+                         "'ABI target probe (0.14.1)': its `if` is false for this row",
+                         "0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1: target_probe step "
+                         "'macOS ABI target probe (0.15.2)': bound to Zig 0.15.2, not 0.16.0")
+
+    def test_probe_step_must_run_the_probe(self):
+        self.edit_text(TM['WORKFLOW'], 'python3 scripts/abi-probe.py observe --zig "$PWD/host-zig/zig"',
+                       'python3 scripts/abi-probe.py --help --zig "$PWD/host-zig/zig"')
+        self.check_fails("'ABI target probe (0.14.1)': its commands do not perform target_probe")
 
     def test_evidence_of_another_version_does_not_count(self):
         def change(data):
@@ -192,15 +220,15 @@ class Gaps(Scratch):
         def change(data):
             entry = self.entry(data, *DARWIN_15)
             entry['evidence'].pop('native_execution')
-            entry['gaps']['native_execution'] = 'later'
+            entry['evidence'].pop('target_probe')
+            entry['gaps'] = {'native_execution': 'later', 'target_probe': 'later'}
         self.edit_json(TM['MAP'], change)
         self.check_fails('more than one gap')
 
     def test_gap_needs_a_reason_and_excludes_evidence(self):
         def change(data):
             entry = self.entry(data, *DARWIN_15)
-            entry['gaps']['target_probe'] = ' '
-            entry['evidence']['target_probe'] = ['macOS ABI target probe (0.16.0)']
+            entry['gaps'] = {'target_probe': ' '}
         self.edit_json(TM['MAP'], change)
         self.check_fails('target_probe gap needs a reason', 'lists both evidence and a gap')
 

@@ -141,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests/roadmap/target-matrix -v
-          python3 scripts/target-matrix.py check
+          python3 scripts/target-matrix.py check --strict
 
       # Offline fixture repositories; runs before check.sh rewrites committed Gen.lean files.
       - name: Artifact manifest provenance regressions
@@ -314,6 +314,20 @@ jobs:
       - name: Float target probe
         if: matrix.full
         run: scripts/floatprobe.sh
+
+      # Q05: 0.14.1's std cannot build the float probe's compat writer, so its target probe is
+      # the bounded ABI probe against the 0.14.1 contracts (tests/roadmap/abi-probes/0.14.1/).
+      - name: ABI target probe (0.14.1)
+        if: ${{ matrix.zig == '0.14.1' && !matrix.mutate }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          for mode in ReleaseSafe ReleaseFast; do
+            python3 scripts/abi-probe.py observe --zig "$PWD/host-zig/zig" \
+              --profile "tests/roadmap/abi-probes/0.14.1/x86_64-linux-gnu-$mode.json" \
+              --output "$RUNNER_TEMP/abi-x86_64-linux-gnu-$mode.json"
+          done
 
       # Cache the patched compiler: zig-patch/build.sh takes a few minutes. Rebuild only when
       # the exporter, the version's hook, the version pin, or the build script itself changes.
@@ -1253,6 +1267,19 @@ jobs:
               --output "$RUNNER_TEMP/abi-aarch64-macos-none-$mode.json"
           done
 
+      # 0.15.2's contracts (tests/roadmap/abi-probes/0.15.2/) differ from 0.16.0's only in
+      # the LLVM feature names (zcm vs zcm_fpr64/zcm_gpr64).
+      - name: macOS ABI target probe (0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          for mode in ReleaseSafe ReleaseFast; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+              --profile "tests/roadmap/abi-probes/0.15.2/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-0.15.2-aarch64-macos-none-$mode.json"
+          done
+
       # T04: the native aarch64-macos-none probe against its versioned expected results.
       - name: aarch64-macos ABI qualification (T04, 0.16.0)
         env:
@@ -1332,7 +1359,19 @@ jobs:
           AIR2LEAN_DIFF: "1"
           AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.16.0/zig
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.16.0
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.16.0/report.json
         run: scripts/check.sh
+
+      # Q04/Q05: this version's macOS row of the accounting table (docs/host-accounting.md).
+      # Kept even when the differential gate fails: an incomplete summary records why.
+      - name: Upload the macOS differential summary (0.16.0)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-0.16.0-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/diff-summary/0.16.0/report.json
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: macOS proofs (0.16.0)
         env:
@@ -1351,7 +1390,19 @@ jobs:
           AIR2LEAN_DIFF: "1"
           AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.15.2/zig
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.15.2
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.15.2/report.json
         run: scripts/check.sh
+
+      # Q04/Q05: this version's macOS row of the accounting table (docs/host-accounting.md).
+      # Kept even when the differential gate fails: an incomplete summary records why.
+      - name: Upload the macOS differential summary (0.15.2)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-0.15.2-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/diff-summary/0.15.2/report.json
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: macOS proofs (0.15.2)
         env:

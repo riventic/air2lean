@@ -31,7 +31,8 @@ check is offline: it starts no Zig, Lake or Lean process.
 
 A missing `native_execution` or `target_probe` may be recorded as an explicit gap with a
 reason; `proof_check` never can, and a path with two gaps fails. Gaps keep Q05 partial;
-`--strict` passing is part of its acceptance. Profiles whose `target_triples` are
+`--strict` passing is part of its acceptance. No path records a gap today, and CI's
+`Declared target matrix is natively backed` step runs `check --strict`, so a new gap fails CI. Profiles whose `target_triples` are
 `unverified` (`legacy-abi64-le`) claim no platform and must be listed as input-only. A
 profile target without a declared native host fails; targets listed as `not_declared`
 must stay undeclared.
@@ -42,16 +43,32 @@ must stay undeclared.
 | --- | --- | --- | --- | --- | --- |
 | 0.16.0 | x86_64-linux | `test` (full row) | check.sh + diff test | float probe | `lake build Proofs` |
 | 0.15.2 | x86_64-linux | `test` (full row) | check.sh + diff test | float probe | `lake build Proofs` |
-| 0.14.1 | x86_64-linux | `test` (restricted row) | dispatch `--native-only` | **gap** | `lake build Proofs` |
+| 0.14.1 | x86_64-linux | `test` (restricted row) | dispatch `--native-only` | ABI probe (`0.14.1/x86_64-linux-gnu`) | `lake build Proofs` |
 | 0.16.0 | aarch64-macos | `macos` | Darwin AIR export, check.sh + diff test | ABI probe (`aarch64-macos-none`) | `lake build Proofs` |
-| 0.15.2 | aarch64-macos | `macos` | Darwin AIR export, check.sh + diff test | **gap** | `lake build Proofs` (with `Gen-darwin.lean`) |
+| 0.15.2 | aarch64-macos | `macos` | Darwin AIR export, check.sh + diff test | ABI probe (`0.15.2/aarch64-macos-none`) | `lake build Proofs` (with `Gen-darwin.lean`) |
 
 The `macos` job is one job without a matrix (macOS runner concurrency is limited). It
 installs the checksum-pinned stock aarch64-macos Zig releases, caches the patched
 compilers it builds with them, exports fresh Darwin AIR, compares it with the goldens
 and their `air-darwin`/`Gen-darwin` overrides, runs the differential test (host-listed
 float differences count as `host`, [floats.md](floats.md)), and builds the proofs
-against the translation of that host. On failure it uploads the dumped Darwin AIR.
+against the translation of that host. On failure it uploads the dumped Darwin AIR. Each
+version's differential summary is uploaded as `diff-summary-<zig>-macOS-ARM64`, the macOS
+rows of the accounting table ([host-accounting.md](host-accounting.md)).
+
+The ABI target probes (`scripts/abi-probe.py observe`, [profiles.md](profiles.md)) run in
+ReleaseSafe and ReleaseFast against per-version contracts: 0.16.0's are
+`tests/roadmap/abi-probes/<triple>-<mode>.json`, and 0.14.1's (x86_64-linux-gnu) and 0.15.2's
+(aarch64-macos-none) are under `tests/roadmap/abi-probes/<zig>/`. The probe reports the Zig
+version that compiled it, so a contract never matches another version's compiler. 0.14.1
+needs the ABI probe because its std cannot build the float probe's `tests/diff/compat.zig`
+writer. On aarch64-macos, the float probe's expected results are the x86_64-linux reference,
+so it does not apply. The 0.14.1 and 0.15.2 contracts were recorded by running the probe with
+stock compilers, checked against the `index.json` checksums: 0.15.2 natively on an
+aarch64-macos host, and 0.14.1 in a `linux/amd64` container. That container ran ReleaseSafe
+through `abi-probe.py observe`. Rosetta rejected the ReleaseFast binary (`bss_size overflow`),
+so its output came from the same build run under `qemu-x86_64` and was checked against the
+contract. CI runs both modes on a native `ubuntu-24.04` runner.
 
 Not declared: `wasm32-wasi` (needs T02 pointer-width parameterization and T05
 native/WASM correspondence) and `aarch64-linux` (translation stays guarded).

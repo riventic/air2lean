@@ -70,7 +70,10 @@ A focused `AIR2LEAN_EXAMPLES` run therefore cannot serve as evidence for a versi
 Full jobs (0.16.0 and 0.15.2) publish, check and claim-check their own summary after the
 differential gate and append the table to the job summary. They upload
 `tests/diff/out/report.json` as the artifact `diff-summary-<zig>-<os>-<arch>`, even when the
-gate fails, in which case the summary is incomplete and `publish` rejects it. The restricted
+gate fails, in which case the summary is incomplete and `publish` rejects it. The `macos` job
+(`macos-14`, aarch64) runs the differential test for 0.16.0 and 0.15.2 and uploads each
+version's summary the same way, as `diff-summary-<zig>-macOS-ARM64`. Each is a separate
+version/target row (its selection omits `asm`, which runs only on x86_64). The restricted
 0.14.1 job runs no diff harness and uploads no summary. To publish the cross-version table for
 a run:
 
@@ -81,8 +84,8 @@ python3 scripts/accounting.py publish $(printf -- '--summary %s ' summaries/*/re
 python3 scripts/accounting.py claims $(printf -- '--summary %s ' summaries/*/report.json) --require-full-versions
 ```
 
-Only Linux x86_64 full jobs exist today, so the table has one target per version. Cross-target
-rows wait on Q05.
+The macOS summaries add one aarch64-macos row per full version. The first `main` run after the
+`macos` job began uploading them is the first one whose table has cross-target rows.
 
 ## Published table
 
@@ -109,6 +112,6 @@ re-checks every committed table against its committed summaries.
 The table is `qualified: false`. It does not establish compiler/native correspondence or proof
 applicability. The 0.16.0 row's 87,084 cases are the current scope; README's 87,064-case headline
 belongs to the original Outcome closeout. 0.14.1 has no row because its restricted job runs no
-diff harness. There are no cross-target rows. The macOS job (`macos-14`, aarch64) runs the
-differential test for 0.16.0 and 0.15.2 through `scripts/check.sh`, but uploads no
-`diff-summary-*` artifact, so this table cannot include it (Q05).
+diff harness. This table has no cross-target rows because, at that commit, the `macos` job uploaded no
+`diff-summary-*` artifact. It uploads them now, and the macOS rows (`diff-summary-0.16.0-macOS-ARM64`,
+`diff-summary-0.15.2-macOS-ARM64`) appear in the table published from the next `main` run.
