@@ -159,6 +159,15 @@ observes both ([target-matrix.md](target-matrix.md); per-mode status:
 [build-modes.md](build-modes.md)). A macOS report stays outside the
 paired Linux `compare` relation.
 
+Contracts for other Zig versions are under `tests/roadmap/abi-probes/<zig>/`: 0.14.1
+x86_64-linux-gnu and 0.15.2 aarch64-macos-none, in both modes. They are the Q05 target probes
+of those declared paths. Each differs from its 0.16.0 counterpart only in `zig_version`
+and, for 0.15.2 on macOS, in the LLVM feature names (`zcm` against 0.16.0's
+`zcm_fpr64`/`zcm_gpr64`). The probe prints its compiler's version, so a contract matches only
+that version. `compare` pairs only reports of the same Zig version. The probe writes its output
+with `std.fmt.bufPrint` and `compat.write`, which lets the same source build on 0.14.1, 0.15.2
+and 0.16.0.
+
 ```sh
 python3 scripts/abi-probe.py observe --zig /absolute/path/to/stock/zig \
   --profile tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json \
