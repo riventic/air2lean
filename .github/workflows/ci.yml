@@ -823,6 +823,8 @@ jobs:
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
           fi
+          # C05: sampled spurious-wake and cancelation schedules (no translation involved).
+          lake env lean --run tests/roadmap/cancellation/Runtime.lean
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
       # assembly/libm policy is reviewed for this profile and the pinned Lean release.

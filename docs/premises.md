@@ -207,17 +207,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: `Group.async`/`concurrent` spawn a recorded task; `Group.await` joins the tasks
-  in spawn order. Cancellation is not modelled, so `Group.cancel` is `await`.
-- Derived from: tokens `groupAsyncC`, `groupAwaitC`, `groupConcurrentC`, `groupCancelC`.
+  in spawn order. `Group.cancel` gives each task a cancelation request (`Mem.cancels`) and
+  joins it; a task's cancelation point (a cancelable futex wait, its own `Group.await`)
+  delivers a pending request as `error.Canceled`. `main` is not an `Io` task and is never
+  canceled.
+- Derived from: tokens `groupAsyncC`, `groupAwaitC`, `groupConcurrentC`, `groupCancelC`, `cancelPending`, `requestCancel`.
 - Sources: [std-models.md](std-models.md#thread-model).
 
 <a id="thr-05"></a>
 ### THR-05 — Futex model
 
 - Kind: environment.
-- Statement: A futex wait on a matching `u32` sleeps until a wake at that address. Waiters
-  wake in FIFO order. There is no spurious wakeup or cancellation, and a wake adds no
-  happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
+- Statement: A futex wait on a matching `u32` sleeps until a wake at that address, or returns
+  spuriously in place of the sleep (an oracle choice, `Sched.spuriousWake`). Waiters wake in
+  FIFO order; a sleeping waiter leaves the queue only through a wake or a cancelation request.
+  A wake adds no happens-before edge. No runnable thread with an unfinished thread is
+  `Zig.Error.deadlock`.
 - Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
