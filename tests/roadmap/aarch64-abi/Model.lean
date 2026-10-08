@@ -239,6 +239,8 @@ def main (args : List String) : IO UInt32 := do
       | ["atomic", name, _, _, pad, _, won, lost, added, swapped, loaded, _] =>
         let some bits := intBits? name | pure (s!"atomic {name} {pad}", false)
         pure (s!"atomic {name} {pad}", atomicCase bits won lost added swapped loaded)
+      -- A malformed result line is a failure, not a skipped case.
+      | "fop" :: rest | "atomic" :: rest => pure (s!"malformed {" ".intercalate rest}", false)
       | _ => pure ("", true)
     if key.isEmpty then continue
     match divergences.lookup key, ok with
