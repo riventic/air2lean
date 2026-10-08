@@ -47,6 +47,10 @@ namespace Wrap
 
 def outOfMemory : ErrName := "OutOfMemory"
 
+/-- The pointer of a zero-byte allocation: no block, the highest address with alignment `a`
+(`alignment.backward(maxInt(usize))`). -/
+def zeroPtr (a : Nat) : Ptr := ⟨none, 2 ^ 64 - a⟩
+
 /-- The owned bytes of an allocated slice (module doc). -/
 def owned (I : AllocInv) (k : Nat) (p : Ptr) (bs : Array Byte) : Assn :=
   if bs.size = 0 then emp else granted I p k bs
@@ -77,7 +81,7 @@ variable (vt : RawVTable) (ctx : Ptr)
 
 /-- `allocBytesWithAlignment`. -/
 def allocBytes (k : Nat) (n ra : BitVec 64) : MemM (Except ErrName Ptr) :=
-  if n.toNat = 0 then pure (.ok (zeroAllocPtr (2 ^ k))) else
+  if n.toNat = 0 then pure (.ok (zeroPtr (2 ^ k))) else
   vt.alloc ctx n k ra >>= fun r => match r with
     | none => pure (.error outOfMemory)
     | some p => memset (α := BitVec 8) 1 p n none >>= fun _ => pure (.ok p)
@@ -95,7 +99,7 @@ def allocSlice (size k : Nat) (n ra : BitVec 64) : MemM (Except ErrName Slice) :
 
 /-- `create(T)`. -/
 def create (size k : Nat) (ra : BitVec 64) : MemM (Except ErrName Ptr) :=
-  if size = 0 then pure (.ok (zeroAllocPtr (2 ^ k)))
+  if size = 0 then pure (.ok (zeroPtr (2 ^ k)))
   else allocBytes vt ctx k (BitVec.ofNat 64 size) ra
 
 /-- `destroy(p)`: no `@memset`, a direct `rawFree`. -/
@@ -125,7 +129,7 @@ def allocSentinel {T : Type} [Enc T] (k : Nat) (n : BitVec 64) (sentinel : T) (r
 def realloc (size k : Nat) (old : Slice) (newN ra : BitVec 64) : MemM (Except ErrName Slice) :=
   if old.len.toNat = 0 then allocSlice vt ctx size k newN ra else
   if newN.toNat = 0 then
-    free vt ctx size k old ra >>= fun _ => pure (.ok ⟨zeroAllocPtr (2 ^ k), 0⟩) else
+    free vt ctx size k old ra >>= fun _ => pure (.ok ⟨zeroPtr (2 ^ k), 0⟩) else
   if 2 ^ 64 ≤ size * newN.toNat then pure (.error outOfMemory) else
   vt.remap ctx ⟨old.ptr, byteLen size old⟩ k (itemBytes size newN) ra >>= fun r => match r with
     | some p => pure (.ok ⟨p, newN⟩)
@@ -133,7 +137,7 @@ def realloc (size k : Nat) (old : Slice) (newN ra : BitVec 64) : MemM (Except Er
       | none => pure (.error outOfMemory)
       | some p =>
         memmove 1 1 1 p old.ptr
-            (BitVec.ofNat 64 (min (itemBytes size newN).toNat (byteLen size old).toNat)) >>= fun _ =>
+            (BitVec.ofNat 64 (Min.min (itemBytes size newN).toNat (byteLen size old).toNat)) >>= fun _ =>
         memset (α := BitVec 8) 1 old.ptr (byteLen size old) none >>= fun _ =>
         vt.free ctx ⟨old.ptr, byteLen size old⟩ k ra >>= fun _ => pure (.ok ⟨p, newN⟩)
 
@@ -163,7 +167,7 @@ theorem toNat_ofNat_lt {n : Nat} (h : n < 2 ^ 64) : (BitVec.ofNat 64 n).toNat = 
 
 /-- The copy of `realloc` keeps the common prefix. -/
 theorem keepsPrefix_copy (bs bn : Array Byte) :
-    keepsPrefix bs (writeBytes bn 0 (bs.extract 0 (min bn.size bs.size))) := by
+    keepsPrefix bs (writeBytes bn 0 (bs.extract 0 (Min.min bn.size bs.size))) := by
   unfold keepsPrefix
   rcases Nat.le_total bs.size bn.size with hle | hle
   · rw [Nat.min_eq_right hle, Array.extract_size, writeBytes_size bn 0 bs (by omega),
@@ -314,7 +318,7 @@ theorem dupe_spec (h : AllocSpec L vt ctx I) (size k sa a' : Nat) (src : Slice) 
         rw [Array.extract_eq_self_of_le (by omega), writeBytes_all hr.symm]
       rw [ew, hr] at hp
       show (⌜d.len = src.len⌝ ∗ (I.own ∗ (owned I k d.ptr bsrc ∗ region src.ptr a' bsrc))) hh
-      rw [owned_pos (by omega)]
+      rw [owned_pos (by rw [hsz, Nat.mul_comm]; exact h0)]
       unfold granted
       exact sep_lift.mpr ⟨hlen, by sep_normalize at hp ⊢; exact hp⟩
 
@@ -332,14 +336,15 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] (h : AllocSpec L vt 
     (hal : Enc.align T ∣ 2 ^ k) (hals : Enc.align T ∣ Enc.size T) (hn : n.toNat + 1 < 2 ^ 64) :
     L.T I.own (allocSentinel vt ctx k n sentinel ra) (sentinelResult I k n sentinel) := by
   have e1 : (n + 1).toNat = n.toNat + 1 := by
-    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]; omega
+    rw [BitVec.toNat_add, show (1 : BitVec 64).toNat = 1 from rfl]; exact Nat.mod_eq_of_lt hn
   refine L.bind (allocItems_spec h (Enc.size T) k (n + 1) ra hk) fun r => ?_
   cases r with
   | error e => exact L.ret' _ fun hh hp => hp
   | ok p =>
     dsimp only
     simp only [allocResult]
-    rw [e1, owned_pos (by simp; exact Nat.mul_pos hT (by omega)), Ptr.elem_eq]
+    rw [e1, owned_pos (by rw [Array.size_replicate]; exact Nat.ne_of_gt (Nat.mul_pos hT (Nat.succ_pos _))),
+      Ptr.elem_eq]
     unfold granted
     have ho : Enc.size T * n.toNat + Enc.size T ≤
         (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size := by
@@ -429,8 +434,8 @@ theorem realloc_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Slice) (ne
             refine granted_ex fun bn hbn => ?_
             rw [ec] at hbn
             unfold granted
-            have em : (BitVec.ofNat 64 (min (itemBytes size newN).toNat
-                (byteLen size old).toNat)).toNat * 1 = min bn.size bs.size := by
+            have em : (BitVec.ofNat 64 (Min.min (itemBytes size newN).toNat
+                (byteLen size old).toNat)).toNat * 1 = Min.min bn.size bs.size := by
               rw [ec, eo, Nat.mul_one, ← hbn]
               exact toNat_ofNat_lt (by omega)
             -- copy the common prefix into the new region
@@ -438,20 +443,20 @@ theorem realloc_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Slice) (ne
               (R := I.own ∗ (I.tok p bn.size k ∗ I.tok old.ptr bs.size k))
               (L.ofTotal (Region.memcpy (d := p) (s := old.ptr) (a := 2 ^ k) (a' := 2 ^ k)
                 (da := 1) (sa := 1) (sz := 1) (bd := bn) (bsrc := bs)
-                (n := BitVec.ofNat 64 (min (itemBytes size newN).toNat (byteLen size old).toNat))
+                (n := BitVec.ofNat 64 (Min.min (itemBytes size newN).toNat (byteLen size old).toNat))
                 (by rw [em]; omega) (by rw [em]; omega) (Nat.one_dvd _) (Nat.one_dvd _))))
               fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
             rw [em]
             -- poison the old region
             refine L.bind (L.pre (L.frame
-              (R := region p (2 ^ k) (writeBytes bn 0 (bs.extract 0 (min bn.size bs.size))) ∗
+              (R := region p (2 ^ k) (writeBytes bn 0 (bs.extract 0 (Min.min bn.size bs.size))) ∗
                 (I.own ∗ (I.tok p bn.size k ∗ I.tok old.ptr bs.size k)))
               (L.ofTotal (Region.memsetUndef (p := old.ptr) (a := 2 ^ k) (bs := bs)
                 (n := byteLen size old) eo)))
               fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
             -- free it
             refine L.bind (L.pre (L.frame
-              (R := region p (2 ^ k) (writeBytes bn 0 (bs.extract 0 (min bn.size bs.size))) ∗
+              (R := region p (2 ^ k) (writeBytes bn 0 (bs.extract 0 (Min.min bn.size bs.size))) ∗
                 I.tok p bn.size k)
               (h.free ⟨old.ptr, byteLen size old⟩ k ra
                 (Array.replicate (byteLen size old).toNat .undef) hk (by simp) (by simp; omega)))
@@ -460,7 +465,7 @@ theorem realloc_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Slice) (ne
               rw [Array.size_replicate]
               rw [← eo] at hp
               sep_normalize at hp ⊢; exact hp
-            · have hw : (writeBytes bn 0 (bs.extract 0 (min bn.size bs.size))).size = bn.size :=
+            · have hw : (writeBytes bn 0 (bs.extract 0 (Min.min bn.size bs.size))).size = bn.size :=
                 writeBytes_size _ _ _ (by simp; omega)
               refine sep_lift.mpr ⟨rfl, sep_ex_right.mpr ⟨_, sep_lift_right.mpr
                 ⟨⟨by rw [hw, hbn], keepsPrefix_copy bs bn⟩, ?_⟩⟩⟩

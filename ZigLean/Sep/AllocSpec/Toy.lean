@@ -163,13 +163,13 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
     exact hc) (fun _ x => x)) hp
   have hp3 : ((pts ctx 8 b' ∗ (pts (ctx.add 8) 8 (BitVec.ofNat 64 (e + pad + len.toNat)) ∗
       (regionIn (b'.add ((e + pad + len.toNat : Nat) : Int)) A S K 1
-          (tail.extract (pad + len.toNat) tail.size) ∗
+          ((tail.extract pad tail.size).extract len.toNat (tail.extract pad tail.size).size) ∗
         (regionIn (b'.add ((e : Nat) : Int)) A S K 1 (tail.extract 0 pad) ∗ junk)))) ∗
       regionIn (b'.add ((e + pad : Nat) : Int)) A S K (2 ^ k)
-        (tail.extract pad (pad + len.toNat))) h := by
+        ((tail.extract pad tail.size).extract 0 len.toNat)) h := by
     sep_normalize at hp2 ⊢; exact hp2
   refine sep_mono (fun _ x => own_intro (e := e + pad + len.toNat) ?_ ?_)
-    (fun _ x => ⟨tail.extract pad (pad + len.toNat),
+    (fun _ x => ⟨(tail.extract pad tail.size).extract 0 len.toNat,
       sep_lift.mpr ⟨by simp; omega, sep_emp.mpr (region_of_regionIn x)⟩⟩) hp3
   · exact ⟨by omega, by simp; omega, hcap, hoff⟩
   · unfold state

@@ -73,31 +73,29 @@ theorem extract_append_right (bs bs' : Array Byte) :
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs bs' : Array Byte} {h : Heap}
 
+/-- `bytesAt` determines its heap. -/
+theorem bytesAt_precise {h' : Heap} (h₁ : bytesAt p A S K bs h) (h₂ : bytesAt p A S K bs h') :
+    h = h' := by
+  obtain ⟨b, hb, -, hl⟩ := h₁
+  obtain ⟨b', hb', -, hl'⟩ := h₂
+  rw [hb] at hb'; cases hb'
+  funext l; rw [hl, hl']
+
 /-- Two adjacent owned ranges of one block are one range. -/
 theorem bytesAt_append :
     (bytesAt p A S K bs ∗ bytesAt (p.add bs.size) A S K bs') h ↔ bytesAt p A S K (bs ++ bs') h := by
   constructor
-  · rintro ⟨h₁, h₂, -, rfl, ⟨b, hpb, h0, hl₁⟩, ⟨b', hpb', -, hl₂⟩⟩
-    have hb' : b' = b := by simp only [Ptr.add] at hpb'; rw [hpb] at hpb'; exact (Option.some.inj hpb').symm
-    subst hb'
-    have hoff : (p.add bs.size).off.toNat = p.off.toNat + bs.size := by simp [Ptr.add]; omega
-    refine ⟨b', hpb, h0, fun l => ?_⟩
-    rw [Heap.union_apply, hl₁, hl₂, hoff, Array.size_append, append_getElem!]
-    by_cases e1 : l.1 = b' ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
-    · simp only [e1, and_self, ↓reduceIte, Option.some_or,
-        show l.2 < p.off.toNat + (bs.size + bs'.size) by omega,
-        show l.2 - p.off.toNat < bs.size by omega]
-    · simp only [e1, ↓reduceIte, Option.none_or]
-      by_cases e2 : l.1 = b' ∧ p.off.toNat + bs.size ≤ l.2 ∧ l.2 < p.off.toNat + bs.size + bs'.size
-      · simp only [e2, and_self, ↓reduceIte, show p.off.toNat ≤ l.2 by omega,
-          show l.2 < p.off.toNat + (bs.size + bs'.size) by omega,
-          show ¬ l.2 - p.off.toNat < bs.size by omega]
-        congr 3
-        have : l.2 - p.off.toNat - bs.size = l.2 - (p.off.toNat + bs.size) := by omega
-        rw [this]
-      · have : ¬ (l.1 = b' ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + (bs.size + bs'.size)) := by
-          omega
-        simp only [e2, this, ↓reduceIte]
+  · rintro ⟨h₁, h₂, -, rfl, hb₁, hb₂⟩
+    obtain ⟨b, hpb, h0, -⟩ := id hb₁
+    let H : Heap := fun l =>
+      if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + (bs ++ bs').size
+      then some ⟨(bs ++ bs')[l.2 - p.off.toNat]!, A, S, K⟩ else none
+    have hH : bytesAt p A S K (bs ++ bs') H := ⟨b, hpb, h0, fun _ => rfl⟩
+    obtain ⟨H₁, H₂, -, hHe, hH₁, hH₂⟩ := bytesAt_split hH (k := bs.size) (by simp)
+    rw [extract_append_left] at hH₁
+    rw [extract_append_right] at hH₂
+    rw [bytesAt_precise hb₁ hH₁, bytesAt_precise hb₂ hH₂, ← hHe]
+    exact hH
   · intro hb
     have := bytesAt_split hb (k := bs.size) (by simp)
     rwa [extract_append_left, extract_append_right] at this
@@ -205,7 +203,7 @@ theorem regionIn_of_block {b : BlockId} (hb : bytesAt ⟨some b, 0⟩ A S K bs h
 
 theorem Ptr.add_add_nat (q : Ptr) (x y : Nat) :
     (q.add (x : Int)).add (y : Int) = q.add ((x + y : Nat) : Int) := by
-  cases q; simp [Ptr.add]; omega
+  cases q; simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
 
 /-- A bump step on a free range `bs` (alignment 1) at `q`: `pad` bytes of padding, then a region
 of `len` bytes at an `a`-aligned address, then the rest. The pattern of a fixed buffer's
@@ -213,22 +211,25 @@ of `len` bytes at an `a`-aligned address, then the rest. The pattern of a fixed 
 theorem regionIn_carve {q : Ptr} (hr : regionIn q A S K 1 bs h) {pad len : Nat}
     (hfit : pad + len ≤ bs.size) (hal : (A + q.off.toNat + pad) % a = 0) :
     (regionIn q A S K 1 (bs.extract 0 pad) ∗
-      (regionIn (q.add ((pad : Nat) : Int)) A S K a (bs.extract pad (pad + len)) ∗
-        regionIn (q.add ((pad + len : Nat) : Int)) A S K 1 (bs.extract (pad + len) bs.size))) h := by
-  have h0 := bytesAt_pos_off hr.2.2
+      (regionIn (q.add ((pad : Nat) : Int)) A S K a ((bs.extract pad bs.size).extract 0 len) ∗
+        regionIn (q.add ((pad + len : Nat) : Int)) A S K 1
+          ((bs.extract pad bs.size).extract len (bs.extract pad bs.size).size))) h := by
   obtain ⟨h₁, h₂, hd, rfl, hr₁, hr₂⟩ := regionIn_split hr (k := pad) (a' := a) (by omega) hal
   refine ⟨h₁, h₂, hd, rfl, hr₁, ?_⟩
-  have hs : (bs.extract pad bs.size).size = bs.size - pad := by simp
-  have := regionIn_split hr₂ (k := len) (a' := 1) (by omega) (Nat.mod_one _)
+  have := regionIn_split hr₂ (k := len) (a' := 1) (by simp; omega) (Nat.mod_one _)
   rw [Ptr.add_add_nat] at this
-  simpa [Array.extract_extract, Nat.add_comm pad len, Nat.min_eq_left (by omega : pad + len ≤ bs.size)]
-    using this
+  exact this
 
 /-! ## Total triples for the byte operations of the wrappers -/
 
-theorem enc_size_byte : Enc.size (BitVec 8) = 1 := by
-  show intSize 8 = 1
-  decide
+theorem flatten_replicate_single (x : Byte) (n : Nat) :
+    (Array.replicate n #[x]).flatten = Array.replicate n x := by
+  induction n with
+  | zero => simp
+  | succ k ih =>
+    rw [Array.replicate_succ, Array.flatten_push, ih, Array.replicate_succ, Array.push_eq_append]
+
+theorem enc_size_byte : Enc.size (BitVec 8) = 1 := rfl
 
 /-- `@memset(region, undefined)` of all `n` bytes. -/
 theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
@@ -241,19 +242,12 @@ theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
     refine ⟨(), m, hP, ?_, hd, hm, by rw [h0]; exact hp, hst⟩
     simp [memset, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
   obtain ⟨A, S, K, hA, hK, hb⟩ := hp
-  let bs' : Array Byte := (Array.replicate n.toNat (Array.replicate (Enc.size (BitVec 8)) Byte.undef)).flatten
+  let bs' : Array Byte :=
+    (Array.replicate n.toNat (Array.replicate (Enc.size (BitVec 8)) Byte.undef)).flatten
   have hs' : bs' = Array.replicate n.toNat .undef := by
-    apply Array.ext
-    · simp [bs', enc_size_byte]
-    · intro i h1 h2
-      simp only [Array.getElem_replicate]
-      have : ∀ x ∈ bs', x = .undef := by
-        intro x hx
-        simp only [bs', Array.mem_flatten, Array.mem_replicate] at hx
-        obtain ⟨a, ⟨-, rfl⟩, hx⟩ := hx
-        exact (Array.mem_replicate.mp hx).2
-      exact this _ (Array.getElem_mem h1)
-  have hsz : bs'.size = bs.size := by rw [hs']; simp [hn]
+    show (Array.replicate n.toNat (Array.replicate 1 Byte.undef)).flatten = _
+    exact flatten_replicate_single _ _
+  have hsz : bs'.size = bs.size := by rw [hs', Array.size_replicate]; exact hn
   have hp0 : p = p.add ((0 : Nat) : Int) := by simp [Ptr.add]
   have ha0 : (A + p.off.toNat + 0) % 1 = 0 := Nat.mod_one _
   obtain ⟨b, blk, hacc, -, -, -, -⟩ := bytesAt_access (q := p) (k := 0) (n := bs'.size) (a := 1)
@@ -262,13 +256,11 @@ theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
     (bs' := bs') hb hm hd hp0 (by omega) (by omega) ha0 hst hK
   rw [writeBytes_all hsz] at hb'
   refine ⟨(), m', h', ?_, hd', hm', ⟨A, S, K, hA, hK, hs' ▸ hb'⟩, hst'⟩
-  have e : n.toNat * Enc.size (BitVec 8) = bs'.size := by rw [hsz, enc_size_byte]; omega
+  have e : n.toNat * Enc.size (BitVec 8) = bs'.size := by
+    rw [hsz, enc_size_byte, Nat.mul_one]; exact hn
+  have hne : ¬ Enc.size (BitVec 8) = 0 := by rw [enc_size_byte]; decide
   simp only [StateT.run] at hrun
-  simp only [memset, h0, enc_size_byte, Nat.one_ne_zero, or_self, ↓reduceIte, zig_unfold,
-    Nat.mul_one] at hrun ⊢
-  have e' : n.toNat = bs'.size := by rw [hsz]; exact hn
-  simp only [e', hacc]
-  rw [← enc_size_byte]
+  simp only [memset, h0, hne, or_self, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
   exact hrun
 
 /-- A store of an item `v` at byte `o` of a region, aligned to `al`. -/
@@ -329,8 +321,8 @@ theorem memcpy {d s : Ptr} {a' da sa sz : Nat} {bd bsrc : Array Byte} {n : BitVe
     (n := n.toNat * sz) (a := sa) hb₂ hm₂ (hp0 s) hpos (by omega) haS
   let src := bsrc.extract 0 (0 + n.toNat * sz)
   have hsrc : src.size = n.toNat * sz := by simp [src]; omega
-  let recorded := m.recordAt b₂ (s.off.toNat + 0) (n.toNat * sz) AccessKind.read
-  have hmr : recorded.heap = h₁ ∪ (h₂ ∪ hF) := by
+  have hmr : (m.recordAt b₂ (s.off.toNat + 0) (n.toNat * sz) AccessKind.read).heap =
+      h₁ ∪ (h₂ ∪ hF) := by
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm₁ l
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := d) (k := 0) (a := da)
     (bs' := src) hb₁ hmr hdd₁ (hp0 d) (by omega) (by omega) haD (hst.recordAt _ _ _ _) hK
