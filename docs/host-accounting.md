@@ -100,11 +100,15 @@ and the table published from them is
 
 Successful comparisons (exact matches only): **171934**.
 
-| Zig | Target | cases | exact_matches | host_differences | illegal | unspecified | capped_searches | bounded_no_result | mismatches | setup_failures | skipped_examples | skipped_functions | proof_exclusions |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0.15.2 | Linux-x86_64 | 87004 | 85927 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 2 | 7 | 17 |
-| 0.16.0 | Linux-x86_64 | 87084 | 86007 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 1 | 3 | 18 |
-| total |  | 174088 | 171934 | 0 | 994 | 1160 | 0 | 0 | 0 | 0 | 3 | 10 | 35 |
+| Zig | Target | cases | exact_matches | host_differences | illegal | unspecified | unspecified_timer | capped_searches | bounded_no_result | mismatches | setup_failures | skipped_examples | skipped_functions | proof_exclusions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.15.2 | Linux-x86_64 | 87004 | 85927 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 0 | 2 | 7 | 17 |
+| 0.16.0 | Linux-x86_64 | 87084 | 86007 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 0 | 1 | 3 | 18 |
+| total |  | 174088 | 171934 | 0 | 994 | 1160 | 0 | 0 | 0 | 0 | 0 | 3 | 10 | 35 |
+
+The `unspecified_timer` column (V06) was added after that run: its summaries come from the
+pre-V06 runner, whose timer counter is pinned at 0, so the column is 0 and the table is
+republished unchanged from the same committed summaries.
 
 Verification, on that run's summaries: `publish`, `check` and `claims --require-full-versions`
 each exit 0 against this commit's README and CI matrix. `tests/roadmap/host-accounting/test_accounting.py`

@@ -57,7 +57,7 @@ version's differential summary is uploaded as `diff-summary-<zig>-macOS-ARM64`, 
 rows of the accounting table ([host-accounting.md](host-accounting.md)).
 
 The ABI target probes (`scripts/abi-probe.py observe`, [profiles.md](profiles.md)) run in
-ReleaseSafe and ReleaseFast against per-version contracts: 0.16.0's are
+ReleaseSafe and ReleaseFast ([build-modes.md](build-modes.md)) against per-version contracts: 0.16.0's are
 `tests/roadmap/abi-probes/<triple>-<mode>.json`, and 0.14.1's (x86_64-linux-gnu) and 0.15.2's
 (aarch64-macos-none) are under `tests/roadmap/abi-probes/<zig>/`. The probe reports the Zig
 version that compiled it, so a contract never matches another version's compiler. 0.14.1

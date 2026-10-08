@@ -5,6 +5,7 @@
     "host_differences",
     "illegal",
     "unspecified",
+    "unspecified_timer",
     "capped_searches",
     "bounded_no_result",
     "mismatches",
@@ -14,7 +15,7 @@
     "proof_exclusions"
   ],
   "headline": {
-    "definition": "exact matches only (value_match, error_return_match, panic_match); host differences, illegal/unspecified exclusions, capped searches, bounded no-result runs, mismatches, setup failures, skipped functions and proof exclusions are excluded",
+    "definition": "exact matches only (value_match, error_return_match, panic_match); host differences, illegal/unspecified/unsupported-timer exclusions, capped searches, bounded no-result runs, mismatches, setup failures, skipped functions and proof exclusions are excluded",
     "successful_comparisons": 171934
   },
   "outside_partition": [
@@ -27,6 +28,7 @@
     "host_differences",
     "illegal",
     "unspecified",
+    "unspecified_timer",
     "capped_searches",
     "bounded_no_result",
     "mismatches",
@@ -69,6 +71,7 @@
       "summary_sha256": "9c39e0020dabef071c5a0fd681326cd0e46d0b16a1a6a6562a2066874c75548a",
       "target": "Linux-x86_64",
       "unspecified": 580,
+      "unspecified_timer": 0,
       "version": "0.15.2"
     },
     {
@@ -107,6 +110,7 @@
       "summary_sha256": "16e973356bb7752314d641d638332d9b39eb93e7e3d54c8762d38b788bfa5489",
       "target": "Linux-x86_64",
       "unspecified": 580,
+      "unspecified_timer": 0,
       "version": "0.16.0"
     }
   ],
@@ -123,6 +127,7 @@
     "setup_failures": 0,
     "skipped_examples": 3,
     "skipped_functions": 10,
-    "unspecified": 1160
+    "unspecified": 1160,
+    "unspecified_timer": 0
   }
 }

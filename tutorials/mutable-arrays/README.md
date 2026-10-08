@@ -73,6 +73,10 @@ lake env lean tutorials/mutable-arrays/Negative.lean   # must fail
   value/safety semantics and the byte-level block memory model.
 - [SEM-03](../../docs/premises.md#sem-03): `Triple` is partial correctness. The theorem says
   nothing about runs that do not finish; it does not prove termination.
+- [SEM-04](../../docs/premises.md#sem-04): derived because `Proofs/Slices/Sep.lean` imports
+  the P01 step tactics (`ZigLean.Sep.Step`), whose module also holds total-correctness rules.
+  This tutorial's theorem is the partial-correctness `Triple` above; it claims no
+  total-correctness statement.
 - [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and standard axioms.
 - [TRU-02](../../docs/premises.md#tru-02), [TRU-03](../../docs/premises.md#tru-03): the
   translation models the analyzed AIR, and the backend preserves it in the native binary.
