@@ -30,6 +30,7 @@ Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py list   (each case and its inputs; no translation)
 """
 import argparse
+import dataclasses
 import functools
 import hashlib
 import json
@@ -45,7 +46,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 OSES = ("linux", "darwin")
 PROFILE_PREFIX = b"-- air2lean-profile: "
-IDENTITY = re.compile(r"__(anon|enum|opaque|union|struct)_[0-9]+")
+# The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
+IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
 GEN_NAME = re.compile(r"Gen(-[a-z]+)?\.lean")
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
@@ -94,10 +96,15 @@ EXCEPTIONS = {
 }
 
 
+@dataclasses.dataclass
 class Case:
-    def __init__(self, path, dirs, args, mode, label, version=None, example=None):
-        self.path, self.dirs, self.args, self.mode = path, dirs, args, mode
-        self.label, self.version, self.example = label, version, example
+    path: str
+    dirs: list
+    args: list
+    mode: str
+    label: str
+    version: str | None = None
+    example: str | None = None
 
 
 def git_files(*patterns):
