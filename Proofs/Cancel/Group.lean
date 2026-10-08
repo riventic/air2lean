@@ -499,9 +499,11 @@ theorem cover_join {own : ThreadId → Heap} {m m' : Mem} {t u : ThreadId} (hcv 
   refine ⟨if w = u then t else w, ?_⟩
   by_cases hwu : w = u
   · subst hwu
-    rw [if_pos rfl, upd_ne _ _ (Ne.symm hut), upd_self, Heap.union_apply]
+    simp only [↓reduceIte]
+    rw [upd_ne _ _ (Ne.symm hut), upd_self, Heap.union_apply]
     cases h : own t l <;> simp_all
-  · rw [if_neg hwu, upd_ne _ _ hwu]
+  · simp only [hwu, ↓reduceIte]
+    rw [upd_ne _ _ hwu]
     by_cases hwt : w = t
     · subst hwt
       rw [upd_self, Heap.union_apply]
@@ -542,7 +544,7 @@ theorem groupTake_one {m : Mem} {g : Ptr} (hg : m.groups = #[(g, 1)]) :
   unfold Thread.groupTake
   simp only [StateT.run_bind, StateT.run_get, pure_bind, hg]
   simp [StateT.run, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
-    bind, StateT.bind, ExceptT.bind, ExceptT.bindCont]
+    bind, ExceptT.bind, ExceptT.bindCont]
 
 /-- `free` of the first word. -/
 theorem free_front {R : Assn} {p : Ptr} {A : Nat} {v : BitVec 32} (h0 : p.off = 0) :
@@ -674,12 +676,113 @@ theorem main_spec (n : Nat) :
         · subst h1; rw [upd_self] at hu; cases hu
           exact ⟨hW, hWa, rfl, by decide⟩
         · rw [upd_ne _ _ h1, hn₆ u (by unfold ThreadId at *; omega)] at hu; cases hu
-    · refine ⟨by simp [hsz₆], by simp [Array.getElem?_push, Array.getElem_push, hsz₆],
+    · refine ⟨by simp [hsz₆], by simp [Array.getElem_push, hsz₆],
         by simp [hgr₆],
         ⟨hW₅, 0, 0, false, by simp [upd]⟩, fun u hu => ?_⟩
       rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
         hn₆ u (by unfold ThreadId at *; omega)]
     · simp only [Array.getElem?_push, hsz₆]; exact hj₆
-  sorry
+  -- `Group.cancel`: the take of the task, its cancelation request, the join
+  obtain ⟨ph, hm, W', g', h0, hsh⟩ := hi₈.main
+  rw [hg₂] at h0; cases h0
+  obtain ⟨hsz₈, hr₈, hgr₈, ⟨hT₈, sT₈, dT₈, eT₈, h1₈⟩, hn₈⟩ := hsh
+  refine WP.bind ?_
+  unfold groupCancelC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.callMC_keep (groupTake_one hgr₈) ?_ rfl)
+  dsimp only
+  refine WP.bind (WP.callMC_keep (requestCancel_run _ _) ?_ rfl)
+  dsimp only
+  rw [← Array.forIn_toList]
+  simp only [List.forIn_cons, List.forIn_nil, StateT.run_bind, bind_assoc]
+  refine WP.bind (WP.joinC fun k₂ _ => ⟨.main .join hG W g, ?_, fun G₃ m₉ hg₃ hi₉ =>
+    ⟨fun h => absurd h not_strict, fun hfin => ⟨fun h => absurd h not_strict, fun m₁₀ hj => ?_⟩⟩⟩)
+  · refine inv_main hi₈ hg₂ rfl rfl rfl rfl ⟨hsz₈, hr₈, ⟨hT₈, sT₈, dT₈, eT₈, ?_⟩, fun u hu => ?_⟩
+    · rw [upd_ne _ _ (by decide)]; exact h1₈
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn₈ u hu
+  -- the join: `main` takes the task's words back
+  obtain ⟨ph, hm, W', g', h0, hsh⟩ := hi₉.main
+  rw [hg₃] at h0; cases h0
+  obtain ⟨hsz₉, hr₉, ⟨hT, s₉, d₉, e₉, h1₉⟩, hn₉⟩ := hsh
+  obtain ⟨hT, W'', s', d', hf1⟩ := hfin
+  rw [h1₉] at hf1
+  simp only [Gh.task.injEq] at hf1
+  obtain ⟨rfl, -, rfl, rfl, rfl⟩ := hf1
+  obtain ⟨-, hTA, hout⟩ := hi₉.task 1 _ _ _ _ _ h1₉
+  have hown0 : ownOf G₃ m₉ 0 = hG := by simp [ownOf, joinedB, hg₃, Gh.heap]
+  have hown1 : ownOf G₃ m₉ 1 = hT := by simp [ownOf, joinedB, hr₉, h1₉, Gh.heap]
+  have hdisj : Heap.Disjoint hG hT := by
+    have := hi₉.own.disj 0 1 (by decide); rwa [hown0, hown1] at this
+  have ho₁₀ := Owned.join (hi₉.own.current 0) (by rw [hsz₉]; decide) (by decide) hj
+  obtain ⟨rec, -, -, hm₁₀⟩ := Proto.join_eq hj
+  have hcv₁₀ := cover_join (m' := m₁₀) hi₉.cover (by rw [hm₁₀]) (show (1 : ThreadId) ≠ 0 by decide)
+  rw [hown0, hown1, upd_comm _ _ _ (show (0 : ThreadId) ≠ 1 by decide)] at ho₁₀ hcv₁₀
+  have hc₁₀ : m₁₀.current = 0 := by rw [hm₁₀]
+  have ht₁₀ : m₁₀.threads.size = 2 := by rw [hm₁₀]; simp [hsz₉]
+  refine WP.bind (WP.pure' ?_)
+  dsimp only
+  refine WP.bind (WP.pure' ?_)
+  dsimp only
+  refine WP.callMC_keep (dropCancels_run _ _) ?_ rfl
+  dsimp only
+  have hP : (bytesAt g Ag 16 .stack (Array.replicate 16 .undef) ∗
+      (word st As s₉ ∗ word dn Ad d₉)) (hG ∪ hT) := ⟨hG, hT, hdisj, rfl, hGa, hTA⟩
+  -- `status.*`, `done.*`
+  refine WP.bind (WP.callMC_step ((word_load hs0 hAs).frame_eq.frameL_eq)
+    (owned_keep ho₁₀ rfl rfl rfl rfl) (fun l c hl => hcv₁₀ l c hl) hc₁₀ (by rw [ht₁₀]; decide) hP
+    fun r₁ m₁₂ h₁₂ ho₁₂ hcv₁₂ hq₁₂ hs₁₂ => ?_)
+  obtain ⟨rfl, hP₁₂⟩ := sep_lift.mp hq₁₂
+  refine WP.bind (WP.callMC_step ((word_load hd0 hAd).frameL_eq.frameL_eq) ho₁₂ hcv₁₂
+    (by rw [hs₁₂.current, hc₁₀]) (by rw [hs₁₂.threads, ht₁₀]; decide) hP₁₂
+    fun r₂ m₁₃ h₁₃ ho₁₃ hcv₁₃ hq₁₃ hs₁₃ => ?_)
+  obtain ⟨rfl, hP₁₃⟩ := sep_lift.mp hq₁₃
+  -- the frees
+  refine WP.bind (WP.callMC_step ((free_front hs0).frameL) ho₁₃ hcv₁₃
+    (by rw [hs₁₃.current, hs₁₂.current, hc₁₀]) (by rw [hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
+    hP₁₃ fun _ m₁₄ h₁₄ ho₁₄ hcv₁₄ hq₁₄ hs₁₄ => ?_)
+  refine WP.bind (WP.callMC_step ((word_free hd0).frameL) ho₁₄ hcv₁₄
+    (by rw [hs₁₄.current, hs₁₃.current, hs₁₂.current, hc₁₀])
+    (by rw [hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
+    hq₁₄ fun _ m₁₅ h₁₅ ho₁₅ hcv₁₅ hq₁₅ hs₁₅ => ?_)
+  refine WP.bind (WP.callMC_step ((TTriple.free (by simp) hg0 (by decide)).conseq
+    (fun _ h => sep_emp.mp h) fun _ _ h => h) ho₁₅ hcv₁₅
+    (by rw [hs₁₅.current, hs₁₄.current, hs₁₃.current, hs₁₂.current, hc₁₀])
+    (by rw [hs₁₅.threads, hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
+    hq₁₅ fun _ m₁₆ h₁₆ ho₁₆ hcv₁₆ hq₁₆ hs₁₆ => ?_)
+  have he : h₁₆ = Heap.empty := hq₁₆
+  subst he
+  refine WP.pure' ⟨hout, heap_empty hcv₁₆ fun u => ?_⟩
+  by_cases h0 : u = 0
+  · subst h0; rw [upd_self]
+  · rw [upd_ne _ _ h0]
+    by_cases h1 : u = 1
+    · subst h1; rw [upd_self]
+    · rw [upd_ne _ _ h1]
+      simp [ownOf, hn₉ u (by unfold ThreadId at *; omega), Gh.heap]
+
+/-! ## The results -/
+
+/-- **Every result of `cancelClient` is the declared outcome, and no heap byte is live when
+`main` returns** (every oracle `o`, every `fuel`): the task completed all its work (`(1, 3)`) or
+was canceled with work left (`(2, d)`, `d < 3`), and its words came back to `main`, which freed
+them. -/
+theorem cancelClient_spec {fuel : Nat} {o : Nat → Nat} {v : BitVec 32 × BitVec 32} {m : Mem}
+    (h : (Sched.run dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
+    Outcome v ∧ m.heap = Heap.empty := by
+  obtain ⟨_, _, hq⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
+    (fun h => absurd h not_strict) rfl main_spec h
+  exact hq
+
+/-- A canceled task is never reported as a completed one, and a result always names an
+outcome (`status` is never the initial `0`). -/
+theorem cancelClient_canceled_not_completed {fuel : Nat} {o : Nat → Nat}
+    {v : BitVec 32 × BitVec 32} {m : Mem}
+    (h : (Sched.run dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
+    v.1 ≠ 0 ∧ (v.1 = 2 → v.2 ≠ 3) ∧ (v.2 = 3 ∨ v.1 = 2) := by
+  rcases (cancelClient_spec h).1 with ⟨h1, h2⟩ | ⟨h1, h2⟩
+  · exact ⟨by rw [h1]; decide, fun h' => absurd (h1 ▸ h' : (1 : BitVec 32) = 2) (by decide),
+      .inl h2⟩
+  · refine ⟨by rw [h1]; decide, fun _ h3 => ?_, .inr h1⟩
+    rw [h3] at h2; exact absurd h2 (by decide)
 
 end Cancel.Group
