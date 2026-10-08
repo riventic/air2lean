@@ -170,13 +170,16 @@ def awaitC (_ : Io) (p : Ptr) : CM Tgt σ α := do
     let tid ← callMC (load ThreadId 8 slot)
     consumeC p slot tid
 
-/-- `Future(T).cancel(io)` on the future at `p`: a cancelation request, then as `await`. -/
+/-- `Future(T).cancel(io)` on the future at `p`: a cancelation request, then as `await`. The
+request is an atomic update of the task's status in `Io.Threaded`, so like every atomic op of
+the model it follows a scheduling point: the task may reach its cancelation point first. -/
 def cancelC (_ : Io) (p : Ptr) : CM Tgt σ α := do
   let f ← callMC (load (Future α) (Future.align α) p)
   match f.task with
   | none => callRC f.settled
   | some slot =>
     let tid ← callMC (load ThreadId 8 slot)
+    StateT.lift (discard (ConcM.sync (Tgt := Tgt) .yield))
     callMC (Future.requestCancel tid)
     let r ← consumeC p slot tid
     callMC (Future.dropCancel tid)
