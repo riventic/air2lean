@@ -516,17 +516,38 @@ def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) :
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
     cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
 
-/-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
-(`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
-def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+/-- An atomic op's pointer pointee (C09): `*T`/`[*]T` or `?*T`/`?[*]T`, not a slice, C or
+allowzero pointer. Its value is `Zig.Ptr` or `Option Zig.Ptr`, whose message keeps the pointer's
+block (`ZigLean/Mem/AtomicPtr.lean`). -/
+def atomicPtrPointee (types : Array Ty) (layouts : Array Layout) (c : TyId) : Bool :=
+  let plain (id : TyId) := match types[id]? with
+    | some (.ptr size _ _) => (size == "one" || size == "many") && !nullablePtrTy types layouts id
+    | _ => false
+  plain c || match types[c]? with
+    | some (.optional c') => plain c'
+    | _ => false
+
+/-- An atomic op's pointee must be an integer, an enum, a `bool`, a packed struct, or a pointer
+(`atomicPtrPointee`; `docs/std-models.md` §Thread model). An RMW on a pointer must be `.Xchg`.
+A float atomic is rejected with its own reason. -/
+def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option RmwOp := none) :
+    Except String Unit := do
   let some pty := cx.valTy? ptr
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
+  if atomicPtrPointee cx.types cx.layouts c then
+    match rmw with
+    | some op => if op != .xchg then
+        cx.fail line "an atomic RMW on a pointer other than `.Xchg` is outside the subset"
+    | none => pure ()
+    return
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
-  | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool` or a \
-      packed struct is outside the subset"
+  | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \
+      atomic messages (float RMW arithmetic and the bitwise compare of `cmpxchg` are not qualified)"
+  | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool`, a packed \
+      struct or a single/many pointer (`*T`, `?*T`) is outside the subset"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
@@ -983,10 +1004,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
-  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
+  | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
+  | .atomicRmw op _ ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr op; pure line
+  | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .fieldPtr base _ =>
     if let .inst b := base then
       if cx.places.contains b then return line
