@@ -99,20 +99,9 @@ theorem joinedAll_of {t : ThreadId} {m : Mem} {ts : Array ThreadRec} (hth : m.th
   obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hr
   exact h i _ (by omega) (Array.getElem?_eq_getElem hi) hsp
 
-theorem rec_eq {ts : Array ThreadRec} {i : Nat} {r r' : ThreadRec} (h : ts[i]? = some r)
-    (h' : ts[i]? = some r') : r' = r := Option.some.inj (h'.symm.trans h)
-
 theorem set_get {ts : Array ThreadRec} {i j : Nat} {r : ThreadRec} (hi : i < ts.size) :
     (ts.setIfInBounds i r)[j]? = if i = j then some r else ts[j]? := by
   rw [Array.getElem?_setIfInBounds]; simp [hi]
-
-theorem fork_eq {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m'.threads = m.threads.push (R t false) ∧ m'.current = t := by
-  rw [fork_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl, rfl⟩
 
 /-- Only thread 1 is `A`. -/
 theorem a_one {G : ThreadId → Gh} {ts : Array ThreadRec} {u : ThreadId} {d : Bool}

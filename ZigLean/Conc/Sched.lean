@@ -20,7 +20,8 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
   edge (the std code reads the value again with an acquire). The model has no spurious wakeup.
   The queue is in `Mem` (`Thread.futexWait`, `Thread.futexWake`).
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
-  joined every thread it spawned (`checkJoinedByChild 0`), so every thread has ended then. If no
+  consumed every handle it owns (`checkJoinedByChild 0`: joined or detached). A joined thread has
+  ended; a detached one may still run, and `main`'s end ends it, as the process exit does. If no
   thread can go on and one has not ended, the run is `.deadlock`.
 - **Catch scope.** `ConcM.tryCatch` handles errors produced by the thread before or after a
   sync op. Errors raised by the scheduler's execution of spawn/join/wait/wake or its end check

@@ -261,14 +261,14 @@ end WP
 
 /-! ## Soundness: the scheduler keeps the protocol -/
 
-/-- Thread `t` joined every thread that it spawned (`Thread.checkJoinedByChild` does not
-throw). -/
+/-- Thread `t` consumed (joined or detached) every handle that it owns
+(`Thread.checkJoinedByChild` does not throw). -/
 def joinedAll (t : ThreadId) (m : Mem) : Prop :=
   ∀ r ∈ m.threads, r.spawner = t → r.joined = true
 
 variable (P) in
 /-- The end of a spawned thread `t`: the invariant with its last ghost value, which satisfies
-`fin`; in strict mode it joined its own threads. -/
+`fin`; in strict mode it consumed every handle it owns. -/
 def QKid (t : ThreadId) : Unit → (ThreadId → γ) → Mem → Nat → Prop :=
   fun _ G m _ => ∃ g, P.inv (upd G t g) m ∧ P.fin g ∧ (P.strict = true → joinedAll t m)
 

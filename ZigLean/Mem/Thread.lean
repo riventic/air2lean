@@ -467,7 +467,10 @@ argument or a store). `std.Thread` has no such call; the translator does not emi
 translated thread that joins a handle it did not spawn is `.illegal` (conservative). The caller
 must own the unconsumed handle; `owner` must be an existing thread other than `tid` itself.
 Afterwards exactly `owner` may join or detach `tid`, and `owner` must do so before it ends
-(`checkJoinedByChild owner`); the caller lost the right. No happens-before edge. -/
+(`checkJoinedByChild owner`); the caller lost the right. No happens-before edge. Known limit:
+the model does not know whether `owner` has already ended; a transfer to a thread that ended
+leaves the handle with an owner that never consumes it, and no end check reports that (the
+handle's thread is then neither joined nor waited for; no memory access is affected). -/
 def transferHandle (tid owner : ThreadId) : MemM Unit := do
   let m ← get
   let some rec := m.threads[tid]?

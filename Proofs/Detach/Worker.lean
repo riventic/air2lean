@@ -109,9 +109,6 @@ def QM (v : BitVec 32) (_ : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
 
 /-! ## Facts of the invariant -/
 
-theorem rec_eq {ts : Array ThreadRec} {i : Nat} {r r' : ThreadRec} (h : ts[i]? = some r)
-    (h' : ts[i]? = some r') : r' = r := Option.some.inj (h'.symm.trans h)
-
 /-- Every thread record is consumed: `main`'s own, and the detached worker's. -/
 theorem joinedAll_of {G : ThreadId → Gh} {m : Mem} (hs : Shape G m.threads) {t : ThreadId} :
     joinedAll t m := by
@@ -171,14 +168,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 
 /-- The start: `main` alone, owning nothing. -/
 def G0 : ThreadId → Gh := fun u => if u = 0 then .pre Heap.empty else .none
-
-theorem fork_eq {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m'.threads = m.threads.push (R t false) ∧ m'.current = t := by
-  rw [fork_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl, rfl⟩
 
 theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   unfold mainRun main

@@ -316,11 +316,14 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Thread.detach` (Zig 0.16.0) consumes the owner's handle without a
   happens-before edge; the thread runs on, and `main`'s end ends the run as the process exit
-  does, whatever detached threads still run. A later join or detach of the handle is
+  does, whatever detached threads still run: no detached thread takes a turn after `main`'s
+  end, so its accesses after that point are not explored. A later join or detach of the handle is
   `.illegal`. `Thread.transferHandle` is a model step, not a `std` call: a proof or
   hand-written client inserts it where a handle passes to another thread, which then is the
   one thread that may join or detach it and must do so before it ends. The translator never
   emits it, so a translated thread that joins a handle it did not spawn is `.illegal`. A
+  transfer to a thread that has already ended is not detected (its handle is then never
+  consumed and no end check reports it). A
   strict-safety proof may order joins by a protocol rank (`Proto.rank`) instead of thread ids.
 - Derived from: `ZigLean.Conc.Detach`; tokens `detachC`, `transferHandle`, `Thread.detach`.
 - Sources: [std-models.md](std-models.md#thread-model), `Proofs/Detach/`.

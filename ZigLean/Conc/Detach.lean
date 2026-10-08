@@ -20,16 +20,21 @@ The model rules of `Thread.detach` and of an explicit handle transfer
 - **Detach.** A detached thread runs independently of its parent: the scheduler keeps running
   it, and `checkJoinedByChild` no longer requires its join (`joinedAll` counts it consumed,
   `joinedAll_detach`), so the parent may end first. There is no happens-before edge from the
-  detached thread to anyone (`detach_clocks`). `main`'s end ends the run, as the process exit does.
+  detached thread to anyone (`detach_clocks`). `main`'s end ends the run, as the process exit does
+  (premise THR-10): a detached thread takes no turn after `main`'s end, so an access it would
+  make only after that point is not explored by the scheduler.
 - **Stack data.** A detached thread can outlive the frame of the function that spawned it. The
   frame's stack blocks die at the frame's exit (`free`), and every access to a dead block, by any
-  thread, throws `.illegal` (`access_dead_any`, `load_dead`, `store_dead`, `frame_exit_kills`): a
-  detached thread cannot read or write stack data that is gone. The dynamic check covers every
-  access after the exit; the logic (`ZigLean/Conc/Csl.lean`, `ZigLean/Conc/Transfer.lean`) adds
-  the static side: a stack region granted `owned` to a detached thread never returns to the
-  parent (there is no join that regains it), so the parent cannot prove its frame's `free`. A
-  detached worker may only capture values, or heap/global regions that it owns (a C01 `owned`
-  transfer) and frees itself (`Proofs/Threads/Detach.lean`).
+  thread, throws `.illegal` (`access_dead_any`, `load_dead`, `store_dead`, `frame_exit_kills`): no
+  access that a detached thread makes after the exit reads or writes stack data that is gone. A
+  stack `free` records no access, so an access before the exit is not checked against it (as in
+  `ZigLean/Conc/Share.lean`). The logic adds the static side: a region granted `owned` to another
+  thread (C01, `ZigLean/Conc/Transfer.lean`) is not in the parent's part, so the parent cannot
+  establish the precondition of its frame's `free` for it (`not_bytesAt_granted`), and a detached
+  thread is never joined, so no join returns the region. A detached worker may only capture
+  values, or heap/global regions that it owns and frees itself (`Proofs/Detach/Worker.lean`).
+- **Known limit.** A transfer to a thread that has already ended is not rejected: the handle then
+  has an owner that never consumes it, and no end check reports it.
 -/
 
 namespace Zig
@@ -51,21 +56,10 @@ theorem join_run_ok (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
         clocks := m.clocks.set! m.current
           (VClock.merge (VClock.bump (m.clocks[m.current]!) m.current) (m.clocks[tid]!))
         threads := m.threads.set! tid { rec with joined := true } } := by
-  unfold Thread.join at h
-  rw [run_get_bind] at h
-  cases hr : m.threads[tid]? with
-  | none => simp only [hr] at h; cases h
-  | some rec =>
-    simp only [hr] at h
-    by_cases hc : (rec.spawner != m.current || rec.joined) = true
-    · simp only [hc, ↓reduceIte] at h; cases h
-    · simp only [Bool.not_eq_true] at hc
-      simp only [hc, Bool.false_eq_true, ↓reduceIte] at h
-      simp only [Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hc
-      refine ⟨rec, rfl, hc.1, hc.2, ?_⟩
-      simp only [StateT.run, set, StateT.set, pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
-        Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
-      exact h.2.symm
+  obtain ⟨rec, hr, hj, rfl⟩ := join_eq h
+  have hv := join_valid h
+  simp only [Thread.joinValid, hr, Bool.and_eq_true, beq_iff_eq] at hv
+  exact ⟨rec, hr, hv.1, hj, rfl⟩
 
 theorem detach_run_ok (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))) :
     ∃ rec, m.threads[tid]? = some rec ∧ rec.spawner = m.current ∧ rec.joined = false ∧
@@ -166,11 +160,6 @@ theorem detach_invalid (hv : Thread.joinValid m m.current tid = false) :
     have hc : (rec.spawner != m.current || rec.joined) = true := by
       rcases hv with hv | hv <;> simp [hv]
     simp only [hc, ↓reduceIte]; rfl
-
-theorem joinValid_of_join (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
-    Thread.joinValid m m.current tid = true := by
-  obtain ⟨rec, hr, hs, hj, -⟩ := join_run_ok h
-  exact joinValid_iff.mpr ⟨rec, hr, hs, hj⟩
 
 theorem joinValid_of_detach (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))) :
     Thread.joinValid m m.current tid = true := by
@@ -346,6 +335,19 @@ theorem frame_exit_kills {b : BlockId} (h : ((free ⟨some b, 0⟩).run m).run =
       (Array.getElem?_eq_some_iff.mp hblk).1]
   exact ⟨fun T _ => load_dead hdead rfl u off a, fun T _ v => store_dead hdead rfl u off a v⟩
 
+/-- **The static side.** In a proof's parts (`Owned`), a cell granted to thread `c` is not in
+another thread's part: so a parent `t` that granted cells of a block to a (detached) thread
+cannot hold `bytesAt` of that block, the precondition of `TTriple.free` for its frame's exit. -/
+theorem not_bytesAt_granted {own : ThreadId → Heap} {t c : ThreadId} (ho : Owned own m)
+    (hct : c ≠ t) {b : BlockId} {x : Nat} (hc : own c (b, x) ≠ none) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} (hp : p.block = some b) (h0 : p.off = 0)
+    (hx : x < bs.size) : ¬ bytesAt p A S K bs (own t) := by
+  rintro ⟨b', hb', -, hcell⟩
+  rw [hp] at hb'; cases hb'
+  have hnone := ho.hne hct hc
+  rw [hcell] at hnone
+  simp [h0, hx] at hnone
+
 /-! ## Rules for a proof over all schedules -/
 
 /-- A detach or a transfer changes only the thread table, with the same size: it keeps every
@@ -357,18 +359,25 @@ theorem Owned.setThread {own : ThreadId → Heap} (ho : Owned own m) (r : Thread
 
 variable {Tgt γ σ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {n : Nat}
 
+/-- A `MemM` call with a known successful run that keeps the number of threads. -/
+theorem WP.callMC_ok {α : Type} {x : MemM α} {v : α} {m' : Mem} {s : σ}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hx : (x.run m).run = some (.ok (v, m')))
+    (hsz : m'.threads.size = m.threads.size) (h : Q (v, s) G m' n) :
+    P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n := by
+  refine WP.callMC (fun e he => ?_) fun a m'' hr => ?_
+  · rw [hx] at he; cases he
+  · rw [hx] at hr
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+    obtain ⟨rfl, rfl⟩ := hr
+    exact ⟨hsz, h⟩
+
 /-- `detachC` of a handle that the current thread owns and has not consumed: no stop, no error;
 the record is consumed. -/
 theorem WP.detachC {rec : ThreadRec} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
     (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with joined := true } } n) :
-    P.WP t ((detachC tid : CM Tgt σ Unit).run s) Q G m n := by
-  refine WP.callMC (fun e he => ?_) fun a m' hr' => ?_
-  · rw [detach_run hr hs hj] at he; cases he
-  · rw [detach_run hr hs hj] at hr'
-    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr'
-    obtain ⟨-, rfl⟩ := hr'
-    exact ⟨by simp [Array.set!_eq_setIfInBounds], h⟩
+    P.WP t ((detachC tid : CM Tgt σ Unit).run s) Q G m n :=
+  WP.callMC_ok (detach_run hr hs hj) (by simp [Array.set!_eq_setIfInBounds]) h
 
 /-- `transferHandleC` of a handle that the current thread owns and has not consumed, to another
 existing thread: no stop, no error; `owner` owns the handle. -/
@@ -377,13 +386,24 @@ theorem WP.transferHandleC {owner : ThreadId} {rec : ThreadRec} {s : σ}
     (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
     (hne : owner ≠ tid) (hlt : owner < m.threads.size)
     (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with spawner := owner } } n) :
-    P.WP t ((transferHandleC tid owner : CM Tgt σ Unit).run s) Q G m n := by
-  refine WP.callMC (fun e he => ?_) fun a m' hr' => ?_
-  · rw [transfer_run hr hs hj hne hlt] at he; cases he
-  · rw [transfer_run hr hs hj hne hlt] at hr'
-    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr'
-    obtain ⟨-, rfl⟩ := hr'
-    exact ⟨by simp [Array.set!_eq_setIfInBounds], h⟩
+    P.WP t ((transferHandleC tid owner : CM Tgt σ Unit).run s) Q G m n :=
+  WP.callMC_ok (transfer_run hr hs hj hne hlt) (by simp [Array.set!_eq_setIfInBounds]) h
+
+/-! ## Helpers for client proofs -/
+
+/-- Two lookups of one array index agree. -/
+theorem rec_eq {ts : Array ThreadRec} {i : Nat} {r r' : ThreadRec} (h : ts[i]? = some r)
+    (h' : ts[i]? = some r') : r' = r := Option.some.inj (h'.symm.trans h)
+
+/-- A spawn by `t`: the child's id, the thread table and the current thread after it. -/
+theorem fork_eq {t c : ThreadId}
+    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
+    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false } ∧
+      m'.current = t := by
+  rw [fork_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  exact ⟨rfl, rfl, rfl⟩
 
 end Detach
 end Conc
