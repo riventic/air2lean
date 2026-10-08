@@ -119,9 +119,9 @@ class ContractTests(unittest.TestCase):
                 with self.subTest(version=version, mode=mode), self.assertRaises(ValueError):
                     abi.observations(other, p)
         # 0.15.2 names the zero-cycle FP/GPR move features differently from 0.16.0.
+        newer = text(profile('aarch64-macos-none')).replace('meta zig 0.16.0', 'meta zig 0.15.2')
         with self.assertRaises(ValueError):
-            p = profile('aarch64-macos-none', version='0.15.2')
-            abi.observations(text(profile('aarch64-macos-none')).replace('meta zig 0.16.0', 'meta zig 0.15.2'), p)
+            abi.observations(newer, profile('aarch64-macos-none', version='0.15.2'))
 
     def test_pair_requires_one_zig_version(self):
         left = report(abi.TARGETS[0])
