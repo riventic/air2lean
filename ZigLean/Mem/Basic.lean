@@ -139,8 +139,10 @@ atomic accesses never race: the scheduler orders them (`ZigLean/Conc/Sched.lean`
 def racePair (a b : AccessKind) : Option Error :=
   if (a.isWrite || b.isWrite) && !(a.isAtomic && b.isAtomic) then some .illegal else none
 
-/-- Who spawned thread `id` (the parent thread's own `ThreadId` at the time), and whether
-`Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. -/
+/-- Who owns the join handle of thread `id`: the thread that spawned it, until an explicit
+`Thread.transferHandle` (C07) moves it; and whether the handle was consumed, by `Thread.join` or
+by `Thread.detach` (a detached thread may still run). Index 0 (main) is unused: nothing ever
+joins it. -/
 structure ThreadRec where
   spawner : ThreadId
   joined : Bool

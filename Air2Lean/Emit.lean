@@ -1179,7 +1179,7 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
 `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, a constructor of the
 program's `Tgt` (`emitTgt`); `args[1]` is the complete by-value captured tuple. Zero
 fields use `Unit`, one field keeps the historical scalar representation, and multiple
-fields form a right-associated product. Dispatch applies each field in source order. `.join`: `args[0]` is the `Thread` handle. -/
+fields form a right-associated product. Dispatch applies each field in source order. `.join`, `.detach`: `args[0]` is the `Thread` handle. -/
 def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
     (args : Array Val) : String :=
   let rv := fc.resolveVal env
@@ -1190,6 +1190,7 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let op := if fc.spawnSemantics == .fallible then "spawnWithPolicyC .fallible" else "spawnC"
     s!"Zig.{op} (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  | .detach => s!"Zig.detachC {rv (args[0]?.getD .void)}"
   | .yield => "Zig.threadYieldC"
   | .spinLoopHint => "Zig.spinLoopHintC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).

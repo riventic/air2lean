@@ -401,7 +401,8 @@ def cmpxchgWeakAs {α : Type} {n : Nat} [Packed α n] (c : Nat) (succ fail : Ato
 
 namespace Thread
 
-/-- `.illegal`: thread `t` finished without joining every thread that `t` itself spawned.
+/-- `.illegal`: thread `t` finished without consuming (joining or detaching) every handle that
+it owns: every thread that `t` itself spawned, or whose handle was transferred to it.
 `spawn` checks it for each spawned thread; for the main thread (`t = 0`), the caller of the
 top-level function checks it when the main thread ends (`ZigLean/Conc/Sched.lean`, `docs/std-models.md`
 §Thread model). -/
@@ -422,15 +423,17 @@ def fork : MemM ThreadId := do
     threads := m.threads.push { spawner := parent, joined := false } }
   pure child
 
-/-- A join handle exists, was spawned by the caller and has not already been joined.
-The scheduler uses the same validation to reject invalid handles before waiting. -/
+/-- A join handle exists, is owned by the caller (`ThreadRec.spawner`: the spawner, until a
+`transferHandle`) and has not already been consumed (joined or detached). The scheduler uses the
+same validation to reject invalid handles before waiting. -/
 def joinValid (m : Mem) (caller tid : ThreadId) : Bool :=
   match m.threads[tid]? with
   | some rec => rec.spawner == caller && !rec.joined
   | none => false
 
-/-- `std.Thread.join`: `tid` must have been spawned by the thread running this join, and not
-already joined — a handle joined by anyone else, or joined twice, throws `.illegal`. Merges the
+/-- `std.Thread.join`: the thread running this join must own the handle `tid` (its spawner, or
+the thread it was transferred to, `transferHandle`), and the handle must not be consumed yet — a
+handle joined by anyone else, joined twice or joined after `detach` throws `.illegal`. Merges the
 joined thread's clock into the caller's (the join edge of the happens-before order) and bumps
 the caller's own clock. -/
 def join (tid : ThreadId) : MemM Unit := do
@@ -443,6 +446,35 @@ def join (tid : ThreadId) : MemM Unit := do
   set { m with
     clocks := m.clocks.set! m.current merged
     threads := m.threads.set! tid { rec with joined := true } }
+
+/-- `std.Thread.detach` (C07): the owner of the handle `tid` releases its obligation to join
+it. The thread goes on running independently of its parent; the parent may end, and its stack
+frame die, while the thread runs (`ZigLean/Conc/Detach.lean`). The handle is consumed: the record
+is marked `joined` (so `checkJoinedByChild` no longer asks for a join), and a later `join` or
+`detach` of it throws `.illegal`, as `std` makes it undefined behavior ("Once called, this
+consumes the Thread object"). No happens-before edge: the clocks do not change. A detach by a
+thread that does not own the handle, or of a consumed or unknown handle, throws `.illegal`. -/
+def detach (tid : ThreadId) : MemM Unit := do
+  let m ← get
+  let some rec := m.threads[tid]?
+    | throw .illegal
+  if rec.spawner != m.current || rec.joined then throw .illegal
+  set { m with threads := m.threads.set! tid { rec with joined := true } }
+
+/-- An explicit transfer of the join handle `tid` to the thread `owner` (C07): a model step that
+a proof or a hand-written client inserts where a handle is passed to another thread (a spawn
+argument or a store). `std.Thread` has no such call; the translator does not emit it, so a
+translated thread that joins a handle it did not spawn is `.illegal` (conservative). The caller
+must own the unconsumed handle; `owner` must be an existing thread other than `tid` itself.
+Afterwards exactly `owner` may join or detach `tid`, and `owner` must do so before it ends
+(`checkJoinedByChild owner`); the caller lost the right. No happens-before edge. -/
+def transferHandle (tid owner : ThreadId) : MemM Unit := do
+  let m ← get
+  let some rec := m.threads[tid]?
+    | throw .illegal
+  if rec.spawner != m.current || rec.joined || owner == tid || m.threads.size ≤ owner then
+    throw .illegal
+  set { m with threads := m.threads.set! tid { rec with spawner := owner } }
 
 /-- `Io.Group`: the task `tid` belongs to the group at `g`. -/
 def groupAdd (g : Ptr) (tid : ThreadId) : MemM Unit := modify fun m =>
