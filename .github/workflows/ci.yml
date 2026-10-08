@@ -451,6 +451,17 @@ jobs:
           tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 300 "$fuzz_dir/failures" 2>&1 \
             | tee "$fuzz_dir/fuzz.log"
 
+      # Q01 heavy differential, capped at 3 seeds: generated Zig is run natively (stock Zig),
+      # exported with the patched compiler, translated, and the Lean values must equal native.
+      # Larger ranges are a manual job (docs/fuzzing.md).
+      - name: Generated Zig differential fuzzing
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_FUZZ_HEAVY_MAX: "3"
+        run: tests/roadmap/fuzz/check.sh --heavy "$RUNNER_TEMP/zig-fuzz" 0 3
+
       # L12: explicit `ExternInit` external initial state, generated-client proofs and
       # rejection of every absent/partly undefined global initializer. Hand-written AIR only.
       - name: Global initialization and external initial state
