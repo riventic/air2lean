@@ -237,8 +237,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   address-sensitive contract `.liveBlock` recovers the live block. A theorem that observes
   addresses holds only under the policy and mode it states. No native allocator address
   behavior is claimed.
-- Derived from: `ZigLean.Sep.AddrReuse`; tokens `reuseAddr`, `withReuse`, `ProvenanceMode`,
-  `liveBlock`.
+- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withReuse`, `liveBlock` (the opt-in policy
+  and provenance mode; the default path `Mem.reuseAddr?`/`ProvenanceMode.strict` that every
+  `alloc`/`@ptrFromInt` unfolds to is not a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
 
 ## Thread creation and scheduling
@@ -596,7 +597,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
   satisfy its stated premise and is not an unconditional total result.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`.
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
