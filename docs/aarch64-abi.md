@@ -104,7 +104,10 @@ The cmpxchg rows are a synchronization boundary. Zig widens a `u24`/`u40` atomic
 the value bytes. The model leaves padding undefined and compares only the value bits. So
 the model's strong cmpxchg claim is not valid for widths with whole padding bytes (`u24`,
 `u40`, `u48`, `u56`, `u65`…`u120`). The translator's atomic checker (`atomicIntChild`)
-does not reject them yet (see the risks in the T04 handoff). Widths without padding (`u8`,
+does not reject them yet (see the risks in the T04 handoff). The LLVM IR that Zig 0.16.0
+emits shows the mechanism: `store i40` for the plain store, and `cmpxchg ptr, i64, i64` for
+the atomic. The widening comes from Zig's frontend lowering, so other targets probably behave
+the same way. This has been observed only on aarch64. Widths without padding (`u8`,
 `u16`, `u32`, `u64`, `u128`) match on both profiles, with either padding.
 
 ## Per-profile observations (Zig 0.16.0, ReleaseSafe)
