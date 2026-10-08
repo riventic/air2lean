@@ -102,7 +102,7 @@ if [ "$mode" = --native ]; then
     fi
     diff -u "$work/model-$arch.txt" "$work/native-$arch.txt"
     cmp "$work/native-$arch.txt" "$case_dir/observed/$arch-linux-musl-ReleaseSafe.txt"
-    echo "native $arch-linux-musl matches the model ($(wc -l < "$work/native-$arch.txt") lines)"
+    echo "native $arch-linux-musl matches the model ($(wc -l < "$work/native-$arch.txt" | tr -d " ") lines)"
   done
 fi
 echo 'big-endian translation, proof, observation and rejection gates passed'

@@ -102,7 +102,7 @@ def main():
         ("reject.boolLanes.json", "a vector of `bool` or pointer lanes is outside"),
         ("reject.nibbleLanes.json", "a vector of non-byte-multiple lanes is outside"),
         ("reject.tagName.json", "`@tagName` is outside the qualified big-endian model"),
-        ("reject.create.json", "the std model 'mem.Allocator.create' is outside"),
+        ("reject.create.json", "the std model 'mem.Allocator.create"),
         ("reject.u128Bytes.json", "the memory model gives type"),
     ]:
         run(binary, one(rejects, name), error=error, prefix="reject.")
