@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2029 theorems in 112 files.
+2028 theorems in 112 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -16,16 +16,16 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-02](premises.md#alc-02) | 66 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 15 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [THR-01](premises.md#thr-01) | 1084 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1083 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 82 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 5 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 12 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 763 | Futex model |
+| [THR-05](premises.md#thr-05) | 762 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 15 | Progress hints without fairness |
 | [THR-08](premises.md#thr-08) | 952 | Protocol (rely-guarantee / CSL) proofs over all schedules |
-| [ORD-01](premises.md#ord-01) | 888 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 888 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 887 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 887 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 320 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 26 | No clock in the default model |
@@ -35,14 +35,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1909 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1587 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 1908 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1586 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 925 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 55 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2029 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2028 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
@@ -317,8 +317,7 @@ File premises: THR-01, THR-02, THR-04, THR-05, THR-07, THR-08, ORD-01, ORD-02, S
 | `Cancel.Group.dropCancels_run` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Cancel.Group.WP.callMC_keep` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Cancel.Group.not_strict` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Cancel.Group.futexWaitCancelableC_eq` | THR-01, THR-05, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
-| `Cancel.Group.wp_afterWait` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Cancel.Group.wp_lateCancel` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Cancel.Group.wp_cancelWait` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Cancel.Group.steps_spec` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Cancel.Group.dispatch_spec` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
