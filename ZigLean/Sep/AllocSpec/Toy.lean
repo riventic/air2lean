@@ -86,8 +86,8 @@ theorem state_absorb {ctx buf : Ptr} {e A S : Nat} {K : BlockKind} {tail : Array
   have h2 : (pts ctx 8 buf ∗ (pts (ctx.add 8) 8 (BitVec.ofNat 64 e) ∗
       (regionIn (buf.add (e : Int)) A S K 1 tail ∗ (G ∗ junk)))) h := by
     sep_from hs
-  exact sep_mono (fun _ x => x) (sep_mono (fun _ x => x) (sep_mono (fun _ x => x)
-    (fun _ _ => trivial))) h2
+  exact sep_mono (fun _ y => y) (fun _ y => sep_mono (fun _ z => z)
+    (fun _ z => sep_mono (fun _ w => w) (fun _ _ => trivial) z) y) h2
 
 theorem own_absorb {cap : Nat} {ctx buf : Ptr} {G : Assn} {h : Heap}
     (hs : ((inv cap ctx buf).own ∗ G) h) : (inv cap ctx buf).own h := by
@@ -160,10 +160,17 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
     exact alignUp_mod_pow _ _
   have hfit3 : pad + len.toNat ≤ tail.size := by omega
   have e3 : e + (pad + len.toNat) = e + pad + len.toNat := by omega
-  have hp2 := sep_mono (fun _ x => x) (sep_mono (fun _ x => by
+  have hcarve : ∀ h', regionIn (b'.add (e : Int)) A S K 1 tail h' →
+      (regionIn (b'.add ((e : Nat) : Int)) A S K 1 (tail.extract 0 pad) ∗
+        (regionIn (b'.add ((e + pad : Nat) : Int)) A S K (2 ^ k)
+            ((tail.extract pad tail.size).extract 0 len.toNat) ∗
+          regionIn (b'.add ((e + pad + len.toNat : Nat) : Int)) A S K 1
+            ((tail.extract pad tail.size).extract len.toNat (tail.extract pad tail.size).size))) h' := by
+    intro h' x
     have hc := Region.regionIn_carve x (pad := pad) (len := len.toNat) hfit3 hal
     rw [Region.Ptr.add_add_nat, Region.Ptr.add_add_nat, e3] at hc
-    exact hc) (fun _ x => x)) hp
+    exact hc
+  have hp2 := sep_mono (fun _ y => y) (fun _ y => sep_mono hcarve (fun _ z => z) y) hp
   have hp3 : ((pts ctx 8 b' ∗ (pts (ctx.add 8) 8 (BitVec.ofNat 64 (e + pad + len.toNat)) ∗
       (regionIn (b'.add ((e + pad + len.toNat : Nat) : Int)) A S K 1
           ((tail.extract pad tail.size).extract len.toNat (tail.extract pad tail.size).size) ∗
@@ -179,8 +186,8 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
         sep_emp.mpr (Region.region_of_regionIn x)⟩⟩) hp3
   · exact ⟨by omega, by simp only [Array.size_extract]; omega, hcap, hoff⟩
   · unfold state
-    exact sep_mono (fun _ y => y) (sep_mono (fun _ y => y) (sep_mono (fun _ y => y)
-      (fun _ _ => trivial))) x
+    exact sep_mono (fun _ y => y) (fun _ y => sep_mono (fun _ z => z)
+      (fun _ z => sep_mono (fun _ w => w) (fun _ _ => trivial) z) y) x
 
 theorem allocSpec (cap : Nat) (ctx buf : Ptr) :
     AllocSpec Logic.total (vtable cap) ctx (inv cap ctx buf) where
@@ -225,7 +232,7 @@ theorem granted_cell {I : AllocInv} {p : Ptr} {k n : Nat} {bs : Array Byte} {h :
 /-- No invariant that holds in some memory makes the static allocator satisfy `AllocSpec`:
 the second `alloc` would grant bytes that the first grant still owns. -/
 theorem not_allocSpec (p ctx : Ptr) (I : AllocInv)
-    (hsat : ∃ m hP hF, Heap.Disjoint hP hF ∧ m.heap = hP ∪ hF ∧ I.own hP ∧ m.Seq) :
+    (hsat : ∃ (m : Mem) (hP hF : Heap), Heap.Disjoint hP hF ∧ m.heap = hP ∪ hF ∧ I.own hP ∧ m.Seq) :
     ¬ AllocSpec Logic.partial (vtable p) ctx I := by
   intro hs
   obtain ⟨m, hP, hF, hd, hm, hI, hst⟩ := hsat
@@ -265,7 +272,5 @@ theorem trapFree_alloc_none {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
     ⟨hI', hG, hdd, rfl, hI'', hg⟩ hst'
   rw [hfree] at f
   exact f
-
-end Bump
 
 end Zig
