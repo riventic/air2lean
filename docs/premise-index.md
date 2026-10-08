@@ -23,13 +23,13 @@ premise was derived. This index covers the committed generated modules.
 | [THR-02](premises.md#thr-02) | 125 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 13 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 810 | Futex model |
+| [THR-05](premises.md#thr-05) | 811 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1054 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1056 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 1014 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1014 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1019 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1019 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 358 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 495 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
@@ -894,9 +894,9 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Mailbox.shape_pr` | SEM-01, SEM-02, TRU-01 |
 | `Sync.Mailbox.shape_wt` | SEM-01, SEM-02, TRU-01 |
 | `Sync.Mailbox.avail_of_pz` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `Sync.Mailbox.stable` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `Sync.Mailbox.own_pad` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `Sync.Mailbox.own_step` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Mailbox.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Mailbox.own_pad` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Mailbox.own_step` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Mailbox.XG_upd` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Sync.Mailbox.wp_msg` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -904,13 +904,13 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Mailbox.Msg0` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.Msg1` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.Msg2` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `Sync.Mailbox.U_retag` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Mailbox.U_retag` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.shape_set` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Sync.Mailbox.hone_w` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Mailbox.hmv_w` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.hU_w` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.hmv_p` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Sync.Mailbox.hU_p` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Mailbox.hU_p` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Mailbox.inv_ghost` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Mailbox.shape_of` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Mailbox.shape_kid` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
@@ -1153,7 +1153,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.frame₀` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.RwLockRead.inv_wgn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.semPtr_eq` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.RwLockRead.semPtr_eq` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.RwLockRead.ws_one` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.RwLockRead.wait₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.post₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1231,7 +1231,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.SemCounter.wp_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.XG_upd` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.shape_set` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.R_held` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.R_held` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.other_free` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.wp_n` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.np_e` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
