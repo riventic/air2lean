@@ -44,8 +44,16 @@ Full qualification also runs the stock source test, exports fresh ReleaseSafe AI
 instruction and every target to stay address-taken, translates it and decides 36 observed
 outputs. `AIR2LEAN_INDIRECT_CALLS_KEEP_WORK=1` retains the artifacts.
 
-Status: the synthetic recipe and the stock Zig 0.16.0 source test (aarch64-macos) passed.
-The patched-compiler export and the native observations have not been run for this slice.
-Executable addresses produced outside the table (for example by a callee that is not
+Status: the full recipe passed on aarch64-macos with stock Zig 0.16.0 and a patched AIR-only
+Zig 0.16.0 built from main's `zig-patch/air-json/json.zig` (same SHA-256): the stock source
+test, a fresh schema-12 export of all eleven functions, the inventory gate and all 36 decided
+observations of the translated source. The real export keeps a call through an instruction
+in every indirect caller (a constant `array_elem_val` table, a loaded mutable global, a field
+loaded through a parameter, a parameter, memory) and passes `fieldCaller`'s struct as a
+constant global, as in the synthetic `table`, `globalSlot`, `fieldGlobal`, `twice` and
+`memory` fixtures. Zig resolves a comptime-known callee to a direct call, so a constant
+callee, the reinterpreted and integer-derived addresses and the static rejections remain
+synthetic controls. Native-machine x86_64-linux qualification and other Zig versions remain
+for CI. Executable addresses produced outside the table (for example by a callee that is not
 translated, or by `@ptrFromInt` of an address the model does not know) are not admitted:
 they throw `.illegal`.

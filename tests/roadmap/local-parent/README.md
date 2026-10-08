@@ -36,10 +36,16 @@ emitted memory code), kernel reduction proofs and the general recovery theorems,
 assertions and semantic mutations. The cache lookup regression throws on a mismatch; it is
 not a kernel theorem. Full qualification
 also runs the stock source tests, exports fresh ReleaseSafe AIR with `source.` as its filter,
-checks that all five source functions and their alloc/projection/parent/cast/call shapes
+checks that all six source functions and their alloc/projection/parent/cast/call shapes
 survive export, translates it and proves the same observed outputs. `direct`, `nested` and
 `castAlias` must remain pure; `escaped` exercises a real call and stack-memory aliasing.
 Missing or optimized-away AIR operations fail qualification rather than counting as coverage.
+
+`arrayItem` (L11) recovers `bag.items[i % 2]` from its field `y` (an array element inside a
+struct, runtime index) and then `bag` from `&bag.items`; its 12 decided observations check
+that the writes through both recovered parents are visible through the original local.
+The extended recipe (28 observations) passed on aarch64-macos with stock Zig 0.16.0 and a
+patched AIR-only Zig 0.16.0 built from main's exporter; CI repeats it on Linux.
 
 `AIR2LEAN_LOCAL_PARENT_KEEP_WORK=1` retains fresh AIR, generated Lean and mutation files.
 There are no retained goldens to silently substitute for fresh source exports. The source

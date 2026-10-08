@@ -39,11 +39,26 @@ export fn escaped(input: u32) u32 {
     return pair.x +% pair.y;
 }
 
+const Bag = struct { tag: u32, items: [2]Pair };
+
+/// L11: a field of an array element inside a struct; both recoveries alias `bag`.
+export fn arrayItem(input: u32, i: u32) u32 {
+    var bag = Bag{ .tag = 1, .items = .{ .{ .x = 3, .y = 9 }, .{ .x = input, .y = 5 } } };
+    const yp = &bag.items[i % 2].y;
+    const item: *Pair = @fieldParentPtr("y", yp);
+    item.x +%= 27;
+    const outer: *Bag = @fieldParentPtr("items", &bag.items);
+    outer.tag = 6;
+    return bag.tag +% bag.items[i % 2].x +% yp.*;
+}
+
 test "local parent writes alias their original local" {
     for ([_]u32{ 0, 3, 255, 0xffffffff }) |n| {
         try std.testing.expectEqual(n +% 12, direct(n));
         try std.testing.expectEqual(n +% 18, nested(n));
         try std.testing.expectEqual(n +% 33, castAlias(n));
         try std.testing.expectEqual(n +% 42, escaped(n));
+        try std.testing.expectEqual(6 +% (n +% 27) +% 5, arrayItem(n, 1));
+        try std.testing.expectEqual(6 +% 30 +% 9, arrayItem(n, 0));
     }
 }
