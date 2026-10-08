@@ -16,7 +16,11 @@ private def require (ok : Bool) (message : String) : IO Unit :=
 #guard ModuleSplit.allocate #["a", "B", "b"] == #["F_a", "F_B", "F_b_2"]
 #guard ModuleSplit.allocate #["x_2", "x", "X"] == #["F_x_2_2", "F_x_2", "F_X"]
 #guard ModuleSplit.validRoot "Proofs.Ex.Gen" && !ModuleSplit.validRoot "Proofs..Gen" &&
-  !ModuleSplit.validRoot "Proofs.1Gen" && !ModuleSplit.validRoot "Proofs.Gén"
+  !ModuleSplit.validRoot "Proofs.1Gen" && !ModuleSplit.validRoot "Proofs.Gén" &&
+  !ModuleSplit.validRoot "Proofs.end.Gen"
+#guard ModuleSplit.matchesOutput "Proofs.Ex.Gen" "Proofs/Ex/Gen.lean" &&
+  ModuleSplit.matchesOutput "Ex.Gen" "/tmp/pkg/Ex/Gen.lean" &&
+  !ModuleSplit.matchesOutput "Gen" "out/MyGen.lean" && !ModuleSplit.matchesOutput "Ex.Gen" "Ex/Gen.lean.bak"
 
 private def load (dir : System.FilePath) : IO (Array Func) := do
   let paths := ((← dir.readDir).filter (·.fileName.endsWith ".json")).qsort

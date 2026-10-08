@@ -42,11 +42,21 @@ structure Module where
   imports : Array String
   text : String
 
-/-- A module name: dot-separated ASCII identifiers. -/
+/-- A module name: dot-separated ASCII identifiers, none a Lean keyword. -/
 def validRoot (root : String) : Bool :=
-  (root.splitOn ".").all fun part => match part.toList with
+  (root.splitOn ".").all fun part => !leanKeywords.contains part && match part.toList with
     | c :: cs => c.isAlpha && c.toNat < 128 && cs.all fun c => c.toNat < 128 && (c.isAlphanum || c == '_')
     | [] => false
+
+/-- The umbrella file must be exactly `<root as a path>.lean`, possibly under a source directory:
+`MyGen.lean` does not hold module `Gen`. -/
+def matchesOutput (root out : String) : Bool :=
+  let path := root.replace "." "/" ++ ".lean"
+  out == path || out.endsWith ("/" ++ path)
+
+/-- The manifest written beside the umbrella `out` (`Gen.lean` → `Gen.modules.json`). -/
+def manifestPath (out : System.FilePath) : System.FilePath :=
+  out.withExtension "modules.json"
 
 /-- `F_` and the declaration name with every non-ASCII-identifier character replaced by `_`,
 at most 100 characters. Uniqueness is case-insensitive (`allocate`). -/

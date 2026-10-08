@@ -130,6 +130,9 @@ def check_rejections_and_stale(binary, work):
     base = [str(binary), str(golden), '-o', str(out), '--namespace', 'Recursion', '--prefix', 'recursion.']
     for flags, message in [(['--split-modules', 'Proofs.Other.Gen'], 'needs -o ending in Proofs/Other/Gen.lean'),
                            (['--split-modules', 'Proofs..Gen'], 'invalid --split-modules'),
+                           (['--split-modules', 'en'], 'needs -o ending in en.lean'),
+                           (['--split-modules', 'Proofs.Ex.Gen', '--timing-json', str(out.with_suffix('.modules.json'))],
+                            'must not name the module manifest'),
                            (['--split-modules', 'Proofs.Ex.Gen', '--split-modules', 'Proofs.Ex.Gen'], 'duplicate --split-modules'),
                            (['--split-modules'], 'missing value for --split-modules'),
                            (['--split-modules', 'Proofs.Ex.Gen', '--model-registry-template'], 'cannot be combined')]:

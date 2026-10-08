@@ -149,8 +149,11 @@ def parseArgs (args : List String) : Except String Args := do
     unless ModuleSplit.validRoot root do
       throw s!"invalid --split-modules '{root}': use a dot-separated module name, such as Proofs.Ex.Gen\n{usage}"
     -- The parts import each other by module name, so the umbrella must sit at that module's path.
-    unless a.outPath.toString.endsWith (root.replace "." "/" ++ ".lean") do
+    unless ModuleSplit.matchesOutput root a.outPath.toString do
       throw s!"--split-modules {root} needs -o ending in {root.replace "." "/"}.lean\n{usage}"
+    let manifest := (ModuleSplit.manifestPath a.outPath).toString
+    if a.timingJson == some manifest || a.sourceMapJson == some manifest then
+      throw s!"--timing-json and --source-map-json must not name the module manifest {manifest}\n{usage}"
   unless (a.ns.splitOn ".").all (fun part => !part.isEmpty && mangleField part == part) do
     throw s!"invalid --namespace '{a.ns}': use dot-separated Lean identifiers, such as My.Program\n{usage}"
   if let some p := a.profile then
@@ -310,7 +313,7 @@ private def run (args : List String) : IO UInt32 := do
               let mods := ModuleSplit.modules parts a.ns root stem header
               ModuleSplit.write (base / stem) base mods
               let manifest := ModuleSplit.manifest a.ns root metadata mods
-              let manifestPath := base / s!"{stem}.modules.json"
+              let manifestPath := ModuleSplit.manifestPath a.outPath
               try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
                 throw (IO.userError s!"writing module manifest {manifestPath}: {e}")
             times := { times with write := (← IO.monoNanosNow) - writeStart }
