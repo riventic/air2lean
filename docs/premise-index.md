@@ -9,8 +9,8 @@ premise was derived. This index covers the committed generated modules.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 581 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 409 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 609 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -341,35 +341,35 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, T
 
 ## `Proofs/Floats/Dot.lean`
 
-File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `dot_loop_step` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `dot_eq_sumLeft` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_loop_step` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `dot_eq_sumLeft` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `dot_init_toRat` | MTH-01, TRU-01 |
 | `dotTerm_error` | MTH-01, TRU-01 |
-| `dot_error` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `dot_isNaN` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `dot_pos_of_gap` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_error` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_isNaN` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_pos_of_gap` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Floats/Fitness.lean`
 
-File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `fitness_loop_step` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `fitness_eq_sumLeft` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `fitness_panic` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_loop_step` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `fitness_eq_sumLeft` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_panic` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `fitTerm_error` | MTH-01, TRU-01 |
-| `fitness_error` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `fitness_isNaN` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `fitness_gt_of_gap` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_error` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_isNaN` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_gt_of_gap` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Floats/Proofs.lean`
 
-File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -379,23 +379,23 @@ File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 | `Zig.Float.le_refl` | MTH-01, TRU-01 |
 | `Zig.Float.le_of_not_lt` | MTH-01, TRU-01 |
 | `Zig.Float.lt_eq_false_of_le` | MTH-01, TRU-01 |
-| `Zig.hypot2_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isNan_spec` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isNan_allowed` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isNan_zero_div_zero` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_spec` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_id` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_allowed` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `dot_nil` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `dot_len_mismatch` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `celsius_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `celsius_null_iff` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `celsius_nan` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `hypot2_not_neg` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `lerp_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `lerp_t0` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `lerp_t0_negzero` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Zig.hypot2_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isNan_spec` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isNan_allowed` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isNan_zero_div_zero` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_spec` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_id` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_allowed` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `dot_nil` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_len_mismatch` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `celsius_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `celsius_null_iff` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `celsius_nan` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `hypot2_not_neg` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `lerp_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `lerp_t0` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `lerp_t0_negzero` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Iogroup/Counter.lean`
 
