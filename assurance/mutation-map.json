@@ -1316,7 +1316,16 @@
     },
     "I04": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/modular-output/test_keys.py",
+          "anchor": "bad(lambda d: d['modules'][1]['imports'].append('R.F_c'), 'import cycle', 'cycle')"
+        },
+        {
+          "path": "tests/roadmap/modular-output/test_cli.py",
+          "anchor": "f'{ex}: default output changed'"
+        }
+      ],
       "mutants": []
     },
     "I05": {

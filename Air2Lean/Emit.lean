@@ -3373,13 +3373,28 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
     footprintDef ++ [evidence])
 
-/-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
-stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
-`--float-semantics` (default `ieee`). Also returns each function's declaration name. -/
-def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
+/-- One emitted program in the pieces that `emitWithNames` concatenates. `groups` are the
+call groups (`callGroups`) in emission order: each group's member source names, the source
+names of the functions it references outside itself (`calleesOf`), and its declarations. -/
+structure EmitParts where
+  /-- `import` lines and the spawn-policy comment, before `namespace`. -/
+  header : List String
+  /-- Types, inline assembly, models, globals and `Tgt`: everything the functions share. -/
+  preamble : List String
+  groups : Array (Array String × Array String × String)
+  /-- `dispatch`, which references the spawn targets. -/
+  dispatch : List String
+  /-- Source names of the functions `dispatch` references. -/
+  dispatchTargets : Array String
+  /-- Each function's declaration name. -/
+  declNames : Array (String × String)
+
+/-- The pieces of `funcs → one Lean source file` importing `ZigLean` (`EmitParts.render`).
+`prefix_` is stripped from every Zig name (function or struct) before mangling.
+`floatSemantics` selects `--float-semantics` (default `ieee`). -/
+def emitParts (funcs : Array Func) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
-    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
-    String × Array (String × String) :=
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) : EmitParts :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
@@ -3451,11 +3466,15 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
       (targets.map fun (_, f, fields) => fields.map (captureClass f.types))
-  let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
+  let allNames := funcs.map (·.name)
+  let refs := fnRefs funcs
+  let groups := (callGroups funcs).map fun (members, recursive) =>
+    let names := members.map (·.name)
+    let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
-    if recursive then
+    let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
       let fix (d : String) := s!"{d}\npartial_fixpoint"
@@ -3468,11 +3487,27 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
           (if proofApi then
             (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs rawFuncs) p.body).toList
           else []))
-  (String.intercalate "\n\n"
-    (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
-      (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
-      [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr ++
-      funcsStr ++ dispatchStr ++ [s!"end {ns}"]), ownFuncNames)
+    (names, callees, text)
+  { header := ["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
+      (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else [])
+    preamble := structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr
+    groups
+    dispatch := dispatchStr
+    dispatchTargets := if dispatchStr.isEmpty then #[] else targets.map (·.1)
+    declNames := ownFuncNames }
+
+/-- The single-file output: every part in order under one `namespace`. -/
+def EmitParts.render (p : EmitParts) (ns : String) : String :=
+  String.intercalate "\n\n" (p.header ++ [s!"\nnamespace {ns}"] ++ p.preamble ++
+    (p.groups.map (·.2.2)).toList ++ p.dispatch ++ [s!"end {ns}"])
+
+/-- `funcs → one Lean source file` (`emitParts`). Also returns each function's declaration name. -/
+def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
+    String × Array (String × String) :=
+  let p := emitParts funcs prefix_ floatSemantics models spawnSemantics proofApi
+  (p.render ns, p.declNames)
 
 /-- `emitWithNames`'s Lean source only. -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)
