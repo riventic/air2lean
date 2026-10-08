@@ -14,6 +14,19 @@ python3 scripts/counterexample.py from-case --summary tests/diff/out/report.json
 python3 scripts/counterexample.py replay --bundle cx.json
 ```
 
+### Without Zig
+
+```sh
+# Search small inputs for a violation of a stated postcondition by evaluating the generated Lean.
+python3 scripts/counterexample.py goal-search --example loops --function sumUpTo \
+  --pre 'p0.toNat < 1000' --spec 'r = .ok (BitVec.ofNat 32 (p0.toNat * (p0.toNat - 1) / 2))' \
+  --gen Gen.lean --output goal.json
+# Replay a schedule bundle through the Lean interpreter (needs `lake build Concurrent ScheduleSearch` in tests/diff once).
+python3 scripts/counterexample.py replay --bundle cx.json --interpret
+```
+
+`goal-search` appends a driver to a copy of `Gen.lean` and runs `lake env lean --run`: no native toolchain, no libm archive. `--spec` is a decidable Lean proposition over the parameter names (`p0`, `p1`, ...) and `r : Except Zig.Error T`; `--pre` filters inputs. Supported shape: plain `Zig.Result` functions with `BitVec n`/`Bool` parameters and result (anything else is `unsolved: unsupported`). Candidates are boundary values, a seeded cross product and a seeded sample (`--max-inputs`, `--seed`), smallest first. The first violation is replayed in a fresh Lean process; only then is it a `counterexample` (contract `postcondition`). A domain fully enumerated without a violation is `no_failure`; a bounded search without one is `unsolved: search_exhausted`, as are a timeout (`timeout`), a no-result (fuel) input (`bounded_no_result`) and a precondition no input satisfies. An elaboration error of the driver or spec is `setup_failure: lean_error`. Sequential `from-case` bundles of supported functions replay the same way (`replay.kind = lean_sequential`); that confirms the model side only, and the native line stays recorded evidence. `replay --interpret` runs `tests/diff/Schedules.lean` through the interpreter with the recorded schedule prefix as the oracle.
+
 All builder commands exit 0 once a bundle is written, whatever its classification, and 3 on invalid or stale evidence. Read `classification` from the bundle or the `COUNTEREXAMPLE:` line.
 
 ## Bundle contents
@@ -30,13 +43,13 @@ All builder commands exit 0 once a bundle is written, whatever its classificatio
 
 ### Localization limits
 
-The model reports only the `Zig.Error` constructor, not the faulting instruction. The generated Lean has no per-instruction source map (`source_map: "unavailable"`), and AIR has no reliable file spans ([diagnostics.md](diagnostics.md)). `candidate_sites` therefore lists every instruction that could raise the observed failure:
+The model reports only the `Zig.Error` constructor, not the faulting instruction, so `candidate_sites` is a candidate set, not an exact fault site. Each site and function carries `source_span` and `source_span_status` in the exporter-provenance format of [diagnostics.md](diagnostics.md): `statement` (nearest preceding `dbg_stmt` in the instruction's own inline scope; `{file, module, line, column}`), `declaration` (function-level, or before any `dbg_stmt`; `column: null`) or `unavailable_in_AIR` (`source_span: null`: older exports without `src`, or an inlined body without its callee's `src`). `location.source_map` is `exact_statement` when any visited function exports `src`, else `unavailable_in_AIR`. Spans are statement-granular, not a source-correspondence claim. Without `src`, the old approximation below remains. `candidate_sites` lists every instruction that could raise the observed failure:
 
 - `illegal`: memory accesses (plain, atomic, `memcpy`/`memset`), `rem`/`mod`, and `free`/`destroy` calls.
 - `deadlock`: calls to `join`/`wait`/`timedWait`/`lock`/`lockShared`.
 - `model_panic`: noreturn panic-handler calls whose `scripts/panic-policy.tsv` constructor matches, plus the matching checked arithmetic.
 
-A differential value mismatch is `function_only`. `zig_line` is `fn` declaration line + `dbg_stmt` line − 1 (nearest preceding statement), so it is approximate. Inside a `dbg_inline_block` the call-site line is kept and the site is marked `inlined`. Std functions have no Zig line.
+A differential value mismatch is `function_only`. A goal-search violation is `function_only`. `zig_line` is the span line for an uninlined `statement` site; otherwise it is `fn` declaration line + `dbg_stmt` line − 1 (nearest preceding statement), so it is approximate. Inside a `dbg_inline_block` the call-site line is kept and the site is marked `inlined`. Std functions have no Zig line.
 
 ## Classification
 
@@ -56,6 +69,8 @@ A timeout or cap is never a program bug, even when the receipt recorded a failur
 
 ```sh
 python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
+# Goal search and Zig-free replay (the seeded-loop class needs `lake build ZigLean air2lean`; no Zig):
+python3 -I -B tests/roadmap/counterexamples/test_goal.py
 # After `(cd tests/diff && lake build schedules)`:
 python3 -I -B tests/roadmap/counterexamples/test_e2e.py [path/to/schedules]
 ```

@@ -1581,6 +1581,14 @@
         {
           "path": "tests/roadmap/counterexamples/test_counterexample.py",
           "anchor": "def test_capped_case_is_unsolved_and_stale_case_rejected"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_limits_are_unsolved_never_program_bugs"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_correct_loop_has_no_counterexample"
         }
       ],
       "mutants": [
