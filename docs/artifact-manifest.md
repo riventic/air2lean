@@ -131,11 +131,23 @@ AIR2LEAN_BUILD_LOCK=... python3 scripts/provenance-evidence.py regenerate WORKDI
 (compiler patch, translator, runtime, toolchain) is reported as `aged` and fails only with `--strict`.
 `regenerate` re-exports, retranslates, rebuilds the native binary and a guarded receipt, requires
 byte-identical AIR, Gen.lean and (for the same stock compiler) binary, then strictly checks a fresh
-manifest. To refresh the fixture after an intentional change: commit the example/Gen/proofs, copy the
-new AIR and receipt files into the fixture, commit, then record the manifest from the clean tree
-and update `pins.json`. The receipt's `plan.json` contains local absolute paths.
+manifest. To refresh the fixture after an intentional change: commit the example/Gen/proofs (and new
+AIR), run `regenerate WORKDIR` on the clean, committed tree, then
 
-The committed receipt's `plan.json` records the revision it was produced at; that commit may no
-longer exist after history rewrites or squash merges, so the receipt is evidence of that run
+```sh
+python3 scripts/provenance-evidence.py install WORKDIR        # path-redacted receipt copy
+git commit ...                                                  # the receipt
+python3 scripts/provenance-evidence.py record WORKDIR --stock-zig STOCK_ZIG   # manifest + pins.json
+git commit ...
+```
+
+`install` copies `receipt.json`, `plan.json` and `audit.json` with every host-local absolute path
+replaced: the attempt directory by `<attempt>`, the checkout by `<repo>`, the home directory by `~`
+and any other absolute path by `<host>/<basename>`. The committed copy therefore holds no local
+paths; its `receipt.json` artifact hashes are those of the unredacted files of the run (the copy's
+own bytes are what the manifest chains).
+
+The committed receipt's `plan.json` records the revision it was produced at (a pushed commit of the
+integration branch); that commit may no longer exist after history rewrites or squash merges, so the receipt is evidence of that run
 (its bytes are chained), not something `verify` can replay later. `regenerate` produces and
 verifies a fresh one.

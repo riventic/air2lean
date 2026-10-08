@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2785 theorems in 162 files.
+2787 theorems in 163 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 684 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 582 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 584 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 24 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [ALC-01](premises.md#alc-01) | 91 | Single modelled allocator |
@@ -45,16 +45,16 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2647 | Zig value and safety semantics |
+| [SEM-01](premises.md#sem-01) | 2649 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 2264 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1132 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 108 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2785 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1290 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1290 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2787 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1292 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1292 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 40 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -839,6 +839,15 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 |---|---|
 | `swap_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `swap_self_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Provenance/Proofs.lean`
+
+File premises: PRF-02, SEM-01, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `add_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `double_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Recursion/Proofs.lean`
 

@@ -132,6 +132,69 @@ def regenerate(a):
     return 0 if status == 'current' else 2
 
 
+RECEIPT_COPY = ('receipt.json', 'plan.json', 'audit.json')
+
+
+def redact(value, prefixes):
+    """Replace host-local absolute paths in every JSON string: known prefixes by placeholders, any
+    other absolute path by `<host>/<basename>`. Keys and non-path strings are unchanged."""
+    if isinstance(value, dict):
+        return {k: redact(v, prefixes) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact(v, prefixes) for v in value]
+    if isinstance(value, str) and value.startswith('/'):
+        for prefix, placeholder in prefixes:
+            if value == prefix or value.startswith(prefix + '/'):
+                return placeholder + value[len(prefix):]
+        return '<host>/' + Path(value).name
+    return value
+
+
+def install(a):
+    """Copy WORKDIR's verified fresh receipt into the fixture, path-redacted (see docs)."""
+    work = Path(os.path.abspath(a.workdir))
+    attempt = am.physical(work / 'attempt')
+    am.receipt.verify(attempt)
+    prefixes = [(str(attempt), '<attempt>'), (str(am.physical(ROOT)), '<repo>'), (str(ROOT), '<repo>'),
+                (str(am.physical(Path.home())), '~'), (str(Path.home()), '~')]
+    target = FIXTURE / 'receipt'
+    for path in target.iterdir():
+        path.unlink()
+    for name in RECEIPT_COPY:
+        data = redact(am.load(attempt / name), prefixes)
+        (target / name).write_text(json.dumps(data, sort_keys=True, separators=(',', ':')) + '\n')
+    print('installed a path-redacted copy of %s into %s' % (attempt, target.relative_to(ROOT)))
+    return 0
+
+
+def record(a):
+    """Record assurance/provenance/manifest.json from the (clean) tree and refresh pins.json."""
+    work = Path(os.path.abspath(a.workdir))
+    path = FIXTURE / 'manifest.json'
+    if path.exists():
+        path.unlink()
+    code = am.manifest_main(['manifest', str(path), '--example', EXAMPLE, '--zig-version', VERSION,
+                             '--source', 'assurance/provenance/src', '--air-dir', 'assurance/provenance/air',
+                             '--receipt', 'assurance/provenance/receipt',
+                             '--native-binary', str(work / 'native' / 'provenance'),
+                             '--native-compiler', str(Path(a.stock_zig).absolute()),
+                             '--native-compiler-version', VERSION, '--native-target', 'x86_64-linux',
+                             '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline'])
+    am.demand(code == 0, 'could not record the fixture manifest')
+    manifest = json.loads(path.read_text())
+    links = manifest['links']
+    pins = {'note': 'Reviewer pins for assurance/provenance/manifest.json (scripts/provenance-evidence.py). '
+                    'Update only with a regenerated, reviewed manifest.',
+            'zig_version': links['profile']['value']['zig_version'],
+            'profile_sha256': links['profile']['value']['profile_sha256'],
+            'source_sha256': links['source']['sha256'], 'native_sha256': links['native']['sha256'],
+            'native_binary_sha256': links['native']['value']['binary_sha256'],
+            'manifest_sha256': manifest['manifest_sha256']}
+    (FIXTURE / 'pins.json').write_text(json.dumps(pins, indent=2, sort_keys=True) + '\n')
+    print('recorded %s and pins.json' % path.relative_to(ROOT))
+    return 0
+
+
 def main(argv):
     parser = argparse.ArgumentParser(prog='provenance-evidence.py', description=__doc__.split('\n\n')[0])
     sub = parser.add_subparsers(dest='action', required=True)
@@ -146,10 +209,19 @@ def main(argv):
     g.add_argument('--timeout', type=int, default=7200)
     g.add_argument('--lock-wait', type=int, default=14400)
     g.add_argument('--allow-dirty', action='store_true')
+    i = sub.add_parser('install', help="copy WORKDIR's verified receipt into the fixture, path-redacted")
+    i.add_argument('workdir')
+    r = sub.add_parser('record', help='record the fixture manifest from the clean tree and refresh pins.json')
+    r.add_argument('workdir')
+    r.add_argument('--stock-zig', default=os.environ.get('AIR2LEAN_ZIG', 'zig'))
     a = parser.parse_args(argv)
     try:
         if a.action == 'regenerate':
             return regenerate(a)
+        if a.action == 'install':
+            return install(a)
+        if a.action == 'record':
+            return record(a)
         report = check(a.strict, a.native_binary, a.native_compiler)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print('provenance evidence unavailable: ' + str(error), file=sys.stderr)
