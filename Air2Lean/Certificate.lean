@@ -1,4 +1,5 @@
 import Air2Lean.Air.Op
+import Air2Lean.Emit
 
 /-!
 # AIR semantics certificates (`--air-certificate`)
@@ -301,6 +302,20 @@ def sig (f : Func) : Sig :=
     encArgs := ", ".intercalate (ps.toList.map fun (i, s) => s.enc s!"p{i}"),
     argNames := " ".intercalate (ps.toList.map fun (i, _) => s!"p{i}") }
 
+/-- Tactic lines that turn a hypothesis `h : argsOk air f.params args` into concrete
+`args = [enc v0, …]` (`argsOk_cons`/`valOk_*`), leaving the decoded `v<i>`. -/
+def invertArgs (f : Func) (air : String) (indent : String) : Array String := Id.run do
+  let paramList := "[" ++ ", ".intercalate (f.params.toList.map toString) ++ "]"
+  let mut out := #[s!"{indent}replace h : argsOk {air} {paramList} args = true := h"]
+  for (_, i) in f.params.zipIdx do
+    out := out.push s!"{indent}obtain ⟨v{i}, args, rfl, h{i}, h⟩ := argsOk_cons h"
+  out := out.push s!"{indent}obtain rfl := argsOk_nil h"
+  for (p, i) in f.params.zipIdx do
+    let inv := ((f.types[p]?.bind scalar?).map (·.inv)).getD "valOk_int"
+    out := out ++ #[s!"{indent}replace h{i} : valOk {printTy (f.types[p]!)} v{i} = true := h{i}",
+      s!"{indent}rw [{inv} h{i}]"]
+  out
+
 /-- The certificate file for `funcs` (the translated program, emission order). `declNames`
 maps each fully qualified name to its generated definition in namespace `ns`, which
 `genModule` defines. -/
@@ -363,20 +378,13 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
       s!"      (fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} := by",
       s!"  conv => rhs; rw [{genName f}]",
       s!"  simp only [{simpSet}]", ""]
-    let paramList := "[" ++ ", ".intercalate (f.params.toList.map toString) ++ "]"
-    let mut fix := #[
+    let fix := #[
       s!"theorem {d}_fix (args : List Value)",
       s!"    (h : argsOk {airName f} {airName f}.params.toList args = true) :",
-      s!"    execFunc gen {airName f} args = gen {str f.name} args := by",
-      s!"  replace h : argsOk {airName f} {paramList} args = true := h"]
-    for (i, _) in s.ps do
-      fix := fix.push s!"  obtain ⟨v{i}, args, rfl, h{i}, h⟩ := argsOk_cons h"
-    fix := fix.push "  obtain rfl := argsOk_nil h"
-    for (i, sc) in s.ps do
-      fix := fix ++ #[s!"  replace h{i} : valOk {printTy (f.types[f.params[i]!]!)} v{i} = true := h{i}",
-        s!"  rw [{sc.inv} h{i}]"]
+      s!"    execFunc gen {airName f} args = gen {str f.name} args := by"] ++
+      invertArgs f (airName f) "  "
     let stepArgs := " ".intercalate (s.ps.toList.map fun (i, sc) => sc.decVar i)
-    fix := fix ++ #["  funext m",
+    let fix := fix ++ #["  funext m",
       s!"  show (execFunc gen {airName f} _).run m = (gen _ _).run m",
       s!"  rw [{d}_step {if calls then "" else "gen "}{stepArgs}]",
       "  simp only [gen, air_sem]", ""]
@@ -390,19 +398,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
     "generated program: every terminating AIR behaviour is the generated definition's. -/",
     "theorem run_le_gen : Lean.Order.PartialOrder.rel (run (progOf table)) gen :=",
     "  run_le_of_table gen_fixpoint", ""]
-  for f in frag do
-    unless calling f do continue
-    let d := declOf f.name
-    let s := sig f
-    lines := lines ++ #[
-      s!"/-- `{f.name}` calls certified functions: every terminating AIR run is the generated definition's. -/",
-      s!"theorem {d}_sound {s.binders} (m : Zig.Mem) :",
-      s!"    Lean.Order.PartialOrder.rel ((run (progOf table) {str f.name} [{s.encArgs}]).run m)",
-      s!"      ((fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames}) := by",
-      s!"  have h : Lean.Order.PartialOrder.rel ((run (progOf table) {str f.name} [{s.encArgs}]).run m)",
-      s!"      ((gen {str f.name} [{s.encArgs}]).run m) := run_le_gen {str f.name} [{s.encArgs}] m",
-      "  simp only [gen, air_sem] at h",
-      "  exact h", ""]
+  -- Exact agreement without calls: one unfolding of `run`.
   for f in frag do
     if calling f then continue
     let d := declOf f.name
@@ -413,7 +409,130 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
       s!"    (run (progOf table) {str f.name} [{s.encArgs}]).run m =",
       s!"      (fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} := by",
       "  rw [run_of_lookup (by rfl)]",
-      s!"  exact {d}_step _ {s.argNames} m", ""]
+      s!"  exact {d}_step _ {s.argNames} m", "",
+      s!"theorem {d}_complete {s.binders} (m : Zig.Mem) :",
+      s!"    Lean.Order.PartialOrder.rel ((fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames})",
+      s!"      ((run (progOf table) {str f.name} [{s.encArgs}]).run m) :=",
+      s!"  rel_of_eq ({d}_run {s.argNames} m).symm", ""]
+  -- With calls: soundness from the program fixpoint, completeness by fixpoint induction over
+  -- the generated clique (or one unfolding, outside a clique), then equality.
+  let motive (f : Func) : String :=
+    let s := sig f
+    s!"fun g => ∀ {s.argNames} m, Lean.Order.PartialOrder.rel ((fun v => ({s.ret.enc "v"}, m)) <$> g {s.argNames}) " ++
+      s!"((run (progOf table) {str f.name} [{s.encArgs}]).run m)"
+  let mut complete : Array String := frag.filterMap fun f => if calling f then none else some f.name
+  for (members, recursive) in callGroups frag do
+    let calls := members.filter calling
+    if calls.isEmpty then continue
+    -- Fail closed: arities without an admissibility lemma, or a callee without completeness.
+    let externals := (members.flatMap callsIn).filter fun n => names.contains n && !members.any (·.name == n)
+    if members.any (·.params.size > 4) || !externals.all complete.contains then
+      for f in calls do
+        lines := lines.push s!"-- `{f.name}`: no completeness theorem (arity or callee outside this generator's scheme)."
+      continue
+    for f in members do
+      let d := declOf f.name
+      let s := sig f
+      lines := lines ++ #[
+        s!"/-- `{f.name}`: every terminating AIR run is the generated definition's. -/",
+        s!"theorem {d}_sound {s.binders} (m : Zig.Mem) :",
+        s!"    Lean.Order.PartialOrder.rel ((run (progOf table) {str f.name} [{s.encArgs}]).run m)",
+        s!"      ((fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames}) := by",
+        s!"  have h : Lean.Order.PartialOrder.rel ((run (progOf table) {str f.name} [{s.encArgs}]).run m)",
+        s!"      ((gen {str f.name} [{s.encArgs}]).run m) := run_le_gen {str f.name} [{s.encArgs}] m",
+        "  simp only [gen, air_sem] at h",
+        "  exact h", ""]
+      -- The callee oracle: one argument per distinct certified callee.
+      let callees := (callsIn f).toList.eraseDups.filter names.contains
+      let calleeFuncs := callees.filterMap fun n => frag.find? (·.name == n)
+      let gTy (c : Func) : String :=
+        let cs := sig c
+        " → ".intercalate (cs.ps.toList.map (·.2.lean) ++ [s!"Zig.Result ({cs.ret.lean})"])
+      lines := lines.push s!"/-- `{f.name}`'s certified callees, answered by the given functions. -/"
+      lines := lines.push s!"def calls_{d} {" ".intercalate (calleeFuncs.map fun c => s!"(g_{declOf c.name} : {gTy c})")} : Oracle"
+      for c in calleeFuncs do
+        let cs := sig c
+        let args := cs.ps.map fun (i, sc) => sc.dec i
+        lines := lines ++ #[s!"  | {str c.name}, args =>",
+          s!"    if argsOk {airName c} {airName c}.params.toList args then",
+          s!"      StateT.lift ((fun v => {cs.ret.enc "v"}) <$> g_{declOf c.name} {" ".intercalate args.toList})",
+          "    else StateT.lift stuck"]
+      lines := lines.push "  | _, _ => StateT.lift stuck\n"
+    -- One completeness theorem per member.
+    let memberNames := members.map (·.name)
+    for f in members do
+      let d := declOf f.name
+      let s := sig f
+      let pre := #[
+        s!"/-- `{f.name}`: the generated definition terminates only as the AIR does: it is below `run`. -/",
+        s!"theorem {d}_complete {s.binders} (m : Zig.Mem) :",
+        s!"    Lean.Order.PartialOrder.rel ((fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames})",
+        s!"      ((run (progOf table) {str f.name} [{s.encArgs}]).run m) := by"]
+      -- The step for member `g`, given the bound clique functions and hypotheses.
+      let step (g : Func) (bound : Bool) (indent : String) : Array String := Id.run do
+        let gs := sig g
+        let gd := declOf g.name
+        let callees := ((callsIn g).toList.eraseDups.filter names.contains).filterMap fun n => frag.find? (·.name == n)
+        let fnOf (c : Func) := if bound && memberNames.contains c.name then s!"g_{declOf c.name}" else genName c
+        let hypOf (c : Func) := if bound && memberNames.contains c.name then s!"hg_{declOf c.name}" else s!"{declOf c.name}_complete"
+        let oracle := s!"(calls_{gd} {" ".intercalate (callees.map fnOf)})"
+        let panics := ", ".intercalate (["air_sem", airName g, s!"calls_{gd}"] ++
+          (callees.filter (·.name != g.name)).map airName ++
+          (panicLemmas.filter fun (n, _) => (callsIn g).contains n).toList.map (·.2))
+        let mut out := #[]
+        if bound then
+          let refs := members.filter fun c => callees.any (·.name == c.name)
+          let binders := " ".intercalate (refs.toList.map fun c => s!"g_{declOf c.name} hg_{declOf c.name}")
+          out := out.push s!"{indent}intro {binders} {gs.argNames} m"
+        out := out ++ #[
+          s!"{indent}rw [run_of_lookup (by rfl)]",
+          s!"{indent}apply Lean.Order.PartialOrder.rel_trans (y := (execFunc {oracle} {airName g} [{gs.encArgs}]).run m)",
+          s!"{indent}· apply rel_of_eq"]
+        unless bound do out := out.push s!"{indent}  conv => lhs; rw [{genName g}]"
+        out := out ++ #[
+          s!"{indent}  simp only [{panics}]",
+          s!"{indent}· apply execFunc_le",
+          s!"{indent}  intro name args m'",
+          s!"{indent}  show Lean.Order.PartialOrder.rel (({oracle} name args).run m') ((run (progOf table) name args).run m')",
+          s!"{indent}  unfold calls_{gd}",
+          s!"{indent}  split"]
+        for c in callees do
+          let cs := sig c
+          out := out ++ #[s!"{indent}  · split", s!"{indent}    · rename_i h"] ++
+            invertArgs c (airName c) s!"{indent}      " ++ #[
+            s!"{indent}      have := {hypOf c} {" ".intercalate (cs.ps.toList.map fun (i, sc) => sc.decVar i)} m'",
+            s!"{indent}      simp only [air_sem] at this ⊢",
+            s!"{indent}      exact this",
+            s!"{indent}    · exact Lean.Order.FlatOrder.rel.bot"]
+        out := out.push s!"{indent}  · exact Lean.Order.FlatOrder.rel.bot"
+        out
+      if recursive then
+        let motives := if members.size == 1 then s!"(motive := {motive f})"
+          else " ".intercalate (members.toList.zipIdx.map fun (g, i) => s!"(motive_{i + 1} := {motive g})")
+        let mut body := pre ++ #[s!"  revert {s.argNames} m", s!"  apply {genName f}.fixpoint_induct {motives}"]
+        for g in members do
+          let gs := sig g
+          let intros := (gs.ps.toList.map fun (i, _) => s!"apply Lean.Order.admissible_pi; intro p{i}") ++
+            ["apply Lean.Order.admissible_pi; intro m"]
+          body := body.push s!"  · {"; ".intercalate intros}"
+          body := body.push s!"    exact adm_app{gs.ps.size} _ {" ".intercalate (gs.ps.toList.map fun _ => "_")} _"
+        for g in members do
+          let st := step g true "    "
+          body := body.push s!"  · {(st[0]!).trimLeft}"
+          body := body ++ st.extract 1 st.size
+        lines := lines ++ body ++ #[""]
+      else
+        lines := lines ++ pre ++ step f false "  " ++ #[""]
+      complete := complete.push f.name
+    for f in members do
+      let d := declOf f.name
+      let s := sig f
+      lines := lines ++ #[
+        s!"/-- `{f.name}`: its AIR semantics equals the generated definition. -/",
+        s!"theorem {d}_eq {s.binders} (m : Zig.Mem) :",
+        s!"    (run (progOf table) {str f.name} [{s.encArgs}]).run m =",
+        s!"      (fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} :=",
+        s!"  Lean.Order.PartialOrder.rel_antisymm ({d}_sound {s.argNames} m) ({d}_complete {s.argNames} m)", ""]
   lines := lines.push s!"end {ns}.AirCert"
   pure ("\n".intercalate lines.toList ++ "\n")
 

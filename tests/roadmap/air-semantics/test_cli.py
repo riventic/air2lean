@@ -59,7 +59,7 @@ def check_example(binary, ex, work):
     for name in certified:
         decl = name.split('.', 1)[1]
         assert re.search(rf'^theorem {decl}_step ', text, re.M), (ex, name)
-        assert re.search(rf'^theorem {decl}_(run|sound) ', text, re.M), (ex, name)
+        assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M), (ex, name)
     assert re.search(r'^theorem run_le_gen ', text, re.M)
 
 

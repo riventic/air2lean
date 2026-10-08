@@ -254,12 +254,22 @@ theorem absDiff_run (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
   rw [run_of_lookup (by rfl)]
   exact absDiff_step _ p0 p1 m
 
+theorem absDiff_complete (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> Basic.absDiff p0 p1)
+      ((run (progOf table) "basic.absDiff" [(Value.int true 32 p0), (Value.int true 32 p1)]).run m) :=
+  rel_of_eq (absDiff_run p0 p1 m).symm
+
 /-- `basic.clampAdd` makes no certified call: its AIR semantics equals the generated definition. -/
 theorem clampAdd_run (p0 : BitVec 16) (p1 : BitVec 16) (m : Zig.Mem) :
     (run (progOf table) "basic.clampAdd" [(Value.int false 16 p0), (Value.int false 16 p1)]).run m =
       (fun v => ((Value.int false 16 v), m)) <$> Basic.clampAdd p0 p1 := by
   rw [run_of_lookup (by rfl)]
   exact clampAdd_step _ p0 p1 m
+
+theorem clampAdd_complete (p0 : BitVec 16) (p1 : BitVec 16) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 16 v), m)) <$> Basic.clampAdd p0 p1)
+      ((run (progOf table) "basic.clampAdd" [(Value.int false 16 p0), (Value.int false 16 p1)]).run m) :=
+  rel_of_eq (clampAdd_run p0 p1 m).symm
 
 /-- `basic.classify` makes no certified call: its AIR semantics equals the generated definition. -/
 theorem classify_run (p0 : BitVec 8) (m : Zig.Mem) :
@@ -268,6 +278,11 @@ theorem classify_run (p0 : BitVec 8) (m : Zig.Mem) :
   rw [run_of_lookup (by rfl)]
   exact classify_step _ p0 m
 
+theorem classify_complete (p0 : BitVec 8) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 8 v), m)) <$> Basic.classify p0)
+      ((run (progOf table) "basic.classify" [(Value.int false 8 p0)]).run m) :=
+  rel_of_eq (classify_run p0 m).symm
+
 /-- `basic.scale` makes no certified call: its AIR semantics equals the generated definition. -/
 theorem scale_run (p0 : BitVec 32) (p1 : BitVec 8) (m : Zig.Mem) :
     (run (progOf table) "basic.scale" [(Value.int false 32 p0), (Value.int false 8 p1)]).run m =
@@ -275,11 +290,21 @@ theorem scale_run (p0 : BitVec 32) (p1 : BitVec 8) (m : Zig.Mem) :
   rw [run_of_lookup (by rfl)]
   exact scale_step _ p0 p1 m
 
+theorem scale_complete (p0 : BitVec 32) (p1 : BitVec 8) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> Basic.scale p0 p1)
+      ((run (progOf table) "basic.scale" [(Value.int false 32 p0), (Value.int false 8 p1)]).run m) :=
+  rel_of_eq (scale_run p0 p1 m).symm
+
 /-- `basic.tardiness` makes no certified call: its AIR semantics equals the generated definition. -/
 theorem tardiness_run (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
     (run (progOf table) "basic.tardiness" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m =
       (fun v => ((Value.int false 32 v), m)) <$> Basic.tardiness p0 p1 := by
   rw [run_of_lookup (by rfl)]
   exact tardiness_step _ p0 p1 m
+
+theorem tardiness_complete (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> Basic.tardiness p0 p1)
+      ((run (progOf table) "basic.tardiness" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m) :=
+  rel_of_eq (tardiness_run p0 p1 m).symm
 
 end Basic.AirCert

@@ -603,6 +603,43 @@ theorem Result.eq_of_le {α : Type} {x y : Result α} (h : x ⊑ y) (hx : x ≠ 
   | bot => exact absurd rfl hx
   | refl => rfl
 
+section Complete
+open Lean.Order
+
+/-! For the converse of `run_le_of_fixpoint` on a generated `partial_fixpoint` clique: its
+`fixpoint_induct` needs these admissibility facts for a motive "the generated function, encoded,
+is below `run`" at each arity. -/
+
+theorem rel_of_eq {α : Type} [PartialOrder α] {x y : α} (h : x = y) : x ⊑ y := by
+  subst h; exact PartialOrder.rel_refl
+
+theorem adm_app0 {β γ : Type} (f : β → γ) (c : Result γ) :
+    admissible (fun x : Result β => f <$> x ⊑ c) := by
+  apply admissible_flatOrder (b := (none : Option (Except Zig.Error β)))
+  exact FlatOrder.rel.bot
+
+theorem adm_app1 {A β γ : Type} (f : β → γ) (a : A) (c : Result γ) :
+    admissible (fun g : A → Result β => f <$> g a ⊑ c) :=
+  admissible_apply (fun _ (r : Result β) => f <$> r ⊑ c) a (adm_app0 f c)
+
+theorem adm_app2 {A B β γ : Type} (f : β → γ) (a : A) (b : B) (c : Result γ) :
+    admissible (fun g : A → B → Result β => f <$> g a b ⊑ c) :=
+  admissible_apply (fun _ (h : B → Result β) => f <$> h b ⊑ c) a (adm_app1 f b c)
+
+theorem adm_app3 {A B C β γ : Type} (f : β → γ) (a : A) (b : B) (d : C) (c : Result γ) :
+    admissible (fun g : A → B → C → Result β => f <$> g a b d ⊑ c) :=
+  admissible_apply (fun _ (h : B → C → Result β) => f <$> h b d ⊑ c) a (adm_app2 f b d c)
+
+theorem adm_app4 {A B C D β γ : Type} (f : β → γ) (a : A) (b : B) (d : C) (e : D) (c : Result γ) :
+    admissible (fun g : A → B → C → D → Result β => f <$> g a b d e ⊑ c) :=
+  admissible_apply (fun _ (h : B → C → D → Result β) => f <$> h b d e ⊑ c) a (adm_app3 f b d e c)
+
+theorem execFunc_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (f : Func) (args : List Value) :
+    execFunc o₁ f args ⊑ execFunc o₂ f args :=
+  execFunc_mono (fun o : Oracle => o) monotone_id f args _ _ h
+
+end Complete
+
 /-- A program as a table of fully qualified names and functions (`progOf`). -/
 abbrev Table := List (String × Func)
 

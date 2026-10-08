@@ -216,7 +216,7 @@ generated program: every terminating AIR behaviour is the generated definition's
 theorem run_le_gen : Lean.Order.PartialOrder.rel (run (progOf table)) gen :=
   run_le_of_table gen_fixpoint
 
-/-- `recursion.fact` calls certified functions: every terminating AIR run is the generated definition's. -/
+/-- `recursion.fact`: every terminating AIR run is the generated definition's. -/
 theorem fact_sound (p0 : BitVec 32) (m : Zig.Mem) :
     Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.fact" [(Value.int false 32 p0)]).run m)
       ((fun v => ((Value.int false 32 v), m)) <$> Recursion.fact p0) := by
@@ -225,7 +225,52 @@ theorem fact_sound (p0 : BitVec 32) (m : Zig.Mem) :
   simp only [gen, air_sem] at h
   exact h
 
-/-- `recursion.gcd` calls certified functions: every terminating AIR run is the generated definition's. -/
+/-- `recursion.fact`'s certified callees, answered by the given functions. -/
+def calls_fact (g_fact : BitVec 32 → Zig.Result (BitVec 32)) : Oracle
+  | "recursion.fact", args =>
+    if argsOk air_fact air_fact.params.toList args then
+      StateT.lift ((fun v => (Value.int false 32 v)) <$> g_fact ((args.getD 0 .void).toBV 32))
+    else StateT.lift stuck
+  | _, _ => StateT.lift stuck
+
+/-- `recursion.fact`: the generated definition terminates only as the AIR does: it is below `run`. -/
+theorem fact_complete (p0 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> Recursion.fact p0)
+      ((run (progOf table) "recursion.fact" [(Value.int false 32 p0)]).run m) := by
+  revert p0 m
+  apply Recursion.fact.fixpoint_induct (motive := fun g => ∀ p0 m, Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> g p0) ((run (progOf table) "recursion.fact" [(Value.int false 32 p0)]).run m))
+  · apply Lean.Order.admissible_pi; intro p0; apply Lean.Order.admissible_pi; intro m
+    exact adm_app1 _ _ _
+  · intro g_fact hg_fact p0 m
+    rw [run_of_lookup (by rfl)]
+    apply Lean.Order.PartialOrder.rel_trans (y := (execFunc (calls_fact g_fact) air_fact [(Value.int false 32 p0)]).run m)
+    · apply rel_of_eq
+      simp only [air_sem, air_fact, calls_fact, callee_0]
+    · apply execFunc_le
+      intro name args m'
+      show Lean.Order.PartialOrder.rel (((calls_fact g_fact) name args).run m') ((run (progOf table) name args).run m')
+      unfold calls_fact
+      split
+      · split
+        · rename_i h
+          replace h : argsOk air_fact [0] args = true := h
+          obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
+          obtain rfl := argsOk_nil h
+          replace h0 : valOk (.int false 32) v0 = true := h0
+          rw [valOk_int h0]
+          have := hg_fact (v0.toBV 32) m'
+          simp only [air_sem] at this ⊢
+          exact this
+        · exact Lean.Order.FlatOrder.rel.bot
+      · exact Lean.Order.FlatOrder.rel.bot
+
+/-- `recursion.fact`: its AIR semantics equals the generated definition. -/
+theorem fact_eq (p0 : BitVec 32) (m : Zig.Mem) :
+    (run (progOf table) "recursion.fact" [(Value.int false 32 p0)]).run m =
+      (fun v => ((Value.int false 32 v), m)) <$> Recursion.fact p0 :=
+  Lean.Order.PartialOrder.rel_antisymm (fact_sound p0 m) (fact_complete p0 m)
+
+/-- `recursion.gcd`: every terminating AIR run is the generated definition's. -/
 theorem gcd_sound (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
     Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.gcd" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m)
       ((fun v => ((Value.int false 32 v), m)) <$> Recursion.gcd p0 p1) := by
@@ -234,7 +279,72 @@ theorem gcd_sound (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
   simp only [gen, air_sem] at h
   exact h
 
-/-- `recursion.isEven` calls certified functions: every terminating AIR run is the generated definition's. -/
+/-- `recursion.gcd`'s certified callees, answered by the given functions. -/
+def calls_gcd (g_gcd : BitVec 32 → BitVec 32 → Zig.Result (BitVec 32)) : Oracle
+  | "recursion.gcd", args =>
+    if argsOk air_gcd air_gcd.params.toList args then
+      StateT.lift ((fun v => (Value.int false 32 v)) <$> g_gcd ((args.getD 0 .void).toBV 32) ((args.getD 1 .void).toBV 32))
+    else StateT.lift stuck
+  | _, _ => StateT.lift stuck
+
+/-- `recursion.gcd`: the generated definition terminates only as the AIR does: it is below `run`. -/
+theorem gcd_complete (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> Recursion.gcd p0 p1)
+      ((run (progOf table) "recursion.gcd" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m) := by
+  revert p0 p1 m
+  apply Recursion.gcd.fixpoint_induct (motive := fun g => ∀ p0 p1 m, Lean.Order.PartialOrder.rel ((fun v => ((Value.int false 32 v), m)) <$> g p0 p1) ((run (progOf table) "recursion.gcd" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m))
+  · apply Lean.Order.admissible_pi; intro p0; apply Lean.Order.admissible_pi; intro p1; apply Lean.Order.admissible_pi; intro m
+    exact adm_app2 _ _ _ _
+  · intro g_gcd hg_gcd p0 p1 m
+    rw [run_of_lookup (by rfl)]
+    apply Lean.Order.PartialOrder.rel_trans (y := (execFunc (calls_gcd g_gcd) air_gcd [(Value.int false 32 p0), (Value.int false 32 p1)]).run m)
+    · apply rel_of_eq
+      simp only [air_sem, air_gcd, calls_gcd, callee_1, callee_2]
+    · apply execFunc_le
+      intro name args m'
+      show Lean.Order.PartialOrder.rel (((calls_gcd g_gcd) name args).run m') ((run (progOf table) name args).run m')
+      unfold calls_gcd
+      split
+      · split
+        · rename_i h
+          replace h : argsOk air_gcd [0, 0] args = true := h
+          obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
+          obtain ⟨v1, args, rfl, h1, h⟩ := argsOk_cons h
+          obtain rfl := argsOk_nil h
+          replace h0 : valOk (.int false 32) v0 = true := h0
+          rw [valOk_int h0]
+          replace h1 : valOk (.int false 32) v1 = true := h1
+          rw [valOk_int h1]
+          have := hg_gcd (v0.toBV 32) (v1.toBV 32) m'
+          simp only [air_sem] at this ⊢
+          exact this
+        · exact Lean.Order.FlatOrder.rel.bot
+      · exact Lean.Order.FlatOrder.rel.bot
+
+/-- `recursion.gcd`: its AIR semantics equals the generated definition. -/
+theorem gcd_eq (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
+    (run (progOf table) "recursion.gcd" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m =
+      (fun v => ((Value.int false 32 v), m)) <$> Recursion.gcd p0 p1 :=
+  Lean.Order.PartialOrder.rel_antisymm (gcd_sound p0 p1 m) (gcd_complete p0 p1 m)
+
+/-- `recursion.isOdd`: every terminating AIR run is the generated definition's. -/
+theorem isOdd_sound (p0 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m)
+      ((fun v => ((Value.bool v), m)) <$> Recursion.isOdd p0) := by
+  have h : Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m)
+      ((gen "recursion.isOdd" [(Value.int false 32 p0)]).run m) := run_le_gen "recursion.isOdd" [(Value.int false 32 p0)] m
+  simp only [gen, air_sem] at h
+  exact h
+
+/-- `recursion.isOdd`'s certified callees, answered by the given functions. -/
+def calls_isOdd (g_isEven : BitVec 32 → Zig.Result (Bool)) : Oracle
+  | "recursion.isEven", args =>
+    if argsOk air_isEven air_isEven.params.toList args then
+      StateT.lift ((fun v => (Value.bool v)) <$> g_isEven ((args.getD 0 .void).toBV 32))
+    else StateT.lift stuck
+  | _, _ => StateT.lift stuck
+
+/-- `recursion.isEven`: every terminating AIR run is the generated definition's. -/
 theorem isEven_sound (p0 : BitVec 32) (m : Zig.Mem) :
     Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.isEven" [(Value.int false 32 p0)]).run m)
       ((fun v => ((Value.bool v), m)) <$> Recursion.isEven p0) := by
@@ -243,13 +353,134 @@ theorem isEven_sound (p0 : BitVec 32) (m : Zig.Mem) :
   simp only [gen, air_sem] at h
   exact h
 
-/-- `recursion.isOdd` calls certified functions: every terminating AIR run is the generated definition's. -/
-theorem isOdd_sound (p0 : BitVec 32) (m : Zig.Mem) :
-    Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m)
-      ((fun v => ((Value.bool v), m)) <$> Recursion.isOdd p0) := by
-  have h : Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m)
-      ((gen "recursion.isOdd" [(Value.int false 32 p0)]).run m) := run_le_gen "recursion.isOdd" [(Value.int false 32 p0)] m
-  simp only [gen, air_sem] at h
-  exact h
+/-- `recursion.isEven`'s certified callees, answered by the given functions. -/
+def calls_isEven (g_isOdd : BitVec 32 → Zig.Result (Bool)) : Oracle
+  | "recursion.isOdd", args =>
+    if argsOk air_isOdd air_isOdd.params.toList args then
+      StateT.lift ((fun v => (Value.bool v)) <$> g_isOdd ((args.getD 0 .void).toBV 32))
+    else StateT.lift stuck
+  | _, _ => StateT.lift stuck
+
+/-- `recursion.isOdd`: the generated definition terminates only as the AIR does: it is below `run`. -/
+theorem isOdd_complete (p0 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.bool v), m)) <$> Recursion.isOdd p0)
+      ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m) := by
+  revert p0 m
+  apply Recursion.isOdd.fixpoint_induct (motive_1 := fun g => ∀ p0 m, Lean.Order.PartialOrder.rel ((fun v => ((Value.bool v), m)) <$> g p0) ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m)) (motive_2 := fun g => ∀ p0 m, Lean.Order.PartialOrder.rel ((fun v => ((Value.bool v), m)) <$> g p0) ((run (progOf table) "recursion.isEven" [(Value.int false 32 p0)]).run m))
+  · apply Lean.Order.admissible_pi; intro p0; apply Lean.Order.admissible_pi; intro m
+    exact adm_app1 _ _ _
+  · apply Lean.Order.admissible_pi; intro p0; apply Lean.Order.admissible_pi; intro m
+    exact adm_app1 _ _ _
+  · intro g_isEven hg_isEven p0 m
+    rw [run_of_lookup (by rfl)]
+    apply Lean.Order.PartialOrder.rel_trans (y := (execFunc (calls_isOdd g_isEven) air_isOdd [(Value.int false 32 p0)]).run m)
+    · apply rel_of_eq
+      simp only [air_sem, air_isOdd, calls_isOdd, air_isEven, callee_4]
+    · apply execFunc_le
+      intro name args m'
+      show Lean.Order.PartialOrder.rel (((calls_isOdd g_isEven) name args).run m') ((run (progOf table) name args).run m')
+      unfold calls_isOdd
+      split
+      · split
+        · rename_i h
+          replace h : argsOk air_isEven [0] args = true := h
+          obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
+          obtain rfl := argsOk_nil h
+          replace h0 : valOk (.int false 32) v0 = true := h0
+          rw [valOk_int h0]
+          have := hg_isEven (v0.toBV 32) m'
+          simp only [air_sem] at this ⊢
+          exact this
+        · exact Lean.Order.FlatOrder.rel.bot
+      · exact Lean.Order.FlatOrder.rel.bot
+  · intro g_isOdd hg_isOdd p0 m
+    rw [run_of_lookup (by rfl)]
+    apply Lean.Order.PartialOrder.rel_trans (y := (execFunc (calls_isEven g_isOdd) air_isEven [(Value.int false 32 p0)]).run m)
+    · apply rel_of_eq
+      simp only [air_sem, air_isEven, calls_isEven, air_isOdd, callee_3]
+    · apply execFunc_le
+      intro name args m'
+      show Lean.Order.PartialOrder.rel (((calls_isEven g_isOdd) name args).run m') ((run (progOf table) name args).run m')
+      unfold calls_isEven
+      split
+      · split
+        · rename_i h
+          replace h : argsOk air_isOdd [0] args = true := h
+          obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
+          obtain rfl := argsOk_nil h
+          replace h0 : valOk (.int false 32) v0 = true := h0
+          rw [valOk_int h0]
+          have := hg_isOdd (v0.toBV 32) m'
+          simp only [air_sem] at this ⊢
+          exact this
+        · exact Lean.Order.FlatOrder.rel.bot
+      · exact Lean.Order.FlatOrder.rel.bot
+
+/-- `recursion.isEven`: the generated definition terminates only as the AIR does: it is below `run`. -/
+theorem isEven_complete (p0 : BitVec 32) (m : Zig.Mem) :
+    Lean.Order.PartialOrder.rel ((fun v => ((Value.bool v), m)) <$> Recursion.isEven p0)
+      ((run (progOf table) "recursion.isEven" [(Value.int false 32 p0)]).run m) := by
+  revert p0 m
+  apply Recursion.isEven.fixpoint_induct (motive_1 := fun g => ∀ p0 m, Lean.Order.PartialOrder.rel ((fun v => ((Value.bool v), m)) <$> g p0) ((run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m)) (motive_2 := fun g => ∀ p0 m, Lean.Order.PartialOrder.rel ((fun v => ((Value.bool v), m)) <$> g p0) ((run (progOf table) "recursion.isEven" [(Value.int false 32 p0)]).run m))
+  · apply Lean.Order.admissible_pi; intro p0; apply Lean.Order.admissible_pi; intro m
+    exact adm_app1 _ _ _
+  · apply Lean.Order.admissible_pi; intro p0; apply Lean.Order.admissible_pi; intro m
+    exact adm_app1 _ _ _
+  · intro g_isEven hg_isEven p0 m
+    rw [run_of_lookup (by rfl)]
+    apply Lean.Order.PartialOrder.rel_trans (y := (execFunc (calls_isOdd g_isEven) air_isOdd [(Value.int false 32 p0)]).run m)
+    · apply rel_of_eq
+      simp only [air_sem, air_isOdd, calls_isOdd, air_isEven, callee_4]
+    · apply execFunc_le
+      intro name args m'
+      show Lean.Order.PartialOrder.rel (((calls_isOdd g_isEven) name args).run m') ((run (progOf table) name args).run m')
+      unfold calls_isOdd
+      split
+      · split
+        · rename_i h
+          replace h : argsOk air_isEven [0] args = true := h
+          obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
+          obtain rfl := argsOk_nil h
+          replace h0 : valOk (.int false 32) v0 = true := h0
+          rw [valOk_int h0]
+          have := hg_isEven (v0.toBV 32) m'
+          simp only [air_sem] at this ⊢
+          exact this
+        · exact Lean.Order.FlatOrder.rel.bot
+      · exact Lean.Order.FlatOrder.rel.bot
+  · intro g_isOdd hg_isOdd p0 m
+    rw [run_of_lookup (by rfl)]
+    apply Lean.Order.PartialOrder.rel_trans (y := (execFunc (calls_isEven g_isOdd) air_isEven [(Value.int false 32 p0)]).run m)
+    · apply rel_of_eq
+      simp only [air_sem, air_isEven, calls_isEven, air_isOdd, callee_3]
+    · apply execFunc_le
+      intro name args m'
+      show Lean.Order.PartialOrder.rel (((calls_isEven g_isOdd) name args).run m') ((run (progOf table) name args).run m')
+      unfold calls_isEven
+      split
+      · split
+        · rename_i h
+          replace h : argsOk air_isOdd [0] args = true := h
+          obtain ⟨v0, args, rfl, h0, h⟩ := argsOk_cons h
+          obtain rfl := argsOk_nil h
+          replace h0 : valOk (.int false 32) v0 = true := h0
+          rw [valOk_int h0]
+          have := hg_isOdd (v0.toBV 32) m'
+          simp only [air_sem] at this ⊢
+          exact this
+        · exact Lean.Order.FlatOrder.rel.bot
+      · exact Lean.Order.FlatOrder.rel.bot
+
+/-- `recursion.isOdd`: its AIR semantics equals the generated definition. -/
+theorem isOdd_eq (p0 : BitVec 32) (m : Zig.Mem) :
+    (run (progOf table) "recursion.isOdd" [(Value.int false 32 p0)]).run m =
+      (fun v => ((Value.bool v), m)) <$> Recursion.isOdd p0 :=
+  Lean.Order.PartialOrder.rel_antisymm (isOdd_sound p0 m) (isOdd_complete p0 m)
+
+/-- `recursion.isEven`: its AIR semantics equals the generated definition. -/
+theorem isEven_eq (p0 : BitVec 32) (m : Zig.Mem) :
+    (run (progOf table) "recursion.isEven" [(Value.int false 32 p0)]).run m =
+      (fun v => ((Value.bool v), m)) <$> Recursion.isEven p0 :=
+  Lean.Order.PartialOrder.rel_antisymm (isEven_sound p0 m) (isEven_complete p0 m)
 
 end Recursion.AirCert
