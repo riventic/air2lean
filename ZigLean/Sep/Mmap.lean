@@ -568,4 +568,79 @@ theorem munmap_tail_access_illegal {m : Mem} {h hF : Heap} (os : Os.Profile) {p 
   refine ⟨m', hr, fun q n a hq ho => access_illegal hq hb₂ (.inr (.inr ?_))⟩
   simp only [Os.Unmap.apply, Array.size_extract, hS]; omega
 
+/-! ## mremap -/
+
+/-- The argument checks of `mremap` pass for the whole live mapping at `p`. -/
+theorem Os.mremap_eq {m : Mem} (os : Os.Profile) {b : BlockId} {blk : Block} {lo : Nat}
+    {oldLen newLen : BitVec 64} {flags : BitVec 32} (hhas : os.hasMremap = true)
+    (hfl : flags = 0 ∨ flags = Os.mremapMayMove) (hblk : m.blocks[b]? = some blk) (hl : blk.live)
+    (hK : blk.kind = .mapped lo) (hold0 : oldLen.toNat ≠ 0)
+    (hold : alignUp oldLen.toNat os.pageSize = alignUp (blk.bytes.size - lo) os.pageSize) :
+    (Os.mremap os (some ⟨some b, lo⟩) oldLen newLen flags none).run m =
+      (Os.mremapLive os ⟨some b, lo⟩ b blk lo newLen flags).run m := by
+  rcases hfl with rfl | rfl <;>
+  simp [Os.mremap, Os.mappingAt, Os.mremapMayMove, hhas, hblk, hl, hK, hold0, hold, zig_unfold,
+    ExceptT.bindCont]
+
+theorem mremapFill_size (P cur n : Nat) : (mremapFill P cur n).size = n - cur := by
+  simp [mremapFill]
+
+theorem Os.mremapLive_zero {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (blk : Block)
+    (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32) (hn : newLen.toNat = 0) :
+    (Os.mremapLive os p b blk lo newLen flags).run m =
+      pure (.error MremapError.invalidSyscallParameters.name, m) := by
+  simp [Os.mremapLive, hn, zig_unfold]
+
+theorem Os.mremapLive_shrink {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (blk : Block)
+    (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32) (hn0 : newLen.toNat ≠ 0)
+    (hn : newLen.toNat ≤ blk.bytes.size - lo) (hst : m.SingleThread) :
+    (Os.mremapLive os p b blk lo newLen flags).run m =
+      pure (.ok ⟨p, newLen⟩, (m.recordAt b (lo + newLen.toNat)
+        (blk.bytes.size - (lo + newLen.toNat)) .write).mremapShrunk b blk lo newLen.toNat) := by
+  have hrec := recordAccess_run (noRace_of_singleThread hst b (lo + newLen.toNat)
+    (blk.bytes.size - (lo + newLen.toNat)) .write)
+  simp only [StateT.run] at hrec
+  simp [Os.mremapLive, hn0, hn, zig_unfold, hrec, ExceptT.bindCont, modify, modifyGet,
+    MonadStateOf.modifyGet, StateT.modifyGet, Mem.recordAt]
+
+theorem Os.mremapLive_grow {m : Mem} (os : Os.Profile) (p : Ptr) (b : BlockId) (blk : Block)
+    (lo : Nat) (newLen : BitVec 64) (flags : BitVec 32)
+    (hn : blk.bytes.size - lo < newLen.toNat) (hst : m.SingleThread) :
+    let n := newLen.toNat
+    let m₁ : Mem := { m with allocs := m.allocs + 1 }
+    (Os.mremapLive os p b blk lo newLen flags).run m =
+      if m.mapDenied n then pure (.error (m.allocPolicy.os.mremapError m.allocs n).name, m₁)
+      else if flags = Os.mremapMayMove ∧
+          (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingOnTop b blk = false) then
+        pure (.ok ⟨⟨some m.blocks.size, 0⟩, newLen⟩,
+          (m₁.recordAt b lo (blk.bytes.size - lo) .write).mremapMoved os.pageSize b blk lo n)
+      else if m.mappingOnTop b blk = false then pure (.error MremapError.outOfMemory.name, m₁)
+      else pure (.ok ⟨p, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) := by
+  intro n m₁
+  have hn0 : newLen.toNat ≠ 0 := by omega
+  have hn' : ¬ newLen.toNat ≤ blk.bytes.size - lo := by omega
+  have hnr := noRace_of_singleThread (m := m₁) hst b lo (blk.bytes.size - lo) .write
+  unfold NoRace at hnr
+  by_cases hd : m.mapDenied n
+  · simp [Os.mremapLive, hn0, hn', hd, zig_unfold, n, m₁, set, StateT.set, MonadStateOf.set]
+  by_cases hmv : flags = Os.mremapMayMove ∧
+      (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingOnTop b blk = false)
+  · simp only [hd, hmv, if_true, if_false, Bool.false_eq_true]
+    simp only [m₁] at hnr
+    simp [hnr, Os.mremapLive, hn0, hn', hd, hmv, zig_unfold, n, set, StateT.set, MonadStateOf.set,
+      recordAccess, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, pure, StateT.run,
+      ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some,
+      Mem.recordAt, liftM, monadLift, MonadLift.monadLift, StateT.lift]
+    rfl
+  · simp only [hd, hmv, if_false, Bool.false_eq_true]
+    by_cases ht : m.mappingOnTop b blk = false
+    · have hf : ¬ flags = Os.mremapMayMove := fun h => hmv ⟨h, .inr ht⟩
+      simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
+        MonadStateOf.set, ExceptT.bindCont]
+    · have hf : ¬ (flags = Os.mremapMayMove ∧ m.allocPolicy.os.mremapMoves m.allocs n = true) :=
+        fun h => hmv ⟨h.1, .inl h.2⟩
+      simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
+        MonadStateOf.set, ExceptT.bindCont, modify, modifyGet, MonadStateOf.modifyGet,
+        StateT.modifyGet]
+
 end Zig
