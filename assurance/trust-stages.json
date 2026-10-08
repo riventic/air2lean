@@ -68,7 +68,7 @@
     {
       "id": "checker",
       "name": "Whole-program checker",
-      "components": ["Air2Lean/Check.lean"],
+      "components": ["Air2Lean/Check.lean", "Air2Lean/AsmContract.lean"],
       "class": "unverified-assumption",
       "premises": ["TRU-02", "PRF-01", "PRF-02"],
       "summary": "Type, layout, global and call restrictions are enforced by unproved Lean code; acceptance does not certify that the admitted program is in the modeled subset.",

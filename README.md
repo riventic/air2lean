@@ -178,7 +178,7 @@ Unsupported features include `threadlocal` globals, `extern` globals other than 
 | scalar nonoptional C/allowzero pointer null tests, casts and direct access ([fragment](docs/null-pointers.md)) | nullable-pointer storage/aggregates/optionals, volatile/null-bit/slice representations and nullable projections |
 | `@memset`, `@memcpy`, `@memmove`; globals, string literals, `@tagName`, `@errorName` | |
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
-| inline asm, register operands only, as opaque functions (x86_64 only) | |
+| inline asm as opaque functions (x86_64 only): register operands, and read-write (`+r`, `+m`) and memory (`=m`) lvalue outputs under an explicit effect contract ([A01](docs/generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01)) | `m`/immediate inputs, a `"memory"` clobber outside the reviewed registry, clobbers of a pinned operand's register |
 
 Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs; the premise and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 

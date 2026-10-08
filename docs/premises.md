@@ -86,7 +86,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
@@ -448,8 +448,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: The theorem states the instruction fact it needs (for example `bswap` is an
   involution) as a hypothesis about the opaque. The result transfers to hardware only if
   that hypothesis holds for the target CPU.
-- Derived from: `statement` rule on `airAsm_<n>` in the theorem's own type.
-- Sources: `Proofs/Asm/Proofs.lean`.
+- Derived from: `statement` rule on `airAsm_<n>` or `airAsmFx_<n>` in the theorem's own type.
+- Sources: `Proofs/Asm/Proofs.lean`, `tests/roadmap/asm-effects/AsmEffects/Proofs.lean`.
+
+<a id="asm-03"></a>
+### ASM-03 — Assembly effects follow the declared contract
+
+- Kind: trusted.
+- Statement: An asm op with a read-write (`+r`, `+m`) or memory (`=m`) output, or a
+  registry-approved `"memory"` clobber, is an opaque `airAsmFx_<hash>` whose generated wrapper
+  holds every memory effect. The instructions read only their register inputs and the old values
+  of their read-write outputs, write each declared output location whole and nothing else
+  (no store through an address held in an integer input), and register/flag clobbers are not
+  model state. Overlapping written locations are `.unspecified`. A `"memory"` clobber is
+  accepted only for a reviewed `asmPureRegistry` entry, whose block has no model-visible effect.
+- Derived from: tokens `airAsmFx_<n>`; runtime module `ZigLean.Asm`.
+- Sources: [generated-code.md](generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01), `Air2Lean/AsmContract.lean`, `Proofs/Asm/Effects.lean`.
 
 ## Core runtime semantics
 

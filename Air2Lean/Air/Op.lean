@@ -559,11 +559,13 @@ inductive Op where
   | line (n : Nat)
   /-- `dbg_var_*`, `dbg_empty_stmt`: no effect. `name` is kept for readable output. -/
   | dbg (name : Option String) (v : Option Val)
-  /-- `assembly`: register-operand-only inline asm (M21). Translated as a call to an `opaque`
+  /-- `assembly`: inline asm (M21, A01). Translated as a call to an `opaque`
   Lean function keyed by a hash of `source` and the operand constraints
   (`docs/generated-code.md` §asm); a proof knows nothing about it beyond what the caller
-  states. `Check.lean` accepts only a register constraint (`=r`, `r`, `{reg}`, `={reg}`), no
-  `"memory"` clobber, and at most one result output (an `=r`/`={reg}` output with no `ref`). -/
+  states. `Check.lean` accepts the constraints of `Air2Lean/AsmContract.lean` (register operands,
+  and A01's read-write/memory lvalue outputs under the effect contract), a `"memory"` clobber only
+  for a reviewed registry block, and at most one result output (an `=r`/`={reg}` output with no
+  `ref`). -/
   | asm (source : String) (isVolatile : Bool) (clobbers : Array String)
       (outputs inputs : Array AsmOperand)
 

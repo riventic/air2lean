@@ -47,6 +47,7 @@
     "ZigLean.Simp": ["TRU-01"],
     "ZigLean.External": ["EXT-01"],
     "ZigLean.External.Callback": ["EXT-01"],
+    "ZigLean.Asm": ["ASM-03"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Env": ["ENV-01"],
     "ZigLean.Mem.Basic": ["SEM-02"],
@@ -141,7 +142,8 @@
     {"premise": "MTH-02", "scope": "closure", "pattern": "(?:^|\\.)libm(?:\\.|$)"},
     {"premise": "MTH-03", "scope": "closure", "pattern": "Rt016|(?:^|\\.)mulRt$|RtChk"},
     {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
-    {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
+    {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm(?:Fx)?_[0-9]+$"},
+    {"premise": "ASM-03", "scope": "closure", "pattern": "(?:^|\\.)airAsmFx_[0-9]+$"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
   ],
   "implies": {
@@ -166,6 +168,7 @@
     "MTH-03": ["MTH-01"],
     "ASM-01": ["TRU-04"],
     "ASM-02": ["ASM-01"],
+    "ASM-03": ["ASM-01"],
     "EXT-02": ["EXT-01"],
     "SEM-02": ["SEM-01"],
     "SEM-03": ["SEM-01"],

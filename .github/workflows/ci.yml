@@ -890,6 +890,16 @@ jobs:
           python3 tests/roadmap/asm-wrappers/harness.py --work "$RUNNER_TEMP/asm-wrappers"
           python3 tests/roadmap/asm-wrappers/audit.py --assurance "$RUNNER_TEMP/air2lean-assumptions.json"
 
+      # A01: the asm effect contract. Retained translation of hand-written AIR (+r, +m, =m,
+      # aliases, registry `memory` clobber), frame/alias proofs on the generated wrappers, CLI
+      # rejections, and the wrappers under the A03 interpretation with six effect mutants.
+      - name: Asm effect contract
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean Proofs.Asm.Effects
+          bash tests/roadmap/asm-effects/check.sh
+
       - name: Assurance environment regressions
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
