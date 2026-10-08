@@ -61,35 +61,41 @@ def μ (s : machLocals) : Nat × Nat := (s.n, rank s.dispatchValue3)
 
 def post (N : Nat) (e : machExit) (_ : machLocals) : Prop := e = .ret N
 
+/-- A wrong invariant: `count` may be entered without work left. -/
+def badInv (N : Nat) : Phase → machLocals → Prop
+  | .count, s => s.acc + s.n = N
+  | k, s => inv N k s
+
+/-- A measure that ignores the state rank fails at every non-consuming transition. -/
+def flatμ (s : machLocals) : Nat × Nat := (s.n, 0)
+
 /-- One prong of the pure machine, by case analysis and arithmetic. -/
 macro "mach_step" : tactic => `(tactic| (
   intro s hk hi
   obtain ⟨n, acc, d⟩ := s
   simp only at hk
   subst hk
-  by_cases hn : n = 0 <;>
-    simp_all [mach.loop3, mach.again3, inv, μ, rank, post, dispatchLt_iff, zig_unfold,
-      get, getThe, MonadStateOf.get, StateT.get, modify, modifyGet, MonadStateOf.modifyGet,
-      StateT.modifyGet, ExceptT.bind, ExceptT.bindCont, ExceptT.pure, ExceptT.mk] <;> omega))
+  cases n <;> refine ⟨_, _, rfl, ?_⟩ <;>
+    simp_all [mach.again3, inv, badInv, μ, flatμ, rank, post, dispatchLt_iff] <;> omega))
 
 /-- info: dispatch_template remaining premises (4):
   step.idle : ∀ (s : machLocals),
   s.dispatchValue3 = Phase.idle →
     inv N Phase.idle s →
       ∃ e s',
-        mach.loop3.run s = pure (e, s') ∧
+        StateT.run mach.loop3 s = pure (e, s') ∧
           if mach.again3 e = true then DispatchLt (μ s') (μ s) ∧ inv N s'.dispatchValue3 s' else post N e s'
   step.count : ∀ (s : machLocals),
   s.dispatchValue3 = Phase.count →
     inv N Phase.count s →
       ∃ e s',
-        mach.loop3.run s = pure (e, s') ∧
+        StateT.run mach.loop3 s = pure (e, s') ∧
           if mach.again3 e = true then DispatchLt (μ s') (μ s) ∧ inv N s'.dispatchValue3 s' else post N e s'
   step.done : ∀ (s : machLocals),
   s.dispatchValue3 = Phase.done →
     inv N Phase.done s →
       ∃ e s',
-        mach.loop3.run s = pure (e, s') ∧
+        StateT.run mach.loop3 s = pure (e, s') ∧
           if mach.again3 e = true then DispatchLt (μ s') (μ s) ∧ inv N s'.dispatchValue3 s' else post N e s'
   entry : inv N Phase.idle { n := N, acc := 0, dispatchValue3 := Phase.idle } -/
 #guard_msgs in
@@ -108,27 +114,18 @@ theorem mach_total (N : Nat) : ∃ r, (Zig.loop mach.loop3 mach.again3).run ⟨N
   dispatch_template (inv N) μ (post N) using mach_step
   case entry => simp [inv]
 
-/-- A wrong invariant: `count` may be entered without work left. -/
-def badInv (N : Nat) : Phase → machLocals → Prop
-  | .count, s => s.acc + s.n = N
-  | k, s => inv N k s
-
 /-- error: dispatch_template: the invariant/measure is not established at 1 state(s):
   state count: the step tactic failed
     ∀ (s : machLocals),
   s.dispatchValue3 = Phase.count →
     badInv N Phase.count s →
       ∃ e s',
-        mach.loop3.run s = pure (e, s') ∧
+        StateT.run mach.loop3 s = pure (e, s') ∧
           if mach.again3 e = true then DispatchLt (μ s') (μ s) ∧ badInv N s'.dispatchValue3 s' else post N e s' -/
 #guard_msgs in
 example (N : Nat) : ∃ r, (Zig.loop mach.loop3 mach.again3).run ⟨N, 0, .idle⟩ = pure r ∧
     post N r.1 r.2 := by
   dispatch_template (badInv N) μ (post N) using mach_step
-  all_goals sorry
-
-/-- A measure that ignores the state rank fails at every non-consuming transition. -/
-def flatμ (s : machLocals) : Nat × Nat := (s.n, 0)
 
 /-- error: dispatch_template: the invariant/measure is not established at 1 state(s):
   state idle: the step tactic failed
@@ -136,14 +133,12 @@ def flatμ (s : machLocals) : Nat × Nat := (s.n, 0)
   s.dispatchValue3 = Phase.idle →
     inv N Phase.idle s →
       ∃ e s',
-        mach.loop3.run s = pure (e, s') ∧
+        StateT.run mach.loop3 s = pure (e, s') ∧
           if mach.again3 e = true then DispatchLt (flatμ s') (flatμ s) ∧ inv N s'.dispatchValue3 s' else post N e s' -/
 #guard_msgs in
 example (N : Nat) : ∃ r, (Zig.loop mach.loop3 mach.again3).run ⟨N, 0, .idle⟩ = pure r ∧
     post N r.1 r.2 := by
-  dispatch_template (inv N) flatμ (post N) using
-    (unfold flatμ; mach_step)
-  all_goals sorry
+  dispatch_template (inv N) flatμ (post N) using mach_step
 
 /-! ## Rejected targets -/
 
@@ -162,7 +157,7 @@ def plain.again4 : plainExit → Bool
 def plain.loop4 : Zig.M plainLocals plainExit := do
   if (← get).n = 0 then pure .ret else do modify fun s => { n := s.n - 1 }; pure .rep4
 
-/-- error: dispatch_template: plain.again4 is not a loop-switch dispatch target: plainLocals has no selector field dispatchValue4 -/
+/-- error: dispatch_template: DispatchTemplateTest.plain.again4 is not a loop-switch dispatch target: DispatchTemplateTest.plainLocals has no selector field dispatchValue4 -/
 #guard_msgs in
 example : ∃ r, (Zig.loop plain.loop4 plain.again4).run ⟨3⟩ = pure r ∧ True := by
   dispatch_template (fun (_ : Nat) _ => True) (fun _ => (0, 0)) (fun _ _ => True)
@@ -220,48 +215,46 @@ macro "word_step" : tactic => `(tactic| (
   obtain ⟨d⟩ := s
   simp only at hk
   subst hk
-  simp_all [word.loop7, word.again7, wordInv, dispatchLt_iff, zig_unfold, get, getThe,
-    MonadStateOf.get, StateT.get, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
-    ExceptT.bind, ExceptT.bindCont, ExceptT.pure, ExceptT.mk]))
+  refine ⟨_, _, rfl, ?_⟩
+  simp [word.again7, wordInv, dispatchLt_iff]))
 
-/-- info: dispatch_template remaining premises (4):
-  step.0 : ∀ (s : wordLocals),
+/-- info: dispatch_template remaining premises (5):
+  step.«0» : ∀ (s : wordLocals),
   s.dispatchValue7 = 0 →
     wordInv 0 s →
       ∃ e s',
-        word.loop7.run s = pure (e, s') ∧
+        StateT.run word.loop7 s = pure (e, s') ∧
           if word.again7 e = true then
-            DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧
-              wordInv s'.dispatchValue7 s'
+            DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧ wordInv s'.dispatchValue7 s'
           else e = wordExit.ret 42
-  step.1 : ∀ (s : wordLocals),
+  step.«1» : ∀ (s : wordLocals),
   s.dispatchValue7 = 1 →
     wordInv 1 s →
       ∃ e s',
-        word.loop7.run s = pure (e, s') ∧
+        StateT.run word.loop7 s = pure (e, s') ∧
           if word.again7 e = true then
-            DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧
-              wordInv s'.dispatchValue7 s'
+            DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧ wordInv s'.dispatchValue7 s'
           else e = wordExit.ret 42
-  step.2 : ∀ (s : wordLocals),
+  step.«2» : ∀ (s : wordLocals),
   s.dispatchValue7 = 2 →
     wordInv 2 s →
       ∃ e s',
-        word.loop7.run s = pure (e, s') ∧
+        StateT.run word.loop7 s = pure (e, s') ∧
           if word.again7 e = true then
-            DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧
-              wordInv s'.dispatchValue7 s'
+            DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧ wordInv s'.dispatchValue7 s'
           else e = wordExit.ret 42
-  step.other : ∀ k ∉ [0, 1, 2],
-  ∀ (s : wordLocals),
-    s.dispatchValue7 = k →
-      wordInv k s →
-        ∃ e s',
-          word.loop7.run s = pure (e, s') ∧
-            if word.again7 e = true then
-              DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧
-                wordInv s'.dispatchValue7 s'
-            else e = wordExit.ret 42 -/
+  step.other : ∀ (k : BitVec 8),
+  ¬k ∈ [0, 1, 2] →
+    ∀ (s : wordLocals),
+      s.dispatchValue7 = k →
+        wordInv k s →
+          ∃ e s',
+            StateT.run word.loop7 s = pure (e, s') ∧
+              if word.again7 e = true then
+                DispatchLt (0, 2 - s'.dispatchValue7.toNat) (0, 2 - s.dispatchValue7.toNat) ∧
+                  wordInv s'.dispatchValue7 s'
+              else e = wordExit.ret 42
+  entry : wordInv 0 { dispatchValue7 := 0 } -/
 #guard_msgs in
 -- A state-ranked measure `(0, 2 - selector)`; listed states and the excluded rest.
 example : ∃ r, (Zig.loop word.loop7 word.again7).run ⟨0⟩ = pure r ∧ r.1 = .ret 42 := by

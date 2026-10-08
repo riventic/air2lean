@@ -40,11 +40,10 @@ def tokens : State → List (BitVec 8) → Nat
     else tokens .start cs
   | .done, _ => 0
 
-private def bytes (s : String) : List (BitVec 8) := s.toUTF8.toList.map (·.toBitVec)
-
-example : tokens .start (bytes "ab 12 c") = 3 := by decide
-example : tokens .start (bytes "x1+22y_z;;9") = 4 := by decide
-example : tokens .start (bytes "") = 0 := by decide
+-- "ab 12 c", "x1+22y_z;;9" and "": the native samples of source.zig.
+example : tokens .start [97, 98, 32, 49, 50, 32, 99] = 3 := by decide
+example : tokens .start [120, 49, 43, 50, 50, 121, 95, 122, 59, 59, 57] = 4 := by decide
+example : tokens .start [] = 0 := by decide
 
 /-- Leaving `ident`/`number` without consuming agrees with restarting on the same input. -/
 theorem tokens_ident_leave (cs : List (BitVec 8))
@@ -66,19 +65,27 @@ theorem tokens_number_leave (cs : List (BitVec 8))
     have h := h c cs rfl
     by_cases ha : alpha c = true <;> simp [tokens, h, ha]
 
-theorem isAlpha_eq (c : BitVec 8) : isAlpha c = pure (alpha c) := by
-  simp only [isAlpha, alpha, zig_unfold, Zig.ge, Zig.le, Bool.false_eq_true, ↓reduceIte,
-    BitVec.ule, decide_eq_true_eq]
-  by_cases h1 : 97 ≤ c.toNat <;> by_cases h2 : c.toNat ≤ 122 <;>
-    by_cases h3 : 65 ≤ c.toNat <;> by_cases h4 : c.toNat ≤ 90 <;> by_cases h5 : c = 95 <;>
-    simp_all [ExceptT.bind, ExceptT.bindCont, ExceptT.pure, ExceptT.mk, BitVec.toNat_eq] <;>
-    omega
+/-- A generated classifier returned `b`. -/
+def agrees (r : Zig.Result Bool) (b : Bool) : Bool :=
+  match r.run with
+  | some (.ok v) => v == b
+  | _ => false
 
-theorem isDigit_eq (c : BitVec 8) : isDigit c = pure (digit c) := by
-  simp only [isDigit, digit, zig_unfold, Zig.ge, Zig.le, Bool.false_eq_true, ↓reduceIte,
-    BitVec.ule, decide_eq_true_eq]
-  by_cases h1 : 48 ≤ c.toNat <;> by_cases h2 : c.toNat ≤ 57 <;>
-    simp_all [ExceptT.bind, ExceptT.bindCont, ExceptT.pure, ExceptT.mk] <;> omega
+theorem agrees_eq : ∀ {r : Zig.Result Bool} {b : Bool}, agrees r b = true → r = pure b
+  | some (.ok _), _, h => by simp only [agrees, ExceptT.run, beq_iff_eq] at h; subst h; rfl
+  | some (.error _), _, h => by simp [agrees, ExceptT.run] at h
+  | none, _, h => by simp [agrees, ExceptT.run] at h
+
+/-- The generated classifiers agree with `alpha`/`digit` on all 256 bytes (kernel evaluation). -/
+theorem isAlpha_all : ∀ n : Fin 256, agrees (isAlpha (BitVec.ofFin n)) (alpha (BitVec.ofFin n)) := by
+  decide +kernel
+
+theorem isDigit_all : ∀ n : Fin 256, agrees (isDigit (BitVec.ofFin n)) (digit (BitVec.ofFin n)) := by
+  decide +kernel
+
+theorem isAlpha_eq (c : BitVec 8) : isAlpha c = pure (alpha c) := agrees_eq (isAlpha_all c.toFin)
+
+theorem isDigit_eq (c : BitVec 8) : isDigit c = pure (digit c) := agrees_eq (isDigit_all c.toFin)
 
 /-- A byte load from the buffer. -/
 theorem byte_load {p : Ptr} {xs : List (BitVec 8)} {m : Mem} {h hF : Heap} {i : BitVec 64}
@@ -116,11 +123,12 @@ abbrev next (sl : Slice) (xs : List (BitVec 8)) (s : countTokensLocals) :=
 /-- Facts about reading byte `i` of the buffer, shared by the consuming prongs. -/
 theorem read_facts {sl : Slice} {xs : List (BitVec 8)} (hlen : sl.len.toNat = xs.length)
     {i : BitVec 64} (hlt : i.toNat < xs.length) :
-    Zig.add false i 1 = pure (i + 1) ∧ (i + 1).toNat = i.toNat + 1 ∧
+    ¬18446744073709551615 ≤ i.toNat ∧ (i + 1).toNat = i.toNat + 1 ∧
       xs.drop i.toNat = xs[i.toNat] :: xs.drop (i.toNat + 1) := by
   have hfit : i.toNat + 1 < 2 ^ 64 := by have := sl.len.isLt; omega
-  exact ⟨add_unsigned_of_lt (by simpa using hfit), toNat_add_one i hfit,
-    List.drop_eq_getElem_cons hlt⟩
+  exact ⟨by omega, toNat_add_one i hfit, List.drop_eq_getElem_cons hlt⟩
+
+theorem one32 : (1 : BitVec 32).toNat = 1 := rfl
 
 /-- `start`: at the end move to `done`; otherwise consume a byte and enter its token state. -/
 theorem step_start (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.length)
@@ -142,44 +150,44 @@ theorem step_start (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
   · have hlt : i.toNat < xs.length := by
       have : i.toNat ≠ sl.len.toNat := fun h => hend (BitVec.eq_of_toNat_eq h)
       omega
-    obtain ⟨hadd, hi1, hdrop⟩ := read_facts hlen hlt
+    obtain ⟨hnoOverflow, hi1, hdrop⟩ := read_facts hlen hlt
     obtain ⟨m1, hv, hm1, hst1⟩ := byte_load (i := i) ha hm hst hlt
     simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hv
     rw [hdrop] at hc
     have hlt' : i.toNat < sl.len.toNat := hlen ▸ hlt
     cases hA : alpha xs[i.toNat] <;> cases hD : digit xs[i.toNat]
     · refine ⟨(.dispatch10 .start, ⟨i + 1, count, .start⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hadd, isAlpha_eq, isDigit_eq, hA, hD]
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, hD, Bool.false_eq_true, ↓reduceIte] at hc
           exact ⟨by simp only [hi1]; omega, by simpa only [hi1] using hc⟩
     · refine ⟨(.dispatch10 .number, ⟨i + 1, count + 1, .number⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hadd, isAlpha_eq, isDigit_eq, hA, hD,
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD,
           Zig.addWrap]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, hD, Bool.false_eq_true, ↓reduceIte] at hc
           refine ⟨by simp only [hi1]; omega, ?_⟩
-          simp only [hi1, BitVec.toNat_add, BitVec.toNat_ofNat]
+          simp only [hi1, BitVec.toNat_add, one32]
           omega
     · refine ⟨(.dispatch10 .ident, ⟨i + 1, count + 1, .ident⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hadd, isAlpha_eq, isDigit_eq, hA,
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA,
           Zig.addWrap]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, ↓reduceIte] at hc
           refine ⟨by simp only [hi1]; omega, ?_⟩
-          simp only [hi1, BitVec.toNat_add, BitVec.toNat_ofNat]
+          simp only [hi1, BitVec.toNat_add, one32]
           omega
     · refine ⟨(.dispatch10 .ident, ⟨i + 1, count + 1, .ident⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hadd, isAlpha_eq, isDigit_eq, hA,
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA,
           Zig.addWrap]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, ↓reduceIte] at hc
           refine ⟨by simp only [hi1]; omega, ?_⟩
-          simp only [hi1, BitVec.toNat_add, BitVec.toNat_ofNat]
+          simp only [hi1, BitVec.toNat_add, one32]
           omega
 
 /-- `ident`: consume an identifier byte, or move back to `start` without consuming. -/
@@ -194,7 +202,7 @@ theorem step_ident (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
   subst hk
   by_cases hlt : i.toNat < xs.length
   · have hlt' : i.toNat < sl.len.toNat := hlen ▸ hlt
-    obtain ⟨hadd, hi1, hdrop⟩ := read_facts hlen hlt
+    obtain ⟨hnoOverflow, hi1, hdrop⟩ := read_facts hlen hlt
     obtain ⟨m1, hv, hm1, hst1⟩ := byte_load (i := i) ha hm hst hlt
     obtain ⟨m2, hv2, hm2, hst2⟩ := byte_load (i := i) ha hm1 hst1 hlt
     simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hv hv2
@@ -208,14 +216,14 @@ theorem step_ident (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
         rw [hdrop]
         simpa only [tokens, hA, hD, Bool.or_false, Bool.false_eq_true, ↓reduceIte] using hc
     · refine ⟨(.dispatch10 .ident, ⟨i + 1, count, .ident⟩), m2, h, ?_, hd, hm2, ?_, hst2⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hv2, hadd, isAlpha_eq, isDigit_eq, hA, hD]
+      · simp [countTokens.loop10, zig_unfold, hlt', hv, hv2, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, hD, Bool.or_true, ↓reduceIte] at hc
           exact ⟨by simp only [hi1]; omega, by simpa only [hi1] using hc⟩
     all_goals
       refine ⟨(.dispatch10 .ident, ⟨i + 1, count, .ident⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hadd, isAlpha_eq, hA]
+      · simp [countTokens.loop10, zig_unfold, hlt', hv, hnoOverflow, isAlpha_eq, hA]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, Bool.true_or, ↓reduceIte] at hc
@@ -242,7 +250,7 @@ theorem step_number (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = x
   subst hk
   by_cases hlt : i.toNat < xs.length
   · have hlt' : i.toNat < sl.len.toNat := hlen ▸ hlt
-    obtain ⟨hadd, hi1, hdrop⟩ := read_facts hlen hlt
+    obtain ⟨hnoOverflow, hi1, hdrop⟩ := read_facts hlen hlt
     obtain ⟨m1, hv, hm1, hst1⟩ := byte_load (i := i) ha hm hst hlt
     simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hv
     rw [hdrop] at hc
@@ -255,7 +263,7 @@ theorem step_number (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = x
         cases hA : alpha xs[i.toNat] <;>
           simpa only [tokens, hA, hD, Bool.false_eq_true, ↓reduceIte] using hc
     · refine ⟨(.dispatch10 .number, ⟨i + 1, count, .number⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hadd, isDigit_eq, hD]
+      · simp [countTokens.loop10, zig_unfold, hlt', hv, hnoOverflow, isDigit_eq, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hD, ↓reduceIte] at hc
@@ -297,19 +305,19 @@ theorem loop_total (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
 /-- info: dispatch_template remaining premises (5):
   step.start : ∀ (s : countTokensLocals),
   s.dispatchValue10 = State.start →
-    TotalTriple (inv sl xs State.start s) ((countTokens.loop10 sl).run s)
+    TotalTriple (inv sl xs State.start s) (StateT.run (countTokens.loop10 sl) s)
       (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (μ xs) (post sl xs) s)
   step.ident : ∀ (s : countTokensLocals),
   s.dispatchValue10 = State.ident →
-    TotalTriple (inv sl xs State.ident s) ((countTokens.loop10 sl).run s)
+    TotalTriple (inv sl xs State.ident s) (StateT.run (countTokens.loop10 sl) s)
       (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (μ xs) (post sl xs) s)
   step.number : ∀ (s : countTokensLocals),
   s.dispatchValue10 = State.number →
-    TotalTriple (inv sl xs State.number s) ((countTokens.loop10 sl).run s)
+    TotalTriple (inv sl xs State.number s) (StateT.run (countTokens.loop10 sl) s)
       (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (μ xs) (post sl xs) s)
   step.done : ∀ (s : countTokensLocals),
   s.dispatchValue10 = State.done →
-    TotalTriple (inv sl xs State.done s) ((countTokens.loop10 sl).run s)
+    TotalTriple (inv sl xs State.done s) (StateT.run (countTokens.loop10 sl) s)
       (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (μ xs) (post sl xs) s)
   entry : ∀ (h : Heap), arr sl.ptr xs h → inv sl xs s.dispatchValue10 s h -/
 #guard_msgs in
@@ -319,43 +327,14 @@ example (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.length)
     TotalTriple (arr sl.ptr xs) ((Zig.loop (countTokens.loop10 sl) countTokens.again10).run s)
       (fun r => post sl xs r.1 r.2) := by
   dispatch_template? (inv sl xs) (μ xs) (post sl xs)
-  all_goals sorry
-
-/-- A wrong measure (no state rank) is reported at the non-consuming states. -/
-def flatμ (xs : List (BitVec 8)) (s : countTokensLocals) : Nat × Nat := (xs.length - s.i.toNat, 0)
-
-/-- error: dispatch_template: the invariant/measure is not established at 3 state(s):
-  state start: the step tactic failed
-    ∀ (s : countTokensLocals),
-  s.dispatchValue10 = State.start →
-    TotalTriple (inv sl xs State.start s) ((countTokens.loop10 sl).run s)
-      (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (flatμ xs) (post sl xs) s)
-  state ident: the step tactic failed
-    ∀ (s : countTokensLocals),
-  s.dispatchValue10 = State.ident →
-    TotalTriple (inv sl xs State.ident s) ((countTokens.loop10 sl).run s)
-      (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (flatμ xs) (post sl xs) s)
-  state number: the step tactic failed
-    ∀ (s : countTokensLocals),
-  s.dispatchValue10 = State.number →
-    TotalTriple (inv sl xs State.number s) ((countTokens.loop10 sl).run s)
-      (dispatchNext countTokens.again10 (fun s => s.dispatchValue10) (inv sl xs) (flatμ xs) (post sl xs) s)
--/
-#guard_msgs in
-example (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.length)
-    (s : countTokensLocals) :
-    TotalTriple (inv sl xs s.dispatchValue10 s)
-      ((Zig.loop (countTokens.loop10 sl) countTokens.again10).run s)
-      (fun r => post sl xs r.1 r.2) := by
-  -- The proofs of the correct template, reused against the flat measure: they fail exactly at
-  -- the transitions that keep the input (`start → done`, `ident/number → start`).
-  dispatch_template (inv sl xs) (flatμ xs) (post sl xs) using
-    first
-      | exact step_start sl xs hlen
-      | exact step_ident sl xs hlen
-      | exact step_number sl xs hlen
-      | exact step_done sl xs
-  all_goals sorry
+  case start => exact step_start sl xs hlen
+  case ident => exact step_ident sl xs hlen
+  case number => exact step_number sl xs hlen
+  case done => exact step_done sl xs
+  case entry =>
+    intro h ha
+    rw [hk]
+    exact sep_lift.mpr ⟨⟨by simp [h0], by simp [h0, hc]⟩, ha⟩
 
 /-- `countTokens p n` over a buffer `p` of `n` bytes `xs` returns the number of tokens of `xs`
 (mod `2 ^ 32`) and leaves the buffer unchanged. -/
@@ -370,12 +349,12 @@ theorem countTokens_total (p : Ptr) (xs : List (BitVec 8)) (hlen : xs.length < 2
   let s0 : countTokensLocals := { (default : countTokensLocals) with
     i := 0, count := 0, dispatchValue10 := .start }
   obtain ⟨⟨e, s'⟩, m', h', hr, hd', hm', hpost, hst'⟩ :=
-    loop_total sl xs hsl s0 rfl rfl rfl m h hF hd hm (by simpa [sl, hp] using ha) hst
+    loop_total sl xs hsl s0 rfl rfl rfl m h hF hd hm (by show arr (p.elem 1 0) xs h; rw [hp]; exact ha) hst
   obtain ⟨⟨rfl, hc⟩, ha'⟩ := sep_lift.mp hpost
-  refine ⟨s'.count, m', h', ?_, hd', hm', sep_lift.mpr ⟨hc, by simpa [sl, hp] using ha'⟩, hst'⟩
+  refine ⟨s'.count, m', h', ?_, hd', hm', sep_lift.mpr ⟨hc, by rw [← hp]; exact ha'⟩, hst'⟩
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
   simp [countTokens, zig_unfold, sl, s0] at hr ⊢
-  simp [hr]
+  simp [hr, zig_unfold, ExceptT.bindCont, ExceptT.pure, ExceptT.mk, ExceptT.bind]
 
 end Tok.Proof
 

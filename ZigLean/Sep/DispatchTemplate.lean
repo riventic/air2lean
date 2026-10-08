@@ -1,4 +1,5 @@
 import ZigLean.Sep.LoopTemplate
+import ZigLean.Loop
 
 /-!
 # Invariant/measure templates for generated loop-switch dispatch
@@ -211,7 +212,7 @@ def selectorOf (again σ : Expr) : MetaM Expr := do
   let some fn := again.getAppFn.constName?
     | throwError "dispatch_template: the loop iterator {again} is not a generated `f.againN`"
   let last := fn.componentsRev.headD .anonymous |>.toString
-  let id := (last.toList.drop 5).asString
+  let id := String.ofList (last.toList.drop 5)
   unless last.startsWith "again" && id.isNat do
     throwError "dispatch_template: the loop iterator {fn} is not a generated `f.againN`"
   let field := Name.mkSimple s!"dispatchValue{id}"
@@ -265,15 +266,15 @@ def splitStates (step : MVarId) (κ : Expr) (mem : Bool) (states : Option (Array
   | some ks =>
     let list ← `([$ks,*])
     let rule := mkIdent (if mem then ``Zig.DispatchTemplate.of_states else ``Zig.DispatchSpec.of_states)
-    let [listed, other] ← evalTacticAt (← `(tactic| refine $rule $list ?listed ?other)) step
+    let [listed, other] ← evalTacticAt (← `(tactic| refine $rule $list ?_ ?_)) step
       | throwError "dispatch_template: could not split the step premise by states"
     let mut goals := #[]
     let mut g := listed
     for k in ks do
       let [hd, tl] ← evalTacticAt
-          (← `(tactic| refine Zig.dispatch_forall_mem_cons ?head ?tail)) g
+          (← `(tactic| refine Zig.dispatch_forall_mem_cons (a := $k) ?_ ?_)) g
         | throwError "dispatch_template: could not split the state {k}"
-      goals := goals.push (← tidy hd (`step ++ Name.mkSimple (toString k.raw.prettyPrint).trim))
+      goals := goals.push (← tidy hd (`step ++ Name.mkSimple (String.ofList ((toString k.raw.prettyPrint).toList.filter (· != ' ')))))
       g := tl
     discard <| evalTacticAt (← `(tactic| exact Zig.dispatch_forall_mem_nil)) g
     return goals.toList ++ [← tidy other `step.other]
@@ -281,12 +282,13 @@ def splitStates (step : MVarId) (κ : Expr) (mem : Bool) (states : Option (Array
     unless ← isEnum κ do
       throwError "dispatch_template: the selector type {κ} is not an enumeration; \
         name its states with `states [v₁, …]`"
-    let [g] ← evalTacticAt (← `(tactic| refine ⟨fun k => ?_⟩)) step
+    let [g] ← evalTacticAt (← `(tactic| refine ⟨?_⟩)) step
       | throwError "dispatch_template: unexpected step premise"
     let (fs, g) ← g.introN 1
     let subgoals ← g.cases fs[0]!
     subgoals.toList.mapM fun sg => do
-      let tag := `step ++ Name.mkSimple (sg.ctorName.componentsRev.headD .anonymous).toString
+      let ctor := (sg.ctorName.getD `other).componentsRev.headD .anonymous
+      let tag := `step ++ Name.mkSimple ctor.toString
       tidy sg.mvarId tag
 
 /-- Apply the template; return the remaining premises (other goals untouched). -/
@@ -304,23 +306,17 @@ def applyTemplate (inv μ post : Term) (states : Option (Array Term)) :
       | some ``Zig.TotalTriple => pure (mkIdent ``Zig.TotalTriple.dispatch_template)
       | _ => pure (mkIdent ``Zig.Triple.dispatch_template)
     else pure (mkIdent ``Zig.DispatchSpec.dispatch_template)
-  let goals ← evalTacticAt
-    (← `(tactic| refine $rule $selStx $inv $μ $post ?step ?entry ?exit)) g
-  let mut rest := #[]
-  for g in goals do
-    let tag := (← g.getTag).eraseMacroScopes
-    g.setTag tag
-    if tag == `step then
-      rest := rest ++ (← g.withContext <| splitStates g κ mem states).toArray
-    else if tag == `entry then
-      rest := rest.push (← tidy g `entry)
-    else if tag == `exit then
-      let tac ← if mem then `(tactic| (intro _ _ _ hp; exact hp)) else `(tactic| (intro _ _ hp; exact hp))
-      match ← observing? (evalTacticAt tac g) with
-      | some [] => pure ()
-      | _ => rest := rest.push (← tidy g `exit)
-    else
-      rest := rest.push g
+  -- Anonymous holes: a named `?step` would capture a goal of an earlier template application.
+  let [step, entry, exit] ← evalTacticAt
+      (← `(tactic| refine $rule $selStx $inv $μ $post ?_ ?_ ?_)) g
+    | throwError "dispatch_template: unexpected premises of {rule}"
+  let mut rest := (← g.withContext <| splitStates step κ mem states).toArray
+  rest := rest.push (← tidy entry `entry)
+  -- Close `exit` when the template's `post` is already the goal's postcondition.
+  let tac ← if mem then `(tactic| (intro _ _ _ hp; exact hp)) else `(tactic| (intro _ _ hp; exact hp))
+  match ← observing? (evalTacticAt tac exit) with
+  | some [] => pure ()
+  | _ => rest := rest.push (← tidy exit `exit)
   setGoals (rest.toList ++ others)
   return rest.toList
 
@@ -363,13 +359,11 @@ syntax dispatchUsing := " using " tacticSeq
 open Lean Elab Tactic in
 def Zig.DispatchTemplateTactic.run (inv μ post : Term) (st : Option (TSyntax ``dispatchStates))
     (u : Option (TSyntax ``dispatchUsing)) : TacticM (List MVarId) := do
-  let states ← st.mapM fun
-    | `(dispatchStates| states [$ks,*]) => pure ks.getElems
-    | _ => throwUnsupportedSyntax
+  -- `states [k₁, …]`: the third child is the separated term list; `using tac`: the second.
+  let states := st.map fun st => st.raw[2]!.getSepArgs.map (⟨·⟩ : Syntax → Term)
   let goals ← applyTemplate inv μ post states
   match u with
-  | some (`(dispatchUsing| using $tac)) => discharge goals tac
-  | some _ => throwUnsupportedSyntax
+  | some u => discharge goals u.raw[1]!
   | none => pure goals
 
 /-- Apply the dispatch-loop template; leaves `step.<state>` per state, `entry` and `exit`. -/
