@@ -74,6 +74,29 @@ theorem «partial» (t : LoopTemplate body again inv post) (s : σ) :
     Triple (Assn.ex (inv s)) ((Zig.loop body again).run s) (fun r => post r.1 r.2) :=
   (t.total s).toPartial
 
+/-! ### Nested loops
+
+The translator emits an inner loop as `Zig.loop inner again'` inside the outer loop's body,
+over the same locals. Its template gives the inner loop's run from any state in which its
+invariant holds; the outer step uses that run like any other step of the body. -/
+
+/-- The run of a templated loop from inside an enclosing body: it returns, preserves the frame
+and establishes `post`. Used to discharge an inner loop in the outer loop's `step`. -/
+theorem run (t : LoopTemplate body again inv post) {s : σ} {n : Nat} {m : Mem} {h hF : Heap}
+    (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hi : inv s n h) (hs : m.Seq) :
+    ∃ e s' m' h', ((Zig.loop body again).run s).run m = pure ((e, s'), m') ∧
+      Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' ∧ m'.Seq := by
+  obtain ⟨⟨e, s'⟩, m', h', hr, hd', hm', hp, hs'⟩ := t.total s m h hF hd hm ⟨n, hi⟩ hs
+  exact ⟨e, s', m', h', hr, hd', hm', hp, hs'⟩
+
+/-- An inner loop followed by the rest `k` of the enclosing body: the continuation only has to
+start from the inner loop's `post`. -/
+theorem bind {β : Type} {k : ε → MM σ β} {Q : β × σ → Assn}
+    (t : LoopTemplate body again inv post) (hk : ∀ e s', TotalTriple (post e s') ((k e).run s') Q)
+    (s : σ) : TotalTriple (Assn.ex (inv s)) ((Zig.loop body again >>= k).run s) Q := by
+  rw [StateT.run_bind]
+  exact TotalTriple.bind (t.total s) fun r => hk r.1 r.2
+
 end LoopTemplate
 
 /-- The target of `loop_template` on a total goal; the three premises are the named goals. -/
@@ -132,12 +155,215 @@ def reportPremises (goals : List MVarId) : TacticM Unit := do
   logInfo (m!"loop_template remaining premises ({goals.length}):" ++
     MessageData.joinSep (lines.map (m!"\n  " ++ ·)) m!"")
 
+/-! ### Bounded invariant and measure inference
+
+`loop_template?` without an invariant reads the loop body (one definition unfolding, no
+evaluation) and prints suggestions; it proves nothing and leaves the goal unchanged. It follows
+only the generated shapes: locals read by `(← get).f`, writes by `modify (fun s => { s with … })`,
+checked `Zig.add`/`Zig.sub` steps of a local by a literal, and unsigned `Zig.lt`/`le`/`gt`/`ge`
+guards. From a counter that steps towards a bound it suggests a measure and a bound invariant;
+given a postcondition (`loop_template? _ post`) it also suggests the postcondition with that
+bound replaced by the counter. A nested loop's body, calls, memory and any other shape are not
+followed and are reported as such. -/
+
+/-- What inference knows about a value of the loop body. -/
+inductive Src where
+  | state
+  | field (f : Name)
+  | step (f : Name) (up : Bool)
+  | outer (e : Expr)
+  | other
+  deriving Inhabited
+
+structure Facts where
+  vals : Std.HashMap FVarId Src := {}
+  locals : FVarIdSet := {}
+  writes : Array (Name × Src) := #[]
+  guards : Array (Name × Bool × Src × Src) := #[]
+  nested : Array Expr := #[]
+
+abbrev InferM := StateRefT Facts MetaM
+
+def bindLocal (n : Name) (ty : Expr) (src : Src) (k : Expr → InferM Unit) : InferM Unit :=
+  withLocalDeclD n ty fun x => do
+    modify fun st => { st with locals := st.locals.insert x.fvarId!,
+                               vals := st.vals.insert x.fvarId! src }
+    k x
+
+/-- Classify a value of the body. -/
+partial def classify (structName : Name) (e : Expr) : InferM Src := do
+  let e := e.consumeMData.headBeta
+  let st ← get
+  if let .fvar x := e then
+    if let some s := st.vals[x]? then return s
+  let fn := e.getAppFn
+  let args := e.getAppArgs
+  match fn with
+  | .const c _ =>
+    if c == ``Pure.pure && args.size == 4 then return ← classify structName args[3]!
+    if c == ``MonadState.get || c == ``MonadStateOf.get || c == ``StateT.get || c == ``getThe then
+      return .state
+    if (c == ``Zig.add || c == ``Zig.sub) && args.size == 4 && args[3]!.isAppOf ``OfNat.ofNat then
+      if let .field f ← classify structName args[2]! then return .step f (c == ``Zig.add)
+    if let some info ← getProjectionFnInfo? c then
+      if c.getPrefix == structName && args.size == info.numParams + 1 then
+        if let .state ← classify structName args[info.numParams]! then return .field (.mkSimple c.getString!)
+    -- A lifted computation (`liftM`, `monadLift`): classify the lifted value.
+    if let some inner := args.back? then
+      if c == ``MonadLiftT.monadLift || c == ``liftM || c == ``StateT.lift then
+        return ← classify structName inner
+  | .proj s i x =>
+    if s == structName then
+      if let .state ← classify structName x then
+        return .field (getStructureFields (← getEnv) s)[i]!
+  | _ => pure ()
+  if !e.hasLooseBVars && !(e.hasAnyFVar st.locals.contains) then return .outer e
+  return .other
+
+/-- Walk the body: binders get their classification, guards and writes are recorded. -/
+partial def walk (structName ctor : Name) (e : Expr) : InferM Unit := do
+  let e := e.consumeMData
+  match e with
+  | .lam n ty b _ => bindLocal n ty .other fun x => walk structName ctor (b.instantiate1 x)
+  | .letE n ty v b _ => do
+    walk structName ctor v
+    let src ← classify structName v
+    bindLocal n ty src fun x => walk structName ctor (b.instantiate1 x)
+  | .app .. =>
+    let fn := e.getAppFn
+    let args := e.getAppArgs
+    if let .const c _ := fn then
+      if c == ``Bind.bind && args.size == 6 then
+        walk structName ctor args[4]!
+        if let .lam n ty b _ := args[5]!.consumeMData then
+          let src ← classify structName args[4]!
+          return ← bindLocal n ty src fun x => walk structName ctor (b.instantiate1 x)
+      if c == ``modify && args.size == 4 then
+        if let .lam n ty b _ := args[3]!.consumeMData then
+          return ← bindLocal n ty .state fun x => walk structName ctor (b.instantiate1 x)
+      if c == ``Zig.loop && args.size == 7 then
+        modify fun st => { st with nested := st.nested.push args[5]! }
+        return
+      if [``Zig.lt, ``Zig.le, ``Zig.gt, ``Zig.ge].contains c && args.size == 4 then
+        if let some signed := args[1]!.constName? then
+          let a ← classify structName args[2]!
+          let b ← classify structName args[3]!
+          modify fun st => { st with guards := st.guards.push (c, signed == ``Bool.true, a, b) }
+      if c == ctor then
+        let fields := getStructureFields (← getEnv) structName
+        let nParams := args.size - fields.size
+        for f in fields, i in [0:fields.size] do
+          match ← classify structName args[nParams + i]! with
+          | .field f' => if f' != f then modify fun st => { st with writes := st.writes.push (f, .field f') }
+          | src => modify fun st => { st with writes := st.writes.push (f, src) }
+    walk structName ctor fn
+    for a in args do walk structName ctor a
+  | .proj _ _ x => walk structName ctor x
+  | _ => pure ()
+
+/-- Suggestions for the loop in the goal; `post?` is the user's postcondition, if any. -/
+def inferReport (g : MVarId) (post? : Option Expr) : MetaM MessageData := g.withContext do
+  let some loop := (← instantiateMVars (← g.getType)).find? (·.isAppOfArity ``Zig.loop 7)
+    | throwError "loop_template?: the goal does not mention a Zig.loop"
+  let body := loop.getArg! 5
+  let σ ← whnfR (← instantiateMVars (← inferType body)).getAppArgs[0]!
+  let some structName := σ.getAppFn.constName? | throwError "loop_template?: locals type {σ}"
+  unless isStructure (← getEnv) structName do
+    throwError "loop_template?: {structName} is not a structure"
+  let ctorVal := getStructureCtor (← getEnv) structName
+  let fields := getStructureFields (← getEnv) structName
+  let some unfolded ← unfoldDefinition? body
+    | throwError "loop_template?: cannot unfold the loop body {body}"
+  let ((), facts) ← (walk structName ctorVal.name unfolded).run {}
+  let written := fields.filter fun f => facts.writes.any (·.1 == f)
+  let unchanged := fields.filter (!written.contains ·)
+  let steps (f : Name) : Array Bool := facts.writes.filterMap fun (w : Name × Src) =>
+    match w with
+    | (f', .step f'' up) => if f' == f && f'' == f then some up else none
+    | _ => none
+  let names (xs : Array Name) := if xs.isEmpty then m!"(none)" else
+    MessageData.joinSep (xs.toList.map (m!"{·}")) m!", "
+  let mut lines : Array MessageData := #[
+    m!"loop-carried locals (written by the body): {names written}",
+    m!"unchanged locals: {names unchanged}"]
+  let mut found := false
+  for (op, signed, a, b) in facts.guards do
+    -- Normalize to `lo < hi` / `lo ≤ hi`.
+    let (lo, hi, strict) := if op == ``Zig.lt || op == ``Zig.le then (a, b, op == ``Zig.lt)
+      else (b, a, op == ``Zig.gt)
+    if signed then
+      lines := lines.push m!"guard {op}: signed comparison, no measure inferred"
+      continue
+    -- The counter moves towards the bound by a checked step; the bound does not change.
+    let pick : Option (Name × Bool × Src) := match lo, hi with
+      | .field f, b => if (steps f).contains true then some (f, true, b) else none
+      | b, .field f => if (steps f).contains false then some (f, false, b) else none
+      | _, _ => none
+    let some (f, up, bnd) := pick
+      | lines := lines.push m!"guard {op}: no local steps towards a fixed bound, no measure inferred"
+        continue
+    let bound? : Option (Expr → MetaM Expr) := match bnd with
+      | .outer e => some fun _ => pure e
+      | .field f' => if unchanged.contains f' then some (mkProjection · f') else none
+      | _ => none
+    let some bound := bound?
+      | lines := lines.push m!"guard {op}: the bound of {f} changes in the loop, no measure inferred"
+        continue
+    found := true
+    let slack := if strict then 0 else 1
+    let (measure, inv) ← withLocalDeclD `s σ fun s => do
+      let c ← mkAppM ``BitVec.toNat #[← mkProjection s f]
+      let b ← mkAppM ``BitVec.toNat #[← bound s]
+      let b := if slack == 0 then b else mkNatAdd b (mkNatLit slack)
+      let (lo, hi) := if up then (c, b) else (b, c)
+      pure (← mkLambdaFVars #[s] (mkNatSub hi lo), ← mkLambdaFVars #[s] (← mkAppM ``LE.le #[lo, hi]))
+    lines := lines.push m!"measure candidate: {measure}"
+    lines := lines.push m!"bound invariant candidate: {inv}"
+    -- With a postcondition: replace a bound from outside the loop by the counter.
+    if let (some post, .outer be) := (post?, bnd) then
+      let postT ← inferType post
+      let cand ← forallBoundedTelescope postT (some 2) fun xs _ => do
+        let some s := xs[1]? | return none
+        let app := mkAppN post xs
+        let app := (← unfoldDefinition? app).getD app
+        let field ← mkProjection s f
+        unless ← isDefEq (← inferType field) (← inferType be) do return none
+        let replaced := (← instantiateMVars app).headBeta.replace fun t =>
+          if t == be then some field else none
+        if replaced == app.headBeta then return none
+        some <$> mkLambdaFVars xs replaced
+      if let some cand := cand then
+        lines := lines.push m!"postcondition with {be} replaced by {f}: {cand}"
+  unless found do
+    lines := lines.push m!"measure: not inferred (no unsigned counter steps towards a fixed bound); \
+      supply a ghost measure, e.g. the number of remaining items"
+  for n in facts.nested do
+    lines := lines.push m!"nested loop {n}: not followed; give it its own template (LoopTemplate.run)"
+  lines := lines.push m!"not inferred: side premises (overflow and range bounds), the values of the \
+    other carried locals, memory shapes"
+  return m!"loop_template? suggestions (unchecked, nothing is proved):" ++
+    MessageData.joinSep (lines.toList.map (m!"\n  " ++ ·)) m!""
+
 end Zig.LoopTemplateTactic
 
 /-- Apply the invariant/measure template; leaves the named goals `step`, `entry`, `exit`. -/
 elab "loop_template " inv:term:max post:term:max : tactic => do
   discard <| Zig.LoopTemplateTactic.applyTemplate inv post
 
-/-- `loop_template`, reporting the remaining premises with their types. -/
-elab "loop_template? " inv:term:max post:term:max : tactic => do
-  Zig.LoopTemplateTactic.reportPremises (← Zig.LoopTemplateTactic.applyTemplate inv post)
+/-- `loop_template`, reporting the remaining premises with their types.
+
+Without arguments, or with `_` for the invariant, it only prints inference suggestions from the
+loop body (and from `post`, if given); the goal is unchanged. -/
+syntax "loop_template?" (ppSpace colGt term:max ppSpace colGt term:max)? : tactic
+
+elab_rules : tactic
+  | `(tactic| loop_template? $inv $post) => do
+    if inv.raw.isOfKind ``Lean.Parser.Term.hole then
+      let g ← Lean.Elab.Tactic.getMainGoal
+      let post ← g.withContext do
+        Lean.instantiateMVars (← Lean.Elab.Term.elabTerm post none)
+      Lean.logInfo (← Zig.LoopTemplateTactic.inferReport g post)
+    else
+      Zig.LoopTemplateTactic.reportPremises (← Zig.LoopTemplateTactic.applyTemplate inv post)
+  | `(tactic| loop_template?) => do
+    Lean.logInfo (← Zig.LoopTemplateTactic.inferReport (← Lean.Elab.Tactic.getMainGoal) none)
