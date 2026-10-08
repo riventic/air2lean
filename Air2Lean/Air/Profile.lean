@@ -98,6 +98,10 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless profileVersion == zigVersion do
     throw "profile.zig_version differs from top-level zig_version"
   let backend ← strField p "backend"
+  -- The big-endian bit-pointer host is the `(bits + 7) / 8`-byte integer of the LLVM backend
+  -- (`Zig.loadBitsOf`), and its vector lanes are LLVM's; no other backend targets s390x.
+  unless endian == "little" || backend == "stage2_llvm" do
+    throw s!"profile.backend '{backend}' is outside the big-endian model (stage2_llvm only)"
   let cpu ← strField p "cpu"
   let fs ← ((p.getObjVal? "features").bind Json.getArr?).mapError fun e => s!"profile.features: {e}"
   let features ← fs.mapM fun f => f.getStr? |>.mapError fun e => s!"profile.features: {e}"

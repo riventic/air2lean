@@ -84,7 +84,7 @@ The solved exercise is [`tutorials/first-proof/Solution.lean`](../tutorials/firs
 
 This proof covers the generated Lean definition for all inputs satisfying its assumption, not just a set of test cases. Relating it to compiled Zig also trusts Zig's semantic analysis, the AIR export patch, air2lean's translator, and the handwritten runtime model. Differential tests compare the two implementations on sampled inputs; they support that correspondence but do not prove the translator correct.
 
-The memory model uses little-endian, 64-bit pointers. Float and concurrency models have additional target and behavior assumptions. Read [what a proof covers](../README.md#what-a-proof-covers) and [std models](std-models.md) before relying on results for other programs. air2lean generates code, not automatic proofs of arbitrary properties.
+The memory model uses little-endian, 64-bit pointers (big endian only for the qualified s390x-linux profile, [profiles](profiles.md#byte-order-big-endian)). Float and concurrency models have additional target and behavior assumptions. Read [what a proof covers](../README.md#what-a-proof-covers) and [std models](std-models.md) before relying on results for other programs. air2lean generates code, not automatic proofs of arbitrary properties.
 
 ## Set up translation
 

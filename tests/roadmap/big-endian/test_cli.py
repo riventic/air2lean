@@ -78,6 +78,7 @@ def main():
         (big, "target_triple", "x86_64-linux.5.10...6.19-musl", "little-endian byte order"),
         (big, "target_triple", "powerpc64-linux-musl", "model ABI scope"),
         (big, "endian", "middle", "little/big-endian memory model"),
+        (big, "backend", "stage2_c", "outside the big-endian model (stage2_llvm only)"),
     ]:
         bad = one(target_docs, name)
         bad[name]["profile"][field] = value

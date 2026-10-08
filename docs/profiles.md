@@ -259,7 +259,8 @@ orders. Each `.little` definition is the existing model by `rfl`, so little-endi
 and proofs are unchanged; `ZigLean/EndianLemmas.lean` (proof-only) proves the round trips at both
 orders.
 
-A big-endian profile is accepted for `s390x-linux-<abi>` with 64-bit pointers. Generated code
+A big-endian profile is accepted for `s390x-linux-<abi>` with 64-bit pointers and the
+`stage2_llvm` backend (its bit-pointer host is the `(bits + 7) / 8`-byte integer). Generated code
 opens `Zig.BigEndian` and uses `Zig.loadBitsOf .big`/`storeBitsOf .big`/`storeUndefBitsOf .big`
 for bit-pointers ([generated-code.md](generated-code.md#byte-order)). Exported sizes and
 alignments are still checked against the model, so s390x types whose layout differs from the
