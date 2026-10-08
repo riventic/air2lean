@@ -539,6 +539,15 @@ theorem mp_setM {x : Ph} (h : x.isMx) (p : MP) : (x.setM p).mp = some p := by
 theorem wb_ib (x : Ph) : x.wb + x.ib ≤ 1 := by cases x <;> simp [wb, ib]
 theorem rb_le (x : Ph) : x.rb ≤ 1 := by cases x <;> simp [rb]
 
+-- Standalone (empty context) so `simp_all` does not also simplify the large hypotheses of
+-- `live_all`, where the same proofs took 2 s (docs/perf-budgets.md).
+theorem pw_of_mp_wait (x : Ph) (h : x.mp = some .wait) : x.pw = false := by
+  cases x <;> simp_all [Ph.mp, Ph.pw]
+
+theorem not_wait_of_mp_holds_wake (x : Ph) (h : x.mp = some .holds ∨ x.mp = some .wake) :
+    x ≠ .wf ∧ x ≠ .joins ∧ x.mp ≠ some .wait := by
+  cases x <;> rcases h with h | h <;> simp_all [Ph.mp]
+
 end Ph
 
 /-! ## The state word's values -/
@@ -1337,12 +1346,9 @@ theorem live_all (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E)
     obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp h
     exact ⟨_, Array.getElem_mem hi', by simpa using he⟩
   have hu := hi.2.1
-  have hmpf : ∀ x : Ph, x.mp = some .wait → x.pw = false :=
-    fun x h => by
-    cases x <;> simp_all [Ph.mp, Ph.pw]
+  have hmpf : ∀ x : Ph, x.mp = some .wait → x.pw = false := Ph.pw_of_mp_wait
   have hmpf' : ∀ x : Ph, (x.mp = some .holds ∨ x.mp = some .wake) → x ≠ .wf ∧ x ≠ .joins ∧
-      x.mp ≠ some .wait := fun x h => by
-    cases x <;> rcases h with h | h <;> simp_all [Ph.mp]
+      x.mp ≠ some .wait := Ph.not_wait_of_mp_holds_wake
   have h2 : m.threads.size = 2 := by
     obtain ⟨w, hwm, rfl⟩ := hwait t hw
     obtain ⟨-, ⟨-, hp0, hn⟩ | ⟨hs, -⟩⟩ := hu.shape
