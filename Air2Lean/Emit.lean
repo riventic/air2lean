@@ -387,8 +387,9 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   let ptrBits := 8 * ptrBytesOf s.srcLayouts
   let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
     emitTy structNames types ty (ptrBits := ptrBits)
-  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (id : TyId)
-      (expr : String) := withStorageEnc structNames types id expr (ptrBits := ptrBits)
+  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
+      (id : TyId) (expr : String) (layouts : Array Layout) :=
+    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits)
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
   let hn := helperLookup s.ty (structNames.map (·.2))
@@ -443,8 +444,9 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
   let ptrBits := 8 * ptrBytesOf s.srcLayouts
   let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
     emitTy structNames types ty (ptrBits := ptrBits)
-  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (id : TyId)
-      (expr : String) := withStorageEnc structNames types id expr (ptrBits := ptrBits)
+  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
+      (id : TyId) (expr : String) (layouts : Array Layout) :=
+    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits)
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
@@ -3705,7 +3707,8 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   -- `Io.async` tasks: the description, the result write and the capture classes.
   let futureDescriptions := futures.map fun (nm, f, fields, r) =>
     let (_, name, args, kind) := describe nm f fields
-    let complete := withStorageEnc structNames f.types r "Zig.Future.complete futureSlot futureResult"
+    let complete := withStorageEnc structNames f.types f.errorSetBits r
+      "Zig.Future.complete futureSlot futureResult" f.layouts
     (nm, name, args, kind, complete, fields.map (captureClass f.types))
   let spawnFallbacks := if spawnSemantics == .fallible then
     emitSpawnFallbacksWithStorage funcs targetDescriptions ++

@@ -18,6 +18,11 @@ private def expect (name got want : String) : IO Unit := do
   unless got = want do throw (IO.userError s!"{name}: {got}, expected {want}")
   IO.println s!"{name}: {got}"
 
+/-- A mutant's outcome `got` must differ from the unmutated expectation `want`. -/
+private def mutant (name got want : String) : IO Unit := do
+  if got = want then throw (IO.userError s!"mutant {name} survived: {got}")
+  IO.println s!"mutant {name} rejected: {got}, expected {want}"
+
 /-- A memory whose policy proposes `pick b` for block `b`, with provenance mode `pm`. -/
 private def reuseMem (pick : BlockId → Option Nat) (pm : ProvenanceMode := .strict) : Mem :=
   { allocPolicy := { reuseAddr := pick, provenance := pm } }
@@ -109,4 +114,10 @@ def main : IO Unit := do
     free p
     pure (← ptrFromAddr (← addr p).toNat).block
   expect "dead block alone" (outcome deadAlone (reuseMem at4096)) "ok (some 0)"
+  -- Mutants: a model that ignores the selected provenance mode or the reuse policy must fail
+  -- the expectations above (each mutant runs the expectation's program under the mutated setting).
+  -- `provenance-mode-ignored`: strict recovery behaves as `.liveBlock`.
+  mutant "provenance-mode-ignored" (outcome (fromInt true) (reuseMem at4096 .liveBlock)) "unspecified"
+  -- `reuse-policy-ignored`: the opt-in policy behaves as the default fresh-address one.
+  mutant "reuse-policy-ignored" (outcome (twoAddrs .heap .heap) {}) "ok (4096, 4096)"
   IO.println "address-reuse regressions passed"

@@ -45,6 +45,9 @@ PANIC_HANDLERS = frozenset(
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
 MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\](?: #\[([^\]]*)\])?', re.M)
 REJECTED_ROW = re.compile(r'symbol := "([^"\n]+)",\s*kind := \.rejected "([^"\n]*)"')
+# `Air2Lean/StdModels.lean`'s `asyncReason symbol reason` (C08 futures).
+ASYNC_REJECTED_ROW = re.compile(
+    r'symbol := "([^"\n]+)",\s*kind := \.rejected \(asyncReason "([^"\n]+)" "([^"\n]*)"\)')
 
 
 class Invalid(ValueError):
@@ -78,6 +81,8 @@ def std_models(text=None):
         models[symbol] = ('modelled', tuple(re.findall(r'"([^"]+)"', versions or '')), None)
     for symbol, reason in REJECTED_ROW.findall(table):
         models[symbol] = ('rejected', (), reason)
+    for symbol, named, reason in ASYNC_REJECTED_ROW.findall(table):
+        models[symbol] = ('rejected', (), f'{named} is not a qualified async API: {reason} (docs/futures.md)')
     rows = len(re.findall(r'^  (?:allocModel|threadModel)\b', table, re.M)) + table.count('kind := .rejected')
     if not models or rows != len(models):
         raise Invalid('Air2Lean/StdModels.lean table has rows this reader cannot parse')
@@ -268,8 +273,11 @@ class Closure:
                 self.visit(caller, target, 'function_value', instruction, queue)
             for entry in info['globals']:
                 label = entry['name'] or f'{caller}#global{entry["index"]}'
-                if entry['threadlocal']:
-                    cls, kind, reason = 'unresolvable', 'threadlocal_global', 'thread-local storage is outside the model'
+                if entry['threadlocal'] and entry['extern']:
+                    # C02 models defined `threadlocal` storage only (`docs/generated-code.md`
+                    # §Thread-local storage); the translator checks its type.
+                    cls, kind, reason = 'unresolvable', 'threadlocal_global', \
+                        'extern thread-local storage is outside the model'
                 elif entry['extern']:
                     cls, kind, reason = 'modelled', 'extern_initial_state', 'external storage is an explicit ExternInit parameter'
                 elif not entry['has_init']:

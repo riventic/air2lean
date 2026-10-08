@@ -362,6 +362,38 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(self.compare(other, other).returncode, 2)
 
 
+def _load_project():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('air2lean_project_check_compare', SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+project = _load_project()
+
+
+class CompareRecordsTests(unittest.TestCase):
+    """`compare_records` in process: equal reproducible sections reproduce only if both runs passed."""
+
+    def write(self, directory, name, status, toolchain='leanprover/lean4:v4.34.0'):
+        path = Path(directory) / name
+        path.write_text(json.dumps({'schema': project.SCHEMA, 'kind': project.RECORD_KIND, 'status': status,
+                                    'reproducible': {'lean_toolchain': toolchain, 'inputs': {}},
+                                    'host': {'platform': {'system': name}}}))
+        return path
+
+    def test_failed_record_with_equal_sections_is_not_reproduced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            passed = self.write(directory, 'a.json', 'reproduced')
+            self.assertEqual(project.compare_records(passed, self.write(directory, 'b.json', 'reproduced'))['status'],
+                             'reproduced')
+            result = project.compare_records(passed, self.write(directory, 'c.json', 'failed'))
+            self.assertEqual((result['status'], result['differences']), ('not_reproduced', []))
+            other = project.compare_records(passed, self.write(directory, 'd.json', 'reproduced', 'v4.0.0'))
+            self.assertEqual([d['path'] for d in other['differences']], ['reproducible.lean_toolchain'])
+
+
 class SecondMachineScriptTests(unittest.TestCase):
     """scripts/second-machine.sh rejects bad arguments before touching Docker or Git."""
     SCRIPT = SCRIPT.with_name('second-machine.sh')

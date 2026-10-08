@@ -12,6 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / 'scripts/module-split.py'
@@ -142,6 +143,13 @@ def main():
                                 capture_output=True, text=True, timeout=60)
         assert result.returncode == 2 and 'import cycle' in result.stderr, result
     print('modular-output key checks passed')
+
+
+class KeyTests(unittest.TestCase):
+    """`main` as a unittest, so tests/roadmap/mutation-map/mutants.py can run it against a mutant."""
+
+    def test_keys(self):
+        main()
 
 
 if __name__ == '__main__':

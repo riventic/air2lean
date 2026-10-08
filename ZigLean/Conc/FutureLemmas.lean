@@ -364,7 +364,7 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
   unfold asyncC
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
-  · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
+  · obtain ⟨-, rfl⟩ := Proto.alloc_ok' ha; rfl
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
   refine ⟨g, hi, fun G₁ m₂ hg hi₂ => ?_⟩

@@ -260,7 +260,7 @@ silently lack a transitive callee. `project.py closure` (equivalently
 | `exported` | AIR present (a global: its initial value is embedded in the referencing AIR) |
 | `modelled` | boundary: `std_model` (`Air2Lean/StdModels.lean`, qualified for the AIR's Zig version), `registry_binding` (`--model-registry`), `panic_handler` (`panicErrorFor?`), `extern_initial_state` (extern global) |
 | `missing` | required function without AIR: exact FQN, the chain from the root, and the filter prefix (a generic instance `f__anon_<n>` by its base `f`) |
-| `unresolvable` | `runtime_function_pointer` (indirect call with no address-taken function of its type in the closure), `non_function_pointer_callee`, `rejected_std_model`, `std_model_not_qualified`, `std_model_air_conflict`, `unmodelled_noreturn_callee`, `threadlocal_global`, `unresolved_global_initializer`; each with function and instruction |
+| `unresolvable` | `runtime_function_pointer` (indirect call with no address-taken function of its type in the closure), `non_function_pointer_callee`, `rejected_std_model`, `std_model_not_qualified`, `std_model_air_conflict`, `unmodelled_noreturn_callee`, `threadlocal_global` (an `extern` thread-local global; a defined one is embedded, C02), `unresolved_global_initializer`; each with function and instruction |
 
 Edges are direct calls, function values, functions in global initial values, the comptime
 function argument of a non-exported generic instance (a spawn worker), and qualified

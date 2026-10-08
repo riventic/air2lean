@@ -108,19 +108,25 @@ class ClassTests(unittest.TestCase):
     def test_unresolvable_boundaries(self):
         indirect = {'id': 5, 'tag': 'call', 'ty': U32, 'callee': {'inst': 0}, 'args': []}
         not_fn = {'id': 6, 'tag': 'call', 'ty': U32, 'callee': {'inst': 7}, 'args': []}
-        tls = {'name': 'proj.tls', 'ty': U32, 'const': False, 'threadlocal': True, 'extern': False,
-               'init': {'ty': U32, 'val': '0'}}
+        tls = {'name': 'proj.tls', 'ty': U32, 'const': False, 'threadlocal': True, 'extern': True}
+        local = {'name': 'proj.local', 'ty': U32, 'const': False, 'threadlocal': True, 'extern': False,
+                 'init': {'ty': U32, 'val': '0'}}
         body = [{'id': 7, 'tag': 'add', 'ty': U32, 'args': [{'inst': 0}, {'inst': 0}]}, indirect, not_fn,
-                call(1, 'Thread.detach'), call(2, 'process.exit', True), call(3, 'mem.Allocator.allocSentinel__anon_4'),
-                {'id': 8, 'tag': 'load', 'ty': U32, 'args': [{'ty': FN_PTR, 'ptr': {'global': 0, 'off': 0}}]}]
-        result = run([air('proj.root', body, [tls], '0.15.2')], ['proj.root'], '0.15.2')
+                call(1, 'Io.futexWaitTimeout'), call(2, 'process.exit', True), call(3, 'mem.Allocator.allocSentinel__anon_4'),
+                call(4, 'Thread.detach'),
+                {'id': 8, 'tag': 'load', 'ty': U32, 'args': [{'ty': FN_PTR, 'ptr': {'global': 0, 'off': 0}}]},
+                {'id': 9, 'tag': 'load', 'ty': U32, 'args': [{'ty': FN_PTR, 'ptr': {'global': 1, 'off': 0}}]}]
+        result = run([air('proj.root', body, [tls, local], '0.15.2')], ['proj.root'], '0.15.2')
         kinds = sorted((b['kind'], b['target'], b['instruction']) for b in result['unresolvable'])
         self.assertEqual(kinds, [('non_function_pointer_callee', None, 6),
-            ('rejected_std_model', 'Thread.detach', None),
+            ('rejected_std_model', 'Io.futexWaitTimeout', None),
             ('runtime_function_pointer', 'fn (u32) u32', 5),
+            ('std_model_not_qualified', 'Thread.detach', None),
             ('std_model_not_qualified', 'mem.Allocator.allocSentinel__anon_4', None),
             ('threadlocal_global', 'proj.tls', None),
             ('unmodelled_noreturn_callee', 'process.exit', 2)])
+        # C02: defined thread-local storage is embedded like any other global.
+        self.assertEqual(next(g for g in result['globals'] if g['name'] == 'proj.local')['kind'], 'embedded_in_air')
         self.assertTrue(all(b['chain'] == ['proj.root'] for b in result['unresolvable']))
         self.assertEqual(result['status'], 'incomplete')
 
@@ -152,7 +158,10 @@ class ClassTests(unittest.TestCase):
         self.assertLessEqual(names, set(models))
         self.assertIn('atomic.spinLoopHint', models)
         self.assertEqual(models['mem.Allocator.allocSentinel'][:2], ('modelled', ('0.16.0',)))
-        self.assertEqual(models['Thread.detach'][0], 'rejected')
+        self.assertEqual(models['Thread.detach'][:2], ('modelled', ('0.16.0',)))
+        self.assertEqual(models['Io.futexWaitTimeout'][0], 'rejected')
+        self.assertEqual(models['Io.concurrent'][0], 'rejected')
+        self.assertIn('is not a qualified async API', models['Io.concurrent'][2])
         with self.assertRaises(ValueError):
             closure.std_models('def stdModels : Array StdModel := #[\n  allocModel weird,\n  allocModel "a.b" .x #[]]')
 

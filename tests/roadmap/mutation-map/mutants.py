@@ -32,6 +32,11 @@ THEOREMS = 'tests/roadmap/theorem-inventory/test_inventory.py'
 PREMISES = 'tests/roadmap/premises/test_premises.py'
 RELEASE = 'tests/roadmap/release-record/test_release_record.py'
 VC_REPORT = 'tests/roadmap/vcs/test_vc_report.py'
+CLOSURE = 'tests/roadmap/dependency-closure/test_dependency_closure.py'
+EXPORT = 'tests/roadmap/project-export/test_project_export.py'
+MODULE_KEYS = 'tests/roadmap/modular-output/test_keys.py'
+PROJECT_CHECK = 'tests/roadmap/project-check/test_check.py'
+ACCOUNTING = 'tests/roadmap/host-accounting/test_accounting.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -164,6 +169,30 @@ MUTANTS = {
         '        open_count = sum(1 for item in obligations if item["closed_by"] is None)\n',
         '        open_count = 0\n', VC_REPORT, 'VC',
         ('ReportTests.test_open_obligations_are_counted_and_closed_ones_named',)),
+    # I02: a callee without AIR must be reported missing, never counted as exported.
+    'closure-missing-callee-hidden': (
+        'scripts/dependency-closure.py', "    missing = [n for n in nodes if n['class'] == 'missing']\n",
+        '    missing = []\n', CLOSURE, 'closure',
+        ('ClassTests.test_missing_transitive_callee_reports_exact_fqn_chain_and_filter',)),
+    # I01: a module whose bytes differ from its manifest pin must stop the export.
+    'export-source-pin-unchecked': (
+        'scripts/project-export.py', "        if 'sha256' in module and actual != module['sha256']:\n",
+        '        if False:\n', EXPORT, 'export', ('ExportTest.test_source_pins',)),
+    # I04: a module key must cover the keys of the generated modules it imports.
+    'module-key-imports-ignored': (
+        'scripts/module-split.py',
+        '            imports=[[i, result[i]["key"] if i in result else None] for i in sorted(m["imports"])]))\n',
+        '            imports=[]))\n', MODULE_KEYS, 'ms', ('KeyTests.test_keys',)),
+    # I03: two records reproduce each other only if both checks passed.
+    'record-comparison-status-ignored': (
+        'scripts/project.py',
+        "    reproduced = not differences and all(s == 'reproduced' for s in statuses.values())\n",
+        '    reproduced = not differences\n', PROJECT_CHECK, 'project',
+        ('CompareRecordsTests.test_failed_record_with_equal_sections_is_not_reproduced',)),
+    # Q04: a published headline that counts excluded cases as successful comparisons must fail.
+    'accounting-headline-unchecked': (
+        'scripts/accounting.py', "    if headline != totals.get('exact_matches'):\n", '    if False:\n',
+        ACCOUNTING, 'ACC', ('Check.test_headline_including_exclusions_fails',)),
 }
 
 
