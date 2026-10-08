@@ -111,8 +111,9 @@ retain their old bounds, and every resized cell lies below the enlarged boundary
 theorem afterByteRemap_seq {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
     (hb : m.blocks[b]? = some blk) (hl : blk.live)
     (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF)
-    (hst : m.Seq) (n : Nat) : (m.afterByteRemap b blk n).Seq := by
-  obtain ⟨_, hm', _⟩ := afterByteRemap_owned_frame hb hl hd hm n
+    (hst : m.Seq) (n : Nat) (hlo : blk.kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (m.afterByteRemap b blk n).Seq := by
+  obtain ⟨_, hm', _⟩ := afterByteRemap_owned_frame hb hl hd hm n hlo
   refine ⟨(afterByteRemap_sameThreads m b blk n).singleThread hst.single, ?_⟩
   intro l c hc
   rw [hm', Heap.union_apply] at hc

@@ -135,7 +135,8 @@ theorem Mem.heap_resetOwned (m : Mem) (a : AllocId) :
   | some blk =>
     by_cases hk : blk.kind = .owned a <;>
       by_cases hc : blk.live ∧ o < blk.bytes.size ∧ blk.kind.mappedLo ≤ o <;>
-      simp [hk, hc]
+      simp only [hc, dite_true, dite_false] <;> simp [hk] <;>
+      first | exact hc | (intro h1 h2; apply Nat.lt_of_not_le; intro h3; exact hc ⟨h1, h2, h3⟩)
 
 /-- A reset of `a` invalidates every byte of `a`'s blocks. -/
 theorem Mem.resetOwned_own {m : Mem} {a : AllocId} {l : Loc} {c : Cell} (hc : m.heap l = some c)

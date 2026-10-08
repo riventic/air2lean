@@ -417,16 +417,16 @@ theorem off_R {n nb : Nat} {W : Word n nb} (hb : W.b = 0) (ho : W.o + nb ≤ 16)
 
 /-- The cell of byte `x < 24` of the `Tally`. -/
 theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 24) : m.heap (0, x) ≠ none := by
-  obtain ⟨blk, hblk, hl, hs, -⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hrest_lo⟩ := hb
   simp only [Mem.heap, hblk]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
 /-- The same cell at byte 12 (padding): the same block 0. -/
 theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 12) = m.heap (0, 12)) : BlkOk m' := by
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
   have hc : m.heap (0, 12) = some ⟨blk.bytes[12]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
   simp only [Cell.mk.injEq] at he
