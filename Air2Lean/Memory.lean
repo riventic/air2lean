@@ -460,19 +460,37 @@ def fnRefs (funcs : Array Func) : Array (String × String) :=
     | some (.func nm ..), some (.other tn) => if acc.contains (tn, nm) then acc else acc.push (tn, nm)
     | _, _ => acc
 
-/-- The function type name of the indirect callee `id` (a pointer to a function). -/
-def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
-  let i ← f.allInsts.find? (·.id == id)
-  let .ptr _ _ c ← f.types[i.ty]? | none
-  let child ← f.types[c]?
+/-- The function type name of the pointer type `ty`, if it points to a function. -/
+def fnPtrTyName? (types : Array Ty) (ty : TyId) : Option String := do
+  let .ptr _ _ c ← types[ty]? | none
+  let child ← types[c]?
   unless isFnTy child do none
   let .other tn := child | none
   pure tn
 
+/-- The function type name of the indirect callee `id` (a pointer to a function). -/
+def Func.calleeFnTy? (f : Func) (id : InstId) : Option String := do
+  let i ← f.allInsts.find? (·.id == id)
+  fnPtrTyName? f.types i.ty
+
+/-- An indirect callee: an instruction, or a constant address (`ptrConst`). Every function
+pointer resolves through the one table of address-taken functions (`fnRefs`), whatever its
+origin (L11). -/
+def Val.isIndirectCallee : Val → Bool
+  | .inst _ | .ptrConst .. => true
+  | _ => false
+
+/-- The function type name of an indirect callee (`Val.isIndirectCallee`). -/
+def Func.calleeValFnTy? (f : Func) (callee : Val) : Option String :=
+  match callee with
+  | .inst id => f.calleeFnTy? id
+  | .ptrConst ty .. => fnPtrTyName? f.types ty
+  | _ => none
+
 /-- The functions that an indirect call in `f` can call (`fnRefs`). -/
 def Func.indirectCallees (f : Func) (refs : Array (String × String)) : Array String :=
   f.allInsts.flatMap fun i => match i.op with
-    | .call (.inst v) _ => match f.calleeFnTy? v with
+    | .call v _ => if !v.isIndirectCallee then #[] else match f.calleeValFnTy? v with
       | some tn => refs.filterMap fun (t, nm) => if t == tn then some nm else none
       | none => #[]
     | _ => #[]

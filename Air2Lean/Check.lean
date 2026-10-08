@@ -70,7 +70,9 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   if fuel == 0 || seen.contains id then none
   let ty ← types[id]?
   let count ← match ty with
-    | .other _ | .errorSet none => none
+    -- Code: a function block has no data storage (`Emit.lean`, L11).
+    | .other n => if isFnTy (.other n) then some 0 else none
+    | .errorSet none => none
     | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => some 1
     | .errorUnion .. => some 2
     | .struct _ _ fields => some fields.size
@@ -887,11 +889,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           panic-handler function (docs/generated-code.md §Panics)"
       pure line
     | .func .. => pure line
-    -- A pointer to a function (`checkTy`): `Emit.lean` dispatches on the address-taken
-    -- functions of its type (`fnRefs`).
-    | .inst _ => pure line
-    | _ => throw s!"{fnName}: near line {line}: an indirect call through a constant is outside \
-        the subset"
+    -- A pointer to a function (`checkTy`), from an instruction or a constant address:
+    -- `Emit.lean` dispatches on the address-taken functions of its type (`fnRefs`), and
+    -- `checkIndirectCallTarget` rejects a provably unknown or incompatible fixed address (L11).
+    | .inst _ | .ptrConst .. => pure line
+    | _ => throw s!"{fnName}: near line {line}: an indirect call through a constant that is \
+        not a function address is outside the subset"
   | .block body | .loop body => checkInsts cx line body
   | .condBr _ thenBody elseBody => do
     let _ ← checkInsts cx line thenBody
@@ -1420,6 +1423,34 @@ private def immutableOrdinaryNumericValue (f : Func) (insts : Array Inst) (v : V
     let global ← f.globals[g]?
     return immutableOrdinaryNumericAlias f global pty : Option Bool)).getD false
 
+/-- L11: an indirect callee whose address is a fixed global (`fixedGlobalOrigin?`) must be
+the exact zero-offset address of a named function block of the callee's function type.
+Any other fixed address is provably an unknown executable address or a target of an
+incompatible signature, rejected here. A callee without a fixed origin dispatches at
+runtime over the address-taken functions of its type (`Emit.lean`); any other address
+throws `.illegal` there. -/
+private def checkIndirectCallTarget (f : Func) (insts : Array Inst) (i : Inst) :
+    Except String Unit := do
+  let .call callee _ := i.op | return
+  unless callee.isIndirectCallee do return
+  let calleeTy? : Option TyId := match callee with
+    | .inst id => (insts.find? (·.id == id)).map (·.ty)
+    | v => v.constTy?
+  -- A non-function instruction callee is reported by the program check.
+  let some tn := calleeTy?.bind (fnPtrTyName? f.types)
+    | if callee matches .inst _ then return
+      else throw s!"{f.name}: inst {i.id}: a constant indirect callee is not a function pointer"
+  let some (g, off) := fixedGlobalOrigin? f insts callee | return
+  let unknown : Except String Unit :=
+    throw s!"{f.name}: inst {i.id}: indirect callee is the fixed address {off} of global {g}, \
+      not a function block (an unknown executable address)"
+  let some global := f.globals[g]? | unknown
+  let some (.func name ..) := global.init | unknown
+  unless off == 0 do unknown
+  unless f.types[global.ty]? == some (.other tn) do
+    throw s!"{f.name}: inst {i.id}: indirect callee '{name}' has an incompatible signature \
+      (called through '{tn}')"
+
 private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Array Inst) (i : Inst) : Except String Unit := do
   let reject : Except String Unit := throw s!"{f.name}: inst {i.id}: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
   -- A numeric getter does not carry an interprocedural proof for recovering a
@@ -1596,6 +1627,7 @@ def check (f : Func) : Except String Unit := do
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     checkErrorGlobalInstruction errorGlobals f insts i
+    checkIndirectCallTarget f insts i
     checkUndefOperands f (fun v => match v with
       | .inst id => (insts.find? (·.id == id)).map (·.ty)
       | v => v.constTy?) i
@@ -1652,13 +1684,10 @@ def OperandTypes.valTy? (index : OperandTypes) (v : Val) : Option TyId :=
 /-- A normalized operand's type. Bool/void literals carry no file-local ID. -/
 def Func.valTy? (f : Func) (v : Val) : Option TyId := f.operandTypes.valTy? v
 
-private def OperandTypes.calleeFnTy? (index : OperandTypes) (f : Func) (id : InstId) : Option String := do
-  let ty ← index.instructions[id]?
-  let .ptr _ _ child ← f.types[ty]? | none
-  let childTy ← f.types[child]?
-  unless isFnTy childTy do none
-  let .other name := childTy | none
-  pure name
+private def OperandTypes.calleeFnTy? (index : OperandTypes) (f : Func) (callee : Val) :
+    Option String := do
+  unless callee.isIndirectCallee do none
+  fnPtrTyName? f.types (← index.valTy? callee)
 
 /-- Exact argument type agreement between independent local type tables. -/
 def valueCompatible (f target : Func) (v : Val) (expected : TyId)
@@ -2303,7 +2332,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   let mut signatures : SignaturePairs := {}
   for ((f, index), fileIndex) in (funcs.zip indexes).zipIdx do
     for i in index.insts do
-      if let .call (.inst p) args := i.op then
+      if let .call p args := i.op then if p.isIndirectCallee then
         let some tn := index.calleeFnTy? f p
           | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
         for callee in targets.getD tn #[] do
@@ -2458,6 +2487,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for i in insts do
     log := log.record (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
+    log := log.record (checkDiagnostic file f .signatureFailure
+      { idSpace := .canonical, instruction := some i.id }) (checkIndirectCallTarget f insts i)
     log := log.record { (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) with category := .unsupportedSemantics }
       (checkUndefOperands f index.valTy? i)
@@ -2525,7 +2556,7 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
           if let some target := worker.bind snapshot.unique then
             log := log.record diagnostic (checkThreadSpawn f target
               (if kind == .spawn then "Thread.spawn" else "Io.Group.async") k args index)
-    | .call (.inst p) args =>
+    | .call p@(.inst _) args | .call p@(.ptrConst ..) args =>
       match index.calleeFnTy? f p with
       | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }
       | some name =>
