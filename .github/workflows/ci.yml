@@ -773,6 +773,20 @@ jobs:
           python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
           python3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean "$fresh/Gen.lean" "$fresh/generated-report.json"
 
+      # T02: wasm32 and x86_64 translations of one source, layouts, both-profile proofs and
+      # the 32-bit rejections; native layout/boundary tests, wasm32-wasi under Node's WASI.
+      - name: Pointer-width profiles (wasm32, x86_64)
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
+          bash tests/roadmap/pointer-width/check.sh
+          bash tests/roadmap/pointer-width/check.sh --native
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
