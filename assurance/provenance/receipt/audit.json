@@ -7471,7 +7471,7 @@
     "lake_config_sha256": "a20438d276d2f329272ea3c14042bcaba76658b8429e90cfd8f6376e035b2cca",
     "olean_sha256": "0157d804888b03159d9a727768fa2709ff16516c587ff22ad89a30bdb3817d20",
     "lake_trace_sha256": "c4eed6c09a4e9390d1bf12dc324e0ee51530de0aab0f5df14c548a7cfd7148e0",
-    "cache_reused": false
+    "cache_reused": true
   },
   "scope": "explicit-modules",
   "build_checked": true,
