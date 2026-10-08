@@ -87,6 +87,26 @@ class ClassifyTests(unittest.TestCase):
                       {'head': 'Eq', 'args': [pure('Id', {'head': 'Prod.mk'})]}):
             self.assertEqual(claims.claims_of(shape), frozenset(), shape)
 
+    def test_asm_closure_carries_fault_premise(self):
+        """S7: a no-panic or guaranteed-return claim over an inline-asm opaque carries ASM-03
+        (the allowlist entry's fault condition); a report without the closure is rejected."""
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] in ('ClaimFixture.ret_total', 'ClaimFixture.panic_pure'):
+                theorem['opaque_dependencies'] = ['Asm.airAsm_3653072158']
+        theorems = classified(report)
+        self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], ['ASM-01', 'ASM-03'])
+        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-01'])
+        self.assertEqual(theorems['ClaimFixture.ret_partial']['premises'], [])
+        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness',
+                                  'domain': 'all'}, theorems)
+        self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ASM-01', 'ASM-03']))
+        del report['theorems'][0]['opaque_dependencies']
+        name = report['theorems'][0]['name']
+        goal = claims.check_goal({'theorem': name, 'strength': 'safety', 'domain': 'all'}, classified(report))
+        self.assertEqual(goal['status'], 'rejected')
+        self.assertIn('opaque_dependencies', goal['reason'])
+
     def test_old_or_failed_reports_are_rejected(self):
         old = copy.deepcopy(FIXTURE)
         del old['theorems'][0]['conclusion']

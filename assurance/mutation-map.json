@@ -515,7 +515,8 @@
         {"name": "drop_unused_read", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
         {"name": "ordinary_load", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
         {"name": "merge_asm", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
-        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"}
+        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "claims-asm-fault-premise-dropped", "category": "other", "path": "tests/roadmap/mutation-map/mutants.py"}
       ]
     },
     "L14": {
@@ -1468,12 +1469,35 @@
         {
           "path": "tests/roadmap/outcome-accounting/test_report.py",
           "anchor": "def test_pointer_fragment_remains_mismatch_not_setup_failure"
+        },
+        {
+          "path": "tests/roadmap/outcome-accounting/test_report.py",
+          "anchor": "def test_untyped_host_differences_are_mismatches"
+        },
+        {
+          "path": "tests/roadmap/outcome-accounting/test_report.py",
+          "anchor": "def test_model_exclusion_needs_a_pin_for_its_input"
         }
       ],
       "mutants": [
         {
           "name": "b",
           "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "diff-host-difference-untyped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "diff-host-masks-non-values",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "diff-exclusion-unpinned",
+          "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },
         {
