@@ -18,10 +18,6 @@ def ptrFromAddrNullable (n : Nat) : MemM Ptr :=
 def ptrIsNull (p : Ptr) : MemM Bool := do
   pure (decide ((← ptrAddr p) = 0))
 
-/-- Equality of nullable pointers observes addresses, including address zero. -/
-def ptrEqAddr (p q : Ptr) : MemM Bool := do
-  pure (decide ((← ptrAddr p) = (← ptrAddr q)))
-
 /-- A C-pointer unwrap or nullable-to-nonnullable cast in the ReleaseSafe fragment. A
 nonzero address preserves its pointer value; it does not establish dereference validity. -/
 def ptrRequireNonNull (p : Ptr) : MemM Ptr := do

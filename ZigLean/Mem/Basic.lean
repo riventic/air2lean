@@ -10,11 +10,13 @@ removed: `free` marks a block dead, and every later access to it throws `.illega
 A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.MemM α`, and its
 body runs in `Zig.MM σ ε`. A pure function keeps `Zig.Result α` and `Zig.M σ ε`.
 
-Each block gets an address when it is allocated: the next free address, rounded up to the
-block's alignment, with at least 1 byte between two blocks, so one past the end of a block is
-never the start of the next one. The alignment check of an access uses this address. An
-opt-in policy (`AllocPolicy.reuseAddr`, M05) lets a heap or owned block reuse the address of a
-freed block instead; block ids stay unique, and every lifetime check uses the block id, not the
+Each block gets an address when it is made: a global at program start, a stack block at
+function entry, a heap or allocator block at `alloc`. The address is chosen by the environment,
+the placement oracle `Mem.place` (`docs/address-placement.md`, MM-1): a proposal is taken if it
+satisfies what Zig guarantees and nothing more (`Mem.placeOk`: not 0, a multiple of the block's
+alignment, below 2^64, disjoint from every live block; no gap and no order). A generated
+program-start memory takes the placement as a parameter (`mem0 σ`), so a theorem about it holds
+for every placement. Block ids stay unique, and every lifetime check uses the block id, not the
 address (`docs/address-reuse.md`).
 -/
 
@@ -209,8 +211,9 @@ inductive ByteRemapMode where
   deriving DecidableEq, Repr, Inhabited
 
 /-- How `@ptrFromInt` recovers a provenance when more than one block's address range covers
-the address (`ptrFromAddr`). That happens only under address reuse (`AllocPolicy.reuseAddr`,
-`docs/address-reuse.md`): a freed block and a later block at its address. -/
+the address (`ptrFromAddr`): a freed block and a later block at its address (address reuse,
+`docs/address-reuse.md`), or one block's one-past-the-end address that starts the next block (two
+blocks may be adjacent, `docs/address-placement.md`). -/
 inductive ProvenanceMode where
   /-- The default: the integer does not say which block it came from, so the recovery throws
   `.unspecified`. A stale integer never gains the provenance of the block that reuses its
@@ -226,8 +229,8 @@ inductive ProvenanceMode where
 failure oracle over (attempt index, request bytes) and an optional live-heap budget.
 The cap and finite list are special cases of the oracle (`AllocPolicy.asOracle` in
 `ZigLean.Sep.Alloc`).
-It is not a claim about a native allocator's available memory. Its address policy is an
-explicit, opt-in parameter too (`reuseAddr`, M05). -/
+It is not a claim about a native allocator's available memory. Addresses are not part of it:
+the placement oracle (`Mem.place`) chooses the address of every block. -/
 structure AllocPolicy where
   maxBytes : Nat := unboundedAllocBytes
   failures : List Nat := []
@@ -236,12 +239,7 @@ structure AllocPolicy where
   fails : Nat → Nat → Bool := fun _ _ => false
   /-- Total live-heap bytes allowed after the request; `none` is unbounded. -/
   budget : Option Nat := none
-  /-- Address reuse (M05, `docs/address-reuse.md`): `reuseAddr b` proposes the address of block
-  `b`, a new heap or owned block. `alloc` takes it if it is a valid reuse (`Mem.reuseOk`): for
-  example the address of a freed block. The default proposes nothing: every block gets a fresh
-  address. Block ids stay unique either way. -/
-  reuseAddr : BlockId → Option Nat := fun _ => none
-  /-- `@ptrFromInt` of an address that more than one block covers (only under reuse). -/
+  /-- `@ptrFromInt` of an address that more than one block covers. -/
   provenance : ProvenanceMode := .strict
   deriving Inhabited
 
@@ -249,7 +247,7 @@ structure AllocPolicy where
 instance : Repr AllocPolicy where
   reprPrec p _ := f!"\{ maxBytes := {repr p.maxBytes}, failures := {repr p.failures}, " ++
     f!"byteRemap := {repr p.byteRemap}, fails := <oracle>, budget := {repr p.budget}, " ++
-    f!"reuseAddr := <oracle>, provenance := {repr p.provenance} }"
+    f!"provenance := {repr p.provenance} }"
 
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
@@ -274,10 +272,29 @@ structure OwnedAlloc where
   starts : List (BlockId × Nat) := []
   deriving DecidableEq, Repr, Inhabited
 
+/-- Address placement (MM-1, `docs/address-placement.md`): the environment's choice of the
+address of each block, of every kind (global, stack, heap, allocator). `propose b` is the address
+of block `b`; the model takes it if it is valid (`Mem.placeOk`), else the block gets the next
+free address after every block (`Mem.top`). The oracle is an arbitrary function of the block id,
+and a run is deterministic given it, so quantifying over it covers every address assignment
+that keeps live blocks apart: every native layout, with or without address reuse. -/
+structure Placement where
+  propose : BlockId → Option Nat
+
+/-- The placement that proposes nothing: every block at the next free address after every other
+block, from 4096, with a 1-byte gap. Only for running a program (`#eval`, the differential
+harness); a theorem about a generated program holds for every placement. -/
+def Placement.fresh : Placement := ⟨fun _ => none⟩
+
+instance : Inhabited Placement := ⟨.fresh⟩
+
+/-- The oracle is a function, so it is shown opaquely. -/
+instance : Repr Placement := ⟨fun _ _ => "<placement>"⟩
+
 structure Mem where
   blocks : Array Block := #[]
-  /-- The lowest address that the next block can get. Never 0. -/
-  nextAddr : Nat := 4096
+  /-- The address of every new block (`Mem.newAddr`). -/
+  place : Placement := .fresh
   /-- The number of allocations so far (`Zig.rawAlloc`, `ZigLean/Mem/Alloc.lean`). -/
   allocs : Nat := 0
   /-- The allocation that fails: allocation number `failAt` (from 0), or none. -/
@@ -385,54 +402,48 @@ def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .
   let m ← get
   set { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }
 
-/-- No live block's address range meets `[A, A + n]` (one past the end included), so a block of
-`n` bytes at `A` keeps at least 1 byte from every live block. Dead blocks do not count. -/
+/-- No live block's address range `[blk.addr, blk.addr + size)` meets `[A, A + n)`. Dead blocks
+do not count, and neither does an empty range: Zig guarantees disjoint storage for live objects,
+nothing else (no gap, no order, no separation for a zero-size object). -/
 def Mem.addrFree (m : Mem) (A n : Nat) : Bool :=
-  m.blocks.all fun blk => !blk.live || decide (A + n < blk.addr) || decide (blk.addr + blk.bytes.size < A)
+  m.blocks.all fun blk => !blk.live || n == 0 || blk.bytes.size == 0 ||
+    decide (A + n ≤ blk.addr) || decide (blk.addr + blk.bytes.size ≤ A)
 
-/-- `A` is a valid reused address for a new block of `size` bytes with alignment `align`: not 0,
-aligned, below `nextAddr` (so it stays below every later fresh block) and clear of every live
-block (`Mem.addrFree`). It may be the address of a dead block. -/
-def Mem.reuseOk (m : Mem) (A size align : Nat) : Bool :=
-  decide (0 < A) && decide (A % align = 0) && decide (A + size < m.nextAddr) && m.addrFree A size
+/-- `A` is a valid address for a new block of `size` bytes with alignment `align`: exactly what
+Zig guarantees about the address of an object. Not 0, a multiple of the alignment, the block
+below 2^64, and disjoint from every live block (`Mem.addrFree`). It may be the address of a dead
+block (reuse) and it may be adjacent to a live one. -/
+def Mem.placeOk (m : Mem) (A size align : Nat) : Bool :=
+  decide (0 < A) && decide (A % align = 0) && decide (A + size ≤ 2 ^ 64) && m.addrFree A size
 
-/-- The reused address of a new block of kind `kind` (M05): the policy's proposal
-(`AllocPolicy.reuseAddr`) for the next block id, if it is valid (`Mem.reuseOk`). Stack blocks
-and globals always get fresh addresses; heap and owned (allocator) blocks may reuse one. -/
-def Mem.reuseAddr? (m : Mem) (kind : BlockKind) (size align : Nat) : Option Nat :=
-  match kind with
-  | .heap | .owned _ =>
-    match m.allocPolicy.reuseAddr m.blocks.size with
-    | some A => if m.reuseOk A size align then some A else none
-    | none => none
-  | _ => none
+/-- The placement's address for the next block, if it is valid (`Mem.placeOk`). -/
+def Mem.placed? (m : Mem) (size align : Nat) : Option Nat :=
+  match m.place.propose m.blocks.size with
+  | some A => if m.placeOk A size align then some A else none
+  | none => none
 
-/-- The address of a new block: the reused one (`Mem.reuseAddr?`), or the next free address,
-rounded up to `align`. Inlined with `Mem.newNext`, so compiled code evaluates the reuse
-decision once per allocation. -/
-@[inline] def Mem.newAddr (m : Mem) (kind : BlockKind) (size align : Nat) : Nat :=
-  match m.reuseAddr? kind size align with
+/-- One past the end of every block, dead or live, plus a gap byte; at least 4096. The fallback
+address of a new block (`Mem.newAddr`) starts here, so it is clear of every block. -/
+def Mem.top (m : Mem) : Nat :=
+  m.blocks.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) 4096
+
+/-- The address of a new block: the placement's (`Mem.placed?`), or `Mem.top` rounded up to
+`align`. -/
+def Mem.newAddr (m : Mem) (size align : Nat) : Nat :=
+  match m.placed? size align with
   | some A => A
-  | none => alignUp m.nextAddr align
+  | none => alignUp m.top align
 
-/-- `nextAddr` after a new block: unchanged for a reused address, else past the new block and
-1 more byte. -/
-@[inline] def Mem.newNext (m : Mem) (kind : BlockKind) (size align : Nat) : Nat :=
-  match m.reuseAddr? kind size align with
-  | some _ => m.nextAddr
-  | none => alignUp m.nextAddr align + size + 1
-
-/-- The memory after `alloc`: one more block, `m.blocks.size`, at `Mem.newAddr`. -/
+/-- The memory after `alloc`: one more block, `m.blocks.size`, of `size` undefined bytes, at
+`Mem.newAddr`. -/
 def Mem.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) : Mem :=
   { m with
     blocks := m.blocks.push
       { bytes := Array.replicate size .undef, align, kind, live := true,
-        addr := m.newAddr kind size align }
-    nextAddr := m.newNext kind size align }
+        addr := m.newAddr size align } }
 
-/-- A new block of `size` undefined bytes. Its id is new (`m.blocks.size`). Its address is new
-(the next free address, rounded up to `align`), unless the policy reuses one
-(`Mem.reuseAddr?`): then `nextAddr` stays. -/
+/-- A new block of `size` undefined bytes. Its id is new (`m.blocks.size`); its address is the
+placement's (`Mem.newAddr`). -/
 def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
   let m ← get
   set (m.afterAlloc kind size align)
@@ -569,13 +580,13 @@ the matching offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A
 counts (its `addr` does not change on `free`), so the pointer this returns can still be a
 dangling one; the existing liveness check in `Mem.access` catches a later access through it.
 Round-trips with `ptrAddr`: `ptrFromAddr (← ptrAddr p) = p` for `p` inside or one past its
-block's bytes.
+block's bytes, if no other block covers the address.
 
-With fresh addresses (the default), at most one block covers `n`. Under address reuse
-(`AllocPolicy.reuseAddr`) a freed block and a later block can both cover it, and the integer does
-not say which one it came from. Then the policy's `provenance` decides: `.strict` (the default)
-throws `.unspecified`; the address-sensitive contract `.liveBlock` takes the live block
-(`docs/address-reuse.md`). -/
+More than one block covers `n` when a freed block and a later block share addresses (reuse), or
+when `n` is one past the end of a block and the start of an adjacent one: the integer does not
+say which one it came from. Then the policy's `provenance` decides: `.strict` (the default)
+throws `.unspecified`; the address-sensitive contract `.liveBlock` takes the live block that
+contains `n`, else a live block that ends at `n` (`docs/address-reuse.md`). -/
 def ptrFromAddr (n : Nat) : MemM Ptr := do
   let m ← get
   let hits := m.blocks.zipIdx.filterMap fun (blk, b) =>
@@ -587,28 +598,34 @@ def ptrFromAddr (n : Nat) : MemM Ptr := do
     match m.allocPolicy.provenance with
     | .strict => throw .unspecified
     | .liveBlock =>
-      match hits.find? (·.2.live) with
+      match (hits.find? fun (_, blk) => blk.live ∧ n < blk.addr + blk.bytes.size) <|>
+          hits.find? (·.2.live) with
       | some (b, blk) => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
       | none => throw .unspecified
 
-/-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. Two blocks have the order of their
-addresses in the model, which can differ from the compiled code. -/
+/-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. The order of two blocks is the
+placement's (`Mem.place`): nothing fixes it. -/
 def ptrLt (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) < (← ptrAddr b)))
 def ptrLe (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) ≤ (← ptrAddr b)))
 
+/-- `==` and `!=` on pointers of every kind compare the addresses (MM-4), as LLVM's `icmp` does:
+two pointers with different provenance but the same address are equal. Block identity is only
+for liveness and provenance checks. -/
+def ptrEqAddr (p q : Ptr) : MemM Bool := do
+  pure (decide ((← ptrAddr p) = (← ptrAddr q)))
+
 /-! ## Globals -/
 
-/-- `m` with one more global block: `bytes` at the next free address, aligned to `align`.
-`kind`: `.global` for a `var`, `.constGlobal` for anything else. -/
+/-- `m` with one more global block, `m.blocks.size`: `bytes`, at the placement's address
+(`Mem.newAddr`). `kind`: `.global` for a `var`, `.constGlobal` for anything else. -/
 def Mem.addGlobal (m : Mem) (bytes : Array Byte) (align : Nat) (kind : BlockKind) : Mem :=
-  let addr := alignUp m.nextAddr align
-  { blocks := m.blocks.push { bytes, align, kind, live := true, addr }
-    nextAddr := addr + bytes.size + 1 }
+  { m with
+    blocks := m.blocks.push { bytes, align, kind, live := true, addr := m.newAddr bytes.size align } }
 
-/-- The memory at program start: block `k` is global `k`, with its initial bytes, alignment
-and kind. -/
-def Mem.ofGlobals (gs : List (Array Byte × Nat × BlockKind)) : Mem :=
-  gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) {}
+/-- The memory at program start under the placement `σ`: block `k` is global `k`, with its
+initial bytes, alignment and kind, at the address that `σ` gives it. -/
+def Mem.ofGlobals (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) : Mem :=
+  gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) { place := σ }
 
 /-! ## Calls -/
 

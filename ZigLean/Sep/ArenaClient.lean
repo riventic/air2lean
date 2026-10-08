@@ -159,17 +159,8 @@ theorem HoldsAll.grow {a : AllocId} {m m' : Mem} {ss : List Slice} {fs : List (A
 
 theorem Mem.Seq.write {m : Mem} (hst : m.Seq) {b : BlockId} {blk : Block} {o : Nat}
     {bs : Array Byte} (hblk : m.blocks[b]? = some blk) (hl : blk.live)
-    (hn : o + bs.size ≤ blk.bytes.size) : (m.write b blk o bs).Seq := by
-  refine ⟨hst.single, hst.addr.of_heap rfl fun l c hc => ?_⟩
-  rw [Mem.heap_write hblk hl hn] at hc
-  split at hc
-  · rename_i hlb
-    cases hc
-    obtain ⟨rfl, -, hx⟩ := hlb
-    have hx : l.2 < blk.bytes.size := by omega
-    exact ⟨(l.1, l.2), ⟨blk.bytes[l.2], blk.addr, blk.bytes.size, blk.kind⟩,
-      by simp [Mem.heap, hblk, hl, hx], rfl, rfl⟩
-  · exact ⟨l, c, hc, rfl, rfl⟩
+    (_hn : o + bs.size ≤ blk.bytes.size) : (m.write b blk o bs).Seq :=
+  ⟨hst.single⟩
 
 theorem byteSum_map (f : Array (BitVec 8)) :
     byteSum (f.map .int) = f.foldl (fun acc x => acc + x.toNat) 0 := by
@@ -193,7 +184,7 @@ theorem dupeBytes_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
     simp [dupeBytes, AllocRef.alloc, ownedAllocBytes, h0, zig_unfold]
   · have hA := ownedRawAlloc_arena_run hs hl hp bs.size
     let m₁ : Mem := { m with allocs := m.allocs + 1 }
-    have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
+    have hst₁ : m₁.Seq := ⟨hst.single⟩
     have hg₁ : Grows a m m₁ := Grows.of_blocks rfl rfl
     by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < bs.size ∨
         m.allocs ∈ m.allocPolicy.failures
@@ -206,7 +197,7 @@ theorem dupeBytes_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
       let m₂ := m₁.afterAlloc (.owned a) bs.size 1
       let nb : Block :=
         { bytes := Array.replicate bs.size .undef, align := 1, kind := .owned a, live := true,
-          addr := m₁.newAddr (.owned a) bs.size 1 }
+          addr := m₁.newAddr bs.size 1 }
       have hblk₂ : m₂.blocks[B]? = some nb := by simp [m₂, Mem.afterAlloc, B, m₁, nb]
       have hacc : m₂.access ⟨some B, 0⟩ (bs.map Byte.int).size 1 = pure (B, nb, 0) := by
         simpa using access_of (p := ⟨some B, 0⟩) (n := (bs.map Byte.int).size) (a := 1) rfl hblk₂
@@ -374,7 +365,7 @@ theorem session_spec (reqs : List (List (Array (BitVec 8))))
   let m₀ : Mem := { m with allocators := m.allocators.push { policy := .arena } }
   have hs₀ : m₀.allocators[a]? = some { policy := .arena } := by simp [m₀, a]
   obtain ⟨rs, m₁, st₁, hr₁, houts, hheap₁, hst₁, hs₁, hl₁, -⟩ :=
-    serve_spec reqs hn m₀ _ hs₀ rfl rfl ⟨hst.single, hst.addr⟩
+    serve_spec reqs hn m₀ _ hs₀ rfl rfl ⟨hst.single⟩
   obtain ⟨m₂, hr₂, hheap₂, hst₂, -⟩ := Arena.deinit_spec hs₁ hl₁ hst₁
   refine ⟨rs, m₂, ?_, houts, ?_, hst₂⟩
   · rw [session, StateT.run_bind, Arena.init_run, pure_bind, StateT.run_bind, hr₁, pure_bind,
