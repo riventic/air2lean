@@ -145,4 +145,136 @@ theorem awaitValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Na
     (square_task x) (FutureProto.not_strict) rfl (awaitValue_wp io x) h
   exact hv
 
+/-! ## Error propagation: `awaitError` -/
+
+/-- A declared finite error union is lawful on the values of its domain. -/
+theorem errorUnionEnc_lawful (d : ErrorDomain) {α : Type} [inst : Enc α] [LawfulEnc α]
+    (v : Except ErrName α) (hv : ∀ e, v = .error e → d.names.contains e = true) :
+    ((errorUnionEnc d inst).encode v).size = (errorUnionEnc d inst).size ∧
+      (errorUnionEnc d inst).decode ((errorUnionEnc d inst).encode v) = pure v := by
+  have he : (errorUnionEnc d inst).encode v = Enc.encode v := by
+    cases v with
+    | ok y => rfl
+    | error e =>
+      show (if d.names.contains e then Enc.encode (Except.error e : Except ErrName α) else _) = _
+      rw [ite_eq_left_iff.mpr (fun h => absurd (hv e rfl) h)]
+  have hd : ∀ bs, (errorUnionEnc d inst).decode bs = (do
+      let w ← (Enc.decode bs : Result (Except ErrName α))
+      match w with
+      | .ok _ => pure w
+      | .error e => if d.names.contains e then pure w else throw .unspecified) := fun _ => rfl
+  refine ⟨by rw [he]; exact LawfulEnc.size_encode v, ?_⟩
+  rw [hd, he, LawfulEnc.decode_encode]
+  cases v with
+  | ok y => rfl
+  | error e =>
+    have := hv e rfl
+    have hm : e ∈ d.names := Array.contains_iff_mem.mp this
+    simp [this, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+/-- The storage dictionary of `Fail!u32` that the generated code binds. -/
+abbrev zeroEnc : Enc (Except ErrName (BitVec 32)) :=
+  errorUnionEnc (⟨#["Zero"], by decide, by decide⟩ : ErrorDomain) inferInstance
+
+/-- `checked(x)`: `error.Zero` for 0, else `x - 1`. -/
+def checkedSpec (x : BitVec 32) : Except ErrName (BitVec 32) :=
+  if x = 0 then .error "Zero" else .ok (x - 1)
+
+theorem checked_run (x : BitVec 32) : (Futures.checked x).run = some (.ok (checkedSpec x)) := by
+  unfold Futures.checked checkedSpec
+  by_cases hx : x = 0
+  · subst hx; rfl
+  · have hlt : ¬ x < 1 := by
+      intro h; apply hx; apply BitVec.eq_of_toNat_eq; simp [BitVec.lt_def] at h; simp; omega
+    have hov : x.usubOverflow 1 = false := by
+      simp [BitVec.usubOverflow, BitVec.lt_def] at hlt ⊢; omega
+    have hb : (x == 0) = false := beq_eq_false_iff_ne.mpr hx
+    simp only [hx, Zig.sub, hov, hb, ite_false, Bool.false_eq_true, ↓reduceIte]
+    rfl
+
+/-- The checked task of `x` only. -/
+def checkedSlot (x : BitVec 32) : Tgt → Option Ptr
+  | .checked_future slot y => if y = x then some slot else none
+  | _ => none
+
+abbrev checkedProto (x : BitVec 32) :=
+  @futureProto Tgt (Except ErrName (BitVec 32)) zeroEnc (checkedSlot x) (fun r => r = checkedSpec x)
+
+theorem checked_dispatch (slot : Ptr) (x : BitVec 32) :
+    Futures.dispatch (.checked_future slot x) =
+      (ConcM.liftMem (StateT.lift (Futures.checked x)) >>= fun r =>
+        ConcM.liftMem (@Future.complete _ zeroEnc slot r)) := rfl
+
+theorem checkedSpec_lawful (x : BitVec 32) :
+    (zeroEnc.encode (checkedSpec x)).size = zeroEnc.size ∧
+      zeroEnc.decode (zeroEnc.encode (checkedSpec x)) = pure (checkedSpec x) := by
+  refine errorUnionEnc_lawful _ _ fun e he => ?_
+  unfold checkedSpec at he
+  split at he
+  · cases he; exact Array.contains_iff_mem.mpr (by simp)
+  · cases he
+
+theorem checked_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (checkedProto x).init tgt g)
+    (u : ThreadId) (G : ThreadId → FGh) (m : Mem) (n : Nat) (hu : 0 < u) (hgu : G u = g)
+    (hi : (checkedProto x).inv G m) :
+    (checkedProto x).WP u (Futures.dispatch tgt) ((checkedProto x).QKid u) G
+      { m with current := u } n := by
+  obtain ⟨slot, hs, rfl⟩ := hg
+  cases tgt with
+  | checked_future slot' y =>
+    simp only [checkedSlot] at hs
+    split at hs
+    · rename_i hy
+      cases hs; subst hy
+      rw [checked_dispatch]
+      refine @FutureProto.task_wp Tgt _ zeroEnc _ _ _ _ _ _ _ _ hu
+        (fun r hr => by subst hr; exact checkedSpec_lawful y)
+        (WP.liftMem (fun _ _ => rfl) fun r m' hr => ?_)
+      obtain ⟨hc, rfl⟩ := MemM.lift_ok hr
+      rw [checked_run] at hc
+      cases hc
+      exact ⟨rfl, rfl, hgu, @FutureProto.inv_of_blocks Tgt _ zeroEnc _ _ _ _ _ hi rfl⟩
+    · cases hs
+  | _ => cases hs
+
+theorem awaitError_wp (io : Io) (x : BitVec 32) (n : Nat) :
+    (checkedProto x).WP 0 (Futures.awaitError io x) (fun v _ _ _ => v = checkedSpec x)
+      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+  letI : Enc (Except ErrName (BitVec 32)) := zeroEnc
+  unfold Futures.awaitError
+  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
+  · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
+    fun slot m₂ _ k _ => ⟨.none, ?_, fun G₁ m₃ hg hi₃ =>
+    ⟨.task slot false, ⟨slot, by simp [checkedSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩)
+  · exact no_task
+  refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+  refine WP.bind (FutureProto.await_wp
+    (reads_pending (α := Except ErrName (BitVec 32)) (by decide) hs rfl) (only_child hg hi₃)
+    fun r G' m' d hr => ?_)
+  refine WP.pure' ?_
+  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+  · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
+  exact WP.pure' hr
+
+/-- **Error propagation.** Under every schedule, every result of `awaitError(io, x)` is the
+task's result: `error.Zero` for `x = 0`, else `x - 1`. -/
+theorem awaitError_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
+    {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io x) Futures.mem0).run =
+      some (.ok (v, m))) : v = checkedSpec x := by
+  obtain ⟨_, _, hv⟩ := run_sound (P := checkedProto x) Futures.dispatch (fun _ => .none)
+    (checked_task x) (fun h => by cases h) rfl (awaitError_wp io x) h
+  exact hv
+
+theorem awaitError_zero (io : Io) {fuel : Nat} {o : Nat → Nat}
+    {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run Futures.dispatch fuel o (Futures.awaitError io 0) Futures.mem0).run =
+      some (.ok (v, m))) : v = .error "Zero" :=
+  awaitError_result io 0 h
+
 end Futures.Proofs
