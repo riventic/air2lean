@@ -43,7 +43,7 @@ def check(strict, native_binary=None, native_compiler=None):
     if manifest.get('manifest_sha256') != pins['manifest_sha256']:
         problems.append('manifest_sha256 differs from the reviewer pin in pins.json')
     report = am.check_manifest(ROOT, FIXTURE / 'manifest.json', expect, False, False, native_binary, native_compiler,
-                               True if native_binary else False)
+                               native_binary is not None)
     aged = [n for n in report['stale_links'] if n in GLOBAL_LINKS]
     local = [n for n in report['stale_links'] if n not in GLOBAL_LINKS]
     problems += report['problems']

@@ -134,3 +134,8 @@ byte-identical AIR, Gen.lean and (for the same stock compiler) binary, then stri
 manifest. To refresh the fixture after an intentional change: commit the example/Gen/proofs, copy the
 new AIR and receipt files into the fixture, commit, then record the manifest from the clean tree
 and update `pins.json`. The receipt's `plan.json` contains local absolute paths.
+
+The committed receipt's `plan.json` records the revision it was produced at; that commit may no
+longer exist after history rewrites or squash merges, so the receipt is evidence of that run
+(its bytes are chained), not something `verify` can replay later. `regenerate` produces and
+verifies a fresh one.
