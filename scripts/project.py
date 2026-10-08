@@ -1094,7 +1094,8 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                       'An absence claim (no-panic, guaranteed-return) is proved only by a direct goal of matching '
                       'strength. Capped searches, fuel-bounded no-result runs, unspecified results, unsupported timers '
                       '(unspecified_timer, kept apart from unspecified) and unsupported outcomes, or an observed '
-                      'failure the claim denies, refuse it and block functional verification. Error returns are values and never refuse no-panic.'],
+                      'failure the claim denies, refuse it and block functional verification. Error returns are '
+                      'values and never refuse no-panic.'],
             'trust_scope': report['trust_scope']}
 
 
