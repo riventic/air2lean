@@ -32,7 +32,7 @@ Each claim is also refused by incomplete evidence: `search_cap`, `divergence`,
 unclocked timer therefore never supports a proved absence of a failure.
 
 Sampled evidence only refuses. Without a theorem a claim is `not_proved`, however clean the
-tests. In coverage reports, a refused claim blocks `functionally_verified_*`. In claim checks,
+tests. In coverage reports, a refused claim blocks `correct_if_returns` and `functionally_verified_total`. In claim checks,
 it rejects the goal. An observed panic is a refusal even if the theorem's precondition
 excludes that input: domains are not machine-checked.
 

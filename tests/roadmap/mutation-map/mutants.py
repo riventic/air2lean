@@ -109,6 +109,11 @@ MUTANTS = {
         "                    narrower = by_name.get(token, set()) - {'all-schedules'}\n",
         '                    narrower = set()\n', THEOREMS, 'ti',
         ('FixtureTests.test_narrow_theorem_labeled_all_schedules_in_docs',)),
+    # D02/S6: an all-schedules completion witness must complete a run of the same program.
+    'theorem-inventory-completion-unchecked': (
+        'scripts/theorem-inventory.py',
+        "    if not (sched_programs(statement) & sched_programs(decl['statement'])) or not re.search(r'=\\s*some\\b', statement):",
+        '    if False:', THEOREMS, 'ti', ('FixtureTests.test_completion_witness',)),
     # T06: a probe profile of another optimize mode must not qualify a mode/backend record.
     'build-mode-profile-mode-unchecked': (
         'scripts/build-modes.py', "        if profile.get('build_mode') != mode:\n", '        if False:\n',

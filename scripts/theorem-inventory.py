@@ -11,7 +11,8 @@ run recorded.
 
 `check` (default) fails when a listed theorem is missing from its module, has no current
 successful run for a required translation, has an all-schedules scope without a statement
-over every fuel and oracle, when a document or Lean doc comment says "every schedule" of a
+over every fuel and oracle, names a `completes` witness that does not show a completed run of
+the same program, when a document or Lean doc comment says "every schedule" of a
 theorem whose scope is narrower, when a theorem of a proved-examples table is not listed,
 or when docs/theorem-inventory.md is stale. `write` regenerates that document's table.
 `swap-build` builds modules against other translation files and restores the committed
@@ -124,6 +125,67 @@ def all_schedules_statement(statement: str) -> bool:
     return False
 
 
+def _sched_args(text: str, start: int, count: int) -> list[str]:
+    """The next `count` whitespace-separated arguments after `start`, keeping brackets balanced."""
+    args, depth, current = [], 0, ''
+    for ch in text[start:]:
+        if ch in '([{':
+            depth += 1
+        elif ch in ')]}':
+            if depth == 0:
+                break
+            depth -= 1
+        if ch.isspace() and depth == 0:
+            if current:
+                args.append(current)
+                current = ''
+                if len(args) == count:
+                    break
+            continue
+        current += ch
+    if current and len(args) < count:
+        args.append(current)
+    return args
+
+
+def sched_programs(statement: str) -> set[str]:
+    """Head identifiers of the programs run by `Sched.run dispatch fuel o program mem`."""
+    programs = set()
+    for m in re.finditer(r'Sched\.run\b', statement):
+        args = _sched_args(statement, m.end(), 4)
+        if len(args) == 4 and (head := re.match(r'[(\s]*([\w.]+)', args[3])):
+            programs.add(head.group(1))
+    return programs
+
+
+def completion_errors(thm: dict, decl: dict, listed: dict, decls: dict) -> list[str]:
+    """An all-schedules theorem says nothing about runs that never complete (out of fuel is
+    allowed). Its `completes` companion, if named, is a listed single- or bounded-schedule
+    theorem of the same example whose statement shows a `Sched.run` of the same program with a
+    successful result (`= some ...`): at least one schedule completes within its fuel."""
+    name, companion = thm['name'], thm.get('completes')
+    if companion is None:
+        return []
+    if thm['scope'] != 'all-schedules':
+        return [f'{name}: `completes` is only for all-schedules theorems']
+    other = listed.get(companion)
+    if other is None or other['scope'] not in ('single-schedule', 'bounded-schedules') \
+            or other['example'] != thm['example']:
+        return [f'{name}: completion witness {companion} is not a listed single- or bounded-schedule '
+                f'theorem of {thm["example"]}']
+    statement = (decls.get(other['module']) or {}).get(companion, {}).get('statement', '')
+    if not (sched_programs(statement) & sched_programs(decl['statement'])) or not re.search(r'=\s*some\b', statement):
+        return [f'{name}: completion witness {companion} does not show a completed `Sched.run` of the same program']
+    return []
+
+
+def scope_label(row: dict) -> str:
+    """The rendered scope: an all-schedules theorem without a completion witness is labelled so."""
+    if row['scope'] == 'all-schedules' and not row.get('completes'):
+        return 'all-schedules (no run shown to complete)'
+    return row['scope']
+
+
 def closure(root: Path, modules: list[str]) -> list[str]:
     """`Proofs` modules imported (transitively) by `modules`, the modules included."""
     seen: set[str] = set()
@@ -208,6 +270,11 @@ def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
     rows = []
     names = set()
     decl_cache: dict[str, dict] = {}
+    listed = {t['name']: t for t in inv.get('theorems', []) if all(t.get(k) for k in ('name', 'module', 'example', 'scope'))}
+    for thm in listed.values():
+        path = root / module_path(thm['module'])
+        if thm['module'] not in decl_cache and path.is_file():
+            decl_cache[thm['module']] = declarations(path.read_text())
     for thm in inv.get('theorems', []):
         name = thm.get('name', '?')
         missing = [k for k in ('name', 'module', 'example', 'scope', 'domain') if not thm.get(k)]
@@ -234,6 +301,7 @@ def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
                           f'`Sched.run` over every fuel and oracle')
         if thm['scope'] != 'all-schedules' and ALL_SCHEDULES_RE.search(decl['doc']):
             errors.append(f'{name}: its doc comment claims every schedule, scope is {thm["scope"]}')
+        errors += completion_errors(thm, decl, listed, decl_cache)
         try:
             mods = closure(root, [thm['module']])
         except Error as error:
@@ -338,7 +406,7 @@ def render(rows: list[dict], inv: dict) -> str:
                 checks.append(f'{label}: excluded ({cell(c["excluded"])})')
             else:
                 checks.append(f'{label}: {"pass, run `" + c["run"] + "`" if c["run"] else "none"}')
-        out.append(f'| `{row["name"]}` | `{row["module"]}` | {row["scope"]} | {cell(row["domain"])} '
+        out.append(f'| `{row["name"]}` | `{row["module"]}` | {scope_label(row)} | {cell(row["domain"])} '
                    f'| {"<br>".join(checks)} |')
     out += ['', '| Run | Translation | Build | Result | Revision | Started (UTC) | Log SHA-256 |',
             '|---|---|---|---|---|---|---|']

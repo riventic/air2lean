@@ -104,7 +104,11 @@ The report has a versioned schema and contains:
   plus the kernel type's `conclusion` shape used for claim strength (see `docs/claim-strength.md`)
   and its statement-only `statement_dependencies` (constants in the kernel type, without the
   proof term or any unfolding) and `conclusion_dependencies` (the same after dropping binders and
-  hypotheses), which `scripts/project.py coverage` uses to bind goals to generated definitions.
+  hypotheses), and the `statement` structure (binder telescope, conclusion-head declaration
+  with module and fingerprint, the computation each head argument runs, and companion witness
+  status) from which `scripts/claims.py` and `scripts/project.py` bind goals to generated
+  definitions. The extractor imports every registered claim head (`assurance/claim-heads.json`),
+  so an audited module that redefines one fails with a name clash.
 - `nodes`: a shared dependency graph with actual kernel names, stable user names, defining
   modules, declaration kind, direct dependencies, trust class, unsafe/partial flags,
   `implemented_by` targets, and complete extern entries (kind, backend, and symbol/inline

@@ -1741,6 +1741,10 @@
         {
           "path": "tests/roadmap/theorem-inventory/test_inventory.py",
           "anchor": "def test_record_rejects_a_foreign_log"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_completion_witness"
         }
       ],
       "mutants": [
@@ -1751,6 +1755,11 @@
         },
         {
           "name": "theorem-inventory-narrow-claim-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "theorem-inventory-completion-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         }

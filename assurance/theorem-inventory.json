@@ -384,6 +384,7 @@
       "module": "Proofs.Atomics.MessagePassing",
       "example": "atomics",
       "scope": "all-schedules",
+      "completes": "mp_sees_data",
       "domain": "`mpRelAcq` (release/acquire flag): every completed run returns 0 or 42; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -391,6 +392,7 @@
       "module": "Proofs.Atomics.MessagePassing",
       "example": "atomics",
       "scope": "all-schedules",
+      "completes": "mp_sees_data",
       "domain": "`mpRelAcq` (release/acquire flag): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
