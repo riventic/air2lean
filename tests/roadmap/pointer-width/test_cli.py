@@ -77,8 +77,8 @@ def main():
         # The model's pointer size comes from the profile, not from the exporter: an
         # exported layout of the other width is rejected.
         other = 8 if wasm else 4
-        bad = one(docs, "pointer_width.restLen.json")
-        doc = bad["pointer_width.restLen.json"]
+        bad = one(docs, "pointer_width.setFirst.json")
+        doc = bad["pointer_width.setFirst.json"]
         for ty in doc["types"]:
             if ty.get("k") == "ptr":
                 ty["abi_size"] = 2 * other if ty["size"] == "slice" else other
