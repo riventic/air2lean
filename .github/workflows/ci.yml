@@ -738,6 +738,19 @@ jobs:
           lake env lean --run tests/roadmap/vector-layouts/Model.lean tests/roadmap/vector-layouts/aarch64-macos-ReleaseSafe.txt
           lake env lean --run tests/roadmap/vector-layouts/Checker.lean
 
+      # L07: Zig ≤0.16 representation casts and optional-pointer rules: retained translation,
+      # proofs, checker version gate, and this host's native probe against the model.
+      - name: Aggregate representation casts and optional-pointer rules
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.ReprCast Air2Lean air2lean
+          export AIR2LEAN_LEAN=$(lake env which lean)
+          export LEAN_PATH=$(lake env printenv LEAN_PATH)
+          bash tests/roadmap/aggregate-casts/check.sh --native
+
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}

@@ -540,8 +540,23 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
     -- A byte local (`Zig.Bytes T`) encodes its value, also in a pure function.
     let acc := (byteLocals f).foldl (init := acc) fun acc aid =>
       match (f.allInsts.find? (·.id == aid)).bind (fun i => ptrChild f.types i.ty) with
-      | some c => memNamed f.types f.layouts acc c
+      | some c => memNamed f.types f.layouts f.errorSetBits acc c
       | none => acc
+    -- A Zig ≤0.16 representation `@bitCast` (`Zig.reprCast`) encodes and decodes both sides.
+    let insts := f.allInsts
+    let acc := insts.foldl (init := acc) fun acc i => match i.op with
+      | .bitcast a =>
+        let src := match a with
+          | .inst id => (insts.find? (·.id == id)).map (·.ty)
+          | v => v.constTy?
+        match src with
+        | some s =>
+          if reprCastApplies f.zigVersion f.types s i.ty then
+            memNamed f.types f.layouts f.errorSetBits
+              (memNamed f.types f.layouts f.errorSetBits acc s) i.ty
+          else acc
+        | none => acc
+      | _ => acc
     if !memFuncs.contains f.name then acc
     else
       let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts f.errorSetBits acc g.ty) acc
@@ -1831,6 +1846,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .bitcast a =>
     if fc.isPlace a then (env, none) else
+    if (fc.valTyId? a).any (reprCastApplies fc.zigVersion fc.types · inst.ty) then
+      -- Zig ≤0.16 `@bitCast` of an array, `extern` struct or `extern` union: the memory bytes
+      -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`).
+      let (env, l) := bindLet fc env inst.id
+        s!"Zig.reprCast ({fc.emitTyOf inst.ty}) ({rv a} : {fc.emitValTy a})"
+      (env, some l)
+    else
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then
       let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
     else
@@ -1873,6 +1895,20 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- `@ptrFromInt`.
       let fromAddr := if nullablePtrTy fc.types fc.layouts inst.ty then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
       let expr := s!"{fc.callMName} ({fromAddr} ({rv a}).toNat)"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else
+    let srcOptPtr := (fc.valTyId? a).any (optSinglePtrTy fc.types fc.layouts)
+    if srcOptPtr && dstPtr then
+      -- `?*T` → `*U`: unwrap, null throws (`ZigLean/Mem/Repr.lean`).
+      let (env, l) := bindLet fc env inst.id s!"Zig.optPtrUnwrap {rv a}"
+      (env, some l)
+    else if srcOptPtr && isInt (fc.tyOfId inst.ty) then
+      -- `@intFromPtr` of `?*T`: null is 0.
+      let expr := s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.optPtrAddr {rv a})))"
+      let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    else if isInt (fc.valTy a) && optSinglePtrTy fc.types fc.layouts inst.ty then
+      -- `@ptrFromInt` to `?*T`: 0 is null.
+      let expr := s!"{fc.callMName} (Zig.optPtrFromAddr ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && dstPtr &&
         (fc.valTyId? a |>.map (nullablePtrTy fc.types fc.layouts) |>.getD false) &&
