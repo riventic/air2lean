@@ -22,16 +22,21 @@ import time
 from typing import NamedTuple, Optional
 
 
-def _sibling(name):
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
+def _sibling_path(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
     spec.loader.exec_module(module)
     return module
 
 
+def _sibling(name):
+    return _sibling_path(name, Path(__file__).resolve().parent / f'{name}.py')
+
+
 outcomes = _sibling('outcomes')
 claims = _sibling('claims')
+ARTIFACT_MANIFEST = Path(__file__).resolve().with_name('artifact-manifest.py')
 
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
@@ -746,6 +751,59 @@ def run_receipt_verifier(verifier, attempt, limits):
     return True, 'proof receipt verifier reported current identities'
 
 
+EXPORT_LINKS = ('source', 'compiler_patch', 'air', 'profile')
+
+
+def export_evidence(manifest_path, repo_root):
+    """Check an I07 artifact manifest with scripts/artifact-manifest.py (hashing is not reimplemented).
+
+    Returns (links, None) when the manifest is intact, its provenance clean and the source,
+    compiler_patch, air and profile links all recompute to the recorded digests; otherwise
+    (None, reason). Nothing is rerun: the exporter and compiler stay trusted."""
+    try:
+        module = _sibling_path('artifact_manifest_evidence', ARTIFACT_MANIFEST)
+        report = module.check_manifest(repo_root, manifest_path)
+        if report['status'] == 'invalid':
+            return None, f'export manifest invalid: {report["problems"]}'
+        links = module.load(manifest_path)['links']
+        stale = [n for n in EXPORT_LINKS if report['links'][n]['status'] != 'current']
+    except (OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
+        return None, f'export manifest unusable: {error}'
+    if stale or report['problems']:
+        return None, f'stale export manifest: links {stale}; problems {report["problems"]}'
+    return dict(links, manifest_sha256=report['manifest_sha256']), None
+
+
+def export_stages(root, links, profile, file_hashes, source_closure):
+    """(analyzed, exported) stages for one root from verified export-manifest links.
+
+    The root's AIR and the declared source closure must be byte-identical to files recorded in
+    the manifest's air and source links, and the project profile must equal the profile link."""
+    def recorded(name):
+        return {row['sha256'] for row in links[name]['files']}
+    missing = [n for n in root['air'] if file_hashes.get(n) not in recorded('air')]
+    missing_sources = [n for n in source_closure if file_hashes.get(n) not in recorded('source')]
+    export_profile = links['profile']['value']['profile']
+    comparable = {k: v for k, v in export_profile.items() if k != 'schema'}  # the AIR schema is added by the I07 profile link
+    if missing or missing_sources or profile != comparable:
+        reason = ['export manifest does not cover this root:']
+        if missing:
+            reason.append(f'AIR {missing} not among recorded AIR files;')
+        if missing_sources:
+            reason.append(f'sources {missing_sources} not among recorded source files;')
+        if profile != comparable:
+            reason.append('project profile differs from the recorded export profile;')
+        failed = stage('failed', ' '.join(reason))
+        return failed, failed
+    common = dict(manifest_sha256=links['manifest_sha256'], links={n: links[n]['sha256'] for n in EXPORT_LINKS})
+    exported = stage('passed', 'root AIR and source closure are byte-identical to files recorded in the export manifest, '
+                     'whose source, compiler_patch, air and profile links are current; the exporter was not rerun', **common)
+    if export_profile.get('export_stage') != 'analyzed-air':
+        return stage('failed', f'export profile stage is {export_profile.get("export_stage")!r}, not analyzed-air'), exported
+    return stage('passed', 'the bound export profile yields analyzed AIR and the root function is present in it; '
+                 'compiler analysis itself is trusted', **common), exported
+
+
 def load_receipt(attempt, verifier, limits):
     """Return (bundle, None) or (None, reason). The format is consumed, never extended."""
     try:
@@ -960,7 +1018,7 @@ def absence_claims(goals, counts):
     return result
 
 
-def coverage_level(record):
+def coverage_level(record, require_export=False):
     stages, goals = record['stages'], record['goals']
     ok = {name: stages[name]['status'] == 'passed' for name in stages}
     direct = [g for g in goals if g['binding'] == 'direct']
@@ -969,6 +1027,9 @@ def coverage_level(record):
         blockers.append('declared inputs failed preflight')
     if not ok['translated']:
         blockers.append('translation not established by a hash-verified artifact')
+    for name in ('analyzed', 'exported'):
+        if stages[name]['status'] == 'failed' or (require_export and not ok[name]):
+            blockers.append(f'{name} not established by a current export manifest ({stages[name]["reason"]})')
     if not ok['compiled']:
         blockers.append('generated Lean not compiled by a current, hash-bound proof receipt')
     if not goals:
@@ -1004,7 +1065,8 @@ def coverage_level(record):
     return level, blockers
 
 
-def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
+def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_manifest=None,
+             repo_root=None, require_export=False):
     manifest, limits, data, report = collect(path)
     base = path.parent
     file_hashes = {name.removeprefix('input/'): entry['sha256'] for name, entry in report['files'].items()
@@ -1022,9 +1084,20 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
     bundle, receipt_error = (None, None)
     if receipt is not None:
         bundle, receipt_error = load_receipt(receipt, verifier, dict(limits, timeout_seconds=900))
+    export_links, export_error = (None, None)
+    if export_manifest is not None:
+        export_links, export_error = export_evidence(export_manifest, repo_root or ARTIFACT_MANIFEST.parent.parent)
     roots = []
     for root, evidence in zip(manifest['roots'], report['roots']):
         stages = {name: dict(evidence['stages'][name]) for name in STAGES}
+        if export_error:
+            stages['analyzed'] = stages['exported'] = stage('failed', export_error)
+        elif export_links:
+            if evidence['input_validation']['status'] == 'passed':
+                stages['analyzed'], stages['exported'] = export_stages(
+                    root, export_links, report['profile'], file_hashes, manifest['source_closure'])
+            else:
+                stages['analyzed'] = stages['exported'] = stage('failed', 'declared inputs failed preflight')
         if translated is not None:
             stages['translated'] = translated
         if receipt is None:
@@ -1074,7 +1147,7 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                                                  'derives from the audited kernel conclusion'},
                   'assumptions': {'declared': root['assumptions'], 'audited': audited},
                   'exclusions': exclusions, 'outcomes': counts, 'absence_claims': absence_claims(goals, counts)}
-        record['level'], record['blockers'] = coverage_level(record)
+        record['level'], record['blockers'] = coverage_level(record, require_export)
         record['fully_functionally_verified'] = record['level'] == 'functionally_verified_total'
         roots.append(record)
     return {'schema': SCHEMA, 'kind': 'air2lean-coverage-report', 'manifest_sha256': report['manifest_sha256'],
@@ -1090,6 +1163,11 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
+                      'analyzed and exported pass only from an I07 artifact manifest whose source, compiler_patch, air and '
+                      'profile links recompute to the recorded digests and whose air/source files include this root\'s '
+                      'hashed AIR and source closure and equal the project profile; a failed stage blocks functional '
+                      'levels, and --require-export-evidence also blocks them when no manifest is supplied. The exporter '
+                      'and compiler are not rerun.',
                       'An absence claim (no-panic, guaranteed-return) is proved only by a direct goal of matching '
                       'strength. Capped searches, fuel-bounded no-result runs, unspecified (including no-clock timer) '
                       'and unsupported outcomes, or an observed failure the claim denies, refuse it and block '
@@ -1488,6 +1566,11 @@ def main(argv=None):
     parser.add_argument('--receipt', type=Path, help='coverage: proof receipt attempt directory')
     parser.add_argument('--receipt-verifier', type=Path, default=Path(__file__).resolve().with_name('proof-receipt.py'))
     parser.add_argument('--diff', type=Path, action='append', default=[], help='coverage: diff-report summary JSON')
+    parser.add_argument('--export-manifest', type=Path,
+                        help='coverage: I07 artifact manifest (scripts/proof-receipt.py manifest) binding analyzed/exported evidence')
+    parser.add_argument('--export-root', type=Path, help='coverage: repository the export manifest was recorded in (default: this one)')
+    parser.add_argument('--require-export-evidence', action='store_true',
+                        help='coverage: analyzed and exported must pass for any functional level')
     parser.add_argument('--format', choices=('json', 'text'), default='json')
     parser.add_argument('--require-level', choices=LEVELS, help='coverage: exit 1 if any root is below this level')
     parser.add_argument('--lock', type=Path, help='check: build-guard lock (default AIR2LEAN_BUILD_LOCK or the guard default)')
@@ -1516,7 +1599,9 @@ def main(argv=None):
             return 0 if record['status'] == 'reproduced' else 1
         if args.command == 'coverage':
             result = coverage(args.manifest.resolve(), args.artifact and args.artifact.resolve(),
-                              args.receipt, args.receipt_verifier.resolve(), [d.resolve() for d in args.diff])
+                              args.receipt, args.receipt_verifier.resolve(), [d.resolve() for d in args.diff],
+                              args.export_manifest and args.export_manifest.resolve(),
+                              args.export_root and args.export_root.resolve(), args.require_export_evidence)
             encoded = report_bytes(result, LIMITS)
             if args.out:
                 reject_input_overlap(args.out, args.manifest.resolve(), load_manifest(args.manifest.resolve())[0])
