@@ -540,14 +540,14 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
     let acc := f.types.zipIdx.foldl (init := acc) fun acc (t, id) => match t with
       | .union _ _ none _ => memNamed f.types f.layouts f.errorSetBits acc id
       | _ => acc
+    -- Instruction and operand types come from the checker's index (`Check.lean` `valTy?`).
+    let operands := f.operandTypes
     -- A byte local (`Zig.Bytes T`) encodes its value, also in a pure function.
     let acc := (byteLocals f).foldl (init := acc) fun acc aid =>
-      match (f.allInsts.find? (·.id == aid)).bind (fun i => ptrChild f.types i.ty) with
+      match operands.instructions[aid]?.bind (ptrChild f.types) with
       | some c => memNamed f.types f.layouts f.errorSetBits acc c
       | none => acc
     -- A Zig ≤0.16 representation `@bitCast` (`Zig.reprCast`) encodes and decodes both sides.
-    -- The operand's type comes from the checker's index (`Check.lean` `valTy?`), built once.
-    let operands := f.operandTypes
     let acc := operands.insts.foldl (init := acc) fun acc i => match i.op with
       | .bitcast a =>
         match operands.valTy? a with
@@ -2142,13 +2142,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
       -- A copy of a value with undefined parts: its bytes (`rawUseOk`).
       if isRaw then (env, some s!"Zig.storeBytes {rv ptr} {align} {rv v}") else
-      let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
-      let bitOff := ((fc.valTyId? ptr).map fc.bitOffset).getD 0
+      let ptrTy? := fc.valTyId? ptr
+      let host := (ptrTy?.map fc.hostSize).getD 0
+      let bitOff := (ptrTy?.map fc.bitOffset).getD 0
       match v with
       -- `undefined` through a bit-pointer: only the field's bits become undefined.
       | .undef _ =>
         if host != 0 then
-          let bits := (((fc.valTyId? ptr).bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
+          let bits := ((ptrTy?.bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
           (env, some s!"Zig.storeUndefBits {bits} {host} {align} {bitOff} {rv ptr}")
         else
         -- `undefined`: every byte of the value becomes undefined.
@@ -2157,7 +2158,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- item or field undefined (`undefByteRanges`; `Check.lean` rejects any other shape).
       | v =>
         if v.hasNestedUndef then
-          let ranges := ((fc.valTyId? ptr).bind (ptrChild fc.types)).bind
+          let ranges := (ptrTy?.bind (ptrChild fc.types)).bind
             (undefByteRanges fc.types fc.layouts · v)
           match ranges with
           | some ranges =>

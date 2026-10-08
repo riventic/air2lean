@@ -827,9 +827,9 @@ def generate(version, source, os_name='linux'):
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms, ptr_rejected)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
               'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics',
-                                       'tests/roadmap/runtime-tags', 'tests/roadmap/thread-tuples/air', 'tests/roadmap/try-pointers/air',
-                                       'tests/roadmap/bitops/qualified', 'tests/roadmap/idle-loops/air',
-                                       'tests/roadmap/spawn-failure/air'],
+                                       'tests/roadmap/runtime-tags',
+                                       # Every compiler-fixture root is tag evidence, so its sources are hashed.
+                                       *(root.split('/{version}')[0] for root in COMPILER_FIXTURE_ROOTS)],
               'model-boundaries': ['Air2Lean/StdModels.lean', 'Air2Lean/Memory.lean', 'docs/std-models.md']}
     project_hashes = {}
     for scope, roots in scopes.items():
