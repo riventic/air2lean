@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 36 complete, 42 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 37 complete, 41 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -56,11 +56,11 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## L02 — Integer bit operations and shift overflow
 
-Classification: partial.
+Classification: complete.
 
 typed scalar and applicable vector semantics, emission and bitvector lemmas. Acceptance: zero, maximum values, signed/unsigned boundaries, narrow widths and shift boundaries are covered; tests exercise production-style bitset code.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): width-generic bit-operation lemmas in ZigLean/Bit.lean (exact counts at every width, sign-boundary/all-ones counts, Log2Int validity, zero-count and shift rules, the `x & (x -% 1)` measure); runtime and checker cases for u16-u128, i128, u24, u40, i7 and vector lanes, including representable but illegal shift counts; IntegerBitSet/ArrayBitSet client proofs and generated firstSet/clearLowest/cardinality fixtures; operand-order mutants. Remaining: native differential qualification of the wide cases on every version and target.
+Completed in [PR128](https://github.com/riventic/air2lean/pull/128): width-generic bit-operation lemmas in ZigLean/Bit.lean ([PR122](https://github.com/riventic/air2lean/pull/122): exact counts at every width, sign-boundary/all-ones counts, Log2Int validity, zero-count and shift rules, the `x & (x -% 1)` measure; runtime and checker cases for u16-u128, i128, u24, u40, i7 and vector lanes, including representable but illegal shift counts; IntegerBitSet/ArrayBitSet client proofs; operand-order mutants); tests/roadmap/bitops-native qualifies the wide cases natively: a generated corpus of wide-integer bit operations (runtime safety on) on Zig 0.14.1, 0.15.2 and 0.16.0 x x86_64-linux, aarch64-macos and aarch64-linux x 4 build modes gives native result streams equal to the Lean streams of fresh translations (31366 rows, 0 mismatches; a 408-row panic lane agrees everywhere), and Zig's shift-count safety check (`shiftRhsTooBig`) maps to `.overflow` (shift-panic regression on committed AIR for all three versions). Notes: aarch64-linux is qualified by AIR equivalence to x86_64-linux (its AIR equals the x86_64-linux AIR except `profile`); the 0.14.1 macOS AIR comes from a locally built patched compiler, not CI. Remaining: none for the wide cases.
 
 ## L03 — Loop switch and switch dispatch
 

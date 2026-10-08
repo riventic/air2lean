@@ -147,6 +147,14 @@
         {
           "path": "tests/roadmap/bitops/Runtime.lean",
           "anchor": "| some (.error .illegal) => true"
+        },
+        {
+          "path": "tests/roadmap/bitops-native/shift-panic/test_cli.py",
+          "anchor": "assert \"is not a known panic-handler function\" in result.stderr, result.stderr"
+        },
+        {
+          "path": "tests/review/Parser.lean",
+          "anchor": "require (panicErrorFor? \"debug.FullPanic((function 'defaultPanic')).shiftRhsTooBig\" == some \".overflow\")"
         }
       ],
       "mutants": [

@@ -586,6 +586,9 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
@@ -3380,6 +3383,7 @@
         "paths": [
           "tests/golden/layout/air/layout.maskStore.json",
           "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
@@ -3506,6 +3510,8 @@
           "tests/golden/0.15.2/lists/air/lists.listSum.json",
           "tests/golden/asm/air/asm.divmod.json",
           "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
@@ -4075,6 +4081,7 @@
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
           "tests/golden/variants/air/variants.prioValue.json",
           "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
@@ -4289,6 +4296,8 @@
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
@@ -4768,6 +4777,8 @@
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
@@ -5166,6 +5177,8 @@
           "tests/golden/vectors/air/vectors.twiceInMem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -6814,7 +6827,9 @@
           "tests/golden/slices/air/slices.sumSlice.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.startMany.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json"
         ]
       },
       "proofs": {
@@ -7728,7 +7743,9 @@
           "tests/golden/vectors/air/vectors.sMod.json",
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
-          "tests/golden/vectors/air/vectors.vMod.json"
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json"
         ]
       },
       "proofs": {
@@ -8511,6 +8528,9 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
@@ -9012,6 +9032,8 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/golden/vectors/air/vectors.splatAdd.json",
           "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -10355,6 +10377,9 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
@@ -10965,7 +10990,9 @@
           "tests/golden/vectors/air/vectors.sMod.json",
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
-          "tests/golden/vectors/air/vectors.vMod.json"
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json"
         ]
       },
       "proofs": {
@@ -11154,6 +11181,8 @@
           "tests/golden/pointers/air/pointers.addTo.json",
           "tests/golden/slices/air/slices.sumZ.json",
           "tests/golden/variants/air/variants.area.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
@@ -11316,6 +11345,9 @@
           "tests/golden/layout/air/layout.setNum.json",
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
+          "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
@@ -16958,7 +16990,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "af862ee81029beacbb739e971e96fd1eb5396d88074575281111e79663dad62a",
+      "scripts/coverage.py": "c051447f9e048aa128ecb9742a5a006a89858f311ddb6d10f817eb9b042a81a7",
       "zig-patch/versions.toml": "8192cc5ad6fd9cfcf78db421c037870ec74fb1730e15f4ca94e93c2362436edd"
     },
     "translation": {
@@ -16967,7 +16999,7 @@
       "Air2Lean/Air/Compat.lean": "7acd50392627d71dc54fe91ffcca6eaca524ee6b39147d801b51c3877017325c",
       "Air2Lean/Air/Json.lean": "e99b3c477552b65b36338a42d688124b1250a37a0bc7fe323df4c37d8576fa13",
       "Air2Lean/Air/Normalize.lean": "2368fad664ef99d583d781ad27046fe02a572e1165b137bc9176b63717149ae4",
-      "Air2Lean/Air/Op.lean": "f1e0bd7a8477e7e503e31ce064ed884c0b69efef319f07d443badc5ca44747d4",
+      "Air2Lean/Air/Op.lean": "69a43637d957455e22a1d7b7c10e9b347888299823a1ae10b13787351320ed15",
       "Air2Lean/Air/Profile.lean": "ca584063ac6b71b0dc08899e3582712e1efbb506a2831d63796d62f6fe2be385",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
@@ -17994,6 +18026,15 @@
       "tests/roadmap/const-locals/air/0.16.0/const_locals.read.json": "674af64c6a34bc374524c70fd8c61d7c73d3eaec1634a2a3b4f185186d97c8e2",
       "tests/roadmap/const-locals/air/0.16.0/const_locals.roundTrip.json": "0f0333ff9e52676621e02cb371c2e3dcfb07d2205f98dae39fabe2aea98d3991",
       "tests/roadmap/const-locals/air/0.16.0/const_locals.stack.json": "757204f374b2bd41ae841fb983717b8ccc8f2dcb37d920f3169f7cc510eac479",
+      "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json": "3528428f26914f744bed3eaccfc630c64663d5ea792f12f1deeac7e7397b7eb1",
+      "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json": "b38e060b4abb687b26a07b5b10fa3871b065144b80822d3f8e17c0a5547685a0",
+      "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json": "c9551fcbd50a4a8de5fe20bf74922f5cd30fec7ec90970955ae81dc030cb08b5",
+      "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json": "ad92f7efe3ea592147fc6989b0b40ab727a3b58a6da749ccd96ff5a50dcc20d7",
+      "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json": "1609c2d44fc92c4ebecaaa6fd9a335b06d26d0ac9e4902fd9d79e78e9cd73aa2",
+      "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json": "71fc3db416bec6c2f673d1a4a525491332c8eec20e7fbffd1860f1474d10ed61",
+      "tests/roadmap/bitops-native/shift-panic/air/0.16.0/shift.shl40.json": "0df931ca94099f5ad442199fd738e963bdbc3bcb8e7a356c2cdbb39729d24282",
+      "tests/roadmap/bitops-native/shift-panic/air/0.16.0/shift.shl64.json": "f8840eb60872f5537d1d10931fa657aef85b8a7e6f8907f108f923c030ba39f3",
+      "tests/roadmap/bitops-native/shift-panic/air/0.16.0/shift.shr40.json": "41d742901a2559a648576f0a3f19526ee06551647fa37dfe1d28984731b81624",
       "tests/roadmap/const-locals/air-fuzz_s19/0.16.0/fuzz_s19.entry.json": "5500edd1a4189f0161c8812fe43f856193a22da0f6b265999055a79b34f69c29",
       "tests/roadmap/const-locals/air-fuzz_s19/0.16.0/fuzz_s19.work.json": "6d52806dbdde96cb7092a26dab2b044f702156f21b50593d6843a7d93236dec9"
     },

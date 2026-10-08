@@ -293,6 +293,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',
+    'tests/roadmap/bitops-native/shift-panic/air/{version}': 'tests/roadmap/bitops-native/README.md',
     'tests/roadmap/const-locals/air-fuzz_s19/{version}': 'tests/roadmap/const-locals/provenance.json',
 }
 NON_COMPILER_AIR = {

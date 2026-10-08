@@ -79,11 +79,18 @@ def float_edges(width, tokens, context):
             assert neighbors <= bits, f"{context}: missing valid f80 neighbors of 2^{power}"
 
 
+TIE_ROWS = 5
+
+
 def check_floats():
     checked = 0
     for width in (16, 32, 64, 80, 128):
         data = rows("floatops", f"op{width}")
-        assert len(data) == 26 * 300
+        # 300 rows per selector, then the deterministic round-half-even tie rows
+        # (`writeTieRows` in tests/diff/gen_inputs.zig) on selectors 0 and 1.
+        ties = data[26 * 300:]
+        assert len(ties) == TIE_ROWS and {row[0] for row in ties} <= {0, 1}, f"op{width}: tie rows"
+        data = data[:26 * 300]
         for selector in range(26):
             selected = [row for row in data if row[0] == selector]
             assert len(selected) == 300

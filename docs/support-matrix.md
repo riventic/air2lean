@@ -79,16 +79,16 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 0.16.0 | 214 | 28 | 136 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
 | 0.15.2 | 212 | 34 | 130 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
-| 0.14.1 | 207 | 65 | 95 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
+| 0.14.1 | 207 | 64 | 96 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 88 requirements, 36 complete, 42 partial, 0 open, 10 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 88 requirements, 37 complete, 41 partial, 0 open, 10 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
 | T: Targets and profiles | T01 | T02, T04, T06 | — | T03, T05 |
-| L: Language and representation | L01, L11 | L02, L03, L04, L05, L06, L07, L08, L09, L10, L12, L13, L14 | — | — |
+| L: Language and representation | L01, L02, L11 | L03, L04, L05, L06, L07, L08, L09, L10, L12, L13, L14 | — | — |
 | C: Concurrency | C02, C03, C04, C05, C06, C09, C11 | C01, C07, C08, C14 | — | C10, C12, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
 | F: Floats | F01, F05, F06 | F04 | — | F02, F03 |

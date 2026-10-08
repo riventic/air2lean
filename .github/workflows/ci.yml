@@ -929,7 +929,7 @@ jobs:
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
             tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-macos-none-ReleaseSafe.txt
           for expected in tests/roadmap/aarch64-abi/expected/0.16.0/*.txt; do
-            grep -E '^(vector|lane) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
           done
 
