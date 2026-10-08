@@ -46,8 +46,10 @@ from zig_gen import INPUTS, lean_checks  # noqa: E402  (Q01 inputs and #guard em
 SCHEMA = 1
 TC_TARGET = "x86_64-linux-musl"
 AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
-# std code that translate-c output calls is translated from its AIR like user code.
-STD_FILTER = ["zig.c_translation.", "mem.zeroes", "debug.assert"]
+# std code that translate-c output calls is translated from its AIR like user code. Wider
+# prefixes (`mem.zeroes`, `debug.assert`) also select std's own unrelated instances and fail
+# them, so other std callees stay CALLEE_MISSING (docs/c-frontend.md, gap G8).
+STD_FILTER = ["zig.c_translation."]
 STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "lean"]
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
 WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
