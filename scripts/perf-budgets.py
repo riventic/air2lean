@@ -37,6 +37,8 @@ TIMING_SCHEMA = "air2lean-timing/1"
 INTERNAL_PHASES = ("parse", "normalize", "check", "emit")
 LEAN_PHASES = ("elaborate", "proof.cold", "proof.warm")
 EXIT_PENDING = 3
+# Phases a portable (any-platform) gate checks by default: everything that needs no cold Lake build.
+PORTABLE_PHASES = ("translate.cold", "translate.warm", *INTERNAL_PHASES, "elaborate")
 
 
 def digest(path):
@@ -82,6 +84,17 @@ def validate_budgets(data, root=ROOT):
             errors.append(f"tolerance.{name} needs nonnegative time/rss ratio and slack")
         elif tolerance["time_ratio"] < 1 or tolerance["rss_ratio"] < 1:
             errors.append(f"tolerance.{name} ratios must be at least 1")
+    for name in ("translator", "lean"):
+        portable = data.get("portable_tolerance", {}).get(name)
+        if not isinstance(portable, dict) or not all(
+                isinstance(portable.get(key), (int, float)) and portable[key] >= 0 for key in
+                ("time_ratio", "time_slack_seconds", "rss_ratio", "rss_slack_kib")):
+            errors.append(f"portable_tolerance.{name} needs nonnegative time/rss ratio and slack")
+        elif portable["time_ratio"] < 1 or portable["rss_ratio"] < 1:
+            errors.append(f"portable_tolerance.{name} ratios must be at least 1")
+        elif isinstance(data.get("tolerance", {}).get(name), dict) and any(
+                portable[key] < data["tolerance"][name].get(key, 0) for key in portable):
+            errors.append(f"portable_tolerance.{name} must be at least as loose as tolerance.{name}")
     seen = set()
     workloads = data.get("workloads")
     if not isinstance(workloads, list) or not workloads:
@@ -132,8 +145,12 @@ def validate_budgets(data, root=ROOT):
 # Gate
 
 
-def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=False):
+def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=False,
+         portable=False, only_phases=None):
     """Compare one measurement with the budgets.
+
+    `portable` checks the generous `portable_*` limits instead of the reference-platform
+    ones, on any platform (CI runners), over `only_phases` (default PORTABLE_PHASES).
 
     Returns (exit_code, findings). Each finding is a dict with `kind`, `workload`,
     optional `phase` and a `message`. Every kind except `pending` is a failure.
@@ -154,7 +171,10 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
             "measurement was not taken with LEAN_NUM_THREADS=1; record it under build-guard.py")
     reference = budgets.get("reference_platform")
     measured_platform = measurement.get("platform", {})
-    if reference and not allow_platform_mismatch and any(
+    if portable:
+        only_phases = set(only_phases or PORTABLE_PHASES)
+    prefix = "portable_" if portable else ""
+    if reference and not portable and not allow_platform_mismatch and any(
             measured_platform.get(key) != value for key, value in reference.items()):
         add("platform-mismatch", None,
             f"budgets were recorded on {reference}, measurement is from "
@@ -184,25 +204,27 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
                 "Rebaseline only with preservation evidence (docs/perf-budgets.md).")
         phases = result.get("phases", {})
         for phase, limits in sorted(budget.get("phases", {}).items()):
+            if only_phases is not None and phase not in only_phases:
+                continue
             got = phases.get(phase)
             if got is None:
                 add("missing-phase", ident, "budgeted phase is absent from the measurement", phase)
                 continue
-            if "max_seconds" in limits:
+            if prefix + "max_seconds" in limits:
                 seconds = got.get("seconds")
                 if not isinstance(seconds, (int, float)):
                     add("missing-phase", ident, "phase has no wall time", phase)
-                elif seconds > limits["max_seconds"]:
+                elif seconds > limits[prefix + "max_seconds"]:
                     add("time-regression", ident,
-                        f"{seconds:.3f}s exceeds budget {limits['max_seconds']:.3f}s "
+                        f"{seconds:.3f}s exceeds budget {limits[prefix + 'max_seconds']:.3f}s "
                         f"(baseline {limits.get('baseline_seconds', 0):.3f}s)", phase)
-            if "max_peak_rss_kib" in limits:
+            if prefix + "max_peak_rss_kib" in limits:
                 rss = got.get("peak_rss_kib")
                 if not isinstance(rss, int):
                     add("missing-phase", ident, "phase has no peak RSS", phase)
-                elif rss > limits["max_peak_rss_kib"]:
+                elif rss > limits[prefix + "max_peak_rss_kib"]:
                     add("memory-regression", ident,
-                        f"peak RSS {rss} KiB exceeds budget {limits['max_peak_rss_kib']} KiB "
+                        f"peak RSS {rss} KiB exceeds budget {limits[prefix + 'max_peak_rss_kib']} KiB "
                         f"(baseline {limits.get('baseline_peak_rss_kib', 0)} KiB)", phase)
     failures = [item for item in findings if item["kind"] != "pending"]
     if failures:
@@ -266,15 +288,20 @@ def derive(budgets, measurement, only=None, allow_dirty=False):
         phases = {}
         for phase, got in sorted(result["phases"].items()):
             tolerance = budgets["tolerance"][phase_class(phase)]
+            portable = budgets["portable_tolerance"][phase_class(phase)]
             entry = {}
             if isinstance(got.get("seconds"), (int, float)):
                 entry["baseline_seconds"] = got["seconds"]
                 entry["max_seconds"] = round(limit(got["seconds"], tolerance["time_ratio"],
                                                    tolerance["time_slack_seconds"]), 3)
+                entry["portable_max_seconds"] = round(limit(got["seconds"], portable["time_ratio"],
+                                                            portable["time_slack_seconds"]), 3)
             if isinstance(got.get("peak_rss_kib"), int):
                 entry["baseline_peak_rss_kib"] = got["peak_rss_kib"]
                 entry["max_peak_rss_kib"] = int(limit(got["peak_rss_kib"], tolerance["rss_ratio"],
                                                       tolerance["rss_slack_kib"]))
+                entry["portable_max_peak_rss_kib"] = int(limit(got["peak_rss_kib"], portable["rss_ratio"],
+                                                               portable["rss_slack_kib"]))
             if entry:
                 phases[phase] = entry
         workload["budget"] = {"recorded": recorded, "output": result["output"], "phases": phases}
@@ -575,6 +602,10 @@ def main(argv=None):
     gat.add_argument("--budgets", type=Path, default=BUDGETS)
     gat.add_argument("--allow-pending", action="store_true")
     gat.add_argument("--allow-platform-mismatch", action="store_true")
+    gat.add_argument("--portable", action="store_true",
+                     help="check the generous platform-independent limits (CI runners)")
+    gat.add_argument("--phase", action="append",
+                     help="with --portable: restrict to these phases (default: translator and elaborate)")
     gat.add_argument("--json", type=Path, help="also write findings as JSON")
     val = sub.add_parser("validate", help="check the budgets file structure")
     val.add_argument("--budgets", type=Path, default=BUDGETS)
@@ -602,7 +633,8 @@ def main(argv=None):
         write_json(args.budgets, updated)
         print(f"wrote {args.budgets} (status {updated['status']})")
         return 0
-    code, findings = gate(budgets, measurement, args.allow_pending, args.allow_platform_mismatch)
+    code, findings = gate(budgets, measurement, args.allow_pending, args.allow_platform_mismatch,
+                          args.portable, args.phase)
     if args.json:
         write_json(args.json, {"exit_code": code, "findings": findings})
     print_findings(code, findings)

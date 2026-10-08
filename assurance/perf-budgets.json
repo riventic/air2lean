@@ -19,6 +19,20 @@
       "rss_slack_kib": 262144
     }
   },
+  "portable_tolerance": {
+    "translator": {
+      "time_ratio": 10.0,
+      "time_slack_seconds": 1.0,
+      "rss_ratio": 3.0,
+      "rss_slack_kib": 131072
+    },
+    "lean": {
+      "time_ratio": 6.0,
+      "time_slack_seconds": 30.0,
+      "rss_ratio": 2.0,
+      "rss_slack_kib": 524288
+    }
+  },
   "workloads": [
     {
       "id": "basic",
