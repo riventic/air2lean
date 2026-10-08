@@ -410,7 +410,7 @@ theorem consumed_reads_back (r : BitVec 32) :
 /-! ## Rejected uses
 
 Hand-written clients of the model, each checked by the kernel on one schedule (`decide
-+kernel`, no `native_decide`); `Futures/Runtime.lean` enumerates every schedule of each. -/
++kernel`, kernel reduction only); `Futures/Runtime.lean` enumerates every schedule of each. -/
 
 /-- A squaring task and a thread that awaits a future it did not create. -/
 inductive H where

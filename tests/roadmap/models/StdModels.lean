@@ -19,7 +19,8 @@ private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
     .timerStart, .timerRead, .futexTimedWait,
-    .groupAsync, .groupConcurrent, .groupAwait, .groupCancel]
+    .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
+    .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
 /-- A call of `callee` with the single `u8` argument of `f`, returning `u8`. -/
 private def caller (f : Func) (name callee : String) : Func :=
@@ -52,6 +53,15 @@ def main : IO Unit := do
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
   require (threadFn? "Thread.Futex.timedWait" == some .futexTimedWait) "clock projection"
   require ((rejectedThreadFn? "Thread.detach").isSome) "rejection projection"
+  -- C08: methods of instantiated generic types name their generic method.
+  require (threadFn? "Io.Future(u32).await" == some .futureAwait) "Future(T).await projection"
+  require (threadFn? "Io.Future(error{Canceled}!u32).cancel" == some .futureCancel) "Future(E!T).cancel projection"
+  require (threadFn? "Io.Future(foo(bar).Baz).await" == some .futureAwait) "nested type argument"
+  require (threadFn? "Io.async__anon_582" == some .futureAsync) "Io.async projection"
+  require ((rejectedThreadFn? "Io.Select(union).async__anon_9").isSome) "Select rejection"
+  require ((rejectedThreadFn? "Io.concurrent__anon_3").isSome) "Io.concurrent rejection"
+  require ((stdModel? "Io.Futurex(u32).await").isNone) "generic prefix is exact"
+  require ((stdModel? "Io.async").map (·.zigVersions) == some #["0.16.0"]) "futures are 0.16.0 only"
 
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/client.json")
   let f ← get <| normalize raw
@@ -64,6 +74,10 @@ def main : IO Unit := do
     "mem.Allocator.allocSentinel qualified Zig 0.16.0"
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.realloc qualified Zig 0.16.0"
+  expectError (checkProgram #[{ caller f "client" "Io.Future(u8).await" with zigVersion := "0.15.2" }])
+    "Io.Future.await qualified Zig 0.16.0"
+  expectError (checkProgram #[caller f "client" "Io.concurrent__anon_1"])
+    "Io.concurrent is not a qualified async API"
   -- A translated function cannot reuse a built-in std model name.
   for name in #["Thread.join", "Thread.spawn__anon_4", "Thread.detach", "mem.Allocator.free__anon_9"] do
     expectError (checkProgram #[f, { f with name }]) s!"{name}: translated function conflicts with built-in std model"
