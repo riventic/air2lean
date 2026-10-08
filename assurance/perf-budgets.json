@@ -1,6 +1,6 @@
 {
   "schema": "air2lean-perf-budgets/1",
-  "status": "recorded",
+  "status": "pending",
   "reference_platform": {
     "system": "Darwin",
     "machine": "arm64"
@@ -579,6 +579,211 @@
           }
         }
       }
+    },
+    {
+      "id": "asm",
+      "description": "golden asm example (4 AIR files, Zig 0.16.0)",
+      "air": [
+        "tests/golden/asm/air"
+      ],
+      "air_zig_version": "0.16.0",
+      "namespace": "Asm",
+      "prefix": "asm.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Asm/Gen.lean",
+      "proof_modules": [
+        "Proofs.Asm.Gen",
+        "Proofs.Asm.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "atomics",
+      "description": "golden atomics example (11 AIR files, Zig 0.16.0)",
+      "air": [
+        "tests/golden/atomics/air"
+      ],
+      "air_zig_version": "0.16.0",
+      "namespace": "Atomics",
+      "prefix": "atomics.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Atomics/Gen.lean",
+      "proof_modules": [
+        "Proofs.Atomics.Gen",
+        "Proofs.Atomics.MessagePassing",
+        "Proofs.Atomics.Proofs",
+        "Proofs.Atomics.Relaxed",
+        "Proofs.Atomics.Stack"
+      ],
+      "budget": null
+    },
+    {
+      "id": "errors",
+      "description": "golden errors example (3 AIR files, Zig 0.15.2)",
+      "air": [
+        "tests/golden/errors/air"
+      ],
+      "air_zig_version": "0.15.2",
+      "namespace": "Errors",
+      "prefix": "errors.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Errors/Gen.lean",
+      "proof_modules": [
+        "Proofs.Errors.Gen",
+        "Proofs.Errors.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "floatconv",
+      "description": "golden floatconv example (10 AIR files, Zig 0.15.2)",
+      "air": [
+        "tests/golden/floatconv/air"
+      ],
+      "air_zig_version": "0.15.2",
+      "namespace": "Floatconv",
+      "prefix": "floatconv.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Floatconv/Gen.lean",
+      "proof_modules": [
+        "Proofs.Floatconv.Gen",
+        "Proofs.Floatconv.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "floats",
+      "description": "golden floats example (6 AIR files, Zig 0.15.2)",
+      "air": [
+        "tests/golden/floats/air"
+      ],
+      "air_zig_version": "0.15.2",
+      "namespace": "Floats",
+      "prefix": "floats.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Floats/Gen.lean",
+      "proof_modules": [
+        "Proofs.Floats.Dot",
+        "Proofs.Floats.Gen",
+        "Proofs.Floats.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "iogroup",
+      "description": "golden iogroup example (8 AIR files, Zig 0.16.0)",
+      "air": [
+        "tests/golden/iogroup/air"
+      ],
+      "air_zig_version": "0.16.0",
+      "namespace": "Iogroup",
+      "prefix": "iogroup.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Iogroup/Gen.lean",
+      "proof_modules": [
+        "Proofs.Iogroup.Counter",
+        "Proofs.Iogroup.Gen"
+      ],
+      "budget": null
+    },
+    {
+      "id": "options",
+      "description": "golden options example (3 AIR files, Zig 0.15.2)",
+      "air": [
+        "tests/golden/options/air"
+      ],
+      "air_zig_version": "0.15.2",
+      "namespace": "Options",
+      "prefix": "options.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Options/Gen.lean",
+      "proof_modules": [
+        "Proofs.Options.Gen",
+        "Proofs.Options.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "pointers",
+      "description": "golden pointers example (12 AIR files, Zig 0.15.2)",
+      "air": [
+        "tests/golden/pointers/air"
+      ],
+      "air_zig_version": "0.15.2",
+      "namespace": "Pointers",
+      "prefix": "pointers.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Pointers/Gen.lean",
+      "proof_modules": [
+        "Proofs.Pointers.Gen",
+        "Proofs.Pointers.Proofs",
+        "Proofs.Pointers.Sep"
+      ],
+      "budget": null
+    },
+    {
+      "id": "recursion",
+      "description": "golden recursion example (4 AIR files, Zig 0.15.2)",
+      "air": [
+        "tests/golden/recursion/air"
+      ],
+      "air_zig_version": "0.15.2",
+      "namespace": "Recursion",
+      "prefix": "recursion.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Recursion/Gen.lean",
+      "proof_modules": [
+        "Proofs.Recursion.Gen",
+        "Proofs.Recursion.Proofs"
+      ],
+      "budget": null
+    },
+    {
+      "id": "sync",
+      "description": "golden sync example (26 AIR files, Zig 0.16.0)",
+      "air": [
+        "tests/golden/sync/air"
+      ],
+      "air_zig_version": "0.16.0",
+      "namespace": "Sync",
+      "prefix": "sync.",
+      "translate_args": [],
+      "reference_gen": null,
+      "proof_modules": [
+        "Proofs.Sync.Contracts",
+        "Proofs.Sync.Gen",
+        "Proofs.Sync.Handoff",
+        "Proofs.Sync.Lock",
+        "Proofs.Sync.Mailbox",
+        "Proofs.Sync.Mutex",
+        "Proofs.Sync.Proofs",
+        "Proofs.Sync.RwLock",
+        "Proofs.Sync.RwLockContract",
+        "Proofs.Sync.RwLockSnapshotPair",
+        "Proofs.Sync.SemCounter",
+        "Proofs.Sync.Semaphore",
+        "Proofs.Sync.SnapshotCache"
+      ],
+      "budget": null
+    },
+    {
+      "id": "threads",
+      "description": "golden threads example (11 AIR files, Zig 0.16.0)",
+      "air": [
+        "tests/golden/threads/air"
+      ],
+      "air_zig_version": "0.16.0",
+      "namespace": "Threads",
+      "prefix": "threads.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Threads/Gen.lean",
+      "proof_modules": [
+        "Proofs.Threads.Counter",
+        "Proofs.Threads.Disjoint",
+        "Proofs.Threads.Gen",
+        "Proofs.Threads.Proofs"
+      ],
+      "budget": null
     }
   ]
 }
