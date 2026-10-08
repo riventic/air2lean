@@ -133,6 +133,11 @@ def validate_budgets(data, root=ROOT):
             continue
         if not isinstance(budget.get("phases"), dict) or not budget["phases"]:
             errors.append(f"{ident}: budget.phases must be a nonempty object")
+        for phase, limits in sorted(budget["phases"].items()) if isinstance(budget.get("phases"), dict) else ():
+            for key in ("max_seconds", "max_peak_rss_kib"):
+                if key in limits and "portable_" + key not in limits:
+                    errors.append(f"{ident}: phase {phase} has {key} but no portable_{key}; "
+                                  "rebaseline it so the portable gate cannot skip it")
         output = budget.get("output", {})
         if not isinstance(output.get("sha256"), str):
             errors.append(f"{ident}: budget.output.sha256 is required")

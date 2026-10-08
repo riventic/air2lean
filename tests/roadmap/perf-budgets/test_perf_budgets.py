@@ -111,6 +111,9 @@ class CommittedBudgets(unittest.TestCase):
         data = pending_budgets()
         data["tolerance"]["lean"]["time_ratio"] = 0.5
         self.assertTrue(any("at least 1" in error for error in perf.validate_budgets(data)))
+        data = recorded_budgets()
+        del data["workloads"][0]["budget"]["phases"]["elaborate"]["portable_max_seconds"]
+        self.assertTrue(any("portable_max_seconds" in error for error in perf.validate_budgets(data)))
         self.assertEqual(perf.validate_budgets(recorded_budgets()), [])
 
 
