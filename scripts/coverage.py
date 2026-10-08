@@ -230,15 +230,22 @@ def normalizer(text):
     return result
 
 
-def runtime_tag_reasons(text):
+def runtime_tag_reasons(text, name='runtimeTagReason?'):
     """Source-only rejection policy shared with the translator, not feature support.
 
     Actual per-version enum membership is supplied by compiler_inventory.
     """
-    section = text.split('def runtimeTagReason?', 1)[1].split('\nprivate def', 1)[0]
+    section = lean_section(text, name)
     arms = re.finditer(r'^  \| ((?:"[^"\n]+"\s*(?:\|\s*)?)+)=> some ("[^"\n]+")$', section, re.M)
     return {tag: json.loads(match.group(2)) for match in arms
             for tag in re.findall(r'"([^"\n]+)"', match.group(1))}
+
+
+def lean_string_constant(text, name):
+    match = re.search(r'^def ' + re.escape(name) + r' : String :=\s*\n\s*("[^"\n]+")$', text, re.M)
+    if not match:
+        raise ValueError(f'missing Lean string constant {name}')
+    return json.loads(match.group(1))
 
 
 def source_hits(paths, symbol, cache):
@@ -266,6 +273,68 @@ def golden_paths(version, os_name):
             groups.update(layer)  # Later layer replaces every instance of a name.
         selected.extend(path for group in groups.values() for path in group)
     return sorted(selected)
+
+
+# Reviewed roots of committed compiler-exported AIR outside tests/golden, keyed by the
+# document that records the export command and checked source. `{version}` selects the
+# per-version directory. Every other AIR JSON directory under tests/roadmap must be listed
+# in NON_COMPILER_AIR with the reason it is not compiler evidence.
+COMPILER_FIXTURE_ROOTS = {
+    'tests/roadmap/thread-tuples/air/{version}': 'tests/roadmap/thread-tuples/provenance.json',
+    'tests/roadmap/try-pointers/air/{version}': 'tests/roadmap/try-pointers/provenance.json',
+    'tests/roadmap/bitops/qualified/{version}/air': 'tests/roadmap/bitops/qualified/0.16.0/manifest.json',
+    'tests/roadmap/idle-loops/air': 'tests/roadmap/idle-loops/provenance.json',
+    'tests/roadmap/spawn-failure/air/{version}': 'tests/roadmap/spawn-failure/air/provenance.json',
+}
+NON_COMPILER_AIR = {
+    'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/global-init/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/aggregate-casts/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; compiler export pending)',
+    'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
+    'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
+    'tests/roadmap/models': 'synthetic model-boundary inputs',
+    'tests/roadmap/profiles': 'synthetic profile inputs',
+}
+
+
+def is_air_json(data):
+    return isinstance(data, dict) and 'zig_version' in data and isinstance(data.get('body'), list)
+
+
+def roadmap_fixture_paths(version):
+    """Committed compiler-exported roadmap AIR recorded for exactly this compiler version."""
+    selected = []
+    for template in COMPILER_FIXTURE_ROOTS:
+        directory = ROOT/template.format(version=version)
+        selected.extend(path for path in sorted(directory.glob('*.json'))
+                        if json.loads(path.read_text()).get('zig_version') == version)
+    return selected
+
+
+def compiler_fixture_root(directory):
+    """Whether a repository-relative directory is a reviewed COMPILER_FIXTURE_ROOTS entry."""
+    return any(re.fullmatch(re.escape(t).replace(re.escape('{version}'), r'[^/]+'), directory)
+               for t in COMPILER_FIXTURE_ROOTS)
+
+
+def unreviewed_air_roots():
+    """AIR JSON directories under tests/roadmap in neither reviewed table."""
+    found = set()
+    for path in (ROOT/'tests/roadmap').rglob('*.json'):
+        relative = str(path.parent.relative_to(ROOT))
+        if compiler_fixture_root(relative) or \
+                any(relative == r or relative.startswith(r + '/') for r in NON_COMPILER_AIR):
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if is_air_json(data):
+            found.add(relative)
+    return sorted(found)
 
 
 # Table row pattern -> legacy recognizer label kept in coverage JSON.
@@ -322,11 +391,12 @@ def compiler_inventory(source, cache=None):
 FORBIDDEN = 'unclassified-forbidden'
 DISPOSITIONS = {
     'tags': {
-        'emitted-unqualified': 'Exporter decodes the tag for this version, normalizeOp builds an Op and an Emit.lean dispatch arm emits it; no semantics, proof or fixture qualification.',
+        'emitted-unqualified': 'Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification.',
+        'emitted-unfixtured': 'Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature.',
         'erased-at-emission': 'Exported and normalized to line/debug metadata that the emitter drops.',
-        'rejected-fast-math': 'normalizeOp rejects the fast-math suffix with a diagnostic before decoding.',
+        'rejected-fast-math': 'normalizeOp rejects the fast-math suffix with optimizedFloatGuidance before decoding.',
         'rejected-compiler-state-or-effect': 'runtimeTagReason? rejects the tag with a specific diagnostic.',
-        'rejected-exporter-unsupported': 'The exporter writes "unsupported": true for this version; normalizeOp rejects the marker with a diagnostic.',
+        'rejected-exporter-unsupported': 'The exporter writes "unsupported": true for this version; normalizeOp rejects the marker with the exporterTagReason? reason and guidance.',
         'rejected-unknown-tag': 'Exported, but normalizeOp has no branch; its fallback rejects the unknown AIR tag with a diagnostic.',
         'unreachable-at-export': 'Reviewed override: the compiler cannot place this tag in exported analyzed AIR.',
         FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
@@ -350,6 +420,58 @@ DISPOSITIONS = {
         FORBIDDEN: 'No mechanical derivation or reviewed override; generate/check fail.',
     },
 }
+
+# L14: for each tag that passes every source stage but has no compiler-generated fixture for
+# some version, the candidate function in FIXTURE_SOURCE that should produce it once exported
+# with the command in docs/coverage.md §L14, or None with the reason no candidate exists.
+# Unexported and unverified; an emitted tag without a fixture and without a row here is forbidden.
+FIXTURE_SOURCE = 'tests/roadmap/runtime-tags/runtime_tags.zig'
+NO_SEMA_PRODUCER = ('no Sema producer found in the 0.14.1/0.15.2/0.16.0 sources (only legalization/backend '
+                    'switches name it); needs an unreachable-at-export review or a compiler-generated counterexample')
+FIXTURE_REQUESTS = {
+    'add_with_overflow': 'addOverflow', 'sub_with_overflow': 'subOverflow',
+    'mul_with_overflow': 'mulOverflow', 'shl_with_overflow': 'shlOverflow',
+    'sub_wrap': 'subWrap', 'sub_sat': 'subSat', 'mul_sat': 'mulSat', 'shl_sat': 'shlSat',
+    'shl': 'shlPlain', 'shl_exact': 'shlExact', 'shr_exact': 'shrExact', 'div_exact': 'divExact',
+    'xor': 'xorBits', 'clz': 'leading', 'ctz': 'trailing', 'popcount': 'population',
+    'byte_swap': 'swapBytes', 'bit_reverse': 'reverseBits',
+    'ptr_add': 'advance', 'ptr_sub': 'retreat', 'ptr_elem_val': 'manyElem',
+    'trap': 'trapZero', 'ret': 'unsafeReturn', 'loop_switch_br': 'dispatch', 'switch_dispatch': 'dispatch',
+    'call_always_tail': 'alwaysTail', 'call_never_tail': 'neverTail', 'call_never_inline': 'neverInline',
+    'try_cold': 'coldTry', 'try_ptr': 'tryPtr', 'try_ptr_cold': 'tryPtrCold', 'is_null': 'isNull',
+    'is_non_err_ptr': 'nonErrPtr', 'errunion_payload_ptr_set': 'setPayload', 'error_name': 'errorName',
+    'is_null_ptr': None, 'is_err': None, 'is_err_ptr': None,
+    'bool_and': 'threeWay', 'bool_or': 'alignSlice',
+    'fptrunc': 'narrow', 'fpext': 'widen', 'int_from_float': 'truncUnsafe', 'float_from_int': 'toFloat',
+    'struct_field_ptr': 'fieldPtr', 'slice': 'subSlice', 'ptr_slice_len_ptr': 'setLen',
+    'ptr_slice_ptr_ptr': 'setPtr', 'slice_elem_ptr': 'elemPtr', 'array_to_slice': 'arraySlice',
+    'aggregate_init': 'makePair', 'tag_name': 'colorName', 'splat': 'splatLanes', 'shuffle': 'reverseLanes',
+    'memset': 'clearUnsafe', 'memset_safe': 'clearSafe', 'memcpy': 'copyBytes',
+    'cmpxchg_weak': 'casWeak', 'cmpxchg_strong': 'casStrong', 'atomic_load': 'loadAcquire',
+    'atomic_store_unordered': 'storeUnordered', 'atomic_store_monotonic': 'storeMonotonic',
+    'atomic_store_release': 'storeRelease', 'atomic_store_seq_cst': 'storeSeqCst', 'atomic_rmw': 'fetchAdd',
+}
+
+
+def fixture_request(tag, source_text):
+    """The reviewed fixture request for an unfixtured tag, or None when absent or dangling."""
+    if tag not in FIXTURE_REQUESTS:
+        return None
+    function = FIXTURE_REQUESTS[tag]
+    if function is None:
+        return {'source': None, 'function': None, 'reason': NO_SEMA_PRODUCER}
+    if not re.search(r'^(?:export|pub) fn ' + re.escape(function) + r'\(', source_text, re.M):
+        return None
+    return {'source': FIXTURE_SOURCE, 'function': function,
+            'reason': 'candidate source not yet exported by a patched compiler; see docs/coverage.md §L14'}
+
+
+# Normalize.lean definition holding the reason and guidance for each rejected disposition.
+# `rejected-unknown-tag` has none, so the L14 gate fails any such row.
+REJECTION_DEFINITIONS = {'rejected-fast-math': 'optimizedFloatGuidance',
+                         'rejected-compiler-state-or-effect': 'runtimeTagReason?',
+                         'rejected-exporter-unsupported': 'exporterTagReason?'}
+
 
 # Reviewed exceptions. `replaces` pins the mechanical result an override was reviewed
 # against: when the derivation changes, the override is stale and the row is forbidden.
@@ -497,6 +619,69 @@ def disposition_problems(inventory):
     return problems
 
 
+def compiler_fixture_path(relative):
+    """A committed golden or a file directly inside a reviewed compiler-export root."""
+    if relative.startswith('tests/golden/'):
+        return True
+    return compiler_fixture_root(relative.rsplit('/', 1)[0])
+
+
+def air_tags(data):
+    """Instruction tags (objects with a string tag and an integer id) anywhere in AIR JSON."""
+    found = set()
+    def visit(value):
+        if isinstance(value, dict):
+            if isinstance(value.get('tag'), str) and type(value.get('id')) is int:
+                found.add(value['tag'])
+            for child in value.values(): visit(child)
+        elif isinstance(value, list):
+            for child in value: visit(child)
+    visit(data)
+    return found
+
+
+def l14_problems(inventory):
+    """L14 gate on an inventory: emitted tags need a compiler fixture (or a reviewed request);
+    rejected tags need the translator's current reason and guidance."""
+    problems = [f'tests/roadmap AIR directory {d} is in neither COMPILER_FIXTURE_ROOTS nor NON_COMPILER_AIR'
+                for d in unreviewed_air_roots()]
+    source = (ROOT/'Air2Lean/Air/Normalize.lean').read_text()
+    reasons = {'runtimeTagReason?': runtime_tag_reasons(source),
+               'exporterTagReason?': runtime_tag_reasons(source, 'exporterTagReason?'),
+               'optimizedFloatGuidance': lean_string_constant(source, 'optimizedFloatGuidance')}
+    fixture_text = (ROOT/FIXTURE_SOURCE).read_text()
+    tags_cache = {}
+    for row in inventory['tags']:
+        tag, disposition = row['tag'], row['disposition']
+        label = f'{inventory.get("zig_version")}: {tag}'
+        paths = row.get('tests', {}).get('paths', [])
+        if disposition == 'emitted-unqualified':
+            witnesses = []
+            for relative in paths:
+                path = ROOT/relative
+                if compiler_fixture_path(relative) and path.is_file():
+                    if relative not in tags_cache:
+                        tags_cache[relative] = air_tags(json.loads(path.read_text()))
+                    if tag in tags_cache[relative]:
+                        witnesses.append(relative)
+            if not witnesses:
+                problems.append(f'{label}: emitted-unqualified without a committed compiler-generated fixture containing it')
+        elif disposition == 'emitted-unfixtured':
+            request = fixture_request(tag, fixture_text)
+            if paths:
+                problems.append(f'{label}: emitted-unfixtured but fixture paths are recorded')
+            if request is None or row.get('fixture_request') != request:
+                problems.append(f'{label}: emitted-unfixtured without a current FIXTURE_REQUESTS entry')
+        elif disposition.startswith('rejected-'):
+            rejection = row.get('rejection') or {}
+            definition = REJECTION_DEFINITIONS.get(disposition)
+            current = reasons.get(definition) if rejection.get('definition') == definition else None
+            current = current.get(tag) if isinstance(current, dict) else current
+            if not rejection.get('reason') or rejection['reason'] != current:
+                problems.append(f'{label}: {disposition} without a current translator reason and guidance')
+    return problems
+
+
 def pointer_dispositions(names, arms, checker_rejects=True):
     def derive(name):
         arm = arms.get(name, arms.get('*', []))
@@ -543,6 +728,9 @@ def generate(version, source, os_name='linux'):
     normalizer_source = cache.text(ROOT/'Air2Lean/Air/Normalize.lean')
     norms = normalizer(normalizer_source)
     rejection_reasons = runtime_tag_reasons(normalizer_source)
+    exporter_reasons = runtime_tag_reasons(normalizer_source, 'exporterTagReason?')
+    fast_guidance = lean_string_constant(normalizer_source, 'optimizedFloatGuidance')
+    fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
     semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
     path_groups = {'semantics': semantic_paths, 'proofs': proof_paths}
@@ -550,19 +738,12 @@ def generate(version, source, os_name='linux'):
     def hits(group, symbol):
         return source_hits(path_groups[group], symbol, cache)
 
-    # Parse actual selected golden JSON; malformed fixture is not silently evidence.
+    # Parse actual selected golden and reviewed roadmap compiler-exported JSON; a malformed
+    # fixture is not silently evidence.
     test_tags = {}
-    for p in golden_paths(version, os_name):
-        data = json.loads(cache.text(p))
-        def visit(value):
-            if isinstance(value, dict):
-                tag = value.get('tag')
-                if isinstance(tag, str) and type(value.get('id')) is int:
-                    test_tags.setdefault(tag, set()).add(str(p.relative_to(ROOT)))
-                for child in value.values(): visit(child)
-            elif isinstance(value, list):
-                for child in value: visit(child)
-        visit(data)
+    for p in golden_paths(version, os_name) + roadmap_fixture_paths(version):
+        for tag in air_tags(json.loads(cache.text(p))):
+            test_tags.setdefault(tag, set()).add(str(p.relative_to(ROOT)))
     minor = version_minor(version)
     fast_suffix, call_prefix = normalizer_rules(normalizer_source)
     emitted, erased = emission_arms(cache.text(ROOT/'Air2Lean/Emit.lean'))
@@ -581,12 +762,14 @@ def generate(version, source, os_name='linux'):
         is_call = tag not in norms and tag.startswith(call_prefix)
         ops = norms.get(tag, ['call'] if is_call else [])
         unemitted = [op for op in ops if op not in emitted]
+        request = None
         if tag.endswith(fast_suffix):
             disposition = 'rejected-fast-math'
         elif rejection_reason:
             disposition = 'rejected-compiler-state-or-effect'
         elif export_status in ('explicit-arm-unsupported-marker', 'fallback-unsupported-marker'):
-            disposition = 'rejected-exporter-unsupported'
+            # L14: an exporter rejection needs a reviewed reason and guidance in the translator.
+            disposition = 'rejected-exporter-unsupported' if tag in exporter_reasons else FORBIDDEN
         elif export_status not in ('explicit-arm', 'fallback-named-decoder'):
             disposition = FORBIDDEN
         elif tag not in norms and not is_call:
@@ -595,9 +778,16 @@ def generate(version, source, os_name='linux'):
             disposition = FORBIDDEN
         elif all(op in erased for op in ops):
             disposition = 'erased-at-emission'
-        else:
+        elif test_tags.get(tag):
             disposition = 'emitted-unqualified'
-        reached = disposition in ('emitted-unqualified', 'erased-at-emission')
+        else:
+            # L14: no compiler-generated fixture; honest only with a reviewed fixture request.
+            request = fixture_request(tag, fixture_text)
+            disposition = 'emitted-unfixtured' if request else FORBIDDEN
+        reached = disposition in ('emitted-unqualified', 'emitted-unfixtured', 'erased-at-emission')
+        reason = (fast_guidance if disposition == 'rejected-fast-math' else rejection_reason
+                  if disposition == 'rejected-compiler-state-or-effect' else exporter_reasons.get(tag)
+                  if disposition == 'rejected-exporter-unsupported' else None)
         emission = ('erased-dispatch-arm' if disposition == 'erased-at-emission' else 'dispatch-arm') if reached else \
             'missing-dispatch-arm: ' + ', '.join(unemitted) if disposition == FORBIDDEN and unemitted else 'not-reached'
         tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
@@ -607,9 +797,11 @@ def generate(version, source, os_name='linux'):
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},
-                     'tests': {'status': 'golden-input-presence-only', 'paths': sorted(test_tags.get(tag, []))},
+                     'tests': {'status': 'compiler-fixture-presence-only', 'paths': sorted(test_tags.get(tag, []))},
                      'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
-                     'guidance': (rejection_reason + '; source-only rejection classification, no compiler fixture or support qualification') if rejection_reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))
+                     'rejection': {'reason': reason, 'source': 'Air2Lean/Air/Normalize.lean', 'definition': REJECTION_DEFINITIONS[disposition]} if reason else None,
+                     'fixture_request': request if disposition == 'emitted-unfixtured' else None,
+                     'guidance': (reason + '; source-only rejection classification, no compiler fixture or support qualification') if reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))
     other_written = '"other"' in type_arms.get('*', [])
     other_rejected = re.search(r'\|\s*\.other name =>\s*\n\s*throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
     type_rows = [apply_override('types', {'name': name,
@@ -634,7 +826,10 @@ def generate(version, source, os_name='linux'):
     ptr_rejected = re.search(r'ptrOther\? then throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms, ptr_rejected)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
-              'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics'],
+              'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics',
+                                       'tests/roadmap/runtime-tags',
+                                       # Every compiler-fixture root is tag evidence, so its sources are hashed.
+                                       *(root.split('/{version}')[0] for root in COMPILER_FIXTURE_ROOTS)],
               'model-boundaries': ['Air2Lean/StdModels.lean', 'Air2Lean/Memory.lean', 'docs/std-models.md']}
     project_hashes = {}
     for scope, roots in scopes.items():
@@ -689,6 +884,8 @@ def main():
         p.add_argument('--os', default='linux', help='golden OS overlay (default: linux); no host test claim')
         p.add_argument('--source', type=Path, required=True, help='compiler source root; no compiler is invoked')
         p.add_argument('--inventory', type=Path, required=True)
+    p = sub.add_parser('l14', help='offline L14 fixture/guidance gate over committed inventories')
+    p.add_argument('inventories', type=Path, nargs='+')
     p = sub.add_parser('diff')
     p.add_argument('before', type=Path); p.add_argument('after', type=Path)
     p.add_argument('--output', type=Path)
@@ -699,8 +896,22 @@ def main():
         if args.output: args.output.write_text(output)
         else: print(output, end='')
         return 0
+    if args.command == 'l14':
+        problems = []
+        for path in args.inventories:
+            inventory = json.loads(path.read_text())
+            problems += disposition_problems(inventory) + l14_problems(inventory)
+            rows = Counter(row['disposition'] for row in inventory['tags'])
+            print(f"{inventory['zig_version']}: {rows['emitted-unqualified']} emitted tags with a compiler fixture, "
+                  f"{rows['emitted-unfixtured']} without (fixture requested), "
+                  f"{sum(n for d, n in rows.items() if d.startswith('rejected-'))} rejected with reason and guidance")
+        if problems:
+            print('\n'.join(problems), file=sys.stderr)
+            print(f'{len(problems)} L14 problems: add a compiler fixture, a FIXTURE_REQUESTS row or a translator reason.', file=sys.stderr)
+            return 1
+        return 0
     result = generate(args.version, args.source, args.os)
-    problems = disposition_problems(result)
+    problems = disposition_problems(result) + l14_problems(result)
     if args.command == 'generate':
         # Written even when incomplete so the forbidden rows can be reviewed in place.
         args.inventory.parent.mkdir(parents=True, exist_ok=True)

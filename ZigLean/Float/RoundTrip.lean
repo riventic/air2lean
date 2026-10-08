@@ -1126,4 +1126,28 @@ theorem roundRat_mono (fmt : FloatFmt) {q1 q2 r1 r2 : Rat} (h0 : 0 ≤ q1) (h12 
     rw [heq]
     exact Nat.mul_le_mul_right _ (by omega)
 
+/-! ## `f128` `@sqrt` before Zig 0.16.0
+
+`Float.sqrtF128ViaF64` rounds to `f64`, takes the `f64` root and extends back. On a NaN, an
+infinity or a zero that is IEEE `Float.sqrt`. A finite nonzero operand is rounded twice
+(once to `f64`), and an operand outside the `f64` range overflows or underflows first; the
+definition itself states that case (`docs/floats.md` §Per-version differences). -/
+
+/-- A NaN, infinite or zero operand (no finite class with a nonzero mantissa):
+`Float.sqrtF128ViaF64` is IEEE `Float.sqrt`. -/
+theorem sqrtF128ViaF64_eq_sqrt_of_special {x : Float .f128}
+    (h : ∀ s m e, x.classify = .finite s m e → m = 0) :
+    Float.sqrtF128ViaF64 x = Float.sqrt x := by
+  have hnan : ∀ {f : FloatFmt}, (Float.nan : Float f).classify = .nan := by
+    intro f; cases f <;> decide
+  have hinf : ∀ {f : FloatFmt} (s : Bool), (Float.inf s : Float f).classify = .inf s := by
+    intro f s; cases f <;> cases s <;> decide
+  unfold Float.sqrtF128ViaF64 Float.sqrt Float.sqrt.sqrtCore Float.conv
+  generalize hc : x.classify = c at h
+  rcases c with _ | s | ⟨s, m, e⟩
+  · simp only [hnan]
+  · cases s <;> simp only [hinf, hnan, ite_true, ite_false, Bool.false_eq_true]
+  · obtain rfl := h s m e rfl
+    simp only [finiteToRat_zero, roundRat_zero, classify_zero, ite_true]
+
 end Zig

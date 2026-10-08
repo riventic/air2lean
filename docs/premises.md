@@ -238,8 +238,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: The opt-in `fallible` policy adds the declared spawn errors and the `Io.Group`
-  caller-execution fallback. WP rules must cover every oracle outcome.
-- Derived from: `ZigLean.Conc.Spawn`, `ZigLean.Conc.SpawnLemmas`; tokens `SpawnPolicy`, `WithPolicyC`.
+  caller-execution fallback. The per-caller budget `Mem.spawnLimit` (default none) removes
+  assignment from the oracle range while the caller's live children reach it. WP rules must
+  cover every oracle outcome.
+- Derived from: `ZigLean.Conc.Spawn`, `ZigLean.Conc.SpawnLemmas`; tokens `SpawnPolicy`, `WithPolicyC`,
+  `spawnLimit`, `spawnAdmits`, `assignmentCount`, `assignmentOutcome`, `assignmentChoiceC`.
 - Sources: [spawn-failure.md](spawn-failure.md).
 
 <a id="thr-04"></a>
@@ -471,7 +474,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
   global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
   misaligned or dead accesses are `.illegal`. Undefined bytes are explicit.
-- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Sep.*`; implied by THR-01.
+- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
 <a id="sem-03"></a>

@@ -5,6 +5,7 @@ import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
+import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
 
 /-!
@@ -143,15 +144,15 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
       throw s!"{fnName}: near line {line}: nullable slices and nullable bit-pointers are outside the qualified pointer fragment"
-    -- A bit-pointer loads its host integer as a `BitVec (8 * hostSize)`, whose size must be
-    -- `hostSize` (`Zig.loadBits`).
-    if l.hostSize != 0 && Zig.intSize (8 * l.hostSize) != l.hostSize then
-      throw s!"{fnName}: near line {line}: a pointer to a packed struct field whose host \
-        integer is {l.hostSize} bytes is outside the subset (only 1, 2, 4, 8 or a multiple of 16)"
+    -- A bit-pointer reads and writes its host's `hostSize` bytes, any count (`Zig.loadBits`):
+    -- `(bits + 7) / 8` on LLVM (3 for a `packed struct(u24)`), the ABI size on x86_64.
     if l.hostSize != 0 then
-      if let some bits := packedBits types child then
-        if l.bitOffset + bits > 8 * l.hostSize then
-          throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
+      -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
+      let some bits := packedBits types child
+        | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
+            `bool`, an enum or a packed struct is outside the subset"
+      if l.bitOffset + bits > 8 * l.hostSize then
+        throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
     match size with
     -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A `*anyopaque`
@@ -162,10 +163,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       else recur child
     | "many" | "slice" | "c" => recur child
     | _ => throw s!"{fnName}: near line {line}: pointer size '{size}' is outside the subset"
-  | .array _ child _ =>
-    if nullablePtrTy types layouts child then
-      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
-    recur child
+  -- Arrays and ordinary structs of C/allowzero pointers use the null-byte storage
+  -- dictionary (`Zig.nullablePtrEnc`); unions, tuples and error-union payloads do not.
+  | .array _ child _ => recur child
   | .vector _ child =>
     unless (match types[child]? with
       | some (.int ..) | some (.float _) | some .bool => true | _ => false) do
@@ -186,8 +186,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: an error encoding domain must have at most 65535 distinct nonempty names"
     pure ()
   | .struct name layout fields =>
-    if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
-      throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    if fields.any (fun (_, c) => nullablePtrTy types layouts c) && layout == "packed" then
+      throw s!"{fnName}: near line {line}: nullable pointers in packed aggregates are outside the qualified pointer fragment"
     if layout == "packed" && (packedBits types id).isNone then
       throw s!"{fnName}: near line {line}: packed struct '{name}' has a field other than an \
         integer, a `bool`, an enum or a packed struct: outside the subset"
@@ -232,11 +232,16 @@ def byteStridedLane (types : Array Ty) (lane : TyId) : Bool :=
   | some (.int _ bits) | some (.float bits) => bits != 0 && bits == 8 * Zig.intSize bits
   | _ => false
 
+/-- The exporter's layout of type `id` is the profile's `errBits`-bit error integer. -/
+def errCodeLayout (layouts : Array Layout) (id : TyId) (errBits : Nat) : Bool :=
+  (layouts[id]?.map fun l => l.size == some (Zig.errCodeSize errBits) &&
+    l.align == some (Zig.errCodeAlign errBits)).getD false
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
 values: their encodings are generated from the exporter's offsets. -/
-partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) :
-    Except String (Nat × Nat) := do
+partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
+    (errBits : Nat := 16) : Except String (Nat × Nat) := do
   let exported : Except String (Nat × Nat) :=
     match layouts[id]? with
     | some { size := some s, align := some a, .. } => pure (s, a)
@@ -246,10 +251,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
-  | some (.ptr size ..) =>
-    if nullablePtrTy types layouts id then
-      throw "a C/allowzero pointer stored as a memory value needs qualified null-byte encoding"
-    pure (if size == "slice" then 16 else 8, 8)
+  -- A C/allowzero pointer is stored with `Zig.nullablePtrEnc` (null = eight zero bytes).
+  | some (.ptr size ..) => pure (if size == "slice" then 16 else 8, 8)
   | some .allocator => pure (16, 8)
   | some .thread => pure (8, 8)
   | some .io => pure (16, 8)
@@ -259,17 +262,17 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
     | some (.ptr ..) => pure (8, 8)
-    | some (.errorSet _) => modelLayout types layouts c
+    | some (.errorSet _) => modelLayout types layouts c errBits
     | _ =>
-      let (s, a) ← modelLayout types layouts c
+      let (s, a) ← modelLayout types layouts c errBits
       pure (Zig.alignUp (s + 1) a, a)
   | some (.array len c sentinel) =>
-    let (s, a) ← modelLayout types layouts c
+    let (s, a) ← modelLayout types layouts c errBits
     pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
-      let (s, _) ← modelLayout types layouts c
+      let (s, _) ← modelLayout types layouts c errBits
       if bits == 0 then throw "a vector of zero-bit lanes in memory is outside the subset"
       -- The size check compares the rest with the exporter's.
       if byteStridedLane types c then return (Zig.vecLayout len s, Zig.vecLayout len s)
@@ -283,7 +286,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
     | _ => throw "a vector of a type other than an integer, a float or `bool`"
   | some (.enum _ tag _ _) =>
-    let _ ← modelLayout types layouts tag
+    let _ ← modelLayout types layouts tag errBits
     exported
   | some (.struct name layout fields) =>
     if layout == "packed" then
@@ -292,57 +295,118 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
         than an integer, a `bool` or a packed struct"
       return (Zig.intSize bits, Zig.intAlign bits)
     for (_, fty) in fields do
-      let _ ← modelLayout types layouts fty
+      let _ ← modelLayout types layouts fty errBits
     if (layouts[id]?.map (·.offsets.size)).getD 0 != fields.size then
       throw s!"struct '{name}' has no field offsets in the AIR file"
     exported
   | some (.errorUnion set payload) =>
-    -- `Zig.errUnionOffsets`: the error code is 2 bytes.
-    unless (layouts[set]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
-      throw "an error set that is not 2 bytes (`--error-limit`)"
+    -- `Zig.errUnionOffsetsW`: the error code is the profile's `error_set_bits` integer.
+    unless errCodeLayout layouts set errBits do
+      throw s!"an error set whose layout is not the profile's {errBits}-bit error integer \
+        ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits}; `--error-limit`)"
     if let some (.errorSet (some names)) := types[set]? then
       -- An empty discriminator has no standalone value, but its union's success arm does.
       unless names.isEmpty do
-        let _ ← modelLayout types layouts set
-    let (s, a) ← modelLayout types layouts payload
-    pure (Zig.errUnionSize s a, Nat.max a 2)
+        let _ ← modelLayout types layouts set errBits
+    let (s, a) ← modelLayout types layouts payload errBits
+    pure (Zig.errUnionSizeW errBits s a, Nat.max a (Zig.errCodeAlign errBits))
   | some (.errorSet none) =>
     throw "standalone anyerror or unresolved error storage has no finite declared encoding domain"
   | some (.errorSet (some names)) =>
     if names.isEmpty then throw "an empty standalone error domain has no runtime value"
     if names.size > 65535 then throw "an error encoding domain exceeds the 16-bit nonzero code capacity"
+    if names.size > Zig.errCapacity errBits then
+      throw s!"an error encoding domain of {names.size} names exceeds the {Zig.errCapacity errBits} \
+        nonzero codes of the profile's {errBits}-bit error integer (`--error-limit`)"
     if !validErrorDomainNames names then
       throw "an error encoding domain must have distinct nonempty names"
-    unless (layouts[id]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
-      throw "an error set storage layout must be 2 bytes aligned to 2 (16-bit error codes)"
-    pure (2, 2)
+    unless errCodeLayout layouts id errBits do
+      throw s!"an error set storage layout must be the profile's {errBits}-bit error integer \
+        ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits})"
+    pure (Zig.errCodeSize errBits, Zig.errCodeAlign errBits)
   | some (.union _ _ (some tag) fields) =>
-    let (ts, ta) ← modelLayout types layouts tag
-    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
+    let (ts, ta) ← modelLayout types layouts tag errBits
+    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t errBits
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
     pure (s, a)
   | some (.union name layout none fields) =>
     unless layout == "extern" || layout == "packed" do
       throw s!"union '{name}' ({layout}) without a tag"
     for (_, fty) in fields do
-      let _ ← modelLayout types layouts fty
+      let _ ← modelLayout types layouts fty errBits
     exported
   | some t => throw s!"{repr t}"
   | none => throw s!"unknown type id {id}"
 
 /-- The tag and payload offsets of a tagged union with the tag type `tag` and the field types
 `fields` in memory (`unionLayout`). -/
-def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId) :
-    Option (Nat × Nat) := do
-  let (ts, ta) ← (modelLayout types layouts tag).toOption
-  let fs ← fields.mapM fun t => (modelLayout types layouts t).toOption
+def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId)
+    (errBits : Nat := 16) : Option (Nat × Nat) := do
+  let (ts, ta) ← (modelLayout types layouts tag errBits).toOption
+  let fs ← fields.mapM fun t => (modelLayout types layouts t errBits).toOption
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
+/-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
+
+/-- Up to 0.16.0, `@bitCast` reinterprets the in-memory representation. Zig 0.17.0 changed it
+to the logical bit order; the representation-cast and optional-pointer cast rules below apply
+to the listed versions only. -/
+def memoryBitCastVersion (zigVersion : String) : Bool :=
+  #["0.14.1", "0.15.2", "0.16.0"].contains zigVersion
+
+/-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array without a sentinel,
+an `extern` struct, an `extern` union. -/
+def reprAggregate (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.array _ _ false) | some (.struct _ "extern" _) | some (.union _ "extern" none _) => true
+  | _ => false
+
+/-- A single (non-slice) pointer type that cannot hold address zero, and its optional. -/
+def singlePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.ptr size _ _) => size != "slice" && !nullablePtrTy types layouts id
+  | _ => false
+
+def optSinglePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.optional c) => singlePtrTy types layouts c
+  | _ => false
+
+/-- Zig 0.16.0's `Type.bitSize` of a type with a guaranteed in-memory layout (`src/Type.zig`):
+an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@sizeOf(E) +
+@bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts). `none`
+for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
+storage, sentinel array, packed union), which `@bitCast` rejects or the model leaves out, and
+for a pointer or optional pointer at any depth: the model's pointer bytes carry provenance and
+are not integer bits, so a pointer-bearing representation cast is rejected (fail closed). -/
+partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) : Option Nat := do
+  let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
+  match ← types[id]? with
+  | .int _ bits | .float bits => pure bits
+  | .bool => pure 1
+  | .enum _ tag _ _ => reprBitSize types layouts tag
+  | .struct _ "packed" _ => packedBits types id
+  | .struct _ "extern" fields | .union _ "extern" none fields =>
+    for (_, t) in fields do let _ ← reprBitSize types layouts t
+    abiBits
+  | .array len child false =>
+    let eb ← reprBitSize types layouts child
+    let es ← layouts[child]?.bind (·.size)
+    pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
+  | _ => none
+
+/-- A ≤0.16 `@bitCast` from `src` to `dst` that the representation cast (`Zig.reprCast`)
+translates: different types, an array, `extern` struct or `extern` union on at least one side.
+The checker then requires both sides to have a `reprBitSize` and equal ones. -/
+def reprCastApplies (zigVersion : String) (types : Array Ty) (src dst : TyId) : Bool :=
+  memoryBitCastVersion zigVersion && src != dst &&
+    (reprAggregate types src || reprAggregate types dst)
+
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
-    (id : TyId) : Except String Unit := do
-  match modelLayout types layouts id with
+    (id : TyId) (errBits : Nat := 16) : Except String Unit := do
+  match modelLayout types layouts id errBits with
   | .error e =>
     throw s!"{fnName}: near line {line}: a value in memory is outside the subset: {e}"
   | .ok (s, a) =>
@@ -363,6 +427,8 @@ structure CheckCtx where
   fnName : String
   types : Array Ty
   layouts : Array Layout
+  /-- The profile's `error_set_bits` (`Func.errorSetBits`). -/
+  errBits : Nat := 16
   /-- The type of each instruction. -/
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
@@ -373,6 +439,9 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
+  /-- The function's `zig_version`: up to 0.16.0 `@bitCast` reinterprets memory
+  (`memoryBitCastVersion`). Empty in bare contexts, which then reject representation casts. -/
+  zigVersion : String := ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -398,7 +467,7 @@ def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String 
   if let .inst p := ptr then
     if cx.places.contains p then return
   let pty ← cx.memPtrTy line ptr
-  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+  checkMemTy cx.fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
 
 /-- Is `ty` a bit-pointer type whose AIR file has no `vector_index`? -/
 def unverifiedBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
@@ -437,11 +506,12 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
-/-- Nullable pointer projections/arithmetic are not yet part of the qualified fragment.
-Cast to a nonnullable pointer after a null check before projecting or constructing a slice. -/
+/-- Nullable pointer slicing, bulk memory operations and parent recovery are not part of the
+qualified fragment. Field/element projections and pointer arithmetic are
+(`Zig.ptrProjectNullable`). Cast to a nonnullable pointer after a null check first. -/
 def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
-    cx.fail line "nullable pointer arithmetic, indexing and projections require a nonnull cast first (outside the qualified pointer fragment)"
+    cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
 
 /-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
 (`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
@@ -458,7 +528,6 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
-  cx.rejectNullableProjection line ptr
   let pty ← cx.memPtrTy line ptr
   if let some (.ptr "one" _ c) := cx.types[pty]? then
     if let some (.vector _ e) := cx.types[c]? then
@@ -470,10 +539,10 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
         cx.fail line "a pointer to a lane of a vector whose lanes are not byte-strided (non-byte \
           width or ABI padding) is outside the subset (the lane is a bit field, and the AIR file \
           has no lane index)"
-      checkMemTy cx.fnName cx.types cx.layouts line c
+      checkMemTy cx.fnName cx.types cx.layouts line c cx.errBits
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
-  checkMemTy cx.fnName cx.types cx.layouts line e
+  checkMemTy cx.fnName cx.types cx.layouts line e cx.errBits
 
 /-- The size of the type `id` is in the AIR file (pointer arithmetic, `@memcpy`). -/
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
@@ -620,6 +689,64 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
             cx.fail line s!"built-in std model '{name}' has no volatile contract (argument \
               type {aty}): {guidance}"
 
+/-- The pointer to field `idx` of a packed struct (L08), from the pointer type `base` to it:
+`(host size, bit offset)` of a bit-pointer, or `(0, byte offset)` of a byte pointer. The
+compiler's rule (`Type.packedStructFieldPtrInfo`): the field's bit offset is the sum of the
+earlier fields' bit sizes, plus the base's bit offset if the base is a bit-pointer, whose host it
+keeps. Otherwise the host is the struct: `(bits + 7) / 8` bytes (LLVM) or its ABI size (the
+self-hosted x86_64 backend), both accepted (`hosts`). A field at a byte boundary whose bit size
+fills its ABI size can be a byte pointer instead. `none`: not a packed struct field, or a
+size the exporter does not give. -/
+def packedFieldPtr? (types : Array Ty) (layouts : Array Layout) (base : TyId) (idx : Nat) :
+    Option (Array Nat × Nat × Option Nat) := do
+  let some (.ptr _ _ s) := types[base]? | none
+  let some (.struct _ "packed" fields) := types[s]? | none
+  let (_, fty) ← fields[idx]?
+  let bits ← packedBits types s
+  let fieldBits ← packedBits types fty
+  let bl := layouts[base]?.getD {}
+  let bit := bl.bitPtrOffset + packedFieldBit types fields idx
+  let hosts ← if bl.hostSize != 0 then pure #[bl.hostSize] else do
+    let abi ← (layouts[s]?).bind (·.size)
+    pure (if abi == (bits + 7) / 8 then #[abi] else #[(bits + 7) / 8, abi])
+  let fieldAbi ← (layouts[fty]?).bind (·.size)
+  let bytePtr := if bit % 8 == 0 && 8 * fieldAbi == fieldBits then some (bit / 8) else none
+  pure (hosts, bit, bytePtr)
+
+/-- Cross-boundary packed layout (L08): the exporter's pointer to a packed struct field (its
+`host_size` and `bit_offset`, or a byte pointer) is the one the model computes from the struct's
+field bit sizes (`packedFieldPtr?`); a mismatch is rejected, with `PACKED_LAYOUT`. Also for
+`@fieldParentPtr`, from the field pointer back to the struct pointer. -/
+def CheckCtx.checkPackedLayout (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let (base, field, idx) ← match op with
+    | .fieldPtr b idx => match cx.valTy? b with
+      | some bt => pure (bt, ty, idx)
+      | none => return
+    | .fieldParentPtr f idx => match cx.valTy? f with
+      | some ft => pure (ty, ft, idx)
+      | none => return
+    | _ => return
+  let some (.ptr _ _ s) := cx.types[base]? | return
+  let some (.struct name "packed" fields) := cx.types[s]? | return
+  -- A field outside the packed subset is `checkTy`'s type error, not a layout mismatch.
+  unless (packedBits cx.types s).isSome && idx < fields.size do return
+  let some (hosts, bit, bytePtr) := packedFieldPtr? cx.types cx.layouts base idx
+    | cx.fail line s!"packed layout of '{name}' field {idx}: the struct, field or pointer \
+        sizes are not in the AIR file (a bit-pointer needs them)"
+  let fl := cx.layouts[field]?.getD {}
+  let hostText := String.intercalate " or " (hosts.toList.map toString)
+  let expected := s!"host_size {hostText}, bit_offset {bit}" ++
+    (match bytePtr with | some o => s!", or a byte pointer at byte {o}" | none => "")
+  let fail {α : Type} (got : String) : Except String α :=
+    cx.fail line s!"packed layout mismatch: field {idx} of '{name}' through pointer type {base} \
+      is {got} in the AIR file, the model computes {expected} (the field bit offsets are the sums \
+      of the earlier fields' bit sizes)"
+  if fl.hostSize == 0 then
+    if bytePtr.isNone then fail s!"a byte pointer (type {field})"
+  else if !hosts.contains fl.hostSize || fl.bitOffset != bit then
+    fail s!"host_size {fl.hostSize}, bit_offset {fl.bitOffset} (type {field})"
+
 /-- Scalar or vector integer shape: lane count, signedness and element width. -/
 def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool × Nat) :=
   match cx.types[t]? with
@@ -643,6 +770,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   cx.checkVolatile line ty op
+  cx.checkPackedLayout line ty op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -774,25 +902,61 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
-    -- (`?*T`) is `Option Zig.Ptr` in the model: a bitcast to another optional pointer (a
-    -- `@constCast`) is a no-op, and one from a pointer is Lean's coercion `Zig.Ptr → Option
-    -- Zig.Ptr`. Any other bitcast to or from it would need an unwrap/wrap `Emit.lean` does not
-    -- have.
+    -- (`?*T`) is `Option Zig.Ptr` in the model, null = `none` = address 0: a bitcast to another
+    -- optional pointer (a `@constCast`) is a no-op, and one from a pointer is Lean's coercion
+    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Up to 0.16.0 (`memoryBitCastVersion`) three more
+    -- casts have explicit rules (`ZigLean/Mem/Repr.lean`): `?*T` → `*U` unwraps and requires
+    -- non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` gives 0 for null (`Zig.optPtrAddr`), and
+    -- `usize` → `?*T` gives null for 0 (`Zig.optPtrFromAddr`). Any other bitcast to or from an
+    -- optional pointer is rejected.
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
+    -- A C/allowzero pointer and an ordinary optional single/many pointer convert with explicit
+    -- null mapping (`Zig.ptrToOptional`/`Zig.ptrOfOptional`); address zero is `none`.
+    let isOptScalarPtr (t : TyId) : Bool := (cx.types[t]?.map (optScalarPtr cx.types)).getD false
     match sourceTy with
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
-      if isOptPtr ty && nullablePtrTy cx.types cx.layouts aty then
-        cx.fail line "casting a C/allowzero pointer to an optional pointer needs explicit null wrapping and is outside the qualified pointer fragment"
-      if (isOptPtr aty && !isOptPtr ty) || (isOptPtr ty && !isOptPtr aty && !isPtr aty) then
+      let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
+      let memCast := memoryBitCastVersion cx.zigVersion
+      let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
+      -- A nullable pointer is never optional, so at most one side is the optional pointer.
+      if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then
+        unless isOptScalarPtr (if isOptPtr ty then ty else aty) do
+          cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
+        return line
+      let unwrapRule := memCast && optSinglePtrTy cx.types cx.layouts aty &&
+        (singlePtrTy cx.types cx.layouts ty || isUsize ty)
+      let fromAddrRule := memCast && isUsize aty && optSinglePtrTy cx.types cx.layouts ty
+      if (isOptPtr aty && !isOptPtr ty && !unwrapRule) ||
+          (isOptPtr ty && !isOptPtr aty && !isPtr aty && !fromAddrRule) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
           another type is outside the subset"
       -- A packed struct or union is a bitcast of its backing integer only (`Zig.Packed`,
-      -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). A bitcast of
-      -- another aggregate as a value (`[4]u8` to `u32`) has no model: through memory
-      -- (`@ptrCast`), it is a load of other bytes.
+      -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). Up to 0.16.0 an
+      -- array, `extern` struct or `extern` union is a representation cast (`Zig.reprCast`):
+      -- encode, then decode the other type from the same bytes, padding bytes undefined.
+      if reprCastApplies cx.zigVersion cx.types aty ty then
+        let side (t : TyId) : Bool := match cx.types[t]? with
+          | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _) => true
+          | _ => reprAggregate cx.types t
+        unless side aty && side ty do
+          cx.fail line "a Zig ≤0.16 representation `@bitCast` between an array, `extern` struct \
+            or `extern` union and a type other than an integer, float, `bool`, packed struct, \
+            array, `extern` struct or `extern` union is outside the subset"
+        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty,
+            reprBitSize cx.types cx.layouts ty)
+          | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
+              pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
+              tagged union, packed union, slice, vector, sentinel array or error storage, at any \
+              depth) is outside the subset"
+        unless abits == bbits do
+          cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
+            {bbits} bits (`@bitSizeOf`) is outside the subset"
+        checkMemTy fnName cx.types cx.layouts line aty cx.errBits
+        checkMemTy fnName cx.types cx.layouts line ty cx.errBits
+        return line
       let kind (t : TyId) : String := match cx.types[t]? with
         | some (.struct _ "packed" _) | some (.union _ "packed" none _) => "packed"
         | some (.struct ..) | some (.array ..) | some (.union ..) | some (.tuple _) => "agg"
@@ -811,11 +975,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .load ptr => cx.memAccess line ptr; pure line
   | .store ptr v =>
     cx.memAccess line ptr
-    -- `Zig.storeBits` has no undefined bits: `undefined` would clobber the host's other fields.
-    if let .undef _ := v then
-      if let some pty := cx.valTy? ptr then
-        if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
-          cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
+    -- `undefined` to a packed struct field: `Zig.storeUndefBits` makes only the field's bits
+    -- undefined (a local with such a store is a stack block: `escapingAllocs`).
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -824,12 +985,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
   | .fieldPtr base _ =>
-    cx.rejectNullableProjection line base
     if let .inst b := base then
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
-    checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+    checkMemTy fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
     pure line
   | .fieldParentPtr fieldPtr idx =>
     cx.rejectNullableProjection line fieldPtr
@@ -846,11 +1006,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let _ ← cx.memPtrTy line fieldPtr
     let some (.ptr _ _ parent) := cx.types[ty]?
       | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
-    checkMemTy fnName cx.types cx.layouts line parent
+    checkMemTy fnName cx.types cx.layouts line parent cx.errBits
     pure line
-  | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
+  | .ptrElemVal p _ => cx.itemAccess line p; pure line
+  | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
-    cx.rejectNullableProjection line p
     -- The result is a pointer to an item: its child is the item type.
     if let some pty := cx.valTy? p then
       if let some (.ptr "one" _ c) := cx.types[pty]? then
@@ -918,7 +1078,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         cx.fail line "try_ptr through a bit-pointer is outside the subset"
       if layout.ptrAlign.isNone then
         cx.fail line "try_ptr pointer type has no ptr_align in the AIR file"
-    checkMemTy fnName cx.types cx.layouts line unionTy
+    checkMemTy fnName cx.types cx.layouts line unionTy cx.errBits
     let exits := match cachedTryExit with
       | some exits => exits
       | none => tryErrorBodyExits errBody
@@ -1133,11 +1293,11 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
     Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
-  let (size, _) ← (modelLayout f.types f.layouts root).toOption
+  let (size, _) ← (modelLayout f.types f.layouts root f.errorSetBits).toOption
   if off > size || width > size - off then return (remaining, false)
   if width == 0 || !hasErrorStorage f.types root then return (remaining, true)
   let recur (child base : Nat) : Option (Nat × Bool) := do
-    let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+    let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     let lo := Nat.max off base
     let hi := Nat.min (off + width) (base + childSize)
     if hi ≤ lo then return (remaining, true)
@@ -1146,12 +1306,12 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
   | .errorSet _ => return (remaining, false)
   | .optional child => recur child 0
   | .errorUnion _ payload =>
-    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-    let (code, base) := Zig.errUnionOffsets size align
-    if off < code + 2 && code < off + width then return (remaining, false)
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
+    if off < code + Zig.errCodeSize f.errorSetBits && code < off + width then return (remaining, false)
     recur payload base
   | .array len child sentinel =>
-    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 then return (remaining, true)
     let first := off / stride
     let last := (off + width - 1) / stride
@@ -1167,7 +1327,7 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
     let offsets := (f.layouts[root]?.getD {}).offsets
     if offsets.size != fields.size || fields.size > remaining then none
     for ((_, child), k) in fields.zipIdx do
-      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       let base := offsets[k]!
       let lo := Nat.max off base
       let hi := Nat.min (off + width) (base + childSize)
@@ -1190,13 +1350,13 @@ private partial def matchingGlobalSubobject (f : Func) (root off target fuel : N
   match ← f.types[root]? with
   | .optional child => matchingGlobalSubobject f child off target remaining
   | .errorUnion set payload =>
-    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-    let (code, base) := Zig.errUnionOffsets size align
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
     if off == code && compatibleType f f set target then return (remaining, true)
     if off < base then return (remaining, false)
     matchingGlobalSubobject f payload (off - base) target remaining
   | .array len child sentinel =>
-    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 || off / stride ≥ len + (if sentinel then 1 else 0) then return (remaining, false)
     matchingGlobalSubobject f child (off % stride) target remaining
   | .struct _ _ fields =>
@@ -1204,7 +1364,7 @@ private partial def matchingGlobalSubobject (f : Func) (root off target fuel : N
     if offsets.size != fields.size || fields.size > remaining then none
     for ((_, child), k) in fields.zipIdx do
       let base := offsets[k]!
-      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       if base ≤ off && off < base + childSize then
         let (next, matched) ← matchingGlobalSubobject f child (off - base) target remaining
         remaining := next
@@ -1239,7 +1399,7 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
   if off == 0 && compatibleType f f root target then true
   else match f.types[root]? with
   | some (.array len child sentinel) =>
-    match (modelLayout f.types f.layouts child).toOption with
+    match (modelLayout f.types f.layouts child f.errorSetBits).toOption with
     | some (stride, _) => stride != 0 && off % stride == 0 &&
         off / stride < len + (if sentinel then 1 else 0) && compatibleType f f child target
     | none => false
@@ -1267,12 +1427,12 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
   let some capability := scanned
     | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
   if !hasErrorStorage f.types global.ty && !capability then return
-  checkMemTy f.name f.types f.layouts 0 global.ty
-  checkMemTy f.name f.types f.layouts 0 child
-  let (size, _) ← (modelLayout f.types f.layouts child).mapError fun e => s!"{f.name}: {e}"
+  checkMemTy f.name f.types f.layouts 0 global.ty f.errorSetBits
+  checkMemTy f.name f.types f.layouts 0 child f.errorSetBits
+  let (size, _) ← (modelLayout f.types f.layouts child f.errorSetBits).mapError fun e => s!"{f.name}: {e}"
   let pointerLayout := globalAliasPointerLayout f pty
   let width := if pointerLayout.hostSize == 0 then size else pointerLayout.hostSize
-  let (globalSize, _) ← (modelLayout f.types f.layouts global.ty).mapError fun e => s!"{f.name}: {e}"
+  let (globalSize, _) ← (modelLayout f.types f.layouts global.ty f.errorSetBits).mapError fun e => s!"{f.name}: {e}"
   if off > globalSize || width > globalSize - off then
     throw s!"{f.name}: global alias subobject exceeds its backing storage"
   if immutableOrdinaryNumericAlias f global pty then return
@@ -1388,8 +1548,8 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
       let child ← sourceTy p
       let .errorUnion _ payload ← f.types[child]? | none
-      let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-      let (code, base) := Zig.errUnionOffsets size align
+      let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+      let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
       let delta := match i.op with | .errCodePtr _ => code | _ => base
       some (g, off + delta)
     | .ptrAdd sub p n =>
@@ -1397,7 +1557,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty
-      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      let (size, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       let delta := k.toNat * size
       if sub then if off < delta then none else some (g, off - delta)
       else some (g, off + delta)
@@ -1406,7 +1566,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty
-      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      let (size, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       some (g, off + k.toNat * size)
     | _ => none
   | _ => none
@@ -1485,7 +1645,7 @@ private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except S
     fail "its type can hold a pointer, a union or an unresolved type"
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
 type that the model encodes, or an `extern` global (`checkExternGlobal`). An array with a
@@ -1511,7 +1671,7 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- Check loop-switch selector contracts and lexical targets even for direct Core callers. -/
 partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
@@ -1577,7 +1737,7 @@ def check (f : Func) : Except String Unit := do
   -- An `extern` or `packed` union is its bytes, also as a value: the model must encode it.
   for (t, id) in f.types.zipIdx do
     if let .union _ _ none _ := t then
-      checkMemTy f.name f.types f.layouts 0 id
+      checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
@@ -1590,7 +1750,7 @@ def check (f : Func) : Except String Unit := do
     if let .alloc := i.op then
       if escaping.contains i.id || bytesLocals.contains i.id then
         if let some c := ptrChild f.types i.ty then
-          checkMemTy f.name f.types f.layouts 0 c
+          checkMemTy f.name f.types f.layouts 0 c f.errorSetBits
   for g in f.globals do
     checkGlobal f g
   let mut checkedConstTypes : Std.HashSet TyId := {}
@@ -1616,8 +1776,10 @@ def check (f : Func) : Except String Unit := do
       (controlFlowSummaries f.body).tryErrorExits
     else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
+                         errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
-                         localRoots, localPaths := localPlacePaths f.types f.layouts insts }
+                         localRoots, localPaths := localPlacePaths f.types f.layouts insts,
+                         zigVersion := f.zigVersion }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -2354,7 +2516,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             else if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
-          checkMemTy f.name f.types f.layouts 0 c
+          checkMemTy f.name f.types f.layouts 0 c f.errorSetBits
 
 /-! Collection reuses validators without constructing partial IR. Failed units retain
 their first error, but cannot suppress independent siblings. -/
@@ -2393,6 +2555,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     let volatileCheck := cx.checkVolatile line i.ty i.op
     log := log.record { (checkDiagnostic file f .volatileAccess anchor) with
       category := .unsupportedSemantics } volatileCheck
+    -- L08: an exporter packed field pointer that the model's layout does not match.
+    let packedCheck := cx.checkPackedLayout line i.ty i.op
+    log := log.record { (checkDiagnostic file f .packedLayout anchor) with
+      category := .unsupportedSemantics } packedCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2406,7 +2572,7 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
@@ -2439,7 +2605,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (t, id) in f.types.zipIdx do
     if let .union _ _ none _ := t then
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
-        (checkMemTy f.name f.types f.layouts 0 id)
+        (checkMemTy f.name f.types f.layouts 0 id f.errorSetBits)
   let insts := index.insts
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
@@ -2452,7 +2618,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
         if let some c := ptrChild f.types i.ty then
           log := log.record (checkDiagnostic file f .memoryFailure
             { idSpace := .canonical, instruction := some i.id, typeId := some c })
-            (checkMemTy f.name f.types f.layouts 0 c)
+            (checkMemTy f.name f.types f.layouts 0 c f.errorSetBits)
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
   for i in insts do
@@ -2474,10 +2640,12 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     fnName := f.name
     types := f.types
     layouts := f.layouts
+    errBits := f.errorSetBits
     instTys := insts.map fun i => (i.id, i.ty)
     places
     localRoots
-    localPaths := localPlacePaths f.types f.layouts insts }
+    localPaths := localPlacePaths f.types f.layouts insts
+    zigVersion := f.zigVersion }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

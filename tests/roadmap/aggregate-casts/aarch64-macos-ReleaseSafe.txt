@@ -1,0 +1,15 @@
+bytes_u32 11 22 33 44
+u32_bytes 11 22 33 44
+pair_u64 01 00 00 00 02 00 00 00
+u64_pair 01 00 00 00 02 00 00 00
+bytes_padded.a 01
+bytes_padded.b 05 06 07 08
+padded_bytes 01 00 00 00 02 03 04 05
+u24x2_u56 33 22 11 00 66 55 44 00
+u56_u24x2 33 22 11 00 66 55 44 00
+u32_word.bytes 11 22 33 44
+short_u32 11 00 00 00
+opt_null_addr 0
+opt_from_zero_null true
+opt_unwrap_same true
+opt_wrap_addr_same true

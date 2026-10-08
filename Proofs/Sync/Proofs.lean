@@ -1,6 +1,9 @@
 import Proofs.Sync.Gen
 import Proofs.Sync.RwLockContract
 import Proofs.Sync.RwLockSnapshotPair
+import Proofs.Sync.Contracts
+import Proofs.Sync.SnapshotCache
+import Proofs.Sync.Mailbox
 
 /-!
 # Proofs about `examples/sync/sync.zig`

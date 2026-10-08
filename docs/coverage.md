@@ -80,10 +80,11 @@ records `mechanical` or `reviewed-override`.
 | --- | --- |
 | `rejected-fast-math` | The tag has the suffix that `normalizeOp` rejects first (`_optimized`). |
 | `rejected-compiler-state-or-effect` | `runtimeTagReason?` gives the tag a specific diagnostic. |
-| `rejected-exporter-unsupported` | The version-selected exporter arm writes only `"unsupported": true`, or the fallback writes it for every tag it does not name; `normalizeOp` rejects the marker. |
+| `rejected-exporter-unsupported` | The version-selected exporter arm writes only `"unsupported": true`, or the fallback writes it for every tag it does not name, and `exporterTagReason?` gives the tag a reviewed reason; `normalizeOp` rejects the marker with that reason. Without a reason the row is forbidden. |
 | `rejected-unknown-tag` | Exported, but no `normalizeOp` branch; the fallback rejects it as an unknown AIR tag. |
 | `erased-at-emission` | Exported and normalized to constructors that `emitScalar` maps to `(env, none)` (line/debug metadata). |
-| `emitted-unqualified` | Exported (explicit arm, or a fallback branch naming the tag directly or via a `Compat.is*` helper), normalized, and every constructor has an emitter dispatch arm. |
+| `emitted-unqualified` | Exported (explicit arm, or a fallback branch naming the tag directly or via a `Compat.is*` helper), normalized, every constructor has an emitter dispatch arm, and a selected compiler-generated fixture contains the tag. |
+| `emitted-unfixtured` | The same source stages pass, but no selected compiler-generated fixture contains the tag; a reviewed `FIXTURE_REQUESTS` row names candidate source or why none exists. Without one the row is forbidden. |
 | `unreachable-at-export` | Reviewed override only. |
 | `unclassified-forbidden` | Anything else: unknown version branches that disagree, data-dependent `unsupported` arms, a fallback without a marker, or a constructor without a dispatch arm. |
 
@@ -113,8 +114,8 @@ against (`replaces`). If the derivation changes, the row becomes
 
 A new or renamed compiler tag therefore fails CI twice: the universe/fingerprint
 comparison reports it, and the row needs a named disposition. An unknown tag
-reaching the exporter's unsupported fallback is classified
-`rejected-exporter-unsupported` automatically; any tag the exporter starts to
+reaching the exporter's unsupported fallback is forbidden until
+`exporterTagReason?` gives it a reason and guidance; any tag the exporter starts to
 decode needs a normalizer branch and emitter arm, or it stays forbidden.
 
 ## Reading stage evidence
@@ -146,7 +147,8 @@ semantic support claims.
   symbol index, not a semantic implementation or theorem-coverage assertion.
   A missing hit is not a proof that the operation is unsupported. No theorem
   strength, input domain, all-schedules claim or current kernel result is inferred.
-* **Tests:** AIR instruction tags in selected golden inputs are indexed. Selection
+* **Tests:** AIR instruction tags in selected golden inputs and reviewed roadmap
+  compiler exports (see [L14](#l14-runtime-and-control-tags)) are indexed. Golden selection
   follows `check.sh`: shared files, then the version layer, then `--os` (default
   `linux`), with later layers replacing all anonymous instances of the same
   normalized filename. Examples excluded by `zig-versions` contribute no paths.
@@ -165,10 +167,84 @@ semantic support claims.
   Contracts, target/version restrictions and spawn/allocator assumptions remain
   in `docs/std-models.md` and the checker.
 
-An `emitted-unqualified` tag passes every source stage, subject to the preceding
-restrictions. It is deliberately not called fully supported or verified. L14's
-source-feature qualification still requires a compiler-generated fixture and a
-checked contract for that source feature.
+An `emitted-unqualified` tag passes every source stage and occurs in a committed
+compiler-generated fixture, subject to the preceding restrictions. It is
+deliberately not called fully supported or verified: one lowering in one fixture is
+not universal tag semantics, and source-feature qualification still needs a checked
+contract for that source feature.
+
+## L14 runtime and control tags
+
+`python3 scripts/coverage.py l14 coverage/*.json` is the offline L14 gate (CI step
+"Runtime tag fixture and guidance gate"; `generate` and `check` apply the same
+rules). It fails when:
+
+* an `emitted-unqualified` row has no recorded fixture that is a committed golden or
+  a file in a reviewed `COMPILER_FIXTURE_ROOTS` directory and still contains the tag;
+* an `emitted-unfixtured` row records fixture paths or lacks its current
+  `FIXTURE_REQUESTS` entry (a function present in the request source, or `None` with
+  a reason);
+* a `rejected-*` row lacks a `rejection.reason` equal to the translator's current
+  text: `runtimeTagReason?` (compiler state/effect), `exporterTagReason?`
+  (exporter marker) or `optimizedFloatGuidance` (fast-math), all in
+  `Air2Lean/Air/Normalize.lean`. `rejected-unknown-tag` has no reviewed reason, so
+  any such row fails;
+* an AIR JSON directory under `tests/roadmap` is in neither `COMPILER_FIXTURE_ROOTS`
+  nor `NON_COMPILER_AIR`.
+
+Compiler-generated fixtures are the selected goldens (exported by `check.sh`'s
+patched-compiler dump and compared on each run) plus the 0.16.0 exports with
+recorded provenance in `tests/roadmap/thread-tuples/air`, `tests/roadmap/try-pointers/air`,
+`tests/roadmap/bitops/qualified/0.16.0/air`, `tests/roadmap/spawn-failure/air` and
+`tests/roadmap/idle-loops/air`. Hand-written AIR (`undef-operands`, `undef-locals`,
+`global-init`, `aggregate-casts`, `packed-fields`, `error-width`, `try-pointers/aliases`),
+fuzzer mutants and synthetic model/profile inputs are explicitly excluded. Shared golden files are a single export reused across
+versions; they count for a version only through `check.sh`'s per-version
+re-export comparison.
+
+Counts (AIR tags passing every source stage):
+
+| Zig | With compiler fixture (`emitted-unqualified`) | Without (`emitted-unfixtured`) | Rejected with reason and guidance |
+| --- | ---: | ---: | ---: |
+| 0.14.1 | 95 | 65 | 42 |
+| 0.15.2 | 130 | 34 | 43 |
+| 0.16.0 | 135 | 29 | 45 |
+
+0.14.1's larger gap comes from examples whose `zig-versions` excludes 0.14.1.
+
+**Stage decisions for rejected tags.** Each rejection message names the tag and
+appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
+`OPTIMIZED_UNSUPPORTED` diagnostic carries the same text):
+
+| Tags | Decision | Guidance |
+| --- | --- | --- |
+| `inferred_alloc*`, `legalize_*`, `cmp_lt(e)_errors_len`, `error_set_has_value` | Not meaningful at the analyzed-AIR export stage (inference, legalization or finalized error universe) | Inspect the exporter/compiler stage; cast to a superset error set |
+| `*_optimized`, `int_from_float_optimized_safe` | Lower first: rebuild in strict float mode | Remove `@setFloatMode(.optimized)` |
+| `err_return_trace*`, `save_err_return_trace_index`, `runtime_nav_ptr`, `vector_store_elem` | Need new semantics (trace state, TLS/extern identity, vector-lane memory) | Keep out of translated functions until modelled |
+| `breakpoint`, `prefetch`, `ret_addr`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state | Remove, pass explicit values, or export fixed-arity functions |
+| `wasm_memory_*`, `work_*` | Outside qualified targets | Keep out of translated functions |
+| `assembly` (0.14.1) | Exporter does not decode the 0.14.1 layout | Use 0.15.2/0.16.0 for assembly wrappers |
+
+**Fixture requests.** `tests/roadmap/runtime-tags/runtime_tags.zig` holds one
+candidate function per `emitted-unfixtured` tag (mapped by `FIXTURE_REQUESTS`). It
+type-checks with a stock compiler but has never been exported: the expected tags
+come from reading Sema, not from an AIR dump. To produce fixtures, with a patched
+compiler per version:
+
+```sh
+out=$(mktemp -d)
+ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER=runtime_tags. \
+  zig-air-0.16.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
+  -target x86_64-linux -mcpu=baseline tests/roadmap/runtime-tags/runtime_tags.zig
+```
+
+Then review which tags actually appear, commit the dump as an example golden or a
+new `COMPILER_FIXTURE_ROOTS` entry with provenance, and regenerate the
+inventories; a tag that then has a fixture becomes `emitted-unqualified`, and its
+request row may be dropped once no version needs it. `is_null_ptr`, `is_err` and
+`is_err_ptr` have no candidate: no Sema producer was found in any supported
+compiler source, so they need an `unreachable-at-export` review or a
+compiler-generated counterexample.
 
 ## Upgrade change impact
 

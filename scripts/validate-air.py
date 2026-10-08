@@ -332,7 +332,9 @@ def validate_text(text, coverage_dir=ROOT / 'coverage', cache=None):
 def committed_air(root=ROOT):
     listed = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--', *GIT_SCOPES],
                             check=True, capture_output=True).stdout.decode('utf-8').split('\0')
+    # A fixture's provenance record may sit beside its AIR (`air/provenance.json`); it is not AIR.
     return sorted(root / rel for rel in listed if rel.endswith('.json')
+                  and Path(rel).name != 'provenance.json'
                   and any(part.startswith('air') for part in Path(rel).parts[:-1]))
 
 

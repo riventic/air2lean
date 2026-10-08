@@ -14,10 +14,13 @@ case "$zig_native" in /*) ;; *) zig_native=$(command -v "$zig_native");; esac
 [ "$("$zig_native" version)" = "$version" ] || { echo 'native compiler version mismatch' >&2; exit 1; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-lake build ZigLean air2lean
-# Imported theorem definitions are kernel checked with the runtime build above.
+lake build ZigLean air2lean ZigLean.Mem.NullLemmas
+# Imported theorem definitions are kernel checked with the runtime build above; the
+# proof-only storage/projection rules (outside the ZigLean umbrella) are built explicitly.
 lake env lean --run tests/roadmap/null-pointers/Generate.lean "$work/generated"
-for name in cNull cNonNull allowzeroAddress allowzeroManyAddress cZero cCast cUnwrap cLoad cEqual; do
+for name in cNull cNonNull allowzeroAddress allowzeroManyAddress cZero cCast cUnwrap cLoad cEqual \
+    storeLoad storedIsNull allowzeroStoreLoad nodeNext nodeVal nodeRoundTrip arrayItem \
+    cAdd cIndex cElem toOptional fromOptional; do
   [ -f "$work/generated/$name.lean" ] || { echo "missing semantic fixture $name" >&2; exit 1; }
   lake env lean "$work/generated/$name.lean"
 done
@@ -57,7 +60,7 @@ cp tests/roadmap/null-pointers/reject.zig "$work/reject.zig"
 mkdir "$work/rejected-air"
 ZIG_AIR_JSON_DIR="$work/rejected-air" ZIG_AIR_JSON_FILTER='reject.' \
   "$zig_air" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "$work/reject.zig" --cache-dir "$work/reject-cache"
-for name in stored fixed; do
+for name in optional fixed; do
   mkdir "$work/reject-$name"
   [ -f "$work/rejected-air/reject.$name.json" ] || { echo "missing compiler rejection fixture $name" >&2; exit 1; }
   cp "$work/rejected-air/reject.$name.json" "$work/reject-$name/"
@@ -68,8 +71,8 @@ for name in stored fixed; do
 from pathlib import Path
 import sys
 message = Path(sys.argv[1]).read_text()
-expected = 'null-byte encoding' if sys.argv[2] == 'stored' else 'pointer constant without a global'
+expected = 'separate null flag' if sys.argv[2] == 'optional' else 'pointer constant without a global'
 assert expected in message, 'wrong rejection: '+message
 PY
 done
-echo "nullable pointer gate passed: Zig $version; 9 semantic cases, 1 killed mutant, 8 native observations, 2 compiler rejection roots"
+echo "nullable pointer gate passed: Zig $version; 21 semantic cases, 1 killed mutant, 8 native observations, 2 compiler rejection roots"

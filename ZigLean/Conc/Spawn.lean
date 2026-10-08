@@ -7,9 +7,29 @@ import ZigLean.Conc.Call
 quantifies every listed API outcome. Failure does not fork, register a task, or
 transfer captures. The oracle choice is a scheduling point, so another thread may
 run before the outcome is selected. These operations promise no progress.
+
+**Resource budget.** `Mem.spawnLimit` (default `none`) bounds the assigned children of the
+calling thread that no join has reclaimed (`Mem.liveChildren`). While the caller is at its
+budget, the fallible oracle range excludes assignment: `Thread.spawn` returns one of the
+declared errors, `Group.async` runs the task in the caller, and `Group.concurrent` returns
+`ConcurrencyUnavailable`. Below the budget every outcome remains possible, so several
+assignments in one run can fail by budget, by the oracle, or both. Only the caller creates or
+joins its own children, so no other thread can change its count between the choice and the
+assignment. The budget is per calling thread; it does not model a process-wide quota, stack
+memory accounting, or the frequency of native failures. The `available` policy ignores it.
 -/
 
 namespace Zig
+
+/-- The assigned children of thread `t` that no join has reclaimed. -/
+def Mem.liveChildren (m : Mem) (t : ThreadId) : Nat :=
+  (m.threads.filter fun r => r.spawner == t && !r.joined).size
+
+/-- The current thread may receive another child under `Mem.spawnLimit`. -/
+def Mem.spawnAdmits (m : Mem) : Bool :=
+  match m.spawnLimit with
+  | none => true
+  | some limit => decide (m.liveChildren m.current < limit)
 
 inductive SpawnPolicy where
   | available
@@ -25,7 +45,23 @@ def spawnErrors : Array ErrName :=
 /-- A total lookup; the fallback only covers malformed direct callers. -/
 def spawnErrorAt (choice : Nat) : ErrName := spawnErrors[choice]?.getD "Unexpected"
 
+/-- The oracle range of a resource choice with `total` outcomes, where outcome 0 assigns a
+child: without budget for the caller, outcome 0 is not in the range. -/
+def assignmentCount (total : Nat) (m : Mem) : Nat :=
+  if m.spawnAdmits then total else total - 1
+
+/-- The outcome of oracle choice `c`: without budget, choice `c` means outcome `c + 1`. -/
+def assignmentOutcome (admits : Bool) (c : Nat) : Nat :=
+  if admits then c else c + 1
+
 variable {Tgt σ : Type}
+
+/-- A resource choice among `total` outcomes (outcome 0 assigns a child). The budget is read in
+the memory at which the caller resumes, with no scheduling point in between. -/
+def assignmentChoiceC (total : Nat) : CM Tgt σ Nat := do
+  let c ← pickC (assignmentCount total)
+  let admits ← callMC (do pure (← get).spawnAdmits)
+  pure (assignmentOutcome admits c)
 
 /-- Outcome zero assigns a child; every other valid outcome returns a declared error.
 The failure branch leaves memory and locals untouched, including captured pointers. -/
@@ -33,13 +69,14 @@ def spawnOutcomeC (choice : Nat) (target : Tgt) : CM Tgt σ (Except ErrName Thre
   if choice = 0 then spawnC target else pure (.error (spawnErrorAt (choice - 1)))
 
 /-- The available policy retains the historical proof contract; fallible exposes all
-six outcomes, without granting a child protocol obligation on failure. -/
+six outcomes (only the five errors at an exhausted budget), without granting a child protocol
+obligation on failure. -/
 def spawnWithPolicyC (policy : SpawnPolicy) (target : Tgt) :
     CM Tgt σ (Except ErrName ThreadId) := do
   match policy with
   | .available => spawnC target
   | .fallible =>
-    let choice ← pickC (fun _ => spawnErrors.size + 1)
+    let choice ← assignmentChoiceC (spawnErrors.size + 1)
     spawnOutcomeC choice target
 
 /-- Fallback executes the task in the caller's ConcM, with the caller's current thread,
@@ -53,7 +90,7 @@ def groupAsyncWithPolicyC (policy : SpawnPolicy) (group : Ptr) (io : Io) (target
   match policy with
   | .available => groupAsyncC group io target
   | .fallible =>
-    let choice ← pickC (fun _ => 2)
+    let choice ← assignmentChoiceC 2
     groupAsyncOutcomeC choice group io target fallback
 
 /-- Unlike async, concurrent never runs the task synchronously on failure. -/
@@ -66,7 +103,7 @@ def groupConcurrentWithPolicyC (policy : SpawnPolicy) (group : Ptr) (io : Io) (t
   match policy with
   | .available => groupConcurrentC group io target
   | .fallible =>
-    let choice ← pickC (fun _ => 2)
+    let choice ← assignmentChoiceC 2
     groupConcurrentOutcomeC choice group io target
 
 open Lean.Order in

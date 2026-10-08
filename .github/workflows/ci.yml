@@ -76,6 +76,13 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      # L14: emitted tags need a committed compiler-generated fixture (or an explicit
+      # emitted-unfixtured request); rejected tags need the translator's reason and guidance.
+      - name: Runtime tag fixture and guidance gate
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+
       - name: Schedule exploration cap accounting regressions
         run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
 
@@ -492,6 +499,14 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
           bash tests/roadmap/undef-locals/check.sh
+      # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
+      # PACKED_LAYOUT rejections. Hand-written AIR only.
+      - name: Packed fields and bit-pointers
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/packed-fields/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
@@ -709,6 +724,15 @@ jobs:
           lake env lean --run tests/roadmap/error-storage/Pipeline.lean "$storage_evidence_dir/Synthetic.lean"
           lake env lean -R "$storage_evidence_dir" "$storage_evidence_dir/Synthetic.lean"
 
+      # L10: error-code widths. Width-quantified proofs (proof-only module) and the
+      # hand-written 16/8/10/17-bit fixtures; only the default width has native evidence.
+      - name: Error-code widths (--error-limit) proofs, fixtures and rejections
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
+          bash tests/roadmap/error-width/check.sh
+
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate.
       - name: Vector memory layouts, compiler probe and checker controls
@@ -721,6 +745,19 @@ jobs:
           lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"
           lake env lean --run tests/roadmap/vector-layouts/Model.lean tests/roadmap/vector-layouts/aarch64-macos-ReleaseSafe.txt
           lake env lean --run tests/roadmap/vector-layouts/Checker.lean
+
+      # L07: Zig ≤0.16 representation casts and optional-pointer rules: retained translation,
+      # proofs, checker version gate, and this host's native probe against the model.
+      - name: Aggregate representation casts and optional-pointer rules
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.ReprCast Air2Lean air2lean
+          export AIR2LEAN_LEAN=$(lake env which lean)
+          export LEAN_PATH=$(lake env printenv LEAN_PATH)
+          bash tests/roadmap/aggregate-casts/check.sh --native
 
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
@@ -772,6 +809,24 @@ jobs:
             --namespace TryPointers --prefix try_pointers.
           python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
           python3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean "$fresh/Gen.lean" "$fresh/generated-report.json"
+
+      # L04 aliasing/cleanup: retained AIR is hand-written; export comparison is pending.
+      - name: Pointer try alias and cleanup rules
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Sep.TryAlias
+          bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
+          bash tests/roadmap/try-pointers/aliases/check.sh --native
+          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-aliases.XXXXXX")
+          trap 'rm -rf "$fresh"' EXIT
+          bash tests/roadmap/try-pointers/aliases/check.sh --export "$fresh/air"
+          python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
 
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
@@ -857,6 +912,7 @@ jobs:
           lake env lean tests/roadmap/container-contracts/Clients.lean
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
+            lake env lean --run tests/roadmap/sync-contracts/Runtime.lean
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
           fi
 

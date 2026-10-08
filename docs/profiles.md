@@ -31,7 +31,7 @@ Every schema-12 function has a mandatory `profile` object:
 | `features` | Enabled CPU feature names, emitted in sorted order; empty/duplicate names are rejected |
 | `build_mode` | `Debug`, `ReleaseSafe`, `ReleaseFast`, or `ReleaseSmall`; recording a mode does not qualify it ([build-modes.md](build-modes.md)) |
 | `float_mode` | `"per-instruction"` |
-| `error_set_bits` | `16`; other widths are rejected |
+| `error_set_bits` | `1`–`32` (the error integer that `--error-limit` selects); `0` and wider values are rejected. Every error-set layout must match it. Only `16` (the default limit) has native evidence: [§Error-code width](#error-code-width---error-limit) |
 | `error_layout` | `"type-table"`; each exported type's ABI size/alignment remains checked against the model |
 | `error_tracing` | Boolean from the owning module |
 | `export_stage` | `"analyzed-air"`; a shipping-binary correspondence claim is rejected |
@@ -83,6 +83,55 @@ A theorem about generated functions concerns the semantics named in this marker;
 changing the profile or float selection requires regenerating and checking its
 proofs. Historical committed outputs lacking a marker should be classified as
 legacy/unverified, rather than treated as schema-12 evidence.
+
+## Error-code width (`--error-limit`)
+
+Zig 0.16 stores an error as `u<errorSetBits>`, where `Zcu.errorSetBits` is
+`log2(limit) + 1` for `--error-limit limit` and `0` for `--error-limit 0`. The default
+limit is `maxInt(u16) - 1`, giving 16 bits. The size and alignment are the target's integer
+rules (`intByteSize`/`intAlignment`): 1, 2 or 4 bytes for 1–8, 9–16 and 17–32 bits on
+the modelled x86_64 and aarch64 targets. The exporter records the width as
+`error_set_bits`. A compilation that names more errors than the limit fails to compile.
+
+The error model is parameterized by this width (`ZigLean/Mem/ErrWidth.lean`). Stored errors
+keep their symbolic name in each code byte (`Byte.errFrag`), never a compiler ordinal. The
+translator reads the width from the profile. Each error set, optional error set and error union
+layout must equal the width's code layout and union rule. A declared domain with more
+names than the width's `2^bits - 1` nonzero codes is rejected. At 16 bits the generated
+source keeps the original 2-byte operations, so existing translations are byte-identical.
+Other widths emit the `…W bits` operations. `ZigLean/Mem/ErrWidthLemmas.lean` proves that
+the 16-bit instances are the original definitions (`errorEncW_sixteen`,
+`errorUnionWithW_sixteen`, `errOfBytesW_sixteen`, …).
+
+`ZigLean/Mem/ErrWidthLemmas.lean` is proof-only and is not part of the `ZigLean` umbrella.
+For every width from 1 to 32 bits it proves the following:
+
+* `E`, `?E`, `FiniteErrorW` and finite `E!T` values read back after a store
+  (`errorEncW_store_load`, `optionalErrorEncW_store_load`, `errorUnionEncW_store_load`).
+  Foreign names and the zero code never reload as a member.
+* Error-union wrap/unwrap is lawful (`errorUnionWithW_lawful`). The code slice read by
+  pointer-form `try`/`is_err_ptr` is the code of the stored value (`errorUnionWithW_code`).
+* `@errorFromInt (@intFromError e) = e` and its converse hold for any compilation numbering
+  that fits the width (`ErrorTable`). The integer code also survives a `u<bits>`
+  store/load (`intFromErrorW_store_load`), and `@errorCast` round trips through a superset.
+* Out-of-range codes raise an explicit error: code 0 or an unused code is a panic, and a value
+  that does not fit a narrower width is an `@intCast` overflow, never a truncated code
+  (`errorCodeOfNat_out_of_range`). A numbering larger than the width is rejected
+  (`ErrorTable.check_capacity`). `errorLimitBits` is the least width that holds the limit.
+
+The translator still rejects integer/error casts (`@intFromError`, `@errorFromInt`). AIR
+does not export the compilation's numbering, so the model states these casts over an explicit
+`ErrorTable` and does not translate them.
+
+| Configuration | `error_set_bits` | Status |
+| --- | --- | --- |
+| Default `--error-limit` (65534) | 16 | Qualified. Native/model observations come from the finite error-storage gate ([error-storage](../tests/roadmap/error-storage/README.md)), plus the width proofs and the hand-written fixtures |
+| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Model-qualified only. The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed ([error-width](../tests/roadmap/error-width/README.md)). There is no compiler export or native observation |
+| `--error-limit 0` | 0 | Rejected (no error storage) |
+
+The project workflow (`scripts/project.py`), golden receipts (`scripts/normalize-generated.py`)
+and ABI probes still require 16 bits. Non-default widths are therefore available only through
+direct translation.
 
 ## Regression checks
 

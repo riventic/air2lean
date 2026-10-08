@@ -58,7 +58,7 @@ def main (args : List String) : IO Unit := do
   require ((gen.splitOn "Option (Zig.ErrName)").length > 1) "public optional API changed"
   require ((gen.splitOn "instance : Zig.Enc Zig.ErrName").length == 1) "global String encoder"
   require (emitTy #[] types types[0]! == "Zig.ErrName") "pure error API changed"
-  let array := emitStorageEnc #[] types 3
+  let array := emitStorageEnc #[] types 16 3
   require (array.isSome && ((array.getD "").splitOn "Zig.Enc.vectorWith").length > 1) "array dictionary missing"
   let status : NamedType := {zigName := "Status", leanName := "Status", ty := types[4]!, srcTypes := types, srcLayouts := layouts, layout := layouts[4]!}
   let structGen := emitEnc #[] status

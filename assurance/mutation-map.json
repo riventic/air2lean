@@ -646,8 +646,19 @@
           "name": "ae",
           "path": "scripts/mutate.sh",
           "category": "other"
+        },
+        {
+          "name": "no-failure",
+          "path": "tests/roadmap/spawn-failure/qualify.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "no-fallback",
+          "path": "tests/roadmap/spawn-failure/qualify.py",
+          "category": "failure-cleanup"
         }
-      ]
+      ],
+      "note": "Fallible assignment: the no-failure mutant (spawnWithPolicyC .fallible replaced by .available) and the no-fallback mutant (groupAsyncWithPolicyC .fallible replaced by .available) rewrite the fresh translation; the allowed-outcomes harness must reject each (SOURCE_REJECTED). They run in tests/roadmap/spawn-failure/check.sh --full (patched and stock 0.16.0). Mutant ae (scripts/mutate.sh) drops the last joined Io.Group task."
     },
     "C07": {
       "categories": [
@@ -1002,9 +1013,31 @@
       "mutants": []
     },
     "F05": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_f05_full_selector_theorem_is_listed_without_exclusion"
+        },
+        {
+          "path": "tests/roadmap/theorem-inventory/test_inventory.py",
+          "anchor": "def test_one_version_missing"
+        },
+        {
+          "path": "tests/roadmap/float-semantics/test_labels.py",
+          "anchor": "def test_compiler_rt_label_needs_compiler_rt_translation"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "theorem-inventory-version-translation-collapsed",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "profile-selection"
+        }
+      ],
+      "note": "op128_spec_full states every f128 selector against each translation's helpers (op128Profile: legacy for 0.14.1/0.15.2, v016 for 0.16.0). The mutant collapses the theorem inventory's per-version translations to the committed Proofs/<Ex>/Gen.lean, so a theorem checked against one version only would pass; test_translations_follow_check_sh kills it. The per-version results are the guarded floatops runs in assurance/theorem-inventory.json. That the ports match compiler_rt is probe and diff-test evidence (docs/floats.md), not a mutant here."
     },
     "F06": {
       "categories": [],

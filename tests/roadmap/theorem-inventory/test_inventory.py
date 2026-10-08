@@ -295,6 +295,30 @@ class RepositoryTests(unittest.TestCase):
         statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec']
         self.assertIn('sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9', statement['statement'])
 
+    def test_f05_full_selector_theorem_is_listed_without_exclusion(self):
+        inv = json.loads((ROOT / ti.INVENTORY).read_text())
+        full = next(t for t in inv['theorems'] if t['name'] == 'op128_spec_full')
+        self.assertIn('every selector', full['domain'])
+        statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec_full']
+        self.assertNotIn('≠', statement['statement'])
+        self.assertIn('opSpec128 op128Profile sel', statement['statement'])
+
+    def test_f05_profile_follows_the_version(self):
+        # `op128Profile` elaborates either profile, so pin which one each version's `op128` selects:
+        # 0.16.0 (the committed Gen) gives `v016`, the 0.14.1/0.15.2 goldens give `legacy`.
+        def op128(path):
+            text = (ROOT / path).read_text()
+            start = text.index('\ndef op128 ')
+            end = text.find('\ndef ', start + 1)
+            return text[start:end if end >= 0 else len(text)]
+        v016 = op128('Proofs/Floatops/Gen.lean')
+        self.assertIn('Zig.Float.divRt016', v016)
+        self.assertNotIn('sqrtF128ViaF64', v016)
+        for version in ('0.14.1', '0.15.2'):
+            legacy = op128(f'tests/golden/{version}/floatops/Gen.lean')
+            self.assertIn('Zig.Float.sqrtF128ViaF64', legacy, version)
+            self.assertNotIn('Rt016', legacy, version)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -258,8 +258,9 @@ def main : IO Unit := do
     "unresolved or cyclic symbolic storage provenance"
   reject { codeAddress with name := "folded_alias.opaqueBacking", ret := opaquePtr, globals := #[{ codeGlobal with ty := opaqueTy, init := some (.undef opaqueTy) }], body := #[{id := 0, ty := 4, op := .ret (.ptrConst opaquePtr 0 0)}] }
     "type 'opaque' is outside the subset"
+  -- An error-code bit-pointer is rejected by the packed-field check (L08) before provenance.
   reject { codeAddress with name := "folded_alias.codeBitPointer", layouts := codeLayouts.set! codePtr { pointer 1 with hostSize := 1, vectorIndexExported := true } }
-    "unresolved or cyclic symbolic storage provenance"
+    "a bit-pointer to a type other than an integer, a `bool`, an enum or a packed struct"
   reject { codeAddress with name := "folded_alias.codeWrongGlobal", body := #[{id := 0, ty := 4, op := .ret (.ptrConst codePtr 99 0)}] }
     "unknown global id 99"
   reject { codeAddress with name := "folded_alias.codeWrongName", globals := #[{codeGlobal with name := some "folded_alias.otherTarget"}] }

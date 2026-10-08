@@ -199,6 +199,10 @@ class FixtureTests(unittest.TestCase):
             theorem field_variable : c.get = c.get := rfl
             end
             theorem field_unbound : x.get = x.get := rfl
+            structure Holder where n : Nat
+            def Holder.run (h : Holder) : Nat := Zig.Sched.run h.n
+            def holder0 : Holder := ⟨0⟩
+            theorem field_constant : holder0.run = holder0.run := rfl
             theorem dot_unique : True := by have := (.lax, 1); trivial
             theorem dot_ambiguous : True := by have := (.done, 1); trivial
             open Zig in
@@ -207,7 +211,7 @@ class FixtureTests(unittest.TestCase):
             theorem instance_unused : Enc.size Nat = 8 := rfl
             """
         entries = self.written()
-        for name in ("field_binder", "field_variable", "dot_unique", "instance_used"):
+        for name in ("field_binder", "field_variable", "field_constant", "dot_unique", "instance_used"):
             self.assertIn("THR-01", entries[name]["premises"], name)
         for name in ("field_unbound", "dot_ambiguous", "instance_unused"):
             self.assertNotIn("THR-01", entries[name]["premises"], name)
