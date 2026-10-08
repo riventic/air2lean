@@ -74,13 +74,13 @@ def regenerate(a):
     air.mkdir()
     native.mkdir()
     # 1/4 fresh export, translate (translate.sh also builds the translator) and checked Gen.lean.
-    shell = ('set -euo pipefail; cd "$1"; mkdir -p "$7"; '
+    shell = ('set -euo pipefail; cd "$1"; '
              'bash scripts/translate.sh %s -o "$2/Gen.lean" --namespace %s --prefix %s. --filter %s --zig-air "$3"; '
              'ZIG_AIR_JSON_DIR="$4" ZIG_AIR_JSON_FILTER=%s "$3" build-obj -fno-emit-bin -OReleaseSafe '
              '-fno-error-tracing -target x86_64-linux -mcpu=baseline %s; '
              '"$5" build-exe -OReleaseSafe -target x86_64-linux -mcpu=baseline -femit-bin="$6/provenance" %s'
              % (SOURCE, MODULE, EXAMPLE, FILTER, FILTER, SOURCE, SOURCE))
-    guarded(work, 'pipeline', ['bash', '-c', shell, 'pipeline', ROOT, work, zig_air, air, stock, native, native],
+    guarded(work, 'pipeline', ['bash', '-c', shell, 'pipeline', ROOT, work, zig_air, air, stock, native],
             a.timeout, a.lock_wait)
     problems = []
 
