@@ -5,8 +5,8 @@ import ZigLean.Range
 /-!
 # A translated nested loop proved with the loop template
 
-`Nested/Gen.lean` is the committed translation of `nested/nested.zig` (retained AIR in
-`nested/air/`, checked byte for byte by `nested/check.sh`). `pairs(acc, n)` runs an inner
+`Nested/Gen.lean` is the committed translation of `nested.zig` (retained AIR in
+`air/`, checked byte for byte by `check.sh`). `pairs(acc, n)` runs an inner
 `while (j < i)` loop inside the body of an outer `while (i < n)` loop; both share the locals
 `pairsLocals` and the inner loop is the separate def `pairs.loop14`, called from the outer body
 `pairs.loop5` as `Zig.loop (pairs.loop14 p0) pairs.again14`.

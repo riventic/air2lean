@@ -10,7 +10,7 @@ body; it proves nothing and leaves the goal unchanged. These regressions pin its
 generated loops (`Pointers.sumTo`, a counter loop with a call; `Lists.sum`, a linked-list walk)
 and on hand-written bodies in the generated shapes for the cases it refuses: a signed guard, a
 counter that steps away from its bound, and a bound that the loop changes.
-`tests/roadmap/loop-tactics/Nested.lean` covers a translated nested loop.
+`tests/roadmap/loop-tactics/nested/Proof.lean` covers a translated nested loop.
 -/
 
 open Zig Assn

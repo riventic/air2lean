@@ -192,7 +192,7 @@ inner `post`. The outer `step` uses that run like any other step of its body, so
 iterations are proved once. `LoopTemplate.bind` is the same rule as a `TotalTriple` for
 `(Zig.loop inner again' >>= k).run s`.
 
-`tests/roadmap/loop-tactics/Nested.lean` proves the translated `pairs` of
+`tests/roadmap/loop-tactics/nested/Proof.lean` proves the translated `pairs` of
 `tests/roadmap/loop-tactics/nested/nested.zig` (an inner `while (j < i)` inside an outer
 `while (i < n)`) total: under the explicit premise that the result fits in `u64`, it returns
 and adds `0 + 1 + … + (n - 1)` to `*acc`. The proof uses `pts_load_run`/`pts_store_run` and
@@ -213,7 +213,7 @@ bound invariant. Given `post`, it also suggests `post` with a bound from outside
 replaced by the counter. It reports, and does not infer, measures for signed guards, counters
 that step away from their bound, bounds the loop changes, and loops without a counter (such as
 list walks, which need a ghost measure). Nested loop bodies, calls and memory are not followed,
-and side premises such as overflow bounds are never inferred. `Infer.lean` and `Nested.lean`
+and side premises such as overflow bounds are never inferred. `Infer.lean` and `nested/Proof.lean`
 fix these reports with `#guard_msgs`. The suggested measures and bounds for the two loops of
 `pairs` are the ones its invariants use.
 
