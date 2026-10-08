@@ -11,6 +11,7 @@ private def typeShape (t : Ty) : Ty :=
   | .array n _ s => .array n 0 s
   | .vector n _ => .vector n 0
   | .optional _ => .optional 0
+  | .future _ => .future 0
   | .errorUnion _ _ => .errorUnion 0 0
   | .struct n l fs => .struct n l (fs.map fun (n, _) => (n, 0))
   | .enum n _ e fs => .enum n 0 e fs

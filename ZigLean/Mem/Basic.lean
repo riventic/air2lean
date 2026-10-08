@@ -282,6 +282,10 @@ structure Mem where
   groups : Array (Ptr × ThreadId) := #[]
   /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
   allocators : Array OwnedAlloc := #[]
+  /-- The `Io.Future` tasks with an outstanding cancelation request that no cancelation point
+  has acknowledged yet (`ZigLean/Conc/Future.lean`). Empty in every program without
+  `Future.cancel`. -/
+  cancels : Array ThreadId := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
