@@ -208,10 +208,8 @@ class Published(unittest.TestCase):
             with self.subTest(table=table.name):
                 summaries = sorted(table.with_suffix('').glob('*.json'))
                 self.assertTrue(summaries)
-                args = ['check', '--json', table]
-                for path in summaries:
-                    args += ['--summary', path]
-                code, output = run(*args)
+                code, output = run('check', '--json', table,
+                                   *(a for path in summaries for a in ('--summary', path)))
                 self.assertEqual(code, 0, output)
                 versions = {r['version'] for r in json.loads(table.read_text())['rows']}
                 self.assertLessEqual(set(CLAIMED), versions)
