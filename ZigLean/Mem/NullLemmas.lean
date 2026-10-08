@@ -75,15 +75,20 @@ theorem load_store_null {m : Mem} {p : Ptr} {a a' : Nat} {b : BlockId} {blk : Bl
       pure (Ptr.null, (m.write b blk o (nullablePtrEnc.encode Ptr.null)).recordAt b o 8 .read) :=
   @load_store_same Ptr nullablePtrEnc nullablePtrEnc_lawful m p a a' b blk o Ptr.null h h' hnr
 
+/-- A pointer whose address is nonzero is not null; memory is unchanged. -/
+theorem ptrIsNull_nonzero {m : Mem} {p : Ptr} {addr : Int}
+    (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
+    (ptrIsNull p).run m = pure (false, m) := by
+  simp only [ptrIsNull, StateT.run_bind, ha]
+  simp [hz, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
+    StateT.pure]
+
 /-- A projection whose base address is nonzero is exactly the projected pointer; memory is
 unchanged. -/
 theorem ptrProjectNullable_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr → Ptr)
     (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
     (ptrProjectNullable p project).run m = pure (project p, m) := by
-  have hn : (ptrIsNull p).run m = pure (false, m) := by
-    simp only [ptrIsNull, StateT.run_bind, ha]
-    simp [hz, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
-      StateT.pure]
+  have hn := ptrIsNull_nonzero ha hz
   simp only [ptrProjectNullable, StateT.run_bind, hn]
   simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     StateT.pure]
@@ -100,10 +105,7 @@ theorem projected_access_block {m : Mem} {p : Ptr} {off : Int} {n a : Nat} {b : 
 theorem ptrOfOptional_toOptional {m : Mem} {p : Ptr} {addr : Int}
     (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
     (do pure (ptrOfOptional (← ptrToOptional p)) : MemM Ptr).run m = pure (p, m) := by
-  have hn : (ptrIsNull p).run m = pure (false, m) := by
-    simp only [ptrIsNull, StateT.run_bind, ha]
-    simp [hz, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
-      StateT.pure]
+  have hn := ptrIsNull_nonzero ha hz
   simp only [ptrToOptional, StateT.run_bind, hn]
   simp [ptrOfOptional, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont,
     StateT.run, StateT.pure]
