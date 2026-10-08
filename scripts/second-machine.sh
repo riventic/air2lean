@@ -82,9 +82,12 @@ commit=$(git rev-parse --verify "$rev^{commit}")
 [ -n "$platform" ] || platform=$(python3 -c 'import json; print(json.load(open("compatibility.json"))["clean_environment"]["platform"])')
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-second-machine.XXXXXX")
 image="air2lean-second-machine:$$"
+container="air2lean-second-machine-$$"
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
+  # A timeout or signal stops only the docker client; remove the container it started.
+  docker rm -f "$container" >/dev/null 2>&1 || true
   rm -rf "$snapshot"
   [ "$keep_image" = 1 ] || docker image rm -f "$image" >/dev/null 2>&1 || true
   exit "$status"
@@ -106,7 +109,7 @@ runner=()
 if command -v timeout >/dev/null 2>&1; then runner=(timeout --foreground "$bound")
 elif command -v gtimeout >/dev/null 2>&1; then runner=(gtimeout --foreground "$bound"); fi
 status=0
-${runner[@]+"${runner[@]}"} docker run --rm --platform "$platform" --init \
+${runner[@]+"${runner[@]}"} docker run --rm --name "$container" --platform "$platform" --init \
   --memory="${AIR2LEAN_SECOND_MEMORY:-10g}" --cpus="${AIR2LEAN_SECOND_CPUS:-4}" \
   --mount "type=bind,src=$snapshot,dst=/snapshot,readonly" \
   --mount "type=bind,src=$results,dst=/results" \
