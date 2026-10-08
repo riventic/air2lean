@@ -228,6 +228,11 @@ def upgrades(binary):
             old_head, _, old_body = old.partition("\n")
             new_head, _, new_body = new.partition("\n")
             assert new_head == old_head.replace('"zig_version":"0.16.0"', '"zig_version":"0.17.0"'), example
+            # The one intended 0.17.0 semantic change in these goldens: compiler-rt f80 `@trunc`
+            # (docs/floats.md group I, `Zig.Float.truncRt017Chk`). Anything else is a spelling bug.
+            if "--float-semantics" in extra:
+                assert old_body.count("Zig.Float.truncChk") >= new_body.count("Zig.Float.truncRt017Chk"), example
+                new_body = new_body.replace("Zig.Float.truncRt017Chk", "Zig.Float.truncChk")
             assert new_body == old_body, f"{example}: 0.17.0 spelling changed the translation"
             compared += 1
     assert compared + skipped >= 19 and compared >= 18, f"only {compared} examples translated"
