@@ -454,6 +454,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.hypot2.json",
           "tests/golden/floats/air/floats.isNan.json",
           "tests/golden/floats/air/floats.lerp.json",
@@ -586,7 +587,16 @@
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.getU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.putU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -651,6 +661,7 @@
           "tests/golden/floatops/air/floatops.op64.json",
           "tests/golden/floatops/air/floatops.op80.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.hypot2.json",
           "tests/golden/floats/air/floats.lerp.json",
           "tests/golden/lists/air/lists.sumRange.json",
@@ -865,7 +876,8 @@
           "tests/golden/slices/air/slices.bumpAt.json",
           "tests/golden/vectors/air/vectors.addTo.json",
           "tests/golden/vectors/air/vectors.splatAdd.json",
-          "tests/golden/vectors/air/vectors.vMinMax.json"
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json"
         ]
       },
       "proofs": {
@@ -983,6 +995,7 @@
           "tests/golden/floatops/air/floatops.op64.json",
           "tests/golden/floatops/air/floatops.op80.json",
           "tests/golden/floats/air/floats.celsius.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.lerp.json",
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumMid.json"
@@ -1270,6 +1283,7 @@
           "tests/golden/floatops/air/floatops.op64.json",
           "tests/golden/floatops/air/floatops.op80.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.hypot2.json",
           "tests/golden/floats/air/floats.lerp.json",
           "tests/golden/vectors/air/vectors.fDot.json"
@@ -1648,6 +1662,7 @@
         "paths": [
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Vec.lean"
@@ -1772,6 +1787,7 @@
         "paths": [
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Vec.lean"
@@ -1889,6 +1905,7 @@
         "paths": [
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Vec.lean"
@@ -2004,6 +2021,7 @@
         "paths": [
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Vec.lean"
@@ -2125,6 +2143,7 @@
         "paths": [
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Vec.lean"
@@ -2786,6 +2805,7 @@
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.bumpDigit.json",
           "tests/golden/layout/air/layout.incCount.json",
           "tests/golden/layout/air/layout.maskStore.json",
@@ -2822,7 +2842,11 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/golden/vectors/air/vectors.twiceInMem.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -3148,6 +3172,7 @@
           "ZigLean/Bit.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Libm.lean",
@@ -3190,7 +3215,8 @@
           "tests/golden/layout/air/layout.ptrFromAddr.json",
           "tests/golden/layout/air/layout.ptrRoundTrip.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
-          "tests/golden/vectors/air/vectors.vBits.json"
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
         ]
       },
       "proofs": {
@@ -3244,6 +3270,7 @@
           "ZigLean/Bit.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Libm.lean",
@@ -3282,7 +3309,10 @@
           "tests/golden/asm/air/asm.divmod.json",
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/vectors/air/vectors.vBits.json",
-          "tests/golden/vectors/air/vectors.vShift.json"
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -3349,7 +3379,10 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/layout/air/layout.maskStore.json",
-          "tests/golden/vectors/air/vectors.vShift.json"
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
       },
       "proofs": {
@@ -3472,7 +3505,10 @@
           "tests/golden/0.15.2/atomics/air-linux/atomics.sbRelaxed.json",
           "tests/golden/0.15.2/lists/air/lists.listSum.json",
           "tests/golden/asm/air/asm.divmod.json",
-          "tests/golden/vectors/air/vectors.vShift.json"
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -3641,6 +3677,7 @@
           "ZigLean/Bit.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Format.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Libm.lean",
@@ -3675,7 +3712,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/vectors/air/vectors.vBits.json"
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json"
         ]
       },
       "proofs": {
@@ -3786,6 +3824,7 @@
           "ZigLean/Mem/WidthLemmas.lean",
           "ZigLean/Packed.lean",
           "ZigLean/PackedLemmas.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/ReprCast.lean",
           "ZigLean/Sep/AddrReuse.lean",
           "ZigLean/Sep/Alloc.lean",
@@ -3826,7 +3865,8 @@
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.handoff.json",
           "tests/golden/threadsync/air/Thread.ResetEvent.FutexImpl.wait.json",
           "tests/golden/threadsync/air/debug.assert.json",
-          "tests/golden/vectors/air/vectors.vBits.json"
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json"
         ]
       },
       "proofs": {
@@ -3989,6 +4029,7 @@
           "tests/golden/floatconv/air/floatconv.bits32.json",
           "tests/golden/floatconv/air/floatconv.ofBits64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.addrEq.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.asConst.json",
@@ -4035,7 +4076,8 @@
           "tests/golden/variants/air/variants.prioValue.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
         ]
       },
       "proofs": {
@@ -4104,6 +4146,7 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/AddrReuse.lean",
           "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/ArenaClient.lean",
@@ -4191,6 +4234,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.bump.json",
@@ -4244,7 +4288,9 @@
           "tests/golden/vectors/air/vectors.sMod.json",
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
-          "tests/golden/vectors/air/vectors.vMod.json"
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
       },
       "proofs": {
@@ -4387,6 +4433,7 @@
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
@@ -4410,6 +4457,7 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Errors/Proofs.lean",
           "Proofs/Floats/Dot.lean",
+          "Proofs/Floats/Fitness.lean",
           "Proofs/Floats/Gen.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Iogroup/Counter.lean",
@@ -4520,6 +4568,7 @@
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
@@ -4662,6 +4711,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.bump.json",
@@ -4717,7 +4767,9 @@
           "tests/golden/vectors/air/vectors.sMod.json",
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
-          "tests/golden/vectors/air/vectors.vMod.json"
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
       },
       "proofs": {
@@ -4986,6 +5038,7 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5060,6 +5113,7 @@
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floatops/air/floatops.divExact64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.applyTwice.json",
@@ -5113,7 +5167,9 @@
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
       },
       "proofs": {
@@ -5186,6 +5242,7 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5280,6 +5337,7 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5374,6 +5432,7 @@
           "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/RawAlloc.lean",
           "ZigLean/Sep/Remap.lean",
           "ZigLean/Simp.lean",
@@ -5726,6 +5785,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Float/Allowed.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Float/Round.lean",
@@ -6740,6 +6800,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.writeTable.json",
           "tests/golden/lists/air/lists.sumRange.json",
@@ -6985,6 +7046,7 @@
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/floatops/air/floatops.divExact64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.addrEq.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.digit.json",
@@ -7352,7 +7414,8 @@
           "tests/golden/recursion/air/recursion.gcd.json",
           "tests/golden/slices/air/slices.sumZ.json",
           "tests/golden/vectors/air/vectors.sMod.json",
-          "tests/golden/vectors/air/vectors.sRem.json"
+          "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
         ]
       },
       "proofs": {
@@ -7615,6 +7678,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.bump.json",
@@ -7901,6 +7965,7 @@
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Try.lean",
           "ZigLean/Sep/TryAlias.lean",
@@ -8006,6 +8071,7 @@
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Try.lean",
           "ZigLean/Sep/TryAlias.lean",
@@ -8312,6 +8378,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.hypot2.json",
           "tests/golden/floats/air/floats.isNan.json",
           "tests/golden/floats/air/floats.lerp.json",
@@ -8447,7 +8514,16 @@
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.getU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.putU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -8520,6 +8596,7 @@
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
@@ -8528,7 +8605,9 @@
           "tests/golden/slices/air/slices.sumSlice.json",
           "tests/golden/slices/air/slices.sumZ.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
       },
       "proofs": {
@@ -8597,6 +8676,7 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/RecTemplate.lean",
           "ZigLean/Sep/AddrReuse.lean",
           "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/ArenaClient.lean",
@@ -8787,6 +8867,7 @@
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.bumpDigit.json",
           "tests/golden/layout/air/layout.maskStore.json",
           "tests/golden/layout/air/layout.numRoundTrip.json",
@@ -8801,7 +8882,11 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/golden/vectors/air/vectors.twiceInMem.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -8900,6 +8985,7 @@
           "tests/golden/basic/air/basic.weightedTardiness.json",
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.bitsToFloat.json",
           "tests/golden/layout/air/layout.bump.json",
           "tests/golden/layout/air/layout.floatBits.json",
@@ -8927,7 +9013,11 @@
           "tests/golden/vectors/air/vectors.splatAdd.json",
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -9760,6 +9850,7 @@
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.bitsToFloat.json",
           "tests/golden/layout/air/layout.bump.json",
           "tests/golden/layout/air/layout.bumpDigit.json",
@@ -9809,7 +9900,15 @@
           "tests/golden/vectors/air/vectors.twiceInMem.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.getU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -10127,6 +10226,7 @@
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.hypot2.json",
           "tests/golden/floats/air/floats.isNan.json",
           "tests/golden/floats/air/floats.lerp.json",
@@ -10258,7 +10358,16 @@
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.getU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.putU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -10652,6 +10761,7 @@
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.bitsToFloat.json",
           "tests/golden/layout/air/layout.bump.json",
           "tests/golden/layout/air/layout.incCount.json",
@@ -10707,7 +10817,13 @@
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.putU3.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -10822,6 +10938,7 @@
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/floatops/air/floatops.divExact64.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.bumpDigit.json",
@@ -11036,7 +11153,12 @@
           "tests/golden/pointers/air/pointers.addDown.json",
           "tests/golden/pointers/air/pointers.addTo.json",
           "tests/golden/slices/air/slices.sumZ.json",
-          "tests/golden/variants/air/variants.area.json"
+          "tests/golden/variants/air/variants.area.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -11193,7 +11315,10 @@
           "tests/golden/0.15.2/slices/air/slices.sentinelArr.json",
           "tests/golden/layout/air/layout.setNum.json",
           "tests/golden/lists/air/lists.sumRange.json",
-          "tests/golden/vectors/air/vectors.vShift.json"
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -12664,6 +12789,7 @@
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/options/air/options.findOr.json",
@@ -12905,7 +13031,13 @@
           "tests/golden/layout/air/layout.applyOp.json",
           "tests/golden/layout/air/layout.writeTable.json",
           "tests/golden/slices/air/slices.factorial.json",
-          "tests/golden/slices/air/slices.localArr.json"
+          "tests/golden/slices/air/slices.localArr.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
+          "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -12967,6 +13099,7 @@
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/errors/air/errors.sumDigits.json",
           "tests/golden/floats/air/floats.dot.json",
+          "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/slices/air/slices.reverse.json",
@@ -13146,7 +13279,11 @@
           "tests/golden/layout/air/layout.writeTable.json",
           "tests/golden/slices/air/slices.bumpAt.json",
           "tests/golden/slices/air/slices.indexOfScalar.json",
-          "tests/golden/slices/air/slices.localArr.json"
+          "tests/golden/slices/air/slices.localArr.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -14871,7 +15008,11 @@
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.mutexCounter.json",
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.waitGroup.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
-          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
+          "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
+          "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
         ]
       },
       "proofs": {
@@ -15020,6 +15161,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Float/Error.lean",
           "ZigLean/Float/Ops.lean",
           "ZigLean/Vec.lean"
         ]
@@ -16816,34 +16958,34 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "919ebaa662cef3612f54ca0782fa71652b11a3bc127fd9ef2d3d5fa80cfe5e3c",
+      "scripts/coverage.py": "862f2e833643b9714b3d32750687fd768a5c8d146ea690561b77f6c55dc24e9c",
       "zig-patch/versions.toml": "8192cc5ad6fd9cfcf78db421c037870ec74fb1730e15f4ca94e93c2362436edd"
     },
     "translation": {
       "Air2Lean/Air/Anon.lean": "540b0ecab72478d263e4c0509f388bb72b8db9d6c4ea28df2f55f5e14a406183",
-      "Air2Lean/Air/Canon.lean": "1756247add3b63b23182a276102e1270b72cbb0e87fda9a59eeafd5522006ed1",
+      "Air2Lean/Air/Canon.lean": "705376293369fd821b587e8fdc5fd805a129eaf63cbd28f9262dfe361be52487",
       "Air2Lean/Air/Compat.lean": "7acd50392627d71dc54fe91ffcca6eaca524ee6b39147d801b51c3877017325c",
-      "Air2Lean/Air/Json.lean": "bfe78d71fa71e91be397ad5c7adafffe272f3168040fc3e8b3bbe57e1bb6d584",
-      "Air2Lean/Air/Normalize.lean": "9cd8f7f6bbdd5861aa0055e2513ff28f534f565378ee3dbd578b8ad8b96a91c0",
-      "Air2Lean/Air/Op.lean": "e2707f69bef4cda13d6dc520dbee621d6b335cacdc02735202490ad67f03a641",
-      "Air2Lean/Air/Profile.lean": "4c37b95f62f38c75ae80236d105defef7a4ee21a9fec481904194cc2325e1052",
+      "Air2Lean/Air/Json.lean": "e99b3c477552b65b36338a42d688124b1250a37a0bc7fe323df4c37d8576fa13",
+      "Air2Lean/Air/Normalize.lean": "2368fad664ef99d583d781ad27046fe02a572e1165b137bc9176b63717149ae4",
+      "Air2Lean/Air/Op.lean": "f1e0bd7a8477e7e503e31ce064ed884c0b69efef319f07d443badc5ca44747d4",
+      "Air2Lean/Air/Profile.lean": "ca584063ac6b71b0dc08899e3582712e1efbb506a2831d63796d62f6fe2be385",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
-      "Air2Lean/Check.lean": "73369fd92fa9b59bac0aeba53016f24642d5e83927a84bf9d6d6d0c39fea1bd5",
-      "Air2Lean/Diagnose.lean": "a65115cfc20c3d7587fa26ce97109921a2e97ef731f27a5330422ff73af4ee15",
-      "Air2Lean/Diagnostic.lean": "d64f359c4a05524a7d5cc5d0040aed29192a71caf1f7ecb9bc8d123c79b5611f",
-      "Air2Lean/Emit.lean": "ebdd72b895fa51131f14e75dde201d351f57ce87f034e6894ac146412afffd94",
-      "Air2Lean/Main.lean": "b7caa99e453990f89cccb086fe1d055511e1e663f8c755996d05626f0ca42b88",
+      "Air2Lean/Check.lean": "2903dffe1de36f3bf3094e4bcdccd9c7f3690693e98cd95b5bb252594c486844",
+      "Air2Lean/Diagnose.lean": "ab4c4c906df3c01b6010ef068f094936840a5afe4adfe83bc192da8018296b8a",
+      "Air2Lean/Diagnostic.lean": "774a854b134d3425f5d047f52b15d176269fb113ff7a94cf979640f2c315497e",
+      "Air2Lean/Emit.lean": "4fdaa3187696f633cb538fb8d2b9794673031ac44d55f842897821948af53ad9",
+      "Air2Lean/Main.lean": "fbb4fb6191c9e43ff48071a3b9fc6d38a5dbac51fea5160f372b8978454f7a80",
       "Air2Lean/Memory.lean": "55ca29d874dd1f0ea7b2fc58ccc775070d8c7f65b3921e70edb4218921653737",
       "Air2Lean/ModelRegistry.lean": "eaa182ee9cd9af908116e6eccbc3698761fb2474a7974bfcdfe9881bfd914bb5",
       "Air2Lean/ModuleSplit.lean": "ae835155cd6f68cf33705d6ebd58df9d623402b97a31df67b83a43aafa4106a8",
       "Air2Lean/ProofApi.lean": "bbc36a55e40aa7d50a43d53d55b887b06fcccc675b2feaf0ddc9812b7eae2920",
       "Air2Lean/Revision.lean": "2b7a548c65171ce00fed45526a07f6e6be4fd6cde5b0008e4ae416b90e4dba10",
-      "Air2Lean/SourceMap.lean": "a8608c4b0ff4e200ee7c4e16a64f8a7eca1522685370e5e19c906784078e5586",
+      "Air2Lean/SourceMap.lean": "742adb978e7d73a154728eb30467323d07308c6d76953ddf32c0447df73cd000",
       "Air2Lean/StdModels.lean": "e2343f564f7489a1d89ef121b567a7370bd20539ca09b553fdcbdeaa7a17021e",
       "Air2Lean/TimedCheck.lean": "690ac922400f0a9b888f9931a5879bbad7995ef27664ebed7fccda389aa171e5",
       "Air2Lean/TimedEmit.lean": "35f077ba25f6153e1a4dfd96ae6094996d7f94c9fc0a3563671570b629accb86",
-      "zig-patch/air-json/json.zig": "61d81a0b62b05c32bdfb5c722302889112f3ec0431d57448d5e265326ada50a6",
+      "zig-patch/air-json/json.zig": "fc84d05c32c5cdeb43af2cba9a43db010a43d557785d70c1486835b9d2352690",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {
@@ -16889,7 +17031,7 @@
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
       "ZigLean/Float/Allowed.lean": "562d97fa9ed6bba75995953a0eebb34c3a495f03590a00fb948ca3bf7feebe66",
       "ZigLean/Float/CompilerRt.lean": "e0f328bd0ffb6c868ba235ac88ea094b70018703bbdc088eab87bc7b1c051a26",
-      "ZigLean/Float/Error.lean": "d185a79a145a33bb3ccfd304544258d296b9e36e55010c4c5d347487e6deccb1",
+      "ZigLean/Float/Error.lean": "c625bcaf1ced19688539da541422f8708a19cbbd566fea4e0d086beb83d90103",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",
       "ZigLean/Float/Libm.lean": "ecc42f5218b1ca552f45a26d65b614f03e2b91a52cc47ed8cf01133530a2c452",
@@ -16918,10 +17060,11 @@
       "ZigLean/Mem/Width.lean": "c309d13d8daa0796c5fcdc291e5d7cdccc242630c1422619eea042bce2c9240f",
       "ZigLean/Mem/WidthLemmas.lean": "18a6ae415568345d6f0626f3f37be304f592732a4dd1474a67ba123a6ee18931",
       "ZigLean/Mem.lean": "bbb11c184271e2589111f3461779cca3b8ff299ecaacf1f447859700338b98bc",
-      "ZigLean/Packed.lean": "bc065fecb418e1105e12d49caeac78940433d598955eb7fcdb0373f8079882a5",
+      "ZigLean/Packed.lean": "6d33d5f12d4f574ef48cbd556448af66f4938603c7542837c6b8cfa357612d95",
       "ZigLean/PackedLemmas.lean": "80a58950f25a73bdb04020fde3e3ea1b31f0971770972d616dc833329053412c",
       "ZigLean/Permutation.lean": "46ea25243d11f31b66fcecc984a21b0843fe1366276d7abf69840107567c27e9",
       "ZigLean/Range.lean": "5e186493f18715774e89e0794cadf759cf24af3b0dc854b578931ffd8db9602a",
+      "ZigLean/RecTemplate.lean": "ecd7e41067715f6f7f5f568568ab42fd174f40acbc1fbfa406cfc989e0d6261e",
       "ZigLean/ReprCast.lean": "49a795e3577d7dcbc158410e36014190308a7494d112c2701eb53c4ba6f2ebce",
       "ZigLean/Sep/AddrReuse.lean": "ecbe23507c9382480c93fea44770e5612457e0bc446b448c199ea65f2422c796",
       "ZigLean/Sep/Alloc.lean": "54bdab14e9273a06f251549e647cdcc98b0641a8bb8ba8342b61413f7049a61d",
@@ -16936,7 +17079,7 @@
       "ZigLean/Sep/Discard.lean": "c601842744a0cb1c80755e0e459ea081b24ce00dccd8d7e944d3b1a5114b5611",
       "ZigLean/Sep/Heap.lean": "e5686d1fe72e5e47df44708cff597ab21769c7ac9533c2a8ecb1a3c81c20b584",
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
-      "ZigLean/Sep/LoopTemplate.lean": "a52975a351891ccb223e0f4c19392c1f03bc6d96d1614f9eb84912ff414e980b",
+      "ZigLean/Sep/LoopTemplate.lean": "5312d2f597bf721394b3223aaca341fb76f7cc0fd85166c218a13d045e763d20",
       "ZigLean/Sep/Owned.lean": "597a9d72c3b36e8c45a858973c6db1e57e213b6bb807f5db80b7333d0a3384b6",
       "ZigLean/Sep/RawAlloc.lean": "82991269216fdd96896e19a69485fb36a8092e9442b46576c0e0339ee82a0806",
       "ZigLean/Sep/Remap.lean": "dfc6cae3d2564f73def3bd6f90a4bdc33e85da755ec2ef5ae6c0e24d84a3d406",
@@ -16958,8 +17101,8 @@
       "ZigLean/VC/Result.lean": "cf70b6237f2dcf23830a6a898aa79470eec7f5df4b0f2649993078ed3d893b75",
       "ZigLean/VC/Rules.lean": "b98ee572612fca5d931404cd4f3b9fb3bfbbb4b90fa7cd4bc1bd60757ac6a0cf",
       "ZigLean/VC.lean": "c72724d1a0aff5e96ba7960386299b0ac6611949eadb1af4dfbe7c84f7d8dde3",
-      "ZigLean/Vec.lean": "ebfdd75cea4aa5aef1d06a08a2944a5668b7768f17041e82baacf0bc92b6d91d",
-      "ZigLean/VecMem.lean": "c20b6386f4b1a9eb15775b694dac5ca6a9a5be8448c43b2c6590d8794ac78ee5"
+      "ZigLean/Vec.lean": "ee04e26b2cf4923d900e774141f3ea9129f7da7eb34ac0891e892c2d62653b6f",
+      "ZigLean/VecMem.lean": "d1f1af8c5fc2dbbd69ee921e3cb340a4e6319570b1f9a578c4fc8778ca9d9900"
     },
     "proof-sources": {
       "Proofs/Asm/Effects.lean": "c1775f83bb860c7dd7d7089945db69e79776c2ed5f4ff58f694b6b387def394c",
@@ -16987,8 +17130,9 @@
       "Proofs/Floatconv/Proofs.lean": "74c841aaf6e2c2101c28a224ce47349033a057cd622838ec21dea9de7d0f86ce",
       "Proofs/Floatops/Gen.lean": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b",
       "Proofs/Floatops/Proofs.lean": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811",
-      "Proofs/Floats/Dot.lean": "95722a0cd7d03107754a1b5ac39513d020ae24d5e9f4765c660fe92012c1eb95",
-      "Proofs/Floats/Gen.lean": "8618fa7b0d2a78273a3129481e4ff4b9d853424ba380d071df58a79ab4ca7716",
+      "Proofs/Floats/Dot.lean": "06b50a91d334a9a938d7249b3433ffd3430b2e5217afdd44e56fc0f9c8f33c1d",
+      "Proofs/Floats/Fitness.lean": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
+      "Proofs/Floats/Gen.lean": "be83b54570c3fb247faa573a78aa1ced93367af8b882f65b4967239030e6c6d8",
       "Proofs/Floats/Proofs.lean": "ab76fbbe34b9184ae5495c738d5e39892fb26ca1f0c7dcb5c2a642369530707c",
       "Proofs/Iogroup/Counter.lean": "e4d0fd61d42ee915f35fc4aae11e0d1812285029bdeea50c11883ba2aceb16fd",
       "Proofs/Iogroup/Gen.lean": "c1916b15976f9dc2dbc2c030490c205b5e68fc727aaaf9c8af9837caa14a2ef6",
@@ -17044,7 +17188,7 @@
     "qualification-probes": {
       "scripts/floatprobe.sh": "085852eab980a9b0d87c975e3902ad276e5a44fd699ad31ed571f4dbe4b48989",
       "tests/diff/Concurrent.lean": "4895f5102ecade7c1c9084e719adc713e7459ea6d6a9133adc19696d96c9373d",
-      "tests/diff/Diff.lean": "b93d710b66dd18c2ca1a75a2572535f03b5c383ea9333fda4776cb9e3008d985",
+      "tests/diff/Diff.lean": "33cb802c2c34c473c3ce6d9f6d04885c18e24bb0a1b0a5bdf570532d3b68c251",
       "tests/diff/Outcome.lean": "d300f538e27c3c54b1d2837aa22c767773ba2ec9af8b20dbe0b458f1a6fbf255",
       "tests/diff/ScheduleSearch.lean": "ee4ea6c96f8da944fad95895ffcc2bc181be886c9d3abd695f8d8891d782932a",
       "tests/diff/ScheduleSearchTest.lean": "aa14b06fc3ee19578b9bb51e2d6de7e0e8fcf5ef05765f9c7f46c072ce76795b",
@@ -17094,20 +17238,21 @@
       "tests/diff/floatops/host.txt": "b3d5e231bccda3b881dec71d752decf474b675458ee4f3131c361909cd25b828",
       "tests/diff/floatops/inputs/cmp64.jsonl": "f410e007a18603bbffa8325c7cc892db6b09fc6c844986810388f2643b1c2fd2",
       "tests/diff/floatops/inputs/divExact64.jsonl": "79305facfb46509f1a2e8d4fc6c40cb1f25e9addf396d1048ad255d3c4324dfc",
-      "tests/diff/floatops/inputs/op128.jsonl": "0621d370507d7757de774ead5efdc2f698be6c41593d8696ca710fe81905b6fc",
-      "tests/diff/floatops/inputs/op16.jsonl": "77523e5631f6ae67a4f6b574ff5ecf009a6f5cd4fd642a0af5013b47ceb17768",
-      "tests/diff/floatops/inputs/op32.jsonl": "e36a85c1cb082a993478f38502cff079ef29cf8553f5353e8f73c452c485cf4c",
-      "tests/diff/floatops/inputs/op64.jsonl": "443a4c3cbd18536975f4d0767d34ff03b2c655e97e2e948f9de2078a8a2e8c32",
-      "tests/diff/floatops/inputs/op80.jsonl": "0a5968d4eb578b2b4a6094c982a2a77d4d8ffd733fb5a6a9d6e9ea74fed340ed",
+      "tests/diff/floatops/inputs/op128.jsonl": "67222ea892e2750595607b388546a40b314bae8dc0f74920a152bbc2ae3a5390",
+      "tests/diff/floatops/inputs/op16.jsonl": "096910aaacc4e91135f2045b34a5958ee627c80104362a2d80c06b7ea1524781",
+      "tests/diff/floatops/inputs/op32.jsonl": "95c0a83a5c85549faeef38db8becd5772cb16f969111a60b67d09fb23d73712c",
+      "tests/diff/floatops/inputs/op64.jsonl": "b8f00fe0c2b49c8fd4740f37e45d21aeb07ecfb5498e50e0309d3f35405311f0",
+      "tests/diff/floatops/inputs/op80.jsonl": "cfca8be6099e80422472a94d374688fa3cc86a88ab894203c1f7d3e392ab1f32",
       "tests/diff/floatops/unspecified.txt": "25be28d61c81f01974a4e5bdd9ff2e8f465bc346a439e90ea439ef71b39ac8bf",
-      "tests/diff/floats/harness.zig": "ba4d8aeefa215f7f21269b520ce7e9067a0c56e222812bd242634c2d2b128d59",
+      "tests/diff/floats/harness.zig": "5d523867bc8f8b2e66f55e1e12b28ab5c69db53eb69e8f3d863326baffdc08e8",
       "tests/diff/floats/inputs/celsius.jsonl": "549c2f8be5c8334c3a0936a97720cd7affdb1fee522d9725f7a707538ea2403d",
       "tests/diff/floats/inputs/clamp.jsonl": "e35167fa23b23badea24a9a0ace08a72bf9445db041c9239d623f52ccf9d9c33",
       "tests/diff/floats/inputs/dot.jsonl": "4dbd256c9014c7b89f810d774668a69e774f66532855e5a47fb4c8988fb25309",
+      "tests/diff/floats/inputs/fitness.jsonl": "a94c848a50753381ba5dbce74ed065d71cffa5f6bc7ec806f10ed502693a5ad9",
       "tests/diff/floats/inputs/hypot2.jsonl": "8d98ee43d80e2032e743df1baf1cb83fbac246b059ecd590b2881b7e24991b65",
       "tests/diff/floats/inputs/isNan.jsonl": "5939b5858a4b96edbb970232491e23fb792fada1905d0035e40ecc2dd2e84063",
       "tests/diff/floats/inputs/lerp.jsonl": "10564abc609aae3292974a4543d365f42b76770d07d569418501a020940c16d8",
-      "tests/diff/gen_inputs.zig": "59bb392c2a9aef8c5bddeb8c967c20e7c39e57e9384c67566fa64a89f446ec6e",
+      "tests/diff/gen_inputs.zig": "a9a5fdf48a8ee545c1f26f56b131ce4d4d6852b1626e3b9f01b6469cc76c6a21",
       "tests/diff/iogroup/harness.zig": "04f7a39ba895e87ec31a961e40650d5a920770f8cfd383d2c12c02da312f5377",
       "tests/diff/iogroup/inputs/groupConcurrent.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/iogroup/inputs/groupCounter.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
@@ -17487,6 +17632,7 @@
       "tests/golden/floats/air/floats.celsius.json": "cd8dd30f9759234817751d10d11d124d0e4caab49a6b650e3fb0e63b16591502",
       "tests/golden/floats/air/floats.clamp.json": "91f9e2ecca5a23d48d3ec3298a78267d1abaf1d8366093c2a58a62b2765e44c2",
       "tests/golden/floats/air/floats.dot.json": "966b90f4e0cd5c13748f553d5b52c87e2d3a29ffcc87e09c7349d17c88237416",
+      "tests/golden/floats/air/floats.fitness.json": "9c8a33995587875a2d7c18552d96b720cc3f6012eb3de6850d53f091b1533bf0",
       "tests/golden/floats/air/floats.hypot2.json": "ae3c562a428479127116c6b444677484f22098408b71fd0aa4662a1e320231e7",
       "tests/golden/floats/air/floats.isNan.json": "f6888ee5caf4e2d679436c3e4b31df6178e8e9d66a983abd2008ab98b0250c08",
       "tests/golden/floats/air/floats.lerp.json": "03894e26bc7af04d113efdbb87e43dae71567c4fc545e3d402a2cdabea671206",
@@ -17719,9 +17865,9 @@
       "tests/golden/vectors/air/vectors.vShift.json": "19aa90a260d72f7f341801c5241d280d763732a90b31644567fa08a289ae6b8f",
       "tests/golden/vectors/air/vectors.vToFloat.json": "ece67140f1de58de475c8d8e32b1da260e87175653b626efef1e104500b3c8aa",
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45",
-      "tests/roadmap/diagnostics/Collector.lean": "2ee51db19697067cf114efca6196a79d9149ef7908300b22489a009eaa87dc53",
+      "tests/roadmap/diagnostics/Collector.lean": "0b44b0e6641d01e1c08b8dc882eb9f3fb8de29444de5f11ac706670a984233d1",
       "tests/roadmap/diagnostics/RuntimeTags.lean": "7653c5e231b47c061e232607123c3d87d5403deb8e3a7323c31383a162cec68f",
-      "tests/roadmap/diagnostics/test_cli.py": "01f085badd2cd04d754174972905daf23107126f070bfbaadecb1eb0fe013730",
+      "tests/roadmap/diagnostics/test_cli.py": "39ecce9c369c42f1c6a72a4d686826051dd517e1e18699aad740891db7966156",
       "tests/roadmap/runtime-tags/runtime_tags.zig": "23422983282b3a6475593ed50e00cbc39cd39ee22aa15d56acaa9ea8365dd3df",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicShared.json": "e3cc5306e43478e87d453cebe22232643b75402153675488346305cd3311ea2b",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicWorker.json": "6b2250ab5ebf4f2cef48d46e7c09a5db7d26725f319f42b5098939421e7cddd1",
@@ -17821,7 +17967,26 @@
       "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.projectRes.json": "b76ce1853536d1fa25e624eb2028031fb7e17f87d89332495dd0e9d44eb2978c",
       "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.readResElem.json": "1fd816e439086dc4a504bd51b67b97d2a63d6f31bc3843908a29b50934f8bab6",
       "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resCodePtr.json": "2c5660f8ac690493d2e27b4f8642b5b1a35040ce5afa5255ab696b86cadaea62",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resElemPtr.json": "10f931a2fd320ce2ea422a220f2b7b5a578a12a5bddfa63996030593ee90f9a7"
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resElemPtr.json": "10f931a2fd320ce2ea422a220f2b7b5a578a12a5bddfa63996030593ee90f9a7",
+      "tests/roadmap/loop-tactics/nested/air/nested.pairs.json": "8b76d1aa5e064b80d46f9d417e001f7af8bb874731568b158ef8ce20cbb09736",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json": "e4dbcaf2611131d2adbae2595013922ea60181e088a2f0579e159b739e784ab5",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json": "ef65e25131fb75ea34c2f1bb781da03cc1d9da8ff995ef4ded52a82d623efe90",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.getU3.json": "869cf33f6eb303c60e02c73596bce9ccf40e04c3daa3753af9c62552de6d4856",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.putU3.json": "f5e55919d9afb1d75d2b773c603d04141b382ebd418ab549e5db26fbae24da63",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json": "47d558a4955afcaf4b269b86aced31d538c9fe89a09dd76cb2e0a8e3af533664",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json": "5ababf8764bb55088ea1be98898c6e6c5169c4d2d3db5c29844871744aec2cfa",
+      "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json": "922c913a924aaf6283cae51192d995d9ba5de7d6f07a049bd4d7890f180bfa56",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.boolLane.json": "a95bef78267fb239992d5539d18da91ada798016bd2bc7cd7fea0afdb1073158",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.flipBool.json": "76579c3758f0eee0198b5c80abf60fc86dd930217d30e24fd16f77cc38e989fb",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.getU3.json": "3dbbcfda6c91f5b8740d1e09038867362e8548faee6537a27af4bbd4b4006520",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.putU3.json": "882f4cbedeb6a12fbe97c687fa4beb7f4a97f3ebd1511ed6c5be222d1ba6a8d7",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.u24Lane.json": "91c8d62e908502bb553e9faa6b4ffa06bb50e43467a56947732ea1b1e4f53493",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.u3Lane.json": "ac58042c17ad3bbde2030a92869f039fcbaba86eb6f767b804c09e9c76672424",
+      "tests/roadmap/vector-layouts/air/0.16.0/lanes.u9Lane.json": "8fa560a484f91e9157aa221c09014a36427f449385e4556e203f15953cb51079",
+      "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json": "8b8c6c5c97ecbeedb9457605cf41e0076974b4cbb9aa827a58a4ec4b3a91b1e4",
+      "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json": "5391f469110f1f051aa42a7608b321abbf63910a88f049f119261bfacea58019",
+      "tests/roadmap/vector-layouts/air-reads/0.16.0/lane_reads.boolRead.json": "a3e5162ab1b9c30ac4fd93e06e236f5d95bc076b9724d24e3ab07209a21eba6c",
+      "tests/roadmap/vector-layouts/air-reads/0.16.0/lane_reads.u3Read.json": "713b84a25ddf62bcc112064d59223a582e357745399ec10f69bd9634f5014768"
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "e2343f564f7489a1d89ef121b567a7370bd20539ca09b553fdcbdeaa7a17021e",
