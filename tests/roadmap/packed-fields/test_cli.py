@@ -115,6 +115,9 @@ def check(binary, tmp):
     # A field past its host integer is a type error.
     checks += reject(binary, tmp, one("setA", layout(fx.P_A, host_size=1, bit_offset=6)),
                      "TYPE_FAILURE", "a bit-pointer field extends beyond its host integer")
+    # A bit-pointer to a type without a packed bit size (here a packed union) has no field bits.
+    checks += reject(binary, tmp, one("setA", layout(fx.P_A, child=fx.WORD)),
+                     "TYPE_FAILURE", "a bit-pointer to a type other than an integer")
     return checks
 
 

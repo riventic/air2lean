@@ -45,12 +45,6 @@ def Packed.ofBits? {α : Type} {n : Nat} [Packed α n] (b : BitVec n) : Result �
 def Packed.validAt (α : Type) {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) : Bool :=
   Packed.valid (α := α) (host.extractLsb' o n)
 
-/-- `host` with the `n` bits at bit `o` replaced by `v`. -/
-def Packed.set {α : Type} {n w : Nat} [Packed α n] (host : BitVec w) (o : Nat) (v : α) :
-    BitVec w :=
-  let mask : BitVec w := ((BitVec.allOnes n).setWidth w) <<< o
-  (host &&& ~~~mask) ||| (((Packed.toBits v).setWidth w) <<< o)
-
 /-! ## Defined bits
 
 A bit-pointer access reads and writes the field's bits only. Each host byte is a defined-bit

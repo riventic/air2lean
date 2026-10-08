@@ -144,9 +144,12 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     -- A bit-pointer reads and writes its host's `hostSize` bytes, any count (`Zig.loadBits`):
     -- `(bits + 7) / 8` on LLVM (3 for a `packed struct(u24)`), the ABI size on x86_64.
     if l.hostSize != 0 then
-      if let some bits := packedBits types child then
-        if l.bitOffset + bits > 8 * l.hostSize then
-          throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
+      -- Its field's bit size is what `Zig.loadBits`/`Zig.storeUndefBits` read and write.
+      let some bits := packedBits types child
+        | throw s!"{fnName}: near line {line}: a bit-pointer to a type other than an integer, a \
+            `bool`, an enum or a packed struct is outside the subset"
+      if l.bitOffset + bits > 8 * l.hostSize then
+        throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
     match size with
     -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A `*anyopaque`

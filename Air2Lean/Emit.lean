@@ -1065,7 +1065,7 @@ def FCtx.loadMem (fc : FCtx) (ptr : Val) (p : String) : String :=
   | some t =>
     if fc.hostSize t != 0 then
       s!"Zig.loadBits ({fc.pointeeTy ptr}) {fc.hostSize t} {fc.ptrAlign ptr} \
-        {(fc.layouts[t]?.map (·.bitOffset)).getD 0} {p}"
+        {fc.bitOffset t} {p}"
     else fc.pointeeStorageExpr ptr s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
   | none => s!"Zig.load ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {p}"
 
@@ -1969,12 +1969,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if fc.isMemPtr ptr then
       let (ty, align) := (fc.pointeeTy ptr, fc.ptrAlign ptr)
       let host := ((fc.valTyId? ptr).map fc.hostSize).getD 0
+      let bitOff := ((fc.valTyId? ptr).map fc.bitOffset).getD 0
       match v with
       -- `undefined` through a bit-pointer: only the field's bits become undefined.
       | .undef _ =>
         if host != 0 then
           let bits := (((fc.valTyId? ptr).bind (ptrChild fc.types)).bind (packedBits fc.types)).getD 0
-          let bitOff := ((fc.valTyId? ptr).map fc.bitOffset).getD 0
           (env, some s!"Zig.storeUndefBits {bits} {host} {align} {bitOff} {rv ptr}")
         else
         -- `undefined`: every byte of the value becomes undefined.
@@ -1993,7 +1993,6 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           | none => (env, some "(panic! \"air2lean: a store of a partly undefined value\")")
         else
         if host != 0 then
-          let bitOff := ((fc.valTyId? ptr).bind (fc.layouts[·]?) |>.map (·.bitOffset)).getD 0
           (env, some s!"Zig.storeBits (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))
     else (env, some (fc.storePlace ptr (rv v)))
