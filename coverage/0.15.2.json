@@ -2703,6 +2703,7 @@
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Tls.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/Mem/WidthLemmas.lean",
           "ZigLean/Sep/AddrReuse.lean",
           "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/ArenaClient.lean",
@@ -2996,6 +2997,7 @@
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Tls.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/Mem/WidthLemmas.lean",
           "ZigLean/Sep/AddrReuse.lean",
           "ZigLean/Sep/Alloc.lean",
           "ZigLean/Sep/ArenaClient.lean",
@@ -3781,6 +3783,7 @@
           "ZigLean/Mem/Thread.lean",
           "ZigLean/Mem/Tls.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/Mem/WidthLemmas.lean",
           "ZigLean/Packed.lean",
           "ZigLean/PackedLemmas.lean",
           "ZigLean/ReprCast.lean",
@@ -13886,6 +13889,7 @@
           "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/Mem/WidthLemmas.lean",
           "ZigLean/Sep/Triple.lean"
         ]
       },
@@ -13951,6 +13955,7 @@
           "ZigLean/Mem/Null.lean",
           "ZigLean/Mem/NullLemmas.lean",
           "ZigLean/Mem/Width.lean",
+          "ZigLean/Mem/WidthLemmas.lean",
           "ZigLean/Sep/Triple.lean"
         ]
       },
@@ -16910,8 +16915,8 @@
       "ZigLean/Mem/Repr.lean": "3670f8d65c4d17678ab436e5848f244cd70fb4a22c8de6627ba9195512fb0879",
       "ZigLean/Mem/Thread.lean": "409e444c1c1afae688e02b0363d43588b5c99254fde79a3b0d399cd30888e4f9",
       "ZigLean/Mem/Tls.lean": "0cf8a772833fad543306cb82c8cb0a226e68b714b98a4f10ad3579e0126181d2",
-      "ZigLean/Mem/Width.lean": "cf70ddd973d45cf579bb58c76e01591d5da577ca1c1d4182861bc2c9121ee515",
-      "ZigLean/Mem/WidthLemmas.lean": "a62d3f6ea9390ecd2defafe84be6ff981e970d8caf679f3c27e63db16271defb",
+      "ZigLean/Mem/Width.lean": "c309d13d8daa0796c5fcdc291e5d7cdccc242630c1422619eea042bce2c9240f",
+      "ZigLean/Mem/WidthLemmas.lean": "18a6ae415568345d6f0626f3f37be304f592732a4dd1474a67ba123a6ee18931",
       "ZigLean/Mem.lean": "bbb11c184271e2589111f3461779cca3b8ff299ecaacf1f447859700338b98bc",
       "ZigLean/Packed.lean": "bc065fecb418e1105e12d49caeac78940433d598955eb7fcdb0373f8079882a5",
       "ZigLean/PackedLemmas.lean": "80a58950f25a73bdb04020fde3e3ea1b31f0971770972d616dc833329053412c",

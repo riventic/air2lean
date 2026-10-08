@@ -116,8 +116,11 @@
 #     `stackPush_spec` (Proofs/Atomics/Stack.lean) needs. The diff test does not see it: the
 #     newest message is still option 0.
 # (ae) Lean-runtime mutation, iogroup: `Io.Group.await` (ZigLean/Mem/Thread.lean's `groupTake`)
-#     forgets the last task, so it is not joined. Detected by the diff test: `main`'s read of the
-#     counter races with that task on every schedule (the `unspecified` count changes).
+#     forgets the last task, so it is not joined. Detected by the proof build:
+#     `groupCounter_safe` (Proofs/Iogroup/Counter.lean) needs every task joined before `main`
+#     reads the counter. The diff test sees the race too, but since C05's spurious futex returns
+#     its schedule search for a matching witness ends at the search cap, which is budget
+#     evidence, not a semantic detection.
 # (af) Lean-runtime mutation, threads: `Thread.join` (ZigLean/Mem/Thread.lean) does not merge the
 #     joined thread's clock, so the joiner does not happen after that thread's writes. Detected by
 #     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `Owned.join`
@@ -1014,7 +1017,7 @@ else
   cp "$thread_backup" "$thread_lean"
 fi
 
-echo "== mutation (ae): Io.Group.await does not join the last task (Lean runtime) ==" >&2
+echo "== mutation (ae): Io.Group.await does not join the last task (Lean runtime, proof build) ==" >&2
 if ! want_mutation ae; then
   echo "mutation (ae): skipped (not in this shard)"
 elif ! has_example iogroup; then
@@ -1027,7 +1030,7 @@ else
     exit 1
   }
 
-  run_and_report "mutation (ae)" iogroup
+  proof_report "mutation (ae)" Proofs.Iogroup.Counter
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
 fi

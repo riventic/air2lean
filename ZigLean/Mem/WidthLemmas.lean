@@ -94,6 +94,97 @@ theorem sliceEnc_len_lt (w : PtrWidth) {bs : Array Byte} {s : SliceOf w.bits}
     (_ : (sliceEnc w).decode bs = pure s) : s.len.toNat < w.bound :=
   s.len.isLt
 
+/-! ## The `.w64` definitions are the 64-bit model
+
+Moved from `ZigLean/Mem/Width.lean`, which `ZigLean.lean` imports: these equations unfold
+the 64-bit runtime definitions, so a differential mutation of one of them (`scripts/mutate.sh`)
+must not break the runtime build. -/
+
+theorem ptrFrags_w64 (p : Ptr) : ptrFrags .w64 p = (Array.finRange 8).map (.ptrFrag p) := by
+  simp only [ptrFrags, PtrWidth.bytes]
+  rw [show (Array.finRange 8).extract 0 8 = Array.finRange 8 by decide]
+
+/-- The 64-bit instance is the existing `Enc Ptr` (`ZigLean/Mem/Enc.lean`). -/
+theorem ptrEnc_w64 : ptrEnc .w64 = (inferInstance : Enc Ptr) := by
+  have h : ∀ p, ptrFrags .w64 p = (Array.finRange 8).map (.ptrFrag p) := ptrFrags_w64
+  simp only [ptrEnc, h]
+  rfl
+
+/-- The 64-bit instance is the existing `Enc (Option Ptr)`. -/
+theorem optPtrEnc_w64 : optPtrEnc .w64 = (inferInstance : Enc (Option Ptr)) := by
+  have h : ∀ p, ptrFrags .w64 p = (Array.finRange 8).map (.ptrFrag p) := ptrFrags_w64
+  have he : ptrEnc .w64 = (inferInstance : Enc Ptr) := ptrEnc_w64
+  simp only [optPtrEnc, h]
+  rfl
+
+/-- At `.w64`, a slice has the bytes of the existing `Enc Slice`. -/
+theorem sliceEnc_w64_encode (s : Slice) : (sliceEnc .w64).encode s.toOf = Enc.encode s := by
+  have he : ptrEnc .w64 = (inferInstance : Enc Ptr) := ptrEnc_w64
+  show (ptrEnc .w64).encode s.ptr ++ Enc.encode s.len = _
+  rw [he]
+  rfl
+
+theorem sliceEnc_w64_decode (bs : Array Byte) :
+    (sliceEnc .w64).decode bs = Slice.toOf <$> (Enc.decode bs : Result Slice) := by
+  have he : ptrEnc .w64 = (inferInstance : Enc Ptr) := ptrEnc_w64
+  show (do pure (⟨← (ptrEnc .w64).decode (bs.extract 0 8),
+      ← (Enc.decode (bs.extract 8 16) : Result (BitVec 64))⟩ : SliceOf 64)) = _
+  rw [he]
+  show _ = Slice.toOf <$> (do pure (⟨← (Enc.decode (bs.extract 0 8) : Result Ptr),
+      ← (Enc.decode (bs.extract 8 16) : Result (BitVec 64))⟩ : Slice))
+  simp only [map_bind, map_pure]
+  rfl
+
+theorem sliceEnc_w64_size : (sliceEnc .w64).size = Enc.size Slice := rfl
+
+theorem sliceEnc_w64_align : (sliceEnc .w64).align = Enc.align Slice := rfl
+
+theorem allocatorEnc_w64 : allocatorEnc .w64 = (inferInstance : Enc Allocator) := rfl
+
+theorem Ptr.elemOf_64 (p : Ptr) (size : Nat) (i : BitVec 64) : p.elemOf size i = p.elem size i := rfl
+
+theorem Ptr.elemSubOf_64 (p : Ptr) (size : Nat) (i : BitVec 64) :
+    p.elemSubOf size i = p.elemSub size i := rfl
+
+theorem indexOf_64 {α : Type} (a : Array α) (i : BitVec 64) : indexOf a i = index a i := rfl
+
+theorem vindexOf_64 {α : Type} {k : Nat} (a : Vector α k) (i : BitVec 64) :
+    vindexOf a i = vindex a i := rfl
+
+theorem lenOf_64 {α : Type} (a : Array α) : lenOf 64 a = len a := rfl
+
+theorem memsetOf_64 {α : Type} [Enc α] (align : Nat) (p : Ptr) (k : BitVec 64) (v : Option α) :
+    memsetOf align p k v = memset align p k v := rfl
+
+theorem memmoveOf_64 (size dstAlign srcAlign : Nat) (dst src : Ptr) (k : BitVec 64) :
+    memmoveOf size dstAlign srcAlign dst src k = memmove size dstAlign srcAlign dst src k := rfl
+
+theorem readSliceOf_64 (α : Type) [Enc α] (align : Nat) (s : Slice) :
+    readSliceOf α align s.toOf = readSlice α align s := rfl
+
+theorem zeroAllocPtrOf_w64 (align : Nat) : zeroAllocPtrOf .w64 align = zeroAllocPtr align := rfl
+
+theorem allocBytesOf_w64 (align n : Nat) : allocBytesOf .w64 align n = allocBytes align n := rfl
+
+theorem Allocator.createOf_w64 (a : Allocator) (size align : Nat) :
+    a.createOf .w64 size align = a.create size align := rfl
+
+theorem Allocator.freeOf_64 (a : Allocator) (size : Nat) (s : Slice) :
+    a.freeOf size s.toOf = a.free size s := rfl
+
+/-- At `.w64`, `allocOf` is the existing `Allocator.alloc` (its slice as `SliceOf 64`). -/
+theorem Allocator.allocOf_w64 (a : Allocator) (size align : Nat) (n : BitVec 64) :
+    a.allocOf .w64 size align n = (Except.map Slice.toOf) <$> a.alloc size align n := by
+  simp only [Allocator.allocOf, Allocator.alloc, allocBytesOf_w64, PtrWidth.bound_w64,
+    Nat.reducePow]
+  by_cases h : 18446744073709551616 ≤ size * n.toNat
+  · simp only [h, ite_true, map_pure]
+    rfl
+  · simp only [h, ite_false, map_bind]
+    congr 1
+    funext r
+    cases r <;> simp [Except.map, Slice.toOf]
+
 namespace Wasm32
 open scoped Zig.Wasm32
 

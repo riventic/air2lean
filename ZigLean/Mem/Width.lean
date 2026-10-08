@@ -10,8 +10,9 @@ bound of every address and byte count (`PtrWidth.bound = 2 ^ bits`).
 
 The definitions of `ZigLean/Mem/Basic.lean`, `Enc.lean` and `Alloc.lean` remain the 64-bit
 model. Each width-parameterized definition here is proved equal to that model at `.w64`
-(`ptrEnc_w64`, `sliceEnc_w64_encode`, `Allocator.allocOf_w64`, …), so the 64-bit generated
-code keeps its existing terms and proofs. Generated code for a 32-bit profile uses the
+(`ptrEnc_w64`, `sliceEnc_w64_encode`, `Allocator.allocOf_w64`, … in the proof-only
+`ZigLean/Mem/WidthLemmas.lean`, so a differential mutation of the 64-bit model never breaks
+this runtime module), so the 64-bit generated code keeps its existing terms and proofs. Generated code for a 32-bit profile uses the
 definitions here, and opens `Zig.Wasm32` for the 4-byte encodings of `Ptr`, `?*T` and
 `std.mem.Allocator` (`docs/generated-code.md` §Pointer width).
 -/
@@ -65,10 +66,6 @@ end PtrWidth
 def ptrFrags (w : PtrWidth) (p : Ptr) : Array Byte :=
   ((Array.finRange 8).extract 0 w.bytes).map (.ptrFrag p)
 
-theorem ptrFrags_w64 (p : Ptr) : ptrFrags .w64 p = (Array.finRange 8).map (.ptrFrag p) := by
-  simp only [ptrFrags, PtrWidth.bytes]
-  rw [show (Array.finRange 8).extract 0 8 = Array.finRange 8 by decide]
-
 /-- A pointer of width `w`: `w.bytes` bytes that each remember the pointer. -/
 @[instance_reducible] def ptrEnc (w : PtrWidth) : Enc Ptr where
   size := w.bytes
@@ -78,12 +75,6 @@ theorem ptrFrags_w64 (p : Ptr) : ptrFrags .w64 p = (Array.finRange 8).map (.ptrF
     | some (.ptrFrag p _) =>
       if bs.extract 0 w.bytes == ptrFrags w p then pure p else throw .unspecified
     | _ => throw .unspecified
-
-/-- The 64-bit instance is the existing `Enc Ptr` (`ZigLean/Mem/Enc.lean`). -/
-theorem ptrEnc_w64 : ptrEnc .w64 = (inferInstance : Enc Ptr) := by
-  have h : ∀ p, ptrFrags .w64 p = (Array.finRange 8).map (.ptrFrag p) := ptrFrags_w64
-  simp only [ptrEnc, h]
-  rfl
 
 /-- `?*T` of width `w`: `null` is address 0, `w.bytes` zero bytes. -/
 @[instance_reducible] def optPtrEnc (w : PtrWidth) : Enc (Option Ptr) where
@@ -95,13 +86,6 @@ theorem ptrEnc_w64 : ptrEnc .w64 = (inferInstance : Enc Ptr) := by
   decode bs :=
     if bs.extract 0 w.bytes == Array.replicate w.bytes (.int 0) then pure none
     else some <$> (ptrEnc w).decode bs
-
-/-- The 64-bit instance is the existing `Enc (Option Ptr)`. -/
-theorem optPtrEnc_w64 : optPtrEnc .w64 = (inferInstance : Enc (Option Ptr)) := by
-  have h : ∀ p, ptrFrags .w64 p = (Array.finRange 8).map (.ptrFrag p) := ptrFrags_w64
-  have he : ptrEnc .w64 = (inferInstance : Enc Ptr) := ptrEnc_w64
-  simp only [optPtrEnc, h]
-  rfl
 
 /-- A slice whose length is a `usize` of `n` bits. `SliceOf 64` is `Slice` (`Slice.toOf`). -/
 structure SliceOf (n : Nat) where
@@ -126,27 +110,6 @@ def SliceOf.toSlice (s : SliceOf 64) : Slice := ⟨s.ptr, s.len⟩
   decode bs := do
     pure ⟨← (ptrEnc w).decode (bs.extract 0 w.bytes), ← Enc.decode (bs.extract w.bytes (2 * w.bytes))⟩
 
-/-- At `.w64`, a slice has the bytes of the existing `Enc Slice`. -/
-theorem sliceEnc_w64_encode (s : Slice) : (sliceEnc .w64).encode s.toOf = Enc.encode s := by
-  have he : ptrEnc .w64 = (inferInstance : Enc Ptr) := ptrEnc_w64
-  show (ptrEnc .w64).encode s.ptr ++ Enc.encode s.len = _
-  rw [he]
-  rfl
-
-theorem sliceEnc_w64_decode (bs : Array Byte) :
-    (sliceEnc .w64).decode bs = Slice.toOf <$> (Enc.decode bs : Result Slice) := by
-  have he : ptrEnc .w64 = (inferInstance : Enc Ptr) := ptrEnc_w64
-  show (do pure (⟨← (ptrEnc .w64).decode (bs.extract 0 8),
-      ← (Enc.decode (bs.extract 8 16) : Result (BitVec 64))⟩ : SliceOf 64)) = _
-  rw [he]
-  show _ = Slice.toOf <$> (do pure (⟨← (Enc.decode (bs.extract 0 8) : Result Ptr),
-      ← (Enc.decode (bs.extract 8 16) : Result (BitVec 64))⟩ : Slice))
-  simp only [map_bind, map_pure]
-  rfl
-
-theorem sliceEnc_w64_size : (sliceEnc .w64).size = Enc.size Slice := rfl
-theorem sliceEnc_w64_align : (sliceEnc .w64).align = Enc.align Slice := rfl
-
 /-- `?[]T` of width `w`: `null` is a pointer with address 0; the length bytes are undefined. -/
 @[instance_reducible] def optSliceEnc (w : PtrWidth) : Enc (Option (SliceOf w.bits)) where
   size := 2 * w.bytes
@@ -164,8 +127,6 @@ theorem sliceEnc_w64_align : (sliceEnc .w64).align = Enc.align Slice := rfl
   align := w.bytes
   encode _ := Array.replicate (2 * w.bytes) (.int 0)
   decode _ := pure ⟨⟩
-
-theorem allocatorEnc_w64 : allocatorEnc .w64 = (inferInstance : Enc Allocator) := rfl
 
 instance instEncSlice32 : Enc Slice32 := sliceEnc .w32
 instance (priority := high) instEncOptionSlice32 : Enc (Option Slice32) := optSliceEnc .w32
@@ -192,10 +153,6 @@ The same terms as the 64-bit operations, for an index or count of any width. Eac
 @[inline] def Ptr.elemSubOf (p : Ptr) (size : Nat) {n : Nat} (i : BitVec n) : Ptr :=
   p.add (-(size * i.toNat))
 
-theorem Ptr.elemOf_64 (p : Ptr) (size : Nat) (i : BitVec 64) : p.elemOf size i = p.elem size i := rfl
-theorem Ptr.elemSubOf_64 (p : Ptr) (size : Nat) (i : BitVec 64) :
-    p.elemSubOf size i = p.elemSub size i := rfl
-
 /-- `Zig.index` for a `usize` of `n` bits. -/
 @[inline] def indexOf {α : Type} {n : Nat} (a : Array α) (i : BitVec n) : Result α :=
   if h : i.toNat < a.size then pure a[i.toNat] else throw .outOfBounds
@@ -207,11 +164,6 @@ theorem Ptr.elemSubOf_64 (p : Ptr) (size : Nat) (i : BitVec 64) :
 /-- `Zig.len` as a `usize` of `n` bits. An array of a pure function's `[]const T` comes from
 `readSliceOf`, so its size is a `usize` of the target. -/
 @[inline] def lenOf (n : Nat) {α : Type} (a : Array α) : BitVec n := BitVec.ofNat n a.size
-
-theorem indexOf_64 {α : Type} (a : Array α) (i : BitVec 64) : indexOf a i = index a i := rfl
-theorem vindexOf_64 {α : Type} {k : Nat} (a : Vector α k) (i : BitVec 64) :
-    vindexOf a i = vindex a i := rfl
-theorem lenOf_64 {α : Type} (a : Array α) : lenOf 64 a = len a := rfl
 
 /-- `@memset` with an item count of `n` bits. -/
 def memsetOf {α : Type} [Enc α] {n : Nat} (align : Nat) (p : Ptr) (k : BitVec n) (v : Option α) :
@@ -238,13 +190,6 @@ def readSliceOf (α : Type) [Enc α] {n : Nat} (align : Nat) (s : SliceOf n) : M
   (Array.range s.len.toNat).mapM fun i =>
     (Enc.decode (bs.extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
 
-theorem memsetOf_64 {α : Type} [Enc α] (align : Nat) (p : Ptr) (k : BitVec 64) (v : Option α) :
-    memsetOf align p k v = memset align p k v := rfl
-theorem memmoveOf_64 (size dstAlign srcAlign : Nat) (dst src : Ptr) (k : BitVec 64) :
-    memmoveOf size dstAlign srcAlign dst src k = memmove size dstAlign srcAlign dst src k := rfl
-theorem readSliceOf_64 (α : Type) [Enc α] (align : Nat) (s : Slice) :
-    readSliceOf α align s.toOf = readSlice α align s := rfl
-
 /-- `@intFromPtr` on a target of width `w`. The model's address of a block can exceed the
 target's address space (`alloc` does not bound `Mem.nextAddr`); the model chooses no
 address then (`.unspecified`), so a proof that the code never throws shows that every
@@ -258,8 +203,6 @@ def ptrAddrOf (w : PtrWidth) (p : Ptr) : MemM (BitVec w.bits) := do
 /-- `zeroAllocPtr` on a target of width `w`: the highest address with the alignment. -/
 def zeroAllocPtrOf (w : PtrWidth) (align : Nat) : Ptr := ⟨none, w.bound - align⟩
 
-theorem zeroAllocPtrOf_w64 (align : Nat) : zeroAllocPtrOf .w64 align = zeroAllocPtr align := rfl
-
 /-- `allocBytes` on a target of width `w`. -/
 def allocBytesOf (w : PtrWidth) (align n : Nat) : MemM (Except ErrName Ptr) := do
   if n = 0 then return .ok (zeroAllocPtrOf w align)
@@ -267,15 +210,10 @@ def allocBytesOf (w : PtrWidth) (align n : Nat) : MemM (Except ErrName Ptr) := d
   | some p => pure (.ok p)
   | none => pure (.error "OutOfMemory")
 
-theorem allocBytesOf_w64 (align n : Nat) : allocBytesOf .w64 align n = allocBytes align n := rfl
-
 /-- `create(T)` on a target of width `w`. -/
 def Allocator.createOf (w : PtrWidth) (_ : Allocator) (size align : Nat) :
     MemM (Except ErrName Ptr) :=
   allocBytesOf w align size
-
-theorem Allocator.createOf_w64 (a : Allocator) (size align : Nat) :
-    a.createOf .w64 size align = a.create size align := rfl
 
 /-- `alloc(T, n)` on a target of width `w`: `n * size` bytes. A product that does not fit a
 `usize` (`math.mul` overflow) is `error.OutOfMemory`, before any allocator decision. -/
@@ -289,22 +227,6 @@ def Allocator.allocOf (w : PtrWidth) (_ : Allocator) (size align : Nat) (n : Bit
 /-- `free(s)` of a slice with a length of `n` bits. -/
 def Allocator.freeOf {n : Nat} (_ : Allocator) (size : Nat) (s : SliceOf n) : MemM Unit :=
   if size * s.len.toNat = 0 then pure () else poisonFree s.ptr (size * s.len.toNat)
-
-theorem Allocator.freeOf_64 (a : Allocator) (size : Nat) (s : Slice) :
-    a.freeOf size s.toOf = a.free size s := rfl
-
-/-- At `.w64`, `allocOf` is the existing `Allocator.alloc` (its slice as `SliceOf 64`). -/
-theorem Allocator.allocOf_w64 (a : Allocator) (size align : Nat) (n : BitVec 64) :
-    a.allocOf .w64 size align n = (Except.map Slice.toOf) <$> a.alloc size align n := by
-  simp only [Allocator.allocOf, Allocator.alloc, allocBytesOf_w64, PtrWidth.bound_w64,
-    Nat.reducePow]
-  by_cases h : 18446744073709551616 ≤ size * n.toNat
-  · simp only [h, ite_true, map_pure]
-    rfl
-  · simp only [h, ite_false, map_bind]
-    congr 1
-    funext r
-    cases r <;> simp [Except.map, Slice.toOf]
 
 /-- The size check of `allocOf`: a request of `size * n ≥ 2 ^ bits` bytes is
 `error.OutOfMemory` without a change to memory, and consumes no allocation attempt. -/
