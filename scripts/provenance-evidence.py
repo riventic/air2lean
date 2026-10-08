@@ -116,7 +116,7 @@ def regenerate(a):
     am.demand(code == 0, 'could not record the fresh manifest')
     fresh = json.loads(manifest_path.read_text())
     if fresh['links']['native']['value']['compiler_sha256'] == committed['links']['native']['value']['compiler_sha256']:
-        if fresh['links']['native']['value']['binary_sha256'] != pins['native_sha256']:
+        if fresh['links']['native']['value']['binary_sha256'] != pins['native_binary_sha256']:
             problems.append('native binary is not reproducible with the recorded stock compiler')
     for name in ('source', 'profile'):
         if fresh['links'][name]['sha256'] != committed['links'][name]['sha256']:
