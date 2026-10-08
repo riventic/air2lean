@@ -211,9 +211,10 @@ def selectorOf (again σ : Expr) : MetaM Expr := do
   let some fn := again.getAppFn.constName?
     | throwError "dispatch_template: the loop iterator {again} is not a generated `f.againN`"
   let last := fn.componentsRev.headD .anonymous |>.toString
-  unless last.startsWith "again" && (last.drop 5).toString.isNat do
+  let id := (last.toList.drop 5).asString
+  unless last.startsWith "again" && id.isNat do
     throwError "dispatch_template: the loop iterator {fn} is not a generated `f.againN`"
-  let field := Name.mkSimple s!"dispatchValue{(last.drop 5).toString}"
+  let field := Name.mkSimple s!"dispatchValue{id}"
   let some struct := (← whnfR σ).getAppFn.constName?
     | throwError "dispatch_template: the loop state {σ} is not generated locals"
   unless (getStructureFields (← getEnv) struct).contains field do
@@ -221,7 +222,7 @@ def selectorOf (again σ : Expr) : MetaM Expr := do
       {struct} has no selector field {field}"
   withLocalDeclD `s σ fun s => do mkLambdaFVars #[s] (← mkProjection s field)
 
-/-- The goal's loop: `(body, again, s, σ)` and whether it is a memory goal. -/
+/-- The goal's loop: its iterator `again`, its initial locals `s`, and whether it uses memory. -/
 def loopOf (goal : Expr) : MetaM (Expr × Expr × Bool) := do
   let goal ← whnfR goal
   let (c, mem) ← match goal.getAppFn.constName? with
@@ -235,12 +236,11 @@ def loopOf (goal : Expr) : MetaM (Expr × Expr × Bool) := do
       pure ((b.getArg! 0).getArg! 1, false)
     | _ => throwError "dispatch_template: the goal is not a TotalTriple, Triple or \
         `∃ r, _ = pure r ∧ _` about (Zig.loop body again).run s"
-  -- `StateT.run (Zig.loop body again) s`
+  -- `@StateT.run σ m α (@Zig.loop m _ _ _ ε body again) s`
   let c ← instantiateMVars c
-  let lp := c.getArg! 4
-  unless c.isAppOf ``StateT.run && lp.isAppOf ``Zig.loop do
+  unless c.isAppOfArity ``StateT.run 5 && (c.getArg! 3).isAppOfArity ``Zig.loop 7 do
     throwError "dispatch_template: the goal is not about (Zig.loop body again).run s"
-  pure (lp.getArg! 5, c.getArg! 0, mem)
+  pure ((c.getArg! 3).getArg! 6, c.getArg! 4, mem)
 
 /-- Is `κ` an enumeration (an inductive whose constructors have no fields)? -/
 def isEnum (κ : Expr) : MetaM Bool := do
@@ -251,22 +251,21 @@ def isEnum (κ : Expr) : MetaM Bool := do
     let .ctorInfo ci ← getConstInfo c | return false
     return ci.numFields == 0
 
-/-- Tag goals plainly, `beta`-reduce the selector, and return them. -/
-def tidy (gs : List MVarId) (tag : MVarId → MetaM Name) : TacticM (List MVarId) :=
-  gs.mapM fun g => do
-    g.setTag (← tag g)
-    match ← observing? (evalTacticAt (← `(tactic| dsimp only)) g) with
-    | some [g'] => pure g'
-    | _ => pure g
+/-- Tag a goal and `beta`-reduce the selector applications in it. -/
+def tidy (g : MVarId) (tag : Name) : TacticM MVarId := do
+  g.setTag tag
+  match ← observing? (evalTacticAt (← `(tactic| dsimp only)) g) with
+  | some [g'] => pure g'
+  | _ => pure g
 
 /-- Split the `step` premise into one goal per state. -/
-def splitStates (step : MVarId) (κ : Expr) (states : Option (Array Term)) :
+def splitStates (step : MVarId) (κ : Expr) (mem : Bool) (states : Option (Array Term)) :
     TacticM (List MVarId) := do
   match states with
   | some ks =>
     let list ← `([$ks,*])
-    let [listed, other] ← evalTacticAt (← `(tactic| refine Zig.DispatchTemplate.of_states $list ?listed ?other)) step
-        <|> evalTacticAt (← `(tactic| refine Zig.DispatchSpec.of_states $list ?listed ?other)) step
+    let rule := mkIdent (if mem then ``Zig.DispatchTemplate.of_states else ``Zig.DispatchSpec.of_states)
+    let [listed, other] ← evalTacticAt (← `(tactic| refine $rule $list ?listed ?other)) step
       | throwError "dispatch_template: could not split the step premise by states"
     let mut goals := #[]
     let mut g := listed
@@ -274,14 +273,10 @@ def splitStates (step : MVarId) (κ : Expr) (states : Option (Array Term)) :
       let [hd, tl] ← evalTacticAt
           (← `(tactic| refine Zig.dispatch_forall_mem_cons ?head ?tail)) g
         | throwError "dispatch_template: could not split the state {k}"
-      let [hd'] ← evalTacticAt (← `(tactic| dsimp only)) hd <|> pure [hd]
-        | unreachable!
-      hd'.setTag (`step ++ Name.mkSimple (toString k.raw.prettyPrint).trim)
-      goals := goals.push hd'
+      goals := goals.push (← tidy hd (`step ++ Name.mkSimple (toString k.raw.prettyPrint).trim))
       g := tl
     discard <| evalTacticAt (← `(tactic| exact Zig.dispatch_forall_mem_nil)) g
-    let others ← tidy [other] fun _ => pure `step.other
-    return goals.toList ++ others
+    return goals.toList ++ [← tidy other `step.other]
   | none =>
     unless ← isEnum κ do
       throwError "dispatch_template: the selector type {κ} is not an enumeration; \
@@ -292,8 +287,7 @@ def splitStates (step : MVarId) (κ : Expr) (states : Option (Array Term)) :
     let subgoals ← g.cases fs[0]!
     subgoals.toList.mapM fun sg => do
       let tag := `step ++ Name.mkSimple (sg.ctorName.componentsRev.headD .anonymous).toString
-      let [g'] ← tidy [sg.mvarId] fun _ => pure tag | unreachable!
-      pure g'
+      tidy sg.mvarId tag
 
 /-- Apply the template; return the remaining premises (other goals untouched). -/
 def applyTemplate (inv μ post : Term) (states : Option (Array Term)) :
@@ -317,14 +311,14 @@ def applyTemplate (inv μ post : Term) (states : Option (Array Term)) :
     let tag := (← g.getTag).eraseMacroScopes
     g.setTag tag
     if tag == `step then
-      rest := rest ++ (← g.withContext <| splitStates g κ states).toArray
+      rest := rest ++ (← g.withContext <| splitStates g κ mem states).toArray
     else if tag == `entry then
-      rest := rest ++ (← tidy [g] fun _ => pure `entry).toArray
+      rest := rest.push (← tidy g `entry)
     else if tag == `exit then
       let tac ← if mem then `(tactic| (intro _ _ _ hp; exact hp)) else `(tactic| (intro _ _ hp; exact hp))
       match ← observing? (evalTacticAt tac g) with
       | some [] => pure ()
-      | _ => rest := rest ++ (← tidy [g] fun _ => pure `exit).toArray
+      | _ => rest := rest.push (← tidy g `exit)
     else
       rest := rest.push g
   setGoals (rest.toList ++ others)
@@ -363,7 +357,7 @@ def reportPremises (goals : List MVarId) : TacticM Unit := do
 
 end Zig.DispatchTemplateTactic
 
-syntax dispatchStates := " states " "[" term,* "]"
+syntax dispatchStates := &" states " "[" term,* "]"
 syntax dispatchUsing := " using " tacticSeq
 
 open Lean Elab Tactic in

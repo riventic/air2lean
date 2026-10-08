@@ -107,7 +107,6 @@ theorem mach_total (N : Nat) : ∃ r, (Zig.loop mach.loop3 mach.again3).run ⟨N
     r.1 = .ret N := by
   dispatch_template (inv N) μ (post N) using mach_step
   case entry => simp [inv]
-  case exit => exact fun _ _ h => h
 
 /-- A wrong invariant: `count` may be entered without work left. -/
 def badInv (N : Nat) : Phase → machLocals → Prop
@@ -168,11 +167,12 @@ def plain.loop4 : Zig.M plainLocals plainExit := do
 example : ∃ r, (Zig.loop plain.loop4 plain.again4).run ⟨3⟩ = pure r ∧ True := by
   dispatch_template (fun (_ : Nat) _ => True) (fun _ => (0, 0)) (fun _ _ => True)
 
-/-- error: dispatch_template: the loop iterator mach.loop3 is not a generated `f.againN` -/
+def alwaysAgain (_ : machExit) : Bool := true
+
+/-- error: dispatch_template: the loop iterator DispatchTemplateTest.alwaysAgain is not a generated `f.againN` -/
 #guard_msgs in
--- The iterator must be a generated `againN`, not any function (here: a mismatched body).
-example : ∃ r, (Zig.loop mach.loop3 (fun _ => mach.loop3 = mach.loop3)).run ⟨0, 0, .done⟩ = pure r ∧
-    True := by
+-- The iterator must be a generated `againN`, not any function.
+example : ∃ r, (Zig.loop mach.loop3 alwaysAgain).run ⟨0, 0, .done⟩ = pure r ∧ True := by
   dispatch_template (fun (_ : Phase) _ => True) (fun _ => (0, 0)) (fun _ _ => True)
 
 /-- error: dispatch_template: the goal is not a TotalTriple, Triple or `∃ r, _ = pure r ∧ _` about (Zig.loop body again).run s -/
