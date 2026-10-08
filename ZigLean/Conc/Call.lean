@@ -124,13 +124,15 @@ def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
     CM Tgt σ (Except ErrName Unit) := do
   if ← callMC Thread.cancelPending then
     callMC Thread.takeCancel
-    return .error "Canceled"
-  futexWaitC io p expected
-  if ← callMC Thread.cancelPending then
-    if (← pickC (fun _ => 2)) = cancelDelivered then
-      callMC Thread.takeCancel
-      return .error "Canceled"
-  pure (.ok ())
+    pure (.error "Canceled")
+  else
+    futexWaitC io p expected
+    if ← callMC Thread.cancelPending then
+      if (← pickC (fun _ => 2)) = cancelDelivered then
+        callMC Thread.takeCancel
+        pure (.error "Canceled")
+      else pure (.ok ())
+    else pure (.ok ())
 
 /-- `Io.futexWake(T, ptr, max_waiters)`. -/
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
@@ -164,17 +166,19 @@ def groupAwaitTaskC : List ThreadId → CM Tgt σ (Except ErrName Unit)
     if ← callMC Thread.cancelPending then
       if (← pickC (fun _ => 2)) = cancelDelivered then
         callMC Thread.takeCancel
-        return .error "Canceled"
-    pure (.ok ())
+        pure (.error "Canceled")
+      else pure (.ok ())
+    else pure (.ok ())
   | tid :: rest => do
     if ← callMC Thread.cancelPending then
       callMC Thread.takeCancel
       callMC (Thread.requestCancel (tid :: rest).toArray)
       for u in tid :: rest do joinC u
       callMC (Thread.dropCancels (tid :: rest).toArray)
-      return .error "Canceled"
-    joinC tid
-    groupAwaitTaskC rest
+      pure (.error "Canceled")
+    else
+      joinC tid
+      groupAwaitTaskC rest
 
 /-- `Io.Group.await`: joins each task of the group, in the order of their spawn. `main` is not
 an `Io` task and is never canceled; an awaiting task can be (`groupAwaitTaskC`). -/
