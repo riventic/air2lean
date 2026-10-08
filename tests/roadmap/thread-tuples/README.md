@@ -14,11 +14,35 @@ The generated `Tgt.captures` classifies every captured field from its AIR type. 
 
 `provenance.json` records the twelve required AIR roots, their hashes, inspected std Thread
 source hashes, and the declared Zig 0.16.0 export profile. The checked source SHA-256 is
-`1e41b455969d69d9079cb8a6098a14b52a7df5faa7e05f205352d80ac67b5efc`.
+`77ecd985ecaf82efa54412941189af7b1eaed6e5338a90b1bc4eb20363336a9d`.
 The export command uses `-target x86_64-linux -mcpu=baseline -OReleaseSafe
--fno-error-tracing`. Schema 11 carries legacy/unverified target-profile metadata, so the
-recorded flags do not establish target-profile preservation or T01 qualification. A stock
-host compiler supplies the separate native test; the patched compiler supplies AIR.
+-fno-error-tracing`. The checked AIR is schema 12 and carries the exported
+`abi64-le-v1` profile. This profile does not establish compiler preservation or T01
+qualification. A stock host compiler supplies the separate native test; the patched
+compiler supplies AIR. The exporter writes the generic `ZeroWorker(u8).run` and std
+`atomic.Value(u32).init` roots under `~air2lean-sha256-*.json` names; inventory checks use
+each file's `name` field.
+
+### `groupMixed` group lifetime
+
+`Group.async` and `Group.concurrent` attach tasks that `Group.await` or `Group.cancel` must
+finish (Zig 0.16 `std/Io.zig`). An earlier `groupMixed` returned through
+`try group.concurrent(...)` without either. With a failing `concurrent`
+(`error.ConcurrencyUnavailable`), a `mixedWorker` already assigned by `group.async` could
+still write `out` and `other` after the frame was freed. The source now uses the std idiom
+`defer group.cancel(io)`; after a successful `await` the cancel is a no-op. The generated
+model calls `groupCancelC` on all three exits.
+
+`ThreadTuples/FallibleRuntime.lean` runs `groupMixed` translated with `--spawn-policy fallible`
+under 256 deterministic oracles. Every schedule must return 680 or
+`ConcurrencyUnavailable` without a memory error, with no group entry left and every child
+joined. The suite must reach the path where both `async` tasks were assigned to children and
+`concurrent` then failed. On the previous checked AIR this gate fails with `Zig.Error.illegal`
+(schedule 8, stride 1). The model reports `illegal` both for an access to a freed block and for
+a run whose main thread ends with an unjoined child, so the error code alone does not tell
+which of the two occurred. Both follow from the missing await.
+The native test runs the failing path with `std.Io.Threaded` `concurrent_limit = .nothing`. It
+exercises the failure exit natively; it cannot itself detect a late write to a freed frame.
 
 The inspected Zig 0.14.1, 0.15.2 and 0.16.0 std `Thread.zig` implementations copy the entire
 generic `Args` into child storage and invoke `@call(.auto, f, args)`. Zig 0.16 `Io.Group`
@@ -46,12 +70,12 @@ both its default compiler invocation and an absolute `AIR2LEAN_LEAN` override wi
 `LEAN_PATH` unset. These adapter checks establish export/translation/elaboration, not native
 execution of that separate source fixture.
 
-The checked `ThreadTuples/Gen.lean` has 408 lines and SHA-256
-`f22be91d3ac491009510dc3a9136e76ec0dd462d7cac79da78520daf1a474169`.
-It was regenerated from the unchanged checked AIR with the current dispatcher destructuring
-and the generated `Tgt.captures` classification. The only change from the previous
-semantic body (398 lines) is the added `Tgt.captures` definition. The validated profile
-header line is omitted, as before:
+The checked `ThreadTuples/Gen.lean` has 410 lines and SHA-256
+`c5918726a02a24ce1eb05f6d942da2e02d04e3ed5bf2bc4ba6c66b48c53d60a6`.
+It was regenerated from the fresh schema-12 AIR of the fixed source. The only change from
+the previous semantic body (408 lines) is the three `groupCancelC` calls in `groupMixed`; the
+other generated definitions are unchanged. The validated profile header line is omitted, as
+before:
 
 ```sh
 .lake/build/bin/air2lean tests/roadmap/thread-tuples/air/0.16.0 \
@@ -59,12 +83,15 @@ header line is omitted, as before:
   --namespace ThreadTuples --prefix thread_tuples.
 ```
 
-The earlier source qualification recorded in `provenance.json` at `61c7ced` passed a fresh
-Zig 0.16.0 twelve-root export and translation, including `atomic.Value(u32).init` and the
-instantiated generic worker. Both stock native tests passed on arm64 Darwin in 5.2 seconds
-with 399 MiB peak memory. The native command uses ReleaseSafe without a target/CPU override;
-it does not assert an exact host CPU profile or correspondence with the Linux AIR target.
-The checked source and all twelve AIR hashes remain unchanged. Lean is pinned to v4.34.0.
+For the `groupMixed` fix, a fresh Zig 0.16.0 twelve-root export of the fixed source passed,
+including `atomic.Value(u32).init` and the instantiated generic worker. The export used a
+patched compiler built from the current `zig-patch` exporter. All twelve AIR files were
+replaced. Apart from schema and profile, `atomicShared`, `copied`, `genericEmpty`, `mixed` and
+`groupMixed` changed body and type-table encoding. Only `groupMixed` changed the generated
+Lean. All three stock native tests passed on arm64 Darwin in 5.2 seconds with 331 MiB peak
+memory. The native command uses ReleaseSafe without a target/CPU override; it does not
+assert an exact host CPU profile or correspondence with the Linux AIR target. Lean is pinned
+to v4.34.0.
 Recorded timings describe individual validation runs with existing build artifacts.
 
 Current profile-aware translators prepend a validated profile record. The artifact

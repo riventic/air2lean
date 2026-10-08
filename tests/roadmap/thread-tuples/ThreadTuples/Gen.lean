@@ -330,24 +330,27 @@ def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (
     match i12 with
     | .error _ => (do
       let i14 ← Zig.callRC (Zig.unwrapErr i12)
-      let i15 ← pure (i14)
-      let i16 ← pure ((.error i15) : Except Zig.ErrName (BitVec 32))
-      pure (.ret i16))
+      let _i15 ← Zig.groupCancelC i7 p0
+      let i16 ← pure (i14)
+      let i17 ← pure ((.error i16) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i17))
     | .ok _v13 => (do
-      let i18 ← Zig.groupAwaitC i7 p0
-      match i18 with
+      let i19 ← Zig.groupAwaitC i7 p0
+      match i19 with
       | .error _ => (do
-        let i20 ← Zig.callRC (Zig.unwrapErr i18)
-        let i21 ← pure (i20)
-        let i22 ← pure ((.error i21) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i22))
-      | .ok _v19 => (do
-        let i24 ← Zig.load (BitVec 32) 4 i3
-        let i25 ← Zig.load (BitVec 32) 4 i5
-        let i26 ← pure (Zig.mulWrap i25 (7 : BitVec 32))
-        let i27 ← pure (Zig.addWrap i24 i26)
-        let i28 ← pure ((.ok i27) : Except Zig.ErrName (BitVec 32))
-        pure (.ret i28)))) : Zig.CM Tgt groupMixedLocals groupMixedExit).run' { (default : groupMixedLocals) with group := s7, out := s3, other := s5 }
+        let i21 ← Zig.callRC (Zig.unwrapErr i19)
+        let _i22 ← Zig.groupCancelC i7 p0
+        let i23 ← pure (i21)
+        let i24 ← pure ((.error i23) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i24))
+      | .ok _v20 => (do
+        let i26 ← Zig.load (BitVec 32) 4 i3
+        let i27 ← Zig.load (BitVec 32) 4 i5
+        let i28 ← pure (Zig.mulWrap i27 (7 : BitVec 32))
+        let i29 ← pure (Zig.addWrap i26 i28)
+        let _i30 ← Zig.groupCancelC i7 p0
+        let i31 ← pure ((.ok i29) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i31)))) : Zig.CM Tgt groupMixedLocals groupMixedExit).run' { (default : groupMixedLocals) with group := s7, out := s3, other := s5 }
   Zig.free s7
   Zig.free s3
   Zig.free s5

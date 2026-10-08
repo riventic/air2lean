@@ -88,6 +88,12 @@ export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}
 "${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuples/Gen.olean" "$work/ThreadTuples/Gen.lean"
 "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
 "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
+# groupMixed under failing assignment: every exit must finish the group before freeing its frame.
+mkdir -p "$work/ThreadTuplesFallible"
+"$translator" tests/roadmap/thread-tuples/air/0.16.0 -o "$work/ThreadTuplesFallible/Gen.lean" \
+  --namespace ThreadTuplesFallible --prefix thread_tuples. --spawn-policy fallible
+"${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuplesFallible/Gen.olean" "$work/ThreadTuplesFallible/Gen.lean"
+"${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/FallibleRuntime.lean
 "${lean_cmd[@]}" --run tests/roadmap/thread-tuples/Pipeline.lean "$work/TuplePipeline.lean"
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean"
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean.slices.lean"

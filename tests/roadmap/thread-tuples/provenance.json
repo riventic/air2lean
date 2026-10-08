@@ -1,8 +1,8 @@
 {
-  "source_sha256": "1e41b455969d69d9079cb8a6098a14b52a7df5faa7e05f205352d80ac67b5efc",
+  "source_sha256": "77ecd985ecaf82efa54412941189af7b1eaed6e5338a90b1bc4eb20363336a9d",
   "air": {
     "zig_version": "0.16.0",
-    "schema": 11,
+    "schema": 12,
     "target": "x86_64-linux",
     "cpu": "baseline",
     "optimization": "ReleaseSafe",
@@ -16,7 +16,7 @@
   "qualification": {
     "0.14.1": "stdlib source inspected; live export/native pending",
     "0.15.2": "stdlib source inspected; live export/native pending",
-    "0.16.0": "source revision 61c7ced: live schema-11 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (2 tests); schema-11 target profile remains unverified; Linux CI pending"
+    "0.16.0": "groupMixed await fix (defer group.cancel): live schema-12 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, 256 fallible-policy groupMixed schedules, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (3 tests); Linux CI pending"
   },
   "functions": [
     "atomicShared",
@@ -32,18 +32,18 @@
     "ZeroWorker(u8).run"
   ],
   "air_sha256": {
-    "atomic.Value(u32).init.json": "6f79df035939d65b587a248e20d477f2037a2fea7037c9e3b0d085fdc3cf4325",
-    "thread_tuples.ZeroWorker(u8).run.json": "95885ea5a3709803690e3224c8ececf25d74768bcafa7f70b7fb570eaeebe56d",
-    "thread_tuples.atomicShared.json": "861cda679083db577c3c8b090ef03570d36cba3424d50a38fb6cfaca404b1933",
-    "thread_tuples.atomicWorker.json": "5ef6448dbd2b70b7a8a26dba764ebf456405ef56af6ca1f2d8ffbef79a676aae",
-    "thread_tuples.copied.json": "3c66dd2c5a15fd870cfe23003a188669f9247efeb2b81b39beee6ce7faf5623b",
-    "thread_tuples.copyWorker.json": "307f0f8303a687a728a985bea105cd0e34566564acabcb2f0350c590371110b1",
-    "thread_tuples.empty.json": "29e9d3a0eeb20fb1795d0a3244a3475c8c5a9d829ef6c923879ec1f45447c556",
-    "thread_tuples.genericEmpty.json": "a36ed576cc48d2268287d373fd6a10f125abe46944d1a878b261630691d8e8ea",
-    "thread_tuples.groupMixed.json": "ce84484af9de597ce617b5ad65818b1fedee440a834fbb52ae12cde5ed64007d",
-    "thread_tuples.mixed.json": "36e28b9f9f28d2b49180ea223f153f4788bcfa5b4710893a570cc15e8c877e3d",
-    "thread_tuples.mixedWorker.json": "dfc45bb7a91c7e6e070fb1d044ee05ad8710f7f1af7425466557de8a6de0e46f",
-    "thread_tuples.zeroWorker.json": "96bb708a5d780e91387700ce16f5b51674c31832377966ec79cb7b009ea89e17"
+    "thread_tuples.atomicShared.json": "e3cc5306e43478e87d453cebe22232643b75402153675488346305cd3311ea2b",
+    "thread_tuples.atomicWorker.json": "6b2250ab5ebf4f2cef48d46e7c09a5db7d26725f319f42b5098939421e7cddd1",
+    "thread_tuples.copied.json": "80da92bfb9ff3dab7e59194d022a7b7050e85dde7fffd438e44df979e848ee05",
+    "thread_tuples.copyWorker.json": "b3727e728c6bf58327097d05d13132b2340433cef347edad62a75802d9080209",
+    "thread_tuples.empty.json": "4b3846e3e09cbd5a24228e774c7714ae546cb0ace78aba17be1cc9f0f357323e",
+    "thread_tuples.genericEmpty.json": "b9cd88e51dc63aec36bf0e44765e398053ffbae4932ce0a00784fc1386177113",
+    "thread_tuples.groupMixed.json": "5f8092a333195b01f8874d6c3d33d5900cf8c5ca1528571dc074b0ba6fb02fab",
+    "thread_tuples.mixed.json": "e47671bd95441107efc1163d13c08a3eedea477872aad4fa677a5818d53a9b9f",
+    "thread_tuples.mixedWorker.json": "022d7ddc64638b066cee0c327bc05a8cd457633f23482502fc2754dce390a4f2",
+    "thread_tuples.zeroWorker.json": "6601183591b6a68bc4dd05dd6506477f05ccde22a8474707da0fd5d75cc8c22d",
+    "~air2lean-sha256-6c62242d9dff071a471667f243ee8c3deaf800944a7bcc59bf7a803d59527717.json": "d7ebb43e2457d8ea5a33e8dd50aa5ea4a37d5066535ceae33245fb73ccb6459e",
+    "~air2lean-sha256-bf7a0d9a01a2b2bec646ec04e7626b9fe32a795045095b38878d405496a237fa.json": "3db8a2fa4891a7201fcc074625f2be1f751d001ec2374a1ca1677c45cb5213b7"
   },
   "stdlib_functions": [
     "atomic.Value(u32).init"
