@@ -20,6 +20,7 @@
   "generated_imports": {
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Calls": "tests/roadmap/indirect-calls/check.sh compiles the fresh Pipeline.lean translation into Calls.olean at gate time.",
+    "DispatchTokenizer": "tests/roadmap/dispatch-templates/check.sh translates a fresh export of source.zig into DispatchTokenizer.olean at gate time.",
     "Gen": "tests/roadmap/global-payload-pointers/check.sh writes Gen.lean at gate time from a fresh export.",
     "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean.",
     "ErrorWidth16.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 16-bit fixtures into ErrorWidth16/Gen.lean.",
@@ -148,6 +149,7 @@
     "ZigLean.Sep.Total": ["SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Step": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.DispatchTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.Sep.Bounded": ["SEM-04", "SEM-05"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],

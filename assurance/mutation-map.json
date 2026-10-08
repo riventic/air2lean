@@ -222,6 +222,18 @@
         {
           "path": "tests/roadmap/dispatch/Proofs.lean",
           "anchor": "next (.foreign n) = none"
+        },
+        {
+          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "anchor": "dispatch_template (badInv N) μ (post N) using mach_step"
+        },
+        {
+          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "anchor": "dispatch_template (inv N) flatμ (post N) using mach_step"
+        },
+        {
+          "path": "tests/roadmap/dispatch-templates/check.sh",
+          "anchor": "is not an enclosing loop-switch"
         }
       ],
       "mutants": [
