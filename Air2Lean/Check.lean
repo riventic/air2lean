@@ -453,6 +453,8 @@ def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except St
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
+  if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
+    cx.fail line "an atomic op through a vector lane pointer is outside the subset"
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
   | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool` or a \
@@ -834,7 +836,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     if let .undef _ := v then
       if let some pty := cx.valTy? ptr then
         if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
-          cx.fail line "a store of `undefined` to a packed struct field is outside the subset"
+          cx.fail line "a store of `undefined` to a packed struct field or a vector lane is outside \
+            the subset"
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -1426,6 +1429,8 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       else some (g, off + delta)
     | .elemPtr p n =>
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
+      -- A lane pointer is the vector's address (`CheckCtx.lanePtr`).
+      if (f.layouts[i.ty]?.map (·.laneBitPtr)).getD false then return (g, off)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty

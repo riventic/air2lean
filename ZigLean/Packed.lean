@@ -81,14 +81,13 @@ def storeBits {α : Type} {n : Nat} [Packed α n] (hostSize align bitOffset : Na
     | _, _ => bs
   storeBytes p align bs
 
-
 /-! ## Vector lanes
 
 A pointer to one lane of a vector whose lanes are not a power-of-two number of bytes
 (`&v[i]` of `@Vector(n, u9)`, `u3`, `u24` or `bool`; Zig's type `*align(a:0:n:i) T`) is a
 bit-pointer into the vector's `n * w`-bit integer (`ZigLean/Vec.lean`'s `Vec.packedEnc`, the
-LLVM backend's layout): `Check.lean` gives it the host `⌈n * w / 8⌉` bytes, the vector's
-LLVM store size, and the bit offset `i * w`. LLVM loads the whole vector and extracts or
+LLVM backend's layout): `Air2Lean/Air/Normalize.lean`'s `lanePtrLayout` gives it the host
+`⌈n * w / 8⌉` bytes, the vector's LLVM store size, and the bit offset `i * w`. LLVM loads the whole vector and extracts or
 inserts the lane, then stores the whole vector.
 
 Unlike a packed struct's host, a vector in memory can be partly undefined: an `undefined`
@@ -121,8 +120,8 @@ def laneDefined (bs : Array Byte) (o w : Nat) : Bool :=
 /-- The host bytes as an integer, little-endian, with undefined bits as 0. -/
 def hostVal (bs : Array Byte) : Nat := bs.toList.foldr (fun b acc => b.lowBits.2 + 256 * acc) 0
 
-/-- Byte `k` of a host after a write of the lane bits `x` (`< 2 ^ w`) at bit `o`: the bits that
-the lane covers replaced, the others kept. If the lane's bits start above the byte's defined
+/-- Byte `k` of a host after a write of the `w` lane bits `x` at bit `o`: the bits that the lane
+covers replaced, the others kept. If the lane's bits start above the byte's defined
 bits, the byte cannot hold them and stays as it was. -/
 def Byte.setLane (b : Byte) (k o w x : Nat) : Byte :=
   let (lo, hi) := laneSpan k o w

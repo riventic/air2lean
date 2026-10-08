@@ -139,7 +139,7 @@ another lane's pointer and the bytes after the host after a lane store (set to `
 the store writes only the host bytes. `Model.lean` computes those lines with
 `Zig.loadLane`/`Zig.storeLane` and checks that each lane store leaves the image of `Vec.set`.
 Stock Zig 0.16.0 (ReleaseSafe, Debug, ReleaseFast) and 0.15.2 printed the same lines on
-aarch64-macos.
+aarch64-macos (layout evidence only; ReleaseFast stays unqualified, [build-modes.md](build-modes.md)).
 
 Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
