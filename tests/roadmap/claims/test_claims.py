@@ -34,7 +34,18 @@ EXPECTED = {
     'ClaimFixture.diverge_not_total': ('unclassified', None),
     'ClaimFixture.wrapped_total': ('unclassified', None),
     'ClaimFixture.partial_and_returns': ('unclassified', None),
+    'ClaimFixture.exit_within': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.exit_within_total': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.spin_no_run': ('unclassified', None),
+    'ClaimFixture.spin_not_within': ('unclassified', None),
+    'ClaimFixture.countdown_eventually': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.countdown_bounded': ('guaranteed-return', 'total_correctness'),
+    'ClaimFixture.countdown_under': ('guaranteed-return-under-premise', None),
+    'ClaimFixture.stuck_under_false': ('guaranteed-return-under-premise', None),
+    'ClaimFixture.stuck_not_total': ('unclassified', None),
 }
+BOUNDS = {'ClaimFixture.exit_within': {'unit': 'loop_body_runs'},
+          'ClaimFixture.countdown_bounded': {'unit': 'scheduler_turns'}}
 
 
 def classified(report):
@@ -61,6 +72,22 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(theorems['ClaimFixture.ret_total']['claims'],
                          ['no-panic', 'correct-if-returned', 'guaranteed-return'])
 
+    def test_bounds_are_reported_only_for_bounded_heads(self):
+        theorems = classified(FIXTURE)
+        for name in EXPECTED:
+            with self.subTest(name=name):
+                self.assertEqual(theorems[name]['bound'], BOUNDS.get(name))
+        # A bounded return is a guaranteed return; the bound is additional.
+        self.assertEqual(theorems['ClaimFixture.exit_within']['claims'],
+                         ['no-panic', 'correct-if-returned', 'guaranteed-return'])
+
+    def test_premise_return_is_not_an_unconditional_claim(self):
+        theorems = classified(FIXTURE)
+        for name in ('ClaimFixture.countdown_under', 'ClaimFixture.stuck_under_false'):
+            with self.subTest(name=name):
+                self.assertEqual(theorems[name]['claims'], ['guaranteed-return-under-premise'])
+                self.assertIsNone(theorems[name]['derived_strength'])
+
     def test_names_do_not_drive_classification(self):
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
@@ -71,7 +98,9 @@ class ClassifyTests(unittest.TestCase):
                          'partial_correctness')
 
     def test_only_exact_kernel_names(self):
-        for head in ('TotalTriple', 'Foo.TotalTriple', 'Zig.TotalTriple.toPartial', 'Zig.Conc.Total.EventuallyReturns'):
+        for head in ('TotalTriple', 'Foo.TotalTriple', 'Zig.TotalTriple.toPartial', 'EventuallyReturns',
+                     'Zig.EventuallyReturns', 'Zig.Conc.EventuallyReturnsUnder', 'Zig.TotalTripleWithin.toTotal',
+                     'Zig.Conc.Total.ReturnsWithin.eventually'):
             self.assertEqual(claims.claims_of({'head': head}), frozenset(), head)
         self.assertEqual(claims.claims_of({'head': 'Zig.TTriple'}), {'no-panic', 'correct-if-returned'})
 
@@ -139,6 +168,34 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(result['status'], 'pass')
         self.assertTrue(all(g['status'] == 'accepted' for g in result['roots'][0]['goals']))
+
+    def test_bounded_and_concurrent_returns_accepted(self):
+        code, result, err = self.check([('ClaimFixture.exit_within', 'total_correctness'),
+                                        ('ClaimFixture.countdown_eventually', 'total_correctness'),
+                                        ('ClaimFixture.countdown_bounded', 'total_correctness')])
+        self.assertEqual(code, 0, err)
+        goals = result['roots'][0]['goals']
+        self.assertEqual([g['bound'] for g in goals],
+                         [{'unit': 'loop_body_runs'}, None, {'unit': 'scheduler_turns'}])
+
+    def test_premise_dependent_return_cannot_meet_unconditional_goals(self):
+        for name in ('ClaimFixture.countdown_under', 'ClaimFixture.stuck_under_false'):
+            for strength in ('total_correctness', 'partial_correctness', 'safety'):
+                with self.subTest(name=name, strength=strength):
+                    code, result, _ = self.check([(name, strength)])
+                    self.assertEqual(code, 1)
+                    goal = result['roots'][0]['goals'][0]
+                    self.assertEqual((goal['status'], goal['claim_class']),
+                                     ('rejected', 'guaranteed-return-under-premise'))
+                    self.assertIn('premise', goal['reason'])
+
+    def test_diverging_program_cannot_be_declared_bounded(self):
+        # Only the refutation `spin_not_within` exists for the spinning loop; it states no claim.
+        for name in ('ClaimFixture.spin_not_within', 'ClaimFixture.spin_no_run', 'ClaimFixture.stuck_not_total'):
+            with self.subTest(name=name):
+                code, result, _ = self.check([(name, 'total_correctness')])
+                self.assertEqual(code, 1)
+                self.assertEqual(result['roots'][0]['goals'][0]['derived_strength'], None)
 
     def test_diverging_program_cannot_be_declared_total(self):
         code, result, err = self.check([('ClaimFixture.diverge_partial', 'total_correctness')])

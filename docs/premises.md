@@ -574,8 +574,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: meaning.
 - Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
-  than SEM-03 and only cover their stated finite clients.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`.
+  than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
+  bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
+  budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
+  satisfy its stated premise and is not an unconditional total result.
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`.
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -586,7 +589,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   They count allocation requests, live `.heap` blocks and loop-body runs of successful runs.
   A count does not measure CPU time, instruction count, cache behavior or native allocator
   memory use. Relating one to those needs a separate calibration argument.
-- Derived from: `ZigLean.Sep.Cost`.
+- Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
 
 ## External models

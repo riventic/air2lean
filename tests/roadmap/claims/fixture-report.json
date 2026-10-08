@@ -1,8 +1,32 @@
 {
   "schema_version": 1,
   "status": "pass",
-  "theorem_count": 14,
+  "theorem_count": 23,
   "theorems": [
+    {
+      "name": "ClaimFixture.countdown_bounded",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Conc.Total.ReturnsWithin"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.countdown_eventually",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Conc.Total.EventuallyReturns"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.countdown_under",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Conc.Total.EventuallyReturnsUnder"
+      },
+      "allowed": true
+    },
     {
       "name": "ClaimFixture.diverge_not_total",
       "module": "tests.roadmap.claims.Fixture",
@@ -16,6 +40,22 @@
       "module": "tests.roadmap.claims.Fixture",
       "conclusion": {
         "head": "Zig.Triple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.exit_within",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.TotalTripleWithin"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.exit_within_total",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.TotalTriple"
       },
       "allowed": true
     },
@@ -168,6 +208,38 @@
       "module": "tests.roadmap.claims.Fixture",
       "conclusion": {
         "head": "Zig.TotalTriple"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.spin_no_run",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Not"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.spin_not_within",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Not"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.stuck_not_total",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Not"
+      },
+      "allowed": true
+    },
+    {
+      "name": "ClaimFixture.stuck_under_false",
+      "module": "tests.roadmap.claims.Fixture",
+      "conclusion": {
+        "head": "Zig.Conc.Total.EventuallyReturnsUnder"
       },
       "allowed": true
     },
