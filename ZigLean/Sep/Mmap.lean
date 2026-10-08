@@ -812,4 +812,48 @@ theorem Triple.mremapGrow (os : Os.Profile) (hP : 0 < os.pageSize) (hhas : os.ha
       refine Nat.lt_of_lt_of_le ?_ (Nat.le_max_right _ _)
       rw [hnbs]; omega
 
+/-! ## Kernel-checked examples (`x86_64-linux` profile) -/
+
+namespace MmapExamples
+
+open Os
+
+/-- The outcome of a run: `true` iff it throws `.illegal`. -/
+def isIllegal {α : Type} (c : MemM α) : Bool :=
+  match (c.run {}).run with
+  | some (.error .illegal) => true
+  | _ => false
+
+/-- The outcome of a run: `true` iff it returns. -/
+def returns {α : Type} (c : MemM α) : Bool :=
+  match (c.run {}).run with
+  | some (.ok _) => true
+  | _ => false
+
+def lx : Profile := .linuxX86_64
+
+def map8 : MemM Slice := do
+  match ← Os.mmap lx none 8 lx.protReadWrite lx.mapPrivateAnonymous noFd 0 with
+  | .ok s => pure s
+  | .error _ => throw .panic
+
+/-- A store into a fresh mapping returns. -/
+example : returns (do let s ← map8; store 1 (s.ptr.add 7) (1 : BitVec 8)) = true := by
+  decide +kernel
+
+/-- Use after `munmap` is illegal. -/
+example : isIllegal (do let s ← map8; Os.munmap lx s; load (BitVec 8) 1 s.ptr) = true := by decide
+
+/-- A double `munmap` is illegal. -/
+example : isIllegal (do let s ← map8; Os.munmap lx s; Os.munmap lx s) = true := by decide
+
+/-- `munmap` of a range in the middle of a mapping is illegal. -/
+example : isIllegal (do
+    let s ← match ← Os.mmap lx none 12288 lx.protReadWrite lx.mapPrivateAnonymous noFd 0 with
+      | .ok s => pure s
+      | .error _ => throw .panic
+    Os.munmap lx ⟨s.ptr.add 4096, 4096⟩) = true := by decide +kernel
+
+end MmapExamples
+
 end Zig
