@@ -143,10 +143,19 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
 theorem dueOf_spec (j : Ptr) (m : Mem) : (dueOf j).run m = pure (j.add 4, m) := by
   simp [dueOf, zig_unfold]
 
-/-- Pointer equality is equality of block and offset. -/
-theorem same_spec (p q : Ptr) (m : Mem) : (same p q).run m = pure (decide (p = q), m) := by
+/-- Pointer equality is equality of addresses (`ptrEqAddr`, MM-4), as in the compiled code. -/
+theorem same_spec (p q : Ptr) (m : Mem) : (same p q).run m = (ptrEqAddr p q).run m := by
   simp [same, zig_unfold]
-  rfl
+  cases ptrEqAddr p q m with
+  | none => rfl
+  | some r => cases r <;> rfl
+
+/-- Two pointers with different provenance at the same address are equal: a pointer into block
+`b` and the provenance-free pointer to its address. -/
+theorem same_address (m : Mem) {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
+    (k : Int) : (same ⟨some b, k⟩ ⟨none, blk.addr + k⟩).run m = pure (true, m) := by
+  rw [same_spec]
+  simp [ptrEqAddr, ptrAddr, hb, zig_unfold]
 
 theorem maxPtr_none_left (b : Option Ptr) (m : Mem) : (maxPtr none b).run m = pure (b, m) := by
   simp [maxPtr, zig_unfold]
@@ -195,9 +204,10 @@ theorem delay_overflow {m₁ : Mem} (j : Ptr) (m : Mem) (x d : BitVec 32)
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hx
   simp [delay, zig_unfold, hx, Zig.add, BitVec.uaddOverflow, h]
 
--- Concrete instantiations keep the load premises satisfiable as memory bookkeeping evolves.
-example :
-    let m := Mem.ofGlobals [(Enc.encode (1 : BitVec 32), 4, .global),
+-- Concrete instantiations keep the load premises satisfiable as memory bookkeeping evolves, for
+-- every placement: the blocks' addresses are only known to be 4-aligned.
+example (σ : Placement) :
+    let m := Mem.ofGlobals σ [(Enc.encode (1 : BitVec 32), 4, .global),
       (Enc.encode (2 : BitVec 32), 4, .global)]
     (maxPtr (some ⟨some 0, 0⟩) (some ⟨some 1, 0⟩)).run m =
       pure (some ⟨some 1, 0⟩, (m.recordAt 0 0 4 .read).recordAt 1 0 4 .read) := by
@@ -205,23 +215,35 @@ example :
   have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
     rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
     exact Array.extract_size
-  apply maxPtr_spec (m₁ := (Mem.ofGlobals [(Enc.encode (1 : BitVec 32), 4, .global),
+  obtain ⟨A₀, hb₀⟩ : ∃ A, (Mem.ofGlobals σ [(Enc.encode 1#32, 4, .global),
+      (Enc.encode 2#32, 4, .global)]).blocks[0]? = some ⟨Enc.encode 1#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  obtain ⟨A₁, hb₁⟩ : ∃ A, (Mem.ofGlobals σ [(Enc.encode 1#32, 4, .global),
+      (Enc.encode 2#32, 4, .global)]).blocks[1]? = some ⟨Enc.encode 2#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  have hA₀ : A₀ % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb₀ (by simp)
+  have hA₁ : A₁ % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb₁ (by simp)
+  apply maxPtr_spec (m₁ := (Mem.ofGlobals σ [(Enc.encode (1 : BitVec 32), 4, .global),
     (Enc.encode (2 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read) _ _ _ 1 2
-  all_goals simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
-    Mem.recordAt, alignUp, Enc.size, intSize, intAlign, LawfulEnc.size_encode,
+  all_goals simp [load, loadBytes, recordAccess, hb₀, hb₁, hA₀, hA₁, Mem.access,
+    Mem.recordAt, Enc.size, intSize, intAlign, alignUp, LawfulEnc.size_encode,
     hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
 
-example :
-    let m := Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
+example (σ : Placement) :
+    let m := Mem.ofGlobals σ [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
     (delay ⟨some 0, 0⟩ 1).run m = throw .overflow := by
   dsimp only
   have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
     rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
     exact Array.extract_size
+  obtain ⟨A, hb⟩ : ∃ A, (Mem.ofGlobals σ [(Enc.encode 4294967295#32, 4, .global)]).blocks[0]? =
+      some ⟨Enc.encode 4294967295#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   apply delay_overflow
-    (m₁ := (Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
+    (m₁ := (Mem.ofGlobals σ [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
     _ _ 4294967295 1
-  · simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
-      Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
+  · simp [load, loadBytes, recordAccess, hb, hA, Mem.access,
+      Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
       hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide

@@ -683,8 +683,6 @@ theorem optionalFiniteError_encode_injective (d : ErrorDomain) :
   simp [errOfBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
     ExceptT.bindCont, throw, throwThe, MonadExceptOf.throw]
 
-/-! ## Error unions -/
-
 theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by
   unfold alignUp
   split
@@ -693,6 +691,200 @@ theorem le_alignUp (n a : Nat) : n ≤ alignUp n a := by
     have h2 := Nat.mod_lt (n + a - 1) (by omega : a > 0)
     rw [Nat.mul_comm] at h1
     omega
+
+/-! ## Block addresses (MM-1)
+
+What holds for every placement (`Mem.place`): the address of a new block is a multiple of its
+alignment (`Mem.newAddr_mod`), and the fallback `Mem.top` is past every block. The memory at
+program start (`Mem.ofGlobals σ gs`) holds global `k` as block `k`, with its bytes, alignment and
+kind, at an aligned address, and nothing else (`Mem.ofGlobals_block`, `Mem.ofGlobals_eq`). -/
+
+theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
+    0 < A ∧ A % align = 0 ∧ A + size ≤ 2 ^ 64 ∧ m.addrFree A size = true := by
+  unfold Mem.placed? at h
+  split at h
+  · split at h
+    · cases h; simpa [Mem.placeOk, and_assoc] using ‹m.placeOk _ size align = true›
+    · cases h
+  · cases h
+
+theorem foldl_top (l : List Block) (t : Nat) :
+    t ≤ l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t ∧
+      ∀ blk ∈ l, blk.addr + blk.bytes.size < l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t := by
+  induction l generalizing t with
+  | nil => simp
+  | cons x xs ih =>
+    obtain ⟨h1, h2⟩ := ih (Nat.max t (x.addr + x.bytes.size + 1))
+    simp only [List.foldl_cons, List.mem_cons]
+    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun blk hb => ?_⟩
+    rcases hb with rfl | hb
+    · exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_trans (Nat.le_max_right _ _) h1)
+    · exact h2 blk hb
+
+/-- Every block, dead or live, ends below `Mem.top`. -/
+theorem Mem.lt_top {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk) :
+    blk.addr + blk.bytes.size < m.top := by
+  unfold Mem.top
+  rw [← Array.foldl_toList]
+  exact (foldl_top m.blocks.toList 4096).2 blk
+    (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
+
+theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
+    m.newAddr size align % align = 0 := by
+  unfold Mem.newAddr
+  split
+  · exact (Mem.placed?_ok ‹_›).2.1
+  · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
+
+theorem Mem.addGlobal_blocks (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
+    (m.addGlobal bs a k).blocks =
+      m.blocks.push { bytes := bs, align := a, kind := k, live := true, addr := m.newAddr bs.size a } :=
+  rfl
+
+private theorem foldl_addGlobal (gs : List (Array Byte × Nat × BlockKind)) (m : Mem) :
+    let m' := gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) m
+    m' = { m with blocks := m'.blocks } ∧ m'.blocks.size = m.blocks.size + gs.length ∧
+      (∀ i < m.blocks.size, m'.blocks[i]? = m.blocks[i]?) ∧
+      ∀ j (hj : j < gs.length), ∃ A, (0 < gs[j].2.1 → A % gs[j].2.1 = 0) ∧
+        m'.blocks[m.blocks.size + j]? =
+          some { bytes := gs[j].1, align := gs[j].2.1, kind := gs[j].2.2, live := true, addr := A } := by
+  induction gs generalizing m with
+  | nil => simp
+  | cons g gs ih =>
+    obtain ⟨bs, a, k⟩ := g
+    obtain ⟨he, hs, hold, hnew⟩ := ih (m.addGlobal bs a k)
+    simp only [List.foldl_cons] at he hs hold hnew ⊢
+    have hsz : (m.addGlobal bs a k).blocks.size = m.blocks.size + 1 := by
+      simp [Mem.addGlobal_blocks]
+    refine ⟨?_, by rw [hs, hsz]; simp; omega, fun i hi => ?_, fun j hj => ?_⟩
+    · rw [he]; rfl
+    · rw [hold i (by omega)]; simp [Mem.addGlobal_blocks, Array.getElem?_push, Nat.ne_of_lt hi]
+    · cases j with
+      | zero =>
+        refine ⟨m.newAddr bs.size a, fun ha => m.newAddr_mod bs.size a ha, ?_⟩
+        rw [Nat.add_zero, hold m.blocks.size (by omega)]
+        simp [Mem.addGlobal_blocks]
+      | succ j =>
+        obtain ⟨A, hA, hb⟩ := hnew j (by simp at hj; omega)
+        refine ⟨A, hA, ?_⟩
+        rw [hsz, show m.blocks.size + 1 + j = m.blocks.size + (j + 1) by omega] at hb
+        simpa using hb
+
+/-- The memory at program start is its blocks under the placement `σ`, every other field the
+default. -/
+theorem Mem.ofGlobals_eq (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    Mem.ofGlobals σ gs = { blocks := (Mem.ofGlobals σ gs).blocks, place := σ } :=
+  (foldl_addGlobal gs { place := σ }).1
+
+/-! Every field of the memory at program start except `blocks` is the default. -/
+
+@[simp] theorem Mem.ofGlobals_place (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).place = σ := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_allocs (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).allocs = 0 := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_failAt (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).failAt = none := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_allocPolicy (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).allocPolicy = {} := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_current (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).current = 0 := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_clocks (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).clocks = #[#[]] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_threads (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).threads = #[{ spawner := 0, joined := true }] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_footprint (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).footprint = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_atomics (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).atomics = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_seen (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).seen = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_nextMsg (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).nextMsg = 0 := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_waiters (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).waiters = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_woken (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).woken = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_groups (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).groups = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+@[simp] theorem Mem.ofGlobals_allocators (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).allocators = #[] := by
+  rw [Mem.ofGlobals_eq]
+
+theorem Mem.ofGlobals_size (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
+    (Mem.ofGlobals σ gs).blocks.size = gs.length := by
+  have := (foldl_addGlobal gs { place := σ }).2.1
+  simpa [Mem.ofGlobals] using this
+
+/-- Block `j` at program start is global `j`: its bytes, alignment and kind, live, at an address
+that is a multiple of its alignment, under every placement. Nothing else is known about the
+address. -/
+theorem Mem.ofGlobals_block (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) (j : Nat)
+    (hj : j < gs.length) :
+    ∃ A, (0 < gs[j].2.1 → A % gs[j].2.1 = 0) ∧ (Mem.ofGlobals σ gs).blocks[j]? =
+      some { bytes := gs[j].1, align := gs[j].2.1, kind := gs[j].2.2, live := true, addr := A } := by
+  have := (foldl_addGlobal gs { place := σ }).2.2.2 j hj
+  simpa [Mem.ofGlobals] using this
+
+/-- The address of global `j` at program start under the placement `σ` (0 if there is no global
+`j`). A theorem that holds for every `σ` can use only `Mem.globalAddr_mod` about it. -/
+def Mem.globalAddr (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) (j : Nat) : Nat :=
+  ((Mem.ofGlobals σ gs).blocks[j]?.map (·.addr)).getD 0
+
+/-- Block `j` at program start, in a form for `simp`: global `j` at `Mem.globalAddr σ gs j`. -/
+theorem Mem.ofGlobals_getElem? (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (j : Nat) : (Mem.ofGlobals σ gs).blocks[j]? = gs[j]?.map fun g =>
+      { bytes := g.1, align := g.2.1, kind := g.2.2, live := true, addr := Mem.globalAddr σ gs j } := by
+  by_cases hj : j < gs.length
+  · obtain ⟨A, -, h⟩ := Mem.ofGlobals_block σ gs j hj
+    simp [Mem.globalAddr, h, List.getElem?_eq_getElem hj]
+  · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
+    simp [Array.getElem?_eq_none this, List.getElem?_eq_none (Nat.le_of_not_lt hj)]
+
+theorem Mem.globalAddr_mod (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) (j : Nat)
+    (hj : j < gs.length) (ha : 0 < gs[j].2.1) : Mem.globalAddr σ gs j % gs[j].2.1 = 0 := by
+  obtain ⟨A, hA, h⟩ := Mem.ofGlobals_block σ gs j hj
+  simp [Mem.globalAddr, h, hA ha]
+
+/-- A block at program start is aligned: its address is a multiple of its alignment, under every
+placement. -/
+theorem Mem.ofGlobals_addr_mod {σ : Placement} {gs : List (Array Byte × Nat × BlockKind)} {j : Nat}
+    {blk : Block} (h : (Mem.ofGlobals σ gs).blocks[j]? = some blk) (ha : 0 < blk.align) :
+    blk.addr % blk.align = 0 := by
+  by_cases hj : j < gs.length
+  · obtain ⟨A, hA, h'⟩ := Mem.ofGlobals_block σ gs j hj
+    rw [h'] at h; cases h; exact hA ha
+  · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
+    rw [Array.getElem?_eq_none this] at h; cases h
+
+/-! ## Error unions -/
 
 /-- The error code and the payload of `E!T` do not overlap, and both are inside it. -/
 theorem errUnion_bounds (s a : Nat) :

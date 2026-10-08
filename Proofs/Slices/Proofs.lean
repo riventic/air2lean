@@ -28,9 +28,10 @@ theorem colorName_red (m : Mem) : (colorName .red).run m = pure (⟨⟨some 2, 0
 theorem colorName_blue (m : Mem) : (colorName .blue).run m = pure (⟨⟨some 4, 0⟩, 4⟩, m) := by
   simp [colorName, zig_unfold, Color.isNamed, Color.tagName]
 
-/-- The global block of the name `red`: its bytes and the 0 sentinel. -/
-theorem mem0_red : mem0.blocks[2]?.map (·.bytes) = some #[.int 114, .int 101, .int 100, .int 0] := by
-  simp [mem0, Mem.ofGlobals, Mem.addGlobal, Enc.encode, intBytes, padTo, intSize, intAlign, alignUp]
+/-- The global block of the name `red`: its bytes and the 0 sentinel, under every placement. -/
+theorem mem0_red (σ : Placement) :
+    (mem0 σ).blocks[2]?.map (·.bytes) = some #[.int 114, .int 101, .int 100, .int 0] := by
+  simp [mem0, Mem.ofGlobals_getElem?, Enc.encode, intBytes, padTo, intSize, intAlign, alignUp]
 
 /-- `@errorName`: `error.Empty` for `0`, else `error.TooLong`. -/
 theorem failName_zero (m : Mem) : (failName 0).run m = pure (⟨⟨some 5, 0⟩, 5⟩, m) := by
@@ -81,17 +82,23 @@ theorem tag_bytes (a : BitVec 8) :
   simp [Enc.encode, Enc.fields, intBytes, padTo, intSize, intAlign, alignUp, writeBytes]
   apply BitVec.eq_of_toNat_eq; simp; omega
 
--- The second item is read successfully and its access appears in the returned memory.
-example :
-    let m := Mem.ofGlobals [(Enc.encode (1 : BitVec 32) ++ Enc.encode (2 : BitVec 32), 4, .global)]
+-- The second item is read successfully and its access appears in the returned memory, under
+-- every placement: the block's address is only known to be 4-aligned.
+example (σ : Placement) :
+    let m := Mem.ofGlobals σ [(Enc.encode (1 : BitVec 32) ++ Enc.encode (2 : BitVec 32), 4, .global)]
     (second ⟨some 0, 0⟩).run m = pure (2, m.recordAt 0 4 4 .read) := by
   dsimp only
   have hfull (v : BitVec 32) : (Enc.encode v).extract 0 4 = Enc.encode v := by
     rw [← show (Enc.encode v).size = 4 from LawfulEnc.size_encode v]
     exact Array.extract_size
+  obtain ⟨A, hb⟩ : ∃ A, (Mem.ofGlobals σ
+      [(Enc.encode 1#32 ++ Enc.encode 2#32, 4, .global)]).blocks[0]? =
+      some ⟨Enc.encode 1#32 ++ Enc.encode 2#32, 4, .global, true, A⟩ :=
+    ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
+  have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   apply second_spec _ _ 2
   have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
-  simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
-    Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
+  simp [load, loadBytes, recordAccess, hb, Mem.access,
+    Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
     Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set,
-    StateT.set, zig_unfold]
+    StateT.set, zig_unfold, Nat.add_mod, hA]

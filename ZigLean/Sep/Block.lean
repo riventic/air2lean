@@ -52,43 +52,6 @@ and liveness are per block id, and the only address facts they give are the ones
 the alignment of the new block and that its address range is clear of every live block
 (`Mem.newAddr_clear`). Nothing about the order of blocks or a gap between them. -/
 
-theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align = some A) :
-    0 < A ∧ A % align = 0 ∧ A + size ≤ 2 ^ 64 ∧ m.addrFree A size = true := by
-  unfold Mem.placed? at h
-  split at h
-  · split at h
-    · cases h; simpa [Mem.placeOk, and_assoc] using ‹m.placeOk _ size align = true›
-    · cases h
-  · cases h
-
-private theorem foldl_top (l : List Block) (t : Nat) :
-    t ≤ l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t ∧
-      ∀ blk ∈ l, blk.addr + blk.bytes.size < l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t := by
-  induction l generalizing t with
-  | nil => simp
-  | cons x xs ih =>
-    obtain ⟨h1, h2⟩ := ih (Nat.max t (x.addr + x.bytes.size + 1))
-    simp only [List.foldl_cons, List.mem_cons]
-    refine ⟨Nat.le_trans (Nat.le_max_left _ _) h1, fun blk hb => ?_⟩
-    rcases hb with rfl | hb
-    · exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_trans (Nat.le_max_right _ _) h1)
-    · exact h2 blk hb
-
-/-- Every block, dead or live, ends below `Mem.top`. -/
-theorem Mem.lt_top {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk) :
-    blk.addr + blk.bytes.size < m.top := by
-  unfold Mem.top
-  rw [← Array.foldl_toList]
-  exact (foldl_top m.blocks.toList 4096).2 blk
-    (Array.mem_toList_iff.mpr (Array.mem_of_getElem? h))
-
-theorem Mem.newAddr_mod (m : Mem) (size align : Nat) (ha : 0 < align) :
-    m.newAddr size align % align = 0 := by
-  unfold Mem.newAddr
-  split
-  · exact (Mem.placed?_ok ‹_›).2.1
-  · simp only [alignUp, Nat.ne_of_gt ha, ↓reduceIte, Nat.mul_mod_left]
-
 /-- A block clear of every live block by `Mem.addrFree` is clear of every live cell. -/
 theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l : Loc} {c : Cell}
     (hc : m.heap l = some c) : n = 0 ∨ c.addr + c.size ≤ A ∨ A + n ≤ c.addr := by
