@@ -43,7 +43,12 @@ if [ "${1:-}" = --inside ]; then
   tar -xzf /tmp/elan.tar.gz -C /tmp
   /tmp/elan-init --default-toolchain none -y
   export PATH="$HOME/.elan/bin:$PATH"
-  elan toolchain install "$(cat lean-toolchain)"
+  # The toolchain download is the only unpinned-host fetch; retry transient network failures.
+  for attempt in 1 2 3; do
+    if elan toolchain install "$(cat lean-toolchain)"; then break; fi
+    [ "$attempt" -lt 3 ] || exit 1
+    sleep 15
+  done
   lake build air2lean >"$out/build-air2lean.log" 2>&1 || { tail -50 "$out/build-air2lean.log" >&2; exit 1; }
   status=0
   python3 scripts/project.py check "$manifest" --translator .lake/build/bin/air2lean --out "$out/check" || status=$?

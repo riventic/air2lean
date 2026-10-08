@@ -1,5 +1,6 @@
 """Offline I03 project check regressions: stub translator, Lake and audit; real guard and claims."""
 import copy
+import fcntl
 import hashlib
 import json
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'scripts' / 'project.py'
@@ -334,6 +336,24 @@ class CheckTests(unittest.TestCase):
         (self.out / 'taken').mkdir(parents=True)
         self.assertEqual(self.run_check('taken')[0].returncode, 2)
         self.assertEqual(self.calls(), [])
+
+    def test_busy_lock_fails_unless_waited_for(self):
+        self.lock.parent.mkdir(parents=True, exist_ok=True)
+        with self.lock.open('a') as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            result, record = self.run_check('busy')
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(record['reproducible']['stages']['build']['outcome'], 'lock_busy')
+            releaser = threading.Timer(1.0, fcntl.flock, (held, fcntl.LOCK_UN))
+            releaser.start()
+            try:
+                result, record = self.run_check('waited', '--lock-wait', '60')
+            finally:
+                releaser.cancel()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(record['status'], 'reproduced')
+        self.assertEqual(self.compare(self.out / 'waited/record.json', self.out / 'waited/record.json').returncode, 0)
+        self.assertEqual(self.run_check('negative', '--lock-wait', '-1')[0].returncode, 2)
 
     def test_compare_rejects_non_records(self):
         other = self.out / 'x.json'
