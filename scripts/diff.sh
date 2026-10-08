@@ -43,6 +43,8 @@
 #                       safety checks, so an input on which the model throws is illegal behavior there:
 #                       it is counted as ub_excluded, not compared.
 #   AIR2LEAN_DIFF_BACKEND   Native code generator: llvm or stage2_x86_64 (-fno-llvm). Unset: Zig's default.
+#   AIR2LEAN_DIFF_LINK_FLAGS  Extra build-exe flags for the harness (the emulated x86_64 runs pass
+#                       `-z norelro`: Rosetta rejects the empty RELRO segment of release builds).
 #   AIR2LEAN_EXAMPLES   Space-separated example dirs to test. Default: every dir in examples/
 #                       (not `asm` on a host that is not x86_64, and not an example whose
 #                       examples/<ex>/zig-versions does not list the zig's version, as in check.sh).
@@ -116,7 +118,7 @@ build_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-diff.XXXXXX")
 for ex in $examples; do
   # A fixed CPU: float results can depend on CPU features (FMA, native f16; docs/floats.md).
   # shellcheck disable=SC2086  # $backend_flag is empty or one flag
-  "$zig_bin" build-exe -O"$optimize" -mcpu=baseline $backend_flag -femit-bin="$build_dir/$ex" \
+  "$zig_bin" build-exe -O"$optimize" -mcpu=baseline $backend_flag ${AIR2LEAN_DIFF_LINK_FLAGS:-} -femit-bin="$build_dir/$ex" \
     --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" \
     -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig
   "$build_dir/$ex"

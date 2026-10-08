@@ -164,12 +164,17 @@ def check_run(root, record, item, text, errors, where):
     if not isinstance(triage, list):
         errors.append(f'{where}: {path} triage must be a list')
         triage = []
-    if len(triage) != mismatches:
-        errors.append(f'{where}: {path} has {mismatches} mismatches but {len(triage)} triage entries')
-    for entry in triage:
+    if sum(e.get('cases', 0) for e in triage if isinstance(e, dict)) != mismatches:
+        errors.append(f'{where}: {path} has {mismatches} mismatches that the triage entries do not cover')
+    for entry in triage + (run.get('excluded_examples') or []):
         reproducer = entry.get('reproducer') if isinstance(entry, dict) else None
         if not isinstance(reproducer, str) or not (root / reproducer).is_file() or not entry.get('note'):
-            errors.append(f'{where}: {path} every mismatch needs a note and an existing reproducer file')
+            errors.append(f'{where}: {path} every triaged mismatch or excluded example needs a note '
+                          f'and an existing reproducer file')
+    skipped = run.get('skipped_examples')
+    listed = {e.get('example') for e in run.get('excluded_examples') or [] if isinstance(e, dict)}
+    if not isinstance(skipped, dict) or {k for k, v in skipped.items() if v == 'not_requested'} != listed:
+        errors.append(f'{where}: {path} every example left out of the run must be listed in excluded_examples')
     if mismatches and record.get('status') == 'qualified':
         errors.append(f'{where}: a qualified record cannot cite a run with mismatches ({path})')
     exclusions = run.get('exclusions')
@@ -373,7 +378,8 @@ def build_run(summary, cases, args, root):
         raise ValueError(f'summary was made for {profile.get("optimize")}/{profile.get("backend")}')
     excluded = {}
     examples = {}
-    for line in cases:
+    cases_rows = list(cases)
+    for line in cases_rows:
         row = json.loads(line)
         if 'function' not in row:
             continue
@@ -384,6 +390,10 @@ def build_run(summary, cases, args, root):
     flags = f'-O{args.mode} -mcpu=baseline'
     if args.explicit_backend or args.backend != 'llvm':
         flags += ' ' + BACKEND_FLAG[args.backend]
+    if args.link_flags:
+        flags += ' ' + args.link_flags
+    skipped = {row['example']: row['reason'] for row in map(json.loads, cases_rows)
+               if row.get('status') == 'skipped'}
     float_mode = [str(p.relative_to(root)) for rel in FLOAT_MODE_SOURCES
                   for p in sorted((root / rel).rglob('*.zig'))
                   if 'setFloatMode' in p.read_text(encoding='utf-8')]
@@ -400,6 +410,8 @@ def build_run(summary, cases, args, root):
         'sources_sha256': hashlib.sha256(
             json.dumps(summary['runner_runtime_sources'], sort_keys=True).encode()).hexdigest(),
         'examples': dict(sorted(examples.items())),
+        'skipped_examples': dict(sorted(skipped.items())),
+        'excluded_examples': json.loads(args.excluded_examples.read_text()) if args.excluded_examples else [],
         'cases': summary['case_count'],
         'counts': {k: v for k, v in sorted(summary['counts'].items()) if v},
         'exclusions': [{'example': e, 'function': f, 'status': st, 'cases': n}
@@ -427,6 +439,9 @@ def main(argv=None):
     rec.add_argument('--emulated', action='store_true')
     rec.add_argument('--explicit-backend', action='store_true', help='-fllvm was passed')
     rec.add_argument('--triage', type=Path, help='JSON list of triaged mismatches')
+    rec.add_argument('--link-flags', default='', help='extra linker flags the run passed')
+    rec.add_argument('--excluded-examples', type=Path,
+                     help='JSON list of {example, reason, reproducer} for examples left out of the run')
     args = parser.parse_args(argv)
     try:
         data = json.loads((args.root / REGISTRY).read_text(encoding='utf-8'))

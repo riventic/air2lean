@@ -26,6 +26,13 @@ if [ "${1:-}" = --inside ]; then
   lake build
   export AIR2LEAN_ZIG=$zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend
   export AIR2LEAN_DIFF_REPORT=/work/tests/diff/out/report.json
+  # Rosetta cannot load the empty RELRO segment of release builds ("bss_size overflow").
+  export AIR2LEAN_DIFF_LINK_FLAGS='-z norelro'
+  if [ -z "$examples" ] && [ "$backend" = stage2_x86_64 ]; then
+    # The self-hosted backend cannot encode examples/asm's lzcnt/popcnt at -mcpu=baseline.
+    source scripts/example-selection.sh
+    examples=$(air2lean_default_examples /work "$version" x86_64 | tr ' ' '\n' | grep -vx asm | tr '\n' ' ')
+  fi
   if [ -n "$examples" ]; then export AIR2LEAN_EXAMPLES=$examples; fi
   sha256sum "$zig" | cut -d' ' -f1 >/artifacts/zig.sha256
   status=0

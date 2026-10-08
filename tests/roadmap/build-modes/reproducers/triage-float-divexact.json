@@ -1,0 +1,10 @@
+[
+  {
+    "example": "floatops",
+    "function": "divExact64",
+    "cases": 85,
+    "classification": "illegal-behaviour-not-detected-by-releasesafe",
+    "reproducer": "tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig",
+    "note": "Each input has a non-integral quotient, which @divExact makes illegal. ReleaseSafe does not check float @divExact and returns the truncated quotient, which the model reproduces without throwing; ReleaseFast and ReleaseSmall return the plain quotient. The ReleaseFast no-illegal-behaviour-transfer premise (a model that does not throw implies legal execution) therefore does not hold for float @divExact."
+  }
+]
