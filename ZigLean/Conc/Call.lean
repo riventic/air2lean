@@ -110,22 +110,39 @@ instance : Enc Io where
 def futexWaitC {α : Type} {n : Nat} [Packed α n] (_ : Io) (p : Ptr) (expected : α) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p ((Packed.toBits expected).setWidth 32))))
 
-/-- `Io.futexWait(T, ptr, expected)`: as `futexWaitC`; the model never cancels
-(`error.Canceled` does not happen). -/
+/-- The option of the oracle with which a cancelation request that arrived during a blocking
+cancelation point is delivered there (`error.Canceled`); option 1 leaves it pending for the next
+cancelation point. -/
+def cancelDelivered : Nat := 0
+
+/-- `Io.futexWait(T, ptr, expected)`, a cancelation point (`docs/std-models.md` §Cancelation).
+A request that is pending at the call is delivered at once (`Syscall.start` returns
+`error.Canceled`, `Io/Threaded.zig:1347-1364`). Else the wait is `futexWaitC` (it may return
+spuriously); a request that arrived while it waited (`requestCancel` wakes the task) is delivered
+or stays pending, the oracle's choice: std signals the blocked syscall, but a wake can win. -/
 def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr) (expected : α) :
     CM Tgt σ (Except ErrName Unit) := do
+  if ← callMC Thread.cancelPending then
+    callMC Thread.takeCancel
+    return .error "Canceled"
   futexWaitC io p expected
+  if ← callMC Thread.cancelPending then
+    if (← pickC (fun _ => 2)) = cancelDelivered then
+      callMC Thread.takeCancel
+      return .error "Canceled"
   pure (.ok ())
 
 /-- `Io.futexWake(T, ptr, max_waiters)`. -/
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 
-/-! ### `Io.Group` (0.16.0; `docs/std-models.md` §Thread model)
+/-! ### `Io.Group` (0.16.0; `docs/std-models.md` §Thread model, §Cancelation)
 
 A task of a group is a thread: `Group.async` is a spawn that the group records (`Mem.groups`),
-`Group.await` a join of each task of the group. The available policy assumes assignment succeeds and never cancels,
-so `Group.concurrent` is `async`, and `Group.cancel` is `await`. -/
+`Group.await` a join of each task of the group. The available policy assumes assignment succeeds,
+so `Group.concurrent` is `async`. `Group.cancel` gives each task a cancelation request
+(`Thread.requestCancel`), which the task's next cancelation point delivers, and then joins the
+tasks. -/
 
 /-- `Io.Group.async(g, io, function, args)`: the task `t` runs as a thread of the group. -/
 def groupAsyncC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ Unit := do
@@ -138,15 +155,45 @@ def groupConcurrentC (g : Ptr) (io : Io) (t : Tgt) : CM Tgt σ (Except ErrName U
   groupAsyncC g io t
   pure (.ok ())
 
-/-- `Io.Group.await`: joins each task of the group, in the order of their spawn. -/
+/-- The joins of `Group.await` by an `Io` task (a nested group): a request of the awaiter that
+is pending before a join is delivered there; the awaiter then cancels the rest of the group, waits
+for it and returns `error.Canceled` (`groupAwait`, `Io/Threaded.zig:2291-2338`). A request that
+arrived during the last join is delivered or stays pending (the oracle's choice). -/
+def groupAwaitTaskC : List ThreadId → CM Tgt σ (Except ErrName Unit)
+  | [] => do
+    if ← callMC Thread.cancelPending then
+      if (← pickC (fun _ => 2)) = cancelDelivered then
+        callMC Thread.takeCancel
+        return .error "Canceled"
+    pure (.ok ())
+  | tid :: rest => do
+    if ← callMC Thread.cancelPending then
+      callMC Thread.takeCancel
+      callMC (Thread.requestCancel (tid :: rest).toArray)
+      for u in tid :: rest do joinC u
+      callMC (Thread.dropCancels (tid :: rest).toArray)
+      return .error "Canceled"
+    joinC tid
+    groupAwaitTaskC rest
+
+/-- `Io.Group.await`: joins each task of the group, in the order of their spawn. `main` is not
+an `Io` task and is never canceled; an awaiting task can be (`groupAwaitTaskC`). -/
 def groupAwaitC (g : Ptr) (_ : Io) : CM Tgt σ (Except ErrName Unit) := do
   let tids ← callMC (Thread.groupTake g)
-  for tid in tids do joinC tid
-  pure (.ok ())
+  if (← callMC (do pure ((← get).current != 0) : MemM Bool)) then
+    groupAwaitTaskC tids.toList
+  else
+    for tid in tids do joinC tid
+    pure (.ok ())
 
-/-- `Io.Group.cancel`: the model never cancels, so it waits for the tasks as `await` does. -/
-def groupCancelC (g : Ptr) (io : Io) : CM Tgt σ Unit := do
-  let _ ← groupAwaitC g io
+/-- `Io.Group.cancel`: a cancelation request for each task of the group, then a join of each
+(the canceler's wait is uncancelable). A task that ended before its request never observes it;
+the requests end with the joined tasks. -/
+def groupCancelC (g : Ptr) (_ : Io) : CM Tgt σ Unit := do
+  let tids ← callMC (Thread.groupTake g)
+  callMC (Thread.requestCancel tids)
+  for tid in tids do joinC tid
+  callMC (Thread.dropCancels tids)
 
 /-! ### `std.Thread` (0.14.1, 0.15.2; `docs/std-models.md` §Thread model) -/
 

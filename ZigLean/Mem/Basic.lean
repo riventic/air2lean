@@ -234,6 +234,9 @@ structure Mem where
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
   of their spawn (`ZigLean/Mem/Thread.lean`). -/
   groups : Array (Ptr × ThreadId) := #[]
+  /-- The `Io` tasks with a cancelation request (`Io.Group.cancel`) that no cancelation point
+  has delivered yet (`ZigLean/Mem/Thread.lean`, `docs/std-models.md` §Cancelation). -/
+  cancels : Array ThreadId := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

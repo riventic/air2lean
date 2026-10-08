@@ -432,6 +432,33 @@ def groupTake (g : Ptr) : MemM (Array ThreadId) := do
   set { m with groups := m.groups.filter (·.1 != g) }
   pure ((m.groups.filter (·.1 == g)).map (·.2))
 
+/-! ## Cancelation (`Io.Group.cancel`, 0.16.0; `docs/std-models.md` §Cancelation)
+
+A cancelation request of an `Io` task stays in `Mem.cancels` until a cancelation point of the task
+delivers it (`error.Canceled`). Thread 0 (`main`) is not an `Io` task: std's threaded `Io`
+cancels only its worker threads (`Thread.current` is null elsewhere, `Io/Threaded.zig:1348`), so a
+request is never pending for it. -/
+
+/-- The current thread has a cancelation request that no cancelation point delivered. -/
+def cancelPending : MemM Bool := do
+  let m ← get
+  pure (m.current != 0 && m.cancels.contains m.current)
+
+/-- A cancelation point delivers the current thread's request: `error.Canceled`. -/
+def takeCancel : MemM Unit := modify fun m => { m with cancels := m.cancels.erase m.current }
+
+/-- `Io.Group.cancel`: a cancelation request for each task in `tids`. A task that sleeps at a
+futex wakes: a cancelable wait is interrupted (std signals the blocked syscall); for an
+uncancelable wait this is a spurious return, which the futex API permits. -/
+def requestCancel (tids : Array ThreadId) : MemM Unit := modify fun m =>
+  { m with cancels := m.cancels ++ tids.filter (· != 0),
+           waiters := m.waiters.filter (fun w => !tids.contains w.1),
+           woken := m.woken ++ (m.waiters.filter (fun w => tids.contains w.1)).map (·.1) }
+
+/-- The requests of the joined tasks `tids` end with them. -/
+def dropCancels (tids : Array ThreadId) : MemM Unit := modify fun m =>
+  { m with cancels := m.cancels.filter (fun u => !tids.contains u) }
+
 /-! ## Futex (the kernel's part of `Io.futexWait`/`futexWake`)
 
 The scheduler (`ZigLean/Conc/Sched.lean`) calls these at a `wait`/`wake` sync op. The queue is in
