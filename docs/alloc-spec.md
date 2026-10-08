@@ -86,6 +86,11 @@ tries `remap`, then allocates, copies the common prefix, poisons and frees.
 | `allocSentinel_spec` | `n + 1` items, undefined but the last, which is the sentinel |
 | `realloc_spec` | a slice of `size * n` bytes that keeps the common prefix, or `OutOfMemory` with the old slice unchanged |
 
+Two simplifications, both preconditions of the theorems rather than modelled behaviour: a
+sentinel-terminated slice is passed to `free`/`realloc` with its absorbed length (`len + 1`
+items, as `mem.absorbSentinel` computes), and `allocSentinel_spec` assumes `n + 1` does not
+overflow (Zig panics there in safe builds).
+
 `owned I k p bs` is `emp` for zero bytes and `granted I p k bs` otherwise. Each proof uses
 only `AllocSpec L vt ctx I` and the `Logic` rules, so it holds for every allocator in both
 logics.
