@@ -10,8 +10,16 @@ is written as two inequalities.
 
 * `roundRat_error`: one rounding of an exact value `q` with `|q| ≤ A < 2^emax` gives a finite
   value `r` with `|r - q| ≤ u·A + η` (`u = 2^-prec`, `η = 2^(emin - prec)`).
-* `add_error`/`mul_error`: the same for one `+`/`*` of finite operands: finite closure under
-  an explicit magnitude bound, plus the rounding error.
+* `add_error`/`sub_error`/`mul_error`/`div_error`/`conv_error`: the same for one `+`/`-`/
+  `*`/`/`/`@floatCast` of finite operands: finite closure under an explicit magnitude bound,
+  plus the rounding error. `fma_error` (one rounding), `fma_error_f16`/`fma_error_f80` (two
+  roundings, through `f32`/`f128`) for `@mulAdd`; `sqrt_error` for `@sqrt`, stated through
+  squares since `√a` is in general irrational.
+* `mul_abs_le`/`mul_sub_mul_le`: products of bounded and of perturbed values, to propagate an
+  earlier rounding error through `*`.
+* NaN propagation for every operation; `sqrt_isNaN_of_neg`.
+* `fmaRt_error_f32`, `divRt_error_f128`: the `compiler-rt` helper ports with a bound
+  (`docs/floats.md` §Numerical bounds lists the others and why they are out of scope).
 * `sumLeft_error`: the accumulated error of the left fold `((init + t₀) + t₁) + …`, from a
   magnitude bound `M` and an error bound `E` that the caller supplies per step.
   `sumLeft_error_uniform` instantiates them in closed form for a zero start and a uniform
@@ -450,6 +458,7 @@ theorem classify_neg {fmt : FloatFmt} (x : Float fmt) :
   conv => rhs; rw [Float.eq_pack_fields x]
   exact classify_pack_neg _ (Nat.mod_lt _ (Nat.two_pow_pos _)) (Nat.mod_lt _ (Nat.two_pow_pos _))
 
+/-- `neg` negates a finite value. -/
 theorem toRat?_neg {fmt : FloatFmt} {x : Float fmt} {a : Rat} (h : x.toRat? = some a) :
     (Float.neg x).toRat? = some (-a) := by
   obtain ⟨s, m, e, hc, rfl⟩ := exists_finite_of_toRat? h
@@ -457,6 +466,7 @@ theorem toRat?_neg {fmt : FloatFmt} {x : Float fmt} {a : Rat} (h : x.toRat? = so
   rw [classify_neg, hc]
   cases s <;> simp [finiteToRat]
 
+/-- `neg` keeps a NaN a NaN. -/
 theorem isNaN_neg {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = true) :
     (Float.neg x).isNaN = true := by
   rw [isNaN_iff, classify_neg, (isNaN_iff x).mp h]
@@ -872,6 +882,8 @@ theorem gt_of_error {fmt : FloatFmt} {y z : Float fmt} {q w s e : Rat}
 
 /-! ## `@sqrt` -/
 
+/-- `sqrtCore`'s rounded root `M` of the integer radicand `S` is within `1/2` of `√S`, stated
+through squares: `4S ≤ (2M + 1)²` and, for `S > 0`, `(2M - 1)² ≤ 4S`. -/
 private theorem sqrt_round_bounds (S M : Nat)
     (hM : M = if S - S.sqrt * S.sqrt ≤ S.sqrt then S.sqrt else S.sqrt + 1) :
     4 * S ≤ (2 * M + 1) * (2 * M + 1) ∧ (0 < S → 1 ≤ M ∧ (2 * M - 1) * (2 * M - 1) ≤ 4 * S) ∧

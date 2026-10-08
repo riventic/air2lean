@@ -16057,7 +16057,7 @@
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
       "ZigLean/Float/Allowed.lean": "562d97fa9ed6bba75995953a0eebb34c3a495f03590a00fb948ca3bf7feebe66",
       "ZigLean/Float/CompilerRt.lean": "db8e8ee459b5ab80f7c0702b290138e26ef9e3d5508b4304ac376bb623133df7",
-      "ZigLean/Float/Error.lean": "b1a433b87742c99401a4d7b232381da2c9fa9d16db14e7aeba301ae19edd0789",
+      "ZigLean/Float/Error.lean": "c625bcaf1ced19688539da541422f8708a19cbbd566fea4e0d086beb83d90103",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",
       "ZigLean/Float/Libm.lean": "ecc42f5218b1ca552f45a26d65b614f03e2b91a52cc47ed8cf01133530a2c452",
