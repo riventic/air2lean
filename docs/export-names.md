@@ -33,6 +33,11 @@ output directories are trusted, and this is not protection against concurrent
 path replacement or writers that ignore advisory locks. A failed JSON write still
 reports incomplete output, as before.
 
+Within one compilation, a filename belongs to the first function that writes it. A
+different function that maps to the same filename (a function with the same full name in
+another module, or a SHA-256 collision) stops the compiler with an error and exit status 1
+instead of replacing the file ([AIR JSON §Identity](air-json.md#identity)).
+
 Golden normalization first verifies the actual raw artifact's receipt hash and
 profile, then checks a reserved filename against the full original JSON name.
 It derives every canonical filename from the normalized JSON name using one

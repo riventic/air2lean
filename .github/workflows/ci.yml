@@ -392,6 +392,13 @@ jobs:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
         run: bash scripts/check-export-names.sh
 
+      - name: Module identity regression (B1)
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: bash tests/roadmap/module-identity/check.sh
+
       - name: Build optional separation proof tools
         if: ${{ !matrix.mutate }}
         run: |

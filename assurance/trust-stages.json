@@ -13,7 +13,7 @@
     {
       "id": "exporter",
       "name": "AIR JSON exporter patch",
-      "components": ["zig-patch/air-json/json.zig", "zig-patch/air-json/pointer-offset.zig"],
+      "components": ["zig-patch/air-json/json.zig", "zig-patch/air-json/pointer-offset.zig", "zig-patch/air-json/identity.zig"],
       "class": "independently-checked-metadata",
       "premises": ["TRU-02"],
       "summary": "The exported structure is re-checked outside the Lean decoder: instruction ids, operand scoping, block/loop/dispatch targets, terminators, type-table/global references and the per-version tag set and unsupported markers of coverage/<version>.json. Operand values and the meaning of each tag remain trusted.",

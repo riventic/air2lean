@@ -169,6 +169,22 @@ Schema 6. One entry per global that a pointer constant points into, in the order
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On
 success they return that payload's address without reading or copying its bytes.
 
+## Identity
+
+A fully qualified name (`util.helper`) is the declaration's path inside its module. Two modules
+can each have a `util.zig` with a `helper`, so the name alone does not identify a function, a
+type or a global (tests/roadmap/module-identity).
+
+The exporter fails closed when one compilation would write two different declarations under
+one identity: an output file (`<name>.json` or its SHA-256 name), a struct, enum or union
+`name`, or a named global's `name`. The first declaration that writes an identity claims it
+(`zig-patch/air-json/identity.zig`). If a different declaration writes it later, the exporter
+reports `two different declarations export the <kind> identity '<name>'` and the compiler
+exits with status 1. Re-analysis of the same declaration may write its identity again.
+
+The translator rejects two input files with the same function `name` (`duplicate function
+name`), for example dumps of two compilations copied into one directory.
+
 ## Independent validation (V03)
 
 `scripts/validate-air.py` re-checks exported AIR without the Lean decoder: strict JSON, unique

@@ -16496,7 +16496,8 @@
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
       "Air2Lean/TimedCheck.lean": "690ac922400f0a9b888f9931a5879bbad7995ef27664ebed7fccda389aa171e5",
       "Air2Lean/TimedEmit.lean": "69961957cca4f1280290ccd150e43880bc0a9620a3f0b9220c1dd9d108f32bce",
-      "zig-patch/air-json/json.zig": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0",
+      "zig-patch/air-json/identity.zig": "5f19799e6ce019ab724ea87c6ad3df9adcba311266bae05b07aadb36e02fe944",
+      "zig-patch/air-json/json.zig": "73d3ce72a63203cec0d68fc7988c67cf8eda8252842774500e5dccfddf31db34",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {

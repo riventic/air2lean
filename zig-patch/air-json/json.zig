@@ -21,6 +21,7 @@ const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
+const Identity = @import("identity.zig");
 
 /// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0). The compiler
 /// is built by a host zig of its own version (`zig-patch/build.sh`), so `builtin.zig_version`
@@ -490,6 +491,7 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     defer arena.deinit();
     var name_buf: [output_name_capacity]u8 = undefined;
     const file_name = outputFileName(fqn, &name_buf);
+    Identity.claim(zcu, .output, file_name, @intFromEnum(func.owner_nav));
     const file = openOwnedOutput(pt, dir, file_name, fqn) catch |err| {
         std.log.warn("air2lean: no JSON for {s} at {s}: {s}", .{ fqn, file_name, @errorName(err) });
         return;
@@ -1475,8 +1477,10 @@ const W = struct {
         switch (g) {
             .nav => |nav| {
                 const info = Compat.navInfo(zcu, nav);
+                const name = ip.getNav(nav).fqn.toSlice(ip);
+                Identity.claim(zcu, .global, name, @intFromEnum(nav));
                 try w.field("name");
-                try w.j.write(ip.getNav(nav).fqn.toSlice(ip));
+                try w.j.write(name);
                 try w.field("ty");
                 try w.writeTypeRef(Type.fromInterned(info.ty));
                 try w.field("const");
@@ -1509,6 +1513,15 @@ const W = struct {
             try w.queue.append(w.gpa, ty.toIntern());
         }
         return gop.value_ptr.*;
+    }
+
+    /// The `name` of a struct, enum or union type entry: an identity of this type only.
+    fn writeTypeName(w: *W, ty: Type) Error!void {
+        const zcu = w.pt.zcu;
+        const name = ty.containerTypeName(&zcu.intern_pool).toSlice(&zcu.intern_pool);
+        Identity.claim(zcu, .type, name, @intFromEnum(ty.toIntern()));
+        try w.field("name");
+        try w.j.write(name);
     }
 
     /// Write one full type entry (this type's array element in `types`). Child types are
@@ -1650,8 +1663,7 @@ const W = struct {
                 const is_tuple = ty.isTuple(zcu);
                 try w.j.write(if (is_tuple) "tuple" else "struct");
                 if (!is_tuple) {
-                    try w.field("name");
-                    try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                    try w.writeTypeName(ty);
                     try w.field("layout");
                     try w.j.write(@tagName(ty.containerLayout(zcu)));
                 }
@@ -1685,8 +1697,7 @@ const W = struct {
             },
             .@"enum" => {
                 try w.j.write("enum");
-                try w.field("name");
-                try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                try w.writeTypeName(ty);
                 try w.field("tag");
                 try w.writeTypeRef(ty.intTagType(zcu));
                 try w.field("exhaustive");
@@ -1706,8 +1717,7 @@ const W = struct {
             },
             .@"union" => {
                 try w.j.write("union");
-                try w.field("name");
-                try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                try w.writeTypeName(ty);
                 try w.field("layout");
                 try w.j.write(@tagName(ty.containerLayout(zcu)));
                 if (!Compat.hasFields(zcu, ty)) {
