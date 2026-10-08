@@ -11,11 +11,11 @@
     "-fPIE"
   ],
   "schema": "air2lean-bitops-native/1",
-  "stock_zig_sha256": "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489",
+  "stock_zig_sha256": "39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa",
   "targets": {
     "aarch64-linux": {
       "air_equivalent_to": "x86_64-linux",
-      "air_sha256": "e5b101b293b64a9936f7057af2d7580e92a3aec713c1d9a9811f425627395c34",
+      "air_sha256": "3761bb91635033b14248886bca16d5b3b107343dc8d25eeb59374f2c030e86be",
       "executor": "docker:linux/arm64",
       "lean_rows": 31366,
       "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
@@ -55,7 +55,7 @@
       }
     },
     "aarch64-macos": {
-      "air_sha256": "addf5e94360e8e51a6f1db5021d6d415566f30f2ae8f824cb8a44be9b47e87d9",
+      "air_sha256": "8e372685d55c60181dc0856c7e5b6414445bdf9b10323410abe69a102cddc7e7",
       "executor": "host",
       "lean_rows": 31366,
       "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
@@ -95,7 +95,7 @@
       }
     },
     "x86_64-linux": {
-      "air_sha256": "ba45063b6e0447692bb0e9d014d5a15f34a1ac66473137053fa55c4d1f7ab63b",
+      "air_sha256": "1d46c62aec92f61a520ef7388f53ad84c4d651a93fbeb72014a3ed6feefdf64d",
       "executor": "docker:linux/amd64",
       "lean_rows": 31366,
       "lean_sha256": "2500ca8c3cf9ab8437e637bf5ebad500febfba04e45131732bed6439416846d6",
@@ -135,5 +135,5 @@
       }
     }
   },
-  "zig": "0.16.0"
+  "zig": "0.14.1"
 }

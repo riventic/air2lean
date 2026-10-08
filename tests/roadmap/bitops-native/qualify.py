@@ -36,6 +36,9 @@ MODES = ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"]
 NATIVE_TRIPLE = {"x86_64-linux": "x86_64-linux-musl", "aarch64-linux": "aarch64-linux-musl",
                  "aarch64-macos": "aarch64-macos"}
 IMAGE = "alpine:3.21"
+AIR_IMAGE = "ubuntu:24.04"  # the compiler lock wrapper is a bash script
+# Rosetta (Docker on Apple silicon) rejects some non-PIE x86_64 binaries ("bss_size overflow").
+NATIVE_FLAGS = ["-fno-strip", "-fPIE"]
 SRC_FILES = ["wide.zig", "native.zig", "Diff.lean.inc"]
 
 
@@ -63,7 +66,7 @@ def zig_version(zig):
 def air_compiler_version(spec):
     if spec.startswith("docker:"):
         _, plat, install = spec.split(":", 2)
-        cmd = ["docker", "run", "--rm", "--platform", plat, "-v", f"{install}:/zig:ro", IMAGE, "/zig/bin/zig", "version"]
+        cmd = ["docker", "run", "--rm", "--platform", plat, "-v", f"{install}:/zig:ro", AIR_IMAGE, "/zig/bin/zig", "version"]
         return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout.strip()
     return zig_version(spec)
 
@@ -80,7 +83,7 @@ def export_air(zig_air, target, out):
         shutil.copy(HERE / "wide.zig", src / "wide.zig")
         run(["docker", "run", "--rm", "--platform", plat, "-v", f"{install}:/zig:ro", "-v", f"{src}:/src:ro",
              "-v", f"{out}:/air", "-e", "ZIG_AIR_JSON_DIR=/air", "-e", "ZIG_AIR_JSON_FILTER=wide.",
-             "-w", "/tmp", IMAGE, "/zig/bin/zig", *flags, "/src/wide.zig"])
+             "-w", "/tmp", AIR_IMAGE, "/zig/bin/zig", *flags, "/src/wide.zig"])
     else:
         run([zig_air, *flags, str(HERE / "wide.zig")],
             env={**os.environ, "ZIG_AIR_JSON_DIR": str(out), "ZIG_AIR_JSON_FILTER": "wide."})
@@ -137,8 +140,7 @@ exit_codes = {}
 
 def native_stream(zig, target, mode, exec_spec, work):
     exe = work / f"native-{target}-{mode}"
-    # -fno-strip: Rosetta rejects the stripped ReleaseSmall x86_64 binary ("bss_size overflow").
-    run([zig, "build-exe", f"-O{mode}", "-fno-strip", "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
+    run([zig, "build-exe", f"-O{mode}", *NATIVE_FLAGS, "-mcpu=baseline", "-target", NATIVE_TRIPLE[target],
          f"-femit-bin={exe}", "--dep", "wide", f"-Mroot={HERE / 'native.zig'}", f"-Mwide={HERE / 'wide.zig'}"],
         cwd=work)
     out = work / f"native-{target}-{mode}.txt"
@@ -174,7 +176,7 @@ def cmd_run(a):
         if air_version != a.version:
             raise SystemExit(f"patched Zig is {air_version}, expected {a.version}")
         evidence = {"schema": "air2lean-bitops-native/1", "zig": a.version,
-                    "stock_zig_sha256": a.zig_sha256, "corpus": corpus_hashes(), "expected_rows": expected_rows,
+                    "stock_zig_sha256": a.zig_sha256, "native_flags": NATIVE_FLAGS, "corpus": corpus_hashes(), "expected_rows": expected_rows,
                     "host": f"{platform.system().lower()}-{platform.machine()}", "targets": {}}
         targets = a.targets.split(",")
         airs, hashes, leans = {}, {}, {}
@@ -255,7 +257,8 @@ def cmd_verify(a):
         ref = committed["targets"].get(target)
         if ref is None:
             problems.append(f"{target}: not in committed evidence")
-        elif entry["lean_sha256"] != ref["lean_sha256"]:
+            continue
+        if entry["lean_sha256"] != ref["lean_sha256"]:
             problems.append(f"{target}: Lean stream differs from committed evidence")
         for mode, r in entry["modes"].items():
             if r["mismatches"] or r["native_sha256"] != ref["lean_sha256"]:
