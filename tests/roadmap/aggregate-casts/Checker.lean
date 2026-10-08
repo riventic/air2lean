@@ -74,6 +74,8 @@ def main : IO Unit := do
   require (rejects "0.16.0" 10 5 "between types of 56 and 64 bits") "[2]u24 → u64 is accepted"
   require (rejects "0.16.0" 16 0 "an aggregate other than a packed") "[4:0]u8 → u32 is accepted"
   require (rejects "0.16.0" 13 0 "optional pointer") "?*u32 → u32 is accepted"
-  require (rejects "0.16.0" 13 14 "optional pointer") "?*u32 → [*c]u32 is accepted"
-  require (rejects "0.16.0" 14 13 "C/allowzero pointer") "[*c]u32 → ?*u32 is accepted"
+  -- `?*T` ↔ `[*c]T` is L05's explicit null mapping (`docs/null-pointers.md`), for every version.
+  for v in ["0.16.0", "0.17.0"] do
+    require (accepts v 13 14) s!"{v}: ?*u32 → [*c]u32 is rejected: {result v 13 14}"
+    require (accepts v 14 13) s!"{v}: [*c]u32 → ?*u32 is rejected: {result v 14 13}"
   IO.println "aggregate-casts checker controls: ok"

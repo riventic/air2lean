@@ -61,8 +61,11 @@ Its 8 bytes are zero (`optPtr_encode_null`). A wrapped pointer has the pointer's
 | `@ptrFromInt(n)` to `?*T` | `Zig.optPtrFromAddr` | 0 is null (`optPtrFromAddr_zero`); `n ≠ 0` is `optPtrWrap <$> ptrFromAddr n` |
 
 `optPtrUnwrap_eq_pure`: unwrapping succeeds exactly on a wrapped pointer, so `?*T → *T → ?*T`
-round-trips only for a non-null operand. Casts between optional pointers and C/allowzero
-pointers, slices or other integers stay rejected (`docs/null-pointers.md`).
+round-trips only for a non-null operand. A C/allowzero pointer converts to and from an
+ordinary optional single/many pointer only through the explicit null mapping of
+[null-pointers.md](null-pointers.md) (`Zig.ptrToOptional`/`Zig.ptrOfOptional`, checked before
+these rules). Casts between optional pointers and slices or other integers, and between a
+C/allowzero pointer and an optional slice, stay rejected.
 
 ## Evidence
 
