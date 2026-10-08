@@ -18,7 +18,13 @@ bound to the path's Zig version, and it does not compile another OS's `Gen-<os>.
 over a foreign golden compiled on another host are not platform support. A missing kind may
 be recorded as an explicit gap (never `proof_check`); `--strict` fails on any gap. Profiles
 without a native target (`unverified`) must be listed as input-only; targets that are not
-declared (WASM until T02/T05) must stay undeclared. Offline: no Zig, Lake or Lean process.
+declared (WASM until T02/T05) must stay undeclared.
+
+`abi_profiles` (T04) lists ABI-qualified profiles, which need not be declared translation paths
+(aarch64-linux): each names its versioned expected file, a `probe` step on the profile's own
+host running `scripts/aarch64-abi.py check --target TRIPLE`, and a `proof` step (any host: the
+check is kernel/Lean only) running `tests/roadmap/aarch64-abi/Model.lean` on that file. Offline:
+no Zig, Lake or Lean process.
 Exit 0: consistent; 1: a path is unbacked or the map is stale; 2: an input is unreadable.
 """
 import argparse
@@ -437,6 +443,93 @@ def check_entry(entry, path, jobs):
     return errors, sorted(k for k in gaps if k in GAPPABLE)
 
 
+ABI_PROBE = 'scripts/aarch64-abi.py'
+ABI_MODEL = 'tests/roadmap/aarch64-abi/Model.lean'
+
+
+def job_context(jobs, job_name, selector, host=None):
+    """(job, {matrix, runner.os} context, errors) for one job (and matrix row), on `host` if given."""
+    job = jobs.get(job_name)
+    if job is None:
+        return None, None, [f'CI job {job_name!r} not found in {WORKFLOW}']
+    label = scalar(job['runs-on'] or '')
+    job_host = runner_host(label)
+    if job_host is None or (host is not None and job_host != host):
+        return None, None, [f'job {job_name!r} runs on {label!r} ({job_host}), not {host or "a fixed host"}']
+    if job['matrix'] is None:
+        if selector:
+            return None, None, [f'job {job_name!r} has no matrix, but the entry selects a row']
+        row = None
+    else:
+        rows = [r for r in job['matrix'] if selector and all(r.get(k) == v for k, v in selector.items())]
+        if len(rows) != 1:
+            return None, None, [f'matrix selector {selector!r} matches {len(rows)} rows of job {job_name!r}']
+        row = rows[0]
+    context = {'matrix': row, 'runner.os': RUNNER_OS[job_host.split('-', 1)[1]]}
+    try:
+        if not condition(job['if'], context):
+            return None, None, [f'job {job_name!r} does not run for this row']
+    except Unknown as error:
+        return None, None, [f'job condition: {error}']
+    return job, context, []
+
+
+def check_abi_profiles(root, matrix, jobs):
+    """Errors and report rows of the T04 `abi_profiles` entries."""
+    errors, rows, seen = [], [], set()
+    for item in matrix.get('abi_profiles', []):
+        triple, version, host = item.get('target_triple'), item.get('zig'), item.get('host')
+        mode, expected = item.get('mode'), item.get('expected')
+        pid = f'abi {version}/{triple}/{mode}'
+        if not all(isinstance(v, str) and v for v in (triple, version, host, mode, expected)):
+            errors.append(f'{pid}: needs zig, host, target_triple, mode and expected')
+            continue
+        if (version, triple, mode) in seen:
+            errors.append(f'{pid}: duplicate entry')
+        seen.add((version, triple, mode))
+        if '-'.join(triple.split('-')[:2]) != host:
+            errors.append(f'{pid}: target {triple} is not native to host {host}')
+        if expected != f'tests/roadmap/aarch64-abi/expected/{version}/{triple}-{mode}.txt':
+            errors.append(f'{pid}: expected file {expected} is not the versioned file of this profile')
+        elif not (root/expected).is_file():
+            errors.append(f'{pid}: expected file {expected} is missing')
+        line = r'(?:[^\n]|\\\n)*'  # one shell command, with `\` line continuations
+        for kind, pattern, on in (
+                ('probe', rf'(?<![\w/.-]){re.escape(ABI_PROBE)} check\b{line}--target {re.escape(triple)}(?![\w-])', host),
+                ('proof', rf'(?<![\w/.-]){re.escape(ABI_MODEL)} {re.escape(triple)}\s+(?:\\\n\s*)?'
+                          rf'{re.escape(expected)}(?!\S)', None)):
+            ref = item.get(kind) or {}
+            job, context, found = job_context(jobs, ref.get('job'), ref.get('matrix'), on)
+            errors += [f'{pid}: {kind}: {e}' for e in found]
+            if job is None:
+                continue
+            steps = [s for s in job['steps'] if s['name'] == ref.get('step')]
+            if len(steps) != 1:
+                errors.append(f'{pid}: {kind} step {ref.get("step")!r}: '
+                              f'{"not found in the job" if not steps else "the step name is not unique"}')
+                continue
+            step = steps[0]
+            try:
+                runs = condition(step['if'], context)
+                bound = interpolate({**job['env'], **step['env']}.get('AIR2LEAN_ZIG_VERSION', ''), context)
+            except Unknown as error:
+                errors.append(f'{pid}: {kind} step: {error}')
+                continue
+            if not runs:
+                errors.append(f'{pid}: {kind} step {step["name"]!r}: its `if` is false for this row')
+            if bound != version and (context['matrix'] or {}).get('zig') != version:
+                errors.append(f'{pid}: {kind} step {step["name"]!r} is not bound to Zig {version}')
+            if not re.search(pattern, step['run']):
+                errors.append(f'{pid}: {kind} step {step["name"]!r}: its commands do not run the '
+                              f'{"native probe and compare" if kind == "probe" else "profile model check"} for {triple}')
+            if re.search(r'\|\|\s*true\b|set \+e\b', step['run']):
+                errors.append(f'{pid}: {kind} step {step["name"]!r} ignores a failure')
+        rows.append({'profile': f'{version}/{triple}/{mode}', 'host': host,
+                     'probe_job': (item.get('probe') or {}).get('job'),
+                     'proof_job': (item.get('proof') or {}).get('job')})
+    return errors, rows
+
+
 def check_step(found, job, context, version, kind, os_name):
     if not found:
         return ['not found in the job']
@@ -466,7 +559,7 @@ def check_step(found, job, context, version, kind, os_name):
 
 
 def check(root, strict=False):
-    """(errors, report rows, input-only profiles)."""
+    """(errors, report rows, input-only profiles, ABI-only profile rows)."""
     root = Path(root)
     meta = load_json(root, 'compatibility.json')
     matrix = load_json(root, MAP)
@@ -475,7 +568,7 @@ def check(root, strict=False):
     except OSError as error:
         raise Unreadable(f'{WORKFLOW}: {error}')
     if matrix.get('schema') != SCHEMA:
-        return [f'{MAP}: schema must be {SCHEMA!r}'], [], []
+        return [f'{MAP}: schema must be {SCHEMA!r}'], [], [], []
     paths, input_only, errors = declared(meta)
     entries = {}
     for entry in matrix.get('paths', []):
@@ -511,7 +604,8 @@ def check(root, strict=False):
                           'but compatibility.json declares it')
         if not item.get('depends_on') or not item.get('reason'):
             errors.append(f'{MAP}: not_declared {item.get("target")} needs depends_on and a reason')
-    return errors, rows, sorted(input_only)
+    abi_errors, abi_rows = check_abi_profiles(root, matrix, jobs)
+    return errors + abi_errors, rows, sorted(input_only), abi_rows
 
 
 def main(argv=None):
@@ -523,18 +617,21 @@ def main(argv=None):
     run.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
-        errors, rows, input_only = check(args.root, args.strict)
+        errors, rows, input_only, abi_rows = check(args.root, args.strict)
     except (Unreadable, KeyError, TypeError, AttributeError) as error:
         # Malformed input shapes (a profile without a name, a non-object entry) are unreadable.
         print(f'target-matrix: {type(error).__name__}: {error}', file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps({'ok': not errors, 'errors': errors, 'paths': rows,
-                          'input_only_profiles': input_only}, indent=2))
+                          'input_only_profiles': input_only, 'abi_profiles': abi_rows}, indent=2))
     else:
         for row in rows:
             gaps = f' (gaps: {", ".join(row["gaps"])})' if row['gaps'] else ''
             print(f'{row["status"]:8} {row["path"]} <- {row["job"]}{gaps}')
+        for row in abi_rows:
+            print(f'abi-only {row["profile"]} on {row["host"]} <- {row["probe_job"]} (probe), '
+                  f'{row["proof_job"]} (proof)')
         for error in errors:
             print(f'error: {error}', file=sys.stderr)
     return 1 if errors else 0
