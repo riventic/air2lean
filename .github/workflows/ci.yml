@@ -1053,6 +1053,21 @@ jobs:
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
+      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop template regressions
+        if: ${{ !matrix.mutate }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_DISPATCH_ZIG_STOCK: zig
+        run: |
+          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
+            tests/roadmap/dispatch-templates/check.sh
+          else
+            tests/roadmap/dispatch-templates/check.sh --template-only
+          fi
+
       - name: Local-place parent pointer regressions
         if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
