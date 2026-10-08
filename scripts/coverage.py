@@ -285,6 +285,8 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/bitops/qualified/{version}/air': 'tests/roadmap/bitops/qualified/0.16.0/manifest.json',
     'tests/roadmap/idle-loops/air': 'tests/roadmap/idle-loops/provenance.json',
     'tests/roadmap/spawn-failure/air/{version}': 'tests/roadmap/spawn-failure/air/provenance.json',
+    'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',
+    'tests/roadmap/const-locals/air-fuzz_s19/{version}': 'tests/roadmap/const-locals/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',

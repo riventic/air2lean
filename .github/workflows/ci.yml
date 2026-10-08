@@ -467,6 +467,17 @@ jobs:
           lake build ZigLean.Sep
           bash tests/roadmap/global-init/check.sh
 
+      # Q01 fuzz seeds 18/19/39: comptime-resolved locals (dead address-0 placeholders dropped,
+      # a read one rejected); retained translations, native-value guards and a native zig test.
+      - name: Comptime-resolved locals
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          bash tests/roadmap/const-locals/check.sh
+          bash tests/roadmap/const-locals/check.sh --native
+
       - name: Validate check-only diagnostic collection
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |

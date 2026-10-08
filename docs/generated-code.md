@@ -136,7 +136,7 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 `ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers. The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects an explicit non-little-endian value or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices. A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
 
-A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
+A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal), an integer-to-pointer `bitcast` (`@ptrFromInt`) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
 | | Pure | Uses memory |
 |---|---|---|
@@ -193,6 +193,8 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   | .red => pure ⟨⟨some 2, 0⟩, 3⟩
   ...
 ```
+
+`mem0` holds the globals of every function, also of a pure one, so each global's type has a `Zig.Enc` instance when the program has `mem0`. A comptime-resolved local (`const u: U = .{ .b = 0 }; _ = &u;`) is such a constant global: Sema points its live uses at the global (`⟨some k, 0⟩`) and leaves its dead `alloc` and stores as `bitcast`s of address 0, which the translator drops; a read one is rejected (`tests/roadmap/const-locals`).
 
 `errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. `threadlocal` globals are outside the subset.
 

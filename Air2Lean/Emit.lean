@@ -558,9 +558,12 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
           else acc
         | none => acc
       | _ => acc
+    -- `mem0` (emitted when any function uses memory) encodes the globals of every function
+    -- (`collectGlobals`), also of a pure one.
+    let acc := if memFuncs.isEmpty then acc else
+      f.globals.foldl (fun acc g => memNamed f.types f.layouts f.errorSetBits acc g.ty) acc
     if !memFuncs.contains f.name then acc
     else
-      let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts f.errorSetBits acc g.ty) acc
       f.types.foldl (init := acc) fun acc t => match t with
         | .ptr _ _ c => memNamed f.types f.layouts f.errorSetBits acc c
         | _ => acc
