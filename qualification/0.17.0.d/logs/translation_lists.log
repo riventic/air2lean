@@ -1,37 +1,53 @@
 == lists: dumping AIR ==
 == lists: validating profiles and translating to Lean ==
-⚠ [19/54] Replayed ZigLean.Mem.Enc
-warning: ZigLean/Mem/Enc.lean:178:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+⚠ [19/56] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:183:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:189:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:194:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:221:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:231:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:257:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:267:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [20/56] Replayed ZigLean.Mem.ErrWidth
+warning: ZigLean/Mem/ErrWidth.lean:69:0: Definition `Zig.errorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:80:0: Definition `Zig.optionalErrorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:117:0: Definition `Zig.Enc.errorUnionWithW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:134:0: Definition `Zig.errorUnionEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [22/56] Replayed Air2Lean.Check
+warning: Air2Lean/Check.lean:992:15: Variable name `v` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _v
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
 == lists: checking against golden (tests/golden/lists/air, then tests/golden/0.17.0/lists/air, then tests/golden/0.17.0/lists/air-darwin) ==
 note: these files hold the Zig 0.17.0 translation: Proofs/Lists/Gen.lean. Restore the committed ones with: git checkout -- Proofs/Lists/Gen.lean
 == building Lean ==
-⚠ [7/43] Replayed ZigLean.Mem.Enc
-warning: ZigLean/Mem/Enc.lean:178:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+⚠ [7/46] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:183:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:189:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:194:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:221:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:231:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:257:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:267:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-⚠ [10/43] Replayed ZigLean.Permutation
+⚠ [10/46] Replayed ZigLean.Permutation
 warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
-⚠ [13/43] Replayed ZigLean.Mem.Thread
+⚠ [13/46] Replayed ZigLean.Mem.Thread
 warning: ZigLean/Mem/Thread.lean:172:24: Variable name `ord` is not explicitly referenced.
 
 Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
@@ -56,10 +72,10 @@ Hint: The binding can be removed (if unused) or named `_` (if used implicitly). 
   [apply] _succ
 
 Note: This linter can be disabled with `set_option linter.unusedVariables false`
-⚠ [16/43] Replayed ZigLean.Conc.Spawn
-warning: ZigLean/Conc/Spawn.lean:86:38: `if_pos` has been deprecated: Use `ite_eq_left` instead
-warning: ZigLean/Conc/Spawn.lean:89:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
-⚠ [24/43] Replayed ZigLean.Mem.Lemmas
+⚠ [16/46] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:123:38: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:126:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [24/46] Replayed ZigLean.Mem.Lemmas
 warning: ZigLean/Mem/Lemmas.lean:622:8: This simp argument is unused:
   h
 
@@ -90,7 +106,7 @@ Hint: Omit it from the simp argument list.
     ExceptT.bindCont]
 
 Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
-⚠ [25/43] Replayed ZigLean.Conc.Lemmas
+⚠ [25/46] Replayed ZigLean.Conc.Lemmas
 warning: ZigLean/Conc/Lemmas.lean:1509:61: This simp argument is unused:
   Option.bind_some
 
@@ -98,8 +114,20 @@ Hint: Omit it from the simp argument list.
   [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
 
 Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
-✔ [43/43] Built Proofs.Lists.Gen (3.8s)
-Build completed successfully (43 jobs).
+⚠ [35/46] Replayed ZigLean.Mem.Null
+warning: ZigLean/Mem/Null.lean:32:0: Definition `Zig.nullablePtrEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [36/46] Replayed ZigLean.Mem.ErrWidth
+warning: ZigLean/Mem/ErrWidth.lean:69:0: Definition `Zig.errorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:80:0: Definition `Zig.optionalErrorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:117:0: Definition `Zig.Enc.errorUnionWithW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:134:0: Definition `Zig.errorUnionEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+✔ [46/46] Built Proofs.Lists.Gen (1.7s)
+Build completed successfully (46 jobs).
 == differential testing ==
 == building zig harnesses ==
 == building libm ==
@@ -107,22 +135,22 @@ Build completed successfully (43 jobs).
 libm self-check: 320/320 matched, 0 mismatched
 == building asm archive ==
 == building + running lean side ==
-⚠ [9/139] Replayed ZigLean.Mem.Enc
-warning: ZigLean/Mem/Enc.lean:178:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+⚠ [9/145] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:183:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:189:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:194:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:221:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:226:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:231:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:257:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-warning: ZigLean/Mem/Enc.lean:262:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+warning: ZigLean/Mem/Enc.lean:267:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
 definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
-⚠ [12/139] Replayed ZigLean.Permutation
+⚠ [12/145] Replayed ZigLean.Permutation
 warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
-⚠ [15/139] Replayed ZigLean.Mem.Thread
+⚠ [15/145] Replayed ZigLean.Mem.Thread
 warning: ZigLean/Mem/Thread.lean:172:24: Variable name `ord` is not explicitly referenced.
 
 Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
@@ -147,10 +175,10 @@ Hint: The binding can be removed (if unused) or named `_` (if used implicitly). 
   [apply] _succ
 
 Note: This linter can be disabled with `set_option linter.unusedVariables false`
-⚠ [18/139] Replayed ZigLean.Conc.Spawn
-warning: ZigLean/Conc/Spawn.lean:86:38: `if_pos` has been deprecated: Use `ite_eq_left` instead
-warning: ZigLean/Conc/Spawn.lean:89:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
-⚠ [26/139] Replayed ZigLean.Mem.Lemmas
+⚠ [18/145] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:123:38: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:126:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [26/145] Replayed ZigLean.Mem.Lemmas
 warning: ZigLean/Mem/Lemmas.lean:622:8: This simp argument is unused:
   h
 
@@ -181,7 +209,7 @@ Hint: Omit it from the simp argument list.
     ExceptT.bindCont]
 
 Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
-⚠ [27/139] Replayed ZigLean.Conc.Lemmas
+⚠ [27/145] Replayed ZigLean.Conc.Lemmas
 warning: ZigLean/Conc/Lemmas.lean:1509:61: This simp argument is unused:
   Option.bind_some
 
@@ -189,7 +217,19 @@ Hint: Omit it from the simp argument list.
   [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
 
 Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
-⚠ [48/139] Replayed Proofs.Threadsync.Gen
+⚠ [37/145] Replayed ZigLean.Mem.Null
+warning: ZigLean/Mem/Null.lean:32:0: Definition `Zig.nullablePtrEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [38/145] Replayed ZigLean.Mem.ErrWidth
+warning: ZigLean/Mem/ErrWidth.lean:69:0: Definition `Zig.errorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:80:0: Definition `Zig.optionalErrorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:117:0: Definition `Zig.Enc.errorUnionWithW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:134:0: Definition `Zig.errorUnionEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [51/145] Replayed Proofs.Threadsync.Gen
 warning: Proofs/Threadsync/Gen.lean:352:10: Variable name `i12` is not explicitly referenced.
 
 Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
@@ -202,15 +242,15 @@ Hint: The binding can be removed (if unused) or named `_` (if used implicitly). 
   [apply] _v14
 
 Note: This linter can be disabled with `set_option linter.unusedVariables false`
-✔ [132/139] Built Proofs.Lists.Gen:c.o (2.5s)
-✔ [135/139] Built Proofs.Layout.Gen (3.4s)
-⚠ [137/139] Built Diff (1.8s)
+✔ [138/145] Built Proofs.Lists.Gen:c.o (1.2s)
+✔ [141/145] Built Proofs.Layout.Gen (1.7s)
+⚠ [143/145] Built Diff (1.1s)
 warning: Diff.lean:100:17: declaration uses `sorry`
 warning: Diff.lean:101:17: declaration uses `sorry`
 warning: Diff.lean:102:17: declaration uses `sorry`
 warning: Diff.lean:103:17: declaration uses `sorry`
-✔ [139/139] Built difftest:exe (779ms)
-Build completed successfully (139 jobs).
+✔ [145/145] Built difftest:exe (452ms)
+Build completed successfully (145 jobs).
 schedule search regressions passed
 == comparing ==
 lists.dupe: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
