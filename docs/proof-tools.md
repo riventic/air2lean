@@ -189,8 +189,7 @@ The translator emits an inner loop as `Zig.loop inner again'` inside the outer l
 def, over the same locals. `LoopTemplate.run` turns the inner loop's template into its run
 from any state satisfying its invariant: it returns, preserves the frame and establishes the
 inner `post`. The outer `step` uses that run like any other step of its body, so the inner
-iterations are proved once. `LoopTemplate.bind` is the same rule as a `TotalTriple` for
-`(Zig.loop inner again' >>= k).run s`.
+iterations are proved once.
 
 `tests/roadmap/loop-tactics/nested/Proof.lean` proves the translated `pairs` of
 `tests/roadmap/loop-tactics/nested/nested.zig` (an inner `while (j < i)` inside an outer
@@ -224,8 +223,9 @@ A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfol
 `rec_template μ unfolding f, g`. It proves a goal `∀ x₁ … xₖ, B` by strong induction on the
 `Nat` measure `μ` of its first `k` binders (the arity of `μ`). It leaves one goal, `step`,
 with `x₁ … xₖ` introduced and
-`ih : ∀ y₁ … yₖ, μ y₁ … yₖ < μ x₁ … xₖ → B[y/x]`, and it rewrites each listed function's
-`eq_1` once in the goal. Premises and ghost values after the first `k` binders stay in `B`
+`ih : ∀ y₁ … yₖ, μ y₁ … yₖ < μ x₁ … xₖ → B[y/x]`. It rewrites the goal with each listed
+function's `eq_1`: the first application (and identical copies) becomes the generated body,
+whose recursive calls stay folded. Premises and ghost values after the first `k` binders stay in `B`
 and are quantified in `ih`. A mutually recursive group is specified as one conjunction (or
 over an index type such as `Sum`) with one measure, unfolding every member.
 `rec_template? …` also reports the remaining premise. The scaffold does not infer the

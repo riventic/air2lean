@@ -23,6 +23,14 @@ stated as a separation triple, so a client never mentions the frame heap of the 
   assertion (up to `intro`/`exact`), so only real premises remain.
 
 `loop_template? inv post` does the same and reports the remaining premises with their types.
+
+Nested loops: the translator emits an inner loop as `Zig.loop inner again'` inside the outer
+loop's body def. `LoopTemplate.run` gives the inner loop's run from its own template, so the
+outer `step` proof uses it like any other step of the body.
+
+`loop_template?` without arguments (or `loop_template? _ post`) only prints bounded inference
+suggestions (loop-carried locals, a measure and bound for a counter loop, `post` generalized
+over the counter); see "Bounded invariant and measure inference" below.
 -/
 
 namespace Zig
@@ -88,14 +96,6 @@ theorem run (t : LoopTemplate body again inv post) {s : σ} {n : Nat} {m : Mem} 
       Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ post e s' h' ∧ m'.Seq := by
   obtain ⟨⟨e, s'⟩, m', h', hr, hd', hm', hp, hs'⟩ := t.total s m h hF hd hm ⟨n, hi⟩ hs
   exact ⟨e, s', m', h', hr, hd', hm', hp, hs'⟩
-
-/-- An inner loop followed by the rest `k` of the enclosing body: the continuation only has to
-start from the inner loop's `post`. -/
-theorem bind {β : Type} {k : ε → MM σ β} {Q : β × σ → Assn}
-    (t : LoopTemplate body again inv post) (hk : ∀ e s', TotalTriple (post e s') ((k e).run s') Q)
-    (s : σ) : TotalTriple (Assn.ex (inv s)) ((Zig.loop body again >>= k).run s) Q := by
-  rw [StateT.run_bind]
-  exact TotalTriple.bind (t.total s) fun r => hk r.1 r.2
 
 end LoopTemplate
 
