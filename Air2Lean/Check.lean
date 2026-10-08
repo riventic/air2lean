@@ -37,7 +37,7 @@ namespace Air2Lean
 named register in braces — either alone or with a leading `=` (write-only) marker. -/
 def isRegisterConstraint (c : String) : Bool :=
   let body := if c.startsWith "=&" then c.drop 2 else if c.startsWith "=" then c.drop 1 else c
-  body == "r" || (body.startsWith "{" && body.endsWith "}" && body.toString.length > 2)
+  (asmRegBody? body.toString).isSome
 
 /-- Is `c` a matching constraint on an input, tying it to output operand `k < outputs` — the
 register a register-modify-in-place instruction (`bswap`) both reads and writes? -/
@@ -1022,10 +1022,13 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     if dup outPins || dup inPins then
       throw s!"{fnName}: near line {line}: two asm outputs or two inputs pin the same register \
         (A01)"
-    let earlyPins := parsed.filterMap fun po => if po.earlyClobber then family? po.pin else none
-    if inPins.any earlyPins.contains then
+    -- An early-clobber output is written before the inputs are read; a read-write output's
+    -- register already holds its old value. Neither can also hold an input.
+    let busyPins := parsed.filterMap fun po =>
+      if po.earlyClobber || po.readWrite then family? po.pin else none
+    if inPins.any busyPins.contains then
       throw s!"{fnName}: near line {line}: an asm input pins the register of an early-clobber \
-        output (A01)"
+        or read-write output (A01)"
     for i in inputs do
       let tied := match i.constraint.toNat? with
         | some k => (parsed[k]?).map fun po => !po.readWrite && !po.memory && !po.earlyClobber

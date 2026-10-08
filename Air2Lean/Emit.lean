@@ -1539,22 +1539,20 @@ Lean's own `hash`: this only needs to be stable within one generation run (the t
 pinned), and a hand-rolled hash keeps that independent of a core implementation detail.
 `collectAsmOps` removes duplicates by the full `asmKey`, not by this name: two different asm ops
 with the same hash give two `opaque` defs of one name, a Lean build error, never one shared def. -/
-def asmDefName (key : String) : String :=
-  let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
-    (h ^^^ c.val) * 0x01000193
-  s!"airAsm_{h}"
+def asmHash (key : String) : UInt32 :=
+  key.foldl (init := (0x811c9dc5 : UInt32)) fun h c => (h ^^^ c.val) * 0x01000193
+
+def asmDefName (key : String) : String := s!"airAsm_{asmHash key}"
 
 /-- The opaque's name for an op with these clobbers and outputs: `airAsmFx_<hash>` for an op under
 the effect contract (`asmIsEffect`: a read-write or memory output, or a registry-approved
 `"memory"` clobber; premise ASM-03), else `airAsm_<hash>` (register-only, ASM-01). Same hash. -/
 def asmOpName (clobbers : Array String) (outputs : Array AsmOperand) (key : String) : String :=
-  let n := asmDefName key
-  if asmIsEffect clobbers outputs then "airAsmFx_" ++ (n.drop "airAsm_".length).toString else n
+  if asmIsEffect clobbers outputs then s!"airAsmFx_{asmHash key}" else asmDefName key
 
 /-- The widths of the read-write outputs, in output order (`AsmDef.rwWidths`). -/
 def asmRwWidths (outputs : Array AsmOperand) (outputWidths : Array Nat) : Array Nat :=
-  (outputs.zip outputWidths).filterMap fun (o, w) =>
-    if ((parseAsmOutput o.constraint).map (·.readWrite)).getD false then some w else none
+  (outputs.zip outputWidths).filterMap fun (o, w) => if o.isReadWrite then some w else none
 
 /-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
 `Check.lean` accepts only register (so integer) operands. -/
@@ -1590,9 +1588,12 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
         let outputWidths := asmOutputWidths f.types tyOf i.ty outputs
         let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
         let key := asmKey source constraints inputWidths outputWidths
-        if !seen.contains key then
-          seen := seen.push key
-          defs := defs.push { name := asmOpName clobbers outputs key, inputWidths, outputWidths,
+        -- The key omits clobbers, so one key can name both forms (`asm volatile ("")` and the
+        -- registry's `"memory"` barrier): deduplicate by name and key.
+        let name := asmOpName clobbers outputs key
+        if !seen.contains (name ++ "\u0002" ++ key) then
+          seen := seen.push (name ++ "\u0002" ++ key)
+          defs := defs.push { name, inputWidths, outputWidths,
                               rwWidths := asmRwWidths outputs outputWidths }
   return defs
 
@@ -2282,8 +2283,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let name := asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths)
     -- The effect contract (A01, `ZigLean/Asm.lean`): the old value of each read-write output is
     -- read before the call, in output order, and passed after the inputs.
-    let rwOuts := outputs.toList.zipIdx.filter fun (o, _) =>
-      ((parseAsmOutput o.constraint).map (·.readWrite)).getD false
+    let rwOuts := outputs.toList.zipIdx.filter (·.1.isReadWrite)
     let rwName (k : Nat) : String := s!"a{inst.id}o{k}"
     let rwReads := rwOuts.filterMap fun (o, k) => o.ref.map fun ptr =>
       if fc.isMemPtr ptr then s!"let {rwName k} ← {fc.loadMem ptr (rv ptr)}"

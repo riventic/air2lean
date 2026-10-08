@@ -32,12 +32,13 @@ generated text alone:
 | `barrier_spec` | the registry block has no effect |
 
 `test_cli.py` checks the translation byte for byte, that `Proofs/Asm/Gen.lean` (register-only)
-is unchanged, and 24 rejections through the CLI and `--diagnostics-json`: a `"memory"` clobber
+is unchanged, and 25 rejections through the CLI and `--diagnostics-json`: a `"memory"` clobber
 outside the registry, a read-write or memory result output, `=&m`/`+&r`/`=rm`/`=g`/`&r`
 outputs, `m`/`i`/`rm`/`+r` inputs, a 24-bit memory operand, a write through a const pointer,
 two outputs writing one pointer or one local, a clobber naming a pinned operand's register
-(`+{eax}` with `rax`, `{rcx}` with `cl`), two pins of one register, an input pinned to an
-early-clobber output's register, and a matching input tied to a read-write or memory output.
+(`+{eax}` with `rax`, `{rcx}` with `cl`), two pins of one register, an input pinned to the
+register of an early-clobber or read-write output, and a matching input tied to a read-write or
+memory output.
 
 `harness.py` runs the generated wrappers unchanged under A03's test-only interpretation
 (`tests/roadmap/asm-wrappers/Interp.lean`, extended with `+r`/`+m`/`=m` operands and the

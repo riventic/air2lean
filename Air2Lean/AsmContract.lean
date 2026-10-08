@@ -56,6 +56,10 @@ def parseAsmOutput (c : String) : Option AsmOutput :=
       { readWrite := rw, earlyClobber := false, memory := false, pin }
   else none
 
+/-- Is this output read-write (`+r`, `+{reg}`, `+m`)? -/
+def AsmOperand.isReadWrite (o : AsmOperand) : Bool :=
+  ((parseAsmOutput o.constraint).map (·.readWrite)).getD false
+
 /-- Does the output need the Lean effect wrapper beyond plain register outputs (a read of the old
 value, or a memory operand)? -/
 def AsmOutput.isEffect (o : AsmOutput) : Bool := o.readWrite || o.memory

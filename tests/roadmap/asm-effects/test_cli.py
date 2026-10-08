@@ -106,6 +106,18 @@ def main():
         assert fresh == (ROOT / "Proofs/Asm/Gen.lean").read_text(), "register-only asm changed"
     checks += 1
 
+    # The same template without the clobber is a register-only op of the same hash: both opaques
+    # are emitted (the identity key omits clobbers).
+    documents = fixtures()
+    plain = copy.deepcopy(documents["asm_effects.barrier.json"])
+    plain["name"] = "asm_effects.plain"
+    asm_inst(plain)["clobbers"] = []
+    documents["asm_effects.plain.json"] = plain
+    text = accept(binary, documents)
+    assert "opaque airAsmFx_1655126372 : Unit\n" in text and "opaque airAsm_1655126372 : Unit\n" in text
+    assert "pure (airAsm_1655126372)" in text and "pure (airAsmFx_1655126372)" in text
+    checks += 1
+
     # "memory" clobber: only the reviewed registry block (empty template, no operands).
     def memory(i, _):
         i["clobbers"] = ["cc", "memory"]
@@ -185,6 +197,12 @@ def main():
         i["outputs"][0]["constraint"] = "=&{rdx}"
         i["inputs"][0]["constraint"] = "{edx}"
     checks += reject(binary, only("setm", early_pin), "pins the register of an early-clobber")
+
+    def rw_pin(i, _):
+        i["outputs"][0]["constraint"] = "+{rax}"
+        i["inputs"][0]["constraint"] = "{eax}"
+        i["clobbers"] = []
+    checks += reject(binary, only("addr", rw_pin), "pins the register of an early-clobber")
 
     # A matching input tied to a read-write or memory output.
     def tie_rw(i, _):
