@@ -670,6 +670,44 @@ structure FCtx where
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
   rawRet : Bool := false
+  /-- The float `div_trunc`s that are the safety-checked lowering of `@divExact`
+  (`exactFloatDivs`). -/
+  exactFloatDivs : Array InstId := #[]
+
+/-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
+`r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
+`cmp_vector` `eq`), and a `cond_br` on `ok` whose `else` calls the `exactDivisionRemainder`
+panic handler. Only a `floor` of a float reaches this shape, so `r` is a float division. That
+check only catches a NaN quotient, so the emitter lowers `r` with `Zig.Float.divExactTrunc`,
+which makes every other inexact quotient `.illegal` (`docs/illegal-behavior.md`). -/
+def exactFloatDivs (insts : Array Inst) : Array InstId := Id.run do
+  let byId : Std.HashMap InstId Inst := insts.foldl (fun m i => m.insert i.id i) {}
+  let opOf (v : Val) : Option Op := match v with
+    | .inst id => byId[id]?.map (·.op)
+    | _ => none
+  let isFloorOf (f : Val) (r : InstId) : Bool := match opOf f with
+    | some (.floatRound .floor (.inst r')) => r' == r
+    | _ => false
+  -- The truncated quotient compared with its own floor.
+  let checked (cmp : Val) : Option InstId := match opOf cmp with
+    | some (.cmp .eq (.inst r) f) =>
+      match opOf (.inst r) with
+      | some (.div .divTrunc ..) => if isFloorOf f r then some r else none
+      | _ => none
+    | _ => none
+  let callsExact (body : Array Inst) : Bool := body.any fun i => match i.op with
+    | .call (.func name ..) _ => panicMember? name == some "exactDivisionRemainder"
+    | _ => false
+  let mut out := #[]
+  for i in insts do
+    if let .condBr c _ elseBody := i.op then
+      if callsExact elseBody then
+        let cmp := match opOf c with
+          | some (.reduce .and v) => v
+          | _ => c
+        if let some r := checked cmp then
+          out := out.push r
+  return out
 
 private def prepareSpawnFallbackMap (fallbacks : Array (String × String)) : Std.HashMap String String :=
   let empty : Std.HashMap String String := {}
@@ -1698,14 +1736,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if fc.isFloat a then
         match op with
         | .divTrunc =>
-          let f := s!"Zig.Float.divTrunc{fc.divRtSuffix}"
-          s!"pure ({f} {rv a} {rv b})"
+          if fc.exactFloatDivs.contains inst.id then
+            -- `@divExact` with safety: an inexact non-NaN quotient is `.illegal`.
+            s!"Zig.Float.divExactTrunc {rv a} {rv b} (Zig.Float.div{fc.divRtSuffix} {rv a} {rv b})"
+          else
+            let f := s!"Zig.Float.divTrunc{fc.divRtSuffix}"
+            s!"pure ({f} {rv a} {rv b})"
         | .divFloor =>
           let f := s!"Zig.Float.divFloor{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         | .divExact =>
-          let f := s!"Zig.Float.div{fc.divRtSuffix}"
-          s!"pure ({f} {rv a} {rv b})"
+          -- `div_exact` (no safety): every inexact quotient, NaN included, is `.illegal`.
+          s!"Zig.Float.divExactChk {rv a} {rv b} (Zig.Float.div{fc.divRtSuffix} {rv a} {rv b})"
         | .rem => s!"Zig.Float.rem{fc.rtSuffix}Chk {rv a} {rv b}"
         | .mod => s!"Zig.Float.mod{fc.rtSuffix}Chk {rv a} {rv b}"
       else
@@ -1716,7 +1758,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         s!"{f} {sgn} {rv a} {rv b}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .divFloat a b =>
-    -- `div_float` (plain `/` on floats): group A's guard, same mode dispatch as `.divExact`.
+    -- `div_float` (plain `/` on floats): group A's guard, the same divide as `.divExact`.
     let f := s!"Zig.Float.div{fc.divRtSuffix}"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
@@ -2742,7 +2784,7 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
-      rawRet := rawFuncs.contains f.name }
+      rawRet := rawFuncs.contains f.name, exactFloatDivs := exactFloatDivs allInsts }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
   { fc with rawInsts := fc.computeRawInsts fc.rawRet }
 
