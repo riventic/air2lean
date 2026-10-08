@@ -264,7 +264,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   clocks. Reads may see any message not older than a happens-before or own observation.
   RMWs read a message with no RMW after it. The model admits more outcomes than RC11 (a plain
   write of the same value, read views not transferred through release/acquire), never fewer.
-  Atomic pointees are integers, enums, bools or packed structs.
+  Atomic pointees are integers, enums, bools, packed structs or single/many pointers (ORD-05).
 - Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
@@ -294,6 +294,18 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   write, repeatedly. Its rules are safety-only; no retry liveness follows.
 - Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.WeakCasLemmas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
 - Sources: [weak-cas.md](weak-cas.md).
+
+<a id="ord-05"></a>
+### ORD-05 — Pointer atomics keep provenance and compare identities
+
+- Kind: environment.
+- Statement: An atomic message of a `*T`/`?*T` pointee holds the pointer's bytes, which keep
+  its block. `cmpxchg` compares identities (block, offset): equal identities succeed, different
+  identities at different addresses fail, and different identities at the same address (or an
+  address the memory cannot resolve) are `.unspecified`; the hardware compares addresses, and
+  the model claims neither outcome. Only `.Xchg` is a pointer RMW.
+- Derived from: `ZigLean.Mem.AtomicPtr`, `ZigLean.Conc.PtrAtomic`, `ZigLean.Conc.PtrAtomicLemmas`; tokens `AtomicPtrVal`, `ptrValEq`, `*PtrAt`, `*PtrC`.
+- Sources: [pointer-atomics.md](pointer-atomics.md).
 
 ## Timers and clocks
 

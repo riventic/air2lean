@@ -134,6 +134,81 @@ theorem atomicLoadPtrAt_noErr {c : Nat} {ord : AtomicOrder} {align : Nat} {p : P
     have := MemM.lift_err h4
     rw [hw'] at this; cases this
 
+/-! ## A CAS succeeds only on the same pointer -/
+
+theorem casPtrFinish_none [DecidableEq α] [AtomicPtrVal α] {succ fail : AtomicOrder} {align : Nat}
+    {p : Ptr} {li pos : Nat} {rd : Msg} {old new : α} {ok : Bool} {m m' : Mem}
+    (h : ((casPtrFinish succ fail align p li pos rd old new ok).run m).run =
+      some (.ok (none, m'))) : ok = true := by
+  unfold casPtrFinish at h
+  cases ok
+  · simp only [Bool.false_eq_true, ↓reduceIte] at h
+    obtain ⟨_, m₁, -, h₁⟩ := MemM.bind_ok h
+    cases hq : fail.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte] at h₁
+    · obtain ⟨h3, -⟩ := MemM.pure_ok h₁
+      cases h3
+    · obtain ⟨_, m₂, -, h₂⟩ := MemM.bind_ok h₁
+      obtain ⟨h3, -⟩ := MemM.pure_ok h₂
+      cases h3
+  · rfl
+
+/-- **Identity CAS.** A strong pointer `cmpxchg` that succeeds read a message whose bytes decode
+to `expected` itself (same block, same offset), never a different pointer at the same address. -/
+theorem cmpxchgPtrAt_success [DecidableEq α] [AtomicPtrVal α] {c : Nat}
+    {succ fail : AtomicOrder} {align : Nat} {p : Ptr} {expected new : α} {m m' : Mem}
+    (h : ((cmpxchgPtrAt c succ fail align p expected new).run m).run = some (.ok (none, m'))) :
+    ∃ li opts m₁ pos, ((casPtrPrep align p expected).run m).run = some (.ok ((li, opts), m₁)) ∧
+      opts[c]? = some pos ∧
+      (Enc.decode ((m₁.atomics[li]!).msgs[pos]!).bytes : Result α).run = some (.ok expected) := by
+  unfold cmpxchgPtrAt at h
+  obtain ⟨⟨li, opts⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
+  dsimp only at h₁
+  split at h₁
+  · rename_i pos hpos
+    obtain ⟨a₂, m₂, hg, h₂⟩ := MemM.bind_ok h₁
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    obtain ⟨old, m₃, hd, h₃⟩ := MemM.bind_ok h₂
+    obtain ⟨hd, rfl⟩ := MemM.lift_ok hd
+    obtain ⟨a₄, m₄, hg₄, h₄⟩ := MemM.bind_ok h₃
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg₄
+    obtain ⟨eq, m₅, he, h₅⟩ := MemM.bind_ok h₄
+    obtain ⟨he, rfl⟩ := MemM.lift_ok he
+    have := casPtrFinish_none h₅
+    subst this
+    by_cases hx : old = expected
+    · subst hx; exact ⟨li, opts, _, pos, hp, hpos, hd⟩
+    · exact absurd he (ptrValEq_ne hx)
+  · exact (MemM.throw_ok h₁).elim
+
+/-- The same for a weak pointer `cmpxchg`: a success (never a spurious failure) read
+`expected` itself. -/
+theorem cmpxchgWeakPtrAt_success [DecidableEq α] [AtomicPtrVal α] {c : Nat}
+    {succ fail : AtomicOrder} {align : Nat} {p : Ptr} {expected new : α} {m m' : Mem}
+    (h : ((cmpxchgWeakPtrAt c succ fail align p expected new).run m).run = some (.ok (none, m'))) :
+    ∃ li opts m₁ pos, ((weakCasPtrPrep align p expected).run m).run = some (.ok ((li, opts), m₁)) ∧
+      opts[c]? = some (pos, false) ∧
+      (Enc.decode ((m₁.atomics[li]!).msgs[pos]!).bytes : Result α).run = some (.ok expected) := by
+  unfold cmpxchgWeakPtrAt at h
+  obtain ⟨⟨li, opts⟩, m₁, hp, h₁⟩ := MemM.bind_ok h
+  dsimp only at h₁
+  split at h₁
+  · rename_i pos spurious hpos
+    obtain ⟨a₂, m₂, hg, h₂⟩ := MemM.bind_ok h₁
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+    obtain ⟨old, m₃, hd, h₃⟩ := MemM.bind_ok h₂
+    obtain ⟨hd, rfl⟩ := MemM.lift_ok hd
+    obtain ⟨a₄, m₄, hg₄, h₄⟩ := MemM.bind_ok h₃
+    obtain ⟨rfl, rfl⟩ := MemM.get_ok hg₄
+    obtain ⟨eq, m₅, he, h₅⟩ := MemM.bind_ok h₄
+    obtain ⟨he, rfl⟩ := MemM.lift_ok he
+    have hok := casPtrFinish_none h₅
+    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hok
+    obtain ⟨rfl, rfl⟩ := hok
+    by_cases hx : old = expected
+    · subst hx; exact ⟨li, opts, _, pos, hp, hpos, hd⟩
+    · exact absurd he (ptrValEq_ne hx)
+  · exact (MemM.throw_ok h₁).elim
+
 end Proto
 end Conc
 end Zig

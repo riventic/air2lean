@@ -277,6 +277,7 @@ A function that reaches a sync op (an atomic op, `Thread.spawn`, `Thread.join`, 
 | `cmpxchg_strong` | `Zig.cmpxchgC succ fail align p expected new` (typed Packed: `cmpxchgAsC`) |
 | `cmpxchg_weak` | `Zig.cmpxchgWeakC succ fail align p expected new` (typed Packed: `cmpxchgWeakAsC`); matching-value failure is an additional read-only choice |
 | an atomic op on an enum, a `bool` or a packed struct | the same with `Zig.atomicLoadAsC (T)`, `atomicStoreAsC`, `atomicRmwAsC`, `cmpxchgAsC`: the op on the value's `Zig.Packed` bits |
+| an atomic op on a `*T`, `[*]T` or `?*T` | `Zig.atomicLoadPtrC (T)`, `atomicStorePtrC (α := T)`, `atomicXchgPtrC` (`.Xchg` only), `cmpxchgPtrC`, `cmpxchgWeakPtrC` (`T`: `Zig.Ptr` or `Option (Zig.Ptr)`): messages keep the pointer's block; `cmpxchg` compares identities ([pointer-atomics.md](pointer-atomics.md)) |
 
 `ord` is a `Zig.AtomicOrder` (`monotonic` is `.relaxed`; `unordered` is rejected). Each `*C` op is a `Zig.pickC` (the oracle picks the message to read or the place of the write, RC11, std-models.md §Thread model), then the op in `MemM` (`Zig.atomicLoadAt c …`).
 | `call` of `Thread.spawn(config, f, args)` | `Zig.spawnC (Tgt.f args)` |
