@@ -10,7 +10,7 @@ air2lean --diagnostics-json ./air --diagnostic-limit 256
 It prints one JSON object to stdout and exits 0 for `checked` or 1 for `rejected`,
 including argument and directory errors. The leading `--diagnostics-json` selects
 this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096), and
-`--spawn-policy available|fallible`; `-o`,
+`--spawn-policy available|fallible`, `--device-contract <json>` (L13, checks volatile integer accesses as device events); `-o`,
 `--namespace`, `--prefix`, and `--float-semantics` are incompatible. The ordinary
 emission mode keeps its fail-fast interfaces and generated source format.
 
@@ -47,7 +47,7 @@ The schema vocabulary is fixed independently of message text:
 
 | Field | Values |
 | --- | --- |
-| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT` |
+| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT`, `ASM_VOLATILE_EFFECT` |
 | `phase` | `cli`, `input`, `decode`, `canonicalize`, `normalize`, `check`, `program`, `profile` |
 | `category` | `malformed_input`, `unsupported_semantics`, `validation_failure`, `resource_limit`, `io_failure`, `skipped_prerequisite` |
 | `anchor.id_space` | `unavailable`, `exported`, `canonical` |
@@ -63,6 +63,12 @@ marks a pointer to a packed struct field (`struct_field_ptr`, or `@fieldParentPt
 exporter `host_size`/`bit_offset`, or byte pointer, is not the layout the model computes from the
 struct's field bit sizes (`docs/generated-code.md` §Casts, layout and function pointers). It also replaces the generic
 `INSTRUCTION_FAILURE` check of that instruction.
+
+`ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, canonical instruction
+anchor) marks inline asm that is neither on the reviewed allowlist (`Air2Lean/AsmAllowlist.lean`)
+nor a declared device event of `--device-contract`: `rdtsc`, `rdrand`, port I/O, barriers,
+output-less asm and every `memory` clobber ([volatile-effects.md](volatile-effects.md#inline-asm)).
+It also replaces the generic `INSTRUCTION_FAILURE` check of that instruction.
 
 `diagnostics_observed` counts attempted diagnostic additions; it is not the total
 number of blockers in the inputs. Dependency reporting stops once truncated.
