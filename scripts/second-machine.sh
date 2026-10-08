@@ -71,11 +71,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$platform" in '' | linux/amd64 | linux/arm64) ;; *) echo "error: unsupported platform: $platform" >&2; exit 2 ;; esac
+if [ -n "$compare" ]; then
+  [ -f "$compare" ] || { echo "error: no record at $compare" >&2; exit 2; }
+  compare=$(cd -- "$(dirname -- "$compare")" && pwd)/$(basename -- "$compare")
+fi
 command -v docker >/dev/null 2>&1 || { echo 'error: Docker is required' >&2; exit 1; }
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
-[ -z "$compare" ] || compare=$(cd -- "$(dirname -- "$compare")" && pwd)/$(basename -- "$compare")
-[ -z "$compare" ] || [ -f "$compare" ] || { echo "error: no record at $compare" >&2; exit 2; }
 commit=$(git rev-parse --verify "$rev^{commit}")
 [ -n "$platform" ] || platform=$(python3 -c 'import json; print(json.load(open("compatibility.json"))["clean_environment"]["platform"])')
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-second-machine.XXXXXX")

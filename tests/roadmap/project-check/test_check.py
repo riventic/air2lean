@@ -362,5 +362,27 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(self.compare(other, other).returncode, 2)
 
 
+class SecondMachineScriptTests(unittest.TestCase):
+    """scripts/second-machine.sh rejects bad arguments before touching Docker or Git."""
+    SCRIPT = SCRIPT.with_name('second-machine.sh')
+
+    def run_script(self, *args):
+        return subprocess.run(['bash', str(self.SCRIPT), *args], capture_output=True, text=True, timeout=30)
+
+    def test_arguments(self):
+        self.assertEqual(self.run_script('--help').returncode, 0)
+        for args in (('--bogus',), ('--platform', 'linux/riscv64'), ('--rev',),
+                     ('--compare', '/nonexistent/record.json')):
+            with self.subTest(args=args):
+                self.assertEqual(self.run_script(*args).returncode, 2)
+
+    def test_elan_pins_cover_container_architectures(self):
+        toml = SCRIPT.parents[1] / 'zig-patch/toml-get.sh'
+        for table in ('[ci.elan]', '[ci.elan-aarch64]'):
+            with self.subTest(table=table):
+                sha = subprocess.run([str(toml), table, 'sha256'], capture_output=True, text=True, check=True).stdout
+                self.assertRegex(sha.strip(), r'^[0-9a-f]{64}$')
+
+
 if __name__ == '__main__':
     unittest.main()
