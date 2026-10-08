@@ -10,7 +10,7 @@ python3 scripts/project-diagnostics.py check project.json \
 ```
 
 The consumer targets schema 2, `air2lean-check-diagnostics`, frozen at producer
-revision `9a3478a5baa26aa880142c0271f249a9ddd18222`. The required diagnostic-capable
+revision `6b6a20c329ee2639c39b09e1e7b312c6722bfd31`. The required diagnostic-capable
 producer is supplied by [PR 78](https://github.com/riventic/air2lean/pull/78), separately
 from the project manifest base in [PR 68](https://github.com/riventic/air2lean/pull/68).
 Matching the protocol is not executable qualification: the adapter records the actual
