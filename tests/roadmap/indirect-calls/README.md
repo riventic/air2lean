@@ -28,7 +28,7 @@ AIR2LEAN_INDIRECT_CALLS_ZIG_STOCK=/absolute/path/to/stock-0.16.0/zig \
 LEAN_NUM_THREADS=1 bash tests/roadmap/indirect-calls/check.sh
 ```
 
-`--synthetic-only` runs the hand-written schema-11 AIR fixtures of `Pipeline.lean`: seven
+`--synthetic-only` runs the hand-written schema-11 AIR fixtures of `Pipeline.lean`: eight
 static rejections, the program-level signature check of a constant callee, the table and
 call-graph inventory, and 20 kernel-decided observations appended to the generated
 `Calls.lean` (each table target through a constant table, a constant callee, a parameter,

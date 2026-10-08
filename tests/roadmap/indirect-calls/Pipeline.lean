@@ -175,6 +175,12 @@ private def undefCallee : Json :=
   file "undefCallee" #[0] #[arg 0 0 0, call 1 (obj [("ty", num 2), ("undef", .bool true)]) #[ref 0],
     ret 2 (ref 1)] unaryTable
 
+/-- A bare function constant stored as a pointer has no address; `&f` (a `ptrConst`) does. -/
+private def bareFunction : Json :=
+  file "bareFunction" #[12] #[arg 0 0 12,
+    inst 1 "store" 3 #[ref 0, obj [("ty", num 2), ("func", .str "double"), ("noreturn", .bool false)]],
+    inst 2 "ret" 4 #[obj [("ty", num 3), ("val", .str "{}")]]] unaryTable 3
+
 private def process (j : Json) : Except String Func := do
   let f ← normalize (← Raw.parseFunc j)
   check f
@@ -235,6 +241,7 @@ def main (args : List String) : IO Unit := do
   reject constOffset unknown
   reject constDataPointer "a constant indirect callee is not a function pointer"
   reject undefCallee "undefined"
+  reject bareFunction "a function used as a value is outside the subset"
   let funcs ← #[double, succ, square, add2, table, constant, callOnce, twice,
     viaParam "viaDouble" 0, viaParam "viaSquare" 2, globalSlot, field, fieldCaller, fieldGlobal, memory,
     memoryCaller, viaMismatch, viaData, viaInt].mapM accept

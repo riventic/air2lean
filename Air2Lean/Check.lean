@@ -1460,6 +1460,23 @@ private def checkIndirectCallTarget (f : Func) (insts : Array Inst) (i : Inst) :
     throw s!"{f.name}: inst {i.id}: indirect callee '{name}' has an incompatible signature \
       (called through '{tn}')"
 
+/-- L11: a function-pointer value is the address of a function block (`&f`, a `ptrConst`),
+which resolves through the callable-address table. A bare function constant outside a callee
+or call argument (whose check is `checkCallSignature`) has no address in the model. -/
+private def checkFunctionValues (f : Func) (i : Inst) : Except String Unit := do
+  if let .call .. := i.op then return
+  let rec bare (fuel : Nat) (v : Val) : Bool :=
+    match fuel, v with
+    | 0, _ => true
+    | _, .func .. => true
+    | fuel + 1, .agg _ vs => vs.any (bare fuel)
+    | fuel + 1, .optSome _ v | fuel + 1, .errUnionOk _ v | fuel + 1, .unionVal _ _ v => bare fuel v
+    | fuel + 1, .sliceConst _ p n => bare fuel p || bare fuel n
+    | _, _ => false
+  if (valueOperands i.op ++ ptrOperands i.op).any (bare 256) then
+    throw s!"{f.name}: inst {i.id}: a function used as a value is outside the subset (its \
+      address `&f` resolves through the callable-address table)"
+
 private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Array Inst) (i : Inst) : Except String Unit := do
   let reject : Except String Unit := throw s!"{f.name}: inst {i.id}: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
   -- A numeric getter does not carry an interprocedural proof for recovering a
@@ -1637,6 +1654,7 @@ def check (f : Func) : Except String Unit := do
   for i in insts do
     checkErrorGlobalInstruction errorGlobals f insts i
     checkIndirectCallTarget f insts i
+    checkFunctionValues f i
     checkUndefOperands f (fun v => match v with
       | .inst id => (insts.find? (·.id == id)).map (·.ty)
       | v => v.constTy?) i
@@ -2498,6 +2516,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
     log := log.record (checkDiagnostic file f .signatureFailure
       { idSpace := .canonical, instruction := some i.id }) (checkIndirectCallTarget f insts i)
+    log := log.record (checkDiagnostic file f .constantFailure
+      { idSpace := .canonical, instruction := some i.id }) (checkFunctionValues f i)
     log := log.record { (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) with category := .unsupportedSemantics }
       (checkUndefOperands f index.valTy? i)
