@@ -321,6 +321,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',
+    'tests/roadmap/air-semantics/fixtures': 'hand-written caller of the golden basic.scale (docs/air-semantics.md)',
 }
 
 

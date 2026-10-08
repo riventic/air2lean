@@ -318,6 +318,35 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.stackPush_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
+## `Proofs/Basic/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Basic.AirCert.absDiff_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.absDiff_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.absDiff_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.absDiff_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+
 ## `Proofs/Basic/Arith.lean`
 
 File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03

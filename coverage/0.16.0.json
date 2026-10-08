@@ -678,7 +678,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -756,7 +759,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -856,7 +862,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -987,7 +996,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1042,7 +1054,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1108,7 +1123,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1175,7 +1193,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1280,7 +1301,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1331,7 +1355,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": {
@@ -1397,7 +1424,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1459,7 +1489,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1571,7 +1604,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -1622,7 +1658,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": {
@@ -1803,7 +1842,8 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Floatops/Proofs.lean",
-          "Proofs/Floats/Proofs.lean"
+          "Proofs/Floats/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -1921,7 +1961,8 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Floatops/Proofs.lean",
-          "Proofs/Floats/Proofs.lean"
+          "Proofs/Floats/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2033,7 +2074,8 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Floatops/Proofs.lean",
-          "Proofs/Floats/Proofs.lean"
+          "Proofs/Floats/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2159,7 +2201,8 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Floatops/Proofs.lean",
-          "Proofs/Floats/Proofs.lean"
+          "Proofs/Floats/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2279,7 +2322,8 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Floatops/Proofs.lean",
-          "Proofs/Floats/Proofs.lean"
+          "Proofs/Floats/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -4130,6 +4174,7 @@
           "Proofs/Lists/Container.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Pointers/Sep.lean",
+          "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Proofs.lean",
           "Proofs/Slices/Proofs.lean",
           "Proofs/Sync/Contracts.lean",
@@ -4639,6 +4684,7 @@
           "Proofs/Lists/Sep.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Pointers/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean",
           "Proofs/Slices/Gen.lean",
           "Proofs/Slices/Proofs.lean",
           "Proofs/Slices/Sep.lean",
@@ -5135,7 +5181,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -5575,6 +5624,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
@@ -5668,6 +5718,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
@@ -5765,6 +5816,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
@@ -5862,6 +5914,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
@@ -7244,7 +7297,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -7356,7 +7412,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -7503,7 +7562,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -7614,7 +7676,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -7726,7 +7791,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -7848,7 +7916,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -7955,7 +8026,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -8173,7 +8247,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -8245,7 +8322,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -8297,7 +8376,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": {
@@ -9069,7 +9150,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Basic/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -9313,6 +9397,7 @@
           "Proofs/Lists/Sep.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Pointers/Proofs.lean",
+          "Proofs/Recursion/AirCert.lean",
           "Proofs/Slices/Gen.lean",
           "Proofs/Slices/Proofs.lean",
           "Proofs/Slices/Sep.lean",
@@ -10710,6 +10795,7 @@
         "paths": [
           "Proofs/Asm/Gen.lean",
           "Proofs/Atomics/Gen.lean",
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Errors/Proofs.lean",
@@ -11148,6 +11234,7 @@
         "paths": [
           "Proofs/Asm/Gen.lean",
           "Proofs/Atomics/Gen.lean",
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Errors/Gen.lean",
           "Proofs/Errors/Proofs.lean",
@@ -11863,7 +11950,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Recursion/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -12072,6 +12161,7 @@
           "Proofs/Asm/Gen.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/Stack.lean",
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Arith.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Cancel/Client.lean",
@@ -12156,6 +12246,7 @@
           "Proofs/Asm/Gen.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/Stack.lean",
+          "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Arith.lean",
           "Proofs/Basic/Gen.lean",
           "Proofs/Cancel/Client.lean",
@@ -18324,6 +18415,7 @@
       "Proofs/Atomics/PtrPublish.lean": "60253a8404e04863425d5ca56db8cd732754a3500208b1962273b92de7d93017",
       "Proofs/Atomics/Relaxed.lean": "561920c5823e70690898d3fbf294fd52acf0e41f50389ec93df1e0d09fab506b",
       "Proofs/Atomics/Stack.lean": "1d9bcbdd9a703a3bca2db7a4efd6b1b3f0d1b5950497956979567c716c5b1c38",
+      "Proofs/Basic/AirCert.lean": "5ab370aa6f798b54d5c9f600c18041fd0d00be0882c9b602441d34623ec8d4ee",
       "Proofs/Basic/Arith.lean": "b6aba4d80fd8fdb7616934e423614a2dcfc206f3af8b2f2f1f4a9ad10eb987ec",
       "Proofs/Basic/Common.lean": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
       "Proofs/Basic/Gen.lean": "7f200ec957dd89d74dcc33e3e2a2a6e2cf3b8118591aa35085bfabde76acab99",

@@ -189,7 +189,8 @@
     {"premise": "ASM-03", "scope": "closure", "pattern": "(?:^|\\.)airAsmFx_[0-9]+$"},
     {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
-    {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"}
+    {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"},
+    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"}
   ],
   "implies": {
     "DEV-01": ["SEM-02"],
@@ -221,6 +222,7 @@
     "EXT-02": ["EXT-01"],
     "SEM-02": ["SEM-01"],
     "SEM-03": ["SEM-01"],
+    "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],
     "THR-01": ["SEM-02"],
     "TRU-02": ["TRU-03", "SEM-01"]
   }
