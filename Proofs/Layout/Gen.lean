@@ -1,4 +1,3 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"gnu","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"westmere","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","aes","avx","avx2","bmi","bmi2","cmov","crc32","cx16","cx8","f16c","fma","fxsr","idivq_to_divl","lzcnt","macrofusion","mmx","movbe","no_bypass_delay_mov","nopl","pclmul","popcnt","rdrnd","sahf","sse","sse2","sse3","sse4_1","sse4_2","ssse3","vzeroupper","x87","xsave"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.7.0.14...7.0.14-gnu.2.39","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -361,8 +360,8 @@ instance : Zig.Enc Ctl where
     let b : BitVec 8 ← Zig.Enc.decode bs
     Zig.Packed.ofBits? b
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: layout.double
   (#[.undef], 1, .constGlobal),
   -- 1: layout.square

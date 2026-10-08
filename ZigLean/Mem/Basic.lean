@@ -614,6 +614,13 @@ for liveness and provenance checks. -/
 def ptrEqAddr (p q : Ptr) : MemM Bool := do
   pure (decide ((← ptrAddr p) = (← ptrAddr q)))
 
+/-- `==` on optional pointers `?*T`: `null` is address 0, so two nulls are equal, null and a
+pointer are not, and two pointers compare by address (`ptrEqAddr`). -/
+def optPtrEqAddr : Option Ptr → Option Ptr → MemM Bool
+  | none, none => pure true
+  | some p, some q => ptrEqAddr p q
+  | _, _ => pure false
+
 /-! ## Globals -/
 
 /-- `m` with one more global block, `m.blocks.size`: `bytes`, at the placement's address

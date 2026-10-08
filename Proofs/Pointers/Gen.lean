@@ -15,8 +15,8 @@ instance : Zig.Enc Job where
   encode v := Zig.Enc.fields 12 [(0, Zig.Enc.encode v.duration), (4, Zig.Enc.encode v.due), (8, Zig.Enc.encode v.weight)]
   decode bs := do pure { duration := ← Zig.Enc.decodeAt bs 0, due := ← Zig.Enc.decodeAt bs 4, weight := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure addDownLocals where
   deriving Inhabited
@@ -190,7 +190,7 @@ inductive sameExit where
 
 def same (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Bool) := do
   let e ← ((do
-    let i2 ← pure (p0 == p1)
+    let i2 ← Zig.callM (Zig.ptrEqAddr p0 p1)
     pure (.ret i2)) : Zig.MM sameLocals sameExit).run' (default : sameLocals)
   match e with
   | .ret v => pure v
