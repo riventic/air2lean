@@ -55,7 +55,7 @@ pointer pointees (their address-zero encoding is not qualified in memory).
   example, not an exported AIR file.
 - `tests/roadmap/pointer-atomics/Generate.lean`: offline AIR fixtures for load, store, `.Xchg`,
   strong and weak `cmpxchg` on `*u32` and `?*u32`, checked and emitted by the translator; the
-  generated file's kernel-checked runs show that a load keeps the block, that a CAS with the same
+  generated file's `native_decide` runs show that a load keeps the block, that a CAS with the same
   identity succeeds and one with another block fails, and that a pointer one past another node
   (same address) or a raw address is `.unspecified`, never a success. The same file checks the
   rejections of float, slice, C and allowzero pointees and of a non-`Xchg` pointer RMW.

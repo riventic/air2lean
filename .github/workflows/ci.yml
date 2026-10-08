@@ -822,6 +822,8 @@ jobs:
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
+            lake env lean --run tests/roadmap/pointer-atomics/Generate.lean "$RUNNER_TEMP/pointer-atomics"
+            lake env lean "$RUNNER_TEMP/pointer-atomics/PtrAtomics.lean"
           fi
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
