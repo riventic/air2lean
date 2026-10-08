@@ -72,6 +72,34 @@ def runtimeTagReason? (tag : String) : Option String :=
   | "err_return_trace" | "set_err_return_trace" | "save_err_return_trace_index" => some "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics"
   | _ => none
 
+/-- Reason and guidance for every fast-math (`*_optimized`) tag. -/
+def optimizedFloatGuidance : String :=
+  "fast-math permits reassociation and value changes the float model does not match; remove @setFloatMode(.optimized) from translated functions"
+
+/-- Reason and guidance (`reason; guidance`) for tags the exporter marks `unsupported`.
+`scripts/coverage.py` requires an arm for every such tag of every supported compiler. -/
+def exporterTagReason? (tag : String) : Option String :=
+  match tag with
+  | "assembly" => some "0.14.1 inline-assembly AIR uses a layout the exporter does not decode; translate assembly wrappers with Zig 0.15.2 or 0.16.0 (docs/generated-code.md, Inline asm)"
+  | "breakpoint" => some "@breakpoint debugger traps have no modelled effect; remove @breakpoint from translated functions or guard it behind a comptime flag"
+  | "ret_addr" => some "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument"
+  | "frame_addr" => some "@frameAddress exposes machine stack addresses outside the memory model; pass any needed identity as an explicit argument"
+  | "int_from_float_optimized_safe" => some "checked float-to-int conversion under @setFloatMode(.optimized) is fast-math outside the float model; use the default strict float mode in translated functions"
+  | "error_set_has_value" => some "the @errorCast safety check needs the finalized compiler error set beyond analyzed-AIR export; cast to a superset error set or switch on the error explicitly"
+  | "prefetch" => some "@prefetch cache hints have no modelled effect; remove @prefetch from translated functions"
+  | "wasm_memory_size" | "wasm_memory_grow" => some "WebAssembly linear-memory builtins are outside the qualified targets; keep them out of translated functions"
+  | "addrspace_cast" => some "@addrSpaceCast between non-generic address spaces is outside the memory model; use generic address-space pointers in translated functions"
+  | "c_va_arg" | "c_va_copy" | "c_va_end" | "c_va_start" => some "C variadic argument state is outside the calling-convention model; export fixed-arity functions instead"
+  | "work_item_id" | "work_group_size" | "work_group_id" => some "GPU work-item builtins are outside the qualified targets; keep them out of translated functions"
+  | _ => none
+
+/-- Message suffix for a marked tag: its reviewed reason and guidance, if any. -/
+def markedTagGuidance (tag : String) : String :=
+  if tag.endsWith "_optimized" then s!": {optimizedFloatGuidance}"
+  else match exporterTagReason? tag with
+    | some reason => s!": {reason}"
+    | none => ""
+
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
   if let some reason := runtimeTagReason? raw.tag then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}': {reason}"
@@ -85,10 +113,10 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   -- decode fully (same shape as `reduce`/`cmp_vector`) but are rejected here regardless, since
   -- fast-math permits reassociation the model does not claim to match.
   if raw.tag.endsWith "_optimized" then
-    throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag})"
+    throw s!"{fnName}: inst {raw.id}: optimized float mode is outside the subset ({raw.tag}){markedTagGuidance raw.tag}"
   rejectRuntimeTag fnName raw
   if raw.unsupported then
-    throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter"
+    throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter{markedTagGuidance raw.tag}"
   match raw.tag with
   | "arg" =>
     let some p := raw.param

@@ -60,6 +60,40 @@ def main : IO Unit := do
   rejectedWith (file #[instruction "unknown_plain"]) "unsupported by the exporter"
   rejectedWith (file #[instruction "add" true false]) "needs 2 args"
   rejectedWith (file #[instruction "add_optimized"]) "optimized float mode"
+  -- L14: exporter-marked and fast-math tags carry their reviewed reason and guidance in
+  -- both the normalizer error and the structured exporter-marker diagnostic.
+  let marked := #[
+    ("add_optimized", "remove @setFloatMode(.optimized)", "0.16.0"),
+    ("reduce_optimized", "remove @setFloatMode(.optimized)", "0.16.0"),
+    ("int_from_float_optimized_safe", "default strict float mode", "0.16.0"),
+    ("assembly", "Zig 0.15.2 or 0.16.0", "0.14.1"),
+    ("breakpoint", "remove @breakpoint", "0.16.0"),
+    ("ret_addr", "explicit argument", "0.16.0"),
+    ("frame_addr", "explicit argument", "0.16.0"),
+    ("error_set_has_value", "superset error set", "0.16.0"),
+    ("prefetch", "remove @prefetch", "0.16.0"),
+    ("wasm_memory_size", "WebAssembly linear-memory", "0.16.0"),
+    ("wasm_memory_grow", "WebAssembly linear-memory", "0.16.0"),
+    ("addrspace_cast", "generic address-space pointers", "0.16.0"),
+    ("c_va_arg", "fixed-arity functions", "0.16.0"),
+    ("c_va_copy", "fixed-arity functions", "0.16.0"),
+    ("c_va_end", "fixed-arity functions", "0.16.0"),
+    ("c_va_start", "fixed-arity functions", "0.16.0"),
+    ("work_item_id", "GPU work-item builtins", "0.16.0"),
+    ("work_group_size", "GPU work-item builtins", "0.16.0"),
+    ("work_group_id", "GPU work-item builtins", "0.16.0")]
+  for (tag, guidance, version) in marked do
+    rejectedWith (file #[instruction tag] version) guidance
+    rejectedWith (file #[instruction tag] version) s!"routing: inst 42:"
+    let (_, log) := inspect "marked-tags.json" (file #[instruction tag] version).compress {}
+    require (log.items.any (fun d => d.anchor.instruction == some 42 &&
+      (d.code == .exporterUnsupported || d.code == .optimizedUnsupported) &&
+      has d.message tag && has d.message guidance))
+      s!"structured marker for {tag} must carry its reviewed guidance"
+  -- A marked tag without a reviewed reason keeps the generic message (coverage.py forbids it).
+  let .error generic := process (file #[instruction "unknown_plain"])
+    | throw (IO.userError "accepted an exporter-marked tag")
+  require (generic.endsWith "is unsupported by the exporter") s!"unexpected guidance: {generic}"
   rejectedWith (file #[instruction "legalize_vec_elem_val"] "0.99.0") "unsupported zig_version"
   let malformed := file #[obj [("id", num 42), ("tag", .str "runtime_nav_ptr"),
     ("ty", num 0), ("args", .bool false)]]

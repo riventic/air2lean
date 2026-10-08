@@ -76,6 +76,13 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      # L14: emitted tags need a committed compiler-generated fixture (or an explicit
+      # emitted-unfixtured request); rejected tags need the translator's reason and guidance.
+      - name: Runtime tag fixture and guidance gate
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+
       - name: Schedule exploration cap accounting regressions
         run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py
 

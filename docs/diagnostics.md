@@ -203,3 +203,12 @@ currently known count. Their version-dependent comparison also precludes treatin
 the rename as identical semantics. Nested synthetic CLI fixtures retain exported IDs
 and rejection reasons for every actual version/tag member, including untyped
 inferred allocations. No source feature is newly accepted by these classifications.
+
+Exporter-marked and fast-math tags likewise carry a reviewed reason and guidance:
+`exporterTagReason?` (for example `@breakpoint`, `@returnAddress`, C variadics,
+GPU/wasm builtins, the 0.14.1 assembly layout) and `optimizedFloatGuidance` (every
+`*_optimized` tag) in `Air2Lean/Air/Normalize.lean`. Both the normalizer error and
+the `EXPORTER_UNSUPPORTED`/`OPTIMIZED_UNSUPPORTED` message append that text after the
+tag. `scripts/coverage.py l14` fails when an inventory's rejected row lacks the
+current text ([coverage.md](coverage.md#l14-runtime-and-control-tags)).
+`RuntimeTags.lean` checks each family's guidance in both paths.
