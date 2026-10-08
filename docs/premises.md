@@ -81,7 +81,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
-| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
+| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
@@ -228,8 +228,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Thread.spawn` is a sync op that always succeeds under the default `available`
   policy. It copies the argument tuple and gives the child a copy of the parent clock. `join`
-  waits for the child and merges its clock. Only the spawner may join, once. An unjoined
-  child at thread end is `.illegal`. The child protocol obligation (`spawnInit`) is explicit.
+  waits for the child and merges its clock. Only the handle's owner (the spawner, or the thread
+  an explicit transfer named, THR-10) may join, once. An owned handle neither joined nor
+  detached at thread end is `.illegal`. The child protocol obligation (`spawnInit`) is explicit.
 - Derived from: `ZigLean.Conc.Sched`; tokens `spawnC`, `joinC`, `spawnInit`.
 - Sources: [std-models.md](std-models.md#thread-model), [generated-code.md](generated-code.md#atomics-and-threads).
 
@@ -316,6 +317,24 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: token `Cooperative`.
 - Sources: [progress-hints.md](progress-hints.md#worker-idle-loop),
   `tests/roadmap/idle-loops/IdleLoop/Theorems.lean`.
+
+<a id="thr-10"></a>
+### THR-10 — Detached threads and explicit handle transfer
+
+- Kind: environment.
+- Statement: `Thread.detach` (Zig 0.16.0) consumes the owner's handle without a
+  happens-before edge; the thread runs on, and `main`'s end ends the run as the process exit
+  does, whatever detached threads still run: no detached thread takes a turn after `main`'s
+  end, so its accesses after that point are not explored. A later join or detach of the handle is
+  `.illegal`. `Thread.transferHandle` is a model step, not a `std` call: a proof or
+  hand-written client inserts it where a handle passes to another thread, which then is the
+  one thread that may join or detach it and must do so before it ends. The translator never
+  emits it, so a translated thread that joins a handle it did not spawn is `.illegal`. A
+  transfer to a thread that has already ended is not detected (its handle is then never
+  consumed and no end check reports it). A
+  strict-safety proof may order joins by a protocol rank (`Proto.rank`) instead of thread ids.
+- Derived from: `ZigLean.Conc.Detach`; tokens `detachC`, `transferHandle`, `Thread.detach`.
+- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Detach/`.
 ## Memory ordering
 
 <a id="ord-01"></a>

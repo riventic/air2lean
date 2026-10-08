@@ -19,9 +19,11 @@ inductive AllocFn where
   | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap | realloc
   deriving BEq, Repr
 
-/-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
+/-- `std.Thread.spawn`/`.join`/`.detach`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
 inductive ThreadFn where
   | spawn | join
+  /-- `Thread.detach` (C07): the handle is consumed and the thread runs on (`Zig.detachC`). -/
+  | detach
   /-- Progress hints: scheduler opportunity, with no fairness guarantee. -/
   | yield | spinLoopHint
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
@@ -64,8 +66,9 @@ def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
 private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
     (zigVersions : Array String := #[]) : StdModel :=
   { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·) }
-private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String) : StdModel :=
-  { symbol, kind := .thread fn, dependencies := deps.map ("Zig." ++ ·) }
+private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
+    (zigVersions : Array String := #[]) : StdModel :=
+  { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
 
 /-- The one table of built-in std models. -/
 def stdModels : Array StdModel := #[
@@ -80,6 +83,7 @@ def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
   threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"],
   threadModel "Thread.join" .join #["joinC"],
+  threadModel "Thread.detach" .detach #["detachC"] #["0.16.0"],
   threadModel "Thread.yield" .yield #["threadYieldC"],
   threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
   threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
@@ -100,8 +104,6 @@ def stdModels : Array StdModel := #[
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"],
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
-  { symbol := "Thread.detach",
-    kind := .rejected "Thread.detach is outside the fork-join subset: every spawned thread must be joined" },
   -- C05: cancelable `std.Io` APIs outside the cancelation model (`docs/std-models.md`
   -- §Cancelation). Modelled: `Io.futexWait` (and the std code over it), `Io.Group.cancel`,
   -- `Io.Group.await`.
@@ -139,7 +141,7 @@ def allocFn? (name : String) : Option AllocFn :=
   | _ => none
 
 /-- The `Thread` function that the function `name` is an instance of
-(`Thread.spawn__anon_<n>`, `Thread.join`). -/
+(`Thread.spawn__anon_<n>`, `Thread.join`, `Thread.detach`). -/
 def threadFn? (name : String) : Option ThreadFn :=
   match stdKind? name with
   | some (.thread fn) => some fn

@@ -978,6 +978,12 @@ jobs:
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
             lake env lean --run tests/roadmap/pointer-atomics/Generate.lean "$RUNNER_TEMP/pointer-atomics"
             lake env lean "$RUNNER_TEMP/pointer-atomics/PtrAtomics.lean"
+            # C07: detached threads and handle ownership (kernel witnesses; detach admission
+            # and emission, whose generated module must elaborate).
+            lake env lean tests/roadmap/detached-threads/Runtime.lean
+            detach_dir=$(mktemp -d "$RUNNER_TEMP/detached-threads.XXXXXX")
+            lake env lean --run tests/roadmap/detached-threads/Pipeline.lean "$detach_dir/Detached.lean"
+            lake env lean -R "$detach_dir" "$detach_dir/Detached.lean"
           fi
           # C05: sampled spurious-wake and cancelation schedules (no translation involved).
           lake env lean --run tests/roadmap/cancellation/Runtime.lean

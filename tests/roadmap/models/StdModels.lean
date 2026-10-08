@@ -16,7 +16,7 @@ private def expectError {α : Type} (result : Except String α) (part : String) 
 private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
-  #[.spawn, .join, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
+  #[.spawn, .join, .detach, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
     .timerStart, .timerRead, .futexTimedWait,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel]
@@ -51,7 +51,8 @@ def main : IO Unit := do
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
   require (threadFn? "Thread.Futex.timedWait" == some .futexTimedWait) "clock projection"
-  require ((rejectedThreadFn? "Thread.detach").isSome) "rejection projection"
+  require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
+  require (threadFn? "Thread.detach" == some .detach) "detach projection"
   -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
   -- modelled cancelation points stay models.
   for name in #["Io.checkCancel", "Io.recancel", "Io.swapCancelProtection", "Io.sleep",
@@ -71,6 +72,9 @@ def main : IO Unit := do
     "mem.Allocator.allocSentinel qualified Zig 0.16.0"
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.realloc qualified Zig 0.16.0"
+  expectError (checkProgram #[{ caller f "client" "Thread.detach" with zigVersion := "0.15.2" }])
+    "Thread.detach qualified Zig 0.16.0"
+  expectError (checkProgram #[caller f "client" "Thread.detach"]) "has an incompatible Thread/void signature"
   -- A translated function cannot reuse a built-in std model name.
   for name in #["Thread.join", "Thread.spawn__anon_4", "Thread.detach", "mem.Allocator.free__anon_9"] do
     expectError (checkProgram #[f, { f with name }]) s!"{name}: translated function conflicts with built-in std model"
@@ -105,8 +109,8 @@ def main : IO Unit := do
     #[deps #["mem.Allocator.create", "mem.Allocator.allocSentinel", "RegistryExample.identity"], other]
   let _ ← get <| ModelRegistry.checkDependencies #[deps #["project.other"]]
   expectError (ModelRegistry.checkDependencies #[deps #["Zig.x", "Zig.x"]]) "duplicate semantic dependency 'Zig.x'"
-  expectError (ModelRegistry.checkDependencies #[deps #["Thread.detach"]])
-    "semantic dependency 'Thread.detach' is outside the subset"
+  expectError (ModelRegistry.checkDependencies #[deps #["Io.futexWaitTimeout"]])
+    "semantic dependency 'Io.futexWaitTimeout' is outside the subset"
   let legacy := { deps #["mem.Allocator.allocSentinel"] with profile := { model.profile with zigVersion := "0.15.2" } }
   expectError (ModelRegistry.checkDependencies #[legacy])
     "semantic dependency 'mem.Allocator.allocSentinel' is not qualified for Zig 0.15.2"
@@ -115,5 +119,5 @@ def main : IO Unit := do
   expectError (ModelRegistry.checkDependencies #[deps #["project.identity"]]) "cyclic semantic dependency"
   expectError (ModelRegistry.checkDependencies #[deps #["project.other"], other]) "cyclic semantic dependency"
   -- The registry check applies them end to end.
-  expectError (ModelRegistry.check #[deps #["Thread.detach"]] raw.profile #[f]) "outside the subset"
+  expectError (ModelRegistry.check #[deps #["Io.futexWaitTimeout"]] raw.profile #[f]) "outside the subset"
   IO.println s!"std model registry tests passed ({stdModels.size} rows)"

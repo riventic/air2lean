@@ -7,7 +7,8 @@ import ZigLean.Mem.Thread
 
 `Zig.CM Tgt σ α`: the body monad of a concurrent function, its locals over `ConcM`. The lifts
 of calls to the other function kinds (`callMC`, `callRC`), the sync ops that `Emit.lean` writes
-(each atomic op: a `pick` of the oracle, then the op in `MemM`; `spawnC`, `joinC`), and the lemmas
+(each atomic op: a `pick` of the oracle, then the op in `MemM`; `spawnC`, `joinC`; `detachC`
+and `transferHandleC`, which do not stop), and the lemmas
 that `partial_fixpoint` needs to see through them (as `ZigLean/Mem/Basic.lean` has for `MM`).
 -/
 
@@ -90,6 +91,14 @@ def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) := do
 
 /-- `Thread.join`: waits until thread `tid` ends. -/
 def joinC (tid : ThreadId) : CM Tgt σ Unit := StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.join tid)))
+
+/-- `Thread.detach` (C07): no stop; the owner releases the handle and the thread runs on
+independently (`Thread.detach`). -/
+def detachC (tid : ThreadId) : CM Tgt σ Unit := callMC (Thread.detach tid)
+
+/-- An explicit handle transfer (C07, `Thread.transferHandle`): no stop. Not emitted by the
+translator; a hand-written client or proof inserts it where a handle passes to another thread. -/
+def transferHandleC (tid owner : ThreadId) : CM Tgt σ Unit := callMC (Thread.transferHandle tid owner)
 
 /-! ### Futex (`std.Io`, 0.16.0; `docs/std-models.md` §Thread model) -/
 

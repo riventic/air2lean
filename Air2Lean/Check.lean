@@ -2496,7 +2496,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       count 2
       require (errorPayload == some .thread) "error-union Thread result"
       require (match argTy 0 with | some (.struct "Thread.SpawnConfig" ..) => true | _ => false) "spawn configuration"
-    | .join => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
+    | .join | .detach => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
     | .yield | .spinLoopHint => checkProgressCall f callee fn args ret
     | .groupAsync | .groupConcurrent =>
       count 3

@@ -111,11 +111,11 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
   exact ⟨g₀, hg₀, fun child m' hf => WP.pure' (WP.pure' (hk' child m' hf))⟩
 
 /-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
-strict mode, `tid` is a later thread with a valid handle even before it ends, and the join
+strict mode, `tid` has a higher rank (`Proto.rank`) and a valid handle even before it ends, and the join
 does not throw. -/
 theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      (P.strict = true → t < tid ∧ tid < m₁.threads.size ∧ P.joins g ∧
+      (P.strict = true → P.rank t < P.rank tid ∧ tid < m₁.threads.size ∧ P.joins g ∧
         Thread.joinValid m₁ t tid = true) ∧ (P.fin (G₁ tid) →
         (P.strict = true → ∃ m', ((Thread.join tid).run { m₁ with current := t }).run =
           some (.ok ((), m'))) ∧ ∀ m',
