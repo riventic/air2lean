@@ -594,6 +594,10 @@ jobs:
           python3 -m unittest discover -s tests/roadmap/project -v
           # Consumer mocks need no diagnostic producer; actual integration requires PR 78.
           python3 -m unittest discover -s tests/roadmap/project-diagnostics -v
+          # I02: dependency closure fixtures and every committed golden closed or modelled.
+          python3 -m unittest discover -s tests/roadmap/dependency-closure -v
+          python3 scripts/project.py closure example-project.json --format text
+          python3 scripts/dependency-closure.py goldens --format text
           work="$(mktemp -d "${RUNNER_TEMP}/air2lean-project.XXXXXX")"
           python3 scripts/project.py translate example-project.json \
             --translator .lake/build/bin/air2lean --out "$work/artifact" \
