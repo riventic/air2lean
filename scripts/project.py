@@ -3,6 +3,7 @@
 import argparse
 from contextlib import ExitStack
 import datetime
+import functools
 import hashlib
 import importlib.util
 import json
@@ -31,6 +32,12 @@ def _sibling(name):
 
 
 outcomes = _sibling('outcomes')
+
+
+@functools.cache
+def _export_module():
+    return _sibling('project-export')
+
 claims = _sibling('claims')
 
 SCHEMA = 1
@@ -166,7 +173,7 @@ def hash_bounded(path, cap, *, charge=None):
 def load_manifest(path):
     raw = read_bounded(path, LIMITS['max_file_bytes'])
     manifest = bounded_json(raw, LIMITS)
-    obj(manifest, ('schema', 'profile', 'float_semantics', 'source_closure', 'components', 'roots', 'allowed_assumptions'), ('limits', 'spawn_policy', 'check'))
+    obj(manifest, ('schema', 'profile', 'float_semantics', 'source_closure', 'components', 'roots', 'allowed_assumptions'), ('limits', 'spawn_policy', 'check', 'export'))
     if type(manifest['schema']) is not int or manifest['schema'] != SCHEMA:
         raise Invalid('unsupported manifest schema')
     limits = dict(LIMITS)
@@ -180,6 +187,8 @@ def load_manifest(path):
         raise Invalid('float_semantics must be ieee or compiler-rt')
     spawn_policy(manifest)
     check_budget(manifest)
+    if 'export' in manifest:
+        _export_module().validate(manifest['export'])
     strings(manifest['source_closure'], True)
     strings(manifest['allowed_assumptions'])
     obj(manifest['components'], ('compiler_patch', 'runtime', 'toolchain'))
@@ -203,8 +212,9 @@ def load_manifest(path):
             raise Invalid('namespace must contain dot-separated Lean identifiers')
         if not isinstance(root['prefix'], str) or '\0' in root['prefix']:
             raise Invalid('prefix must be a string without NUL')
+        # With an export section the AIR comes from `project.py export`; a committed list is optional.
         for key in ('air', 'contracts', 'assumptions', 'exclusions'):
-            strings(root[key], key == 'air')
+            strings(root[key], key == 'air' and 'export' not in manifest)
         if 'generated' in root:
             string(root['generated'])
         if set(root['assumptions']) - set(manifest['allowed_assumptions']):
@@ -448,7 +458,7 @@ def collect(path, *, air_boundaries=None):
     return manifest, limits, data, report
 
 
-def _run_bounded(argv, cwd, limits, *, merged):
+def _run_bounded(argv, cwd, limits, *, merged, env=None):
     """Raw bounded POSIX execution shared by adapters with different receipt policies."""
     with ExitStack() as streams:
         stdout = streams.enter_context(tempfile.TemporaryFile())
@@ -456,7 +466,7 @@ def _run_bounded(argv, cwd, limits, *, merged):
         logs = (stdout,) if merged else (stdout, stderr)
         def constrain():
             resource.setrlimit(resource.RLIMIT_FSIZE, (limits['max_output_bytes'], limits['max_output_bytes']))
-        child = subprocess.Popen(argv, cwd=cwd, stdout=stdout, stderr=stderr,
+        child = subprocess.Popen(argv, cwd=cwd, stdout=stdout, stderr=stderr, env=env,
                                  start_new_session=True, preexec_fn=constrain)
         def kill_group():
             try:
@@ -1477,8 +1487,15 @@ def compare_records(left_path, right_path):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ['export']:
+        try:
+            return _export_module().main(argparse.Namespace(**globals()), argv[1:])
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            print(json.dumps({'schema': SCHEMA, 'diagnostics': [diagnostic('PROJECT_EXPORT', error)]}), file=sys.stderr)
+            return 2
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('report', 'translate', 'verify', 'coverage', 'check', 'compare-records', 'closure'))
+    parser.add_argument('command', choices=('report', 'translate', 'verify', 'coverage', 'check', 'compare-records', 'closure', 'export'))
     parser.add_argument('manifest', type=Path, help='project manifest; compare-records: first check record')
     parser.add_argument('other', type=Path, nargs='?', help='compare-records: second check record')
     parser.add_argument('--out', type=Path)
