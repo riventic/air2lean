@@ -74,7 +74,8 @@ def translate(out):
         sleeper = 'import time; time.sleep(60)'
         if 'double' in mode:
             code = ('import os, subprocess, sys\n'
-                    f'c = subprocess.Popen([sys.executable, "-c", {sleeper!r}], start_new_session=True)\n'
+                    f'c = subprocess.Popen([sys.executable, "-c", {sleeper!r}], start_new_session=True,\n'
+                    '                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n'
                     'print(c.pid)')
             child = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, env=env)
             record(int(child.stdout))
