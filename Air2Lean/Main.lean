@@ -270,43 +270,46 @@ private def run (args : List String) : IO UInt32 := do
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")]
-            let ((src, declNames), emitNs) ← timed fun _ =>
-              let (body, declNames) :=
-                emitWithNames emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics a.proofApi
-              ("-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
-                (if models.isEmpty then "" else
-                  "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++ body,
-                declNames)
+            let (emitted, emitNs) ← timed fun _ =>
+              (emitWithNamesChecked emissionFuncs a.ns a.prefix_ a.floatSemantics models a.spawnSemantics
+                a.proofApi).map fun (body, declNames) =>
+                ("-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
+                  (if models.isEmpty then "" else
+                    "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++ body,
+                  declNames)
             times := { times with emit := emitNs }
-            let writeStart ← IO.monoNanosNow
-            try IO.FS.writeFile a.outPath src catch e =>
-              throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
-            times := { times with write := (← IO.monoNanosNow) - writeStart }
-            if let some path := a.timingJson then
-              writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
-            if let some path := a.sourceMapJson then
-              -- Path order matches `funcs`: every file reached emission. Records follow
-              -- the same identity order as emission.
-              let entries := ((emissionKeys.zip (jsonPaths.zip (originalNames.zip (rewrittenTexts.zip funcs)))).qsort
-                (fun x y => decide (x.1 < y.1))).map (·.2)
-              let declOf : Std.HashMap String String := declNames.foldl (fun m (k, v) => m.insert k v) {}
-              let records ← entries.mapM fun (airPath, airName, text, f) => do
-                let doc ← match StrictJson.parse text with
-                  | .ok doc => pure doc
-                  | .error e => throw (IO.userError s!"{airPath}: {e}")
-                let definition := declOf.getD f.name f.name
-                let api := if a.proofApi && (proofApiFacts f).isSome then
-                  some (proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold") else none
-                pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)
-              let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
-              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v1"),
-                ("namespace", .str a.ns), ("metadata", metadata),
-                ("options", Lean.Json.mkObj [("spawn_policy", .str spawn),
-                  ("models", if models.isEmpty then .null else ModelRegistry.report models)]),
-                ("functions", .arr records)]
-              try IO.FS.writeFile path (sidecar.compress ++ "\n") catch e =>
-                throw (IO.userError s!"writing source map {path}: {e}")
-            pure 0
+            match emitted with
+            | .error e => die e
+            | .ok (src, declNames) =>
+              let writeStart ← IO.monoNanosNow
+              try IO.FS.writeFile a.outPath src catch e =>
+                throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
+              times := { times with write := (← IO.monoNanosNow) - writeStart }
+              if let some path := a.timingJson then
+                writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
+              if let some path := a.sourceMapJson then
+                -- Path order matches `funcs`: every file reached emission. Records follow
+                -- the same identity order as emission.
+                let entries := ((emissionKeys.zip (jsonPaths.zip (originalNames.zip (rewrittenTexts.zip funcs)))).qsort
+                  (fun x y => decide (x.1 < y.1))).map (·.2)
+                let declOf : Std.HashMap String String := declNames.foldl (fun m (k, v) => m.insert k v) {}
+                let records ← entries.mapM fun (airPath, airName, text, f) => do
+                  let doc ← match StrictJson.parse text with
+                    | .ok doc => pure doc
+                    | .error e => throw (IO.userError s!"{airPath}: {e}")
+                  let definition := declOf.getD f.name f.name
+                  let api := if a.proofApi && (proofApiFacts f).isSome then
+                    some (proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold") else none
+                  pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)
+                let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
+                let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v1"),
+                  ("namespace", .str a.ns), ("metadata", metadata),
+                  ("options", Lean.Json.mkObj [("spawn_policy", .str spawn),
+                    ("models", if models.isEmpty then .null else ModelRegistry.report models)]),
+                  ("functions", .arr records)]
+                try IO.FS.writeFile path (sidecar.compress ++ "\n") catch e =>
+                  throw (IO.userError s!"writing source map {path}: {e}")
+              pure 0
 
 def main (args : List String) : IO UInt32 := do
   if args.head? == some "--diagnostics-json" then

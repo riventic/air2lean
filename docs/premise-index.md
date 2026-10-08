@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2338 theorems in 133 files.
+2349 theorems in 136 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -39,14 +39,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2209 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1865 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2216 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1870 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2349 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2026,6 +2026,38 @@ File premises: ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01
 | `example@L8` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
 | `example@L15` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
 | `example@L19` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/architecture-audit/memory-model/PanicDefault.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `panic_is_default` | SEM-01, SEM-02, TRU-01 |
+| `default_memM_succeeds` | SEM-01, SEM-02, TRU-01 |
+| `panic_memM_succeeds` | SEM-01, SEM-02, TRU-01 |
+| `default_result_is_overflow` | SEM-01, TRU-01 |
+| `panic_ptr_is_null` | SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/architecture-audit/memory-model/Theorems.lean`
+
+File premises: TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `addrOfLocal_is_4096` | TRU-01 |
+| `eqVsAddr_is_1` | TRU-01 |
+| `crossDistance_is_9` | TRU-01 |
+| `overAlign_never_panics` | TRU-01 |
+
+## `tests/roadmap/architecture-audit/trust-chain/reduce-bool-handedit/PanicDefault.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L9` | SEM-01, TRU-01 |
+| `example@L14` | SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/bitops/Bitset.lean`
 

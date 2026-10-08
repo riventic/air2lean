@@ -10,7 +10,7 @@ inductive Code where
   | structureFailure | typeFailure | globalFailure | memoryFailure | instructionFailure
   | constantFailure | signatureFailure | modelFailure | programFailure | profileFailure
   | duplicateFunction | calleeMissing | calleeBlocked | calleeAmbiguous | prerequisiteSkipped
-  | volatileAccess | packedLayout
+  | volatileAccess | packedLayout | emitterPlaceholder
   deriving BEq, Repr
 
 def Code.text : Code → String
@@ -40,6 +40,7 @@ def Code.text : Code → String
   | .prerequisiteSkipped => "PREREQUISITE_SKIPPED"
   | .volatileAccess => "VOLATILE_ACCESS"
   | .packedLayout => "PACKED_LAYOUT"
+  | .emitterPlaceholder => "EMITTER_PLACEHOLDER"
 
 inductive Phase where
   | cli | input | decode | canonicalize | normalize | check | program | profile

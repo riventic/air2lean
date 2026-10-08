@@ -19,7 +19,7 @@ Each case must end predictably:
 
 | Mode | Accepted outcomes |
 |---|---|
-| emission | exit 0 with the `-- air2lean-profile:` header and no `panic! "air2lean: …"` emitter placeholder; or exit 1 with a non-empty diagnostic and the output path unchanged |
+| emission | exit 0 with the `-- air2lean-profile:` header and no emitter placeholder (`air2lean_emitter_placeholder "…"`, formerly `panic! "air2lean: …"`); or exit 1 with a non-empty diagnostic and the output path unchanged |
 | `--diagnostics-json` | exit 0/1 with schema JSON whose `status` is `checked`/`rejected`, every `code` from the fixed vocabulary, and a rejection naming a non-skipped code |
 | both | the same accept/reject decision |
 

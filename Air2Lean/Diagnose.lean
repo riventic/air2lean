@@ -1,8 +1,11 @@
 import Air2Lean.Check
+import Air2Lean.Emit
 import Air2Lean.Air.Normalize
 import Air2Lean.Air.Anon
 
-/-! Check-only diagnostic collection. No emitter, compiler or proof checker runs here. -/
+/-! Check-only diagnostic collection. No compiler or proof checker runs here. The emitter runs
+only on a fully accepted program, so that an arm the checker failed to exclude is rejected here
+as in the CLI (`EMITTER_PLACEHOLDER`); its output is discarded. -/
 namespace Air2Lean.Diagnostics
 open Lean
 
@@ -287,6 +290,18 @@ def collectProgram (units : Array FileResult) (initial : Log)
           message := "not inspected: fallible spawn policy requires a valid selected program"
           prerequisites := #["validated_selected_program"]
           firstErrorInUnit := true }
+    -- The CLI's emission gate (`emitWithNamesChecked`), so that both modes agree. Like the
+    -- CLI, it runs only once every check has passed. Diagnostics mode takes no emission flags,
+    -- so this is the default emission (IEEE floats, no std models, no proof API); the namespace
+    -- and prefix only name declarations.
+    if !log.failed && units.all (·.localPassed) then
+      log := log.record {
+        code := .emitterPlaceholder
+        phase := .program
+        category := .validationFailure
+        message := ""
+        prerequisites := #["validated_selected_program"] }
+        ((emitWithNamesChecked funcs "Diagnostics" "" .ieee #[] spawnPolicy).map fun _ => ())
   if units.any (!·.localPassed) then
     log := { log with complete := false }
   return log

@@ -47,7 +47,7 @@ The schema vocabulary is fixed independently of message text:
 
 | Field | Values |
 | --- | --- |
-| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT` |
+| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT`, `EMITTER_PLACEHOLDER` |
 | `phase` | `cli`, `input`, `decode`, `canonicalize`, `normalize`, `check`, `program`, `profile` |
 | `category` | `malformed_input`, `unsupported_semantics`, `validation_failure`, `resource_limit`, `io_failure`, `skipped_prerequisite` |
 | `anchor.id_space` | `unavailable`, `exported`, `canonical` |
@@ -63,6 +63,14 @@ marks a pointer to a packed struct field (`struct_field_ptr`, or `@fieldParentPt
 exporter `host_size`/`bit_offset`, or byte pointer, is not the layout the model computes from the
 struct's field bit sizes (`docs/generated-code.md` §Casts, layout and function pointers). It also replaces the generic
 `INSTRUCTION_FAILURE` check of that instruction.
+
+`EMITTER_PLACEHOLDER` (phase `program`, category `validation_failure`) marks a program that
+passed every check but reached an emitter arm that the checker should exclude
+(`Air2Lean/Emit.lean`'s `placeholder`). Such an arm used to write `panic!` or `default`, which
+is a successful no-op in the logic (`docs/architecture-audit/memory-model.md`, MM-6). The CLI
+rejects the output before writing it and check-only mode runs the same gate (with the default emission options, since it takes no emission flags), so both modes
+agree. It is a translator bug: every known arm has a checker rule
+(`tests/roadmap/emitter-placeholders`).
 
 `diagnostics_observed` counts attempted diagnostic additions; it is not the total
 number of blockers in the inputs. Dependency reporting stops once truncated.

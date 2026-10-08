@@ -448,6 +448,9 @@ jobs:
           export TMPDIR="$evidence_dir/tmp"
           lake env lean tests/roadmap/input-validation/Validation.lean 2>&1 | tee "$evidence_dir/api.log"
           python3 tests/roadmap/input-validation/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/cli.log"
+          # MM-6: no emitter placeholder succeeds; formerly reachable arms are checker rejections.
+          python3 tests/roadmap/emitter-placeholders/test_cli.py "$PWD/.lake/build/bin/air2lean" 2>&1 | tee "$evidence_dir/placeholders.log"
+          lake env lean --run tests/roadmap/emitter-placeholders/Gate.lean 2>&1 | tee "$evidence_dir/placeholder-gate.log"
 
       # Q01: committed shrunk reproducers, then a small seeded malformed-AIR budget; any
       # failure is shrunk into $RUNNER_TEMP/air-fuzz/failures (docs/fuzzing.md).
