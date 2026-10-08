@@ -19,7 +19,7 @@ namespace Air2Lean.Certificate
 
 def bool (b : Bool) : String := if b then "true" else "false"
 
-def int (v : Int) : String := if v < 0 then s!"({v} : Int)" else s!"({v} : Int)"
+def int (v : Int) : String := s!"({v} : Int)"
 
 def opt {α : Type} (f : α → String) : Option α → String
   | some a => s!"(some {f a})"
@@ -148,9 +148,6 @@ def printFunc (f : Func) : Option String := do
     ",\n  errorSetBits := " ++ toString f.errorSetBits ++
     ",\n  body := " ++ body ++ " }"
 
-end Air2Lean.Certificate
-
-namespace Air2Lean.Certificate
 
 /-! ## The certificate fragment -/
 
