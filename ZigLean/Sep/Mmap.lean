@@ -259,4 +259,224 @@ theorem Triple.mmap (os : Os.Profile) (hP : 0 < os.pageSize) (hint : Option Ptr)
       · have := liveCells_bytesAt (b := m.blocks.size) (nb := nb) (lo := 0) rfl rfl (Nat.zero_le _)
         simpa [nb] using this
 
+/-! ## Replacing a whole owned block -/
+
+/-- A memory whose block `b` became `nb` is again `Seq`, if its frame cells are old cells and `nb`
+ends below the next address. -/
+theorem Mem.Seq.replace {m m' : Mem} {b : BlockId} {nb : Block} {hF : Heap} (hst : m.Seq)
+    (hsingle : m'.SingleThread) (hnext : m.nextAddr ≤ m'.nextAddr)
+    (hheap : m'.heap = liveCells b nb ∪ hF) (hFsub : ∀ l c, hF l = some c → m.heap l = some c)
+    (hnb : nb.live → nb.addr + nb.bytes.size < m'.nextAddr) : m'.Seq := by
+  refine ⟨hsingle, fun l c hc => ?_⟩
+  rw [hheap, Heap.union_apply] at hc
+  cases e : liveCells b nb l with
+  | some c' =>
+    rw [e, Option.some_or] at hc; cases hc
+    obtain ⟨x, y⟩ := l
+    simp only [liveCells] at e
+    split at e
+    · split at e
+      · rename_i h; cases e; exact hnb h.1
+      · cases e
+    · cases e
+  | none =>
+    rw [e, Option.none_or] at hc
+    have := hst.addr l c (hFsub l c hc); omega
+
+/-- The frame's cells are cells of the memory. -/
+theorem frame_sub {m : Mem} {h hF : Heap} (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF) :
+    ∀ l c, hF l = some c → m.heap l = some c := by
+  intro l c hc
+  rw [hm, Heap.union_apply]
+  rcases hd l with e | e
+  · rw [e, Option.none_or]; exact hc
+  · rw [e] at hc; cases hc
+
+theorem extract_mid {a bs : Array Byte} {lo n k : Nat} (h : a.extract lo (lo + n) = bs)
+    (hn : lo + n ≤ a.size) (hk : k ≤ n) : a.extract (lo + k) (lo + n) = bs.extract k n := by
+  subst h; apply Array.ext
+  · simp; try omega
+  · intro i h1 h2; simp only [Array.getElem_extract]; congr 1; omega
+
+theorem extract_pre {a bs : Array Byte} {lo n k : Nat} (h : a.extract lo (lo + n) = bs)
+    (hn : lo + n ≤ a.size) (hk : k ≤ n) :
+    (a.extract 0 (lo + k)).extract lo (lo + k) = bs.extract 0 k := by
+  subst h; apply Array.ext
+  · simp; try omega
+  · intro i h1 h2; simp only [Array.getElem_extract, Nat.zero_add]
+
+theorem mod_add3 {a b c P : Nat} (ha : a % P = 0) (hb : b % P = 0) (hc : c % P = 0) :
+    (a + (b + c)) % P = 0 :=
+  Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_of_mod_eq_zero ha)
+    (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hb) (Nat.dvd_of_mod_eq_zero hc)))
+
+/-! ## munmap -/
+
+/-- `munmap` of a range of a live mapping that `unmapCase` admits: record the removed bytes as a
+write, then apply the case to the block. -/
+theorem Os.munmap_run {m : Mem} (os : Os.Profile) (s : Slice) {b : BlockId} {blk : Block}
+    {lo : Nat} {u : Os.Unmap} (hb : s.ptr.block = some b) (hblk : m.blocks[b]? = some blk)
+    (hl : blk.live) (hk : blk.kind = .mapped lo) (h0 : 0 ≤ s.ptr.off)
+    (hal : (blk.addr + s.ptr.off.toNat) % os.pageSize = 0)
+    (hu : Os.unmapCase os.pageSize lo blk.bytes.size s.ptr.off.toNat s.len.toNat = some u)
+    (hst : m.SingleThread) :
+    (Os.munmap os s).run m =
+      pure ((), { m.recordAt b s.ptr.off.toNat
+        (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size -
+          s.ptr.off.toNat) .write with blocks := m.blocks.set! b (u.apply blk) }) := by
+  have hrec := recordAccess_run (noRace_of_singleThread hst b s.ptr.off.toNat
+    (Nat.min (s.ptr.off.toNat + alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat)
+    .write)
+  simp only [StateT.run] at hrec
+  simp [Os.munmap, Os.mappingAt, hb, hblk, hl, hk, h0, hal, hu, zig_unfold, hrec,
+    ExceptT.bindCont, set, StateT.set, MonadStateOf.set, Mem.recordAt]
+
+/-- The common part of the `munmap` rules: the memory after a case `u` on a whole owned mapping,
+for the range from byte `k` of it. -/
+theorem munmap_owned {m : Mem} {h hF : Heap} (os : Os.Profile)
+    {p : Ptr} {A lo : Nat} {bs : Array Byte} {k : Nat} {len : BitVec 64} {u : Os.Unmap}
+    (hp : mapping os.pageSize p A lo bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
+    (hst : m.Seq) (hk : k % os.pageSize = 0)
+    (hu : Os.unmapCase os.pageSize lo (lo + bs.size) (lo + k) len.toNat = some u) :
+    ∃ b blk, p = ⟨some b, lo⟩ ∧ m.blocks[b]? = some blk ∧ blk.live ∧ blk.kind = .mapped lo ∧
+      blk.addr = A ∧ blk.bytes.size = lo + bs.size ∧ blk.bytes.extract lo (lo + bs.size) = bs ∧
+      (∀ y, hF (b, y) = none) ∧
+      ∃ m', (Os.munmap os ⟨p.add k, len⟩).run m = pure ((), m') ∧
+        m'.heap = liveCells b (u.apply blk) ∪ hF ∧ m'.nextAddr = m.nextAddr ∧ m'.SingleThread ∧
+        m'.blocks = m.blocks.set! b (u.apply blk) := by
+  obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, hh⟩ := mapping_block hp hm hd
+  obtain ⟨-, -, hA0, hlo0, -⟩ := hp
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+  have hoff : (((⟨some b, lo⟩ : Ptr).add k).off).toNat = lo + k := by simp [Ptr.add]; omega
+  have hr := Os.munmap_run os ⟨(⟨some b, lo⟩ : Ptr).add k, len⟩ (b := b) (blk := blk) (lo := lo)
+    (u := u) rfl hblk hl hK (by simp [Ptr.add]; omega)
+    (by rw [hoff, hA]; exact mod_add3 hA0 hlo0 hk) (by rw [hoff, hS]; exact hu) hst.single
+  refine ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, _, hr,
+    heap_replace (h := h) hm hlt rfl hFb hh, rfl, singleThread_recordAt hst.single _ _ _ _, rfl⟩
+
+theorem Ptr.add_zero' (p : Ptr) : p.add 0 = p := by cases p; simp [Ptr.add]
+
+/-- A live mapping block ends below the next address. -/
+theorem mapping_below {m : Mem} {b : BlockId} {blk : Block} {lo : Nat} (hst : m.Seq)
+    (hblk : m.blocks[b]? = some blk) (hl : blk.live) (hK : blk.kind = .mapped lo)
+    (hlt : lo < blk.bytes.size) : blk.addr + blk.bytes.size < m.nextAddr := by
+  have e := Mem.heap_of hblk lo
+  rw [dif_pos ⟨hl, hlt, by rw [hK]; exact Nat.le_refl _⟩] at e
+  exact hst.addr _ _ e
+
+theorem unmapCase_whole {P lo S n : Nat} (hS : 0 < S) (hn : 0 < n)
+    (heq : alignUp n P = alignUp S P) : Os.unmapCase P lo (lo + S) lo n = some .whole := by
+  unfold Os.unmapCase; dsimp only
+  rw [Nat.add_sub_cancel_left, if_neg (by omega), if_pos ⟨rfl, by rw [heq]⟩]
+
+theorem unmapCase_prefix {P lo S n : Nat} (hS : 0 < S) (hn : 0 < n)
+    (hlt : alignUp n P < alignUp S P) :
+    Os.unmapCase P lo (lo + S) lo n = some (.prefix (lo + alignUp n P)) := by
+  unfold Os.unmapCase; dsimp only
+  rw [Nat.add_sub_cancel_left, if_neg (by omega), if_neg (by omega), if_pos rfl]
+
+theorem unmapCase_tail {P lo S k n : Nat} (hk : 0 < k) (hkS : k < S) (hn : 0 < n)
+    (heq : k + alignUp n P = alignUp S P) :
+    Os.unmapCase P lo (lo + S) (lo + k) n = some (.tail (lo + k)) := by
+  unfold Os.unmapCase; dsimp only
+  rw [Nat.add_sub_cancel_left, if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_pos (by omega)]
+
+theorem add_le_of_mod {a b P : Nat} (ha : a % P = 0) (hb : b % P = 0) (h : a < b) :
+    a + P ≤ b := by
+  obtain ⟨q₁, rfl⟩ := Nat.dvd_of_mod_eq_zero ha
+  obtain ⟨q₂, rfl⟩ := Nat.dvd_of_mod_eq_zero hb
+  have : q₁ < q₂ := Nat.lt_of_mul_lt_mul_left h
+  rw [← Nat.mul_succ]; exact Nat.mul_le_mul_left _ this
+
+/-- **munmap, whole mapping.** Consumes the mapping's permission; nothing is left. -/
+theorem Triple.munmapWhole (os : Os.Profile) {p : Ptr} {A lo : Nat} {bs : Array Byte}
+    {len : BitVec 64} (hlen : 0 < len.toNat) (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
+    Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩) (fun _ => emp) :=
+  Triple.of_run fun m h hF hd hm hp hst => by
+    have hpos := hp.2.1
+    obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, -, hFb, m', hr, hm', hn', hs', hb'⟩ :=
+      munmap_owned os (k := 0) (len := len) hp hm hd hst (Nat.zero_mod _)
+        (by rw [Nat.add_zero]; exact unmapCase_whole hpos hlen heq)
+    rw [show (((0 : Nat) : Int)) = 0 from rfl, Ptr.add_zero'] at hr
+    have hdead : liveCells b (Os.Unmap.apply blk .whole) = Heap.empty :=
+      liveCells_dead (by simp [Os.Unmap.apply])
+    rw [hdead] at hm'
+    refine ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, ?_⟩
+    refine hst.replace hs' (Nat.le_of_eq hn'.symm) (by rw [hm', ← hdead]) (frame_sub hm hd) ?_
+    simp [Os.Unmap.apply]
+
+/-- **munmap, page prefix.** `len` (rounded up to pages, `k`) is less than the mapping: the
+permission of its first `k` bytes is consumed; the rest is a mapping that starts `k` bytes later. -/
+theorem Triple.munmapPrefix (os : Os.Profile) (hP : 0 < os.pageSize) {p : Ptr} {A lo : Nat}
+    {bs : Array Byte} {len : BitVec 64} (hlen : 0 < len.toNat)
+    (hlt : alignUp len.toNat os.pageSize < alignUp bs.size os.pageSize) :
+    Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩)
+      (fun _ => mapping os.pageSize (p.add (alignUp len.toNat os.pageSize)) A
+        (lo + alignUp len.toNat os.pageSize)
+        (bs.extract (alignUp len.toNat os.pageSize) bs.size)) :=
+  Triple.of_run fun m h hF hd hm hp hst => by
+    have hpos := hp.2.1
+    have hA0 := hp.2.2.1
+    have hlo0 := hp.2.2.2.1
+    let k := alignUp len.toNat os.pageSize
+    have hkS : k < bs.size := by
+      have := alignUp_lt (n := bs.size) hP
+      have := add_le_of_mod (alignUp_mod_self (n := len.toNat) hP)
+        (alignUp_mod_self (n := bs.size) hP) hlt
+      omega
+    obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, m', hr, hm', hn', hs', hb'⟩ :=
+      munmap_owned os (k := 0) (len := len) hp hm hd hst (Nat.zero_mod _)
+        (by rw [Nat.add_zero]; exact unmapCase_prefix hpos hlen hlt)
+    rw [show (((0 : Nat) : Int)) = 0 from rfl, Ptr.add_zero'] at hr
+    let nb := Os.Unmap.apply blk (.prefix (lo + k))
+    have hnbl : nb.live := hl
+    have hnbk : nb.kind = .mapped (lo + k) := rfl
+    have hnbs : nb.bytes.size = lo + bs.size := hS
+    refine ⟨(), m', liveCells b nb, hr, liveCells_disjoint hFb, hm', ⟨?_, by simp; omega, hA0,
+      ?_, ?_⟩, hst.replace hs' (Nat.le_of_eq hn'.symm) hm' (frame_sub hm hd) fun _ => ?_⟩
+    · simp [Ptr.add]
+    · show (lo + k) % os.pageSize = 0
+      have := mod_add3 (a := 0) (Nat.zero_mod _) hlo0 (alignUp_mod_self (n := len.toNat) hP)
+      simpa using this
+    · have hc := liveCells_bytesAt (b := b) hnbl hnbk (by rw [hnbs]; omega)
+      have hp' : (⟨some b, (lo : Int)⟩ : Ptr).add k = ⟨some b, ((lo + k : Nat) : Int)⟩ := by
+        simp [Ptr.add]
+      rw [hp', show lo + k + (bs.extract k bs.size).size = nb.bytes.size by simp [hnbs]; omega]
+      have e1 : nb.addr = A := hA
+      have e2 : nb.bytes.extract (lo + k) nb.bytes.size = bs.extract k bs.size := by
+        rw [show nb.bytes = blk.bytes from rfl, hS]; exact extract_mid hx (by omega) (by omega)
+      rw [e1, e2] at hc; exact hc
+    · have := mapping_below hst hblk hl hK (by omega)
+      rw [hn']; show blk.addr + blk.bytes.size < m.nextAddr; exact this
+
+/-- **munmap, page tail.** From byte `k` (a page multiple, inside the mapping) to the mapping's
+page end: the permission of those bytes is consumed; the first `k` bytes stay a mapping. -/
+theorem Triple.munmapTail (os : Os.Profile) {p : Ptr} {A lo k : Nat} {bs : Array Byte}
+    {len : BitVec 64} (hk : k % os.pageSize = 0) (hk0 : 0 < k) (hkS : k < bs.size)
+    (hlen : 0 < len.toNat)
+    (heq : k + alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
+    Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p.add k, len⟩)
+      (fun _ => mapping os.pageSize p A lo (bs.extract 0 k)) :=
+  Triple.of_run fun m h hF hd hm hp hst => by
+    have hA0 := hp.2.2.1
+    have hlo0 := hp.2.2.2.1
+    obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, m', hr, hm', hn', hs', hb'⟩ :=
+      munmap_owned os (k := k) (len := len) hp hm hd hst hk (unmapCase_tail hk0 hkS hlen heq)
+    let nb := Os.Unmap.apply blk (.tail (lo + k))
+    have hnbl : nb.live := hl
+    have hnbk : nb.kind = .mapped lo := hK
+    have hnbs : nb.bytes.size = lo + k := by
+      show (blk.bytes.extract 0 (lo + k)).size = lo + k; simp [hS]; omega
+    refine ⟨(), m', liveCells b nb, hr, liveCells_disjoint hFb, hm', ⟨rfl, by simp; omega, hA0,
+      hlo0, ?_⟩, hst.replace hs' (Nat.le_of_eq hn'.symm) hm' (frame_sub hm hd) fun _ => ?_⟩
+    · have hc := liveCells_bytesAt (b := b) hnbl hnbk (by rw [hnbs]; omega)
+      rw [hnbs, show nb.addr = A from hA ▸ rfl] at hc
+      rw [show nb.bytes = blk.bytes.extract 0 (lo + k) from rfl,
+        extract_pre hx (by omega) (by omega)] at hc
+      rw [show lo + (bs.extract 0 k).size = lo + k by simp; omega]
+      exact hc
+    · have := mapping_below hst hblk hl hK (by omega)
+      rw [hn', hnbs]; show blk.addr + (lo + k) < m.nextAddr; omega
+
 end Zig
