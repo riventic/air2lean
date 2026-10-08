@@ -17185,7 +17185,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "f6b8f66399da36ae0d0fa0de0a23cf1a72741502781e317ec354e0686e082132",
+      "scripts/coverage.py": "196b651c6313e2583aeff26ac31de4d6ab597b2195a71b5e6b44bfb15bfb21bc",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
@@ -17193,14 +17193,14 @@
       "Air2Lean/Air/Canon.lean": "1756247add3b63b23182a276102e1270b72cbb0e87fda9a59eeafd5522006ed1",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "7cd6342fcc6a0303041d81b216cb77889199079b159b690fcbef3287d4ff84c3",
-      "Air2Lean/Air/Normalize.lean": "528d7c36131c6e8cdeb1f94bff04a75aeee91a4c991ca80089da2e86b086aa83",
-      "Air2Lean/Air/Op.lean": "59ef008f2078dd053ab759e118ddf93b687698ece582b227080ee6edb4f362eb",
+      "Air2Lean/Air/Normalize.lean": "59c8c163a73fa6fa635da48480d176818e067dc68ca9b72eeeaf28e43c284528",
+      "Air2Lean/Air/Op.lean": "a9153385221a2d75c53aa9785f7cb0984d33c94b29877e9a07d0d858e15363bb",
       "Air2Lean/Air/Profile.lean": "f5f4fe8064d68ce22ce0136e9277c54d5846cb25be7573b3ef6dfae7c3750da3",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/Check.lean": "c91b91848be1e7579b2b25bb94a27631982f32883419b788068058f8ad4f8946",
+      "Air2Lean/Check.lean": "fae268a42d66b5b12f5ff8f40b099560d84e1ae1b9457d7580e7b4ec9450c9a2",
       "Air2Lean/Diagnose.lean": "a65115cfc20c3d7587fa26ce97109921a2e97ef731f27a5330422ff73af4ee15",
       "Air2Lean/Diagnostic.lean": "c129ba11206952f8c4faac769c77dedc0d4422fb8e009416d20300f1faf9e650",
-      "Air2Lean/Emit.lean": "13e636b5c2ebdc7e4dfc6a7b3d8db36ac52cc07e63c0d8ec1c500d6eb9ccd910",
+      "Air2Lean/Emit.lean": "32bb7fcb9e61cef13d73838346406e170efcc40aac7ac2efa252939f43721fe0",
       "Air2Lean/Main.lean": "0d434dc5a3e797e58faced434dbc3fe367ff1ece8fb3130ca6d3ecae67a7de4c",
       "Air2Lean/Memory.lean": "70345d0fde16416e388a4ef89fc1be6eca172eff325c0576136608b09a1b9167",
       "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
@@ -17264,8 +17264,8 @@
       "ZigLean/Mem/ErrWidth.lean": "f87beae1b49f34e21ee976278a45fa4e6a9ac102bf34d6255a1dd1b9c5c9ca3b",
       "ZigLean/Mem/ErrWidthLemmas.lean": "85be79a9d04bfc403d30bf3c911d2d12d0c418b54788a6642a4865994f1a2cff",
       "ZigLean/Mem/Lemmas.lean": "9add6a53b0f078fe0b342e2b4168e1401b9344db7dc67e7e88c394ac94a33f65",
-      "ZigLean/Mem/Null.lean": "55e96c1532e3306945275f57b4e6af64a61e7824984a70e8a54522d7dc6474c9",
-      "ZigLean/Mem/NullLemmas.lean": "1bcaeb2630882ebd4d4476938c55258ae2e6c8df73b2a3dfd694ece3e1d3a18f",
+      "ZigLean/Mem/Null.lean": "bed97006c0d187913021cea5fe244796b7aedb530edbd81cc3a5aebb53645d22",
+      "ZigLean/Mem/NullLemmas.lean": "c4bd018c7e32e2143442ea8e90d41bca1977b75152bb5c949ad6ccc99b096f4c",
       "ZigLean/Mem/Owned.lean": "fb2ad1cace98c4a3d9e962a48c72430ee7cc573978454a8e8651a4d65246276b",
       "ZigLean/Mem/Repr.lean": "3670f8d65c4d17678ab436e5848f244cd70fb4a22c8de6627ba9195512fb0879",
       "ZigLean/Mem/Thread.lean": "c70ab52aaad07bbcf0080f16660ad970e2c702ced1ba2799ff96400e696fb325",
@@ -18100,7 +18100,14 @@
       "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json": "b38c7645eb250cdf0c40a441a513271330bb97fd0f1087aceba4108a450ea42f",
       "tests/roadmap/bitops/qualified/0.16.0/lean.txt": "316be637a0f1683289d3c9acbd4beb3fb4af3a7825d25a54cf4ad988a4dc5012",
       "tests/roadmap/bitops/qualified/0.16.0/manifest.json": "ffbb6f4dabb8af3863b6c8d33755fe3017cd54b2f332c6c5998cb049cd4b1843",
-      "tests/roadmap/bitops/qualified/0.16.0/native.txt": "316be637a0f1683289d3c9acbd4beb3fb4af3a7825d25a54cf4ad988a4dc5012"
+      "tests/roadmap/bitops/qualified/0.16.0/native.txt": "316be637a0f1683289d3c9acbd4beb3fb4af3a7825d25a54cf4ad988a4dc5012",
+      "tests/roadmap/idle-loops/air/progress.idle.json": "6396951d9743b43d1ba1c2f49943b1c504fd74204edc83533ff57ee319b54d62",
+      "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json": "07e39fd33543837cd9992fd04f87c8b89a9bebaa748ba66e6540dc94eec92e1d",
+      "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json": "e8f244961bb9cf9a47c8a2dab806be1428b68e18b9736cbd432ac56932411a35",
+      "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json": "5efaebf94d58dd7ea3f3778527f775c84f7bd1761edfacae594ab59db4a79b06",
+      "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadPair.json": "4c6dc60eefa0dce5418922ea42865ce866fadd28ac7107a50ff8d654d52b5188",
+      "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.writeWorker.json": "1fd20eaea27eb164eedcff644df6ce39b36f014cf18dfe752a588312f21413f2",
+      "tests/roadmap/spawn-failure/air/provenance.json": "d71a80511dcb2d6fa93d8ab8943fb968e876aa05d87cb39892d9996f24b54946"
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
