@@ -2,7 +2,7 @@ import ZigLean.Os.Mmap
 import ZigLean.Sep.Alloc
 
 /-!
-# Separation-logic rules of the OS page-mapping model (premise OS-01)
+# Separation-logic rules of the OS page-mapping model (premise OSM-01)
 
 Proof-only module (not imported by `ZigLean.lean`): the rules of `Os.mmap`, `Os.munmap` and
 `Os.mremap` (`ZigLean/Os/Mmap.lean`, `docs/os-mmap.md`).

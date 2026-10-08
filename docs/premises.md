@@ -88,6 +88,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
+| OS primitives | [OSM-01](#osm-01) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
@@ -472,8 +473,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
-  global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
-  misaligned or dead accesses are `.illegal`. Undefined bytes are explicit.
+  global, OS mapping). Layout comes from `Zig.Enc` instances checked against the profile.
+  Out-of-bounds, misaligned or dead accesses are `.illegal`; so is an access below an OS
+  mapping's first live offset (`BlockKind.mapped lo`). Undefined bytes are explicit.
 - Derived from: `ZigLean.Mem.Basic`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
@@ -508,6 +510,33 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   memory use. Relating one to those needs a separate calibration argument.
 - Derived from: `ZigLean.Sep.Cost`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
+
+## OS primitives
+
+<a id="osm-01"></a>
+### OSM-01 — POSIX page mapping (`posix.mmap`, `posix.munmap`, `posix.mremap`)
+
+- Kind: trusted.
+- Statement: The kernel's anonymous page mappings behave as `ZigLean/Os/Mmap.lean` says (Zig
+  0.16.0 signatures; [os-mmap.md](os-mmap.md)). `mmap` with any hint, `PROT.READ|WRITE`,
+  `MAP.PRIVATE|ANONYMOUS`, `fd = -1`, offset 0 and `length > 0` either returns a member of
+  `MMapError` (the failure decision is the allocator's `Mem.allocDenied`, one attempt index
+  for every request; the error is the oracle `AllocPolicy.os.mmapError`'s) with no other
+  change, or a fresh block of kind `.mapped 0` of exactly `length` zero bytes at a
+  page-aligned address above every earlier block. Other argument combinations are outside
+  the model (`.unspecified`); `length = 0` is `.illegal`. `munmap` of the whole live range of
+  one mapping ends it, of a page-aligned prefix moves its first live offset, of a page tail
+  shrinks it; any other range (middle, past the mapping, not a live mapping: a double
+  `munmap`) is `.illegal`, stricter than the kernel. `mremap` (only where the profile has it:
+  Linux) of a whole live mapping with flags 0 or `MAYMOVE` and no new address shrinks in
+  place, or grows (an allocation attempt) in place, by a move to a fresh page-aligned block
+  under `MAYMOVE` (oracle `mremapMoves`, or no room), or fails with an `MRemapError`;
+  bytes grown up to the old page end are undefined, the rest zero. Page sizes: 4 KiB
+  (`x86_64-linux`), 16 KiB (`aarch64-macos`), fixed per target profile (`Os.Profile`).
+  Addresses are fresh: no address is reused after `munmap`.
+- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Sep.Mmap`; implies SEM-02.
+- Sources: [os-mmap.md](os-mmap.md), `tests/roadmap/os-mmap/Check.lean`, Zig 0.16.0
+  `lib/std/posix.zig`, `lib/std/heap/PageAllocator.zig`.
 
 ## External models
 

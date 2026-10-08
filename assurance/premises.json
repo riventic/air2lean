@@ -123,6 +123,8 @@
     "ZigLean.Sep.Total": ["SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
+    "ZigLean.Os.Mmap": ["OSM-01"],
+    "ZigLean.Sep.Mmap": ["OSM-01"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
@@ -156,6 +158,7 @@
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
   ],
   "implies": {
+    "OSM-01": ["SEM-02"],
     "ALC-02": ["ALC-01"],
     "ALC-03": ["ALC-01"],
     "ALC-04": ["ALC-01"],

@@ -1,6 +1,6 @@
 import ZigLean.Os.Mmap
 
-/-! Runtime regressions of the OS page-mapping model (premise OS-01, `docs/os-mmap.md`): every
+/-! Runtime regressions of the OS page-mapping model (premise OSM-01, `docs/os-mmap.md`): every
 rule of `Os.mmap`/`Os.munmap`/`Os.mremap` with its negative cases, on the `x86_64-linux`
 profile (4 KiB pages) unless noted. `lake env lean tests/roadmap/os-mmap/Check.lean`. -/
 

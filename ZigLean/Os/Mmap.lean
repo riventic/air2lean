@@ -1,7 +1,7 @@
 import ZigLean.Mem.Alloc
 
 /-!
-# OS page mappings: `posix.mmap`, `posix.munmap`, `posix.mremap` (premise OS-01)
+# OS page mappings: `posix.mmap`, `posix.munmap`, `posix.mremap` (premise OSM-01)
 
 The trusted base of the allocator proofs (`docs/os-mmap.md`). Every allocator above these three
 calls (`std.heap.PageAllocator`, arenas, user allocators) is translated from its Zig code; only the

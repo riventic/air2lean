@@ -77,7 +77,7 @@ inductive BlockKind where
   `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
   free through one allocator of a block that another one made throws `.illegal`. -/
   | owned (a : AllocId)
-  /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OS-01). The mapping's
+  /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OSM-01). The mapping's
   live bytes are the offsets from `lo` to the block's size: `munmap` of a page prefix moves `lo`
   up, of a page tail shrinks the bytes, of the whole mapping ends the block. An access below
   `lo` throws `.illegal` (`Mem.access`), as one past the size does. -/
@@ -230,7 +230,7 @@ inductive ByteRemapMode where
   deriving DecidableEq, Repr, Inhabited
 
 /-- A member of Zig 0.16.0's `posix.MMapError` (`UnexpectedError` included): the error that the
-failure oracle picks for a failed `mmap` (`ZigLean/Os/Mmap.lean`, premise OS-01). -/
+failure oracle picks for a failed `mmap` (`ZigLean/Os/Mmap.lean`, premise OSM-01). -/
 inductive MmapError where
   | memoryMappingNotSupported | accessDenied | permissionDenied | lockedMemoryLimitExceeded
   | processFdQuotaExceeded | systemFdQuotaExceeded | outOfMemory | mappingAlreadyExists
@@ -242,7 +242,7 @@ inductive MremapError where
   | lockedMemoryLimitExceeded | invalidSyscallParameters | outOfMemory | unexpected
   deriving DecidableEq, Repr, Inhabited
 
-/-- The OS page-mapping oracles (premise OS-01). Whether an `mmap` or a growing `mremap` fails
+/-- The OS page-mapping oracles (premise OSM-01). Whether an `mmap` or a growing `mremap` fails
 is the allocator failure decision (`Mem.allocDenied`, one attempt index for every request);
 these pick only the error, and whether a growth that may move does move. Each gets the attempt
 index and the requested length in bytes. -/
