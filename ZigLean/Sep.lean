@@ -4,6 +4,7 @@ import ZigLean.Sep.Alloc
 import ZigLean.Sep.Sentinel
 import ZigLean.Sep.Try
 import ZigLean.Sep.Discard
+import ZigLean.Sep.TryAlias
 import ZigLean.Sep.Remap
 import ZigLean.Sep.SentinelRealloc
 import ZigLean.Sep.RawAlloc

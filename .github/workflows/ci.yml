@@ -810,6 +810,24 @@ jobs:
           python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
           python3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean "$fresh/Gen.lean" "$fresh/generated-report.json"
 
+      # L04 aliasing/cleanup: retained AIR is hand-written; export comparison is pending.
+      - name: Pointer try alias and cleanup rules
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Sep.TryAlias
+          bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
+          bash tests/roadmap/try-pointers/aliases/check.sh --native
+          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-aliases.XXXXXX")
+          trap 'rm -rf "$fresh"' EXIT
+          bash tests/roadmap/try-pointers/aliases/check.sh --export "$fresh/air"
+          python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:

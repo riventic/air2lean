@@ -110,6 +110,7 @@
     "ZigLean.Sep.Array.Reassemble": ["SEM-02"],
     "ZigLean.Sep.Discard": ["SEM-02"],
     "ZigLean.Sep.Try": ["SEM-02"],
+    "ZigLean.Sep.TryAlias": ["SEM-02"],
     "ZigLean.Sep.Loop": ["SEM-02", "SEM-03"],
     "ZigLean.Sep.Alloc": ["ALC-01"],
     "ZigLean.Sep.Remap": ["ALC-03"],
