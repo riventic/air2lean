@@ -2393,6 +2393,52 @@
       "note": "scripts/floatprobe.sh with stock Zig 0.17.0 x86_64-linux (-mcpu=baseline) in docker linux/amd64; exit 0 with tests/floatprobe/expected.0.17.0.txt, whose two f128 sqrt lines come from this run's output and equal 0.16.0's override.",
       "recorded_at": "2026-10-08T10:01:46+00:00",
       "git_head": "6a7ddc3a0fe1b953b236f5296b5b2f4c34c25853"
+    },
+    "support:tags:div_ceil": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Opus 5.5 (0.17.0 integration agent)",
+      "decision": "accepted",
+      "evidence": [
+        "tests/roadmap/zig017/divceil/provenance.json",
+        "tests/roadmap/zig017/divceil/air/0.17.0",
+        "tests/roadmap/zig017/divceil/check.sh",
+        "qualification/0.17.0.d/logs/support_div_ceil_aarch64-macos.log",
+        "qualification/0.17.0.d/logs/support_div_ceil_linux-containers.log",
+        "qualification/0.17.0.d/logs/support_div_ceil_container.sh",
+        "tests/roadmap/zig017/reject"
+      ],
+      "note": "Compiler fixture: divceil.zig's AIR exported by the patched 0.17.0 compiler (ReleaseSafe, x86_64-linux), with Sema's minInt/-1 and divide-by-zero checks before div_ceil. Differential: the translation run on 1652 inputs (edge pairs and seeded random, i8/u8/i13/i32/u32/i64/u64) equals stock Zig 0.17.0 on aarch64-macos, aarch64-linux and x86_64-linux: 1562 values, and 90 inputs where both panic with the same check (division by zero / integer overflow). Rejections: div_ceil on a 0.16.0 file and div_ceil_optimized (tests/roadmap/zig017/reject). Contract: Zig.divCeil (ZigLean/Basic.lean). CI reruns check.sh on the 0.17.0 row.",
+      "recorded_at": "2026-10-08T10:21:30+00:00",
+      "git_head": "4379965b9a11f8df13b0d1f3ae857b4659c7de70"
+    },
+    "translation:threadsync": {
+      "status": "not-applicable",
+      "source": "record",
+      "reviewer": "Claude Opus 5.5 (0.17.0 integration agent)",
+      "decision": null,
+      "evidence": [
+        "examples/threadsync/zig-versions",
+        "docs/std-models.md",
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "threadsync is 0.15.2-only (examples/threadsync/zig-versions): it exercises std.Thread.Mutex, Thread.Condition and Thread.WaitGroup, which 0.16.0 removed and 0.17.0 does not have; the Io primitives that replace them are covered by sync. Excluded from 0.17.0 support, not a pass.",
+      "recorded_at": "2026-10-08T10:21:30+00:00",
+      "git_head": "4379965b9a11f8df13b0d1f3ae857b4659c7de70"
+    },
+    "proofs:threadsync": {
+      "status": "not-applicable",
+      "source": "record",
+      "reviewer": "Claude Opus 5.5 (0.17.0 integration agent)",
+      "decision": null,
+      "evidence": [
+        "examples/threadsync/zig-versions",
+        "docs/std-models.md",
+        "zig-patch/0.17.0/TAGS.md"
+      ],
+      "note": "threadsync is 0.15.2-only (examples/threadsync/zig-versions): it exercises std.Thread.Mutex, Thread.Condition and Thread.WaitGroup, which 0.16.0 removed and 0.17.0 does not have; the Io primitives that replace them are covered by sync. Excluded from 0.17.0 support, not a pass.",
+      "recorded_at": "2026-10-08T10:21:30+00:00",
+      "git_head": "4379965b9a11f8df13b0d1f3ae857b4659c7de70"
     }
   },
   "plan_sha256": "52b63d69945ec49136bfff8448e5c3523f3b7bbf7439f0369958a99cc3447157"

@@ -291,6 +291,31 @@ class RecordTests(Base):
         q.record_result(self.out, 'translation:basic', status='pass', evidence=['ci-run-123'], root=self.root)
         self.assertNotIn('translation:basic: no result recorded', q.check_record(self.out))
 
+    def test_not_applicable_is_a_reviewed_exclusion(self):
+        na = dict(status=q.NOT_APPLICABLE, reviewer='kr', note='lists is 0.15.2-only',
+                  evidence=['examples/lists/zig-versions'], root=self.root)
+        # Only for an example whose zig-versions omits the target version.
+        with self.assertRaisesRegex(ValueError, 'zig-versions must exist'):
+            q.record_result(self.out, 'translation:lists', **na)
+        (self.root / 'examples/lists/zig-versions').write_text('0.16.0\n')
+        with self.assertRaisesRegex(ValueError, 'must exist and omit'):
+            q.record_result(self.out, 'translation:lists', **na)
+        (self.root / 'examples/lists/zig-versions').write_text('0.15.2\n')
+        with self.assertRaisesRegex(ValueError, 'only translation and proof'):
+            q.record_result(self.out, 'model-boundary', **na)
+        with self.assertRaisesRegex(ValueError, 'needs --reviewer, --note and --evidence'):
+            q.record_result(self.out, 'translation:lists', **dict(na, note=None))
+        q.record_result(self.out, 'translation:lists', **na)
+        q.record_result(self.out, 'proofs:lists', **na)
+        executor, calls = self.stub()
+        q.run_obligations(self.out, 'zig', executor=executor, root=self.root)
+        self.assertNotIn('lists', [c[1].get('AIR2LEAN_EXAMPLES') for c in calls])  # never run
+        self.accept_reviews()
+        self.assertEqual(q.check_record(self.out, root=self.root), [])
+        # Listing the version again makes the exclusion stale.
+        (self.root / 'examples/lists/zig-versions').write_text('0.15.2\n0.16.0\n')
+        self.assertTrue(any('must exist and omit' in p for p in q.check_record(self.out, root=self.root)))
+
     def test_removed_obligation_and_stale_plan_fail(self):
         record = q.load_record(self.out)
         record['obligations'].pop()

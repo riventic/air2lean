@@ -519,6 +519,8 @@ jobs:
           set -euo pipefail
           tests/roadmap/bitcast-017/check.sh
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
+          # @divCeil: committed compiler-exported AIR, translation and native differential.
+          AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.

@@ -227,7 +227,10 @@ python3 scripts/qualify-upgrade.py check qualification/0.16.0.json \
 obligation under `<record>.d/logs/` and records the exit code, log hash and Git HEAD after
 each one, so an interrupted run resumes; passed obligations rerun only with `--rerun`.
 `record` stores a review decision (`--reviewer`, `--decision accepted|rejected`) or an
-externally produced result (`--status pass|fail --evidence ...`, e.g. a CI run). `check`
+externally produced result (`--status pass|fail --evidence ...`, e.g. a CI run), or a reviewed
+exclusion of a `translation:`/`proofs:` obligation (`--status not-applicable --reviewer --note
+--evidence`), accepted only while `examples/<ex>/zig-versions` omits the target version; it is
+not a pass, and `check` names the excluded obligations. `check`
 fails when an obligation has no result or a failing one, a review is not accepted, a support
 expansion or model change has no review evidence, a run log is missing or edited, the
 obligation list was edited after `plan` (digest), or, with `--before/--after`, the plan is
