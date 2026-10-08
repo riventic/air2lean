@@ -4,6 +4,7 @@ import Air2Lean.Emit
 import Air2Lean.Air.Anon
 import Air2Lean.Diagnose
 import Air2Lean.SourceMap
+import Air2Lean.Revision
 
 /-!
 # CLI
@@ -25,6 +26,9 @@ for semantic fingerprints (`docs/stable-generation.md`, `Air2Lean/SourceMap.lean
 
 namespace Air2Lean
 
+/-- The sources this CLI was built from (`Air2Lean/Revision.lean`). -/
+def translator : Revision.Translator := translator_revision%
+
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
@@ -42,7 +46,7 @@ def help : String :=
   "  --profile <name>             Require this input build profile; see docs/profiles.md.\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
-  "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
+  "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
@@ -295,12 +299,14 @@ private def run (args : List String) : IO UInt32 := do
                   | .ok doc => pure doc
                   | .error e => throw (IO.userError s!"{airPath}: {e}")
                 let definition := declOf.getD f.name f.name
-                let api := if a.proofApi && (proofApiFacts f).isSome then
-                  some (proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold") else none
+                let api := if a.proofApi then some (proofLemmaIndex f) else none
                 pure (SourceMap.record doc airName (airPath.fileName.getD airPath.toString) definition api)
               let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
-              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v1"),
+              let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v2"),
                 ("namespace", .str a.ns), ("metadata", metadata),
+                ("translator", Lean.Json.mkObj [("lean", .str translator.lean),
+                  ("revision", .str translator.revision),
+                  ("modules", .arr (translator.modules.map fun (m, h) => .arr #[.str m, .str h]))]),
                 ("options", Lean.Json.mkObj [("spawn_policy", .str spawn),
                   ("models", if models.isEmpty then .null else ModelRegistry.report models)]),
                 ("functions", .arr records)]

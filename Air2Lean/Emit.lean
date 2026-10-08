@@ -2528,28 +2528,23 @@ partial def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Va
 
 end
 
-/-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
-proof can refer to it — the point of extracting it at all), taking its captured values
-(`FCtx.loopCaptures`) as explicit parameters with the same names the body text already uses. -/
-def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
+/-- The captured parameters `(id, name, type)` of a loop's extracted body def. -/
+def FCtx.loopParams (fc : FCtx) (loopInst : Inst) : Array (InstId × String × String) :=
+  match loopInst.op with
+  | .loop body => fc.loopCaptures body
+  | .loopSwitchBr .. => fc.loopCaptures (dispatchCaptureBody loopInst)
+  | _ => #[]
+
+/-- The text after `:= ` of a loop's extracted body def, starting with `do`. -/
+def emitLoopBody (fc : FCtx) (loopInst : Inst) : String :=
+  let initEnv := (fc.loopParams loopInst).map fun (id, name, _) => (id, name)
   match loopInst.op with
   | .loop body =>
-    let caps := fc.loopCaptures body
-    let paramsStr := String.intercalate " "
-      ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
-    let initEnv := caps.map fun (id, name, _) => (id, name)
-    let bodyStr := emitStmts fc initEnv body.toList
-    String.intercalate "\n"
-      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := do",
-       indent 2 bodyStr]
+    "do\n" ++ indent 2 (emitStmts fc initEnv body.toList)
   | .loopSwitchBr initial cases elseBody =>
-    let caps := fc.loopCaptures (dispatchCaptureBody loopInst)
-    let paramsStr := String.intercalate " "
-      ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
-    let initEnv := caps.map fun (id, name, _) => (id, name)
     let branch := fc.ascribedDo (emitSwitch fc initEnv initial "dispatchValue" cases elseBody)
     String.intercalate "\n"
-      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := do",
+      ["do",
        s!"  let dispatchValue := (← get).{dispatchFieldName loopInst.id}",
        s!"  let dispatchExit ← {indentTail 2 branch}",
        "  match dispatchExit with",
@@ -2557,6 +2552,18 @@ def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
        s!"    modify fun s => \{ s with {dispatchFieldName loopInst.id} := dispatchValue }",
        "    pure dispatchExit",
        "  | _ => pure dispatchExit"]
+  | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
+
+/-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
+proof can refer to it — the point of extracting it at all), taking its captured values
+(`FCtx.loopCaptures`) as explicit parameters with the same names the body text already uses. -/
+def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
+  match loopInst.op with
+  | .loop _ | .loopSwitchBr .. =>
+    let paramsStr := String.intercalate " "
+      (((fc.loopParams loopInst).map fun (_, name, ty) => s!"({name} : {ty})").toList)
+    s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := " ++
+      emitLoopBody fc loopInst
   | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
 
 -- `again` is named too: an inline `fun e => match …` gets a fresh matcher per elaboration,
@@ -2636,6 +2643,8 @@ structure FuncParts where
   loops : List String
   defn : String
   body : String
+  /-- The prepared context, for `--proof-api` lemmas over the same text. -/
+  ctx : FCtx
 
 /-- The static context without block-emission membership, for global encoding. -/
 private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
@@ -2706,26 +2715,53 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     agains := (loops.map (emitAgainDef fc)).toList
     loops := (loops.map (emitLoopDef fc)).toList
     defn := emitFunctionHeader fc leanName f.params f.ret ++ functionBody
-    body := functionBody }
+    body := functionBody
+    ctx := fc }
 
-/-- Optional stable scalar unfolding boundary. The equality exposes the actual emitted
-body and is kernel checked with `rfl`; no replacement model or axiom is introduced. -/
-def emitProofApi (f : Func) (mkFc : Unit → FCtx) (rhs : String) : Option String :=
-  match proofApiFacts f with
-  | none => none
-  | some facts =>
-    let fc := mkFc ()
-    let base := proofApiName f.name
-    let params := String.intercalate " " ((f.params.mapIdx fun i ty =>
-      s!"(p{i} : {fc.emitTyOf ty})").toList)
-    let arguments := String.intercalate " " ((Array.range f.params.size).map (fun i => s!"p{i}")).toList
-    let record := Lean.Json.mkObj [("format", .str "air2lean-proof-api-v1"),
-      ("source", .str f.name), ("definition", .str fc.fnName),
-      ("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold")),
-      ("facts", facts), ("source_map", proofApiSourceMap f)]
-    some ("-- air2lean-proof-api: " ++ record.compress ++ "\n" ++
-      s!"abbrev {base}_model := {fc.fnName}\n\n" ++
-      s!"theorem {base}_unfold {params} : {base}_model {arguments} = ({rhs}) := rfl")
+/-- `--proof-api` lemmas of one emitted function (`docs/generated-code.md`): a model
+abbreviation and its unfolding lemma, and per loop (pre-order index `k`) body/again
+abbreviations, the body's unfolding lemma and the `Zig.loop` step lemma. Every equality
+exposes the actual emitted text and is kernel checked: by `rfl`, or by the definition's
+equation lemma for a `partial_fixpoint` (recursive) group. No axiom is introduced. Names come
+from the source identity and the loop index (`proofLemmaIndex`), never from AIR IDs. -/
+def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
+  let fc := p.ctx
+  let base := proofApiName f.name
+  let binders (xs : Array (String × String)) :=
+    String.join (xs.toList.map fun (name, ty) => s!" ({name} : {ty})")
+  let applied (head : String) (xs : Array (String × String)) :=
+    head ++ String.join (xs.toList.map fun (name, _) => s!" {name}")
+  let proof (defn : String) (xs : Array (String × String)) :=
+    if recursive then applied s!"{defn}.eq_def" xs else "rfl"
+  let params := f.params.mapIdx fun i ty => (s!"p{i}", fc.emitTyOf ty)
+  let record := Lean.Json.mkObj ([("format", .str "air2lean-proof-lemmas-v1"),
+    ("source", .str f.name), ("definition", .str fc.fnName)] ++ proofLemmaFields f)
+  let scalar := match proofApiFacts f with
+    | none => []
+    | some facts =>
+      let v1 := Lean.Json.mkObj [("format", .str "air2lean-proof-api-v1"),
+        ("source", .str f.name), ("definition", .str fc.fnName),
+        ("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold")),
+        ("facts", facts), ("source_map", proofApiSourceMap f)]
+      ["-- air2lean-proof-api: " ++ v1.compress]
+  let function := String.intercalate "\n" (scalar ++
+    ["-- air2lean-proof-lemmas: " ++ record.compress, s!"abbrev {base}_model := {fc.fnName}", "",
+     s!"theorem {base}_unfold{binders params} : {applied (base ++ "_model") params} = ({p.body}) :=",
+     s!"  {proof fc.fnName params}"])
+  let monad := s!"{fc.monad} {fc.localsName} {fc.exitName}"
+  let loops := (proofLoops f).toList.zipIdx.map fun (inst, k) =>
+    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    let defn := s!"{fc.fnName}.loop{inst.id}"
+    let caps := (fc.loopParams inst).map fun (_, name, ty) => (name, ty)
+    let call := applied body caps
+    String.intercalate "\n\n" [
+      s!"abbrev {body} := {defn}",
+      s!"abbrev {again} := {fc.fnName}.again{inst.id}",
+      s!"theorem {bodyUnfold}{binders caps} : {call} = ({emitLoopBody fc inst}) :=\n  {proof defn caps}",
+      s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
+        s!"      ({call} >>= fun e => if {again} e then Zig.loop ({call}) {again} else pure e : {monad}) :=\n" ++
+        "  Zig.loop.eq_1 _ _"]
+  String.intercalate "\n\n" (function :: loops)
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
 emission shares one prepared map across all functions. -/
@@ -3302,8 +3338,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let modelNames := models.zipIdx.flatMap fun (m, i) =>
     #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"] ++
       (if m.footprint.isSome then #[s!"air2lean_model_{i}_footprint"] else #[])
-  let apiNames := if proofApi then funcs.flatMap (fun f =>
-    if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
+  let apiNames := if proofApi then funcs.flatMap proofLemmaNames else #[]
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
     (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
@@ -3371,13 +3406,13 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
       let fix (d : String) := s!"{d}\npartial_fixpoint"
       let defs := parts.flatMap fun p => (p.loops ++ [p.defn]).map fix
       String.intercalate "\n\n"
-        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
+        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"] ++
+          (if proofApi then (members.toList.zip parts).map fun (f, p) => emitProofApi f p true
+           else []))
     else
       String.intercalate "\n\n" ((members.toList.zip parts).flatMap fun (f, p) =>
         p.types ++ p.agains ++ p.loops ++ [p.defn] ++
-          (if proofApi then
-            (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs rawFuncs) p.body).toList
-          else []))
+          (if proofApi then [emitProofApi f p false] else []))
   (String.intercalate "\n\n"
     (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++

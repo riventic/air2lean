@@ -1,9 +1,13 @@
-import Air2Lean.Air.Op
+import Air2Lean.Memory
 import Lean.Data.Json
 
-/-! Opt-in proof interfaces for checked, straight-line scalar functions.
-This is an unfolding boundary and a normalized-IR index, not compiler correspondence.
-Unsupported constructs receive no interface; existing emission stays unchanged.
+/-! Opt-in proof interfaces (`--proof-api`, `docs/generated-code.md`).
+Every emitted function receives a stable model abbreviation and unfolding lemma, and each
+of its loops a body/again abbreviation, a body unfolding lemma and a step lemma. Their names
+derive from the function's source identity (after generic-instance renumbering) and the
+loop's pre-order position, never from AIR instruction IDs. Checked, straight-line scalar
+functions additionally carry a normalized-IR index. These are unfolding boundaries, not
+compiler correspondence.
 -/
 namespace Air2Lean
 open Lean
@@ -11,6 +15,38 @@ open Lean
 /-- Injective source-name encoding, independent of declaration allocation order. -/
 def proofApiName (source : String) : String :=
   "air2lean_api" ++ String.join (source.toUTF8.toList.map fun b => s!"_{b.toNat}")
+
+/-- The loops of `f` in pre-order (an outer loop before the loops nested in it). The
+position of a loop in this list is its stable `loop<k>` index. -/
+def proofLoops (f : Func) : Array Inst :=
+  f.allInsts.filter fun i => match i.op with | .loop _ | .loopSwitchBr .. => true | _ => false
+
+/-- The stable names of loop `k` of the function with lemma base `base`:
+`(body, again, body_unfold, step)`. -/
+def proofLoopNames (base : String) (k : Nat) : String × String × String × String :=
+  let loop := s!"{base}_loop{k}"
+  (loop ++ "_body", loop ++ "_again", loop ++ "_body_unfold", loop ++ "_step")
+
+/-- Every declaration name `--proof-api` emits for `f`, reserved before ordinary
+declaration allocation. -/
+def proofLemmaNames (f : Func) : Array String :=
+  let base := proofApiName f.name
+  #[base ++ "_model", base ++ "_unfold"] ++ ((Array.range (proofLoops f).size).flatMap fun k =>
+    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    #[body, again, bodyUnfold, step])
+
+/-- The lemma names of `f` as JSON fields: `model`, `unfold` and, if `f` has loops, `loops`. -/
+def proofLemmaFields (f : Func) : List (String × Json) :=
+  let base := proofApiName f.name
+  let loops := (Array.range (proofLoops f).size).map fun k =>
+    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    Json.mkObj [("body", .str body), ("again", .str again), ("body_unfold", .str bodyUnfold),
+      ("step", .str step)]
+  [("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold"))] ++
+    if loops.isEmpty then [] else [("loops", .arr loops)]
+
+/-- `proofLemmaFields` as one JSON object (the source-map sidecar's `proof_api`). -/
+def proofLemmaIndex (f : Func) : Json := Json.mkObj (proofLemmaFields f)
 
 private def proofType (f : Func) (id : TyId) : Option Json := do
   let ty ← f.types[id]?

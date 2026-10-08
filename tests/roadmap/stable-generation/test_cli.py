@@ -176,6 +176,14 @@ def main():
         for ex in SEMANTIC:
             check_example(binary, ex, work)
         check_generic_instance(binary, work)
+        # The translator revision describes this checkout's translator sources.
+        translator = fp.load_sidecar(work / 'recursion-base.source-map.json')['translator']
+        modules = dict(translator['modules'])
+        assert 'Air2Lean.Main' in modules and 'Air2Lean.Emit' in modules, sorted(modules)
+        for module, sha in modules.items():
+            source = ROOT / (module.replace('.', '/') + '.lean')
+            assert hashlib.sha256(source.read_bytes()).hexdigest() == sha, \
+                f'{module}: translator built from other sources than this checkout'
         # A sidecar bound to another module's Lean output is rejected as stale.
         stale = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), 'index',
                                 str(work / 'recursion-base.source-map.json'),
