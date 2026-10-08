@@ -32,6 +32,8 @@ THEOREMS = 'tests/roadmap/theorem-inventory/test_inventory.py'
 PREMISES = 'tests/roadmap/premises/test_premises.py'
 RELEASE = 'tests/roadmap/release-record/test_release_record.py'
 VC_REPORT = 'tests/roadmap/vcs/test_vc_report.py'
+CLAIMS = 'tests/roadmap/claims/test_claims.py'
+COVERAGE = 'tests/roadmap/coverage-report/test_coverage.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -164,6 +166,41 @@ MUTANTS = {
         '        open_count = sum(1 for item in obligations if item["closed_by"] is None)\n',
         '        open_count = 0\n', VC_REPORT, 'VC',
         ('ReportTests.test_open_obligations_are_counted_and_closed_ones_named',)),
+    # P05/S2: a claim head counts only as the registered declaration (module and fingerprint).
+    'claim-head-identity-unchecked': (
+        'scripts/claims.py', "    if found != expected or (node is not None and node.get('module') != entry['module']):",
+        '    if False:', CLAIMS, 'claims', ('ClassifyTests.test_heads_are_registered_declarations',)),
+    # I06/S5: the conclusion must be about the root, not merely mention it.
+    'claim-subject-unchecked': (
+        'scripts/claims.py', "    elif subject is not None and subject.get('fn') == definition:",
+        "    elif definition in _list(theorem.get('conclusion_dependencies')) or subject is not None:",
+        CLAIMS, 'claims', ('AssessTests.test_subject_must_be_the_root',)),
+    # I06/S4: a fixed root argument or initial state scopes the derived domain.
+    'claim-fixed-argument-universal': (
+        'scripts/claims.py', '    scoped = bool(fixed or repeated or constrained)',
+        '    scoped = bool(repeated or constrained)', CLAIMS, 'claims', ('AssessTests.test_domain_is_derived',)),
+    # P05/S3: a hypothesis about generated code or a claim head rejects the goal.
+    'claim-hypothesis-unchecked': (
+        'scripts/claims.py', "            bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))",
+        '            bad = []', CLAIMS, 'claims', ('AssessTests.test_hypotheses_about_generated_code_are_rejected',)),
+    # P05/S3: functional strength needs a non-vacuity witness.
+    'claim-nonvacuity-not-required': (
+        'scripts/claims.py', '    if strength in FUNCTIONAL and not nonvacuous:', '    if False:',
+        CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # P05/S6: partial correctness needs a liveness witness.
+    'claim-liveness-not-required': (
+        'scripts/claims.py', "    if strength == 'partial_correctness' and witnesses['liveness'] != 'verified':",
+        '    if False:', CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # P05/S3: a witness counts only as an allowed audited theorem.
+    'claim-witness-unaudited-accepted': (
+        'scripts/claims.py', "        if not isinstance(companion, dict) or companion.get('allowed') is not True:",
+        '        if False:', CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # I06/S4: a scoped domain caps coverage at proved_scoped.
+    'coverage-scoped-domain-functional': (
+        'scripts/project.py',
+        "        elif goal['strength'] in FUNCTIONAL and goal.get('scope') != 'universal':",
+        '        elif False:',
+        COVERAGE, 'project', ('CoverageTests.test_fixed_arguments_scope_the_domain',)),
 }
 
 

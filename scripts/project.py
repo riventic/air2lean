@@ -996,9 +996,9 @@ def coverage_level(record):
         if goal.get('scope') != 'universal' and not claims.declares_scoped(goal['domain']):
             blockers.append(f'goal {goal["theorem"]}: declared domain {goal["domain"]!r} is not marked scoped, '
                             'but the derived domain is scoped')
-    strengths = {g['strength'] for g in direct if strength_supported(g) and g.get('scope') == 'universal'}
+    strengths = {g['strength'] for g in direct if strength_supported(g)}
     if not strengths & set(FUNCTIONAL):
-        blockers.append('no direct theorem has functional strength (partial/total correctness) over a universal domain')
+        blockers.append('no direct theorem has functional strength (partial/total correctness)')
     # Every functional precondition (preflight, translated, compiled, all goals direct) is a blocker above.
     functional = not blockers
     total = 'total_correctness' in strengths

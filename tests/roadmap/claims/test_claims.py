@@ -224,6 +224,7 @@ class AssessTests(unittest.TestCase):
         theorems = theorems_of(report)
         theorems['ClaimFixture.ret_total.nonvacuous']['allowed'] = False
         goal = self.goal('ClaimFixture.ret_total', 'total_correctness', 'ClaimFixture.ret', report=report)
+        self.assertEqual(goal['status'], 'rejected')
         self.assertIn('non-vacuity witness unaudited', goal['reason'])
         theorems['ClaimFixture.ret_partial']['statement']['witnesses']['liveness']['status'] = 'mismatch'
         goal = self.goal('ClaimFixture.ret_partial', 'partial_correctness', 'ClaimFixture.ret', report=report)

@@ -356,6 +356,9 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(self.run_coverage()['goals'][0]['witnesses']['nonvacuity'], 'unaudited')
 
     def test_fixed_arguments_scope_the_domain(self):
+        self.manifest['roots'][0]['goals'][0]['domain'] = 'scoped: one input'
+        self.save()
+        self.rebuild_artifact()
         for subject in (computation('Example.root', ({'closed': 'OfNat.ofNat'},)),
                         computation('Example.root', ({'bvar': 0}, {'bvar': 0}), params=('default', 'default')),
                         computation('Example.root', extra=({'closed': 'Zig.Mem.mk'},))):
@@ -365,6 +368,7 @@ class CoverageTests(unittest.TestCase):
                 root = self.run_coverage()
                 self.assertEqual((root['goals'][0]['binding'], root['goals'][0]['scope']), ('direct', 'scoped'))
                 self.assertEqual(root['level'], 'proved_scoped')
+                self.assertTrue(any('derived domain is scoped' in b for b in root['blockers']), root['blockers'])
                 self.assertNotFunctional(root)
 
     def test_sampled_tests_only_are_not_functional(self):

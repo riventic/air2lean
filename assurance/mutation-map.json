@@ -599,7 +599,7 @@
         },
         {
           "path": "tests/roadmap/deadline-cases/Runtime.lean",
-          "anchor": "#check_failure (TimedBudget.loop countdown (⟨10⟩ : WallTimestamp) 3 0)"
+          "anchor": "#check_failure (TimedBudget.loop countdown (\u27e810\u27e9 : WallTimestamp) 3 0)"
         },
         {
           "path": "tests/roadmap/deadline-cases/Runtime.lean",
@@ -1243,10 +1243,48 @@
       "negative_tests": [
         {
           "path": "tests/roadmap/claims/test_claims.py",
-          "anchor": "def test_diverging_program_cannot_be_declared_total"
+          "anchor": "def test_diverging_program_cannot_be_declared_correct"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_heads_are_registered_declarations"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_witnesses_cap_strength"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_hypotheses_about_generated_code_are_rejected"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "claim-head-identity-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-hypothesis-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-nonvacuity-not-required",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-liveness-not-required",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-witness-unaudited-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "P06": {
       "categories": [],
@@ -1330,9 +1368,45 @@
         {
           "path": "tests/roadmap/coverage-report/test_coverage.py",
           "anchor": "def test_sampled_tests_only_are_not_functional"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_subject_must_be_the_root"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_domain_is_derived"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_spoofed_head_does_not_bind"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_root_outside_the_subject_does_not_bind"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_fixed_arguments_scope_the_domain"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "claim-subject-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-fixed-argument-universal",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "coverage-scoped-domain-functional",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I07": {
       "categories": [],
