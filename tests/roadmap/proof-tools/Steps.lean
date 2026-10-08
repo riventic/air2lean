@@ -67,6 +67,19 @@ example (p q : Ptr) (c : MemM Ptr) (x : BitVec 32) (R : Assn)
   sep_steps
   sep_ret y
 
+-- A rule whose precondition is a compound (left-nested, `emp`-padded) assertion is used as
+-- stated; only its atoms are matched against the goal.
+example (p q : Ptr) (c : MemM Unit) (x y : BitVec 32) (R : Assn)
+    (rule : Triple ((pts p 4 x ∗ emp) ∗ pts q 4 y) c (fun _ => pts p 4 y ∗ pts q 4 x)) :
+    Triple (pts q 4 y ∗ (R ∗ pts p 4 x)) c (fun _ => R ∗ (pts q 4 x ∗ pts p 4 y)) := by
+  sep_step using rule
+  sep_ret
+
+-- Two equal pure atoms in the postcondition are both discharged.
+example (p : Ptr) (x : BitVec 32) :
+    Triple (pts p 4 x) (pure x) (fun r => ⌜r = x⌝ ∗ (⌜r = x⌝ ∗ pts p 4 x)) := by
+  sep_ret
+
 -- `sep_intro` names facts and witnesses in order.
 example (p : Ptr) (b : Bool) :
     Triple (Assn.ex fun x : BitVec 32 => ⌜b = true⌝ ∗ pts p 4 x) (load (BitVec 32) 4 p)

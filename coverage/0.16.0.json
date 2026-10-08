@@ -335,7 +335,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Sep/Step.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -3565,6 +3567,7 @@
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean",
           "ZigLean/Sep/Remap.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/Time.lean",
@@ -4100,6 +4103,7 @@
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Loop.lean",
           "ZigLean/Sep/LoopTemplate.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/VC/Mem.lean",
           "ZigLean/VC/Result.lean"
@@ -4172,6 +4176,7 @@
           "Proofs/Lists/Append.lean",
           "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
+          "Proofs/Lists/Sep.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
           "Proofs/Pointers/Gen.lean",
@@ -4234,7 +4239,8 @@
           "ZigLean/Conc/Logic.lean",
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Loop.lean",
-          "ZigLean/Sep/LoopTemplate.lean"
+          "ZigLean/Sep/LoopTemplate.lean",
+          "ZigLean/Sep/Step.lean"
         ]
       },
       "emission": {
@@ -7427,6 +7433,7 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Try.lean"
         ]
       },
@@ -7526,6 +7533,7 @@
           "ZigLean/Float/Round.lean",
           "ZigLean/Float/RoundTrip.lean",
           "ZigLean/Mem/Enc.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Try.lean"
         ]
       },
@@ -9076,6 +9084,7 @@
           "ZigLean/Packed.lean",
           "ZigLean/Sep/Array/Reassemble.lean",
           "ZigLean/Sep/Cost.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Mem.lean",
@@ -9306,6 +9315,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Mem.lean",
@@ -9394,6 +9404,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Conc/Own.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Mem.lean",
@@ -9798,6 +9809,7 @@
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Sentinel.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Mem.lean",
@@ -9927,6 +9939,7 @@
           "ZigLean/Sep/Assert.lean",
           "ZigLean/Sep/Cost.lean",
           "ZigLean/Sep/Sentinel.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Sep/Total.lean",
           "ZigLean/Sep/Triple.lean",
           "ZigLean/VC/Mem.lean",
@@ -10589,7 +10602,8 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
-          "ZigLean/Basic.lean"
+          "ZigLean/Basic.lean",
+          "ZigLean/Sep/Step.lean"
         ]
       },
       "emission": {
@@ -10629,7 +10643,6 @@
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
-          "Proofs/Lists/Sep.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
           "Proofs/Pointers/Gen.lean",
@@ -12808,6 +12821,7 @@
         "status": "symbol-index-only",
         "paths": [
           "ZigLean/Lemmas.lean",
+          "ZigLean/Sep/Step.lean",
           "ZigLean/Vec.lean"
         ]
       },
@@ -15973,6 +15987,7 @@
       "ZigLean/Sep/LoopTemplate.lean": "a52975a351891ccb223e0f4c19392c1f03bc6d96d1614f9eb84912ff414e980b",
       "ZigLean/Sep/Remap.lean": "1da97587785b5a7273f01769642945deda6ee2b0f866d68bf7be8080469d9e46",
       "ZigLean/Sep/Sentinel.lean": "1a228a05437ea2f34d66cef7f44146a51f8e9f164ceeb6eb5107713a0c484e84",
+      "ZigLean/Sep/Step.lean": "781c91356e03d3f52fda33f8e3bce6dc8fa8ec508a9475bb51189d7c9aa12ef3",
       "ZigLean/Sep/Total.lean": "6959fbadcf627ba55a1f1bddf4989afd93867e7b6cd3cf795b0db266e6f3dc4e",
       "ZigLean/Sep/Triple.lean": "23293c5c6db5e75c941f2248fac6d908416337519b70281ac764d4f82d4f4ac4",
       "ZigLean/Sep/Try.lean": "d71810e014e3ba5dd7c6671f8c02f8b84c7ab86d6614c3d05ee6c0fd6c636845",
@@ -16018,7 +16033,7 @@
       "Proofs/Lists/Container.lean": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
       "Proofs/Lists/Cost.lean": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
       "Proofs/Lists/Gen.lean": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d",
-      "Proofs/Lists/Sep.lean": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
+      "Proofs/Lists/Sep.lean": "651f9e7b00603190cbaa14b39fcb29525a75ac1eb92961dba23618f1ec36a836",
       "Proofs/Options/Gen.lean": "940204ca1774971d5051abfdafd5fd2356f65b818e306ad452370dddb199c34e",
       "Proofs/Options/Proofs.lean": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
       "Proofs/Pointers/Gen.lean": "4d2662a861cb4ca947245022387cb4e10f4982eb78150a87ebadaea8aad3afa4",
@@ -16028,7 +16043,7 @@
       "Proofs/Recursion/Proofs.lean": "9fb582b84b77d054fa9a231f0fcf2bf27456c4506c06625fe020df1c2f9d4961",
       "Proofs/Slices/Gen.lean": "d8ca92d93311be85f639d3fc8c88434a3ad3537d63e189dafc3672509d843271",
       "Proofs/Slices/Proofs.lean": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
-      "Proofs/Slices/Sep.lean": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
+      "Proofs/Slices/Sep.lean": "c3fd9465c3166c518e9ec0de2314b48c3e7219ef2a1dd074ddb1d3b49d2ed53b",
       "Proofs/Sync/Gen.lean": "f7437d5ec7fa357d7c298ecd457ccf0bd2831f6d9d7013dcceaa19f541386630",
       "Proofs/Sync/Handoff.lean": "d038b6856f2d52630fa842e57717d3ee9cae99aadfcf3e6c39e5a00d7b3fb58a",
       "Proofs/Sync/Lock.lean": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",

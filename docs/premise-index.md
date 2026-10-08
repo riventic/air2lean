@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2002 theorems in 110 files.
+2007 theorems in 111 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 576 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 578 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 323 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 15 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 67 | Single modelled allocator |
@@ -35,16 +35,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 1882 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1560 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 935 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 1887 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1565 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 940 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 67 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 21 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2002 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 914 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 914 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2007 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 916 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 916 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2401,7 +2401,7 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 |---|---|
 | `generated_at_array` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `generated_bumpAt_array` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `example@L36` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L94` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/proof-tools/Clients.lean`
 
@@ -2455,6 +2455,16 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 | `example@L95` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `example@L104` | SEM-01, SEM-02, SEM-03, TRU-01 |
 
+## `tests/roadmap/proof-tools/StepClients.lean`
+
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `at_array_steps` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `bumpAt_array_steps` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L34` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
 ## `tests/roadmap/proof-tools/Steps.lean`
 
 File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
@@ -2468,13 +2478,15 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `example@L45` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `example@L53` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `example@L62` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L71` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L80` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L100` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L107` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L115` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L123` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L131` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L72` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L79` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L84` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L93` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L113` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L120` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L128` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L136` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L144` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `steps_axioms` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 
 ## `tests/roadmap/proof-tools/Total.lean`

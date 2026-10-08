@@ -260,8 +260,10 @@ def goalTriple : TacticM (Name × Expr × Expr × Expr) := do
 
 def lemmaId (kind : Name) (l : String) : Ident := mkIdent (kind ++ Name.mkSimple l)
 
-/-- Reorder the precondition to `head ∗ R`, proved by AC normalization. -/
-def focus (kind : Name) (P : Expr) (head : Array Expr) : TacticM Unit := do
+/-- Reorder the precondition to `head ∗ R`, proved by AC normalization. `headExpr` is the
+assertion whose atoms are `head` (default: their right-nested `∗`), kept as the rule states it. -/
+def focus (kind : Name) (P : Expr) (head : Array Expr) (headExpr : Option Expr := none) :
+    TacticM Unit := do
   let all := atoms P
   let mut used := Array.replicate all.size false
   for a in head do
@@ -274,7 +276,7 @@ def focus (kind : Name) (P : Expr) (head : Array Expr) : TacticM Unit := do
   let mut rest := #[]
   for i in [0:all.size] do
     unless used[i]! do rest := rest.push all[i]!
-  let target := mkApp2 (mkConst ``Zig.Assn.sep) (sepOf head) (sepOf rest)
+  let target := mkApp2 (mkConst ``Zig.Assn.sep) (headExpr.getD (sepOf head)) (sepOf rest)
   let target ← Term.exprToSyntax (← instantiateMVars target)
   evalTactic (← `(tactic| refine $(lemmaId kind "pre") (P' := $target)
     (fun _ hp => by first | exact hp | (sep_normalize at hp ⊢; exact hp)) ?_))
@@ -353,7 +355,8 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
         throwError "sep_step: the rule must prove a {kind} goal{indentExpr ty}"
       unless ← isDefEq ty.getAppArgs[2]! cmd do
         throwError "sep_step: the rule is about a different command{indentExpr ty.getAppArgs[2]!}"
-      focus kind P (atoms (← instantiateMVars ty.getAppArgs[1]!))
+      let pre ← instantiateMVars ty.getAppArgs[1]!
+      focus kind P (atoms pre) pre
       let rule ← Term.exprToSyntax (← instantiateMVars proof)
       if (← observing? (evalTactic (← `(tactic|
           refine $(lemmaId kind "spec_bind_eq") $rule ?_)))).isNone then
@@ -411,8 +414,9 @@ def close (hp : Ident) (ws : List Term) : TacticM Unit := do
     let some a := all.find? fun a =>
         a.isAppOfArity ``Zig.Assn.lift 1 || (a.isAppOfArity ``Zig.Assn.ex 2 && !ws.isEmpty)
       | break
+    let some i := all.idxOf? a | break
     let target ← Term.exprToSyntax
-      (mkApp2 (mkConst ``Zig.Assn.sep) a (sepOf (all.filter (· != a))))
+      (mkApp2 (mkConst ``Zig.Assn.sep) a (sepOf (all.eraseIdx! i)))
     let [k] ← evalTacticAt (← `(tactic|
         refine Zig.assn_cast (P := $target) (by first | rfl | sep_normalize) ?_)) g
       | throwError "sep: unexpected goals"
