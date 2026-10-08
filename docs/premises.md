@@ -38,8 +38,8 @@ the tool:
    applies the token rules to every identifier and resolved name in the closure. `statement`
    rules see only the theorem's own hypotheses and conclusion.
 4. Adds the profile of every generated module reached. Its first-line
-   `-- air2lean-profile:` header selects PRF-02; no header or `legacy-abi64-le` selects
-   PRF-01. A generated import absent from the repository uses PRF-03.
+   `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
+   header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
 5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
 
 The check fails if a runtime module with declarations has no mapping, if any ID is not
@@ -79,7 +79,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 | Category | IDs |
 |---|---|
-| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
+| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-05](#prf-05) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
@@ -123,6 +123,19 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   The committed client source does not fix it.
 - Derived from: an import listed in `generated_imports`.
 - Sources: [global-payload-pointers README](../tests/roadmap/global-payload-pointers/README.md).
+
+<a id="prf-05"></a>
+### PRF-05 — Recorded `abi64-be-v1` big-endian profile
+
+- Kind: environment.
+- Statement: As PRF-02, for a big-endian target (s390x-linux): the theorem concerns the
+  analyzed AIR of the recorded profile under the big-endian encodings of `Zig.BigEndian`
+  (`ZigLean/Endian.lean`): integers, floats, slice lengths, packed backing integers,
+  bit-pointer hosts and whole-byte vector lanes most significant byte first. Pointer and error
+  bytes stay symbolic. The operations of the fail-closed list are absent. No shipping-binary
+  claim; the native observations of `tests/roadmap/big-endian` are bounded evidence.
+- Derived from: a reached generated module whose header names `abi64-be-v1`.
+- Sources: [profiles.md](profiles.md#byte-order-big-endian), `ZigLean/Endian.lean`.
 
 ## Allocator policies
 

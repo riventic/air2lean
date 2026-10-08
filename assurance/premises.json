@@ -29,6 +29,7 @@
     "absent": "PRF-01",
     "legacy-abi64-le": "PRF-01",
     "abi64-le-v1": "PRF-02",
+    "abi64-be-v1": "PRF-05",
     "gate-time": "PRF-03"
   },
   "float_semantics": {
@@ -41,6 +42,8 @@
     "ZigLean.Bit": ["SEM-01"],
     "ZigLean.Permutation": ["SEM-01"],
     "ZigLean.Packed": ["SEM-01", "SEM-02"],
+    "ZigLean.Endian": ["SEM-02"],
+    "ZigLean.EndianLemmas": ["SEM-02"],
     "ZigLean.Union": ["SEM-01", "SEM-02"],
     "ZigLean.Vec": ["SEM-01"],
     "ZigLean.VecMem": ["SEM-01", "SEM-02"],
