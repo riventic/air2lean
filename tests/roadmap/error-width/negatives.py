@@ -48,7 +48,8 @@ CASES = {
     "domain beyond capacity": ([with_code_layout(with_bits(load("bits8"), 1), 1, 1)],
                                "exceeds the 1 nonzero codes of the profile's 1-bit error integer"),
     # One program, two widths: profiles must agree exactly.
-    "mixed widths": ([load("bits16"), load("bits8", "loadOptional")], "profile"),
+    "mixed widths": ([load("bits16"), load("bits8", "loadOptional")],
+                     "mixed AIR profiles: field 'error_set_bits' differs"),
 }
 
 

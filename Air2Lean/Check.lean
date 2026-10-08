@@ -231,6 +231,11 @@ def byteStridedLane (types : Array Ty) (lane : TyId) : Bool :=
   | some (.int _ bits) | some (.float bits) => bits != 0 && bits == 8 * Zig.intSize bits
   | _ => false
 
+/-- The exporter's layout of type `id` is the profile's `errBits`-bit error integer. -/
+def errCodeLayout (layouts : Array Layout) (id : TyId) (errBits : Nat) : Bool :=
+  (layouts[id]?.map fun l => l.size == some (Zig.errCodeSize errBits) &&
+    l.align == some (Zig.errCodeAlign errBits)).getD false
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
 values: their encodings are generated from the exporter's offsets. -/
@@ -297,8 +302,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     exported
   | some (.errorUnion set payload) =>
     -- `Zig.errUnionOffsetsW`: the error code is the profile's `error_set_bits` integer.
-    unless (layouts[set]?.map fun l => l.size == some (Zig.errCodeSize errBits) &&
-        l.align == some (Zig.errCodeAlign errBits)).getD false do
+    unless errCodeLayout layouts set errBits do
       throw s!"an error set whose layout is not the profile's {errBits}-bit error integer \
         ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits}; `--error-limit`)"
     if let some (.errorSet (some names)) := types[set]? then
@@ -317,8 +321,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
         nonzero codes of the profile's {errBits}-bit error integer (`--error-limit`)"
     if !validErrorDomainNames names then
       throw "an error encoding domain must have distinct nonempty names"
-    unless (layouts[id]?.map fun l => l.size == some (Zig.errCodeSize errBits) &&
-        l.align == some (Zig.errCodeAlign errBits)).getD false do
+    unless errCodeLayout layouts id errBits do
       throw s!"an error set storage layout must be the profile's {errBits}-bit error integer \
         ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits})"
     pure (Zig.errCodeSize errBits, Zig.errCodeAlign errBits)

@@ -45,9 +45,6 @@ def errCodeAlign (bits : Nat) : Nat := intAlign bits
 /-- Nonzero codes of a `bits`-bit error integer: the most errors one compilation can name. -/
 def errCapacity (bits : Nat) : Nat := 2 ^ bits - 1
 
-/-- A declared domain fits the width when each of its names can have its own nonzero code. -/
-def ErrorDomain.fits (d : ErrorDomain) (bits : Nat) : Bool := d.names.size ≤ errCapacity bits
-
 /-! ## Code bytes -/
 
 /-- The `errCodeSize bits` bytes of an error code: zeros for no error, else the name's
