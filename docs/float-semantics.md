@@ -13,8 +13,11 @@ one. Each numerical theorem has exactly one label in `assurance/float-semantics.
 A compiler-rt label lists the Zig versions it holds for, e.g.
 `{"semantics": "compiler-rt", "zig_versions": ["0.14.1", "0.15.2", "0.16.0"], ...}`.
 Each version must be a version in `zig-patch/versions.toml`. The `op*_spec` theorems of
-`Proofs/Floatops` hold for all three versions. `Float.floorRtLegacyChk_eq` and
-`Float.ceilRtLegacyChk_eq` state the helpers that Zig used before 0.16.0.
+`Proofs/Floatops` hold for all three versions; `op128_spec_full` does too, with the `f128`
+division and `@sqrt` helpers of the translation's profile. `Float.floorRtLegacyChk_eq`,
+`Float.ceilRtLegacyChk_eq` and the `Float.divRt_*` lemmas state the helpers that Zig used
+before 0.16.0 (`compiler-rt@0.14.1,0.15.2`); the `Float.divRt016_*` lemmas state the 0.16.0
+`f128` division (`compiler-rt@0.16.0`).
 
 Every label also carries `"correspondence": "model"`. A label is a statement about the
 Lean model only. It never claims that a compiled or shipped binary behaves the same way.

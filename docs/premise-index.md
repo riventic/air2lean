@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2168 theorems in 124 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 605 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
@@ -34,22 +34,22 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 70 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 21 | Opaque libm transcendentals |
-| [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
+| [MTH-01](premises.md#mth-01) | 73 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
+| [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
+| [SEM-01](premises.md#sem-01) | 2046 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 2168 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1004 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1004 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 
@@ -337,6 +337,10 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, T
 | `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-04 |
+| `sel_cases128` | TRU-01 |
+| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `divExact64_spec` | PRF-01, MTH-01, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Floats/Dot.lean`
