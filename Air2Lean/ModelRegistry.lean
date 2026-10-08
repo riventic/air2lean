@@ -379,6 +379,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
     if functionNames.contains m.symbol || (stdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
+    if let some reason := projectStdBinding? m.symbol then throw reason
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
     let sites := calls.getD m.symbol #[]
@@ -422,7 +423,8 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name false none) args := i.op then
-        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
+        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome ||
+            (projectStdBinding? name).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
           entries := entries.push <| Json.mkObj [("symbol", .str name),

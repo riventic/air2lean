@@ -2288,8 +2288,9 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     require (packedBits f.types child == some 32) "32-bit futex pointee"
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
   if let some model := stdModel? callee then
-    unless model.qualifies f.zigVersion do
-      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
+    -- A rejected row reports its own reason (`checkProgram`); a modelled one needs a review.
+    if modelledStdFn callee && !model.qualifies f.zigVersion then
+      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}; no reviewed std source for Zig {f.zigVersion}"
   if let some fn := allocFn? callee then
     count (if fn == .create then 1 else if fn == .remap || fn == .realloc then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
