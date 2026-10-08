@@ -609,6 +609,11 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.unexpectedErrno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/std_io16.readClose.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
@@ -1108,7 +1113,8 @@
           "tests/golden/recursion/air/recursion.isOdd.json",
           "tests/golden/sync/air/Io.Condition.waitInner.json",
           "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
-          "tests/golden/vectors/air/vectors.vNeg.json"
+          "tests/golden/vectors/air/vectors.vNeg.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json"
         ]
       },
       "proofs": {
@@ -2487,7 +2493,8 @@
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
-          "tests/golden/vectors/air/vectors.vMinMax.json"
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -2905,6 +2912,7 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json",
@@ -3162,7 +3170,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Env/Linux.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -3840,6 +3850,7 @@
           "ZigLean/Conc/WeakCas.lean",
           "ZigLean/Conc/WeakCasLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Float/Allowed.lean",
           "ZigLean/Float/CompilerRt.lean",
@@ -4136,6 +4147,8 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json",
@@ -4197,6 +4210,7 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4348,6 +4362,9 @@
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.firstSet.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json"
         ]
@@ -4503,6 +4520,7 @@
           "tests/golden/threads/air/threads.bump.json",
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/idle-loops/air/progress.idle.json"
         ]
       },
@@ -4641,6 +4659,7 @@
           "tests/golden/threads/air/threads.bump.json",
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/idle-loops/air/progress.idle.json"
         ]
       },
@@ -4832,6 +4851,9 @@
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.firstSet.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json",
           "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicShared.json",
@@ -5232,6 +5254,9 @@
           "tests/golden/vectors/air/vectors.twiceInMem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/std_io16.readClose.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
@@ -6878,7 +6903,8 @@
           "tests/golden/sync/air/sync.writer.json",
           "tests/golden/threads/air/threads.bump.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json"
         ]
       },
       "proofs": {
@@ -7133,6 +7159,7 @@
           "tests/golden/variants/air/variants.isRound.json",
           "tests/golden/variants/air/variants.isUrgent.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.firstSet.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/idle-loops/air/progress.idle.json"
         ]
       },
@@ -7355,7 +7382,8 @@
           "tests/golden/layout/air/layout.digit.json",
           "tests/golden/sync/air/Io.Condition.signal.json",
           "tests/golden/sync/air/Io.Condition.waitInner.json",
-          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json"
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json"
         ]
       },
       "proofs": {
@@ -7786,6 +7814,8 @@
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.firstSet.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json"
         ]
@@ -7858,7 +7888,9 @@
           "tests/golden/sync/air/Io.Event.waitUncancelable.json",
           "tests/golden/sync/air/Io.Mutex.unlock.json",
           "tests/golden/variants/air/variants.next.json",
-          "tests/golden/variants/air/variants.severity.json"
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -8018,6 +8050,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -8132,6 +8165,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -8593,6 +8627,12 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.recoverableOsBugDetected.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.unexpectedErrno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/std_io16.readClose.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
@@ -8754,6 +8794,7 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -9103,6 +9144,8 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadPair.json",
           "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.ZeroWorker(u8).run.json",
@@ -9837,6 +9880,7 @@
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidth.lean",
@@ -10010,6 +10054,7 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json",
@@ -10483,6 +10528,12 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.recoverableOsBugDetected.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.unexpectedErrno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/std_io16.readClose.json",
           "tests/roadmap/idle-loops/air/progress.idle.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
@@ -10641,6 +10692,7 @@
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean",
@@ -10783,6 +10835,7 @@
           "ZigLean/Conc/Lemmas.lean",
           "ZigLean/Conc/Own.lean",
           "ZigLean/Conc/TimedClient.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Enc.lean",
@@ -10965,6 +11018,7 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json",
@@ -11118,7 +11172,8 @@
           "tests/golden/vectors/air/vectors.sMod.json",
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
-          "tests/golden/vectors/air/vectors.vMod.json"
+          "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -11316,7 +11371,8 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftNarrow.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSigned8.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedNarrow.json",
-          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json"
+          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftUnsigned8.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -11399,7 +11455,9 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.populationLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
-          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json"
+          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -12158,6 +12216,7 @@
           "tests/golden/lists/air/lists.listSum.json",
           "tests/golden/lists/air/lists.push.json",
           "tests/golden/lists/air/lists.sumRange.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadPair.json",
@@ -12254,6 +12313,7 @@
           "tests/golden/sync/air/Io.Condition.wait.json",
           "tests/golden/sync/air/Io.Condition.waitInner.json",
           "tests/golden/sync/air/Io.Mutex.lock.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupAsync.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.groupConcurrent.json",
           "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadPair.json",
@@ -13171,7 +13231,8 @@
           "tests/golden/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
           "tests/golden/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
           "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
-          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json"
+          "tests/golden/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -13227,7 +13288,8 @@
           "tests/golden/layout/air/layout.headerLen.json",
           "tests/golden/layout/air/layout.readHeader.json",
           "tests/golden/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
-          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json"
+          "tests/golden/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -17185,7 +17247,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "196b651c6313e2583aeff26ac31de4d6ab597b2195a71b5e6b44bfb15bfb21bc",
+      "scripts/coverage.py": "ebef29c5aa323f94221aa6bfc9fd190c0b57ef32a53528f5a65753743b13d841",
       "zig-patch/versions.toml": "bcb9d1bd8cb98ebcf4b9d163cb3be30bcfa9d1213eb0cf95d61f6af5312d0288"
     },
     "translation": {
@@ -17242,7 +17304,8 @@
       "ZigLean/Conc/WeakWord.lean": "02f7185bda76281a86290f678902ab140848194cb793133192ad610f99c3a245",
       "ZigLean/Conc/Word.lean": "59661315491f6ecaf2fdba5df8728bbdd4506fae5c4d21cad9bc8a38e8569543",
       "ZigLean/Conc.lean": "6d6fcff53307469d0327868e053f8340279149eeca0686206e818113bbce2234",
-      "ZigLean/Env.lean": "d6c733c2e60381c487995155f198b5c47254375579265238502e8337c1d11229",
+      "ZigLean/Env/Linux.lean": "cfb98bfc10e3160167c3754a89a603631dcf0ff564a7edc7e315ef8af6193de0",
+      "ZigLean/Env.lean": "3782b6793dcb14249476d22ac26f154e0a753fb390eb837dd663e1da3d93add5",
       "ZigLean/External/Callback.lean": "28574fab3f472dffb951d08f1eae59e84b3e6f61b594f04876f8a202deb3d0f0",
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
       "ZigLean/Float/Allowed.lean": "562d97fa9ed6bba75995953a0eebb34c3a495f03590a00fb948ca3bf7feebe66",
@@ -17259,7 +17322,7 @@
       "ZigLean/Lemmas.lean": "1fb0ae49b9ea33ad0caadec7bb61378c06539088e95a014e117d91debd491634",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
       "ZigLean/Mem/Alloc.lean": "3764ceb7f6cbffeb9806db02f5d359fba3e9120f93c70d3e6d393bebf60ccfdc",
-      "ZigLean/Mem/Basic.lean": "b8280be34776f93c30c4726d3f6e63fea1bd0b322a03b1d93c5cfea3dd676ab3",
+      "ZigLean/Mem/Basic.lean": "74778648ac31a16b3f8f8b5aeb3ec344afafb1306b4e81aafb40083eeaa5a4a4",
       "ZigLean/Mem/Enc.lean": "8b1453063bef1205abc178736a3b094b85070dfcaafdfde7b54e73ab852bbeb0",
       "ZigLean/Mem/ErrWidth.lean": "f87beae1b49f34e21ee976278a45fa4e6a9ac102bf34d6255a1dd1b9c5c9ca3b",
       "ZigLean/Mem/ErrWidthLemmas.lean": "85be79a9d04bfc403d30bf3c911d2d12d0c418b54788a6642a4865994f1a2cff",
@@ -18107,7 +18170,26 @@
       "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadCatch.json": "5efaebf94d58dd7ea3f3778527f775c84f7bd1761edfacae594ab59db4a79b06",
       "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.threadPair.json": "4c6dc60eefa0dce5418922ea42865ce866fadd28ac7107a50ff8d654d52b5188",
       "tests/roadmap/spawn-failure/air/0.16.0/spawn_failure.writeWorker.json": "1fd20eaea27eb164eedcff644df6ce39b36f014cf18dfe752a588312f21413f2",
-      "tests/roadmap/spawn-failure/air/provenance.json": "d71a80511dcb2d6fa93d8ab8943fb968e876aa05d87cb39892d9996f24b54946"
+      "tests/roadmap/spawn-failure/air/provenance.json": "d71a80511dcb2d6fa93d8ab8943fb968e876aa05d87cb39892d9996f24b54946",
+      "tests/roadmap/env-boundaries/air/0.15.2/fs.File.close.json": "5d37e8ac109f0ecb0b29270d7b418c7c7780f8630c28ce86d987909336e1bae0",
+      "tests/roadmap/env-boundaries/air/0.15.2/fs.File.read.json": "5e0c915b7d45b48718ee955a0404a2c5982d7774cb7459825d9248b7e0d1f20d",
+      "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json": "bc4469e370f54807e9e390a54bb92f8af5894a65acf4d76e2f4d2084ab581727",
+      "tests/roadmap/env-boundaries/air/0.15.2/fs.File.write.json": "620e32a93d77701fccc6c06dbe0b065d45cc1453f27e10a603400924483ab7be",
+      "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json": "3d52a8269df361419dd4de851be928ee10404097a77b9c68dbbf27723800deae",
+      "tests/roadmap/env-boundaries/air/0.15.2/posix.close.json": "32200b80c7fe974c5fefca9f7dbcf021e054b3e7c15633ddac74b2824eefa125",
+      "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json": "4f588cf522bec169ef82681f370f969418edbcd2429ff574c1322301c782d4f8",
+      "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json": "403d0d0d8b4a12831042cc1a3cfe5de3f832c64e376b7e183f58486e192677c3",
+      "tests/roadmap/env-boundaries/air/0.15.2/posix.unexpectedErrno.json": "fe36c486d0b27049a2e2d27e7a507705ae5622d3df14bf27ed077e4c69648661",
+      "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json": "e6009bbeb148432c458b10ec63e9b12de3c49e67d28cd9abb07156d07f9043b9",
+      "tests/roadmap/env-boundaries/air/0.15.2/std_io15.readAllClose.json": "a7906605807597499923212bb0b48cec35f4850697418b27a5779539ef7f08ad",
+      "tests/roadmap/env-boundaries/air/0.15.2/std_io15.writeAllClose.json": "0bd69bf9c6b33c666a6c526a478e4740648a987e4755413f36245d3f47a5c878",
+      "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.closeFd.json": "394a57ed9b518da6c86b6a38b3d28ee6ba58f8493849e66ae6dee9e8e8aec097",
+      "tests/roadmap/env-boundaries/air/0.16.0/Io.Threaded.recoverableOsBugDetected.json": "836f1f85cfbd68fc75f05d8c574e4356c228da187058faf8e7b34c16ff13e01c",
+      "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json": "bac92b52e5e204bae6d7f159499ada716059344664343c6b700cdebda0c9d501",
+      "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json": "88ae9b87329dc00c719f32589ec38bd6874f9819ab1f6ce523168862d3d23fd7",
+      "tests/roadmap/env-boundaries/air/0.16.0/posix.unexpectedErrno.json": "30032248b142cc39a565870148e4ec40256854a243aa69b6a0ed8c33a33d2002",
+      "tests/roadmap/env-boundaries/air/0.16.0/std_io16.readClose.json": "90a424137999276085fc43142def75280fca7ddc218a171cfe67ba284073088a",
+      "tests/roadmap/env-boundaries/air/provenance.json": "590c590b7f8df7e002308ad75bc3760ca4d7efb1f7d8b0abc14b8536191f6104"
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",

@@ -13,11 +13,12 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo/.lake/build/bin/air2lean"}
 out=$1
 update=${2:-}
 for v in 15 16; do
-  ns=EnvStd$v
+  ns=EnvStd$v zv=0.$v.0
+  [ "$v" = 15 ] && zv=0.15.2
   mkdir -p "$out/$ns"
-  "$translator" "$here/air/std$v" -o "$out/$ns/template.json" --namespace "$ns" --model-registry-template
+  "$translator" "$here/air/$zv" -o "$out/$ns/template.json" --namespace "$ns" --model-registry-template
   python3 -B "$here/fill_registry.py" "$out/$ns/template.json" "$out/$ns/registry.json"
-  "$translator" "$here/air/std$v" -o "$out/$ns/Gen.lean" --namespace "$ns" --prefix "std_io$v." \
+  "$translator" "$here/air/$zv" -o "$out/$ns/Gen.lean" --namespace "$ns" --prefix "std_io$v." \
     --model-registry "$out/$ns/registry.json"
   if [ "$update" = --update ]; then
     cp "$out/$ns/registry.json" "$here/registry/std$v.json"

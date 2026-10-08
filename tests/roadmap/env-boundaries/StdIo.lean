@@ -1,3 +1,4 @@
+import ZigLean.Env.Linux
 import EnvStd15.Gen
 import EnvStd16.Gen
 
@@ -614,3 +615,56 @@ theorem readClose_spec {m0 : Mem} {fd : BitVec 32} {h : Handle} {s : Slice}
         rw [hlog1]; simp
 
 end EnvStd16.Proofs
+
+/-! ## Any contracted environment, and a scripted run -/
+
+namespace EnvStd15.Proofs
+open Zig Zig.Env Zig.Env.Linux EnvStdIo
+
+/-- `writeAllClose_spec` for operations over any state type, installed through `Ops.replay`. -/
+theorem writeAllClose_spec_replay {σ : Type} {ops : Ops σ} {s0 : σ} {m0 : Mem} {fd : BitVec 32}
+    {h : Handle} {s : Slice} {buf : List UInt8} {errs : List IoError} (hc : Contract ops errs)
+    (hm : m0.host.ops = ops.replay s0) (ho : OpenAt fd m0 h) (hb : BytesAt m0 s.ptr buf)
+    (hl : s.len.toNat = buf.length) (hst : m0.SingleThread) :
+    ∃ r m', (writeAllClose ⟨fd⟩ s).run m0 = pure (r, m') ∧ m'.blocks = m0.blocks ∧
+      m'.host.ops.isOpen m'.host.env h = false ∧
+      (∀ h', h' ≠ h → m'.host.ops.isOpen m'.host.env h' = m0.host.ops.isOpen m0.host.env h') ∧
+      ∃ evs, m'.host.log = m0.host.log ++ evs ++ [.closed h] ∧ Event.closed h ∉ evs ∧
+        ((r = .ok () ∧ OnlyWrites h evs ∧ written evs = buf) ∨
+         (∃ e pre rest, r = .error (writeErrName e) ∧ e ∈ errs ∧ evs = pre ++ [.failed h e] ∧
+            OnlyWrites h pre ∧ written pre ++ rest = buf ∧ rest ≠ [])) :=
+  writeAllClose_spec (hm ▸ hc.replay s0) ho hb hl hst
+
+/-- A scripted host: descriptor 3 is open until closed; each write accepts at most two bytes,
+or fails with `brokenPipe` once `failAfter` writes were accepted. -/
+def scripted (failAfter : Nat) : Ops Hist where
+  monotonicNow hist := hist.length
+  wallNow _ := 0
+  isOpen hist h := h == 3 && !(hist.contains (.close 3))
+  read hist h max := (.ok [], hist ++ [.read h max])
+  write hist h bytes :=
+    if (hist.filter fun r => r matches .write ..).length < failAfter then
+      (.ok (min 2 bytes.length), hist ++ [.write h bytes])
+    else (.error .brokenPipe, hist ++ [.write h bytes])
+  close hist h := hist ++ [.close h]
+
+/-- Five bytes at the start of a global block, and the scripted host. -/
+def demoMem (failAfter : Nat) : Mem :=
+  { Mem.ofGlobals [((#[1, 2, 3, 4, 5] : Array UInt8).map enc, 1, .global)] with
+    host := { ops := scripted failAfter } }
+
+def demoSlice : Slice := ⟨⟨some 0, 0⟩, 5⟩
+
+def demoRun (failAfter : Nat) : Option (Except ErrName Unit × List Event) :=
+  match (writeAllClose ⟨3⟩ demoSlice).run (demoMem failAfter) with
+  | some (.ok (r, m)) => some (r, m.host.log)
+  | _ => none
+
+-- Partial writes are retried until every byte is accepted; the handle is closed once.
+#guard demoRun 10 ==
+  some (.ok (), [.wrote 3 [1, 2], .wrote 3 [3, 4], .wrote 3 [5], .closed 3])
+-- The first error stops the loop after a proper prefix; the handle is still closed once.
+#guard demoRun 1 ==
+  some (.error "BrokenPipe", [.wrote 3 [1, 2], .failed 3 .brokenPipe, .closed 3])
+
+end EnvStd15.Proofs

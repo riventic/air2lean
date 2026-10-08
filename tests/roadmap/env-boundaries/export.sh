@@ -18,7 +18,8 @@ export_one() { # zig source dir filter
 }
 export_one "$AIR2LEAN_ZIG_AIR_015" std_io15.zig std15 'std_io15.,fs.File.,posix.,os.linux.'
 export_one "$AIR2LEAN_ZIG_AIR_016" std_io16.zig std16 'std_io16.,posix.,os.linux.,Io.Threaded.closeFd,Io.Threaded.recoverableOsBugDetected'
-python3 -B "$here/refresh-air.py" "$work/std15" "$here/air/std15" \
-  std_io15.writeAllClose std_io15.readAllClose $mode
-python3 -B "$here/refresh-air.py" "$work/std16" "$here/air/std16" std_io16.readClose $mode
+python3 -B "$here/refresh-air.py" "$work/std15" "$here/air/0.15.2" "$here/std_io15.zig" \
+  "$AIR2LEAN_ZIG_AIR_015" std_io15.writeAllClose std_io15.readAllClose $mode
+python3 -B "$here/refresh-air.py" "$work/std16" "$here/air/0.16.0" "$here/std_io16.zig" \
+  "$AIR2LEAN_ZIG_AIR_016" std_io16.readClose $mode
 echo "env-boundaries: fresh export matches air/ (${mode:-updated})"
