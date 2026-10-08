@@ -84,6 +84,30 @@ theorem complete_holds {slot : Ptr} {r : α} {m m' : Mem}
   simp only
   rw [← hs, hx, hd]
 
+/-- A successful load right after a successful store at the same pointer and alignment decodes
+the stored bytes. -/
+theorem load_after_store {β : Type} [Enc β] {q : Ptr} {a : Nat} {v w : β} {m m' m'' : Mem}
+    {x : Unit} (hs : (Enc.encode v).size = Enc.size β)
+    (h : ((store a q v).run m).run = some (.ok (x, m')))
+    (hl : ((load β a q).run m').run = some (.ok (w, m''))) :
+    (Enc.decode (Enc.encode v) : Result β).run = some (.ok w) := by
+  obtain ⟨b, blk, o, ha, -, rfl⟩ := Conc.Proto.store_ok h
+  obtain ⟨b', blk', o', ha', -, hd, -⟩ := Conc.Proto.load_ok hl
+  rw [hs] at ha ha'
+  have hp : (m.recordAt b o (Enc.size β) .write).access q (Enc.encode v).size a =
+      pure (b, blk, o) := by
+    rw [access_recordAt, hs]; exact ha
+  have hq : (m.recordAt b o (Enc.size β) .write).access q (Enc.size β) a = pure (b, blk, o) := by
+    rw [access_recordAt]; exact ha
+  have hw := access_write_same hp hq
+  rw [ha'] at hw
+  simp only [pure, ExceptT.pure, ExceptT.mk] at hw
+  obtain ⟨rfl, rfl, rfl⟩ := hw
+  obtain ⟨-, -, -, h0, hn, -, ho⟩ := access_eq ha
+  have hx := extract_writeBytes blk.bytes o (Enc.encode v) (by omega)
+  simp only at hd
+  rwa [← hs, hx] at hd
+
 theorem complete_blocks_threads {slot : Ptr} {r : α} {m m' : Mem}
     (h : ((complete slot r).run m).run = some (.ok ((), m'))) : m'.threads = m.threads := by
   obtain ⟨b, blk, o, -, -, rfl⟩ := Conc.Proto.store_ok h
@@ -257,6 +281,11 @@ namespace FutureProto
 
 variable {Tgt α : Type} [Enc α] {slotOf : Tgt → Option Ptr} {R : α → Prop}
 
+theorem strict_false : (futureProto slotOf R).strict = false := rfl
+
+theorem not_strict {φ : Prop} : (futureProto slotOf R).strict = true → φ := fun h => by
+  rw [strict_false] at h; cases h
+
 theorem inv_of_blocks {G : ThreadId → FGh} {m m' : Mem} (hi : (futureProto slotOf R).inv G m)
     (hb : m'.blocks = m.blocks) : (futureProto slotOf R).inv G m' := by
   intro u slot d hu
@@ -307,6 +336,133 @@ theorem task_wp {u : ThreadId} {slot : Ptr} {body : ConcM Tgt α} {G : ThreadId 
   · rw [upd_ne _ _ hwu] at hw
     obtain ⟨-, rfl⟩ := inv_main hi h0 hw
     exact absurd rfl hwu
+
+variable {σ : Type}
+
+theorem load_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : Mem}
+    (h : ((load β a q).run m).run = some (.ok (v, m'))) : m'.threads = m.threads := by
+  obtain ⟨_, _, _, -, -, -, rfl⟩ := Proto.load_ok h
+  rfl
+
+theorem store_threads {β : Type} [Enc β] {a : Nat} {q : Ptr} {v : β} {m m' : Mem} {x : Unit}
+    (h : ((store a q v).run m).run = some (.ok (x, m'))) : m'.threads = m.threads := by
+  obtain ⟨_, _, _, -, -, rfl⟩ := Proto.store_ok h
+  rfl
+
+/-- `Io.async` in the spawner `t`: a runtime record, a stop at the spawn (the task starts with a
+ghost value of `init`), then the spawner writes the task's id into the record. -/
+theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tgt} {s : σ}
+    {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : Future α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
+    (h : ∀ slot m₁, ((Future.slotAlloc α).run m).run = some (.ok (slot, m₁)) →
+      ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m₁ ∧ ∀ G₁ m₂, G₁ t = g → P.inv G₁ m₂ →
+        ∃ g₀, P.init (mk slot) g₀ ∧ ∀ child m₃,
+          (Thread.fork.run { m₂ with current := t }).run = some (.ok (child, m₃)) →
+          ∀ m₄, ((store 8 slot child).run m₃).run = some (.ok ((), m₄)) →
+            Q ({ task := some slot, result := none }, s) (upd G₁ child g₀) m₄ k) :
+    P.WP t ((asyncC mk : CM Tgt σ (Future α)).run s) Q G m n := by
+  unfold asyncC
+  simp only [StateT.run_bind, StateT.run_lift]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun slot m₁ ha => ⟨?_, ?_⟩)
+  · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync fun k hk => ?_))
+  obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
+  refine ⟨g, hi, fun G₁ m₂ hg hi₂ => ?_⟩
+  obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₂ hg hi₂
+  refine ⟨g₀, hg₀, fun child m₃ hf => Proto.WP.pure' ?_⟩
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun x m₄ hs => ⟨?_, ?_⟩)
+  · rw [store_threads hs]
+  · exact Proto.WP.pure' (hk' child m₃ hf m₄ hs)
+
+/-- The spawner's `await` of its pending future at `p`, with record `slot` and task `child`, in
+the future protocol. Before the join the task has not run (`htasks`); after it, the record
+holds a result satisfying `R`, which `await` returns. -/
+theorem await_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : ThreadId → FGh}
+    {m : Mem} {n : Nat} {Q : α × σ → (ThreadId → FGh) → Mem → Nat → Prop}
+    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+      f = { task := some slot, result := none })
+    (htasks : ∀ u sl d, G u = .task sl d → u = child ∧ sl = slot ∧ d = false)
+    (hQ : ∀ r G' m' d, R r → Q (r, s) G' m' d) :
+    (futureProto slotOf R).WP 0 ((awaitC io p : CM Tgt σ α).run s) Q G m n := by
+  unfold awaitC consumeC
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  obtain rfl := hp f m₁ hl
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind ?_
+  refine Proto.WP.joinC ?_
+  intro k _
+  refine ⟨.main slot child, ?_, fun G₁ m₃ hg hi₃ =>
+    ⟨not_strict, fun hf => ⟨not_strict, fun m₄ hj => ?_⟩⟩⟩
+  · intro u sl d hu
+    by_cases hu0 : u = 0
+    · subst hu0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ hu0] at hu
+      obtain ⟨rfl, rfl, rfl⟩ := htasks u sl d hu
+      exact ⟨upd_self _ _ _, fun h => by cases h⟩
+  obtain ⟨-, r, hr, hh⟩ := joined_holds hi₃ hg hf
+  have hh₄ : Future.Holds slot r m₄ := by
+    obtain ⟨_, -, -, rfl⟩ := Proto.join_eq hj
+    exact hh.of_blocks rfl
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun v m₅ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
+  obtain rfl := Future.take_eq hh₄ htk
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [store_threads hs], ?_⟩)
+  exact Proto.WP.pure' (hQ v _ _ _ hr)
+
+/-- The spawner's `cancel` of its pending future: as `await_wp`, with a stop before the
+cancelation request, after which the task may already have completed. -/
+theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : ThreadId → FGh}
+    {m : Mem} {n : Nat} {Q : α × σ → (ThreadId → FGh) → Mem → Nat → Prop}
+    (hp : ∀ f m', ((load (Future α) (Future.align α) p).run m).run = some (.ok (f, m')) →
+      f = { task := some slot, result := none })
+    (htasks : ∀ u sl d, G u = .task sl d → u = child ∧ sl = slot ∧ d = false)
+    (hQ : ∀ r G' m' d, R r → Q (r, s) G' m' d) :
+    (futureProto slotOf R).WP 0 ((cancelC io p : CM Tgt σ α).run s) Q G m n := by
+  unfold cancelC consumeC
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
+  obtain rfl := hp f m₁ hl
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun tid m₂ ht => ⟨by rw [load_threads ht], ?_⟩)
+  simp only [StateT.run_bind, StateT.run_lift]
+  have hstop : (futureProto slotOf R).inv (upd G 0 (.main slot child)) m₂ := by
+    intro u sl d hu
+    by_cases hu0 : u = 0
+    · subst hu0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ hu0] at hu
+      obtain ⟨rfl, rfl, rfl⟩ := htasks u sl d hu
+      exact ⟨upd_self _ _ _, fun h => by cases h⟩
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync fun k _ =>
+    ⟨.main slot child, hstop, fun G₁ m₃ hg hi₃ => ?_⟩)))
+  refine Proto.WP.pure' (Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₄ hc => ?_))
+  obtain ⟨hb₄, ht₄⟩ := Future.requestCancel_eq hc
+  refine ⟨by rw [ht₄], ?_⟩
+  have hi₄ := inv_of_blocks hi₃ hb₄
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.bind ?_)
+  refine Proto.WP.joinC ?_
+  intro k' _
+  refine ⟨.main slot child, ?_,
+    fun G₂ m₅ hg₂ hi₅ => ⟨not_strict, fun hf => ⟨not_strict, fun m₆ hj => ?_⟩⟩⟩
+  · rw [show upd G₁ 0 (.main slot child) = G₁ by rw [← hg]; exact Proto.upd_same _ _]
+    exact hi₄
+  obtain ⟨-, r, hr, hh⟩ := joined_holds hi₅ hg₂ hf
+  have hh₆ : Future.Holds slot r m₆ := by
+    obtain ⟨_, -, -, rfl⟩ := Proto.join_eq hj
+    exact hh.of_blocks rfl
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun v m₇ htk => ⟨by rw [Future.take_threads htk], ?_⟩)
+  obtain rfl := Future.take_eq hh₆ htk
+  simp only [StateT.run_bind]
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₈ hs => ⟨by rw [store_threads hs], ?_⟩)
+  refine Proto.WP.pure' ?_
+  refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => rfl) fun _ m₉ hd => ⟨?_, ?_⟩)
+  · rw [(Future.dropCancel_eq hd).2]
+  · exact Proto.WP.pure' (hQ v _ _ _ hr)
 
 end FutureProto
 
