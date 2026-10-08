@@ -29,6 +29,13 @@ inductive Error where
   /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
   a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/
   | deadlock
+  /-- A clock or timed-wait operation the model has no semantics for (TMR-01): the default model
+  has no clock, so `time.Timer.start`/`.read` and `Thread.Futex.timedWait` (generated code), and
+  the timed scheduler's no-clock environment, wrong clock or unselected timeout
+  (`ZigLean/Conc/Timed*.lean`) throw it. It is not a Zig-unspecified result: it marks semantics
+  the model does not supply, so reports keep it apart from `.unspecified`. A proof of "never
+  throws" shows that the code never reaches such a call. -/
+  | unsupportedTimer
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/

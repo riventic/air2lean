@@ -22,9 +22,11 @@ class Outcome(str, Enum):
     ERROR_RETURN = 'error_return'
     PANIC = 'panic'
     ILLEGAL = 'illegal_behavior'
-    # Includes every no-clock timer/timed-wait path: the default model has no clock (TMR-01),
-    # so `time.Timer` and `Futex.timedWait` with a timeout are `.unspecified` at run time.
     UNSPECIFIED = 'unspecified_behavior'
+    # Unsupported timer semantics: the default model has no clock (TMR-01), so `time.Timer`,
+    # `Futex.timedWait` with a timeout and the timed scheduler's no-clock paths throw
+    # `Zig.Error.unsupportedTimer`. Kept apart from `.unspecified` results.
+    UNSPECIFIED_TIMER = 'unspecified_timer'
     UNSUPPORTED = 'unsupported_semantics'
     DEADLOCK = 'deadlock'
     # Tests only observe scheduler fuel exhaustion (`bounded_no_result`); it is not divergence.
@@ -34,9 +36,22 @@ class Outcome(str, Enum):
 
 # Model failures. A partial or total triple rules out each of them (`Zig.Error`); a Zig error
 # union value is an ordinary returned value and is not among them.
-SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.DEADLOCK})
+SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
+                             Outcome.DEADLOCK})
 # Evidence that cannot show a failure is absent, whatever was observed elsewhere.
-INCOMPLETE = frozenset({Outcome.SEARCH_CAP, Outcome.DIVERGENCE, Outcome.UNSPECIFIED, Outcome.UNSUPPORTED})
+INCOMPLETE = frozenset({Outcome.SEARCH_CAP, Outcome.DIVERGENCE, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
+                        Outcome.UNSUPPORTED})
+# Why each blocking outcome refuses an absence claim; reports name every class found.
+REFUSAL_REASONS = {
+    Outcome.SEARCH_CAP: 'capped schedule search',
+    Outcome.DIVERGENCE: 'fuel-bounded no-result run',
+    Outcome.UNSPECIFIED: 'unspecified result',
+    Outcome.UNSPECIFIED_TIMER: 'unsupported timer',
+    Outcome.UNSUPPORTED: 'unsupported semantics',
+    Outcome.PANIC: 'observed panic',
+    Outcome.ILLEGAL: 'observed illegal behavior',
+    Outcome.DEADLOCK: 'observed deadlock',
+}
 # Absence claims (scripts/claims.py names) and the outcomes each one denies.
 ABSENCE_CLAIMS = {
     'no-panic': SAFETY_FAILURES,
@@ -54,6 +69,7 @@ DIFF_KINDS = {
     'model_panic': Outcome.PANIC,
     'illegal': Outcome.ILLEGAL,
     'unspecified': Outcome.UNSPECIFIED,
+    'unspecified_timer': Outcome.UNSPECIFIED_TIMER,
     'deadlock': Outcome.DEADLOCK,
     'bounded_no_result': Outcome.DIVERGENCE,
     'search_cap': Outcome.SEARCH_CAP,
@@ -69,6 +85,7 @@ DIFF_STATUSES = {
     'panic_match': Outcome.PANIC,
     'illegal_exclusion': Outcome.ILLEGAL,
     'unspecified_exclusion': Outcome.UNSPECIFIED,
+    'unspecified_timer_exclusion': Outcome.UNSPECIFIED_TIMER,
     'search_cap': Outcome.SEARCH_CAP,
     'bounded_no_result': Outcome.DIVERGENCE,
 }
@@ -105,10 +122,11 @@ def count(rows) -> dict[str, int]:
 def absence(claim: str, counts: dict[str, int]) -> dict:
     """Whether outcome evidence refuses an absence claim. Clean evidence proves nothing."""
     blocking = INCOMPLETE | ABSENCE_CLAIMS[claim]
-    found = {o.value: counts[o.value] for o in Outcome if o in blocking and counts.get(o.value)}
+    found = [o for o in Outcome if o in blocking and counts.get(o.value)]
     if not found:
         return {'status': 'not_refuted', 'blocking': {}, 'reason': None}
-    return {'status': 'refused', 'blocking': found,
-            'reason': f'{claim} refused: evidence includes ' + ', '.join(f'{k} ({v})' for k, v in found.items())
-                      + '; capped, fuel-bounded, unsupported, unspecified/timer or observed failure '
-                        'outcomes cannot support proved absence'}
+    return {'status': 'refused', 'blocking': {o.value: counts[o.value] for o in found},
+            'reason': f'{claim} refused: evidence includes '
+                      + ', '.join(f'{o.value} ({counts[o.value]}: {REFUSAL_REASONS[o]})' for o in found)
+                      + '; capped, fuel-bounded, unsupported (including unsupported timer), unspecified or '
+                        'observed failure outcomes cannot support proved absence'}

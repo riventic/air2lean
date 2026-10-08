@@ -35,7 +35,7 @@ claims = _sibling('claims')
 
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
-OUTCOMES = ('exact_match', 'host_difference', 'undefined_behavior', 'unspecified_behavior',
+OUTCOMES = ('exact_match', 'host_difference', 'undefined_behavior', 'unspecified_behavior', 'unspecified_timer',
             'nondeterministic_valid', 'unsupported_semantics', 'panic', 'error_return',
             'illegal_behavior', 'deadlock', 'divergence', 'search_cap', 'skipped', 'proof_exclusion')
 LIMITS = {'max_file_bytes': 8 * 1024 * 1024, 'max_total_bytes': 64 * 1024 * 1024,
@@ -714,7 +714,8 @@ LEVELS = ('none', 'translated', 'compiled', 'tested_sampled', 'proved_scoped',
           'functionally_verified_partial', 'functionally_verified_total')
 EVIDENCE_JSON = dict(LIMITS, max_file_bytes=64 * 1024 * 1024)
 DIFF_FAILURES = ('mismatch', 'host_difference', 'input_failure', 'native_harness_failure')
-DIFF_EXCLUSIONS = ('illegal_exclusion', 'unspecified_exclusion', 'search_cap', 'bounded_no_result')
+DIFF_EXCLUSIONS = ('illegal_exclusion', 'unspecified_exclusion', 'unspecified_timer_exclusion', 'search_cap',
+                   'bounded_no_result')
 DIFF_MATCHES = ('value_match', 'error_return_match', 'panic_match')
 
 
@@ -1091,9 +1092,9 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=()):
                       'partial/total correctness goal; full verification requires total_correctness.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
                       'An absence claim (no-panic, guaranteed-return) is proved only by a direct goal of matching '
-                      'strength. Capped searches, fuel-bounded no-result runs, unspecified (including no-clock timer) '
-                      'and unsupported outcomes, or an observed failure the claim denies, refuse it and block '
-                      'functional verification. Error returns are values and never refuse no-panic.'],
+                      'strength. Capped searches, fuel-bounded no-result runs, unspecified results, unsupported timers '
+                      '(unspecified_timer, kept apart from unspecified) and unsupported outcomes, or an observed '
+                      'failure the claim denies, refuse it and block functional verification. Error returns are values and never refuse no-panic.'],
             'trust_scope': report['trust_scope']}
 
 

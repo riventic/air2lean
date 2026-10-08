@@ -33,7 +33,7 @@ inductive ThreadFn where
   | osLock | osUnlock | osTryLock
   /-- `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`: a clock, which the model
   does not have. `Thread.Futex.Deadline` reaches them only with a timeout, so a call is
-  `.unspecified` at run time (the diff test pins that count), not a rejection. Each has its
+  `.unsupportedTimer` at run time (distinct from `.unspecified`), not a rejection. Each has its
   own runtime signature (`checkModelSignature`). -/
   | timerStart | timerRead | futexTimedWait
   /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
@@ -91,9 +91,9 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.Mutex.DarwinImpl.lock" .osLock #["osUnfairLockC"],
   threadModel "Thread.Mutex.DarwinImpl.unlock" .osUnlock #["osUnfairUnlockC"],
   threadModel "Thread.Mutex.DarwinImpl.tryLock" .osTryLock #["osUnfairTryLockC"],
-  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unspecified"],
-  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unspecified"],
-  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unspecified"],
+  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"],
+  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"],
+  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"],
   threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"],
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"],
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"],

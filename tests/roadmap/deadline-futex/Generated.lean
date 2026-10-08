@@ -43,7 +43,7 @@ def main : IO Unit := do
   require (match boundary.result with | some (.ok (.ok n)) => n == 73 | _ => false)
     "actual boundaryClient body did not propagate successful return"
   let noClock := TimedSched.run {} 80 (fun _ => 0) (DeadlineActual.observe {}) memory
-  require (match noClock.result with | some (.error .unspecified) => true | _ => false)
+  require (match noClock.result with | some (.error .unsupportedTimer) => true | _ => false)
     "actual generated body acquired a clock in the default environment"
 
   -- Two readable source messages: option 0 is current, option 1 is older.

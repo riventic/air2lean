@@ -55,7 +55,7 @@ def checkedTimeout : Timeout → Option Time.Timeout
 def clockNow (clock : Clock) (_io : Io) : TimedSched.Program Timestamp :=
   if clock = .awake then
     .observe fun now => .done ⟨BitVec.ofNat 96 now.nanoseconds⟩
-  else .fail .unspecified
+  else .fail .unsupportedTimer
 
 /-- Actual public runtime argument order after comptime T specialization: io,p,e,timeout.
 Return reason is deliberately hidden. The continuation is retained by Program.wait and
@@ -64,11 +64,11 @@ by the interpreter's explicit environment premise, never reclassified as timeout
 def futexWaitTimeout (_io : Io) (pointer : Ptr) (expected : BitVec 32)
     (timeout : Timeout) : TimedSched.Program (Except ErrName Unit) :=
   match checkedTimeout timeout with
-  | none => .fail .unspecified
+  | none => .fail .unsupportedTimer
   | some selected => .wait pointer expected selected (fun _ => .done (.ok ()))
 
 theorem wrong_clock_rejected (io : Io) :
-    clockNow .real io = .fail .unspecified := rfl
+    clockNow .real io = .fail .unsupportedTimer := rfl
 
 theorem unbounded_not_selected : checkedTimeout .none = none := rfl
 
