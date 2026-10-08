@@ -95,7 +95,7 @@ The former T-series follow-ups now map to register IDs:
 
 | Former item | Register | Remaining scope |
 |---|---|---|
-| T7 (theorem inventory) | C14, F05 | C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol only; reusable RwLock contracts remain. F05: `op128_spec_full` covers every `f128` selector with each translation's division and `@sqrt` helpers; 0.16.0 deep-underflow division and pre-0.16.0 finite `@sqrt` are specified by their ports, not a closed IEEE form. Each listed theorem's scope class, domain and current guarded check result per Zig version/target translation are in [docs/theorem-inventory.md](docs/theorem-inventory.md) (`scripts/theorem-inventory.py check`). |
+| T7 (theorem inventory) | C14 | C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol only; reusable RwLock contracts remain. Each listed theorem's scope class, domain and current guarded check result per Zig version/target translation are in [docs/theorem-inventory.md](docs/theorem-inventory.md) (`scripts/theorem-inventory.py check`). |
 
 The former T6 follow-up (a release record with its gates and the review ledger for one exact source/profile state) is published as [assurance/releases/25f89bbb405821b286e04ee7676bc24aa4c7e5ae.json](assurance/releases/25f89bbb405821b286e04ee7676bc24aa4c7e5ae.json). Earlier T7 clauses whose proofs exist (`vectors.checkedAdd`, [docs/vector-proofs.md](docs/vector-proofs.md); `sync.semaphoreCounter`; `sync.rwLockRead`; 0.15.2 `Thread.Mutex` on macOS) are historical; their current check results are in docs/theorem-inventory.md.
 

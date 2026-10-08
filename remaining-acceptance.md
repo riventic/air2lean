@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 18 complete, 53 partial, 6 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 20 complete, 51 partial, 6 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -72,11 +72,15 @@ Classification: partial.
 
 export and model pointer-based error-union propagation without copying or changing the addressed payload. Acceptance: success, error, aliasing and cleanup paths have differential tests and memory proof rules.
 
+Bounded progress: Pointer try export/check/emission slice merged with qualified boundaries. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): whole-union alias and cleanup memory rules (opt-in `ZigLean/Sep/TryAlias.lean`): every pointer try on one union returns the same payload address or the original error, loads/stores through it act in place without writing the tag; applied to the retained compiler-exported `writeAlias`, `cleanup` (distinct and shared counters) and `coldPayload`; two hand-written-AIR functions (`twoPaths` over one or two unions, `resetOnError` with errdefer cleanup) with proofs, runtime cases and native tests. Remaining: compiler export and native qualification of the alias fixture, concurrent aliases, overlapping unequal unions, aliases through casts or other element types, cleanup that frees the union, multi-byte payloads in generated cleanup rules, 0.14/0.15 export.
+
 ## L05 — C pointers and allowzero
 
 Classification: partial.
 
 explicit nullability, address-zero and access rules. Keep pointer representation distinct from the validity conditions needed for dereference. Acceptance: null tests and permitted casts translate; accesses require the right preconditions, with no invented valid allocation at address zero.
+
+Bounded progress: Nonoptional scalar C/allowzero fragment merged. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): stored C/allowzero pointers use the storage dictionary `Zig.nullablePtrEnc` (null is eight zero bytes; zero bytes read back as null, other integer or undefined bytes are `.unspecified`), also as extern/auto struct fields and array items; projections from a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`) are `.illegal` at address zero and keep the base's provenance; `[*c]T`/`*allowzero T` convert to and from `?*T`/`?[*]T` by explicit null mapping. Proof-only `ZigLean.Mem.NullLemmas` (lawful storage, null round trip, projected-access block); twelve hand-written AIR cases. Remaining: fresh export and native observations of the new operations; optionals of nullable pointers, nullable pointers in unions/tuples/error-union payloads, nullable slicing, bulk memory and parent recovery.
 
 ## L06 — Constant pointer bases
 
@@ -90,11 +94,15 @@ Classification: partial.
 
 representation-based casts for arrays, structs, tuples and qualified unions, including padding/undefined bits. Extend optional-pointer conversions with explicit wrapping/unwrapping rules. Acceptance: round trips hold only under stated representation conditions; tests include padding and null values.
 
+Bounded progress: Existing dedicated packed/optional conversions. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): Zig ≤0.16 representation `@bitCast` of arrays, `extern` structs and `extern` unions (`Zig.reprCast`: encode, pad, decode; padding and unused bits undefined, so a result that needs them is `.unspecified`), with checked equal `@bitSizeOf` and a version gate (0.17+ and unversioned contexts reject); `?*T` unwrap (null panics), `@intFromPtr`/`@ptrFromInt` null rules; proof-only `ZigLean.ReprCast` (round trip under the stated no-padding condition, undefined-byte throws); hand-written fixture and an aarch64-macos native probe whose defined bytes match the model. Remaining: compiler-exported fixtures, Zig 0.17's logical bit order, casts involving auto structs, tuples, tagged/packed unions, vectors, sentinel arrays or error storage.
+
 ## L08 — Packed representations and bit pointers
 
 Classification: partial.
 
 defined-bit masks for partial writes, broader qualified packed fields and unions, and correct host-width/bit-offset encoding. Acceptance: adjacent bits remain unchanged, undefined fields do not overwrite unrelated bits, and cross-boundary layouts are checked.
+
+Bounded progress: [PR103](https://github.com/riventic/air2lean/pull/103) merged with bounded byte permutation controls. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): bit-pointer loads and stores touch only the field's bits through defined-bit masks (`Byte.mask`, `writeField`), a store of `undefined` makes only the field's bits undefined, and `ZigLean.PackedLemmas` proves the frame; the checker compares every exported packed field pointer with the model's layout (`PACKED_LAYOUT`) and rejects bit-pointers without a packed bit size. Soundness fix: a byte-aligned field reached through a nested bit-pointer (`&reg.inner.c`) was addressed without the base's bit offset (wrong host byte); the emitter now adds it. Remaining: hand-written AIR only (no fresh export or native execution); packed unions as packed-struct fields, float and pointer fields, partly undefined packed constants, big-endian targets.
 
 ## L09 — Vector memory layouts
 
@@ -109,6 +117,8 @@ Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): bit-p
 Classification: partial.
 
 standalone error encoding and target/configuration-dependent error-code layout, including `--error-limit` effects. Acceptance: error identities survive stores, loads, unions and casts on every qualified configuration.
+
+Bounded progress: [Storage PR105](https://github.com/riventic/air2lean/pull/105) merged with bounded error-storage and declared version generation/proof/runtime controls. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): the error model is parameterized by the profile's `error_set_bits` (1–32, from `--error-limit`): width-parameterized storage operations (`ZigLean/Mem/ErrWidth.lean`; the default 16 bits keeps byte-identical output), layout and capacity checks, and proof-only `ZigLean.Mem.ErrWidthLemmas` (store/load round trips, error-union laws, `@errorFromInt`/`@intFromError` over an explicit `ErrorTable`, out-of-range codes); hand-written fixtures at 8, 10, 16 and 17 bits are translated, elaborated and executed. Remaining: only 16 bits has native evidence; non-default widths have no compiler export, project workflow or ABI probe; integer/error casts stay untranslated (AIR does not export the numbering).
 
 ## L11 — Local parent pointers and constant indirect calls
 
@@ -137,6 +147,8 @@ Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): the e
 Classification: partial.
 
 decide which tags are meaningful at the export stage, which should be lowered first and which need new semantics. Do not claim a source feature is supported merely because one lowering works. Acceptance: each supported feature has a compiler-generated fixture; all remaining tags have explicit reasons and diagnostic guidance.
+
+Bounded progress: PR89 merged selected runtime/control classifications. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): every emitted tag either occurs in a selected compiler-generated fixture (goldens or reviewed `COMPILER_FIXTURE_ROOTS` exports) or is `emitted-unfixtured` with a reviewed `FIXTURE_REQUESTS` candidate; every rejected tag carries the translator's reason and guidance (`runtimeTagReason?`, `exporterTagReason?`, `optimizedFloatGuidance`); every roadmap AIR directory is classified compiler or non-compiler evidence; `coverage.py l14` gates it offline. Remaining: 29/34/65 emitted tags (0.16.0/0.15.2/0.14.1) still lack a compiler fixture (`runtime_tags.zig` requests are unexported); a fixture is one lowering, not universal tag semantics.
 
 ## C01 — General spawn argument tuples
 
@@ -176,9 +188,13 @@ target/API-specific cancellation and permitted spurious wake outcomes, with clea
 
 ## C06 — Spawn failure and group fallback behavior
 
-Classification: partial.
+Classification: complete.
 
 thread-creation failure, supported resource constraints and real API fallback behavior. Acceptance: failure leaves ownership with the caller; synchronous fallback and asynchronous success satisfy the same declared result contract where required.
+
+Completed in [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): failure leaves ownership with the caller (`WP.spawnFailureRetains`: a refused spawn keeps the C01 `Capture.grant` of the generated captures, so the caller frees it); the synchronous fallback of `Group.async` and an assigned task establish the same declared post (`afterAsync_spec`, `await_spec`); a per-caller thread budget (`Mem.spawnLimit`) makes several failures in one run possible; `threadPair_spec`/`threadPair_safe` and `groupAsync_spec`/`groupAsync_safe` hold for every schedule, resource outcome and budget on the translated retained 0.16.0 export (`tests/roadmap/spawn-failure`). Scope: model proofs; no native adequacy, fairness, termination, `groupConcurrent` contract or process-wide quota.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## C07 — Detached threads and broader join ownership
 
@@ -231,6 +247,8 @@ Classification: partial.
 Preserve the existing rwLockRead all-schedules result and strict-safety theorems. Finish exact composed snapshot-client/Outcome registry and integration qualification, then publish its bounded resource, clock, lifetime and join-before-free premises. General reusable RwLock/Condition/Event/WaitGroup contracts and further independent clients remain open; no fairness, termination or multiwriter claim.
 
 Current closeout: the bounded snapshot-client/Outcome integration is merged in [PR104](https://github.com/riventic/air2lean/pull/104); the general reusable synchronization contracts and independent-client scope above remain incomplete.
+
+Bounded progress: [PR104](https://github.com/riventic/air2lean/pull/104) merged with bounded snapshot-client kernel/native/integration controls. [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): reusable `MutexContract`, `SemContract`, `CondContract` and restricted `RwContract` (`Proofs/Sync/Contracts.lean`) proved once against the translated 0.16.0 std code; two Lean model clients proved from the contracts alone for every fuel and oracle (`cache_spec`/`cache_safe` against `MutexContract`, `mailbox_spec`/`mailbox_safe` against `SemContract`), with compiled runtime witnesses. Remaining: a reusable RwLock contract for arbitrary readers/resources, Event/ResetEvent and WaitGroup contracts, broadcast, several condition waiters, timeouts, cancellation, fairness and native adequacy; the clients are not Zig exports.
 
 ## M01 — Multiple allocator identities and policies
 
@@ -306,9 +324,13 @@ Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): ZigLe
 
 ## F05 — Complete version-specific f128 proofs
 
-Classification: partial.
+Classification: complete.
 
 version/profile-specific specifications and proofs for the excluded selectors, including the compiler-rt implementation where selected. Acceptance: the full supported selector domain has an accurate theorem for each version/profile. A changed specification must reflect the implementation rather than force IEEE equality.
+
+Completed in [PR B6PR](https://github.com/riventic/air2lean/pull/B6PR): `op128_spec_full` states every `f128` selector against each translation's division and `@sqrt` helpers (`op128Profile`: legacy for 0.14.1/0.15.2, v016 for 0.16.0), checked by guarded floatops runs for all three versions; `op128_eq_opSpec_of_special` gives the IEEE result for NaN, infinite or zero operands on every version; 0.16.0 deep-underflow division (`divRt016`) and 0.14/0.15 finite `@sqrt` (`sqrtF128ViaF64`) are specified by their compiler-rt ports, with IEEE agreement proved where it holds (`divRt016_eq_div_of_exp`, `divRt_eq_div_of_not_subnormal`). Scope: theorems about the model's ports; port/compiler_rt agreement is probe and diff-test evidence.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## F06 — Practical numerical reasoning
 

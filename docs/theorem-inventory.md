@@ -63,9 +63,10 @@ committed goldens.
 
 ## Remaining scope
 
-- F05: `op128_spec` excludes the `f128` selectors 3, 5, 6 and 9 (`/`, `@divTrunc`,
-  `@divFloor`, `@sqrt`), which call a different model function per Zig version. They stay
-  excluded; the theorem's domain says so.
+- F05 (complete): `op128_spec` still excludes the `f128` selectors 3, 5, 6 and 9 (`/`,
+  `@divTrunc`, `@divFloor`, `@sqrt`), which call a different model function per Zig version;
+  its domain says so. `op128_spec_full` covers every selector with each translation's helpers
+  ([floats.md](floats.md) §Per-version differences).
 - C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol of
   `Proofs/Sync/RwLockContract.lean` (one fixed client: main reader, one writer, writer count
   at most 2). `cache_spec`/`cache_safe` and `mailbox_spec`/`mailbox_safe` are Lean model
