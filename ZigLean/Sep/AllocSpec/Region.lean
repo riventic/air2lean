@@ -187,6 +187,43 @@ theorem region_reveal {m : Mem} (hr : region p a bs h) (hs : Heap.Sub h m.heap)
   subst hA hS hK
   exact ⟨b, blk, hpb, hblk, hl, hle, hr⟩
 
+/-- A hidden region rejoins the explicit range right after it, inside a memory (a fixed buffer
+taking a freed last allocation back, a page allocator rejoining the rest of a mapping). -/
+theorem region_join_of_heap {m : Mem} {a' : Nat}
+    (hr : (region p a bs ∗ regionIn (p.add bs.size) A S K a' bs') h) (hs : Heap.Sub h m.heap)
+    (hpos : 0 < bs.size) (hpos' : 0 < bs'.size) : regionIn p A S K a (bs ++ bs') h := by
+  obtain ⟨h₁, h₂, hd, rfl, ⟨A₀, S₀, K₀, hr₁⟩, hr₂⟩ := hr
+  obtain ⟨eA, eS, eK⟩ := bytesAt_meta_eq hr₁.2.2 (Heap.sub_union_left hs) hpos hr₂.2.2
+    (Heap.sub_union_right hd hs) hpos' rfl
+  subst eA eS eK
+  exact regionIn_join ⟨h₁, h₂, hd, rfl, hr₁, hr₂⟩
+
+/-- A whole block (a fresh `alloc`, or an `mmap` mapping) with an aligned address is a region. -/
+theorem regionIn_of_block {b : BlockId} (hb : bytesAt ⟨some b, 0⟩ A S K bs h) (ha : A % a = 0)
+    (hK : K ≠ .constGlobal) : regionIn ⟨some b, 0⟩ A S K a bs h :=
+  ⟨by simpa using ha, hK, hb⟩
+
+theorem Ptr.add_add_nat (q : Ptr) (x y : Nat) :
+    (q.add (x : Int)).add (y : Int) = q.add ((x + y : Nat) : Int) := by
+  cases q; simp [Ptr.add]; omega
+
+/-- A bump step on a free range `bs` (alignment 1) at `q`: `pad` bytes of padding, then a region
+of `len` bytes at an `a`-aligned address, then the rest. The pattern of a fixed buffer's
+`alloc`. -/
+theorem regionIn_carve {q : Ptr} (hr : regionIn q A S K 1 bs h) {pad len : Nat}
+    (hfit : pad + len ≤ bs.size) (hal : (A + q.off.toNat + pad) % a = 0) :
+    (regionIn q A S K 1 (bs.extract 0 pad) ∗
+      (regionIn (q.add ((pad : Nat) : Int)) A S K a (bs.extract pad (pad + len)) ∗
+        regionIn (q.add ((pad + len : Nat) : Int)) A S K 1 (bs.extract (pad + len) bs.size))) h := by
+  have h0 := bytesAt_pos_off hr.2.2
+  obtain ⟨h₁, h₂, hd, rfl, hr₁, hr₂⟩ := regionIn_split hr (k := pad) (a' := a) (by omega) hal
+  refine ⟨h₁, h₂, hd, rfl, hr₁, ?_⟩
+  have hs : (bs.extract pad bs.size).size = bs.size - pad := by simp
+  have := regionIn_split hr₂ (k := len) (a' := 1) (by omega) (Nat.mod_one _)
+  rw [Ptr.add_add_nat] at this
+  simpa [Array.extract_extract, Nat.add_comm pad len, Nat.min_eq_left (by omega : pad + len ≤ bs.size)]
+    using this
+
 /-! ## Total triples for the byte operations of the wrappers -/
 
 theorem enc_size_byte : Enc.size (BitVec 8) = 1 := by
