@@ -63,7 +63,9 @@ Proved once, in `Air2Lean/Sem.lean`:
 * `run_le_of_fixpoint`, `run_le_of_table`: any oracle that satisfies every function's equation
   on well-typed arguments is above `run` — every terminating AIR behaviour (a value or a panic)
   is that oracle's behaviour (`Result.eq_of_le`);
-* `run_of_lookup`: one unfolding of `run`.
+* `run_of_lookup`: one unfolding of `run`;
+* `adm_app0`…`adm_app4`, `execFunc_le`: the admissibility and monotonicity facts that a
+  completeness proof by fixpoint induction over a generated clique needs.
 
 ## Certificates (`--air-certificate`)
 
@@ -86,28 +88,42 @@ air2lean tests/golden/basic/air -o Proofs/Basic/Gen.lean --namespace Basic --pre
 
   for any call oracle when `f` makes no certified call, otherwise with `gen` (the generated
   definitions as an oracle) answering its calls;
-* `f_fix` — the same equation for every well-typed argument list;
+* `f_fix` — the same equation for every well-typed argument list; `gen_fixpoint`, `run_le_gen`:
+  the generated program is a fixpoint of the AIR program's equations, so `run ⊑ gen`;
 * `f_run` (no certified calls): **equality** of the program semantics and the generated
   definition, `(run (progOf table) "basic.scale" [...]).run m = ... <$> Basic.scale p0 p1`;
-* `f_sound` (certified calls, here the recursive functions): **refinement**,
-  `(run (progOf table) "recursion.gcd" [...]).run m ⊑ ... <$> Recursion.gcd p0 p1`: if the AIR
-  program terminates (value or panic), the generated definition gives the same result;
-* `gen_fixpoint`, `run_le_gen` — the whole certified program.
+* with certified calls: `f_sound` (`run ⊑ gen`: every terminating AIR behaviour, value or
+  panic, is the generated definition's), `f_complete` (`gen ⊑ run`: the generated definition
+  is defined only where the AIR program is) and `f_eq`, **equality**, by antisymmetry:
 
-The proofs are one `simp only` with the `air_sem` simp set (`Air2Lean/SemAttr.lean`) after one
-unfolding of the generated definition, and generic lemmas. A panic handler's name is evaluated
-by `rfl` (`callee_<k>`).
+  ```lean
+  theorem gcd_eq (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
+      (run (progOf table) "recursion.gcd" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m =
+        (fun v => ((Value.int false 32 v), m)) <$> Recursion.gcd p0 p1
+  ```
+
+  `f_complete` is fixpoint induction over the generated `partial_fixpoint` clique
+  (`Recursion.gcd.fixpoint_induct`; for `isEven`/`isOdd` the two-motive mutual principle):
+  each step relates the clique body, with its recursive calls abstracted as `g`, to
+  `execFunc (calls_f g)` (the AIR semantics with `f`'s callees answered by `g`) by the same
+  normalization, and `calls_f g ⊑ run` by the induction hypothesis. A non-recursive caller uses
+  its callees' `_complete` theorems the same way, without induction.
+
+The `_step` proofs are one `simp only` with the `air_sem` simp set (`Air2Lean/SemAttr.lean`)
+after one unfolding of the generated definition. A panic handler's name is evaluated by `rfl`
+(`callee_<k>`).
 
 ### Results on the committed examples
 
-| Example | Certified (equality) | Certified (refinement) | Outside the fragment |
-|---|---|---|---|
-| `basic` | `scale`, `clampAdd`, `absDiff`, `tardiness`, `classify` | — | `weightedTardiness` (struct parameter), `sum`, `totalWeightedTardiness` (slice parameters) |
-| `recursion` | — | `gcd`, `fact`, `isEven`, `isOdd` (recursive) | — |
+| Example | Certified (equality with `run`) | Outside the fragment |
+|---|---|---|
+| `basic` | `scale`, `clampAdd`, `absDiff`, `tardiness`, `classify` (`_run`) | `weightedTardiness` (struct parameter), `sum`, `totalWeightedTardiness` (slice parameters) |
+| `recursion` | `gcd`, `fact` (self-recursive), `isEven`, `isOdd` (mutually recursive) (`_eq`) | — |
 
-The generator was also run on every other example's golden AIR (not committed): the
-functions it admits in `layout` (`double`, `square`, `succ`), `lists`
-(`growCapacity`, `debug.assert`) and `vectors` (`sMod`, `sRem`) check as well.
+The generator was also run on every other example's shared golden AIR (not committed): the
+functions it admits in `layout` (`double`, `square`, `succ`) and `vectors` (`sMod`, `sRem`)
+check as well; it admits `debug.assert` in `iogroup`, `sync` and `threadsync` (not checked
+locally). Every other function of those examples is listed as outside the fragment.
 
 ### Emission strategies and fail-closed coverage
 
@@ -125,7 +141,7 @@ certificate the `air_sem` normalization covers:
 | `switch_br` on an integer | `if x == a \|\| (Zig.le s lo x && Zig.le s x hi) then … else …` chain | covered |
 | `switch_br` on an exhaustive enum | `match x with \| .A => …` | excluded (enum) |
 | `ret`, `unreach`, `trap`, panic-handler call | `pure (.ret v)`, `throw .unreachable`, `throw .panic`, `throw .<ctor>` | covered |
-| direct call | `Zig.call (f args)`; a recursion clique is `mutual … partial_fixpoint` | covered (unfolded once by its equation lemma) |
+| direct call | `Zig.call (f args)`; a recursion clique is `mutual … partial_fixpoint` | covered: unfolded once by its equation lemma; completeness by `fixpoint_induct` for parameters up to 4 (otherwise only `_sound`, noted in the file) |
 | `loop`/`repeat` | extracted `f.loop<n>` definitions and `Zig.loop` | **excluded**: semantics only |
 | `alloc`/`load`/`store` | struct-field locals, escaping `Zig.Mem` stack blocks, byte locals | **excluded**: semantics only |
 | everything else (aggregates, slices, optionals, errors, floats, vectors, pointers, atomics, threads, models, indirect calls, asm) | — | excluded |
@@ -137,14 +153,18 @@ fails, so the failure mode is closed, not silent.
 
 ### Cost
 
-Measured on the committed certificates (Apple M-series laptop, warm build of the imports;
-`lake env lean` wall time including import loading):
+Measured on the committed certificates (Apple M-series laptop; median of three
+`lake env lean` runs, with the import-only time of `Air2Lean.Sem` + the `Gen` module subtracted):
 
-COST_TABLE
+| Certificate | Functions | AIR instructions | Lines | Bytes (of which `Func` terms) | Theorems | Check time (imports) |
+|---|---|---|---|---|---|---|
+| `Proofs/Basic/AirCert.lean` | 5 | 53 | 310 | 19,806 (9,304) | 22 | 0.6 s (0.7 s) |
+| `Proofs/Recursion/AirCert.lean` | 4 | 65 | 486 | 30,541 (10,063) | 27 | 4.4 s (0.6 s) |
 
-The proof term grows with the AIR body (one `simp only` per function, linear in the number
-of instructions and branches); the printed `Func` (with its type and layout tables) dominates
-the file size.
+A call-free function costs one normalization (`_step`); a function with calls costs a second,
+oracle-abstracted normalization plus the argument inversions of its callees in `_complete`,
+which is why the recursive example is slower per instruction. Both grow with the AIR body
+(instructions and branches), not with the program: each theorem unfolds only its own function.
 
 ## Trusted base
 
@@ -181,11 +201,10 @@ What this slice does **not** establish:
   them needs a simulation lemma per strategy (`Zig.loop` under a state/exit encoding; the
   `Zig.Mem` store/load round trip against struct fields). Functions with loops or locals are
   excluded, so `basic.sum` would need both plus slices.
-* **Recursive functions: one direction.** For a function with certified calls the certificate
-  proves that every *terminating* AIR behaviour is the generated definition's
-  (`run ⊑ gen`). The converse — the generated definition terminates only where the AIR does —
-  needs fixpoint induction over the generated `partial_fixpoint` cliques and is not done.
-  Non-recursive call-free functions have full equality.
+* **Completeness needs the scheme's shape.** `f_complete` assumes the generated clique's
+  `fixpoint_induct` binds exactly the clique members a body calls, in the mutual block's
+  order, and has an admissibility lemma only up to 4 parameters. A clique outside that shape
+  gets only `_sound` (with a comment); a mismatch fails the check, it is not silently weakened.
 * **Ill-formed AIR** is `⊥`, not a distinguished error; a certificate never relies on it
   (the certified functions are checked, well-typed AIR).
 
