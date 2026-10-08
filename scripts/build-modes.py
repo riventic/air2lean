@@ -12,7 +12,7 @@ source-level gate (no Zig or Lean):
   each target it lists (`assurance/build-mode-runs/`; see `record`);
 * a run record is internally consistent: counts add up, only the release modes without safety
   checks may exclude model-throwing inputs, fast-math is absent from the tested sources, and any
-  mismatch is triaged with a reproducer (a qualified record admits none);
+  mismatch is triaged with a reproducer and falls under an exception the record states;
 * premise IDs exist in docs/premises.md;
 * the shipping export/native flags appear in their sources and match compatibility.json;
 * fast-math and other changed semantics are excluded, with guard text present in the source;
@@ -175,8 +175,14 @@ def check_run(root, record, item, text, errors, where):
     listed = {e.get('example') for e in run.get('excluded_examples') or [] if isinstance(e, dict)}
     if not isinstance(skipped, dict) or {k for k, v in skipped.items() if v == 'not_requested'} != listed:
         errors.append(f'{where}: {path} every example left out of the run must be listed in excluded_examples')
-    if mismatches and record.get('status') == 'qualified':
-        errors.append(f'{where}: a qualified record cannot cite a run with mismatches ({path})')
+    # A qualified record may carry only exceptions (illegal behaviour its premise leaves out);
+    # an unqualified one lists its open findings.
+    declared = (record.get('exceptions') or []) + (
+        record.get('findings') or [] if record.get('status') != 'qualified' else [])
+    for entry in triage:
+        if isinstance(entry, dict) and entry.get('classification') not in declared:
+            errors.append(f'{where}: {path} triage class {entry.get("classification")!r} is not a stated '
+                          f'exception of the record')
     exclusions = run.get('exclusions')
     if not isinstance(exclusions, list) or sum(
             e.get('cases', 0) for e in exclusions if isinstance(e, dict)) != sum(
@@ -418,7 +424,7 @@ def build_run(summary, cases, args, root):
                        for (e, f, st), n in sorted(excluded.items())],
         'pin_violations': len(summary['pin_violations']),
         'float_mode_optimized_sources': float_mode,
-        'triage': json.loads(Path(args.triage).read_text()) if args.triage else [],
+        'triage': [entry for path in args.triage for entry in json.loads(path.read_text())],
     }
 
 
@@ -438,7 +444,8 @@ def main(argv=None):
     rec.add_argument('--backend', choices=sorted(BACKENDS), required=True)
     rec.add_argument('--emulated', action='store_true')
     rec.add_argument('--explicit-backend', action='store_true', help='-fllvm was passed')
-    rec.add_argument('--triage', type=Path, help='JSON list of triaged mismatches')
+    rec.add_argument('--triage', type=Path, action='append', default=[], help='JSON list of triaged mismatches')
+    rec.add_argument('--verify', action='store_true', help='compare with the committed record instead of writing')
     rec.add_argument('--link-flags', default='', help='extra linker flags the run passed')
     rec.add_argument('--excluded-examples', type=Path,
                      help='JSON list of {example, reason, reproducer} for examples left out of the run')
@@ -460,6 +467,22 @@ def main(argv=None):
             return 1
         name = f'{args.zig_version}--{args.target}--{args.mode}--{args.backend}.json'
         out = args.root / RUN_DIR / name
+        if args.verify:
+            # A fresh run must agree with the committed record on everything that is not
+            # schedule- or hash-dependent: the case count and the mismatches.
+            try:
+                committed = json.loads(out.read_text(encoding='utf-8'))
+            except (OSError, json.JSONDecodeError) as error:
+                print(f'build-modes: no committed record {out}: {error}', file=sys.stderr)
+                return 1
+            problems = [key for key in ('cases', 'examples', 'triage') if committed.get(key) != run.get(key)]
+            problems += [f'counts.{key}' for key in ('mismatch', 'ub_excluded')
+                         if committed['counts'].get(key, 0) != run['counts'].get(key, 0)]
+            for problem in problems:
+                print(f'build-modes: {out.name}: {problem} differs from the committed record', file=sys.stderr)
+            if not problems:
+                print(f'build-modes: {out.name} verified ({run["cases"]} cases)')
+            return 1 if problems else 0
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(run, indent=2, sort_keys=True) + '\n', encoding='utf-8')
         print(f'build-modes: wrote {out.relative_to(args.root)} ({run["cases"]} cases)')
