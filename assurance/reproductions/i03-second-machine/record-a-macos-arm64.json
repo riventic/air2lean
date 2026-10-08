@@ -1,0 +1,312 @@
+{
+  "failures": [],
+  "host": {
+    "audit": {
+      "log_sha256": "0b98ea970f12be79fa84177a6050acd478816e7438808b55267c5e2753160334",
+      "peak_sampled_rss_kib": 1425904,
+      "workload_seconds": 6.432
+    },
+    "build": {
+      "log_sha256": "93031e181a9c6539549c2fc770fc04e3a90a34dfca078e2f2cdf465264d17e6c",
+      "peak_sampled_rss_kib": 1247280,
+      "pins": [
+        {
+          "bytes": 25,
+          "path": "/opt/dev/air2lean/.claude/worktrees/agent-ad8a1e00248f9c21e/lean-toolchain",
+          "sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
+        },
+        {
+          "bytes": 3401,
+          "path": "/opt/dev/air2lean/.claude/worktrees/agent-ad8a1e00248f9c21e/zig-patch/versions.toml",
+          "sha256": "8192cc5ad6fd9cfcf78db421c037870ec74fb1730e15f4ca94e93c2362436edd"
+        }
+      ],
+      "tools": [
+        {
+          "bytes": 5804016,
+          "path": "/opt/homebrew/Cellar/elan-init/4.2.4/bin/elan-init",
+          "sha256": "110ee1796ee6343b363b04b87a08b91b736681df859e3161381c6a77e5bb9b5c"
+        },
+        {
+          "bytes": 34640,
+          "path": "/opt/homebrew/Cellar/python@3.14/3.14.8/Frameworks/Python.framework/Versions/3.14/bin/python3.14",
+          "sha256": "7ebde552773a4045532637b114d645a313e045ac07b26f5e520bf039f1e34063"
+        },
+        {
+          "bytes": 268736,
+          "path": "/bin/ps",
+          "sha256": "a06fe087161557f1f8c030672eaedcd90bc6a8e92b8f2d44e07cffedc3349205"
+        }
+      ],
+      "workload_seconds": 20.844
+    },
+    "elapsed_seconds": 47.781,
+    "git": {
+      "dirty": false,
+      "revision": "ea8e8e75c87111cb33da246dc03ddc6765e25306"
+    },
+    "manifest": "/opt/dev/air2lean/.claude/worktrees/agent-ad8a1e00248f9c21e/example-project.json",
+    "platform": {
+      "machine": "arm64",
+      "release": "27.0.0",
+      "system": "Darwin"
+    },
+    "python": "3.14.8",
+    "started_utc": "2026-10-08T08:23:47.153735+00:00",
+    "translator": {
+      "path": "/opt/dev/air2lean/.claude/worktrees/agent-ad8a1e00248f9c21e/.lake/build/bin/air2lean",
+      "sha256": "d53e9516b66acdbe76d6e637a4f491c96b43e84bc555f6785a24765d6e2ab61a"
+    }
+  },
+  "kind": "air2lean-project-check-record",
+  "note": "compare-records compares only `reproducible`; `host` holds machine-specific evidence (translator and Lake binaries, paths, timing, Git state).",
+  "reproducible": {
+    "check_budget": {
+      "audit_timeout_seconds": 3600,
+      "build_timeout_seconds": 3600,
+      "rss_mib": 8192
+    },
+    "float_semantics": "ieee",
+    "inputs": {
+      "input/Proofs/Basic/Gen.lean": {
+        "bytes": 8112,
+        "sha256": "7f200ec957dd89d74dcc33e3e2a2a6e2cf3b8118591aa35085bfabde76acab99"
+      },
+      "input/Proofs/Basic/Proofs.lean": {
+        "bytes": 6320,
+        "sha256": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c"
+      },
+      "input/ZigLean.lean": {
+        "bytes": 334,
+        "sha256": "1ce66e0f1da8ba1575e0ee3e6702f5bad82bf995a6fa77f2ac0f72f5d8b74dcb"
+      },
+      "input/ZigLean/Basic.lean": {
+        "bytes": 13365,
+        "sha256": "61fadbf0435e81e47eeeb8f3d32ce4c4d8846f53873d9ec1a78307a1cd1e623b"
+      },
+      "input/examples/basic/basic.zig": {
+        "bytes": 1156,
+        "sha256": "00934d994365d765aad630f769fc68553d66965737e53d9652d0ec946f6d2a8a"
+      },
+      "input/lake-manifest.json": {
+        "bytes": 140,
+        "sha256": "8597d11e822141447a698f4bd14406865e69a4ed7f6500384b08ef136da13099"
+      },
+      "input/lakefile.toml": {
+        "bytes": 324,
+        "sha256": "a20438d276d2f329272ea3c14042bcaba76658b8429e90cfd8f6376e035b2cca"
+      },
+      "input/lean-toolchain": {
+        "bytes": 25,
+        "sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632"
+      },
+      "input/tests/golden/basic/air/basic.absDiff.json": {
+        "bytes": 2515,
+        "sha256": "31cd135324ef7e2bf93bdc413eac794e6c58dcce4214d2da3d61444c804bac58"
+      },
+      "input/tests/golden/basic/air/basic.clampAdd.json": {
+        "bytes": 811,
+        "sha256": "838632190fa18c21fec1985d9cc806756d0991ad5d5d36a64304421cd03446f0"
+      },
+      "input/tests/golden/basic/air/basic.classify.json": {
+        "bytes": 1801,
+        "sha256": "6293551ceb67355f2b0044d64b78d629c19822dc7b8c0522b72f9b27b8794cc4"
+      },
+      "input/tests/golden/basic/air/basic.scale.json": {
+        "bytes": 1002,
+        "sha256": "dd997b8a8e8fca56a3681e179776781f3dba10da2dd6d91a5d86a1e5adb150ba"
+      },
+      "input/tests/golden/basic/air/basic.sum.json": {
+        "bytes": 6154,
+        "sha256": "89241caee0689b1d1677ea01114671aeff2a5b3e512e876f543c33ee7939b7c1"
+      },
+      "input/tests/golden/basic/air/basic.tardiness.json": {
+        "bytes": 1731,
+        "sha256": "ae15b05a56fbb450a62f4d8b248e41479990b00a91ea4defa7f2e9880439a334"
+      },
+      "input/tests/golden/basic/air/basic.totalWeightedTardiness.json": {
+        "bytes": 14230,
+        "sha256": "0823acb45b4da8517eb08e2b9eea03d9fa24c122801f935a785e8f192d68af0f"
+      },
+      "input/tests/golden/basic/air/basic.weightedTardiness.json": {
+        "bytes": 2581,
+        "sha256": "bd499b1c5705fc799adf50d193f2eaf9cdcd48e9020a600f2f372751ecf88e94"
+      },
+      "input/tests/roadmap/project/legacy-profile.json": {
+        "bytes": 53,
+        "sha256": "f522ca2d563517291b2f5cb84c8545a88c814ebd7b8157d4c71ca687907bd70d"
+      },
+      "input/zig-patch/air-json/json.zig": {
+        "bytes": 79013,
+        "sha256": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0"
+      },
+      "manifest": {
+        "bytes": 1575,
+        "sha256": "32e0e5b88d47a3449718a5241e9daee5fa55f131ba489e98dc91e672fa56ae29"
+      }
+    },
+    "lean_toolchain": "leanprover/lean4:v4.34.0",
+    "manifest_sha256": "32e0e5b88d47a3449718a5241e9daee5fa55f131ba489e98dc91e672fa56ae29",
+    "modules": {
+      "tardiness": {
+        "contracts": [
+          "Proofs.Basic.Proofs"
+        ],
+        "generated": "Proofs.Basic.Gen"
+      }
+    },
+    "roots": [
+      {
+        "goals": [
+          {
+            "audited_theorem": "tardiness_spec",
+            "project_assumptions": [],
+            "reason": null,
+            "references_root": true,
+            "root_definition_module": "Proofs.Basic.Gen",
+            "standard_assumptions": [
+              "Array.emptyWithCapacity",
+              "Array.mk",
+              "Array.push",
+              "Array.size",
+              "Array.toList",
+              "ByteArray.emptyWithCapacity",
+              "ByteArray.mk",
+              "ByteArray.push",
+              "ByteArray.size",
+              "Char.ofNatAux",
+              "Int.add",
+              "Int.decEq",
+              "Int.decLe",
+              "Int.decLt",
+              "Int.decNonneg",
+              "Int.ediv",
+              "Int.emod",
+              "Int.mul",
+              "Int.natAbs",
+              "Int.neg",
+              "Int.negSucc",
+              "Int.ofNat",
+              "Int.sub",
+              "Lean.Name.anonymous",
+              "Lean.Name.num",
+              "Lean.Name.str",
+              "Nat.add",
+              "Nat.beq",
+              "Nat.ble",
+              "Nat.decEq",
+              "Nat.decLe",
+              "Nat.decLt",
+              "Nat.div",
+              "Nat.gcd",
+              "Nat.gcd._unary",
+              "Nat.land",
+              "Nat.mod",
+              "Nat.modCore",
+              "Nat.mul",
+              "Nat.pow",
+              "Nat.pred",
+              "Nat.repr",
+              "Nat.shiftRight",
+              "Nat.sub",
+              "Quot.sound",
+              "String.Internal.append",
+              "String.ofByteArray",
+              "String.ofList",
+              "String.toByteArray",
+              "String.utf8ByteSize",
+              "UInt32.ofBitVec",
+              "UInt32.toBitVec",
+              "UInt32.toNat",
+              "UInt8.ofBitVec",
+              "UInt8.ofNat",
+              "panicCore",
+              "propext"
+            ],
+            "status": "allowed",
+            "strength": "total_correctness",
+            "theorem": "tardiness_spec"
+          }
+        ],
+        "id": "tardiness"
+      }
+    ],
+    "scripts": {
+      "assumptions": "5d7fb5c6186db0b102a7784249796b50fb769f8df0e35f28b78336c02fdc6e7e",
+      "build_guard": "74f3850f03d1026f5d2ddfd0b5fbde66832fce0ea8493c3b94c8addbaa1dcbfd",
+      "claims": "4830fcc9e69b4aac298a58c6ee54382608a0ae838d6bc0c65efb54ec3ef7fb83",
+      "normalize": "55e5a93c9e652472003bd8ad1fb413295e0f7e15de6b3bca3a96d250c602fa11",
+      "project": "6eb2aef3609047794c060206c5d71eacf12b3e51a91812f20b4fe5c623f24032"
+    },
+    "spawn_policy": "available",
+    "stages": {
+      "audit": {
+        "audit_status": "pass",
+        "exit_code": 0,
+        "lean_toolchain": "leanprover/lean4:v4.34.0",
+        "outcome": "success",
+        "policy_sha256": "e78ba4d7e306fd53df27022cd773d8f7741e0ebedf362abd5f8e81e72402badf",
+        "status": "passed",
+        "theorem_count": 59
+      },
+      "build": {
+        "exit_code": 0,
+        "outcome": "success",
+        "status": "passed"
+      },
+      "claims": {
+        "exit_code": 0,
+        "goals": {
+          "tardiness/tardiness_spec": {
+            "claim_class": "guaranteed-return",
+            "declared_strength": "total_correctness",
+            "derived_strength": "total_correctness",
+            "reason": null,
+            "status": "accepted"
+          }
+        },
+        "status": "pass"
+      },
+      "inputs_stable": {
+        "changed": [],
+        "status": "passed"
+      },
+      "reproduce": {
+        "mismatched_roots": [],
+        "roots": {
+          "tardiness": {
+            "body_sha256": "7f200ec957dd89d74dcc33e3e2a2a6e2cf3b8118591aa35085bfabde76acab99",
+            "committed_header": false,
+            "header_profile": {
+              "abi": "unverified",
+              "backend": "unverified",
+              "build_mode": "unverified",
+              "cpu": "unverified",
+              "endian": "little",
+              "error_layout": "reference-model",
+              "error_set_bits": 16,
+              "error_tracing": null,
+              "export_stage": "unverified",
+              "features": [],
+              "float_mode": "unverified",
+              "name": "legacy-abi64-le",
+              "pointer_bits": 64,
+              "schema": 11,
+              "target_triple": "unverified",
+              "zig_version": "0.15.2"
+            }
+          }
+        },
+        "status": "passed"
+      },
+      "translate": {
+        "generated_sha256": {
+          "tardiness": "8c357a713cda2ef7ab44e65c7260b53c2f35e01d623844c60b6bcf1dd4809a5e"
+        },
+        "status": "passed"
+      }
+    }
+  },
+  "schema": 1,
+  "status": "reproduced"
+}

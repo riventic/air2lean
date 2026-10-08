@@ -1221,16 +1221,17 @@ def check_modules(manifest):
     return modules
 
 
-def run_guarded(tools, base, staging, name, phase, timeout, budget, lock, command):
+def run_guarded(tools, base, staging, name, phase, timeout, budget, lock, command, lock_wait=0):
     """Run one Lake-backed stage under build-guard; the guard's JSON report is the evidence."""
     report_path, log_path = staging / f'{name}-guard.json', staging / f'{name}.log'
     argv = [sys.executable, str(tools['build_guard']), '--cwd', str(base), '--report', str(report_path),
             '--log', str(log_path), '--profile', 'project-check', '--phase', phase,
             '--timeout', str(timeout), '--rss-mib', str(budget['rss_mib']), '--log-bytes', str(16 * 1024 * 1024)]
     argv += ['--lock', str(lock)] if lock else []
+    argv += ['--lock-wait', str(lock_wait)] if lock_wait else []
     child = subprocess.Popen([*argv, '--', *command], cwd=base, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
-        _, stderr = child.communicate(timeout=timeout + 120)
+        _, stderr = child.communicate(timeout=timeout + lock_wait + 120)
     except BaseException:
         # The guard owns its workload's process tree: ask it to stop the tree, then wait.
         child.send_signal(signal.SIGTERM)
@@ -1313,7 +1314,7 @@ def run_claims(tools, manifest_path, audit_path, staging):
     return {'status': claims.get('status'), 'exit_code': result.returncode, 'goals': goals}
 
 
-def project_check(path, translator, staging, tools=None, lock=None):
+def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0):
     """Run the whole check into `staging`; stage failures are recorded, not raised."""
     tools = dict(CHECK_TOOLS, **(tools or {}))
     started = time.monotonic()
@@ -1385,7 +1386,7 @@ def project_check(path, translator, staging, tools=None, lock=None):
     # 3. Build the contract modules (and their imports, including the generated modules).
     contract_modules = sorted({m for names in modules.values() for m in names['contracts']})
     stages['build'], guard = run_guarded(tools, base, staging, 'build', 'proof', budget['build_timeout_seconds'],
-                                         budget, lock, ['lake', 'build', *contract_modules])
+                                         budget, lock, ['lake', 'build', *contract_modules], lock_wait)
     stages['build']['status'] = 'passed' if stages['build']['outcome'] == 'success' else 'failed'
     host['build'] = {k: guard.get(k) for k in ('tools', 'pins', 'workload_seconds', 'peak_sampled_rss_kib', 'log_sha256')}
     if stages['build']['status'] != 'passed':
@@ -1398,7 +1399,7 @@ def project_check(path, translator, staging, tools=None, lock=None):
     for module in contract_modules:
         audit_command += ['--module', module]
     stages['audit'], guard = run_guarded(tools, base, staging, 'audit', 'check', budget['audit_timeout_seconds'],
-                                         budget, lock, audit_command)
+                                         budget, lock, audit_command, lock_wait)
     host['audit'] = {k: guard.get(k) for k in ('workload_seconds', 'peak_sampled_rss_kib', 'log_sha256')}
     try:
         if stages['audit']['outcome'] not in ('success', 'child_failed') or stages['audit']['exit_code'] not in (0, 1):
@@ -1436,7 +1437,7 @@ def project_check(path, translator, staging, tools=None, lock=None):
     return finish()
 
 
-def check_command(path, translator, out, tools=None, lock=None):
+def check_command(path, translator, out, tools=None, lock=None, lock_wait=0):
     """Publish a fresh directory: artifact, guard reports and logs, audit, claims, record.json."""
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
@@ -1444,7 +1445,7 @@ def check_command(path, translator, out, tools=None, lock=None):
     with tempfile.TemporaryDirectory(prefix='.air2lean-check-', dir=out.parent) as temp:
         staging = Path(temp) / 'check'
         staging.mkdir()
-        record = project_check(path, translator, staging, tools, lock)
+        record = project_check(path, translator, staging, tools, lock, lock_wait)
         encoded = report_bytes(record, LIMITS)
         (staging / 'record.json').write_bytes(encoded)
         if out.exists():
@@ -1509,6 +1510,8 @@ def main(argv=None):
     parser.add_argument('--require-level', choices=LEVELS, help='coverage: exit 1 if any root is below this level')
     parser.add_argument('--model-registry', type=Path, help='closure: project model registry whose symbols are boundaries')
     parser.add_argument('--lock', type=Path, help='check: build-guard lock (default AIR2LEAN_BUILD_LOCK or the guard default)')
+    parser.add_argument('--lock-wait', type=int, default=0, metavar='SECONDS',
+                        help='check: seconds each guarded stage may wait for a busy lock (default 0: fail lock_busy)')
     parser.add_argument('--build-guard', type=Path, default=CHECK_TOOLS['build_guard'], help='check: build guard script')
     parser.add_argument('--assumptions-script', type=Path, default=CHECK_TOOLS['assumptions'], help='check: assurance audit script')
     parser.add_argument('--claims-script', type=Path, default=CHECK_TOOLS['claims'], help='check: claim strength script')
@@ -1532,10 +1535,12 @@ def main(argv=None):
         if args.command == 'check':
             if not args.out or not args.translator or args.overwrite:
                 raise Invalid('check requires --out, --translator and no --overwrite; use a fresh record directory')
+            if not 0 <= args.lock_wait <= 86400:
+                raise Invalid('--lock-wait must be 0 through 86400 seconds')
             tools = {'build_guard': args.build_guard.resolve(), 'assumptions': args.assumptions_script.resolve(),
                      'claims': args.claims_script.resolve()}
             record, encoded = check_command(args.manifest.resolve(), args.translator, args.out.resolve(), tools,
-                                            args.lock and args.lock.resolve())
+                                            args.lock and args.lock.resolve(), args.lock_wait)
             print(encoded.decode('utf-8'), end='')
             return 0 if record['status'] == 'reproduced' else 1
         if args.command == 'coverage':

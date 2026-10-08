@@ -442,7 +442,9 @@ The optional `check` object bounds proof checking: `build_timeout_seconds` and
 `audit_timeout_seconds` (default 3600, maximum 21600) and the guard's sampled `rss_mib`
 (default 8192, maximum 65536). `--lock` selects the guard lock (default
 `AIR2LEAN_BUILD_LOCK`); `--build-guard`, `--assumptions-script` and `--claims-script`
-override the tools (tests use a stub audit). `lake` resolves from `PATH`.
+override the tools (tests use a stub audit). `--lock-wait SECONDS` (default 0) lets each
+guarded stage wait for a lock another build holds; without it a busy lock fails the stage
+with outcome `lock_busy`. `lake` resolves from `PATH`.
 
 `--out` is a fresh directory published by rename after the record is written:
 `record.json`, `artifact/`, the guard reports and logs, `assumptions.json` and
@@ -467,6 +469,36 @@ allowed assumptions and strengths on both machines. It does not establish export
 correspondence or backend adequacy. Translator binaries are trusted per host, and Lake
 dependency revisions are covered only through `lake-manifest.json` when it is listed in
 `components`.
+
+### Second machine
+
+`scripts/second-machine.sh` produces the second record from a fresh clone in a clean Linux
+container and compares it with a record from the host checkout:
+
+```sh
+lake build air2lean
+python3 scripts/project.py check example-project.json \
+  --translator .lake/build/bin/air2lean --out /tmp/machine-a --lock-wait 3600
+scripts/second-machine.sh --platform linux/arm64 --rev HEAD --compare /tmp/machine-a/record.json
+```
+
+It builds `Dockerfile.clean-env` (Ubuntu 24.04 with no Lean, elan, Zig or caches) and passes
+only a `git bundle` of the committed ref, so working-tree edits never reach the container.
+Inside, it clones the bundle, checks out the exact commit, installs the elan pin for the
+container architecture (`zig-patch/versions.toml` `[ci.elan]` for `x86_64`,
+`[ci.elan-aarch64]` for `aarch64`, both sha256-checked) and the `lean-toolchain` release, runs
+`lake build air2lean`, then `project.py check`. The check fails if the clone is dirty afterwards.
+Zig is not installed because the manifest translates committed AIR. `--platform` defaults to
+`compatibility.json` `clean_environment.platform` (`linux/amd64`); on Apple-silicon hosts
+`linux/arm64` runs natively, while `linux/amd64` runs emulated (about 7 instead of 3 minutes for
+`example-project.json`). Results go to
+`.lake/second-machine-results/run.*/` (`check/` with `record.json` and all check evidence,
+`clone.json`, `build-air2lean.log`); override with `AIR2LEAN_SECOND_RESULTS`. The script exits
+with the container's status (1 for a failed record), then with `compare-records`' status.
+Both records must come from the same commit, because `reproducible` hashes the check scripts.
+The committed run (macOS arm64 host against linux/arm64 and linux/amd64 containers, both
+`reproduced`) is in `assurance/reproductions/i03-second-machine/` (`note.json`, the three
+records and both comparisons).
 
 ```sh
 python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
