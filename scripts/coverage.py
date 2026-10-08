@@ -285,6 +285,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/bitops/qualified/{version}/air': 'tests/roadmap/bitops/qualified/0.16.0/manifest.json',
     'tests/roadmap/idle-loops/air': 'tests/roadmap/idle-loops/provenance.json',
     'tests/roadmap/spawn-failure/air/{version}': 'tests/roadmap/spawn-failure/air/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/page-linux': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-translated/air/{version}/fba-macos': 'tests/roadmap/alloc-translated/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
@@ -823,7 +827,7 @@ def generate(version, source, os_name='linux'):
                   'disposition': constant_disposition(name),
                   'qualification': 'writeRef source arm/fallback only; Json.parseVal and Check.lean restrict forms and types.'})
                  for name in universe['intern_keys']]
-    ptr_rejected = re.search(r'ptrOther\? then throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
+    ptr_rejected = re.search(r'ptrOther\?[^\n]* then throw', cache.text(ROOT/'Air2Lean/Check.lean')) is not None
     bases = pointer_dispositions(universe['pointer_bases'], ptr_arms, ptr_rejected)
     scopes = {'inventory-tool': ['scripts/coverage.py', 'zig-patch/versions.toml'], 'translation': ['Air2Lean', 'zig-patch/air-json'], 'runtime-models': ['ZigLean'],
               'proof-sources': ['Proofs'], 'qualification-probes': ['scripts/floatprobe.sh', 'tests/diff', 'tests/golden', 'tests/roadmap/diagnostics',

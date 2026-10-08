@@ -2370,8 +2370,13 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     | some (.optional p) => pageBytes (some p) "many" false
     | _ => false
   let isSize (k : Nat) := argTy k == some (.int false 64)
+  -- TODO(module identity, codex/fix-module-identity): bind on std's `posix` module, not on the
+  -- module-less fqn. Until then, guard: the flag structs must be std's own OS types, which a
+  -- user module named `posix` does not produce.
+  let stdFlags : List String := if f.targetOs == "linux" then ["os.linux."] else ["macho.", "c."]
   let packed32 (k : Nat) : Bool := match argId k, argTy k with
-    | some t, some (.struct _ "packed" _) => packedBits f.types t == some 32
+    | some t, some (.struct name "packed" _) =>
+      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·)
     | _, _ => false
   let mapping : Bool := match f.types[ret]? with
     | some (.errorUnion set p) =>
