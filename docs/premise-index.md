@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2170 theorems in 125 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 581 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 409 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -34,21 +34,21 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-04](premises.md#ord-04) | 457 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 70 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 77 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 21 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
+| [SEM-01](premises.md#sem-01) | 2049 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
+| [SEM-03](premises.md#sem-03) | 983 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2170 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1008 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1008 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -341,22 +341,35 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, T
 
 ## `Proofs/Floats/Dot.lean`
 
-File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `dot_loop_step` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `dot_eq_sumLeft` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_loop_step` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `dot_eq_sumLeft` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `dot_init_toRat` | MTH-01, TRU-01 |
-| `mul_bound` | TRU-01 |
 | `dotTerm_error` | MTH-01, TRU-01 |
-| `dot_error` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `dot_isNaN` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `dot_pos_of_gap` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_error` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_isNaN` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_pos_of_gap` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Floats/Fitness.lean`
+
+File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `fitness_loop_step` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `fitness_eq_sumLeft` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_panic` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitTerm_error` | MTH-01, TRU-01 |
+| `fitness_error` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_isNaN` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `fitness_gt_of_gap` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Floats/Proofs.lean`
 
-File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -366,23 +379,23 @@ File premises: PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 | `Zig.Float.le_refl` | MTH-01, TRU-01 |
 | `Zig.Float.le_of_not_lt` | MTH-01, TRU-01 |
 | `Zig.Float.lt_eq_false_of_le` | MTH-01, TRU-01 |
-| `Zig.hypot2_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isNan_spec` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isNan_allowed` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isNan_zero_div_zero` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_spec` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_id` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `clamp_allowed` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `dot_nil` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `dot_len_mismatch` | PRF-01, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `celsius_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `celsius_null_iff` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `celsius_nan` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `hypot2_not_neg` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `lerp_body` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `lerp_t0` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `lerp_t0_negzero` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Zig.hypot2_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isNan_spec` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isNan_allowed` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isNan_zero_div_zero` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_spec` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_id` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `clamp_allowed` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `dot_nil` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `dot_len_mismatch` | PRF-02, MTH-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `celsius_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `celsius_null_iff` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `celsius_nan` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `hypot2_not_neg` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `lerp_body` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `lerp_t0` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `lerp_t0_negzero` | PRF-02, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Iogroup/Counter.lean`
 

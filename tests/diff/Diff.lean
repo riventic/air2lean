@@ -483,6 +483,15 @@ def runDot : IO Unit :=
     let ys ← (← getArr items[1]!).mapM (getFloat .f64)
     pure (renderOk (Floats.dot xs ys) floatStr)
 
+def runFitness : IO Unit :=
+  processFile "floats" "fitness" fun j => do
+    let items ← getArr j
+    let xs ← (← getArr items[0]!).mapM (getFloat .f64)
+    let ws ← (← getArr items[1]!).mapM (getFloat .f64)
+    let target ← getFloat .f64 items[2]!
+    let penalty ← getFloat .f64 items[3]!
+    pure (renderOk (Floats.fitness xs ws target penalty) floatStr)
+
 /-! ### vectors: every function takes/returns `@Vector(4, T)` (examples/vectors/vectors.zig) -/
 
 /-- A `@Vector(4, α)` from 4 already-parsed lanes, lane 0 first (Zig's lane order; matches
@@ -1164,6 +1173,7 @@ def main : IO Unit := do
     DiffTest.runHypot2
     DiffTest.runCelsius
     DiffTest.runDot
+    DiffTest.runFitness
 
   run "vectors" do
     DiffTest.runFDot
