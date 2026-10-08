@@ -412,6 +412,19 @@ jobs:
           cat "$proof_api_dir/mutation.log"
           test "$mutation_status" -eq 1
           grep -Fq 'not definitionally equal' "$proof_api_dir/mutation.log"
+          # Unfolding/step lemmas for every function, and name-only downstream clients.
+          python3 -I -B tests/roadmap/proof-api/test_lemmas.py "$PWD/.lake/build/bin/air2lean" \
+            --retain "$proof_api_dir/lemmas" 2>&1 | tee "$proof_api_dir/lemmas.log"
+          for module in "$proof_api_dir"/lemmas/*.lean; do
+            lake env lean "$module" 2>&1 | tee "$module.log"
+          done
+          # The same name-only client after a semantic change must fail.
+          changed_status=0
+          lake env lean "$proof_api_dir/lemmas/changed/Basic.lean" \
+            > "$proof_api_dir/lemmas-changed.log" 2>&1 || changed_status=$?
+          cat "$proof_api_dir/lemmas-changed.log"
+          test "$changed_status" -eq 1
+          grep -Fq 'not definitionally equal' "$proof_api_dir/lemmas-changed.log"
 
       - name: Public exporter filename qualification
         if: ${{ !matrix.mutate }}

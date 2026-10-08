@@ -142,6 +142,11 @@ def checked_generated(path, report_path):
     return data, body, metadata
 
 
+def proof_api_base(source):
+    """`Air2Lean.proofApiName`: the injective UTF-8 byte encoding of a source identity."""
+    return "air2lean_api" + "".join("_" + str(byte) for byte in source.encode("utf-8"))
+
+
 def proof_api_records(body, metadata, sources):
     """Index opt-in normalized scalar IR facts; raw source/artifact hashes stay separate."""
     interfaces = []
@@ -158,7 +163,7 @@ def proof_api_records(body, metadata, sources):
                     for key in ("source", "definition", "model", "unfold"))):
             raise ValueError("malformed proof interface record")
         source = record["source"]
-        expected = "air2lean_api" + "".join("_" + str(byte) for byte in source.encode("utf-8"))
+        expected = proof_api_base(source)
         if record["model"] != expected + "_model" or record["unfold"] != expected + "_unfold":
             raise ValueError("proof interface identity differs from source encoding")
         if source not in sources or source in names:
@@ -179,6 +184,43 @@ def proof_api_records(body, metadata, sources):
         interfaces.append(dict(record, semantic_sha256=digest(encoded),
                                raw_air=dict(sources[source])))
     return sorted(interfaces, key=lambda item: item["source"])
+
+
+def proof_lemma_records(body, sources):
+    """Index `--proof-api` lemma names of every emitted function (`air2lean-proof-lemmas-v1`).
+    Names must follow the source-identity encoding and loop pre-order indices exactly."""
+    lemmas, seen = [], set()
+    prefix = b"-- air2lean-proof-lemmas: "
+    for line in body.splitlines():
+        if not line.startswith(prefix):
+            continue
+        record = parse_json(line[len(prefix):].decode("utf-8"))
+        if (not isinstance(record, dict) or record.get("format") != "air2lean-proof-lemmas-v1" or
+                not set(record) <= {"format", "source", "definition", "model", "unfold", "loops"} or
+                not {"format", "source", "definition", "model", "unfold"} <= set(record) or
+                any(not isinstance(record[key], str) or not record[key]
+                    for key in ("source", "definition", "model", "unfold"))):
+            raise ValueError("malformed proof lemma record")
+        source = record["source"]
+        base = proof_api_base(source)
+        loops = record.get("loops", [])
+        expected_loops = [dict(body=f"{base}_loop{k}_body", again=f"{base}_loop{k}_again",
+                               body_unfold=f"{base}_loop{k}_body_unfold", step=f"{base}_loop{k}_step")
+                          for k in range(len(loops))] if isinstance(loops, list) else None
+        if (record["model"] != base + "_model" or record["unfold"] != base + "_unfold" or
+                not isinstance(loops, list) or loops != expected_loops or
+                ("loops" in record and not loops)):
+            raise ValueError("proof lemma names differ from source encoding")
+        # A generic instance is renumbered before emission (Air2Lean/Air/Anon.lean): its
+        # identity must name an instance of a generic that the AIR inputs contain.
+        generic, marker, number = source.rpartition("__anon_")
+        known = source in sources or (marker and number.isdecimal() and any(
+            name.startswith(generic + marker) for name in sources))
+        if not known or source in seen:
+            raise ValueError("proof lemma record has missing or duplicate source identity")
+        seen.add(source)
+        lemmas.append(record)
+    return sorted(lemmas, key=lambda item: item["source"])
 
 
 def write_report(generated, air_dir, output):
@@ -206,6 +248,9 @@ def write_report(generated, air_dir, output):
     if interfaces:
         report["proof_api"] = dict(format="air2lean-proof-api-index-v1", interfaces=interfaces,
                                    qualification="normalized-model-unfolding; no compiler preservation claim")
+    lemmas = proof_lemma_records(body, sources)
+    if lemmas:
+        report["proof_lemmas"] = dict(format="air2lean-proof-lemmas-index-v1", functions=lemmas)
     Path(output).write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 

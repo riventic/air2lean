@@ -577,29 +577,58 @@ match {v} with
 `catch` does not use `try`: it lowers to `is_err`/`is_non_err` plus a `cond_br`, so it becomes a plain `if`/`else` on `Zig.isNonErr`/`Zig.isErr`, unwrapping with `Zig.unwrapPayload`/`Zig.unwrapErr` (`ZigLean/Basic.lean`) in each arm.
 
 
-## Stable scalar proof interface (opt-in)
+## Stable proof interface (opt-in)
 
-`--proof-api` adds a bounded P07 interface for named, checked, straight-line scalar
-functions. This initial slice covers integer arguments/constants, checked/wrapping/
-saturating add/subtract/multiply, bit and/or/xor, not/negation, integer casts,
-truncation/bitcasts and return. Calls, control flow, memory, globals, floats and
-anonymous functions receive no interface or partial semantic fingerprint. Their
-ordinary definitions continue to emit normally. Default generation is unchanged.
+`--proof-api` adds stable, named unfolding and step lemmas for every emitted function:
+pure, memory (`Zig.MemM`), concurrent, error-returning and recursive ones, with or
+without loops. Their ordinary definitions emit exactly as without the flag (the flag
+only adds declarations), and default generation is unchanged.
 
-Each selected full source name receives an injective UTF-8 byte encoding:
-`air2lean_api_<byte>_<byte>..._model` and the corresponding `_unfold` theorem.
-The model is an abbreviation of the actual emitted function. The theorem unfolds
-that abbreviation to the function's actual emitted body, with explicit arguments,
-and is proved by `rfl`; it introduces neither an axiom nor a replacement semantics.
-These names are reserved before ordinary declaration allocation. A source function
-that would collide is renamed by the existing declaration allocator. Unrelated
-anonymous instantiations therefore do not rename the public scalar interface.
+Each full source name (after generic-instance renumbering, `Air2Lean/Air/Anon.lean`)
+receives an injective UTF-8 byte encoding `B = air2lean_api_<byte>_<byte>...`. For
+each function the module then declares:
 
-Use the `model` and `unfold` fields of the generated `air2lean-proof-api` JSON
-record to find these names, rather than depending on temporary instruction/local
-names. A client can use `rw [Namespace.<unfold>]` to enter the generated model.
-The unfolded expression remains implementation detail: this slice stabilizes the
-entry boundary, not every intermediate expression or a general step-rule calculus.
+| Name | Declaration |
+| --- | --- |
+| `B_model` | `abbrev` of the emitted function |
+| `B_unfold` | `B_model p0 … = (<the emitted body>)` |
+| `B_loop<k>_body` | `abbrev` of loop `k`'s extracted body (`<fn>.loop<id>`) |
+| `B_loop<k>_again` | `abbrev` of loop `k`'s repeat test (`<fn>.again<id>`) |
+| `B_loop<k>_body_unfold` | `B_loop<k>_body caps… = (<the emitted loop body>)` |
+| `B_loop<k>_step` | `Zig.loop (B_loop<k>_body caps…) B_loop<k>_again = (B_loop<k>_body caps… >>= fun e => if B_loop<k>_again e then Zig.loop … else pure e)` |
+
+`k` is the loop's position among the function's loops in pre-order (an outer loop before
+the loops nested in it), never an AIR instruction ID. Every equality states the actual
+emitted text and is kernel checked: by `rfl`, or, in a recursive (`partial_fixpoint`)
+group, by the definition's own `eq_def`; the step lemma is `Zig.loop.eq_1`. No axiom or
+replacement semantics is introduced. The step lemma is the one-iteration rule that
+`Zig.loop_spec`/`Zig.loop_spec_mm`/`Zig.loop_dispatch_spec` (`ZigLean/Loop.lean`,
+`ZigLean/Mem/Lemmas.lean`) iterate; apply them to `B_loop<k>_body caps…` and
+`B_loop<k>_again`. All names are reserved before ordinary declaration allocation, so a
+colliding source function is renamed by the allocator rather than the interface.
+
+Each function's names are listed in a generated comment record,
+`-- air2lean-proof-lemmas: {"format":"air2lean-proof-lemmas-v1","source":…,"definition":…,"model":…,"unfold":…,"loops":[{"body":…,"again":…,"body_unfold":…,"step":…}]}`
+(`loops` only when the function has loops), and in the source-map sidecar's `proof_api`
+field (`docs/stable-generation.md`). `scripts/normalize-generated.py report` indexes them
+under `proof_lemmas` and rejects names that differ from the encoding or loop order.
+
+Stability. Canonical AIR renumbers instruction IDs (`Air2Lean/Air/Canon.lean`), so
+exporter renumbering, shifted debug lines and an added unrelated generic instance leave
+the lemma names and statements textually identical. A semantic change to a function keeps
+its lemma names but changes its statements, so a client proof that depended on the old
+body fails to check; callers' statements mention the callee only by name, and their
+invalidation is reported by the semantic fingerprints. Write clients against these names
+(`rw [Ns.B_unfold]`, `rw [Ns.B_loop0_step]`) rather than against `<fn>.loop<id>`, exit
+constructors or local names: the unfolded expression remains implementation detail.
+
+### Scalar facts
+
+Named, checked, straight-line scalar functions additionally carry the original
+normalized-IR index. This slice covers integer arguments/constants,
+checked/wrapping/saturating add/subtract/multiply, bit and/or/xor, not/negation, integer
+casts, truncation/bitcasts and return. Their `air2lean-proof-api-v1` record (`model`,
+`unfold`, normalized facts and a source map) precedes the lemma record.
 
 The existing `scripts/normalize-generated.py report Gen.lean AIR_DIR report.json`
 indexes these records under `proof_api.interfaces`. `semantic_sha256` hashes
@@ -639,7 +668,22 @@ if lake env lean /tmp/Generated.changed.client.lean; then exit 1; fi
 ```
 
 The CLI driver checks renumbered AIR and an unrelated generic instance, then a
-semantic mutation. Neither this driver nor synthetic report tests are qualification
+semantic mutation.
+
+The lemma driver runs on committed golden AIR (memory, loops, recursion, errors,
+concurrency). It checks that the default output is the committed golden, that removing the
+lemma blocks gives the default output back, that renumbering and an unrelated generic
+instance keep every lemma name and statement, and that a semantic change alters exactly
+that function's statements. It retains each module with downstream clients that use only
+generated lemma names (unfold a function, step its loop, unfold a recursive function),
+then each must kernel check, including the renumbered and unrelated variants:
+
+```sh
+python3 tests/roadmap/proof-api/test_lemmas.py .lake/build/bin/air2lean --retain /tmp/lemmas
+for f in /tmp/lemmas/*.lean; do lake env lean "$f"; done
+# The same client after `sum`'s `<` becomes `>` must fail:
+if lake env lean /tmp/lemmas/changed/Basic.lean; then exit 1; fi
+``` Neither this driver nor synthetic report tests are qualification
 evidence until the actual translator and kernel checks have completed.
 
 For every emitted function, including calls, memory and recursion,
