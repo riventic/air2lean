@@ -70,7 +70,7 @@ def std_models(text=None):
         models[symbol] = ('modelled', tuple(re.findall(r'"([^"]+)"', versions or '')), None)
     for symbol, reason in REJECTED_ROW.findall(table):
         models[symbol] = ('rejected', (), reason)
-    rows = len(re.findall(r'^  (?:allocModel|threadModel) "', table, re.M)) + table.count('kind := .rejected')
+    rows = len(re.findall(r'^  (?:allocModel|threadModel)\b', table, re.M)) + table.count('kind := .rejected')
     if not models or rows != len(models):
         raise Invalid('Air2Lean/StdModels.lean table has rows this reader cannot parse')
     return models
