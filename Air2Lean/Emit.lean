@@ -1863,9 +1863,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
+    -- The count of a width that is not a power of two can reach the width: illegal behaviour
+    -- that only a safety check (rejected `shiftRhsTooBig`) would catch (`Zig.shiftCountOk`).
+    let countChecked := match fc.valTy a, b with
+      | .int _ w, .int _ k => k < w || k == 0
+      | .int _ w, _ => w &&& (w - 1) == 0  -- a power of two (or `u0`)
+      | _, _ => true
     let expr := match op with
-      | .shl => s!"pure (Zig.shl {rv a} {rv b})"
-      | .shr => s!"pure (Zig.shr {sgn} {rv a} {rv b})"
+      | .shl => if countChecked then s!"pure (Zig.shl {rv a} {rv b})" else s!"Zig.shlChk {rv a} {rv b}"
+      | .shr =>
+        if countChecked then s!"pure (Zig.shr {sgn} {rv a} {rv b})" else s!"Zig.shrChk {sgn} {rv a} {rv b}"
       | .shlSat => s!"pure (Zig.shlSat {sgn} {rv a} {rv b})"
       | .shlExact => s!"Zig.shlExact {sgn} {rv a} {rv b}"
       | .shrExact => s!"Zig.shrExact {sgn} {rv a} {rv b}"

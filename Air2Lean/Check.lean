@@ -423,6 +423,12 @@ def ptrChild (types : Array Ty) (id : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
+/-- The pointee of a pointer or of an optional pointer. -/
+def ptrOrOptChild (types : Array Ty) (id : TyId) : Option TyId :=
+  match types[id]? with
+  | some (.optional child) => ptrChild types child
+  | _ => ptrChild types id
+
 structure CheckCtx where
   fnName : String
   types : Array Ty
@@ -847,10 +853,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
       if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
         cx.fail line "an opaque bitcast involving optional, aggregate or error-union error storage is outside the finite symbolic error-storage fragment"
-      let pointerChild (id : TyId) : Option TyId :=
-        match cx.types[id]? with
-        | some (.optional child) => ptrChild cx.types child
-        | _ => ptrChild cx.types id
       -- Changing only const qualification preserves the decoder and pointer
       -- representation even when the unchanged pointee graph is recursive.
       let qualifierPointer (id : TyId) : Option (Bool × TyId × String × Bool × TyId) := do
@@ -880,7 +882,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         return pid == aty && a.size.isSome && a.align.isSome &&
           a.ptrAlign.isSome && b.ptrAlign.isNone &&
           a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
-      match pointerChild aty, pointerChild ty with
+      match ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty with
       | some source, some target =>
         unless qualifierOnly || optionalWrapOnly do
           let some sourceCap := hasErrorCapability cx.types source
@@ -899,6 +901,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
       cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+    -- A vector has no defined byte layout, so a `@ptrCast` between it and another pointee is
+    -- illegal behaviour that no safety check catches (langref §Vectors); the model would read
+    -- its bytes as an array (`docs/illegal-behavior.md`).
+    let pointee (t : Option TyId) : Option TyId := t.bind (ptrOrOptChild cx.types)
+    if (isVector (pointee (some ty)) || isVector (pointee sourceTy)) &&
+        pointee sourceTy != pointee (some ty) then
+      cx.fail line "a pointer cast between a vector and another pointee type is illegal behaviour \
+        (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer

@@ -88,10 +88,14 @@ variable {n : Nat}
                   else pure (.ofInt n (Int.fdiv a.toInt b.toInt)))
   else pure (a.udiv b)
 
-/-- `@divExact`: the remainder must be zero. -/
-@[inline] def divExact (s : Bool) (a b : BitVec n) : Result (BitVec n) := do
-  let q ← divTrunc s a b
-  if q * b = a then pure q else throw .panic
+/-- `@divExact` as the AIR `div_exact`, which Sema emits only without safety (with safety it
+emits `div_trunc` and checks the remainder, `exactDivisionRemainder`). A zero divisor,
+`minInt / -1` and a nonzero remainder are therefore unchecked illegal behaviour. -/
+@[inline] def divExact (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
+  if b = 0 || (s && a.sdivOverflow b) then throw .illegal
+  else
+    let q := if s then a.sdiv b else a.udiv b
+    if q * b = a then pure q else throw .illegal
 
 /-- `minInt % -1`: LLVM's `srem` has no result (x86_64 `idiv` traps), and Sema does not check
 it, so `@rem`/`@mod` of these is illegal behaviour. -/
@@ -149,6 +153,12 @@ is `2^(n-1)`, the same bits). -/
 
 @[inline] def shl {m : Nat} (a : BitVec n) (b : BitVec m) : BitVec n := a <<< b.toNat
 
+/-- A shift count below the operand width (only a zero count for `u0`). A larger count is
+illegal behaviour. Sema checks it only with safety on and only for a width that is not a power
+of two (`shiftRhsTooBig`, which the translator rejects); the `Log2Int` count of a power-of-two
+width is always in range. -/
+@[inline] def shiftCountOk {m : Nat} (n : Nat) (b : BitVec m) : Bool := b.toNat < n || b.toNat == 0
+
 /-- `<<|` saturates when set bits would be shifted out. -/
 @[inline] def shlSat {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : BitVec n :=
   clamp s n (val s a * 2 ^ b.toNat)
@@ -156,13 +166,26 @@ is `2^(n-1)`, the same bits). -/
 @[inline] def shr {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : BitVec n :=
   if s then a.sshiftRight b.toNat else a >>> b.toNat
 
-/-- `@shlExact`: no set bit may be shifted out. -/
+/-- `<<` (`shl`) of a width that is not a power of two, whose count can reach the width: an
+out-of-range count is `.illegal` (`shiftCountOk`). -/
+@[inline] def shlChk {m : Nat} (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
+  if shiftCountOk n b then pure (shl a b) else throw .illegal
+
+/-- `>>` (`shr`) of a width that is not a power of two: as `shlChk`. -/
+@[inline] def shrChk {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
+  if shiftCountOk n b then pure (shr s a b) else throw .illegal
+
+/-- `@shlExact` as the AIR `shl_exact`, which Sema emits only without safety (with safety it
+emits `shl_with_overflow` and checks the flag, `shlOverflow`): a shifted-out bit and an
+out-of-range count are unchecked illegal behaviour. -/
 @[inline] def shlExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
   let r := a <<< b.toNat
-  if shr s r b = a then pure r else throw .overflow
+  if shiftCountOk n b && shr s r b = a then pure r else throw .illegal
 
-/-- `@shrExact`: no set bit may be shifted out. -/
+/-- `@shrExact`: no set bit may be shifted out (`.overflow`; with safety Sema also checks it
+after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shiftCountOk`). -/
 @[inline] def shrExact {m : Nat} (s : Bool) (a : BitVec n) (b : BitVec m) : Result (BitVec n) :=
+  if !shiftCountOk n b then throw .illegal else
   let r := shr s a b
   if r <<< b.toNat = a then pure r else throw .overflow
 
