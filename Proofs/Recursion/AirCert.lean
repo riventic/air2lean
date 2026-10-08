@@ -336,14 +336,6 @@ theorem isOdd_sound (p0 : BitVec 32) (m : Zig.Mem) :
   simp only [gen, air_sem] at h
   exact h
 
-/-- `recursion.isOdd`'s certified callees, answered by the given functions. -/
-def calls_isOdd (g_isEven : BitVec 32 → Zig.Result (Bool)) : Oracle
-  | "recursion.isEven", args =>
-    if argsOk air_isEven air_isEven.params.toList args then
-      StateT.lift ((fun v => (Value.bool v)) <$> g_isEven ((args.getD 0 .void).toBV 32))
-    else StateT.lift stuck
-  | _, _ => StateT.lift stuck
-
 /-- `recursion.isEven`: every terminating AIR run is the generated definition's. -/
 theorem isEven_sound (p0 : BitVec 32) (m : Zig.Mem) :
     Lean.Order.PartialOrder.rel ((run (progOf table) "recursion.isEven" [(Value.int false 32 p0)]).run m)
@@ -352,6 +344,14 @@ theorem isEven_sound (p0 : BitVec 32) (m : Zig.Mem) :
       ((gen "recursion.isEven" [(Value.int false 32 p0)]).run m) := run_le_gen "recursion.isEven" [(Value.int false 32 p0)] m
   simp only [gen, air_sem] at h
   exact h
+
+/-- `recursion.isOdd`'s certified callees, answered by the given functions. -/
+def calls_isOdd (g_isEven : BitVec 32 → Zig.Result (Bool)) : Oracle
+  | "recursion.isEven", args =>
+    if argsOk air_isEven air_isEven.params.toList args then
+      StateT.lift ((fun v => (Value.bool v)) <$> g_isEven ((args.getD 0 .void).toBV 32))
+    else StateT.lift stuck
+  | _, _ => StateT.lift stuck
 
 /-- `recursion.isEven`'s certified callees, answered by the given functions. -/
 def calls_isEven (g_isOdd : BitVec 32 → Zig.Result (Bool)) : Oracle

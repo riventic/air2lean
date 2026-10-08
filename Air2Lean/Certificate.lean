@@ -322,9 +322,13 @@ maps each fully qualified name to its generated definition in namespace `ns`, wh
 def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String))
     (genModule : String) : String := Id.run do
   let (frag, out) := fragment funcs
-  let declOf (n : String) : String := (declNames.find? (·.1 == n)).map (·.2) |>.getD n
+  let leanDecl (n : String) : String := (declNames.find? (·.1 == n)).map (·.2) |>.getD n
+  -- The stem of every certificate name derived from a function (`air_<d>`, `<d>_step`, …): the
+  -- generated name without `«»` quoting, other characters as `_`, so a suffix keeps it valid.
+  let declOf (n : String) : String :=
+    String.ofList ((plainName (leanDecl n)).toList.map fun c => if c.isAlphanum then c else '_')
   let airName (f : Func) := s!"air_{declOf f.name}"
-  let genName (f : Func) := s!"{ns}.{declOf f.name}"
+  let genName (f : Func) := s!"{ns}.{leanDecl f.name}"
   let names := frag.map (·.name)
   let calling (f : Func) := (callsIn f).any names.contains
   let mut lines : Array String := #[
@@ -424,13 +428,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   for (members, recursive) in callGroups frag do
     let calls := members.filter calling
     if calls.isEmpty then continue
-    -- Fail closed: arities without an admissibility lemma, or a callee without completeness.
-    let externals := (members.flatMap callsIn).filter fun n => names.contains n && !members.any (·.name == n)
-    if members.any (·.params.size > 4) || !externals.all complete.contains then
-      for f in calls do
-        lines := lines.push s!"-- `{f.name}`: no completeness theorem (arity or callee outside this generator's scheme)."
-      continue
-    for f in members do
+    for f in calls do
       let d := declOf f.name
       let s := sig f
       lines := lines ++ #[
@@ -442,6 +440,14 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
         s!"      ((gen {str f.name} [{s.encArgs}]).run m) := run_le_gen {str f.name} [{s.encArgs}] m",
         "  simp only [gen, air_sem] at h",
         "  exact h", ""]
+    -- Fail closed: arities without an admissibility lemma, or a callee without completeness.
+    let externals := (members.flatMap callsIn).filter fun n => names.contains n && !members.any (·.name == n)
+    if members.any (·.params.size > 4) || !externals.all complete.contains then
+      for f in calls do
+        lines := lines.push s!"-- `{f.name}`: no completeness theorem (arity or callee outside this generator's scheme)."
+      continue
+    for f in members do
+      let d := declOf f.name
       -- The callee oracle: one argument per distinct certified callee.
       let callees := (callsIn f).toList.eraseDups.filter names.contains
       let calleeFuncs := callees.filterMap fun n => frag.find? (·.name == n)

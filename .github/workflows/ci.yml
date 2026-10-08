@@ -375,7 +375,7 @@ jobs:
           set -euo pipefail
           python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
           lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main
-          python3 -I -B tests/roadmap/air-semantics/test_lean.py
+          python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
 
       - name: Stable scalar proof API regressions
         if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}

@@ -5,7 +5,11 @@ Needs `lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main` f
 (b) Mutations: a certificate whose embedded AIR differs from what the generated code does
     (one operator changed) no longer checks, at that function's theorem. The committed
     certificates are not vacuous.
+(c) fixtures/caller: a non-recursive caller of a certified function (a path the committed
+    examples do not exercise) gets `_complete` and `_eq`, and its fresh certificate checks.
 """
+import argparse
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -26,7 +30,29 @@ def lean(path):
                           text=True, timeout=1800)
 
 
+def check_caller(binary, tmp):
+    gen, cert = tmp / 'CallerGen.lean', tmp / 'CallerCert.lean'
+    result = subprocess.run([str(binary), str(ROOT / 'tests/roadmap/air-semantics/fixtures/caller'),
+                             '-o', str(gen), '--namespace', 'Caller', '--prefix', 'basic.',
+                             '--air-certificate', str(cert), '--air-certificate-import', 'CallerGen'],
+                            capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    text = cert.read_text()
+    for name in ('scale_run', 'scaleTwice_sound', 'scaleTwice_complete', 'scaleTwice_eq'):
+        assert f'theorem {name} ' in text, name
+    olean = subprocess.run(['lake', 'env', 'lean', f'--root={tmp}', '-o', str(tmp / 'CallerGen.olean'), str(gen)],
+                           cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert olean.returncode == 0, olean.stdout + olean.stderr
+    check = subprocess.run(['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH" exec lean "$2"', 'sh',
+                            str(tmp), str(cert)], cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert check.returncode == 0, check.stdout + check.stderr
+    print('caller fixture: scaleTwice_eq checks')
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('binary', type=Path)
+    args = parser.parse_args()
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.count('certified AIR terms equal the decoded golden files') == 2, result.stdout
@@ -53,6 +79,7 @@ def main():
                       if l.startswith(str(mutant)) and ': error' in l]
             assert errors and all(start < n <= end + 1 for n in errors[:1]), (theorem, errors, output[:2000])
             print(f'mutant {index}: {theorem} rejected')
+        check_caller(args.binary, Path(tmp))
     print('AIR semantics Lean checks passed')
 
 
