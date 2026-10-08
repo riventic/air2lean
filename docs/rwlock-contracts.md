@@ -4,7 +4,8 @@ The public `Proofs/Sync/RwLock.lean` already proves `rwLockRead_spec` (successfu
 2, 12 or 22) and `rwLockRead_safe` (no scheduler error for every fuel and oracle).
 These are partial correctness and strict safety statements, not fairness or termination.
 The roadmap's former missing-proof assessment is stale. C14 remains partial: the reusable
-Mutex/Semaphore/Condition contracts and two independent clients are below
+Mutex/Semaphore contracts with two independent clients, a Condition contract restricted to
+the `Io.Semaphore` layout (no client yet) and a restricted RwLock contract are below
 ([Reusable synchronization contracts](#reusable-synchronization-contracts)); a general
 RwLock contract and Event/WaitGroup contracts are not complete.
 
@@ -96,7 +97,9 @@ That larger extraction and generic Event/WaitGroup contracts are separate remain
 | `RwContract E …` | `Sync.Contracts.rwLock` (existing `RwLockRead` specs) | shared/exclusive acquire gives `NPts`, release returns it | only the restricted protocol above (reader 0, writer 1, `NPts`) |
 
 A client that takes a contract as a hypothesis receives the operations as abstract
-functions, so its proof cannot unfold the std implementation. Two new model clients (written
+functions, so its proof cannot unfold the std code. It still establishes the object's
+invariant interface (`Lock.FitsOn`, `Sem.Fits`), which includes the implementation's ghost
+phases and futex/word histories, so a client is not independent of that encoding. Two new model clients (written
 in Lean, not Zig exports; they call the translated std operations) are proved this way:
 
 - `Proofs/Sync/SnapshotCache.lean`: a writer updates `a += 1; b -= 1` twice under the

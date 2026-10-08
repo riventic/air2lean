@@ -89,13 +89,13 @@ MUTANTS = {
         'scripts/external-contracts.py', '    extra = sorted(set(axioms) - STANDARD_AXIOMS)\n', '    extra = []\n',
         'tests/roadmap/models/test_external_contracts.py', 'contracts',
         ('ContractReportTests.test_nonstandard_axioms_stay_assumptions',)),
-    # D02: a recorded check result goes stale when an imported proof source changes.
     # F05: a per-version theorem (e.g. `op128_spec_full`) needs a check result against each
     # version's own translation (`tests/golden/<v>/<ex>/Gen.lean`), not only the committed one.
     'theorem-inventory-version-translation-collapsed': (
         'scripts/theorem-inventory.py', '        if not (root / default).is_file():\n',
         '        if True:\n', THEOREMS, 'ti',
         ('FixtureTests.test_translations_follow_check_sh',)),
+    # D02: a recorded check result goes stale when an imported proof source changes.
     'theorem-inventory-stale-proof-accepted': (
         'scripts/theorem-inventory.py',
         '                return sources.get(mod) == sha256(root / module_path(mod))\n',

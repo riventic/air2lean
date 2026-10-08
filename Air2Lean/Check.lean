@@ -387,10 +387,7 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) 
   | .struct _ "packed" _ => packedBits types id
   | .ptr .. => if singlePtrTy types layouts id then pure 64 else none
   | .optional _ => if optSinglePtrTy types layouts id then pure 64 else none
-  | .struct _ "extern" fields =>
-    for (_, t) in fields do let _ ← reprBitSize types layouts t
-    abiBits
-  | .union _ "extern" none fields =>
+  | .struct _ "extern" fields | .union _ "extern" none fields =>
     for (_, t) in fields do let _ ← reprBitSize types layouts t
     abiBits
   | .array len child false =>
@@ -708,7 +705,7 @@ def packedFieldPtr? (types : Array Ty) (layouts : Array Layout) (base : TyId) (i
   let bits ← packedBits types s
   let fieldBits ← packedBits types fty
   let bl := layouts[base]?.getD {}
-  let bit := (if bl.hostSize != 0 then bl.bitOffset else 0) + packedFieldBit types fields idx
+  let bit := bl.bitPtrOffset + packedFieldBit types fields idx
   let hosts ← if bl.hostSize != 0 then pure #[bl.hostSize] else do
     let abi ← (layouts[s]?).bind (·.size)
     pure (if abi == (bits + 7) / 8 then #[abi] else #[(bits + 7) / 8, abi])
@@ -917,19 +914,18 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | _ => false
     -- A C/allowzero pointer and an ordinary optional single/many pointer convert with explicit
     -- null mapping (`Zig.ptrToOptional`/`Zig.ptrOfOptional`); address zero is `none`.
-    let isOptScalarPtr (t : TyId) : Bool := match cx.types[t]? with
-      | some (.optional c) => match cx.types[c]? with
-        | some (.ptr size ..) => size != "slice" | _ => false
-      | _ => false
+    let isOptScalarPtr (t : TyId) : Bool := (cx.types[t]?.map (optScalarPtr cx.types)).getD false
     match sourceTy with
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
       let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
       let memCast := memoryBitCastVersion cx.zigVersion
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
-      if (isOptPtr ty && nullable aty && !isOptScalarPtr ty) || (isOptPtr aty && nullable ty && !isOptScalarPtr aty) then
-        cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
-      if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then return line
+      -- A nullable pointer is never optional, so at most one side is the optional pointer.
+      if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then
+        unless isOptScalarPtr (if isOptPtr ty then ty else aty) do
+          cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
+        return line
       let unwrapRule := memCast && optSinglePtrTy cx.types cx.layouts aty &&
         (singlePtrTy cx.types cx.layouts ty || isUsize ty)
       let fromAddrRule := memCast && isUsize aty && optSinglePtrTy cx.types cx.layouts ty

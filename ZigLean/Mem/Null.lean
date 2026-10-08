@@ -30,8 +30,10 @@ def ptrRequireNonNull (p : Ptr) : MemM Ptr := do
   if ← ptrIsNull p then throw .panic else pure p
 
 /-- The storage dictionary of a C/allowzero pointer value in memory (a `[*c]T` variable,
-struct field or array item). Address zero is eight zero integer bytes, the target's null
-representation and the same bytes as a null `?*T` (`Enc (Option Ptr)`). Zero bytes from any
+struct field or array item). `Ptr.null` is eight zero integer bytes, the target's null
+representation and the same bytes as a null `?*T` (`Enc (Option Ptr)`). The test is structural
+(`p = Ptr.null`), not `ptrIsNull`: a pointer that reaches address zero by arithmetic on its
+provenance keeps its fragments. Zero bytes from any
 other source (`@memset`, zero-initialised storage) read back as `Ptr.null`. Every other pointer
 keeps its provenance fragments; integer bytes other than zero remain unspecified. -/
 def nullablePtrEnc : Enc Ptr where

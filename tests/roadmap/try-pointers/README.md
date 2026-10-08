@@ -33,7 +33,9 @@ Own-target branches retain the block's continuation. Target
 membership is prepared once per emission context, including bare public contexts.
 Void and nonvoid nested-branch runtime fixtures retain original error names and values.
 Existing layout/encoding
-checks still apply: the current memory model uses a two-byte error code, a 64-bit
+checks still apply: these ownership and alias rules (`Sep/Try.lean`, `Sep/TryAlias.lean`)
+cover the default two-byte error code only (the `…W` operations emitted for another
+`--error-limit` width have no ownership rules), a 64-bit
 little-endian pointer ABI, and payload offsets from `errUnionOffsets`. Unmodeled error
 unions, volatile/allowzero pointers and unsupported layouts remain rejected. No claim
 is made for representations that erase the error tag, or other target ABIs.
