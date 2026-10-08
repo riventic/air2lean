@@ -1,0 +1,5 @@
+device_effects.putc
+device_effects.writeAll
+device_effects.statusTwice
+device_effects.clearStatus
+device_effects.sendThenStatus

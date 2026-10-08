@@ -1,0 +1,402 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "device_effects.writeAll",
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 3,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 4,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 5,
+   "tag": "slice_len",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 7,
+     "tag": "loop",
+     "ty": 5,
+     "body": [
+      {
+       "id": 8,
+       "tag": "load",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 2
+        }
+       ]
+      },
+      {
+       "id": 9,
+       "tag": "block",
+       "ty": 2,
+       "body": [
+        {
+         "id": 10,
+         "tag": "bitcast",
+         "ty": 6,
+         "args": [
+          {
+           "inst": 8
+          }
+         ]
+        },
+        {
+         "id": 11,
+         "tag": "bitcast",
+         "ty": 6,
+         "args": [
+          {
+           "inst": 5
+          }
+         ]
+        },
+        {
+         "id": 12,
+         "tag": "cmp_lt",
+         "ty": 7,
+         "args": [
+          {
+           "inst": 10
+          },
+          {
+           "inst": 11
+          }
+         ]
+        },
+        {
+         "id": 21,
+         "tag": "cond_br",
+         "ty": 5,
+         "args": [
+          {
+           "inst": 12
+          }
+         ],
+         "then": [
+          {
+           "id": 13,
+           "tag": "slice_elem_val",
+           "ty": 8,
+           "args": [
+            {
+             "inst": 1
+            },
+            {
+             "inst": 8
+            }
+           ]
+          },
+          {
+           "id": 14,
+           "tag": "dbg_var_val",
+           "ty": 2,
+           "args": [
+            {
+             "inst": 13
+            }
+           ],
+           "name": "c"
+          },
+          {
+           "id": 15,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 2
+          },
+          {
+           "id": 16,
+           "tag": "call",
+           "ty": 2,
+           "callee": {
+            "ty": 9,
+            "func": "device_effects.putc",
+            "noreturn": false
+           },
+           "args": [
+            {
+             "inst": 0
+            },
+            {
+             "inst": 13
+            }
+           ]
+          },
+          {
+           "id": 17,
+           "tag": "dbg_stmt",
+           "ty": 2,
+           "line": 2
+          },
+          {
+           "id": 18,
+           "tag": "dbg_empty_stmt",
+           "ty": 2
+          },
+          {
+           "id": 19,
+           "tag": "br",
+           "ty": 5,
+           "target": 9,
+           "args": [
+            {
+             "ty": 2,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 20,
+           "tag": "br",
+           "ty": 5,
+           "target": 6,
+           "args": [
+            {
+             "ty": 2,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 22,
+       "tag": "add",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 8
+        },
+        {
+         "ty": 4,
+         "val": "1"
+        }
+       ]
+      },
+      {
+       "id": 23,
+       "tag": "store_safe",
+       "ty": 2,
+       "args": [
+        {
+         "inst": 2
+        },
+        {
+         "inst": 22
+        }
+       ]
+      },
+      {
+       "id": 24,
+       "tag": "repeat",
+       "ty": 5,
+       "target": 7
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "ty": 2,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 10,
+   "ptr_align": 4,
+   "volatile": true,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 8,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (*volatile device_effects.Uart, u8) void"
+  },
+  {
+   "k": "struct",
+   "name": "device_effects.Uart",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "status",
+     "ty": 11,
+     "offset": 0
+    },
+    {
+     "name": "data",
+     "ty": 11,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}

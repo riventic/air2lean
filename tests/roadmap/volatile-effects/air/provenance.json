@@ -1,0 +1,20 @@
+{
+  "source_sha256": "32f67d9080bed60bd7473a212ac61b5ed5701b238fd1fd86b45c2f6c7858f7d7",
+  "air": {
+    "zig_version": "0.16.0",
+    "schema": 12,
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+  "qualification": "Fresh export of device_effects.zig (filter device-filter) with the patched 0.16.0 compiler (aarch64-macos host build of zig-patch 5715fa4a); check-device.sh --export re-exports and requires the same translation. The 0.15.2 and 0.14.1 exports translate to the same Gen.lean except for the profile header. Re-export and refresh this record when device_effects.zig changes.",
+  "air_sha256": {
+    "device_effects.clearStatus.json": "57743cbcb3021164292cbf022685ac5f9486d49d317f6b0f40b9a4e4dad65f43",
+    "device_effects.putc.json": "ae110cb065b390d78e4ffc1cdc159704e165bc80ed8be6a6c2fa040d8db75398",
+    "device_effects.sendThenStatus.json": "e4b0c60b0a339db75e45306c342a69d43566d7e17f696351ad34b521f0ce4c11",
+    "device_effects.statusTwice.json": "5149973494e98bf9e3ec68c8d21194c94792486cee66fe024060be66f211f2d1",
+    "device_effects.writeAll.json": "97c64cb52e81b69869ee53fbe7e612642a073effff580c92c1fffc08ff8ea4d6"
+  }
+}

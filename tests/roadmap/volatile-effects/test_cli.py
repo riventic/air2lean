@@ -225,6 +225,175 @@ def check_registry(binary, tmp, air):
     return 4
 
 
+DEVICE_CONTRACT = Path(__file__).resolve().parent / "uart.json"
+
+# Under `--device-contract`: `None` accepted as a device event (or ordinary code), else the
+# rejection marker. Only an integer load or store through a volatile pointer to memory is an event.
+DEVICE_EXPECTED = {
+    "load_volatile": None, "load_plain": None, "store_volatile": None, "store_plain": None,
+    "atomic_volatile": "volatile atomic access", "slice_volatile": None,
+    "slice_ptr_volatile": None, "local_volatile": "points into a local", "local_plain": None,
+    "drop_volatile": "without `volatile`", "int_from_volatile": "without `volatile`",
+    "keep_volatile": None, "std_volatile": "has no volatile contract",
+}
+
+
+def device_only_fixtures(version="0.16.0"):
+    """Volatile accesses that stay outside the device contract."""
+    f = lambda name, params, ret, body: function(name, params, ret, body, version)
+    void = dict(ty=1, val="{}")
+    return {
+        "store_undef_volatile": (f("store_undef_volatile", [3], 1, [
+            inst(0, "arg", 3, param=0), inst(1, "store", 1, [ref(0), dict(ty=0, undef=True)]),
+            returning(2, void)]), "a store of `undefined`"),
+    }
+
+
+def check_device(binary, tmp, air):
+    """`--device-contract`: the admitted events, the rejections, the emission and the contract."""
+    checks = 0
+    out = tmp / "Gen.lean"
+    for version in VERSIONS:
+        cases = {n: (d, DEVICE_EXPECTED[n]) for n, (d, _) in fixtures(version).items()}
+        cases.update(device_only_fixtures(version))
+        for name, (document, expected) in cases.items():
+            write(air, {name: document})
+            result = invoke(binary, "--diagnostics-json", air, "--device-contract", DEVICE_CONTRACT)
+            assert result.stderr == "", result.stderr
+            report = json.loads(result.stdout)
+            if expected is None:
+                assert report["status"] == "checked", (version, name, report)
+            else:
+                found = [d for d in report["diagnostics"] if d["code"] == "VOLATILE_ACCESS"]
+                assert found and all(expected in d["message"] for d in found), (version, name, report)
+            out.write_text("KEEP\n")
+            result = invoke(binary, air, "-o", out, "--namespace", "Volatile",
+                            "--device-contract", DEVICE_CONTRACT)
+            if expected is None:
+                assert result.returncode == 0, (name, result.stderr)
+                text = out.read_text()
+                assert "-- air2lean-device: " in text and "def air2lean_device : Zig.Device" in text
+                if name.endswith("_volatile") and name != "keep_volatile":
+                    assert "Zig.vload air2lean_device" in text or "Zig.vstore air2lean_device" in text, text
+                    assert "Zig.load " not in text and "Zig.store " not in text, text
+            else:
+                assert result.returncode == 1 and expected in result.stderr, (name, result.stderr)
+                assert out.read_text() == "KEEP\n", name
+            checks += 1
+    # Without the flag the same fixtures keep the default translation: no device definitions.
+    write(air, {"store_plain": fixtures()["store_plain"][0]})
+    result = invoke(binary, air, "-o", out, "--namespace", "Volatile")
+    assert result.returncode == 0 and "air2lean_device" not in out.read_text(), result.stderr
+    # A malformed contract fails before any output.
+    contract = json.loads(DEVICE_CONTRACT.read_text())
+    status, data = contract["registers"]
+    bad = {
+        "schema": {**contract, "schema": 2},
+        "unsupported field": {**contract, "extra": 1},
+        "no registers": {**contract, "registers": []},
+        "device name": {**contract, "device": "u art"},
+        "missing field": {**contract, "registers": [{k: v for k, v in status.items() if k != "access"}]},
+        "bits must be": {**contract, "registers": [{**status, "bits": 24}]},
+        "address 0": {**contract, "registers": [{**status, "address": 0}]},
+        "aligned": {**contract, "registers": [{**status, "address": status["address"] + 2}]},
+        "outside the 64-bit": {**contract, "registers": [{**status, "address": 2 ** 64}]},
+        "access 'rw'": {**contract, "registers": [{**status, "access": "rw"}]},
+        "duplicate register": {**contract, "registers": [status, {**data, "name": status["name"]}]},
+        "overlap": {**contract, "registers": [status, {**data, "address": status["address"]}]},
+    }
+    path = tmp / "device.json"
+    write(air, {"load_volatile": fixtures()["load_volatile"][0]})
+    for marker, document in bad.items():
+        path.write_text(json.dumps(document))
+        out.write_text("KEEP\n")
+        result = invoke(binary, air, "-o", out, "--namespace", "Volatile", "--device-contract", path)
+        assert result.returncode == 1 and marker in result.stderr, (marker, result.stderr)
+        assert out.read_text() == "KEEP\n", marker
+        checks += 1
+    result = invoke(binary, air, "-o", out, "--namespace", "Volatile", "--device-contract", DEVICE_CONTRACT,
+                    "--device-contract", DEVICE_CONTRACT)
+    assert result.returncode == 1 and "duplicate --device-contract" in result.stderr, result.stderr
+    return checks + 2
+
+
+TSC_CONTRACT = Path(__file__).resolve().parent / "tsc.json"
+TSC = "rdtsc\n\tshlq $32, %%rdx\n\torq %%rdx, %%rax"
+
+
+def asm(i, ty, source, *, volatile=True, clobbers=(), outputs=(), inputs=()):
+    return inst(i, "assembly", ty, source=source, volatile=volatile, clobbers=list(clobbers),
+                outputs=[dict(constraint=c, name=f"o{k}") for k, c in enumerate(outputs)],
+                inputs=[dict(constraint=c, name=f"i{k}", ref=r) for k, (c, r) in enumerate(inputs)])
+
+
+def asm_fixtures(version="0.16.0"):
+    """name -> (document, default rejection count, device-mode rejection count) under tsc.json.
+    Index 8 of TYPES is `usize` (u64)."""
+    f = lambda name, ret, body, params=(): function(name, list(params), ret, body, version)
+    void = dict(ty=1, val="{}")
+    tsc = lambda i, volatile=True: asm(i, 8, TSC, volatile=volatile, clobbers=("cc", "rdx"), outputs=("={rax}",))
+    return {
+        # Two reads of the time-stamp counter: as opaques they would be one repeatable value.
+        "rdtsc_twice": (f("rdtsc_twice", 8, [tsc(0), tsc(1), inst(2, "sub_wrap", 8, [ref(1), ref(0)]),
+                                            returning(3, ref(2))]), 2, 0),
+        "rdtsc_plain": (f("rdtsc_plain", 8, [tsc(0, volatile=False), returning(1, ref(0))]), 1, 1),
+        "rdrand": (f("rdrand", 8, [asm(0, 8, "rdrand %[ret]", clobbers=("cc",), outputs=("=r",)),
+                                   returning(1, ref(0))]), 1, 1),
+        "outputless": (f("outputless", 1, [asm(0, 1, "mfence"), returning(1, void)]), 1, 1),
+        "memory_clobber": (f("memory_clobber", 1, [asm(0, 1, "", clobbers=("memory",)), returning(1, void)]), 1, 1),
+        # Allowlisted (Air2Lean/AsmAllowlist.lean): input-determined, and the C03 spin hint.
+        "lzcnt": (f("lzcnt", 8, [inst(0, "arg", 8, param=0),
+                                 asm(1, 8, "lzcnt %[x], %[ret]", clobbers=("cc",), outputs=("=r",),
+                                     inputs=(("r", ref(0)),)),
+                                 returning(2, ref(1))], params=(8,)), 0, 0),
+        "lzcnt_other_clobbers": (f("lzcnt_other_clobbers", 8, [inst(0, "arg", 8, param=0),
+                                 asm(1, 8, "lzcnt %[x], %[ret]", outputs=("=r",), inputs=(("r", ref(0)),)),
+                                 returning(2, ref(1))], params=(8,)), 1, 1),
+        "pause": (f("pause", 1, [asm(0, 1, "pause"), returning(1, void)]), 0, 0),
+    }
+
+
+def check_asm(binary, tmp, air):
+    """Inline asm: the reviewed allowlist, ASM_VOLATILE_EFFECT, and device asm events."""
+    checks = 0
+    out = tmp / "Gen.lean"
+    for version in VERSIONS:
+        for name, (document, default, device) in asm_fixtures(version).items():
+            write(air, {name: document})
+            for flags, expected in (((), default), (("--device-contract", TSC_CONTRACT), device)):
+                result = invoke(binary, "--diagnostics-json", air, *flags)
+                assert result.stderr == "", result.stderr
+                found = [d for d in json.loads(result.stdout)["diagnostics"]
+                         if d["code"] == "ASM_VOLATILE_EFFECT"]
+                assert len(found) == expected, (version, name, flags, result.stdout)
+                assert all((d["phase"], d["category"]) == ("check", "unsupported_semantics") and
+                           d["anchor"]["instruction"] is not None for d in found), found
+                out.write_text("KEEP\n")
+                result = invoke(binary, air, "-o", out, "--namespace", "Asm", *flags)
+                if expected:
+                    assert result.returncode == 1 and out.read_text() == "KEEP\n", (name, result.stderr)
+                else:
+                    assert result.returncode == 0, (name, result.stderr)
+                    text = out.read_text()
+                    assert ("Zig.vasm air2lean_device" in text) == (name == "rdtsc_twice" and bool(flags)), text
+                checks += 1
+    # Device asm entries: a `memory` clobber is outside the contract (DEV-01), templates are unique.
+    contract = json.loads(TSC_CONTRACT.read_text())
+    entry = contract["asm"][0]
+    path = tmp / "tsc.json"
+    write(air, {"pause": asm_fixtures()["pause"][0]})
+    for marker, document in {
+            "'memory' clobber": {**contract, "asm": [{**entry, "clobbers": ["memory"]}]},
+            "duplicate asm template": {**contract, "asm": [entry, entry]},
+            "unsupported field": {**contract, "asm": [{**entry, "volatile": True}]},
+            "no registers and no asm": {**contract, "asm": []}}.items():
+        path.write_text(json.dumps(document))
+        result = invoke(binary, air, "-o", out, "--namespace", "Asm", "--device-contract", path)
+        assert result.returncode == 1 and marker in result.stderr, (marker, result.stderr)
+        checks += 1
+    return checks
+
+
 EXPORT_EXPECTED = {
     "volatile_effects.mmioRead": "volatile load",
     "volatile_effects.mmioWrite": "volatile store",
@@ -254,7 +423,21 @@ def check_export(binary, export):
                 assert report["status"] == "checked", (name, report)
             else:
                 assert_volatile(report, name, expected)
-    return len(EXPORT_EXPECTED)
+            # With the device contract, register accesses are events; the rest stays rejected.
+            result = invoke(binary, "--diagnostics-json", air, "--device-contract", DEVICE_CONTRACT)
+            codes = {d["code"] for d in json.loads(result.stdout)["diagnostics"]}
+            assert codes == DEVICE_EXPORT_EXPECTED[name], (name, codes)
+    return 2 * len(EXPORT_EXPECTED)
+
+
+DEVICE_EXPORT_EXPECTED = {
+    "volatile_effects.mmioRead": set(), "volatile_effects.mmioWrite": set(),
+    "volatile_effects.sliceRead": set(), "volatile_effects.keepVolatile": set(),
+    # The integer pointer constant is outside the exporter's pointer constants.
+    "volatile_effects.mmioFixed": {"CONSTANT_FAILURE"},
+    "volatile_effects.localVolatile": {"VOLATILE_ACCESS"},
+    "volatile_effects.dropVolatile": {"VOLATILE_ACCESS"},
+}
 
 
 class SelfTest(unittest.TestCase):
@@ -273,6 +456,17 @@ class SelfTest(unittest.TestCase):
         accepted = {name for name, e in expected.items() if e is None}
         self.assertEqual(accepted, {"load_plain", "store_plain", "local_plain", "keep_volatile"})
         self.assertTrue(all(expected[n.replace("plain", "volatile")] for n in accepted if "plain" in n))
+
+    def test_device_expectations_cover_fixtures(self):
+        self.assertEqual(set(DEVICE_EXPECTED), set(fixtures()))
+        contract = json.loads(DEVICE_CONTRACT.read_text())
+        self.assertEqual([r["access"] for r in contract["registers"]], ["read", "write"])
+
+    def test_asm_fixture_schema(self):
+        for name, (document, default, device) in asm_fixtures().items():
+            self.assertTrue(any(i["tag"] == "assembly" for i in document["body"]), name)
+            self.assertGreaterEqual(default, device, name)
+        self.assertEqual(json.loads(TSC_CONTRACT.read_text())["asm"][0]["template"], TSC)
 
     def test_registry_fixture(self):
         plain, nested = registry_client(), registry_client(nested=True)
@@ -299,7 +493,9 @@ def main():
         tmp = Path(tmp)
         air = tmp / "air"
         air.mkdir()
-        checks = check_fixtures(binary, air) + check_emission(binary, tmp, air) + check_registry(binary, tmp, air)
+        checks = (check_fixtures(binary, air) + check_emission(binary, tmp, air) +
+                  check_registry(binary, tmp, air) + check_device(binary, tmp, air) +
+                  check_asm(binary, tmp, air))
     print(f"volatile effect checks: {checks}")
 
 
