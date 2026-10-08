@@ -22,7 +22,7 @@
 #                         from there, and the translator makes that OS's Gen.lean from them.
 #   AIR2LEAN_CHECK_REPORT_DIR  Profile/input/generated-hash receipts. Default:
 #                         .lake/check-reports/<zig-version>/; actual generated sources are retained.
-#   AIR2LEAN_STAGE_TIMEOUT  Seconds per AIR dump/translation stage (default 3600; 0 disables).
+#   AIR2LEAN_STAGE_TIMEOUT  Seconds per stage (AIR dump, translation, lake build, diff) (default 3600; 0 disables).
 #                         A timed-out or interrupted stage's process group is stopped.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
 #                         harness; the stale-Gen.lean check (AIR2LEAN_CI=1) then shows that the
@@ -214,7 +214,7 @@ fi
 
 [ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
 echo "== building Lean ==" >&2
-lake build "${gen_targets[@]}"
+workflow_run_stage lake build "${gen_targets[@]}"
 
 if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
   echo "== differential testing: skipped (AIR2LEAN_DIFF=0) ==" >&2
@@ -222,4 +222,4 @@ if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
 fi
 
 echo "== differential testing ==" >&2
-exec scripts/diff.sh
+workflow_run_stage scripts/diff.sh
