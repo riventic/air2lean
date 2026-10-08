@@ -577,6 +577,11 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
   | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \
       atomic messages (float RMW arithmetic and the bitwise compare of `cmpxchg` are not qualified)"
+  | some (.ptr "c" ..) | some (.ptr "one" ..) | some (.ptr "many" ..) =>
+    -- `atomicPtrPointee` admits these only when not C/allowzero (L05 stores those with a
+    -- null-byte encoding: eight zero bytes, not the model's pointer message).
+    cx.fail line "an atomic op on a C or allowzero pointer is outside the subset: its null-byte \
+      encoding (L05) has no pointer atomic messages"
   | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool`, a packed \
       struct or a single/many pointer (`*T`, `?*T`) is outside the subset"
 

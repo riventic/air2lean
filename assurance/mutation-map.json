@@ -470,6 +470,10 @@
         {
           "path": "tests/roadmap/local-parent/Proofs.lean",
           "anchor": "#[.field 1 1 2] = none := rfl"
+        },
+        {
+          "path": "tests/roadmap/indirect-calls/test_harness.py",
+          "anchor": "def test_devirtualized_call_or_missing_target_fails"
         }
       ],
       "mutants": [
@@ -482,6 +486,21 @@
           "name": "lost_outer_alias",
           "path": "tests/roadmap/local-parent/mutations.py",
           "category": "forwarding"
+        },
+        {
+          "name": "lost_target",
+          "path": "tests/roadmap/indirect-calls/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "wrong_target",
+          "path": "tests/roadmap/indirect-calls/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "unknown_admitted",
+          "path": "tests/roadmap/indirect-calls/mutations.py",
+          "category": "other"
         }
       ]
     },
@@ -548,9 +567,38 @@
       ]
     },
     "C02": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/thread-locals/test_cli.py",
+          "anchor": "it is `extern`"
+        },
+        {
+          "path": "tests/roadmap/thread-locals/test_cli.py",
+          "anchor": "names no global"
+        },
+        {
+          "path": "tests/roadmap/thread-locals/ThreadLocals/Runtime.lean",
+          "anchor": "leaked pointer read did not throw .illegal"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "shared-instance",
+          "path": "tests/roadmap/thread-locals/ThreadLocals/Runtime.lean",
+          "category": "other",
+          "anchor": "private def sharedDispatch"
+        },
+        {
+          "name": "immortal-instance",
+          "path": "tests/roadmap/thread-locals/ThreadLocals/Runtime.lean",
+          "category": "failure-cleanup",
+          "anchor": "private def immortalDispatch"
+        }
+      ],
+      "note": "Runtime.lean (thread-locals/check.sh) requires that one instance shared by all threads changes the result and that instances outliving their thread make the leaked read succeed."
     },
     "C03": {
       "categories": [
@@ -627,7 +675,9 @@
       "note": "Deadline boundary, timeout, wake-before-timeout and wake-at-timeout contracts are kernel theorems (Contracts.lean) and runtime cases (Runtime.lean). The two mutants of ZigLean/Conc/TimedBudget.lean count as killed only by errors inside its named soundness theorems (mutations.py, CI deadline-case step)."
     },
     "C05": {
-      "categories": [],
+      "categories": [
+        "failure-cleanup"
+      ],
       "negative_tests": [
         {
           "path": "Proofs/Cancel/Spurious.lean",
@@ -642,7 +692,21 @@
           "anchor": "cancelable API not rejected"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "cancel-is-await",
+          "path": "tests/roadmap/cancellation/Runtime.lean",
+          "category": "other",
+          "anchor": "cancel-is-await: a canceled result is still reachable"
+        },
+        {
+          "name": "canceled-status-dropped",
+          "path": "tests/roadmap/cancellation/Runtime.lean",
+          "category": "failure-cleanup",
+          "anchor": "canceled-status-dropped: every sampled result is inside Outcome"
+        }
+      ],
+      "note": "Runtime.lean (CI) runs two client mutants: awaiting instead of canceling leaves no canceled result, and dropping the cleanup store on error.Canceled gives a result outside Outcome."
     },
     "C06": {
       "categories": [
@@ -692,9 +756,35 @@
       "mutants": []
     },
     "C09": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "invariant-transfer",
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/pointer-atomics/Generate.lean",
+          "anchor": "\"a float atomic is outside the subset\""
+        },
+        {
+          "path": "tests/roadmap/pointer-atomics/Generate.lean",
+          "anchor": "-- Node 1 plus 8 has node 2's address, but another block: no success, `.unspecified`."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "relaxed-pointer-publish",
+          "path": "tests/roadmap/pointer-atomics/Mutants.lean",
+          "category": "invariant-transfer",
+          "anchor": "relaxed-pointer-publish: the read of the node after a relaxed publish was not rejected with illegal"
+        },
+        {
+          "name": "free-before-join",
+          "path": "tests/roadmap/pointer-atomics/Mutants.lean",
+          "category": "failure-cleanup",
+          "anchor": "free-before-join: destroying the node before the join was not rejected with illegal"
+        }
+      ],
+      "note": "Mutants.lean (CI Build proofs step) requires that a relaxed pointer publish and a free before the join are rejected with .illegal on sampled schedules, while the unmutated client (publishRead_safe) has no error."
     },
     "C10": {
       "categories": [],
@@ -940,9 +1030,38 @@
       ]
     },
     "M05": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/address-reuse/Check.lean",
+          "anchor": "expect \"std use after free\""
+        },
+        {
+          "path": "tests/roadmap/address-reuse/Check.lean",
+          "anchor": "expect \"std double free\""
+        },
+        {
+          "path": "tests/roadmap/address-reuse/Check.lean",
+          "anchor": "expect \"live overlap refused\""
+        }
+      ],
+      "mutants": [
+        {
+          "name": "provenance-mode-ignored",
+          "path": "tests/roadmap/address-reuse/Check.lean",
+          "category": "profile-selection",
+          "anchor": "mutant \"provenance-mode-ignored\""
+        },
+        {
+          "name": "reuse-policy-ignored",
+          "path": "tests/roadmap/address-reuse/Check.lean",
+          "category": "other",
+          "anchor": "mutant \"reuse-policy-ignored\""
+        }
+      ],
+      "note": "Check.lean (address-reuse/check.sh) runs the strict-provenance and reuse expectations under a mutated mode/policy and requires that they fail."
     },
     "M06": {
       "categories": [
@@ -1064,9 +1183,52 @@
       ]
     },
     "A01": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "layout",
+        "operand-order"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/asm-effects/test_cli.py",
+          "anchor": "an asm 'memory' clobber is outside the subset"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_cli.py",
+          "anchor": "two asm outputs write the same location"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_cli.py",
+          "anchor": "writes through a const pointer"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "store_wrong_location",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "layout"
+        },
+        {
+          "name": "rw_order",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "swap_targets",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "guard_dropped",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "other"
+        },
+        {
+          "name": "local_store_dropped",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "other"
+        }
+      ],
+      "note": "Each mutant of the generated memory/read-write asm wrappers must elaborate and fail with a MISMATCH wrapper line (asm-effects/check.sh)."
     },
     "A02": {
       "categories": [],
@@ -1194,9 +1356,40 @@
       "note": "The Lean rejection cases run in scripts/model-contracts.sh; the designated mutant is Python-side (the coverage inventory reading the std model table). No Lean-side mutant of the table checks exists yet."
     },
     "P01": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "anchor": "-- No points-to for the loaded address: the step fails instead of inventing ownership."
+        },
+        {
+          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "anchor": "-- A rule about a different command is rejected."
+        }
+      ],
+      "mutants": [
+        {
+          "name": "array-update-wrong-neighbor",
+          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "category": "layout",
+          "anchor": "(fun _ => arr p [w, w, z])"
+        },
+        {
+          "name": "store-keeps-old-value",
+          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "category": "other",
+          "anchor": "(store 4 p w) (fun _ => pts p 4 x)"
+        },
+        {
+          "name": "frame-atom-dropped",
+          "path": "tests/roadmap/proof-tools/Steps.lean",
+          "category": "other",
+          "anchor": "Triple (pts p 4 x ∗ R) (load (BitVec 32) 4 p) (fun r => ⌜r = x⌝ ∗ pts p 4 x)"
+        }
+      ],
+      "note": "Mutated specifications of the sep_* step tactics (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (Steps.lean, CI proof-tools step)."
     },
     "P02": {
       "categories": [],
@@ -1313,22 +1506,86 @@
       ]
     },
     "I01": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "failure-cleanup"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/project-export/test_project_export.py",
+          "anchor": "def test_stalled_closure_fails"
+        },
+        {
+          "path": "tests/roadmap/project-export/test_project_export.py",
+          "anchor": "def test_unreferenced_roots_are_reported_and_fail"
+        },
+        {
+          "path": "tests/roadmap/project-export/test_project_export.py",
+          "anchor": "def test_compiler_and_translator_failures_publish_nothing"
+        },
+        {
+          "path": "tests/roadmap/project-export/test_project_export.py",
+          "anchor": "def test_source_pins"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "export-source-pin-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "failure-cleanup"
+        }
+      ],
+      "note": "project.py export publishes nothing on a stalled closure, an unexported root, a compiler/translator failure or a source that differs from its manifest pin; the Python mutant skips the pin check."
     },
     "I02": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/dependency-closure/test_dependency_closure.py",
+          "anchor": "def test_missing_transitive_callee_reports_exact_fqn_chain_and_filter"
+        },
+        {
+          "path": "tests/roadmap/dependency-closure/test_dependency_closure.py",
+          "anchor": "def test_unresolvable_boundaries"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "closure-missing-callee-hidden",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "A callee without AIR is reported missing with its exact FQN, chain and filter prefix; unresolvable boundaries are listed. The Python mutant drops every missing callee from the closure report."
     },
     "I03": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/project-check/test_check.py",
+          "anchor": "def test_failed_records_do_not_compare_as_reproduced"
+        },
+        {
+          "path": "tests/roadmap/project-check/test_check.py",
+          "anchor": "def test_committed_generated_module_must_match_translation"
+        },
+        {
+          "path": "tests/roadmap/project-check/test_check.py",
+          "anchor": "def test_failed_record_with_equal_sections_is_not_reproduced"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "record-comparison-status-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "compare-records reproduces only two passed checks with equal reproducible sections; the Python mutant ignores the record status."
     },
     "I04": {
-      "categories": [],
+      "categories": [
+        "forwarding"
+      ],
       "negative_tests": [
         {
           "path": "tests/roadmap/modular-output/test_keys.py",
@@ -1339,7 +1596,14 @@
           "anchor": "f'{ex}: default output changed'"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "module-key-imports-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "forwarding"
+        }
+      ],
+      "note": "Module keys propagate through generated imports and are bound to the translator revision; the Python mutant drops the imported modules' keys from every key (test_keys.py KeyTests)."
     },
     "I05": {
       "categories": [],
@@ -1552,8 +1816,28 @@
     },
     "Q04": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/host-accounting/test_accounting.py",
+          "anchor": "def test_headline_including_exclusions_fails"
+        },
+        {
+          "path": "tests/roadmap/host-accounting/test_accounting.py",
+          "anchor": "def test_exclusion_moved_into_exact_column_fails"
+        },
+        {
+          "path": "tests/roadmap/host-accounting/test_accounting.py",
+          "anchor": "def test_skipped_counted_as_cases_fails"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "accounting-headline-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "Published accounting tables keep exclusions and skipped cases out of the exact-match headline; the Python mutant stops checking the headline."
     },
     "Q05": {
       "categories": [],

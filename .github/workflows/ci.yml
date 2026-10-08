@@ -1043,6 +1043,8 @@ jobs:
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
             lake env lean --run tests/roadmap/pointer-atomics/Generate.lean "$RUNNER_TEMP/pointer-atomics"
             lake env lean "$RUNNER_TEMP/pointer-atomics/PtrAtomics.lean"
+            # C09: semantic mutants of the pointer-publication client must be rejected.
+            lake env lean --run tests/roadmap/pointer-atomics/Mutants.lean
             # C07: detached threads and handle ownership (kernel witnesses; detach admission
             # and emission, whose generated module must elaborate).
             lake env lean tests/roadmap/detached-threads/Runtime.lean

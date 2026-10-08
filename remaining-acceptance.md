@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 20 complete, 51 partial, 6 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 33 complete, 45 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -10,9 +10,11 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## T02 — Parameterized pointer and machine integer widths
 
-Classification: open.
+Classification: partial.
 
 a target parameter throughout pointer encoding, slices, lengths, addresses, allocation arithmetic, thread handles and layout checks. Acceptance: wasm32 and native 64-bit fixtures use their real layouts; boundary and overflow proofs hold under both profiles.
+
+Bounded progress ([PR126](https://github.com/riventic/air2lean/pull/126)): the profile's pointer width (`Zig.PtrWidth`) parameterizes pointer and optional-pointer encoding, slices, lengths, `usize` arithmetic, addresses and allocation overflow (`ZigLean/Mem/Width.lean`; the `.w64` definitions are the 64-bit model); one source exported for wasm32-freestanding, wasm32-wasi and x86_64 uses each target's real layouts, and `PointerWidth/Proofs.lean` proves its boundary and overflow behavior under both profiles (`@mulWithOverflow`, increments, bounds checks, `alloc` overflow at 2^30 on wasm32 only, stored layouts); native layout and boundary tests run on the host and under Node's WASI, and a layout of the other width is rejected. Remaining: atomics, threads, futexes, Io, futures, vectors in memory, `@tagName`/`@errorName`, inline asm and C/allowzero pointers stay 64-bit only (rejected on wasm32), and machine integer widths other than pointers.
 
 ## T03 — Endianness support
 
@@ -25,6 +27,8 @@ target-dependent integer, float, pointer-fragment, packed-field and aggregate by
 Classification: partial.
 
 qualify aarch64-linux and aarch64-macos separately, including vector layout, unusual integer widths, f80/f128 behavior and synchronization boundaries. Acceptance: each profile has native probes, versioned expected results and proofs tied to that profile. Host exclusions cannot count as successful matches.
+
+Bounded progress: [PR100](https://github.com/riventic/air2lean/pull/100) merged with bounded alignment and three-version controls. [PR126](https://github.com/riventic/air2lean/pull/126): aarch64-linux-gnu and aarch64-macos-none are qualified separately: native probes run only on their own host (`scripts/aarch64-abi.py`: unusual integer widths, f16 to f128 and `c_longdouble` layouts and results, f80 invalid encodings, atomic cells including u24/u40 with padding, the widest atomic, the cache line, L09 vector images), Zig 0.16.0 expected results are versioned per profile, and Lean checks with kernel-checked layout tables are tied to each file; host exclusions never count as matches. Remaining: aarch64 AIR stays outside the translator's accepted profiles (no native differential test or proof build on those hosts), only Zig 0.16.0 results are recorded, and synchronization boundaries beyond the atomic-cell probes.
 
 ## T05 — Native and WASM correspondence
 
@@ -122,9 +126,13 @@ Bounded progress: [Storage PR105](https://github.com/riventic/air2lean/pull/105)
 
 ## L11 — Local parent pointers and constant indirect calls
 
-Classification: partial.
+Classification: complete.
 
 parent-path recovery for local places and uniform callable-address resolution. Keep the existing direct/function-pointer call support. Acceptance: container recovery preserves aliasing; indirect dispatch covers declared targets and rejects incompatible signatures or unknown executable addresses.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): every function-pointer value resolves through one table of address-taken functions, so a call through a pointer of type `T` dispatches over exactly the declared targets of `T` whatever the pointer's origin (constant callee, global initializer, struct field, parameter, memory, integer address), and any other address or signature throws `.illegal`; `ZigLean.External.Callback` proves table completeness and incompatible-signature and unknown-address rejection, `Bridge.lean` ties them to the fresh generated dispatch, the checker rejects unknown fixed executable addresses and incompatible signatures, and dispatch mutants (dropped target, admitted unknown address, wrong target) are killed; together with PR95's local parent recovery, which keeps aliasing.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## L12 — Globals and initialization
 
@@ -160,9 +168,13 @@ Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): `Tgt.
 
 ## C02 — Thread-local storage
 
-Classification: open.
+Classification: complete.
 
 per-thread instances, initialization, address identity and lifetime rules. Acceptance: equal TLS names in different threads do not alias; thread creation and exit preserve TLS ownership rules.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): `threadlocal` globals with pointer-free, error-free storage are per-thread instances (`ZigLean/Mem/Tls.lean`): `main`'s instance is the global's block, every spawned thread makes its own from `tlsInit` when it starts and frees it when it ends (`ConcM.tlsThread`), and `runtime_nav_ptr` is the current thread's instance; `TlsWF.no_alias` proves that equal TLS names in different threads never alias, `tlsEnter_init` per-thread initialization, `twoCounters_spec`/`_safe` the concurrent client for every schedule, and `leaked_never_ok`/`tlsExit_dead` that thread exit ends the instance; `extern`, pointer-holding, over-aligned, volatile and constant-pointer forms are rejected. Scope: 0.16.0 and 0.15.2 exports; no thread-local destructors.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## C03 — Yield and spin hints
 
@@ -182,9 +194,13 @@ Completed in [PR124](https://github.com/riventic/air2lean/pull/124): tests/roadm
 
 ## C05 — Cancellation and spurious wakeups
 
-Classification: open.
+Classification: complete.
 
 target/API-specific cancellation and permitted spurious wake outcomes, with cleanup and ownership rules. Acceptance: callers that must recheck predicates are tested under those outcomes; cancellation cannot lose owned resources or disguise unfinished work as completion.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): every futex wait may return spuriously (`Sched.spuriousWake`) and `WP.futexWaitC` requires the post of that return, so the std sync proofs show their callers recheck predicates; `Io.Group.cancel` gives each task a request (`Mem.cancels`, waking a sleeping task) and joins it, and cancelable futex waits, `Io.Group.await` and `Io.checkCancel` deliver `error.Canceled` as the audited 0.16.0 std source does; `Proofs/Cancel/Group.lean` proves for every schedule that a canceled task either completes or reports cancelation with its unfinished work, its words return to `main` and every block is freed; other cancelable `std.Io` APIs (recancel, cancel protection, `Batch`, `sleep`, `operate`) are rejected with a reason, and client mutants (cancel as await, dropped cleanup) are rejected. Scope: `std.Io` 0.16.0; `Io.checkCancel` is shared with C08 futures.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## C06 — Spawn failure and group fallback behavior
 
@@ -198,21 +214,29 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## C07 — Detached threads and broader join ownership
 
-Classification: open.
+Classification: partial.
 
 thread lifetime independent of parent return, explicit handle transfer and safe reclamation conditions. Acceptance: a detached thread cannot retain freed stack data; transferred handles have one authorized join owner.
 
+Bounded progress ([PR126](https://github.com/riventic/air2lean/pull/126)): `Thread.detach` (0.16.0) consumes the handle (a later join or detach is `.illegal`); the detached thread runs on independently and any access to its creator's dead stack blocks is `.illegal` (`frame_exit_kills`); `transferHandleC` gives a handle one authorized join owner, and strict proofs order joins by a protocol rank (`Proofs/Detach/Worker.lean`, `Transfer.lean`); premise THR-10 records that no detached thread runs after `main` ends. Remaining: the translator never emits a handle transfer (a translated join of a handle its thread did not spawn stays `.illegal`), accesses after `main`'s end are not explored, a stack free records no access, and a transfer to an ended thread is not detected.
+
 ## C08 — Futures and general async IO
 
-Classification: open.
+Classification: partial.
 
 task states, await/cancel results, environment operations and ownership transfer. Qualify only the APIs selected for support. Acceptance: future completion, cancellation and error propagation have semantic rules and proof examples; group support is not reported as general async support.
 
+Bounded progress ([PR126](https://github.com/riventic/air2lean/pull/126)): `Io.async`, `Future(T).await`/`.cancel` and `Io.checkCancel` (0.16.0) are a separate model (`ZigLean/Conc/Future.lean`, docs/futures.md): a task is a model thread that writes its result into a runtime record, await and cancel join and consume it, error unions propagate, cancel records a request observed at `Io.checkCancel`, a second await returns the stored result, an unconsumed or foreign-consumed future is `.illegal`, and the `fallible` policy covers the audited eager fallbacks; generated-code proofs for every oracle and fuel (`awaitValue_result`, `awaitError_result`, `cancelValue_result`, idempotence, kernel-checked illegal schedules); `Io.concurrent`, `Select`, `Batch`, Io operations, recancel and cancel protection are rejected with reasons, and group support is not reported as async support. Remaining: partial correctness only (no strict-mode error freedom), a `Future.cancel` request reaches only `Io.checkCancel` (programs whose tasks reach another cancelation point are rejected), only the spawner may consume a future, and no I/O environment operations.
+
 ## C09 — Pointer atomics and other atomic values
 
-Classification: open.
+Classification: complete.
 
 pointer values that preserve provenance through atomic messages; qualify other atomic formats separately. Acceptance: publish/read pointer examples prove visibility and lifetime; equality/CAS does not lose block identity by reducing pointers to bare integers.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): atomic ops on `*T`, `[*]T` and `?*T` are pointer ops whose messages hold the pointer's bytes with its block (`ZigLean/Mem/AtomicPtr.lean`); `cmpxchg` compares identities (block and offset), a different pointer at the same address is `.unspecified`, never a success, and only `.Xchg` is a pointer RMW; `publishRead_spec`/`publishRead_safe` prove visibility (0 or 42) and lifetime (no error; the published node is destroyed once, after the join) for every schedule (`Proofs/Atomics/PtrPublish.lean`); float, slice, C and allowzero pointer atomics are rejected with their reasons, and relaxed-publish and free-before-join mutants are rejected. Scope: 64-bit profiles; a `usize` from `@intFromPtr` stays an integer atomic.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## C10 — Sequential consistency and unordered operations
 
@@ -282,9 +306,13 @@ Bounded progress ([PR124](https://github.com/riventic/air2lean/pull/124)): `real
 
 ## M05 — Address reuse and provenance contracts
 
-Classification: research.
+Classification: complete.
 
 state when proofs are address-independent; qualify address reuse, stale integer addresses and provenance recovery before generalizing. Acceptance: lifetime safety does not follow from an assumption that real allocators never reuse addresses; address-sensitive programs have separate contracts.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): lifetime safety does not assume fresh addresses: a pointer is a block id and an offset, and every liveness check uses the id; the opt-in `AllocPolicy.reuseAddr` oracle lets heap and owned blocks take a freed block's address (valid only if aligned, nonzero, below `nextAddr` and clear of live blocks), the Sep alloc rules and every triple hold under every reuse policy (`Triple.withReuse`), and use after free and double free stay `.illegal` after reuse (`ZigLean/Sep/AddrReuse.lean`); `@ptrFromInt` of an address that a dead and a live block share is `.unspecified` unless the program declares `ProvenanceMode.liveBlock` (premise ALC-08), and the memory-safety tutorial quantifies its headline client over reuse oracles and provenance modes. Scope: the model allocator; no native malloc address behavior.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## M06 — Shared reads and reclamation proof interfaces
 
@@ -342,9 +370,13 @@ Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): ZigLe
 
 ## A01 — Assembly effects and operand coverage
 
-Classification: partial.
+Classification: complete.
 
 explicit register, memory and observable-effect contracts before extending accepted constraints. Acceptance: writes affect the declared locations; aliases and clobbers are accounted for. Register assembly support does not imply arbitrary assembly safety.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): read-write and memory asm operands are accepted only through an explicit effect contract (premise ASM-03): the opaque `airAsmFx_<hash>` is a pure function of the register inputs and the old read-write values, and the generated wrapper holds every memory effect (alias guard, loads, call, one store per lvalue output); `incm_frame`/`setm_frame`/`swapm_frame` prove that a run changes only the declared operands, aliased `+m` operands are `.unspecified`, and a reviewed registry entry covers a `memory`-clobber barrier; 25 forms are rejected (a `memory` clobber outside the registry, early-clobber, `rm`/`g` and memory result outputs, memory inputs, writes through const pointers, two outputs to one location, clobbers of pinned registers), and wrapper mutants fail the A03 interpreter harness. Scope: x86_64 GPR families and one registry entry; register assembly support does not imply arbitrary assembly safety.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## A02 — Instruction semantics and target expansion
 
@@ -400,9 +432,13 @@ Maintain exact-source/profile regression and release audit; wider scopes remain 
 
 ## P01 — Separation logic automation
 
-Classification: partial.
+Classification: complete.
 
 associative/commutative normalization, frame inference, array splitting and proof-producing load/store steps. Acceptance: a mutable-array or heap client proof becomes materially shorter, while the Lean kernel checks every generated step.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): `ZigLean.Sep.Step` adds proof-producing symbolic-execution tactics (`sep_unfold`, `sep_step`, `sep_steps`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split`): each load/store finds its points-to or array atom, the frame is inferred by definitional AC matching, supplied contracts apply to calls, and entailments close; every step elaborates to ordinary lemmas that the kernel checks (no axioms); re-proving `bump_spec` (11 to 4 lines), the slice `reverse_step` (64 to 52) and `Lists.reverse_step` (28 to 19) plus new step clients makes heap and array proofs materially shorter, while mutated specifications fail. Scope: no range or loop-invariant synthesis (P03).
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## P02 — Verification condition generation
 
@@ -434,7 +470,7 @@ Classification: partial.
 
 distinct total-correctness and partial-correctness interfaces, plus exact result-existence obligations and resource-bounded variants where useful. Acceptance: reports distinguish no-panic, correct-if-returned and guaranteed-return claims. A diverging program cannot satisfy a total-correctness goal vacuously.
 
-Bounded progress ([PR111](https://github.com/riventic/air2lean/pull/111)): Sequential Returns/TotalTriple interface; reports classify each audited theorem as no-panic / correct-if-returned / guaranteed-return from its kernel type and reject overstated manifest goals; divergence cannot satisfy TotalTriple. Resource-bounded variants and concurrent termination absent.
+Bounded progress: [PR111](https://github.com/riventic/air2lean/pull/111) merged: Sequential Returns/TotalTriple interface; reports classify each audited theorem as no-panic / correct-if-returned / guaranteed-return from its kernel type and reject overstated manifest goals; divergence cannot satisfy TotalTriple. [PR126](https://github.com/riventic/air2lean/pull/126): resource-bounded variants: `TotalTripleWithin B` (the loop exits within `B` body runs, `LoopRuns`) with composition and refutation rules, tight for the generated `sum` loop (`Proofs/Lists/Bounded.lean`); concurrent `ReturnsWithin B` (a scheduler budget uniform in the oracle) and `EventuallyReturnsUnder Fair` (only premise-satisfying oracles, never reported as unconditional; the C03 idle loop under THR-09); claims.py derives each head's strength and bound unit and rejects overstated or premise-conditional goals. Remaining: checking a bound's value against a manifest, bounded or conditional termination of generated concurrent programs beyond the idle-loop example, and exact result-existence obligations.
 
 ## P06 — Resource and complexity proofs
 
@@ -450,7 +486,7 @@ Classification: partial.
 
 documented stable proof interfaces, generated unfolding/step lemmas, source maps and semantic fingerprints. Preserve contracts across harmless AIR renumbering. Acceptance: adding an unrelated generic instantiation does not break downstream proof interfaces; semantic changes still invalidate affected proof checks.
 
-Bounded progress: PR93 deterministic names and PR94 scalar stable proof API merged. [PR120](https://github.com/riventic/air2lean/pull/120): air2lean --source-map-json writes a per-function source-map sidecar bound to its Lean output; scripts/semantic-fingerprints.py computes renumbering-invariant fingerprints folded over call-graph SCCs and an invalidation checker reports exactly the changed functions, their cycles and callers. Remaining: step/unfolding lemmas beyond the scalar proof API; binding fingerprints to the translator revision.
+Bounded progress: PR93 deterministic names and PR94 scalar stable proof API merged. [PR120](https://github.com/riventic/air2lean/pull/120): air2lean --source-map-json writes a per-function source-map sidecar bound to its Lean output; scripts/semantic-fingerprints.py computes renumbering-invariant fingerprints folded over call-graph SCCs and an invalidation checker reports exactly the changed functions, their cycles and callers. [PR126](https://github.com/riventic/air2lean/pull/126): `--proof-api` emits source-named unfolding lemmas for every function (pure, memory, concurrent, error-returning, recursive) and per-loop body/again/body-unfold/step lemmas, proved by `rfl`, `eq_def` or `Zig.loop.eq_1` and indexed by an `air2lean-proof-lemmas-v1` record; renumbering and an unrelated generic instance keep lemma names and statements while a semantic change alters only that function's; sidecar v2 carries a build-time translator revision (digests of the CLI and every imported `Air2Lean` module) that is part of every fingerprint, and I04's module keys are bound to it. Remaining: lemmas over the loop specifications beyond the step equation, and binding the runtime (`ZigLean`) revision.
 
 ## P08 — Counterexamples and proof diagnostics
 
@@ -462,29 +498,43 @@ Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): scrip
 
 ## I01 — Zig build integration and root selection
 
-Classification: partial.
+Classification: complete.
 
 a `zig build` integration or equivalent project command that selects roots, exports the required closure and preserves project flags. Report unreferenced requested roots. Acceptance: a real production kernel is translated from its original source without copied implementation code or a misleading empty export.
 
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): `project.py export` goes from original Zig source to Lean: it selects the manifest roots, exports their AIR with the patched compiler using the project's verbatim flags, modules, build options and references, re-exports until the I02 dependency closure reaches a fixed point, and translates each root; unreferenced, inline-only or comptime-only requested roots, stalled closures, profile/version mismatches and changed pinned sources fail and publish nothing, so an empty or partial export is never mistaken for a translation; a `zig build` step runs it, and committed manifests for two production kernels (flow-time, pcg64) translate them from their original, SHA-256-pinned sources without copied implementation code. Scope: one patched-compiler export per Zig version; `build.zig` itself is not evaluated.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
+
 ## I02 — Dependency discovery
 
-Classification: partial.
+Classification: complete.
 
 dependency closure over direct calls, qualified indirect targets, globals and generic instances, with model boundaries identified explicitly. Acceptance: the tool lists and exports every required dependency or reports the exact unresolved boundary.
 
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): `scripts/dependency-closure.py` (`project.py closure`) computes each root's closure over direct calls, function values, global initializers, the comptime spawn workers of non-exported generic instances and qualified indirect targets; it classifies every target as exported, modelled (std model, registry binding, panic handler, extern initial state) or missing (exact FQN, chain from the root, filter prefix), lists each unresolvable boundary with its function and instruction, and writes the minimal `ZIG_AIR_JSON_FILTER` and a re-export command; `goldens` keeps every example's committed AIR closed and covered by its filter. Scope: the closure of exported AIR; calls inside a missing function are known once it is exported (I01 iterates to a fixed point).
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
+
 ## I03 — Project configuration and support profiles
 
-Classification: partial.
+Classification: complete.
 
 a versioned manifest for roots, targets, contracts, models, theorem goals, resource limits and allowed assumptions. Acceptance: one committed manifest reproduces translation and proof checking on another qualified machine.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): project.py check translates every root, requires the fresh translation to reproduce the committed generated modules (profile record validated), builds the contracts and audits goal theorems under build-guard budgets, checks statement binding, allowed assumptions and claims.py strength, and writes a reproducibility record; compare-records compares the machine-independent sections. A single-machine real check of example-project.json reproduced: translate/reproduce/build/audit/goal/claims all passed. Remaining: second-machine compare-records.
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): `scripts/second-machine.sh` reproduces `example-project.json` from a git bundle of the committed ref in a clean Ubuntu container (pinned elan and Lean, no caches, no Zig) and compares its check record with the host's; the committed run (`assurance/reproductions/i03-second-machine/`: a macOS arm64 host against linux/arm64 and linux/amd64 containers) is `reproduced` for both, and records of failed checks never compare as reproduced. Scope: the example manifest, translated from committed AIR.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## I04 — Modular output and incremental checking
 
-Classification: partial.
+Classification: complete.
 
 dependency-aware module splitting, incremental caches and deterministic interfaces, with invalidation for every semantic/profile change. Acceptance: an isolated function edit rebuilds only dependent modules; cold and warm builds produce equivalent definitions and proof status.
+
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): `air2lean --split-modules <Module>` writes one Lean module per call group (a strongly connected component of the call graph) plus `Types`, `Dispatch` and umbrella modules and a manifest; the parts concatenate to the single-file output (checked), so proofs change only their import; `scripts/module-split.py` keys each module by its text, the profile metadata, the P07 translator revision, the semantic fingerprints of its functions and the keys of the modules it imports, and an isolated function edit invalidates only that group's module and its transitive importers (the Lake incremental demo rebuilds only those); cold and warm builds give identical definitions. Scope: keys are conservative (text and translator revision), not a semantic-equivalence claim.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## I05 — Complete machine-readable diagnostics
 
@@ -566,7 +616,7 @@ Classification: partial.
 
 make nondeterministic valid outcomes, undefined behavior, unsupported semantics, deadlock, divergence and test-search caps distinct in reports and contracts. Acceptance: no unsupported timer or capped schedule search is reported as proved absence of a failure; error returns stay distinct from model panics.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/outcomes.py maps typed differential observations onto one taxonomy (valid, nondeterministic_valid, error_return, panic, illegal/unspecified including no-clock timers, unsupported_semantics, deadlock, divergence/fuel, search_cap); claims.py check --diff and project.py coverage refuse no-panic/guaranteed-return absence claims whose evidence has a capped, fuel-bounded, unsupported or unspecified/timer outcome or a denied failure, and error returns never refuse no-panic; a Lean fixture keeps error returns apart from model failures. Remaining: timer outcomes are indistinguishable from other unspecified outcomes; taxonomy in contracts beyond these reports, separate from correspondence.
+Bounded progress: [PR96](https://github.com/riventic/air2lean/pull/96) merged with explicit outcomes and exclusions. [PR119](https://github.com/riventic/air2lean/pull/119): scripts/outcomes.py maps typed differential observations onto one taxonomy (valid, nondeterministic_valid, error_return, panic, illegal/unspecified, unsupported_semantics, deadlock, divergence/fuel, search_cap); claims.py check --diff and project.py coverage refuse no-panic/guaranteed-return absence claims whose evidence has a capped, fuel-bounded, unsupported or unspecified outcome or a denied failure, and error returns never refuse no-panic; a Lean fixture keeps error returns apart from model failures. [PR126](https://github.com/riventic/air2lean/pull/126): unsupported timers are their own outcome: `Zig.Error.unsupportedTimer` (generated `time.Timer.start`/`.read`, `Thread.Futex.timedWait`, and the timed scheduler's no-clock, wrong-clock and unselected-timeout paths) is `unspecified_timer` in outcomes, accounting and claims, refuses no-panic/guaranteed-return with a timer-specific reason, and `claims.py check --diff` accepts only summaries bound to the current tree. Remaining: the taxonomy in contracts beyond these reports, separate from correspondence.
 
 ## Q01 — Generated program and parser fuzzing
 
@@ -594,19 +644,23 @@ Bounded progress ([PR108](https://github.com/riventic/air2lean/pull/108)): Bound
 
 ## Q04 — Host and skipped-case accounting
 
-Classification: partial.
+Classification: complete.
 
 publish exact matches, host differences, undefined/unspecified cases, capped searches, skipped functions and proof exclusions separately by version/target. Acceptance: headline totals cannot include excluded cases as successful comparisons. Legacy-version support claims match the actual matrix.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): scripts/accounting.py publishes one per-version/target table from diff-report summaries with separate exact/host/illegal/unspecified/capped/bounded/mismatch/setup columns, skipped examples/functions and proof exclusions; the headline is exact matches only and check fails when a total absorbs an excluded category; claims cross-checks README legacy-version claims against the CI matrix and each summary's selection; CI full jobs publish/check their row and upload the summary. The original Outcome-scope Zig0.16 report (87,064 cases, 85,987 exact matches, 497 illegal, 580 unspecified, zero setup failures or mismatches, qualified=false) is unchanged and is not a new full-run total. Remaining: a published cross-version table assembled from CI artifacts; proof applicability is unevaluated.
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): the published cross-version accounting table is assembled from the committed `diff-summary` artifacts of CI run 37747391759 (main 9f39e80): Zig 0.15.2 and 0.16.0 Linux-x86_64 rows with separate exact/host/illegal/unspecified/capped/bounded/mismatch/setup columns, skipped examples/functions and proof exclusions, headline 171,934 exact matches only; `check` and `claims --require-full-versions` pass and the tests re-check every committed table against its summaries; the macOS job uploads its own summaries (Q05). Scope: `qualified=false`, no cross-target rows, proof applicability unevaluated; the original Outcome-scope report is unchanged.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## Q05 — Cross-target continuous integration
 
-Classification: partial.
+Classification: complete.
 
 version/target/profile matrices for every declared supported path, including WASM execution once T02/T05 are implemented. Acceptance: platform support is backed by native execution, target probes and proof checks appropriate to that platform, not just compilation of foreign goldens.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): assurance/target-matrix.json + scripts/target-matrix.py check: every declared version/host/target/profile path is backed by native execution, target probes and proof checks on its own host, or records a gap; foreign-golden compilation does not count; a native macOS (aarch64) CI job backs the 0.16.0 and 0.15.2 macOS paths. Remaining gaps: target probe for 0.14.1 Linux and 0.15.2 macOS; WASM undeclared (T02/T05).
+Completed in [PR126](https://github.com/riventic/air2lean/pull/126): the 0.14.1 Linux and 0.15.2 macOS target-probe gaps are closed: the test job's 0.14.1 row and the macOS job's 0.15.2 steps run `scripts/abi-probe.py observe` against per-version contracts recorded with stock compilers, the target matrix records no gaps and CI runs `target-matrix.py check --strict`; T04's aarch64-linux-gnu and aarch64-macos-none ABI profiles are backed by native probes on their own hosts, and the macOS job uploads its differential summaries. Scope: the declared paths; WASM execution correspondence stays with T02/T05.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## Q06 — Translation and proof performance budgets
 

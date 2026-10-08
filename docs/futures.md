@@ -97,8 +97,10 @@ translation.
 - The all-schedule proofs are partial correctness: an error or no result satisfies them. No
   schedule is proved free of errors (strict mode). The negative results hold for every
   enumerated schedule at runtime, and the kernel checks one schedule.
-- Only `Io.checkCancel` is a modelled cancelation point (see Rejected APIs).
-  `Io.Group.cancel` still does not cancel its members (spawn-failure.md).
+- A `Future.cancel` request is delivered only at `Io.checkCancel` (see Rejected APIs).
+  `Io.Group.cancel` (C05, [std-models.md](std-models.md#spurious-wakeups-and-cancelation)) shares
+  the request set `Mem.cancels`: its requests are also delivered at cancelable futex waits and
+  `Io.Group.await`, and at `Io.checkCancel` when a group task reaches it.
 - Only the spawning thread may consume a future. std allows a future value to be moved to and
   awaited by another thread. The model rejects that as `.illegal`.
 - The model has no fairness, termination, timing or native allocator claim.
