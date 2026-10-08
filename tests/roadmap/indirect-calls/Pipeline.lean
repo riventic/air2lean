@@ -117,6 +117,13 @@ private def fieldCaller : Json :=
     call 4 (obj [("ty", num 17), ("func", .str "field"), ("noreturn", .bool false)]) #[ref 3, ref 0],
     ret 5 (ref 4)] unaryTable
 
+/-- A constant global struct whose field initializer is a function address. -/
+private def fieldGlobal : Json :=
+  file "fieldGlobal" #[0] #[arg 0 0 0,
+    call 1 (obj [("ty", num 17), ("func", .str "field"), ("noreturn", .bool false)]) #[gptr 11 3, ref 0],
+    ret 2 (ref 1)] (unaryTable.push (dataGlobal "ops" true 10
+      (obj [("ty", num 10), ("elems", .arr #[gptr 2 1, lit 4])])))
+
 /-- A function pointer written to and read back from caller memory. -/
 private def memory : Json :=
   file "memory" #[12, 0] #[arg 0 0 12, arg 1 1 0, inst 2 "store" 3 #[ref 0, gptr 2 0],
@@ -199,6 +206,7 @@ example : observe ((viaSquare 5).run mem0) = some (.ok 625) := by decide +kernel
 example : observe ((globalSlot false 5).run mem0) = some (.ok 6) := by decide +kernel
 example : observe ((globalSlot true 5).run mem0) = some (.ok 25) := by decide +kernel
 example : observe ((fieldCaller 5).run mem0) = some (.ok 25) := by decide +kernel
+example : observe ((fieldGlobal 5).run mem0) = some (.ok 6) := by decide +kernel
 example : observe ((memoryCaller 5).run mem0) = some (.ok 10) := by decide +kernel
 -- An integer that is the address of a function block is that function.
 example : observe ((do viaInt (BitVec.ofInt 64 (← Zig.ptrAddr ⟨some 2, 0⟩)) 5).run mem0) =
@@ -228,7 +236,7 @@ def main (args : List String) : IO Unit := do
   reject constDataPointer "a constant indirect callee is not a function pointer"
   reject undefCallee "undefined"
   let funcs ← #[double, succ, square, add2, table, constant, callOnce, twice,
-    viaParam "viaDouble" 0, viaParam "viaSquare" 2, globalSlot, field, fieldCaller, memory,
+    viaParam "viaDouble" 0, viaParam "viaSquare" 2, globalSlot, field, fieldCaller, fieldGlobal, memory,
     memoryCaller, viaMismatch, viaData, viaInt].mapM accept
   match checkProgram funcs with
   | .error e => throw (IO.userError e)

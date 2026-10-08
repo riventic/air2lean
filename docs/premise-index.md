@@ -5,13 +5,13 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2164 theorems in 124 files.
+2173 theorems in 125 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 603 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 381 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
+| [PRF-03](premises.md#prf-03) | 24 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
@@ -39,16 +39,16 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 12 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2043 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1702 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2050 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1703 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 978 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2164 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1002 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1002 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2173 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1008 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1008 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 25 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -2442,18 +2442,34 @@ File premises: PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, S
 | `IdleLoop.Client.tt_store_zero` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `IdleLoop.Client.tt_join` | PRF-02, THR-01, THR-02, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
-## `tests/roadmap/local-parent/Proofs.lean`
+## `tests/roadmap/indirect-calls/Bridge.lean`
 
-File premises: TRU-01
+File premises: PRF-03, SEM-01, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `example@L15` | TRU-01 |
+| `IndirectCallsBridge.table_nodup` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `IndirectCallsBridge.callOnce_resolve` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `IndirectCallsBridge.callOnce_complete` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `IndirectCallsBridge.callOnce_incompatible` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `IndirectCallsBridge.callOnce_unknown` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `IndirectCallsBridge.callOnce_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/local-parent/Proofs.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
 | `example@L17` | TRU-01 |
-| `example@L18` | TRU-01 |
 | `example@L19` | TRU-01 |
 | `example@L20` | TRU-01 |
 | `example@L21` | TRU-01 |
+| `example@L22` | TRU-01 |
+| `example@L23` | TRU-01 |
+| `LocalParentProof.localParentPath_pop` | TRU-01 |
+| `LocalParentProof.localParentPath_push` | TRU-01 |
+| `example@L48` | SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/loop-tactics/Queue.lean`
 
