@@ -1,4 +1,4 @@
-import ZigLean.Sep.Total
+import ZigLean.Sep.Witness
 import AuditClaims.Gen
 
 /-!
@@ -38,8 +38,12 @@ ignored argument on the right. `total_correctness`, `direct`. -/
 theorem root_ignored : (pure 5 : Result Nat) = pure (Function.const _ 5 (root 255)) := rfl
 
 /-- C7: partial correctness of a program that never returns, with postcondition `False`.
-`partial_correctness`: coverage reports `functionally_verified_partial`. -/
+`partial_correctness`: coverage reported `functionally_verified_partial`. Its precondition is
+satisfiable (witness below), so only the missing liveness witness (S6) caps it. -/
 theorem spin_partial : Triple emp spin (fun _ _ => False) := by
   intro m hP hF hd hm hp hs; trivial
+
+nonvacuity_witness spin_partial :=
+  ⟨{}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl, Mem.seq_default, trivial⟩
 
 end AuditClaims

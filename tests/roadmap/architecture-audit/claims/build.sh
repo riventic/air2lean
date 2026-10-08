@@ -9,16 +9,18 @@ src=tests/roadmap/architecture-audit/claims
 out=.lake/architecture-audit/claims
 mkdir -p "$out/lib/AuditClaims"
 export LEAN_PATH="$repo_root/$out/lib"
-for module in Gen Vacuous Shadow Unchecked AsmTotal; do
+for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal; do
   lake env lean -R "$src" -o "$out/lib/AuditClaims/$module.olean" "$src/AuditClaims/$module.lean"
 done
-# Separate audits: Shadow declares its own Zig.TotalTriple and cannot share an environment with
-# ZigLean.Sep.Total, exactly as a project contract audited alone with --module.
-for group in "Vacuous Unchecked AsmTotal" "Shadow"; do
+# Separate audits: Shadow declares its own Zig.TotalTriple, exactly as a project contract audited
+# alone with --module. The audit environment imports the registered claim heads
+# (tools/Assurance.lean), so that audit must fail with a name clash; its stderr is kept.
+for group in "Vacuous Unchecked AsmTotal ShadowWithin Universal" "Shadow"; do
   name=${group%% *}
   args=()
   for module in $group; do args+=(--module "AuditClaims.$module"); done
   status=0
-  python3 -B scripts/assumptions.py --no-build --output "$out/assurance-$name.json" "${args[@]}" || status=$?
+  python3 -B scripts/assumptions.py --no-build --output "$out/assurance-$name.json" "${args[@]}" \
+    2> "$out/assurance-$name.stderr" || status=$?
   echo "assumptions.py [$group] exit $status"
 done
