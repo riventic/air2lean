@@ -136,6 +136,8 @@
 #                         Default: every dir in examples/.
 #   AIR2LEAN_MUTATION_SHARD   Run only the mutations of line N (from 1) of
 #                         scripts/mutation-shards.txt (CI runs one job per line). Default: all.
+#   AIR2LEAN_MUTATION_KILL_LOG  Append "<label> killed|survived diff|proof <example|module>" per mutation run
+#                         (what killed it); `scripts/mutation-map.py kills record|verify` uses it.
 #   AIR2LEAN_MUTATION_SHARDS  The number of shard jobs. If set, the file must have that many lines.
 #                         Each run checks that the lines name every mutation exactly once, so a
 #                         new mutation that is in no line fails.
@@ -376,6 +378,16 @@ translate_mutated() {
 # detected (mismatch=N)" and sets $detected (1/0). A diff.sh crash with no TOTAL line at all (not
 # even a mismatch report) is a broken test setup, not an undetected mutation, so that case
 # aborts the whole script instead.
+# kill_log <label> <kind> <target> <status>: with AIR2LEAN_MUTATION_KILL_LOG set, append one
+# "<letter> <status> <kind> <target>" line (kind diff|proof; target the example or module whose
+# regression ran). `scripts/mutation-map.py kills record|verify` turns the log into, or checks it
+# against, assurance/mutation-kills.json.
+kill_log() {
+  [ -n "${AIR2LEAN_MUTATION_KILL_LOG:-}" ] || return 0
+  local letter=${1#mutation (}
+  printf '%s %s %s %s\n' "${letter%)}" "$4" "$2" "$3" >>"$AIR2LEAN_MUTATION_KILL_LOG"
+}
+
 # proof_report <label> <module>: `lake build <module>` fails with the mutation (a detection).
 proof_report() {
   local label=$1 mod=$2
@@ -386,10 +398,12 @@ proof_report() {
   if [ "$status" -eq 0 ]; then
     echo "$label: NOT detected (lake build $mod succeeded)"
     detected=0
+    kill_log "$label" proof "$mod" survived
   elif [ "$status" -eq 1 ] && grep -Eq '(^error: .*\.lean:[0-9]+:[0-9]+:|\.lean:[0-9]+:[0-9]+: error:)' "$out"; then
     cat "$out" >&2
     echo "$label: detected (lake build $mod failed)"
     detected=1
+    kill_log "$label" proof "$mod" killed
   else
     echo "error: $label: proof build setup failed (exit=$status)" >&2
     cat "$out" >&2
@@ -458,9 +472,11 @@ run_and_report() {
       { [ -z "$eligible" ] && { [ "${mismatch:-0}" -gt 0 ] || [ "${counts:-0}" -gt 0 ]; }; }; }; then
     echo "$label: detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=1
+    kill_log "$label" diff "$ex" killed
   else
     echo "$label: NOT detected (exit=$status mismatch=$mismatch count_changes=$counts)"
     detected=0
+    kill_log "$label" diff "$ex" survived
   fi
 }
 

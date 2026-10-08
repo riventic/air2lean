@@ -1042,7 +1042,13 @@ jobs:
           AIR2LEAN_ZIG_AIR: zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_MUTATION_SHARD: ${{ matrix.shard }}
           AIR2LEAN_MUTATION_SHARDS: "5"
+          AIR2LEAN_MUTATION_KILL_LOG: ${{ runner.temp }}/mutation-kills.log
         run: scripts/mutate.sh
+
+      # Each mutation of the shard was killed by the regression assurance/mutation-kills.json names.
+      - name: Mutation kill evidence
+        if: matrix.mutate
+        run: python3 -B scripts/mutation-map.py kills verify --log "$RUNNER_TEMP/mutation-kills.log"
 
       # Keep the selected generated/profile context and final compiled library together.
       # This owns its sole guard; evidence stays outside cached .lake, with no upload.

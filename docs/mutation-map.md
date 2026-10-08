@@ -72,10 +72,31 @@ python3 -B tests/roadmap/mutation-map/mutants.py --list
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py
 ```
 
-All three run in CI ("Mutation map and Python-side mutants"). The Lean/Zig mutants the map
-names stay in their own gates (`scripts/mutate.sh` shards, `tests/roadmap/*/check.sh` and
-`mutations.py`). The map records that they exist and what they target. Their kills are shown by
-those gates.
+All three run in CI ("Mutation map and Python-side mutants"). The other Lean/Zig mutants the
+map names (`tests/roadmap/*/check.sh`, `mutations.py`) stay in their own gates.
+
+## Kill evidence for `scripts/mutate.sh`
+
+`assurance/mutation-kills.json` records, for each `scripts/mutate.sh` mutation, the regression
+that killed it: `{"kind": "diff", "target": "<example>"}` (the differential test of that example
+reported a mismatch or an eligible count change) or `{"kind": "proof", "target": "<module>"}`
+(`lake build <module>` failed with a Lean error, possibly in a dependency such as
+`ZigLean.Conc.Lemmas`), plus `block_sha256`, the hash of the mutation's text in `mutate.sh`.
+`check` fails when a designated `mutate.sh` mutant has no recorded kill, the killing example or
+module does not exist, the hash differs (the mutation was edited after its kill was recorded),
+or the ledger names a mutation that is gone. A survivor can never be recorded.
+
+```sh
+AIR2LEAN_MUTATION_KILL_LOG=kills.log scripts/mutate.sh        # also per shard (heavy)
+python3 scripts/mutation-map.py kills record --log kills.log  # merge killed mutations into the ledger
+python3 scripts/mutation-map.py kills verify --log kills.log  # fail unless each was killed by the recorded regression
+```
+
+`mutate.sh` appends one line per mutation it runs (`<label> killed|survived diff|proof <target>`).
+`record` refuses a log with a survivor; the CI mutation shards run `verify` on their own log, so a
+mutant that survives or is killed by something else than the recorded regression fails the job.
+The ledger is evidence of what was run when it was recorded; it is not rechecked offline
+beyond the block hash, so a change to the mutated Lean source alone is caught by the CI shards, not by `check`.
 
 ## Scope
 
