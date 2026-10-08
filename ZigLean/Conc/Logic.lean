@@ -28,7 +28,8 @@ invariant and ghost values.
   no deadlock (`ready_ne`). No result (out of fuel) is still allowed.
 - **Futex.** The futex queue is in the memory (`Mem.waiters`, `Mem.woken`), so the invariant can
   name it. A wait that sleeps keeps the invariant with the thread's ghost value; the thread goes
-  on when a wake woke it.
+  on when a wake woke it. A wait that would sleep may instead return spuriously
+  (`Sched.spuriousWake`), so its continuation must also hold from the memory before the wait.
 
 The rules for generated code are on `WP` (the weakest precondition of a `ConcM` run): `pure`,
 `bind`, a step in `MemM` (`WP.liftMem`), a sync op (`WP.sync`), and a loop (`WP.loop`). The post
