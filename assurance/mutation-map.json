@@ -547,9 +547,21 @@
       ]
     },
     "L13": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": ["forwarding", "operand-order"],
+      "negative_tests": [
+        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def assert_volatile"},
+        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_device"},
+        {"path": "tests/roadmap/volatile-effects/check-device.sh", "anchor": "rdtsc twice, rdrand, output-less asm, a memory clobber"},
+        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_asm"}
+      ],
+      "mutants": [
+        {"name": "merge_reads", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "reorder_write_read", "category": "operand-order", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "drop_unused_read", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "ordinary_load", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "merge_asm", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"}
+      ]
     },
     "L14": {
       "categories": [],

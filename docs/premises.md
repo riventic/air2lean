@@ -85,6 +85,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
+| Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
@@ -485,6 +486,28 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   decrease. Neither is related to an OS clock or to `Zig.Time.AwakeEnvironment` (TMR-02).
 - Derived from: tokens `monotonicNow`, `wallNow`.
 - Sources: [env-boundaries.md](env-boundaries.md#operations).
+
+## Device effects
+
+<a id="dev-01"></a>
+### DEV-01 — Declared device: trace and read oracle
+
+- Kind: environment.
+- Statement: With `--device-contract`, every executed volatile load or store of an 8/16/32/64-bit
+  integer is one event in `Mem.dev.trace`, in program order (`Zig.vload`/`Zig.vstore`). A read's
+  value is `Mem.dev.oracle` applied to the whole trace so far, the address and the width; theorems
+  quantify over the oracle or state which answers they need. Device registers are the declared
+  addresses of the generated `air2lean_device`, reached through block-less pointers. The device
+  neither observes nor changes model memory (no DMA, no aliasing of model blocks), so ordinary
+  memory accesses are not events and their order relative to events is not claimed. Interrupts,
+  other bus masters, timing, side effects of a read beyond the trace, and multi-threaded device
+  access are outside the model. A declared `asm volatile` (`Zig.vasm`/`vasmEffect`) is an `asm`
+  event of the same trace, with outputs from `Mem.dev.asmOracle`; a `memory` clobber is never
+  declared. No correspondence with real hardware is claimed: the compiled
+  program's volatile order is trusted to match the AIR order (TRU-03).
+- Derived from: `ZigLean.Mem.Device`; tokens `vload`, `vstore`, `vasm`, `vasmEffect`, `DevOracle`, `AsmOracle`, `Device`,
+  `DevState.oracle`, `DevState.asmOracle`. The `Mem.dev` field alone (for example in a struct update) does not select it.
+- Sources: [volatile-effects.md](volatile-effects.md#device-contract), `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`.
 
 ## Opaque math and floats
 

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "device": "cpu",
+  "registers": [],
+  "asm": [
+    {
+      "template": "rdtsc\n\tshlq $32, %%rdx\n\torq %%rdx, %%rax",
+      "constraints": ["={rax}"],
+      "clobbers": ["cc", "rdx"]
+    }
+  ]
+}

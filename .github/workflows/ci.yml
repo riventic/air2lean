@@ -570,14 +570,26 @@ jobs:
           bash tests/roadmap/diagnostics-complete/export.sh "$PWD/zig-air-${{ matrix.zig }}/bin/zig" "$diagnostics_evidence_dir/air"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/diagnostics-complete/test_cli.py "$PWD/.lake/build/bin/air2lean" \
             --export-air "$diagnostics_evidence_dir/air" 2>&1 | tee "$diagnostics_evidence_dir/complete.log"
-      # L13: synthetic exporter-schema fixtures only; the real export check needs a patched
-      # compiler (docs/volatile-effects.md §Commands).
-      - name: Reject volatile and device effects
+      # L13: exporter-schema fixtures, the default rejection, the reviewed asm allowlist
+      # (ASM_VOLATILE_EFFECT) and the opt-in device contract; fresh real exports of the fixtures
+      # with the patched compiler; device-trace proofs on the generated UART driver and rdtsc
+      # client and their semantic mutants (docs/volatile-effects.md).
+      - name: Volatile rejection and device effects
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
-          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 tests/roadmap/volatile-effects/test_cli.py --self-test
+          python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          volatile_air=$(mktemp -d "$RUNNER_TEMP/volatile-export.XXXXXX")
+          ZIG_AIR_JSON_DIR="$volatile_air" ZIG_AIR_JSON_FILTER=volatile_effects. "$AIR2LEAN_ZIG_AIR" \
+            build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline \
+            tests/roadmap/volatile-effects/volatile_effects.zig
+          python3 tests/roadmap/volatile-effects/test_cli.py --export-dir "$volatile_air" "$PWD/.lake/build/bin/air2lean"
+          bash tests/roadmap/volatile-effects/check-device.sh
+          bash tests/roadmap/volatile-effects/check-device.sh --export "$(mktemp -d "$RUNNER_TEMP/device-export.XXXXXX")"
       # A cmpxchg or RMW .Max/.Min on a padded integer width compares the whole ABI cell
       # natively: rejected with PADDED_ATOMIC (docs/diagnostics.md). Hand-written AIR only.
       - name: Reject padded-width atomic comparisons

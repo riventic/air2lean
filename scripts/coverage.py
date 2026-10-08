@@ -295,6 +295,8 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',
     'tests/roadmap/bitops-native/shift-panic/air/{version}': 'tests/roadmap/bitops-native/README.md',
     'tests/roadmap/const-locals/air-fuzz_s19/{version}': 'tests/roadmap/const-locals/provenance.json',
+    'tests/roadmap/volatile-effects/air/{version}': 'tests/roadmap/volatile-effects/air/provenance.json',
+    'tests/roadmap/volatile-effects/air-asm/{version}': 'tests/roadmap/volatile-effects/air-asm/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',

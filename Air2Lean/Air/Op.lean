@@ -642,5 +642,8 @@ structure Func where
   schemas and constructed functions are `unverified`. Backend-specific constant lowering
   checks (`Check.lean`) read it. -/
   backend : String := "unverified"
+  /-- The profile's target architecture (`x86_64`, `aarch64`); empty for a legacy profile, whose
+  reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
+  targetArch : String := ""
 
 end Air2Lean

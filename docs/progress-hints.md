@@ -15,9 +15,11 @@ model boundary name remains recognized, together with `atomic.spinLoopHint`,
 with zero runtime arguments and a void result. Real source normally exports
 assembly directly: exact volatile `pause` and `isb`, with a void result and no
 inputs, outputs or clobbers, become `Zig.spinLoopHintC`. Identical user-written
-assembly gets the same instruction semantics. Other assembly retains the
-existing opaque model and restrictions; this change does not interpret generic
-assembly as a hint or infer source provenance from a string.
+assembly gets the same instruction semantics. Both are entries of the reviewed asm
+allowlist (`Air2Lean/AsmAllowlist.lean`, L13): `pause` for x86_64 and `isb` for aarch64. Other
+assembly must be on that allowlist as an input-determined opaque or a declared device event, else
+it is `ASM_VOLATILE_EFFECT` ([volatile-effects.md](volatile-effects.md#inline-asm)). This change
+does not interpret generic assembly as a hint or infer source provenance from a string.
 
 These exact strings were audited against the three compiler libraries:
 

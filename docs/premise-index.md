@@ -3776,6 +3776,45 @@ File premises: MTH-01, SEM-01, SEM-02, TRU-01
 | `example@L24` | MTH-01, SEM-01, SEM-02, TRU-01 |
 | `example@L25` | SEM-01, SEM-02, TRU-01 |
 
+## `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01
+
+| Theorem | Premises |
+|---|---|
+| `DeviceAsmProofs.after_append` | SEM-01, SEM-02, TRU-01 |
+| `DeviceAsmProofs.declared` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.tsc_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.elapsed_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.elapsed_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.merged_is_zero` | TRU-01 |
+
+## `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01
+
+| Theorem | Premises |
+|---|---|
+| `DeviceEffectsProofs.widen_toNat` | TRU-01 |
+| `DeviceEffectsProofs.after_nil` | SEM-01, SEM-02, TRU-01 |
+| `DeviceEffectsProofs.after_append` | SEM-01, SEM-02, TRU-01 |
+| `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.loop_ready` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.poll_run` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_trace` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.answers_of_ready` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.putc_eventually` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_ne_merged` | TRU-01 |
+| `DeviceEffectsProofs.clearStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+
 ## `tests/roadmap/weak-cas/Messages.lean`
 
 File premises: THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01

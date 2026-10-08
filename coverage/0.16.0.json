@@ -750,7 +750,8 @@
           "tests/golden/sync/air/sync.semWork.json",
           "tests/golden/sync/air/sync.work.json",
           "tests/golden/sync/air/sync.writer.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/volatile-effects/air/0.16.0/device_effects.writeAll.json"
         ]
       },
       "proofs": {
@@ -1273,7 +1274,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.clearLowest.json"
+          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.clearLowest.json",
+          "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json"
         ]
       },
       "proofs": {
@@ -3291,7 +3293,12 @@
           "tests/golden/asm/air/asm.divmod.json",
           "tests/golden/asm/air/asm.lzcnt64.json",
           "tests/golden/asm/air/asm.popcnt64.json",
-          "tests/roadmap/idle-loops/air/progress.idle.json"
+          "tests/roadmap/idle-loops/air/progress.idle.json",
+          "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.barrier.json",
+          "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json",
+          "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.fence.json",
+          "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.random.json",
+          "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.ticksPlain.json"
         ]
       },
       "proofs": {
@@ -10309,6 +10316,7 @@
           "ZigLean/Conc/Word.lean",
           "ZigLean/Mem/AtomicPtr.lean",
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Mem/Device.lean",
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidth.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
@@ -11218,6 +11226,7 @@
           "ZigLean/Conc/TlsLemmas.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Mem/Device.lean",
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidth.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
@@ -11380,6 +11389,7 @@
           "ZigLean/Conc/TlsLemmas.lean",
           "ZigLean/Mem/Alloc.lean",
           "ZigLean/Mem/Basic.lean",
+          "ZigLean/Mem/Device.lean",
           "ZigLean/Mem/Enc.lean",
           "ZigLean/Mem/ErrWidth.lean",
           "ZigLean/Mem/ErrWidthLemmas.lean",
@@ -14054,7 +14064,8 @@
           "tests/golden/lists/air/lists.sumRange.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/slices/air/slices.sumSlice.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/volatile-effects/air/0.16.0/device_effects.writeAll.json"
         ]
       },
       "proofs": {
