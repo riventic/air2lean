@@ -47,10 +47,12 @@ SCHEMA = 1
 TC_TARGET = "x86_64-linux-musl"
 AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
 # std code that translate-c output calls is translated from its AIR like user code.
-STD_FILTER = ["zig.c_translation."]
+STD_FILTER = ["zig.c_translation.", "mem.zeroes", "debug.assert"]
 STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "lean"]
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
-WARNING = re.compile(r"^// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
+WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
+MISMATCH = re.compile(r"expected \d+, found \d+")
+COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: undefined symbol)")
 EXTERN_FN = re.compile(r"^pub extern fn (\w+)\(", re.M)
 BODY_FN = re.compile(r"^(?:pub )?(?:export )?fn (\w+)\(.*\{$", re.M)
 
@@ -209,12 +211,13 @@ def stage_zig_native(zig, zig_file, expected, work):
     code, out = run([zig, "test", str(test_file), "-OReleaseSafe", "-lc"], TIMEOUT["zig"], cwd=work)
     if code == 0:
         return {"status": "ok"}
-    if "expected " in out and ", found " in out:
+    (work / "zig_native.log").write_text(out)
+    if MISMATCH.search(out):
         status = "mismatch"
-    elif "error:" in out and ("All 1 tests passed" not in out) and ("panic" not in out.lower()):
+    elif COMPILE_ERROR.search(out):
         status = "compile_error"
     else:
-        status = "runtime_error"
+        status = "runtime_error"  # a ReleaseSafe panic / signal of the translated program
     return {"status": status, "log": tail(out)}
 
 
@@ -225,6 +228,7 @@ def stage_air_export(zig_air, zig_file, stem, work):
     env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join([stem + "."] + STD_FILTER))
     code, out = run([zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
                      *AIR_TARGET, str(zig_file)], TIMEOUT["air"], cwd=work, env=env)
+    (work / "air_export.log").write_text(out)
     files = sorted(air.glob("*.json"))
     incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
     if code != 0 or incomplete or not files:
@@ -284,9 +288,10 @@ def stage_lean(binary, air, stem, expected, work):
     check.write_text(text + guards)
     env = dict(os.environ, LEAN_NUM_THREADS="1")
     code, out = run(["lake", "env", "lean", str(check)], TIMEOUT["lean"], cwd=ROOT, env=env)
+    (work / "lean.log").write_text(out)
     if code == 0:
         return {"status": "ok", "gen_lines": text.count("\n")}
-    status = "guard_failed" if "#guard" in out or "guard" in out.split("error", 1)[-1][:200] else "elab_failed"
+    status = "guard_failed" if "did not evaluate to `true`" in out else "elab_failed"
     return {"status": status, "log": tail(out)}
 
 
