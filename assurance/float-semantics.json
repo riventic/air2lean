@@ -228,6 +228,34 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "Proofs.Floats.Fitness::fitTerm_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Fitness::fitness_eq_sumLeft": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Fitness::fitness_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Fitness::fitness_gt_of_gap": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Fitness::fitness_isNaN": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Fitness::fitness_loop_step": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Fitness::fitness_panic": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "Proofs.Floats.Proofs::Zig.Float.eq_refl": {
       "semantics": "ieee",
       "correspondence": "model"
@@ -569,6 +597,42 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "ZigLean.Float.Error::Zig.classify_neg": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.classify_pack_neg": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.conv_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.conv_toRat_of_wider": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.divRt_error_f128": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.div_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.div_isNaN_left": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.div_isNaN_right": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "ZigLean.Float.Error::Zig.finalizeRounded_isSome": {
       "semantics": "abstract-spec",
       "correspondence": "model"
@@ -585,12 +649,49 @@
       "semantics": "abstract-spec",
       "correspondence": "model"
     },
+    "ZigLean.Float.Error::Zig.fmaRt_error_f32": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.fma_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.fma_error_f16": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.fma_error_f80": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.fma_isNaN": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.fma_of_finite": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "ZigLean.Float.Error::Zig.gt_of_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.isNaN_neg": {
       "semantics": "ieee",
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.lt_of_error": {
       "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.mul_abs_le": {
+      "semantics": "abstract-spec",
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.mul_den_eq_num": {
@@ -606,6 +707,18 @@
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.mul_isNaN_right": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.mul_sub_mul_le": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.neg_bits_toNat": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.neg_eq_pack": {
       "semantics": "ieee",
       "correspondence": "model"
     },
@@ -633,12 +746,52 @@
       "semantics": "abstract-spec",
       "correspondence": "model"
     },
+    "ZigLean.Float.Error::Zig.roundRat_conv_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "ZigLean.Float.Error::Zig.roundRat_error": {
       "semantics": "abstract-spec",
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.roundRat_isSome": {
       "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sq_lt_sq": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sqrt_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sqrt_final": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sqrt_isNaN": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sqrt_isNaN_of_neg": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sqrt_round_bounds": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sub_error": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sub_isNaN_left": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.sub_isNaN_right": {
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.sumLeft_error": {
@@ -650,6 +803,10 @@
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.sumLeft_isNaN": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.toRat?_neg": {
       "semantics": "ieee",
       "correspondence": "model"
     },
@@ -682,6 +839,10 @@
       "correspondence": "model"
     },
     "ZigLean.Float.Error::Zig.uniform_mag_step": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.Float.Error::Zig.xor_top_field": {
       "semantics": "abstract-spec",
       "correspondence": "model"
     },
