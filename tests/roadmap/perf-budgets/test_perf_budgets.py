@@ -27,6 +27,10 @@ TOLERANCE = {
     "translator": {"time_ratio": 2.0, "time_slack_seconds": 0.25, "rss_ratio": 1.5, "rss_slack_kib": 65536},
     "lean": {"time_ratio": 1.5, "time_slack_seconds": 10.0, "rss_ratio": 1.3, "rss_slack_kib": 262144},
 }
+PORTABLE = {
+    "translator": {"time_ratio": 10.0, "time_slack_seconds": 1.0, "rss_ratio": 3.0, "rss_slack_kib": 131072},
+    "lean": {"time_ratio": 6.0, "time_slack_seconds": 30.0, "rss_ratio": 2.0, "rss_slack_kib": 524288},
+}
 PLATFORM = {"system": "Linux", "machine": "x86_64"}
 
 
@@ -54,7 +58,7 @@ AIR_VERSIONS = {"basic": "0.15.2", "layout": "0.16.0"}
 
 def pending_budgets(ids=("basic", "layout")):
     return {"schema": perf.BUDGETS_SCHEMA, "status": "pending", "reference_platform": None,
-            "tolerance": copy.deepcopy(TOLERANCE),
+            "tolerance": copy.deepcopy(TOLERANCE), "portable_tolerance": copy.deepcopy(PORTABLE),
             "workloads": [{"id": ident, "air": [f"tests/golden/{ident}/air"],
                            "air_zig_version": AIR_VERSIONS[ident],
                            "namespace": ident.capitalize(), "prefix": ident + ".",
@@ -77,13 +81,15 @@ class CommittedBudgets(unittest.TestCase):
         ids = [workload["id"] for workload in data["workloads"]]
         self.assertGreaterEqual(len(ids), 5)
         for workload in data["workloads"]:
-            self.assertTrue((ROOT / workload["reference_gen"]).is_file(), workload["id"])
+            if workload["reference_gen"] is not None:
+                self.assertTrue((ROOT / workload["reference_gen"]).is_file(), workload["id"])
             self.assertTrue(workload["proof_modules"], workload["id"])
         if data["status"] == "pending":
             self.assertTrue(any(workload["budget"] is None for workload in data["workloads"]))
         for workload in data["workloads"]:
             if workload["budget"] is not None:
-                self.assertIs(workload["budget"]["output"]["matches_reference"], True, workload["id"])
+                expected = True if workload["reference_gen"] is not None else None
+                self.assertIs(workload["budget"]["output"]["matches_reference"], expected, workload["id"])
 
     def test_validation_rejects_bad_documents(self):
         data = pending_budgets()
@@ -184,6 +190,54 @@ class Gate(unittest.TestCase):
         parallel["lean_num_threads"] = None
         self.assertEqual(kinds(perf.gate(recorded_budgets(), parallel)[1]), ["unserialized-measurement"])
         self.assertEqual(perf.gate(recorded_budgets(), {"schema": "other"})[0], 1)
+
+
+class PortableGate(unittest.TestCase):
+    def other_platform(self, **workloads):
+        data = measurement(**workloads)
+        data["platform"] = {"system": "Darwin", "machine": "arm64"}  # not the reference platform
+        return data
+
+    def test_ignores_platform_and_absorbs_runner_noise(self):
+        budgets = recorded_budgets()
+        noisy = self.other_platform(basic=measured_workload(scale=4.0, rss=150_000),
+                                    layout=measured_workload())
+        # Reference limits fail on the wrong platform and on the 4x slowdown ...
+        self.assertEqual(perf.gate(budgets, noisy)[0], 1)
+        # ... the portable limits (10x translator, 6x lean + slack) accept it.
+        self.assertEqual(perf.gate(budgets, noisy, portable=True), (0, []))
+
+    def test_catches_gross_regression(self):
+        code, findings = perf.gate(recorded_budgets(), self.other_platform(
+            basic=measured_workload(scale=100.0), layout=measured_workload()), portable=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(kinds(findings), ["time-regression"])
+        self.assertEqual({item["workload"] for item in findings}, {"basic"})
+        self.assertNotIn("proof.cold", {item["phase"] for item in findings})  # not a portable phase
+
+    def test_catches_memory_blowup_and_output_change(self):
+        code, findings = perf.gate(recorded_budgets(), self.other_platform(
+            basic=measured_workload(rss=10_000_000, sha="b" * 64), layout=measured_workload()), portable=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(kinds(findings), ["memory-regression", "output-changed"])
+
+    def test_missing_portable_phase_fails_but_skipped_proofs_do_not(self):
+        lean_only = measured_workload()
+        del lean_only["phases"]["proof.cold"], lean_only["phases"]["proof.warm"]
+        self.assertEqual(perf.gate(recorded_budgets(), self.other_platform(
+            basic=lean_only, layout=measured_workload()), portable=True)[0], 0)
+        broken = measured_workload()
+        del broken["phases"]["elaborate"]
+        code, findings = perf.gate(recorded_budgets(), self.other_platform(
+            basic=broken, layout=measured_workload()), portable=True)
+        self.assertEqual((code, kinds(findings)), (1, ["missing-phase"]))
+
+    def test_portable_limits_are_looser_than_reference_limits(self):
+        for workload in recorded_budgets()["workloads"]:
+            for limits in workload["budget"]["phases"].values():
+                self.assertGreaterEqual(limits["portable_max_seconds"], limits["max_seconds"])
+                if "max_peak_rss_kib" in limits:
+                    self.assertGreaterEqual(limits["portable_max_peak_rss_kib"], limits["max_peak_rss_kib"])
 
 
 class Baseline(unittest.TestCase):
