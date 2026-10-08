@@ -109,6 +109,13 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest discover -s tests/roadmap/project-check -p 'test_*.py' -v
 
+      # I01 project.py export: stub compiler and translator (fixed point, unexported-root
+      # reports, empty-export failure, flag preservation). The real-compiler case is skipped here.
+      - name: Project export regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests/roadmap/project-export -p 'test_*.py' -v
+
       # Offline: committed sources only. Fails when docs/support-matrix.md, README or PLAN
       # regions are stale or README, PLAN, ROADMAP, CI and the CLI help disagree.
       - name: Support matrix is current and consistent
@@ -583,6 +590,9 @@ jobs:
           python3 -m unittest discover -s tests/roadmap/dependency-closure -v
           python3 scripts/project.py closure example-project.json --format text
           python3 scripts/dependency-closure.py goldens --format text
+          # I01: original-source export of examples/basic with the patched compiler (closure fixed point).
+          AIR2LEAN_ZIG_AIR="$PWD/zig-air-0.16.0/bin/zig" AIR2LEAN_TRANSLATOR="$PWD/.lake/build/bin/air2lean" \
+            python3 -m unittest discover -s tests/roadmap/project-export -k RealCompilerTest -v
           work="$(mktemp -d "${RUNNER_TEMP}/air2lean-project.XXXXXX")"
           python3 scripts/project.py translate example-project.json \
             --translator .lake/build/bin/air2lean --out "$work/artifact" \

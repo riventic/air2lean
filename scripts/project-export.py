@@ -271,7 +271,8 @@ def load_air(project, directory, limits, zig_version, profile):
     return functions, files
 
 
-def run_export(project, manifest_path, zig, translator, out, module_overrides=(), defines=(), models=None):
+def run_export(project, manifest_path, zig, translator, out, module_overrides=(), defines=(), models=None,
+               replace=False):
     manifest, raw, limits = project.load_manifest(manifest_path)
     spec = manifest.get('export')
     if spec is None:
@@ -299,8 +300,8 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
     if version['failure'] or version['returncode'] != 0 or found != spec['zig_version']:
         raise Invalid(f'patched compiler {zig} reports version {found!r}, export.zig_version is {spec["zig_version"]}')
     out = out.resolve()
-    if out.exists() and (not out.is_dir() or any(out.iterdir())):
-        raise Invalid('--out must be a fresh or empty directory')
+    if out.exists() and (not out.is_dir() or any(out.iterdir())) and not (replace and previous_export(out)):
+        raise Invalid('--out must be a fresh or empty directory (--replace: or a previous export artifact)')
     out.parent.mkdir(parents=True, exist_ok=True)
     roots = [r['function'] for r in manifest['roots']]
     report = {'schema': SCHEMA, 'kind': KIND, 'manifest_sha256': project.digest(raw), 'status': 'failed',
@@ -420,14 +421,25 @@ def translate_root(project, manifest, root, entry, files, translator, stage, pro
     return result
 
 
+def previous_export(out):
+    try:
+        return json.loads((out / 'export.json').read_text(encoding='utf-8')).get('kind') == KIND
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def finish(report, publish):
     """Write export.json; publish the staged artifact (rename) only when every root translated."""
     encoded = (json.dumps(report, indent=2, sort_keys=True) + '\n').encode()
     if publish is not None:
         stage, out = publish
         (stage / 'export.json').write_bytes(encoded)
-        if out.exists():
-            out.rmdir()  # empty, checked before export; fails if anything appeared meanwhile
+        if out.exists() and not any(out.iterdir()):
+            out.rmdir()
+        elif out.exists():
+            if not previous_export(out):
+                raise Invalid(f'{out} changed during the export; refusing replacement')
+            os.rename(out, stage.parent / 'previous')  # removed with the staging directory
         os.rename(stage, out)
     return report, encoded
 
@@ -436,6 +448,8 @@ def main(project, argv=None):
     parser = argparse.ArgumentParser(prog='project.py export', description=__doc__.split('\n')[0])
     parser.add_argument('manifest', type=Path)
     parser.add_argument('--out', type=Path, required=True, help='fresh or empty artifact directory')
+    parser.add_argument('--replace', action='store_true',
+                        help='replace a previous export artifact in --out after a successful export (zig build reruns)')
     parser.add_argument('--translator', type=Path, required=True)
     parser.add_argument('--zig-air', type=Path, help='patched compiler (default AIR2LEAN_ZIG_AIR, '
                         'then zig-air-<export.zig_version>/bin/zig in this repository)')
@@ -451,7 +465,8 @@ def main(project, argv=None):
     if zig is None:
         spec = project.load_manifest(manifest_path)[0].get('export') or {}
         zig = ROOT / f'zig-air-{spec.get("zig_version", "0.16.0")}' / 'bin' / 'zig'
-    report, encoded = run_export(project, manifest_path, zig, args.translator, args.out, args.module, args.defines)
+    report, encoded = run_export(project, manifest_path, zig, args.translator, args.out, args.module, args.defines,
+                                 replace=args.replace)
     if args.report:
         args.report.write_bytes(encoded)
     print(text(report) if args.format == 'text' else encoded.decode(), end='')

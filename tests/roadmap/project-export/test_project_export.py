@@ -232,11 +232,53 @@ class ExportTest(unittest.TestCase):
         out.mkdir()
         self.assertEqual(self.run_export(self.manifest(['proj.root']), {'proj.root': []}, out=out)[0], 0)
         self.assertEqual(self.run_export(self.manifest(['proj.root']), {'proj.root': []}, out=out)[0], 2)
+        code, report, _ = self.run_export(self.manifest(['proj.root']), {'proj.root': ['proj.rootX']}, '--replace', out=out)
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads((out / 'r0/Gen.lean').read_text()[3:])['functions'], ['proj.root'],
+                         'a failed export keeps the previous artifact')
+        program = {'proj.root': ['lib.x'], 'lib.x': []}
+        self.assertEqual(self.run_export(self.manifest(['proj.root']), program, '--replace', out=out)[0], 0)
+        self.assertEqual(json.loads((out / 'r0/Gen.lean').read_text()[3:])['functions'], ['lib.x', 'proj.root'])
+        (out / 'export.json').unlink()
+        self.assertEqual(self.run_export(self.manifest(['proj.root']), program, '--replace', out=out)[0], 2)
 
     def test_committed_manifests_validate(self):
         for name in ('flow-time-project.json', 'pcg64-project.json'):
             manifest = project.load_manifest(REPO / name)[0]
             self.assertTrue(all('sha256' in m for m in manifest['export']['modules'] if m['path'].startswith('/')))
+
+
+@unittest.skipUnless(os.environ.get('AIR2LEAN_ZIG_AIR') and os.environ.get('AIR2LEAN_TRANSLATOR'),
+                     'needs AIR2LEAN_ZIG_AIR (patched Zig 0.16.0) and AIR2LEAN_TRANSLATOR')
+class RealCompilerTest(unittest.TestCase):
+    """The real patched compiler on an in-repo source: the closure needs two re-exports."""
+
+    def test_examples_basic_closure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            for name in ('patch', 'runtime', 'toolchain', 'src.zig'):
+                (base / name).write_text('x')
+            (base / 'profile.json').write_bytes(
+                (REPO / 'case-studies/profile-x86_64-linux-musl-releasesafe.json').read_bytes())
+            manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['src.zig'],
+                        'components': {'compiler_patch': ['patch'], 'runtime': ['runtime'], 'toolchain': ['toolchain']},
+                        'allowed_assumptions': [],
+                        'export': {'zig_version': '0.16.0', 'flags': FLAGS,
+                                   'modules': [{'name': 'basic', 'path': str(REPO / 'examples/basic/basic.zig')}]},
+                        'roots': [{'id': 'total', 'function': 'basic.totalWeightedTardiness', 'air': [],
+                                   'namespace': 'Basic', 'prefix': 'basic.', 'contracts': [], 'goals': [],
+                                   'assumptions': [], 'exclusions': []}]}
+            (base / 'project.json').write_text(json.dumps(manifest))
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = project.main(['export', str(base / 'project.json'), '--out', str(base / 'out'),
+                                     '--translator', os.environ['AIR2LEAN_TRANSLATOR']])
+            report = json.loads(stdout.getvalue())
+            self.assertEqual(code, 0, report)
+            self.assertEqual([i['outcome'] for i in report['iterations']], ['re-export', 're-export', 'fixed_point'])
+            self.assertEqual(report['roots'][0]['air'],
+                             ['basic.tardiness', 'basic.totalWeightedTardiness', 'basic.weightedTardiness'])
+            self.assertIn('def totalWeightedTardiness', (base / 'out/total/Gen.lean').read_text())
 
 
 if __name__ == '__main__':
