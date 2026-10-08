@@ -201,33 +201,44 @@ are not ABI error ordinals; storage retains the shared symbolic `errFrag` identi
 def emitErrorDomain (names : Array String) : String :=
   s!"(⟨#[{String.intercalate ", " (names.toList.map String.quote)}], by decide, by decide⟩ : Zig.ErrorDomain)"
 
+/-- The error-storage operation `name` of `ZigLean/Mem/Enc.lean` at the profile's
+`error_set_bits`: the default 16 bits keeps the original 2-byte definitions (byte-identical
+output); any other width selects the width-parameterized `<name>W bits` of
+`ZigLean/Mem/ErrWidth.lean`. -/
+def errOp (errBits : Nat) (name : String) : String :=
+  if errBits == 16 then s!"Zig.{name}" else s!"Zig.{name}W {errBits}"
+
 /-- An explicit type-indexed storage dictionary. No instance for `String` is registered.
-Named aggregate dictionaries choose these recursively for their fields. -/
+Named aggregate dictionaries choose these recursively for their fields. At a non-default
+error width every error union also gets an explicit dictionary, since the registered
+`Enc (Except ErrName α)` instance is the 16-bit one. -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
-    (id : TyId) : Option String :=
+    (errBits : Nat) (id : TyId) : Option String :=
   match types[id]? with
-  | some (.errorSet (some names)) => some s!"Zig.errorEnc {emitErrorDomain names}"
+  | some (.errorSet (some names)) => some s!"{errOp errBits "errorEnc"} {emitErrorDomain names}"
   | some (.optional c) =>
     match types[c]? with
-    | some (.errorSet (some names)) => some s!"Zig.optionalErrorEnc {emitErrorDomain names}"
-    | _ => (emitStorageEnc structNames types c).map fun enc => s!"Zig.Enc.optionWith ({enc})"
+    | some (.errorSet (some names)) => some s!"{errOp errBits "optionalErrorEnc"} {emitErrorDomain names}"
+    | _ => (emitStorageEnc structNames types errBits c).map fun enc => s!"Zig.Enc.optionWith ({enc})"
   | some (.array n c sentinel) =>
-    (emitStorageEnc structNames types c).map fun enc =>
+    (emitStorageEnc structNames types errBits c).map fun enc =>
       s!"Zig.Enc.vectorWith {n + if sentinel then 1 else 0} ({enc})"
   | some (.errorUnion set payload) =>
-    let payloadEnc := emitStorageEnc structNames types payload
+    let payloadEnc := emitStorageEnc structNames types errBits payload
     let enc := payloadEnc.getD
       s!"(inferInstance : Zig.Enc ({emitTy structNames types types[payload]!}))"
     match types[set]? with
-    | some (.errorSet (some names)) => some s!"Zig.errorUnionEnc {emitErrorDomain names} ({enc})"
-    | _ => payloadEnc.map fun _ => s!"Zig.Enc.errorUnionWith ({enc})"
+    | some (.errorSet (some names)) => some s!"{errOp errBits "errorUnionEnc"} {emitErrorDomain names} ({enc})"
+    | _ =>
+      if errBits == 16 then payloadEnc.map fun _ => s!"Zig.Enc.errorUnionWith ({enc})"
+      else some s!"Zig.Enc.errorUnionWithW {errBits} ({enc})"
   | _ => none
 
 /-- Bind a dictionary only around the storage operation that needs it. This preserves the
 public semantic types (`ErrName`, `Option ErrName`, `Except ErrName`) and pure APIs. -/
-def withStorageEnc (structNames : Array (String × String)) (types : Array Ty)
+def withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
     (id : TyId) (expr : String) : String :=
-  match emitStorageEnc structNames types id with
+  match emitStorageEnc structNames types errBits id with
   | none => expr
   | some enc =>
     s!"(letI : Zig.Enc ({emitTy structNames types types[id]!}) := {enc}; {expr})"
@@ -243,6 +254,8 @@ structure NamedType where
   srcLayouts : Array Layout
   /-- The layout of `ty`. -/
   layout : Layout
+  /-- The source function's `error_set_bits`. -/
+  errBits : Nat := 16
   deriving Inhabited
 
 /-- The Lean name of a named Zig type. The tag enum of `union(enum)` has the Zig name
@@ -304,7 +317,7 @@ def collectNamed (funcs : Array Func) (prefix_ : String) : Array NamedType := Id
       | .struct name .. | .enum name .. | .union name .. =>
         let entry : NamedType := { zigName := name, leanName := namedLeanName prefix_ name, ty,
                                    srcTypes := f.types, srcLayouts := f.layouts,
-                                   layout := f.layouts[i]?.getD {} }
+                                   layout := f.layouts[i]?.getD {}, errBits := f.errorSetBits }
         match found.findIdx? (·.zigName == name) with
         | none => found := found.push entry
         -- Another function's file can have the layout that this one does not.
@@ -366,15 +379,15 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
       ["  encode v := v.bytes.toArray", s!"  decode bs := pure ⟨Zig.Raw.ofArray {size} bs⟩"])
   | .union _ _ (some tag) fields =>
     -- The tag and the active field's payload at `unionOffsets` (M20).
-    let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2))).getD (0, 0)
+    let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2)) s.errBits).getD (0, 0)
     let tagTy := emitTy structNames s.srcTypes s.srcTypes[tag]!
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
     let enc := fields.toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
-      else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes id "Zig.Enc.encode x"})]"
+      else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes s.errBits id "Zig.Enc.encode x"})]"
     let dec := fields.toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => pure .{fm f}"
-      else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.decodeAt bs {po}"}))"
+      else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes s.errBits id s!"Zig.Enc.decodeAt bs {po}"}))"
     String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
   | .struct _ "packed" fields =>
@@ -385,9 +398,9 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
        s!"    let b : BitVec {bits} ← Zig.Enc.decode bs", "    Zig.Packed.ofBits? b"])
   | .struct _ _ fields =>
     let parts := (fields.zip s.layout.offsets).toList.map fun ((f, id), o) =>
-      s!"({o}, {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.encode v.{fm f}"})"
+      s!"({o}, {withStorageEnc structNames s.srcTypes s.errBits id s!"Zig.Enc.encode v.{fm f}"})"
     let decs := (fields.zip s.layout.offsets).toList.map fun ((f, id), o) =>
-      s!"{fm f} := ← {withStorageEnc structNames s.srcTypes id s!"Zig.Enc.decodeAt bs {o}"}"
+      s!"{fm f} := ← {withStorageEnc structNames s.srcTypes s.errBits id s!"Zig.Enc.decodeAt bs {o}"}"
     String.intercalate "\n" (head ++
       [s!"  encode v := Zig.Enc.fields {size} [{String.intercalate ", " parts}]",
        s!"  decode bs := do pure \{ {String.intercalate ", " decs} }"])
@@ -445,9 +458,9 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     let ns := rawUnionNs layout
     let perField := fields.toList.flatMap fun (f, id) =>
       let t := tyStr id
-      ["", s!"def {n}.{hn s!"get_{f}"} (u : {n}) : Zig.Result ({t}) := {withStorageEnc structNames s.srcTypes id s!"{ns}.get ({t}) u.bytes"}", "",
+      ["", s!"def {n}.{hn s!"get_{f}"} (u : {n}) : Zig.Result ({t}) := {withStorageEnc structNames s.srcTypes s.errBits id s!"{ns}.get ({t}) u.bytes"}", "",
        s!"def {n}.{hn s!"modify_{f}"} (g : {t} → {t}) (u : {n}) : {n} :=",
-       s!"  {withStorageEnc structNames s.srcTypes id s!"⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩"}"]
+       s!"  {withStorageEnc structNames s.srcTypes s.errBits id s!"⟨{ns}.set u.bytes (g (Zig.Raw.getD ({ns}.get ({t}) u.bytes)))⟩"}"]
     String.intercalate "\n"
       ([s!"structure {n} where", s!"  bytes : Vector Zig.Byte {size}",
         "  deriving Repr, Inhabited, DecidableEq"] ++ perField)
@@ -501,18 +514,18 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
 
 /-- The named types reachable from `id` through struct fields, optionals and arrays, that the
 memory model encodes (`modelLayout`). -/
-partial def memNamed (types : Array Ty) (layouts : Array Layout) (acc : Array String) (id : TyId) :
-    Array String :=
-  if (modelLayout types layouts id).toOption.isNone then acc else
+partial def memNamed (types : Array Ty) (layouts : Array Layout) (errBits : Nat) (acc : Array String)
+    (id : TyId) : Array String :=
+  if (modelLayout types layouts id errBits).toOption.isNone then acc else
   match types[id]? with
   | some (.struct name _ fs) =>
-    if acc.contains name then acc else fs.foldl (fun a (_, t) => memNamed types layouts a t) (acc.push name)
+    if acc.contains name then acc else fs.foldl (fun a (_, t) => memNamed types layouts errBits a t) (acc.push name)
   | some (.enum name ..) => if acc.contains name then acc else acc.push name
   | some (.union name _ tag fs) =>
     if acc.contains name then acc
-    else (tag.toArray ++ fs.map (·.2)).foldl (memNamed types layouts) (acc.push name)
-  | some (.optional c) | some (.array _ c _) => memNamed types layouts acc c
-  | some (.errorUnion _ c) => memNamed types layouts acc c
+    else (tag.toArray ++ fs.map (·.2)).foldl (memNamed types layouts errBits) (acc.push name)
+  | some (.optional c) | some (.array _ c _) => memNamed types layouts errBits acc c
+  | some (.errorUnion _ c) => memNamed types layouts errBits acc c
   | _ => acc
 
 /-- The named types that get a `Zig.Enc` instance: those that a pointer of a function that uses
@@ -522,7 +535,7 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
   funcs.foldl (init := #[]) fun acc f =>
     -- An `extern` or `packed` union reads its fields with `Zig.Enc`, also in a pure function.
     let acc := f.types.zipIdx.foldl (init := acc) fun acc (t, id) => match t with
-      | .union _ _ none _ => memNamed f.types f.layouts acc id
+      | .union _ _ none _ => memNamed f.types f.layouts f.errorSetBits acc id
       | _ => acc
     -- A byte local (`Zig.Bytes T`) encodes its value, also in a pure function.
     let acc := (byteLocals f).foldl (init := acc) fun acc aid =>
@@ -531,9 +544,9 @@ def encTypeNames (funcs : Array Func) (memFuncs : Array String) : Array String :
       | none => acc
     if !memFuncs.contains f.name then acc
     else
-      let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts acc g.ty) acc
+      let acc := f.globals.foldl (fun acc g => memNamed f.types f.layouts f.errorSetBits acc g.ty) acc
       f.types.foldl (init := acc) fun acc t => match t with
-        | .ptr _ _ c => memNamed f.types f.layouts acc c
+        | .ptr _ _ c => memNamed f.types f.layouts f.errorSetBits acc c
         | _ => acc
 
 /-- A named type, and its `Zig.Enc` instance if it is in `encNames`. -/
@@ -600,6 +613,8 @@ structure FCtx where
   exitName : String
   /-- `--float-semantics` (default `ieee`), for `.div`/`.divFloat`/`.mulAdd` on a float operand. -/
   floatSemantics : FloatSemantics
+  /-- The profile's `error_set_bits` (`Func.errorSetBits`), for error storage (`errOp`). -/
+  errBits : Nat := 16
   spawnSemantics : SpawnSemantics := .available
   /-- Typed caller execution of each complete capture, including pure slice adapters. -/
   spawnFallbacks : Array (String × String) := #[]
@@ -665,7 +680,7 @@ def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
   emitTy fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
 def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
-  withStorageEnc fc.structNames fc.types tid expr
+  withStorageEnc fc.structNames fc.types fc.errBits tid expr
 
 def FCtx.tyBits (fc : FCtx) (tid : TyId) : Nat := match fc.tyOfId tid with | .int _ b => b | _ => 0
 def FCtx.tySigned (fc : FCtx) (tid : TyId) : Bool :=
@@ -1049,7 +1064,7 @@ def FCtx.fieldOffsetIn (fc : FCtx) (c : TyId) (idx : Nat) : Nat :=
   | .struct _ "packed" fields => packedFieldBit fc.types fields idx / 8
   -- Every field of a tagged union is its payload.
   | .union _ _ (some tag) fields =>
-    ((unionOffsets fc.types fc.layouts tag (fields.map (·.2))).map (·.2)).getD 0
+    ((unionOffsets fc.types fc.layouts tag (fields.map (·.2)) fc.errBits).map (·.2)).getD 0
   -- Every field of an `extern` or `packed` union is at offset 0.
   | .union _ _ none _ => 0
   | _ => (fc.layouts[c]?.bind (·.offsets[idx]?)).getD 0
@@ -1923,7 +1938,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let some' := match fc.pointeeOf p with
       | .optional c => match fc.tyOfId c with
         | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
-        | .errorSet (some names) => s!"Zig.optionalErrorIsSome {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
+        | .errorSet (some names) => s!"{errOp fc.errBits "optionalErrorIsSome"} {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
         | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy fc.structNames fc.types ct}) {rv p}"
       | _ => "(panic! \"air2lean: is_null_ptr of a non-optional\")"
     let expr := if isNull then s!"(!·) <$> {some'}" else some'
@@ -1948,16 +1963,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | _ => none
       | _ => none
     let isErr := match domain with
-      | some d => s!"Zig.finiteErrIsErrAt {d}"
-      | none => "Zig.errIsErrAt"
+      | some d => s!"{errOp fc.errBits "finiteErrIsErrAt"} {d}"
+      | none => errOp fc.errBits "errIsErrAt"
     let code := match domain with
-      | some d => s!"Zig.finiteErrCodeAt {d}"
-      | none => "Zig.errCodeAt"
+      | some d => s!"{errOp fc.errBits "finiteErrCodeAt"} {d}"
+      | none => errOp fc.errBits "errCodeAt"
     let expr := match inst.op with
       | .isErrPtr true _ => s!"{isErr} ({payload}) {a} {rv p}"
       | .isErrPtr false _ => s!"(!·) <$> {isErr} ({payload}) {a} {rv p}"
-      | .errPayloadPtr true _ => s!"Zig.errSetOk ({payload}) {a} {rv p}"
-      | .errPayloadPtr false _ => s!"pure (Zig.errPayloadPtr ({payload}) {rv p})"
+      | .errPayloadPtr true _ => s!"{errOp fc.errBits "errSetOk"} ({payload}) {a} {rv p}"
+      | .errPayloadPtr false _ => s!"pure ({errOp fc.errBits "errPayloadPtr"} ({payload}) {rv p})"
       | _ => s!"{code} ({payload}) {a} {rv p}"
     let expr := match fc.pointeeOf p with
       | .errorUnion _ child => fc.storageExpr child expr
@@ -2021,7 +2036,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- Write the tag; the payload bytes stay (Zig).
       match fc.pointeeOf ptr with
       | .union _ _ (some tagTy) fields =>
-        let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2))).map (·.1)).getD 0
+        let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2)) fc.errBits).map (·.1)).getD 0
         let ty := emitTy fc.structNames fc.types (fc.tyOfId tagTy)
         let align := Nat.min (fc.ptrAlign ptr) ((fc.layouts[tagTy]?.bind (·.align)).getD 1)
         (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
@@ -2431,9 +2446,9 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         let restStr := emitStmts fc (env.push (inst.id, vname)) rest
         let tryFn := match fc.pointeeOf p with
           | .errorUnion set _ => match fc.tyOfId set with
-            | .errorSet (some names) => s!"Zig.finiteTryPayloadPtr {emitErrorDomain names}"
-            | _ => "Zig.tryPayloadPtr"
-          | _ => "Zig.tryPayloadPtr"
+            | .errorSet (some names) => s!"{errOp fc.errBits "finiteTryPayloadPtr"} {emitErrorDomain names}"
+            | _ => errOp fc.errBits "tryPayloadPtr"
+          | _ => errOp fc.errBits "tryPayloadPtr"
         let expr := s!"{tryFn} ({payload}) {fc.ptrAlign p} {fc.resolveVal env p}"
         let expr := match fc.pointeeOf p with
           | .errorUnion _ child => fc.storageExpr child expr
@@ -2651,7 +2666,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blockLoopTys allInsts,
       allInsts, brT := brTargets allInsts, repT := repTargets allInsts,
       retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
-      exitName := mangleField s!"{plain}Exit", floatSemantics, zigVersion := f.zigVersion, places := #[],
+      exitName := mangleField s!"{plain}Exit", floatSemantics, errBits := f.errorSetBits,
+      zigVersion := f.zigVersion, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
@@ -3350,7 +3366,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
             some (emitTy structNames worker.types worker.types[child]!,
               Nat.min ((worker.layouts[parameter]?.bind (·.ptrAlign)).getD 1)
                 ((worker.layouts[child]?.bind (·.align)).getD 1),
-              emitStorageEnc structNames worker.types child)
+              emitStorageEnc structNames worker.types worker.errorSetBits child)
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)

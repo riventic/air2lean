@@ -284,11 +284,13 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/try-pointers/air/{version}': 'tests/roadmap/try-pointers/provenance.json',
     'tests/roadmap/bitops/qualified/{version}/air': 'tests/roadmap/bitops/qualified/0.16.0/manifest.json',
     'tests/roadmap/idle-loops/air': 'tests/roadmap/idle-loops/provenance.json',
+    'tests/roadmap/spawn-failure/air/{version}': 'tests/roadmap/spawn-failure/air/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/global-init/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',

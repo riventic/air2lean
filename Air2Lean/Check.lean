@@ -5,6 +5,7 @@ import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
 import ZigLean.Mem.Enc
+import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
 
 /-!
@@ -232,11 +233,16 @@ def byteStridedLane (types : Array Ty) (lane : TyId) : Bool :=
   | some (.int _ bits) | some (.float bits) => bits != 0 && bits == 8 * Zig.intSize bits
   | _ => false
 
+/-- The exporter's layout of type `id` is the profile's `errBits`-bit error integer. -/
+def errCodeLayout (layouts : Array Layout) (id : TyId) (errBits : Nat) : Bool :=
+  (layouts[id]?.map fun l => l.size == some (Zig.errCodeSize errBits) &&
+    l.align == some (Zig.errCodeAlign errBits)).getD false
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
 values: their encodings are generated from the exporter's offsets. -/
-partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) :
-    Except String (Nat × Nat) := do
+partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
+    (errBits : Nat := 16) : Except String (Nat × Nat) := do
   let exported : Except String (Nat × Nat) :=
     match layouts[id]? with
     | some { size := some s, align := some a, .. } => pure (s, a)
@@ -259,17 +265,17 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     match types[c]? with
     | some (.ptr "slice" ..) => pure (16, 8)
     | some (.ptr ..) => pure (8, 8)
-    | some (.errorSet _) => modelLayout types layouts c
+    | some (.errorSet _) => modelLayout types layouts c errBits
     | _ =>
-      let (s, a) ← modelLayout types layouts c
+      let (s, a) ← modelLayout types layouts c errBits
       pure (Zig.alignUp (s + 1) a, a)
   | some (.array len c sentinel) =>
-    let (s, a) ← modelLayout types layouts c
+    let (s, a) ← modelLayout types layouts c errBits
     pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
-      let (s, _) ← modelLayout types layouts c
+      let (s, _) ← modelLayout types layouts c errBits
       if bits == 0 then throw "a vector of zero-bit lanes in memory is outside the subset"
       -- The size check compares the rest with the exporter's.
       if byteStridedLane types c then return (Zig.vecLayout len s, Zig.vecLayout len s)
@@ -283,7 +289,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     | some .bool => pure (Zig.boolVecLayout len, Zig.boolVecLayout len)
     | _ => throw "a vector of a type other than an integer, a float or `bool`"
   | some (.enum _ tag _ _) =>
-    let _ ← modelLayout types layouts tag
+    let _ ← modelLayout types layouts tag errBits
     exported
   | some (.struct name layout fields) =>
     if layout == "packed" then
@@ -292,57 +298,62 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId) 
         than an integer, a `bool` or a packed struct"
       return (Zig.intSize bits, Zig.intAlign bits)
     for (_, fty) in fields do
-      let _ ← modelLayout types layouts fty
+      let _ ← modelLayout types layouts fty errBits
     if (layouts[id]?.map (·.offsets.size)).getD 0 != fields.size then
       throw s!"struct '{name}' has no field offsets in the AIR file"
     exported
   | some (.errorUnion set payload) =>
-    -- `Zig.errUnionOffsets`: the error code is 2 bytes.
-    unless (layouts[set]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
-      throw "an error set that is not 2 bytes (`--error-limit`)"
+    -- `Zig.errUnionOffsetsW`: the error code is the profile's `error_set_bits` integer.
+    unless errCodeLayout layouts set errBits do
+      throw s!"an error set whose layout is not the profile's {errBits}-bit error integer \
+        ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits}; `--error-limit`)"
     if let some (.errorSet (some names)) := types[set]? then
       -- An empty discriminator has no standalone value, but its union's success arm does.
       unless names.isEmpty do
-        let _ ← modelLayout types layouts set
-    let (s, a) ← modelLayout types layouts payload
-    pure (Zig.errUnionSize s a, Nat.max a 2)
+        let _ ← modelLayout types layouts set errBits
+    let (s, a) ← modelLayout types layouts payload errBits
+    pure (Zig.errUnionSizeW errBits s a, Nat.max a (Zig.errCodeAlign errBits))
   | some (.errorSet none) =>
     throw "standalone anyerror or unresolved error storage has no finite declared encoding domain"
   | some (.errorSet (some names)) =>
     if names.isEmpty then throw "an empty standalone error domain has no runtime value"
     if names.size > 65535 then throw "an error encoding domain exceeds the 16-bit nonzero code capacity"
+    if names.size > Zig.errCapacity errBits then
+      throw s!"an error encoding domain of {names.size} names exceeds the {Zig.errCapacity errBits} \
+        nonzero codes of the profile's {errBits}-bit error integer (`--error-limit`)"
     if !validErrorDomainNames names then
       throw "an error encoding domain must have distinct nonempty names"
-    unless (layouts[id]?.map fun l => l.size == some 2 && l.align == some 2).getD false do
-      throw "an error set storage layout must be 2 bytes aligned to 2 (16-bit error codes)"
-    pure (2, 2)
+    unless errCodeLayout layouts id errBits do
+      throw s!"an error set storage layout must be the profile's {errBits}-bit error integer \
+        ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits})"
+    pure (Zig.errCodeSize errBits, Zig.errCodeAlign errBits)
   | some (.union _ _ (some tag) fields) =>
-    let (ts, ta) ← modelLayout types layouts tag
-    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t
+    let (ts, ta) ← modelLayout types layouts tag errBits
+    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t errBits
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
     pure (s, a)
   | some (.union name layout none fields) =>
     unless layout == "extern" || layout == "packed" do
       throw s!"union '{name}' ({layout}) without a tag"
     for (_, fty) in fields do
-      let _ ← modelLayout types layouts fty
+      let _ ← modelLayout types layouts fty errBits
     exported
   | some t => throw s!"{repr t}"
   | none => throw s!"unknown type id {id}"
 
 /-- The tag and payload offsets of a tagged union with the tag type `tag` and the field types
 `fields` in memory (`unionLayout`). -/
-def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId) :
-    Option (Nat × Nat) := do
-  let (ts, ta) ← (modelLayout types layouts tag).toOption
-  let fs ← fields.mapM fun t => (modelLayout types layouts t).toOption
+def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId)
+    (errBits : Nat := 16) : Option (Nat × Nat) := do
+  let (ts, ta) ← (modelLayout types layouts tag errBits).toOption
+  let fs ← fields.mapM fun t => (modelLayout types layouts t errBits).toOption
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
 def checkMemTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
-    (id : TyId) : Except String Unit := do
-  match modelLayout types layouts id with
+    (id : TyId) (errBits : Nat := 16) : Except String Unit := do
+  match modelLayout types layouts id errBits with
   | .error e =>
     throw s!"{fnName}: near line {line}: a value in memory is outside the subset: {e}"
   | .ok (s, a) =>
@@ -363,6 +374,8 @@ structure CheckCtx where
   fnName : String
   types : Array Ty
   layouts : Array Layout
+  /-- The profile's `error_set_bits` (`Func.errorSetBits`). -/
+  errBits : Nat := 16
   /-- The type of each instruction. -/
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
@@ -398,7 +411,7 @@ def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String 
   if let .inst p := ptr then
     if cx.places.contains p then return
   let pty ← cx.memPtrTy line ptr
-  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+  checkMemTy cx.fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
 
 /-- Is `ty` a bit-pointer type whose AIR file has no `vector_index`? -/
 def unverifiedBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
@@ -470,10 +483,10 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
         cx.fail line "a pointer to a lane of a vector whose lanes are not byte-strided (non-byte \
           width or ABI padding) is outside the subset (the lane is a bit field, and the AIR file \
           has no lane index)"
-      checkMemTy cx.fnName cx.types cx.layouts line c
+      checkMemTy cx.fnName cx.types cx.layouts line c cx.errBits
   let some e := itemTy cx.types pty
     | cx.fail line s!"item access through pointer type {pty}, which has no items"
-  checkMemTy cx.fnName cx.types cx.layouts line e
+  checkMemTy cx.fnName cx.types cx.layouts line e cx.errBits
 
 /-- The size of the type `id` is in the AIR file (pointer arithmetic, `@memcpy`). -/
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
@@ -829,7 +842,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
-    checkMemTy fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+    checkMemTy fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
     pure line
   | .fieldParentPtr fieldPtr idx =>
     cx.rejectNullableProjection line fieldPtr
@@ -846,7 +859,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let _ ← cx.memPtrTy line fieldPtr
     let some (.ptr _ _ parent) := cx.types[ty]?
       | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
-    checkMemTy fnName cx.types cx.layouts line parent
+    checkMemTy fnName cx.types cx.layouts line parent cx.errBits
     pure line
   | .ptrElemVal p _ | .memset p _ => cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
@@ -918,7 +931,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         cx.fail line "try_ptr through a bit-pointer is outside the subset"
       if layout.ptrAlign.isNone then
         cx.fail line "try_ptr pointer type has no ptr_align in the AIR file"
-    checkMemTy fnName cx.types cx.layouts line unionTy
+    checkMemTy fnName cx.types cx.layouts line unionTy cx.errBits
     let exits := match cachedTryExit with
       | some exits => exits
       | none => tryErrorBodyExits errBody
@@ -1133,11 +1146,11 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
     Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
-  let (size, _) ← (modelLayout f.types f.layouts root).toOption
+  let (size, _) ← (modelLayout f.types f.layouts root f.errorSetBits).toOption
   if off > size || width > size - off then return (remaining, false)
   if width == 0 || !hasErrorStorage f.types root then return (remaining, true)
   let recur (child base : Nat) : Option (Nat × Bool) := do
-    let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+    let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     let lo := Nat.max off base
     let hi := Nat.min (off + width) (base + childSize)
     if hi ≤ lo then return (remaining, true)
@@ -1146,12 +1159,12 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
   | .errorSet _ => return (remaining, false)
   | .optional child => recur child 0
   | .errorUnion _ payload =>
-    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-    let (code, base) := Zig.errUnionOffsets size align
-    if off < code + 2 && code < off + width then return (remaining, false)
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
+    if off < code + Zig.errCodeSize f.errorSetBits && code < off + width then return (remaining, false)
     recur payload base
   | .array len child sentinel =>
-    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 then return (remaining, true)
     let first := off / stride
     let last := (off + width - 1) / stride
@@ -1167,7 +1180,7 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
     let offsets := (f.layouts[root]?.getD {}).offsets
     if offsets.size != fields.size || fields.size > remaining then none
     for ((_, child), k) in fields.zipIdx do
-      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       let base := offsets[k]!
       let lo := Nat.max off base
       let hi := Nat.min (off + width) (base + childSize)
@@ -1190,13 +1203,13 @@ private partial def matchingGlobalSubobject (f : Func) (root off target fuel : N
   match ← f.types[root]? with
   | .optional child => matchingGlobalSubobject f child off target remaining
   | .errorUnion set payload =>
-    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-    let (code, base) := Zig.errUnionOffsets size align
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
     if off == code && compatibleType f f set target then return (remaining, true)
     if off < base then return (remaining, false)
     matchingGlobalSubobject f payload (off - base) target remaining
   | .array len child sentinel =>
-    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 || off / stride ≥ len + (if sentinel then 1 else 0) then return (remaining, false)
     matchingGlobalSubobject f child (off % stride) target remaining
   | .struct _ _ fields =>
@@ -1204,7 +1217,7 @@ private partial def matchingGlobalSubobject (f : Func) (root off target fuel : N
     if offsets.size != fields.size || fields.size > remaining then none
     for ((_, child), k) in fields.zipIdx do
       let base := offsets[k]!
-      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       if base ≤ off && off < base + childSize then
         let (next, matched) ← matchingGlobalSubobject f child (off - base) target remaining
         remaining := next
@@ -1239,7 +1252,7 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
   if off == 0 && compatibleType f f root target then true
   else match f.types[root]? with
   | some (.array len child sentinel) =>
-    match (modelLayout f.types f.layouts child).toOption with
+    match (modelLayout f.types f.layouts child f.errorSetBits).toOption with
     | some (stride, _) => stride != 0 && off % stride == 0 &&
         off / stride < len + (if sentinel then 1 else 0) && compatibleType f f child target
     | none => false
@@ -1267,12 +1280,12 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
   let some capability := scanned
     | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
   if !hasErrorStorage f.types global.ty && !capability then return
-  checkMemTy f.name f.types f.layouts 0 global.ty
-  checkMemTy f.name f.types f.layouts 0 child
-  let (size, _) ← (modelLayout f.types f.layouts child).mapError fun e => s!"{f.name}: {e}"
+  checkMemTy f.name f.types f.layouts 0 global.ty f.errorSetBits
+  checkMemTy f.name f.types f.layouts 0 child f.errorSetBits
+  let (size, _) ← (modelLayout f.types f.layouts child f.errorSetBits).mapError fun e => s!"{f.name}: {e}"
   let pointerLayout := globalAliasPointerLayout f pty
   let width := if pointerLayout.hostSize == 0 then size else pointerLayout.hostSize
-  let (globalSize, _) ← (modelLayout f.types f.layouts global.ty).mapError fun e => s!"{f.name}: {e}"
+  let (globalSize, _) ← (modelLayout f.types f.layouts global.ty f.errorSetBits).mapError fun e => s!"{f.name}: {e}"
   if off > globalSize || width > globalSize - off then
     throw s!"{f.name}: global alias subobject exceeds its backing storage"
   if immutableOrdinaryNumericAlias f global pty then return
@@ -1388,8 +1401,8 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
       let child ← sourceTy p
       let .errorUnion _ payload ← f.types[child]? | none
-      let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-      let (code, base) := Zig.errUnionOffsets size align
+      let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+      let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
       let delta := match i.op with | .errCodePtr _ => code | _ => base
       some (g, off + delta)
     | .ptrAdd sub p n =>
@@ -1397,7 +1410,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty
-      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      let (size, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       let delta := k.toNat * size
       if sub then if off < delta then none else some (g, off - delta)
       else some (g, off + delta)
@@ -1406,7 +1419,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty
-      let (size, _) ← (modelLayout f.types f.layouts child).toOption
+      let (size, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       some (g, off + k.toNat * size)
     | _ => none
   | _ => none
@@ -1485,7 +1498,7 @@ private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except S
     fail "its type can hold a pointer, a union or an unresolved type"
   if hasErrorStorage f.types g.ty then fail "its type holds error storage"
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
 type that the model encodes, or an `extern` global (`checkExternGlobal`). An array with a
@@ -1511,7 +1524,7 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
   checkTy f.name f.types f.layouts 0 g.ty
-  checkMemTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
 /-- Check loop-switch selector contracts and lexical targets even for direct Core callers. -/
 partial def checkDispatchScopes (cx : CheckCtx) (body : Array Inst)
@@ -1577,7 +1590,7 @@ def check (f : Func) : Except String Unit := do
   -- An `extern` or `packed` union is its bytes, also as a value: the model must encode it.
   for (t, id) in f.types.zipIdx do
     if let .union _ _ none _ := t then
-      checkMemTy f.name f.types f.layouts 0 id
+      checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
@@ -1590,7 +1603,7 @@ def check (f : Func) : Except String Unit := do
     if let .alloc := i.op then
       if escaping.contains i.id || bytesLocals.contains i.id then
         if let some c := ptrChild f.types i.ty then
-          checkMemTy f.name f.types f.layouts 0 c
+          checkMemTy f.name f.types f.layouts 0 c f.errorSetBits
   for g in f.globals do
     checkGlobal f g
   let mut checkedConstTypes : Std.HashSet TyId := {}
@@ -1616,6 +1629,7 @@ def check (f : Func) : Except String Unit := do
       (controlFlowSummaries f.body).tryErrorExits
     else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
+                         errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts }
   checkDispatchScopes cx f.body
@@ -2354,7 +2368,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             else if mem.contains callee then #[] else args.filterMap sliceItem
           | _ => #[]
         for c in items do
-          checkMemTy f.name f.types f.layouts 0 c
+          checkMemTy f.name f.types f.layouts 0 c f.errorSetBits
 
 /-! Collection reuses validators without constructing partial IR. Failed units retain
 their first error, but cannot suppress independent siblings. -/
@@ -2439,7 +2453,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (t, id) in f.types.zipIdx do
     if let .union _ _ none _ := t then
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
-        (checkMemTy f.name f.types f.layouts 0 id)
+        (checkMemTy f.name f.types f.layouts 0 id f.errorSetBits)
   let insts := index.insts
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
@@ -2452,7 +2466,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
         if let some c := ptrChild f.types i.ty then
           log := log.record (checkDiagnostic file f .memoryFailure
             { idSpace := .canonical, instruction := some i.id, typeId := some c })
-            (checkMemTy f.name f.types f.layouts 0 c)
+            (checkMemTy f.name f.types f.layouts 0 c f.errorSetBits)
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
   for i in insts do
@@ -2474,6 +2488,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     fnName := f.name
     types := f.types
     layouts := f.layouts
+    errBits := f.errorSetBits
     instTys := insts.map fun i => (i.id, i.ty)
     places
     localRoots

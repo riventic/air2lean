@@ -46,9 +46,10 @@ inductive Byte where
   | int (b : BitVec 8)
   /-- Byte `i` (little-endian) of the 8-byte pointer `p`. -/
   | ptrFrag (p : Ptr) (i : Fin 8)
-  /-- Byte `i` of the 2-byte code of the error `e`. The compiler numbers the errors per
-  compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
-  | errFrag (e : ErrName) (i : Fin 2)
+  /-- Byte `i` of the code of the error `e`: 2 bytes by default, 1 to 4 bytes for the error
+  integer that `--error-limit` selects (`ZigLean/Mem/ErrWidth.lean`). The compiler numbers the
+  errors per compilation, so the model keeps the name, as `ptrFrag` keeps the pointer (M20). -/
+  | errFrag (e : ErrName) (i : Fin 4)
   /-- The low `m` bits of `b` are defined (`0 < m < 8`, `b`'s bits above are 0); the bits above
   are undefined: the last byte of a `uN` with `N % 8 ≠ 0` (`intBytes`). A read that needs a
   bit above `m` throws `.unspecified` (`intOfBytes`). -/

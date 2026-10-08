@@ -18,7 +18,11 @@
   "generated_imports": {
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Gen": "tests/roadmap/global-payload-pointers/check.sh writes Gen.lean at gate time from a fresh export.",
-    "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean."
+    "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean.",
+    "ErrorWidth16.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 16-bit fixtures into ErrorWidth16/Gen.lean.",
+    "ErrorWidth8.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 8-bit fixtures into ErrorWidth8/Gen.lean.",
+    "ErrorWidth10.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 10-bit fixtures into ErrorWidth10/Gen.lean.",
+    "ErrorWidth17.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 17-bit fixtures into ErrorWidth17/Gen.lean."
   },
   "generated_premises": ["TRU-02"],
   "profiles": {
@@ -51,6 +55,8 @@
     "ZigLean.Env": ["ENV-01"],
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
+    "ZigLean.Mem.ErrWidth": ["SEM-02"],
+    "ZigLean.Mem.ErrWidthLemmas": ["SEM-02"],
     "ZigLean.Mem.Lemmas": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
