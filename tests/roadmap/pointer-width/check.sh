@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # T02 pointer-width fixtures. `--export DIR` writes fresh AIR for every profile with a
 # patched compiler; `--native` runs the source's layout/boundary tests on the host and
-# type-checks them for wasm32. The default re-translates the retained AIR, compares it
+# under wasm32-wasi (Node WASI). The default re-translates the retained AIR, compares it
 # with the retained Gen.lean files byte for byte and checks the proofs and rejections.
-# All tool invocations must run in the root's serialized build queue.
+# Needs `lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas`. All tool invocations
+# must run in the root's serialized build queue.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
