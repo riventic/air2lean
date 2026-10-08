@@ -470,4 +470,216 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     rw [e]
     exact inv_keep hi rfl rfl rfl rfl rfl
 
+/-- A spawn: `t` gives `h₂` of its part `h₁ ∪ h₂` to the new thread `c`; the covering moves. -/
+theorem cover_fork {own : ThreadId → Heap} {m m' : Mem} {t c : ThreadId} {h₁ h₂ : Heap}
+    (hcv : Covered own m) (hb : m'.blocks = m.blocks) (hs : own t = h₁ ∪ h₂)
+    (hc : own c = Heap.empty) (htc : t ≠ c) : Covered (upd (upd own t h₁) c h₂) m' := by
+  intro l x hl
+  rw [heap_congr hb] at hl
+  obtain ⟨u, hu⟩ := hcv l x hl
+  by_cases hut : u = t
+  · subst hut
+    rw [hs, Heap.union_apply] at hu
+    cases h1 : h₁ l with
+    | some y => exact ⟨u, by rw [upd_ne _ _ htc, upd_self, h1]; simp⟩
+    | none =>
+      rw [h1, Option.none_or] at hu
+      exact ⟨c, by rw [upd_self]; exact hu⟩
+  · by_cases huc : u = c
+    · subst huc; rw [hc] at hu; exact absurd rfl hu
+    · exact ⟨u, by rw [upd_ne _ _ huc, upd_ne _ _ hut]; exact hu⟩
+
+/-- A join: `t` takes the part of `u`; the covering moves. -/
+theorem cover_join {own : ThreadId → Heap} {m m' : Mem} {t u : ThreadId} (hcv : Covered own m)
+    (hb : m'.blocks = m.blocks) (hut : u ≠ t) :
+    Covered (upd (upd own t (own t ∪ own u)) u Heap.empty) m' := by
+  intro l x hl
+  rw [heap_congr hb] at hl
+  obtain ⟨w, hw⟩ := hcv l x hl
+  refine ⟨if w = u then t else w, ?_⟩
+  by_cases hwu : w = u
+  · subst hwu
+    rw [if_pos rfl, upd_ne _ _ (Ne.symm hut), upd_self, Heap.union_apply]
+    cases h : own t l <;> simp_all
+  · rw [if_neg hwu, upd_ne _ _ hwu]
+    by_cases hwt : w = t
+    · subst hwt
+      rw [upd_self, Heap.union_apply]
+      cases h : own w l <;> simp_all
+    · rw [upd_ne _ _ hwt]; exact hw
+
+/-- `main` goes to the phase `ph'` with the same heap, after steps that change no heap byte. -/
+theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {h : Heap} {W : Words}
+    {g : Ptr} (hi : Inv G m) (hg : G 0 = .main ph h W g) (hb : m'.blocks = m.blocks)
+    (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint)
+    (hs : Shape W g (upd G 0 (.main ph' h W g)) m' ph') :
+    Inv (upd G 0 (.main ph' h W g)) m' := by
+  have hown : ownOf (upd G 0 (.main ph' h W g)) m' = ownOf G m := by
+    funext u
+    unfold ownOf
+    rw [joinedB_congr ht]
+    by_cases hu : u = 0
+    · subst hu; rw [upd_self, hg]; rfl
+    · rw [upd_ne _ _ hu]
+  refine ⟨by rw [hown]; exact owned_keep hi.own hb ht hc hf, by
+    rw [hown]; intro l c hl; rw [heap_congr hb] at hl; exact hi.cover l c hl,
+    fun u h₁ W₁ s₁ d₁ e₁ hu => ?_, ⟨ph', h, W, g, upd_self _ _ _, hs⟩, by rw [ht]; exact hi.t0⟩
+  by_cases h0 : u = 0
+  · subst h0; rw [upd_self] at hu; cases hu
+  · rw [upd_ne _ _ h0] at hu; exact hi.task u _ _ _ _ _ hu
+
+/-! ## `main` -/
+
+theorem ownOf_main (m : Mem) (g : Gh) :
+    ownOf (upd (fun _ => .none) 0 g) m = upd (fun _ => Heap.empty) 0 g.heap := by
+  funext u
+  by_cases hu : u = 0
+  · subst hu; simp [ownOf, joinedB, upd]
+  · simp only [ownOf, upd, hu, ↓reduceIte, Gh.heap]; split <;> rfl
+
+theorem groupTake_one {m : Mem} {g : Ptr} (hg : m.groups = #[(g, 1)]) :
+    ((Thread.groupTake g).run m).run = some (.ok (#[1], { m with groups := #[] })) := by
+  unfold Thread.groupTake
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, hg]
+  simp [StateT.run, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
+    bind, StateT.bind, ExceptT.bind, ExceptT.bindCont]
+
+/-- `free` of the first word. -/
+theorem free_front {R : Assn} {p : Ptr} {A : Nat} {v : BitVec 32} (h0 : p.off = 0) :
+    TTriple (word p A v ∗ R) (Zig.free p) (fun _ => R) :=
+  (word_free h0).frame.conseq (fun _ h => h) fun _ _ h => sep_emp.mp (sep_comm h)
+
+/-- No part owns a byte: no byte is live. -/
+theorem heap_empty {own : ThreadId → Heap} {m : Mem} (hcv : Covered own m)
+    (h0 : ∀ u, own u = Heap.empty) : m.heap = Heap.empty := by
+  funext l
+  cases hl : m.heap l with
+  | none => rfl
+  | some c =>
+    obtain ⟨u, hu⟩ := hcv l c hl
+    rw [h0 u] at hu
+    exact absurd rfl hu
+
+set_option maxHeartbeats 4000000 in
+theorem main_spec (n : Nat) :
+    proto.WP 0 cancelClient QM (fun _ => .none) { ({} : Mem) with current := 0 } n := by
+  unfold cancelClient
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { ({} : Mem) with current := 0 } := by
+    rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
+    exact Owned.start rfl rfl
+  have hcv₀ : Covered (upd (fun _ => Heap.empty) 0 Heap.empty)
+      { ({} : Mem) with current := 0 } := by
+    intro ⟨b, o⟩ c hl; simp [Mem.heap] at hl
+  -- `status`
+  refine WP.bind (WP.callMC_step (TTriple.alloc .heap 4 4 (by decide)) ho₀ hcv₀ rfl (by decide)
+    rfl fun st m₁ h₁ ho₁ hcv₁ hq₁ hs₁ => ?_)
+  obtain ⟨As, hA₁⟩ := hq₁
+  obtain ⟨⟨hs0, hAs⟩, hb₁⟩ := sep_lift.mp hA₁
+  refine WP.bind (WP.callMC_step (word_init hs0 hAs 0) ho₁ hcv₁ (by rw [hs₁.current]) (by
+    rw [hs₁.threads]; decide) hb₁ fun _ m₂ h₂ ho₂ hcv₂ hq₂ hs₂ => ?_)
+  -- `done`
+  refine WP.bind (WP.callMC_step alloc_heap_next ho₂ hcv₂ (by rw [hs₂.current, hs₁.current])
+    (by rw [hs₂.threads, hs₁.threads]; decide) hq₂ fun dn m₃ h₃ ho₃ hcv₃ hq₃ hs₃ => ?_)
+  obtain ⟨Ad, ⟨hd0, hAd⟩, hb₃⟩ := sep_ex_lift hq₃
+  refine WP.bind (WP.callMC_step (word_init hd0 hAd 0).frameL ho₃ hcv₃
+    (by rw [hs₃.current, hs₂.current, hs₁.current])
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) hb₃
+    fun _ m₄ h₄ ho₄ hcv₄ hq₄ hs₄ => ?_)
+  let W : Words := ⟨st, dn, As, Ad⟩
+  have hW : W.Ok := ⟨hs0, hd0, hAs, hAd⟩
+  -- the group
+  refine WP.bind (WP.callMC_step (alloc_next 16 8 (by decide)) ho₄ hcv₄
+    (by rw [hs₄.current, hs₃.current, hs₂.current, hs₁.current])
+    (by rw [hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]; decide) hq₄
+    fun g m₅ h₅ ho₅ hcv₅ hq₅ hs₅ => ?_)
+  obtain ⟨Ag, ⟨hg0, hAg⟩, hb₅⟩ := sep_ex_lift hq₅
+  obtain ⟨hW₅, hG, hdWG, rfl, hWa, hGa⟩ := hb₅
+  have hc₅ : m₅.current = 0 := by
+    rw [hs₅.current, hs₄.current, hs₃.current, hs₂.current, hs₁.current]
+  have ht₅ : m₅.threads = ({} : Mem).threads := by
+    rw [hs₅.threads, hs₄.threads, hs₃.threads, hs₂.threads, hs₁.threads]
+  have hg₅ : m₅.groups = #[] := by
+    rw [hs₅.groups, hs₄.groups, hs₃.groups, hs₂.groups, hs₁.groups]
+  dsimp only
+  -- `Group.async`: the task gets the two words
+  refine WP.bind (WP.groupAsyncC fun k _ => ⟨.main .spawn (hW₅ ∪ hG) W g, ?_,
+    fun G₁ m₆ hg₁ hi₆ => ⟨.task hW₅ W 0 0 false, ⟨hW₅, W, rfl, rfl, rfl⟩, fun child m₇ hf => ?_⟩⟩)
+  · refine ⟨by rw [ownOf_main]; exact ho₅, by rw [ownOf_main]; exact hcv₅,
+      fun u _ _ _ _ _ hu => ?_, ⟨.spawn, _, W, g, upd_self _ _ _, ?_⟩, by rw [ht₅]; rfl⟩
+    · by_cases h0 : u = 0
+      · subst h0; rw [upd_self] at hu; cases hu
+      · rw [upd_ne _ _ h0] at hu; cases hu
+    · exact ⟨by rw [ht₅]; rfl, hg₅, fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]⟩
+  -- the fork: `child = 1`
+  obtain ⟨ph, hm, W', g', h0, hsh⟩ := hi₆.main
+  rw [hg₁] at h0; cases h0
+  obtain ⟨hsz₆, hgr₆, hn₆⟩ := hsh
+  have ho₆ := hi₆.own
+  have hcv₆ := hi₆.cover
+  have hj₆ := hi₆.t0
+  rw [Proto.fork_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  simp only [hsz₆]
+  have hown₆ : ownOf G₁ m₆ 0 = hG ∪ hW₅ := by
+    simp only [ownOf, joinedB, bne_self_eq_false, Bool.false_and, Bool.false_eq_true, ↓reduceIte,
+      hg₁, Gh.heap]
+    exact Heap.union_comm hdWG
+  have ho₇ := Owned.fork (ho₆.current 0) (by rw [hsz₆]; decide) hown₆ hdWG.symm
+    (Proto.fork_run _)
+  simp only [hsz₆] at ho₇
+  have hjb6 : ∀ u, joinedB m₆ u = false := by
+    intro u; unfold joinedB
+    by_cases hu : u = 0
+    · subst hu; rfl
+    · rw [Array.getElem?_eq_none (by rw [hsz₆]; unfold ThreadId at *; omega)]; simp
+  have hn₁ : ∀ u, 1 ≤ u → ownOf G₁ m₆ u = Heap.empty := by
+    intro u hu; simp [ownOf, hjb6, hn₆ u hu, Gh.heap]
+  have hjb7 : ∀ M : Mem, M.threads = m₆.threads.push { spawner := 0, joined := false } →
+      ∀ u, joinedB M u = false := by
+    intro M hM u; unfold joinedB
+    by_cases hu : u = 0
+    · subst hu; rfl
+    · rw [hM]; simp only [Array.getElem?_push, hsz₆]
+      split
+      · simp
+      · rw [Array.getElem?_eq_none (by rw [hsz₆]; unfold ThreadId at *; omega)]; simp
+  have e : ∀ M : Mem, M.threads = m₆.threads.push { spawner := 0, joined := false } →
+      ownOf (upd (upd G₁ 1 (.task hW₅ W 0 0 false)) 0 (.main .hint hG W g)) M =
+        upd (upd (ownOf G₁ m₆) 0 hG) 1 hW₅ := by
+    intro M hM
+    funext u
+    simp only [ownOf, hjb7 M hM, Bool.false_eq_true, ↓reduceIte]
+    by_cases h0 : u = 0
+    · subst h0; simp [upd, Gh.heap]
+    · by_cases h1 : u = 1
+      · subst h1; simp [upd, Gh.heap]
+      · simp [upd, h0, h1, ownOf, hjb6]
+  -- the spin hint: the task may run
+  refine WP.bind ?_
+  show proto.WP 0 (Zig.spinLoopHint >>= fun a => pure (a, ((), ()).snd)) _ _ _ _
+  refine WP.bind (WP.spinLoopHint fun k₁ _ => ⟨.main .hint hG W g, ?_,
+    fun G₂ m₈ hg₂ hi₈ => WP.pure' ?_⟩)
+  · refine ⟨by rw [e _ rfl]; exact owned_keep ho₇ rfl rfl rfl rfl, ?_, fun u h₁ W₁ s₁ d₁ e₁ hu => ?_,
+      ⟨.hint, hG, W, g, upd_self _ _ _, ?_⟩, ?_⟩
+    · rw [e _ rfl]
+      exact cover_fork hcv₆ rfl hown₆ (hn₁ 1 (Nat.le_refl _)) (by decide)
+    · by_cases h0 : u = 0
+      · subst h0; rw [upd_self] at hu; cases hu
+      · rw [upd_ne _ _ h0] at hu
+        by_cases h1 : u = 1
+        · subst h1; rw [upd_self] at hu; cases hu
+          exact ⟨hW, hWa, rfl, by decide⟩
+        · rw [upd_ne _ _ h1, hn₆ u (by unfold ThreadId at *; omega)] at hu; cases hu
+    · refine ⟨by simp [hsz₆], by simp [Array.getElem?_push, Array.getElem_push, hsz₆],
+        by simp [hgr₆],
+        ⟨hW₅, 0, 0, false, by simp [upd]⟩, fun u hu => ?_⟩
+      rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
+        hn₆ u (by unfold ThreadId at *; omega)]
+    · simp only [Array.getElem?_push, hsz₆]; exact hj₆
+  sorry
+
 end Cancel.Group
