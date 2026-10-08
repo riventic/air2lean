@@ -3,7 +3,7 @@
 [`assurance/theorem-inventory.json`](../assurance/theorem-inventory.json) lists the headline
 theorems of `Proofs/` (the [proved examples](proofs.md#proved-examples), the
 [vector proofs](vector-proofs.md), the `floatops` selector theorems, the C14 RwLock client and
-its rules, and the single-schedule and single-step facts) with:
+its rules, the C14 contract clients, and the single-schedule and single-step facts) with:
 
 - the Lean name and module, and the example whose translation the module imports;
 - a scope class (below) and the precise domain of the statement;
@@ -68,8 +68,11 @@ committed goldens.
   excluded; the theorem's domain says so.
 - C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol of
   `Proofs/Sync/RwLockContract.lean` (one fixed client: main reader, one writer, writer count
-  at most 2). There is no reusable RwLock contract for arbitrary readers, resources, fairness
-  or native adequacy ([rwlock-contracts.md](rwlock-contracts.md)).
+  at most 2). `cache_spec`/`cache_safe` and `mailbox_spec`/`mailbox_safe` are Lean model
+  clients proved only against the reusable `MutexContract`/`SemContract` of
+  `Proofs/Sync/Contracts.lean`; they have no Zig source or native/model differential. There is
+  no reusable RwLock contract for arbitrary readers or resources, no Event/WaitGroup contract,
+  and no fairness or native adequacy claim ([rwlock-contracts.md](rwlock-contracts.md)).
 
 ## Inventory
 
