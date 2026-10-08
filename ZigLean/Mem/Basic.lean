@@ -55,6 +55,10 @@ inductive Byte where
   | part (m : Nat) (b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
+/-- The identity of an allocator other than the model's `std.mem.Allocator`: an index into
+`Mem.allocators`. -/
+abbrev AllocId := Nat
+
 inductive BlockKind where
   | stack
   | heap
@@ -62,6 +66,10 @@ inductive BlockKind where
   /-- A `const` global, a string literal or a function: read-only. A write to it (through
   `@constCast`) throws `.illegal`. -/
   | constGlobal
+  /-- A block that the allocator `a` made: an arena or a fixed buffer (`Mem.allocators[a]`,
+  `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
+  free through one allocator of a block that another one made throws `.illegal`. -/
+  | owned (a : AllocId)
   deriving DecidableEq, Repr
 
 structure Block where
@@ -184,8 +192,12 @@ structure ALoc where
   msgs : Array Msg
   deriving Repr, Inhabited
 
-/-- The legacy default request-size cap, in bytes; configurable through `Mem.allocPolicy`. -/
+/-- The differential harness's request cap (1 MiB), the legacy model default. It is selected
+explicitly (`AllocPolicy.harness`); the model default has no fixed cap. -/
 def maxAllocBytes : Nat := 1 <<< 20
+
+/-- No fixed model cap: every `usize` request (fewer than 2^64 bytes) passes the size check. -/
+def unboundedAllocBytes : Nat := 2 ^ 64
 
 /-- Explicit byte-remap environment. Default failure preserves the legacy allocator.
 Successful policies cover only nonempty, alignment-1 byte buffers. -/
@@ -193,13 +205,47 @@ inductive ByteRemapMode where
   | fail | inPlace | move
   deriving DecidableEq, Repr, Inhabited
 
-/-- Selected allocator environment: a per-request cap and permitted failure indices.
-The finite list can describe every finite prefix of an arbitrary failure decision trace.
+/-- Selected allocator environment: a per-request cap, finite failure indices, an arbitrary
+failure oracle over (attempt index, request bytes) and an optional live-heap budget.
+The cap and finite list are special cases of the oracle (`AllocPolicy.asOracle` in
+`ZigLean.Sep.Alloc`).
 It is not a claim about a native allocator's available memory or address policy. -/
 structure AllocPolicy where
-  maxBytes : Nat := maxAllocBytes
+  maxBytes : Nat := unboundedAllocBytes
   failures : List Nat := []
   byteRemap : ByteRemapMode := .fail
+  /-- Arbitrary permitted failure decisions: `fails i n` fails attempt `i` of `n` bytes. -/
+  fails : Nat → Nat → Bool := fun _ _ => false
+  /-- Total live-heap bytes allowed after the request; `none` is unbounded. -/
+  budget : Option Nat := none
+  deriving Inhabited
+
+/-- The oracle is a function, so it is shown opaquely. -/
+instance : Repr AllocPolicy where
+  reprPrec p _ := f!"\{ maxBytes := {repr p.maxBytes}, failures := {repr p.failures}, " ++
+    f!"byteRemap := {repr p.byteRemap}, fails := <oracle>, budget := {repr p.budget} }"
+
+/-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
+def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
+
+/-- The kind of an allocator with an identity (`ZigLean/Mem/Owned.lean`, M01). -/
+inductive OwnedPolicy where
+  /-- `std.heap.ArenaAllocator` over the model's `std.mem.Allocator`. -/
+  | arena
+  /-- `std.heap.FixedBufferAllocator` over a buffer of `cap` bytes at address `base`. -/
+  | fixedBuffer (base cap : Nat)
+  deriving DecidableEq, Repr, Inhabited
+
+/-- The state of an allocator with an identity. -/
+structure OwnedAlloc where
+  policy : OwnedPolicy
+  /-- `false` after `ArenaAllocator.deinit`: every later use throws `.illegal`. -/
+  live : Bool := true
+  /-- `FixedBufferAllocator.end_index`. -/
+  used : Nat := 0
+  /-- The buffer index of the first byte of each block of a fixed buffer, for its
+  `isLastAllocation`. -/
+  starts : List (BlockId × Nat) := []
   deriving DecidableEq, Repr, Inhabited
 
 structure Mem where
@@ -234,6 +280,8 @@ structure Mem where
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
   of their spawn (`ZigLean/Mem/Thread.lean`). -/
   groups : Array (Ptr × ThreadId) := #[]
+  /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
+  allocators : Array OwnedAlloc := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -371,6 +419,35 @@ def optSetSome (α : Type) [Enc α] (p : Ptr) : MemM Ptr := do
 /-- A store of `undefined`: every byte of the value becomes undefined. -/
 def storeUndef (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Unit :=
   storeBytes p align (Array.replicate (Enc.size α) .undef)
+
+/-! ## Values with undefined parts
+
+A local that receives a store of `undefined` holds the bytes of its value (`Enc`), so that its
+undefined parts stay undefined bytes: a store writes bytes, a read of a part decodes only the
+part's bytes and throws `.unspecified` if one of them is undefined. A copy of the whole value
+(a load returned or stored to memory) moves the bytes without decoding them. -/
+
+/-- The bytes of a value of type `α` that can have undefined parts. -/
+abbrev Bytes (_α : Type) := Array Byte
+
+/-- Every byte undefined. -/
+def Bytes.undef (α : Type) [Enc α] : Bytes α := Array.replicate (Enc.size α) .undef
+
+/-- The bytes at `off` hold `v`. -/
+def Bytes.set {α β : Type} [Enc β] (bs : Bytes α) (off : Nat) (v : β) : Bytes α :=
+  writeBytes bs off (Enc.encode v)
+
+/-- The bytes of a `β` at `off` become undefined. -/
+def Bytes.setUndef {α : Type} (β : Type) [Enc β] (bs : Bytes α) (off : Nat) : Bytes α :=
+  writeBytes bs off (Array.replicate (Enc.size β) .undef)
+
+/-- The bytes at `off` become `src`'s (a copy of a value with undefined parts). -/
+def Bytes.copy {α β : Type} (bs : Bytes α) (off : Nat) (src : Bytes β) : Bytes α :=
+  writeBytes bs off src
+
+/-- The `β` at `off`: throws `.unspecified` if one of its bytes is undefined. -/
+def Bytes.get (β : Type) [Enc β] {α : Type} (bs : Bytes α) (off : Nat) : Result β :=
+  Enc.decode (bs.extract off (off + Enc.size β))
 
 /-! ## Memory ops
 

@@ -19,6 +19,9 @@ Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
   with a spawned thread is a memory block subject to the race check (`ZigLean/Mem/Thread.lean`).
   A store of a partly `undefined` constant to a place also escapes: a `Locals` field has no
   undefined parts, memory has undefined bytes.
+* A store of a wholly `undefined` value to a place that a read can observe (`deadUndefStores`)
+  makes its `alloc` a **byte local** (`byteLocals`, a `Zig.Bytes T` field of `Locals`) if
+  `byteLocalOk`, else it escapes.
 * A function is **pure** if no parameter and not the return type contains a pointer (a top-level
   `[]const T` parameter with a pointer-free `T` is allowed), no `alloc` escapes, it has no
   pointer constant and no memory op (`memoryOp`, which includes a call to the allocator model),
@@ -212,9 +215,10 @@ partial def undefByteRanges (types : Array Ty) (layouts : Array Layout) (tid : T
       (acc ++ ·) <$> undefByteRanges types layouts t e (base + o)
   | v => if v.hasNestedUndef then none else pure #[]
 
-/-- The `alloc`s of `f` that escape. A store of a partly `undefined` constant to a place makes
-its `alloc` escape: memory holds the undefined parts as undefined bytes (`undefByteRanges`). -/
-def escapingAllocs (f : Func) : Array InstId :=
+/-- The `alloc`s of `f` that escape by their uses. A store of a partly `undefined` constant to a
+place makes its `alloc` escape: memory holds the undefined parts as undefined bytes
+(`undefByteRanges`). -/
+def usesEscapingAllocs (f : Func) : Array InstId :=
   let insts := f.allInsts
   let roots := placeRoots insts
   insts.foldl (init := #[]) fun acc i =>
@@ -270,6 +274,128 @@ def pureParam (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
   | some (.ptr "slice" true c) => !hasPtr types c
   | _ => !hasPtr types id
+
+/-- The instruction list of `body` and of each nested body. -/
+partial def bodyLists (body : Array Inst) : Array (Array Inst) :=
+  #[body] ++ body.flatMap fun i => match i.op with
+    | .block b | .loop b | .«try» _ b | .tryPtr _ b => bodyLists b
+    | .condBr _ t e => bodyLists t ++ bodyLists e
+    | .switchBr _ cs e | .loopSwitchBr _ cs e => cs.flatMap (bodyLists ·.body) ++ bodyLists e
+    | _ => #[]
+
+/-- Every operand of `op` that can be a place: the value operands, the pointer operands and the
+places that an asm output writes. -/
+def placeOperands (op : Op) : Array Val :=
+  valueOperands op ++ match op with
+    | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
+    | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
+    | .cmpxchg _ p .. => #[p]
+    | .asm _ _ _ outputs _ => outputs.filterMap (·.ref)
+    | _ => #[]
+
+/-- The places of the `alloc` `a`. -/
+def placesOf (roots : Array (InstId × InstId)) (a : InstId) : Array InstId :=
+  roots.filterMap fun (p, r) => if r == a then some p else none
+
+/-- The stores of a wholly `undefined` value to an `alloc` itself that no read can observe: the
+next instruction of the same body that uses a place of the `alloc` (`dbg` aside) writes the
+whole local with a defined value (a `store`, or an output-only `=` asm output), and no
+instruction before it can leave the body to an enclosing block or loop (`br`, `repeat`, a
+dispatch), which could reach a read past the write. -/
+def deadUndefStores (f : Func) : Array InstId :=
+  let insts := f.allInsts
+  -- `j` (or a body inside it) can jump to a block or loop that encloses `j`.
+  let leaves (j : Inst) : Bool :=
+    let inner := flattenInst #[] j
+    inner.any fun x => match x.op with
+      | .br t _ | .«repeat» t | .switchDispatch t _ => !inner.any (·.id == t)
+      | _ => false
+  let roots := placeRoots insts
+  (bodyLists f.body).foldl (init := #[]) fun acc body =>
+    body.zipIdx.foldl (init := acc) fun acc (i, k) => match i.op with
+      | .store (.inst a) (.undef _) =>
+        if !insts.any (fun j => j.id == a && j.op matches .alloc) then acc else
+        let ps := placesOf roots a
+        let usesA (j : Inst) : Bool := (flattenInst #[] j).any fun x => match x.op with
+          | .dbg .. => false
+          | op => (placeOperands op).any fun v => match v with
+            | .inst id => ps.contains id
+            | _ => false
+        let overwrites (j : Inst) : Bool := match j.op with
+          | .store (.inst p) v => p == a && !(v matches .undef _) && !v.hasNestedUndef
+          | .asm _ _ _ outputs inputs =>
+            outputs.any (fun o => o.ref == some (.inst a) && o.constraint.startsWith "=") &&
+              !inputs.any fun o => match o.ref with
+                | some (.inst id) => ps.contains id
+                | _ => false
+          | _ => false
+        match (body.extract (k + 1) body.size).find? (fun j => usesA j || leaves j) with
+        | some j => if overwrites j then acc.push i.id else acc
+        | none => acc
+      | _ => acc
+
+/-- The `alloc`s that receive a store of a wholly `undefined` value that a read can observe
+(not `deadUndefStores`), through any of their places. -/
+def undefAllocs (f : Func) : Array InstId :=
+  let insts := f.allInsts
+  if !insts.any (fun i => i.op matches .store _ (.undef _)) then #[] else
+  let roots := placeRoots insts
+  let dead := deadUndefStores f
+  insts.foldl (init := #[]) fun acc i => match i.op with
+    | .store (.inst p) (.undef _) =>
+      if dead.contains i.id then acc else
+      match roots.find? (·.1 == p) with
+      | some (_, r) => if acc.contains r then acc else acc.push r
+      | none => acc
+    | _ => acc
+
+/-- The byte offset of field `idx` of the non-`packed` struct `tid`; `none` for every other type. -/
+def structFieldOffset? (types : Array Ty) (layouts : Array Layout) (tid : TyId) (idx : Nat) :
+    Option Nat := do
+  let some (.struct _ layout fields) := types[tid]? | none
+  if layout == "packed" then none
+  let offsets := (layouts[tid]?.map (·.offsets)).getD #[]
+  if offsets.size != fields.size then none
+  offsets[idx]?
+
+/-- The `alloc` `a` can be a byte local (`Zig.Bytes`): its type has no pointer, and each of its
+places is the `alloc` or a field pointer of a non-`packed` struct, used only by `load`, `store`
+(as the pointer), `struct_field_ptr` and `dbg`. -/
+def byteLocalOk (f : Func) (insts : Array Inst) (roots : Array (InstId × InstId)) (a : InstId) :
+    Bool :=
+  let ps := placesOf roots a
+  let isP (v : Val) : Bool := match v with | .inst id => ps.contains id | _ => false
+  let tyOf (id : InstId) : Option TyId := (insts.find? (·.id == id)).map (·.ty)
+  let child (id : InstId) : Option TyId := (tyOf id).bind fun t => match f.types[t]? with
+    | some (.ptr _ _ c) => some c
+    | _ => none
+  (child a).any (!hasPtr f.types ·) &&
+  insts.all fun i =>
+    if !(placeOperands i.op).any isP then true else
+    match i.op with
+    | .load p => isP p
+    | .store p v => isP p && !isP v
+    | .fieldPtr p@(.inst b) idx =>
+      isP p && (f.layouts[i.ty]?.map (·.hostSize)).getD 0 == 0 &&
+        ((child b).bind (structFieldOffset? f.types f.layouts · idx)).isSome
+    | .dbg .. => true
+    | _ => false
+
+/-- The byte locals of `f`: the `undefAllocs` that do not escape by their uses and are
+`byteLocalOk`. Each is a `Locals` field of type `Zig.Bytes T`. -/
+def byteLocals (f : Func) : Array InstId :=
+  let insts := f.allInsts
+  let roots := placeRoots insts
+  let base := usesEscapingAllocs f
+  (undefAllocs f).filter fun a => !base.contains a && byteLocalOk f insts roots a
+
+/-- The `alloc`s of `f` that escape: by their uses (`usesEscapingAllocs`), and the `undefAllocs`
+that cannot be byte locals (`byteLocalOk`), whose undefined bytes memory holds. -/
+def escapingAllocs (f : Func) : Array InstId :=
+  let insts := f.allInsts
+  let roots := placeRoots insts
+  let base := usesEscapingAllocs f
+  base ++ (undefAllocs f).filter fun a => !base.contains a && !byteLocalOk f insts roots a
 
 /-- Audited operand-free spin instructions emitted by `std.atomic.spinLoopHint` on
 x86/x86_64 (and RISC-V with Zihintpause) and aarch64. Exact volatile instructions only:

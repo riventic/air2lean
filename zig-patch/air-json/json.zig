@@ -155,6 +155,11 @@ const Compat = struct {
         return if (v14) false else tag == .int_from_float_safe;
     }
 
+    /// A lane pointer whose lane is runtime-known: `VectorIndex.runtime`, which 0.16.0 removed.
+    fn isRuntimeLane(vector_index: InternPool.Key.PtrType.VectorIndex) bool {
+        return if (v16) false else vector_index == .runtime;
+    }
+
     /// A `bin_op` tag that does not exist in every version (`memmove`: 0.15.2+).
     fn isNewBinOp(tag: Air.Inst.Tag) bool {
         return if (v14) false else tag == .memmove;
@@ -1564,6 +1569,21 @@ const W = struct {
                 if (info.packed_offset.host_size != 0) {
                     try w.field("bit_offset");
                     try w.j.write(info.packed_offset.bit_offset);
+                }
+                // A pointer to one lane of a vector (`&v[i]`): its `host_size` is the vector
+                // length, not bytes, and the lane is only in the type. Only a lane that is not a
+                // whole power-of-two number of bytes gets one. A bit-pointer always has the field,
+                // `null` for a packed field pointer: an export without it cannot tell the two
+                // apart, so the translator then accepts only bit-pointers that it sees made.
+                if (info.flags.vector_index != .none) {
+                    try w.field("vector_index");
+                    if (Compat.isRuntimeLane(info.flags.vector_index))
+                        try w.j.write("runtime")
+                    else
+                        try w.j.write(@intFromEnum(info.flags.vector_index));
+                } else if (info.packed_offset.host_size != 0) {
+                    try w.field("vector_index");
+                    try w.j.write(null);
                 }
             },
             .array => {

@@ -1,0 +1,159 @@
+{
+ "schema": 11,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "name": "undef_locals.writtenRead",
+ "params": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 1,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ],
+   "name": "x"
+  },
+  {
+   "id": 3,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "5"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "undef_locals.Pair",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "b",
+     "ty": 0,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 2,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn () undef_locals.Pair"
+  }
+ ]
+}

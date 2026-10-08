@@ -39,5 +39,4 @@ bash tests/roadmap/undef-operands/check.sh
 ```
 
 Scope: partly `undefined` global initializers are a separate check (L12). A wholly `undefined`
-store to a local that stays a `Locals` field still writes the field type's `default`
-(`docs/generated-code.md` §`undefined` operands); committed goldens rely on that form.
+store to a local is `tests/roadmap/undef-locals` (byte locals, dead stores).

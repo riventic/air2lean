@@ -1,0 +1,304 @@
+[
+  {
+    "function": "Basic.absDiff",
+    "program": "Basic.vc_absDiff",
+    "status": "extracted"
+  },
+  {
+    "function": "Basic.clampAdd",
+    "program": "Basic.vc_clampAdd",
+    "status": "extracted"
+  },
+  {
+    "function": "Basic.classify",
+    "program": "Basic.vc_classify",
+    "status": "extracted"
+  },
+  {
+    "function": "Basic.scale",
+    "program": "Basic.vc_scale",
+    "status": "extracted"
+  },
+  {
+    "function": "Basic.sum",
+    "requests": [
+      {
+        "instruction": 7,
+        "loop": "Basic.sum.loop7",
+        "request": "invariant + variant"
+      }
+    ],
+    "status": "loop-request"
+  },
+  {
+    "function": "Basic.tardiness",
+    "program": "Basic.vc_tardiness",
+    "status": "extracted"
+  },
+  {
+    "function": "Basic.totalWeightedTardiness",
+    "requests": [
+      {
+        "instruction": 8,
+        "loop": "Basic.totalWeightedTardiness.loop8",
+        "request": "invariant + variant"
+      }
+    ],
+    "status": "loop-request"
+  },
+  {
+    "function": "Basic.weightedTardiness",
+    "reason": "no VC rule or `@[vc_contract]` theorem for `Basic.tardiness`:\n  Basic.tardiness x p0.due",
+    "status": "refused"
+  },
+  {
+    "function": "Pointers.addDown",
+    "reason": "`Pointers.addDown` is recursive; a recursive call needs an explicit measure and a separately proved contract, so no VC is extracted",
+    "status": "refused"
+  },
+  {
+    "function": "Pointers.addTo",
+    "program": "Pointers.vc_addTo",
+    "status": "extracted"
+  },
+  {
+    "function": "Pointers.bumpOpt",
+    "reason": "no VC rule or `@[vc_contract]` theorem for `Zig.optIsSome`:\n  Zig.optIsSome (BitVec 32) p0",
+    "status": "refused"
+  },
+  {
+    "function": "Pointers.copyJob",
+    "reason": "no `LawfulEnc` instance for the stored type\n  Pointers.Job",
+    "status": "refused"
+  },
+  {
+    "function": "Pointers.delay",
+    "program": "Pointers.vc_delay",
+    "status": "extracted"
+  },
+  {
+    "function": "Pointers.dueOf",
+    "program": "Pointers.vc_dueOf",
+    "status": "extracted"
+  },
+  {
+    "function": "Pointers.maxPtr",
+    "program": "Pointers.vc_maxPtr",
+    "status": "extracted"
+  },
+  {
+    "function": "Pointers.same",
+    "program": "Pointers.vc_same",
+    "status": "extracted"
+  },
+  {
+    "function": "Pointers.setOpt",
+    "reason": "no `LawfulEnc` instance for the stored type\n  Option (BitVec 32)",
+    "status": "refused"
+  },
+  {
+    "function": "Pointers.setOptJob",
+    "reason": "no VC rule or `@[vc_contract]` theorem for `Zig.optSetSome`:\n  Zig.optSetSome Pointers.Job p0",
+    "status": "refused"
+  },
+  {
+    "function": "Pointers.sumTo",
+    "requests": [
+      {
+        "instruction": 6,
+        "loop": "Pointers.sumTo.loop6",
+        "request": "invariant + variant"
+      }
+    ],
+    "status": "loop-request"
+  },
+  {
+    "function": "Pointers.swap",
+    "program": "Pointers.vc_swap",
+    "status": "extracted"
+  },
+  {
+    "function": "Errors.digitOrZero",
+    "reason": "no VC rule or `@[vc_contract]` theorem for `Errors.parseDigit`:\n  Errors.parseDigit p0",
+    "status": "refused"
+  },
+  {
+    "function": "Errors.parseDigit",
+    "program": "Errors.vc_parseDigit",
+    "status": "extracted"
+  },
+  {
+    "function": "Errors.sumDigits",
+    "requests": [
+      {
+        "instruction": 7,
+        "loop": "Errors.sumDigits.loop7",
+        "request": "invariant + variant"
+      }
+    ],
+    "status": "loop-request"
+  },
+  {
+    "function": "Basic.tardiness",
+    "obligations": [
+      {
+        "case": "safety_1",
+        "closed_by": null,
+        "given": [
+          "branch1 : gt false a b = true"
+        ],
+        "goal": "b.toNat ≤ a.toNat",
+        "kind": "safety",
+        "label": "precondition of Zig.sub [Zig.VC.Prim.sub_unsigned]"
+      },
+      {
+        "case": "result_1",
+        "closed_by": null,
+        "given": [
+          "branch1 : gt false a b = true",
+          "value2 : BitVec 32",
+          "summary2 : value2 = a - b"
+        ],
+        "goal": "value2.toNat = a.toNat - b.toNat",
+        "kind": "result",
+        "label": "functional result"
+      },
+      {
+        "case": "result_2",
+        "closed_by": null,
+        "given": [
+          "branch1 : gt false a b = false"
+        ],
+        "goal": "BitVec.toNat 0 = a.toNat - b.toNat",
+        "kind": "result",
+        "label": "functional result"
+      }
+    ],
+    "status": "obligations"
+  },
+  {
+    "function": "Errors.parseDigit",
+    "obligations": [
+      {
+        "case": "error_1",
+        "closed_by": null,
+        "given": [
+          "branch1 : lt false c 48 = true"
+        ],
+        "goal": "Except.error \"NotDigit\" = if c.toNat < 48 ∨ 57 < c.toNat then Except.error \"NotDigit\" else Except.ok (c - 48)",
+        "kind": "error",
+        "label": "error return"
+      },
+      {
+        "case": "error_2",
+        "closed_by": null,
+        "given": [
+          "branch1 : lt false c 48 = false",
+          "branch2 : gt false c 57 = true"
+        ],
+        "goal": "Except.error \"NotDigit\" = if c.toNat < 48 ∨ 57 < c.toNat then Except.error \"NotDigit\" else Except.ok (c - 48)",
+        "kind": "error",
+        "label": "error return"
+      },
+      {
+        "case": "safety_1",
+        "closed_by": null,
+        "given": [
+          "branch1 : lt false c 48 = false",
+          "branch2 : gt false c 57 = false"
+        ],
+        "goal": "BitVec.toNat 48 ≤ c.toNat",
+        "kind": "safety",
+        "label": "precondition of Zig.sub [Zig.VC.Prim.sub_unsigned]"
+      },
+      {
+        "case": "result_1",
+        "closed_by": null,
+        "given": [
+          "branch1 : lt false c 48 = false",
+          "branch2 : gt false c 57 = false",
+          "value3 : BitVec 8",
+          "summary3 : value3 = c - 48"
+        ],
+        "goal": "Except.ok value3 = if c.toNat < 48 ∨ 57 < c.toNat then Except.error \"NotDigit\" else Except.ok (c - 48)",
+        "kind": "result",
+        "label": "functional result"
+      }
+    ],
+    "status": "obligations"
+  },
+  {
+    "function": "Pointers.addTo",
+    "obligations": [
+      {
+        "case": "memory_1",
+        "closed_by": null,
+        "given": [
+          "heap : Heap",
+          "pre : pts p 8 old heap"
+        ],
+        "goal": "0 < Enc.size (BitVec 64)",
+        "kind": "memory",
+        "label": "loaded type has positive size"
+      },
+      {
+        "case": "safety_1",
+        "closed_by": null,
+        "given": [
+          "heap : Heap",
+          "pre : pts p 8 old heap"
+        ],
+        "goal": "32 ≤ 64",
+        "kind": "safety",
+        "label": "unsigned cast widens"
+      },
+      {
+        "case": "safety_2",
+        "closed_by": null,
+        "given": [
+          "heap : Heap",
+          "pre : pts p 8 old heap"
+        ],
+        "goal": "old.toNat + (BitVec.setWidth 64 delta).toNat < 2 ^ 64",
+        "kind": "safety",
+        "label": "unsigned addition does not overflow"
+      },
+      {
+        "case": "memory_2",
+        "closed_by": null,
+        "given": [
+          "heap : Heap",
+          "pre : pts p 8 old heap"
+        ],
+        "goal": "0 < Enc.size (BitVec 64)",
+        "kind": "memory",
+        "label": "stored type has positive size"
+      },
+      {
+        "case": "memory_3",
+        "closed_by": "hypothesis",
+        "given": [
+          "heap : Heap",
+          "pre : pts p 8 old heap"
+        ],
+        "goal": "∃ old, pts p 8 old heap",
+        "kind": "memory",
+        "label": "owned cell for the store"
+      },
+      {
+        "case": "memory_4",
+        "closed_by": null,
+        "given": [
+          "heap : Heap",
+          "pre : pts p 8 old heap",
+          "heap1 : Heap",
+          "stored1 : pts p 8 (old + BitVec.setWidth 64 delta) heap1"
+        ],
+        "goal": "pts p 8 (old + BitVec.setWidth 64 delta) heap1",
+        "kind": "memory",
+        "label": "postcondition"
+      }
+    ],
+    "status": "obligations"
+  }
+]

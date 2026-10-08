@@ -13,13 +13,15 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Assn
 
 namespace Threadsync
 
-/-- The deadline with no timeout. -/
-def dl0 : Thread_Futex_Deadline := { (default : Thread_Futex_Deadline) with timeout := none }
+/-- The deadline with no timeout, as `Deadline.init(null)` returns it: the bytes of
+`timeout = null`, and `started` undefined (`Zig.Bytes`). -/
+def dl0 : Bytes Thread_Futex_Deadline :=
+  writeBytes (Array.replicate 48 Byte.undef) 0 (Enc.encode (none : Option (BitVec 64)))
 
 /-- The deadline block after the store of `dl0`. -/
-def bsD : Array Byte := writeBytes (Array.replicate 48 Byte.undef) 0 (Enc.encode dl0)
+def bsD : Array Byte := writeBytes (Array.replicate 48 Byte.undef) 0 dl0
 
-theorem dl0_size : (Enc.encode dl0).size = 48 := by decide +kernel
+theorem dl0_size : dl0.size = 48 := by decide +kernel
 
 theorem bsD_size : bsD.size = 48 := by
   unfold bsD; rw [writeBytes_size _ _ _ (by rw [dl0_size]; decide)]; simp
@@ -29,25 +31,45 @@ def isNone (r : Option (Except Error (Option (BitVec 64)))) : Bool :=
   | some (.ok none) => true
   | _ => false
 
-theorem dl_none_b : isNone ((Enc.decode (bsD.extract 0 (0 + 16)) : Result (Option (BitVec 64))).run) =
-    true := by
-  decide +kernel
-
-theorem dl_none : (Enc.decode (bsD.extract 0 (0 + 16)) : Result (Option (BitVec 64))) = pure none := by
-  have h := dl_none_b
+/-- A decode of `none` from its `isNone` check. -/
+theorem none_of_isNone {r : Result (Option (BitVec 64))} (h : isNone r.run = true) : r = pure none := by
   revert h
-  generalize (Enc.decode (bsD.extract 0 (0 + 16)) : Result (Option (BitVec 64))) = r
+  generalize r = r'
   intro h
-  show r.run = some (.ok none)
+  show r'.run = some (.ok none)
   unfold isNone at h
   split at h
   · assumption
   · cases h
 
+theorem dl_none : (Enc.decode (bsD.extract 0 (0 + 16)) : Result (Option (BitVec 64))) = pure none :=
+  none_of_isNone (by decide +kernel)
+
+/-- `Deadline.init(null)`'s bytes after its store of `timeout`. -/
+theorem dinit_bytes : Bytes.set (Bytes.setUndef Thread_Futex_Deadline (Bytes.undef Thread_Futex_Deadline) 0) 0
+    (none : Option (BitVec 64)) = dl0 := by
+  decide +kernel
+
+/-- Its read of `timeout` decodes only the bytes of `timeout`. -/
+theorem dinit_timeout : (Bytes.get (Option (BitVec 64)) dl0 0 : Result (Option (BitVec 64))) = pure none :=
+  none_of_isNone (by decide +kernel)
+
+/-- `started` stays undefined: a read of it throws `.unspecified`. -/
+theorem dinit_started : (Bytes.get time_Timer dl0 16 : Result time_Timer).run = some (.error .unspecified) := by
+  have h : (match (Bytes.get time_Timer dl0 16 : Result time_Timer).run with
+    | some (.error .unspecified) => true
+    | _ => false) = true := by decide +kernel
+  revert h
+  generalize (Bytes.get time_Timer dl0 16 : Result time_Timer).run = r
+  intro h
+  split at h
+  · rfl
+  · cases h
+
 theorem dinit_eq : Thread_Futex_Deadline_init none = (pure dl0 : ConcM Tgt _) := by
   unfold Thread_Futex_Deadline_init
-  simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, StateT.run_modify,
-    StateT.run_get, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, map_pure, bind_pure_comp]
+  simp only [StateT.run'_eq, StateT.run_bind, pure_bind, StateT.run_modify, StateT.run_get,
+    map_pure, bind_pure_comp, dinit_bytes, dinit_timeout, liftM, monadLift, MonadLift.monadLift]
   rfl
 
 /-- A heap of bytes in another block than block 0. -/

@@ -236,21 +236,21 @@ def Thread_Mutex_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
 
 structure Thread_Futex_Deadline_initLocals where
-  deadline : Thread_Futex_Deadline
+  deadline : Zig.Bytes (Thread_Futex_Deadline)
   deriving Inhabited
 
 inductive Thread_Futex_Deadline_initExit where
-  | ret (v : Thread_Futex_Deadline)
+  | ret (v : Zig.Bytes (Thread_Futex_Deadline))
   | br11 (v : time_Timer)
   | br5
 
-def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Thread_Futex_Deadline) := do
+def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.Bytes (Thread_Futex_Deadline)) := do
   let e ← ((do
-    modify (fun s => { s with deadline := default })
-    modify (fun s => { s with deadline := { s.deadline with timeout := p0 } })
+    modify (fun s => { s with deadline := Zig.Bytes.setUndef (Thread_Futex_Deadline) s.deadline 0 })
+    modify (fun s => { s with deadline := Zig.Bytes.set s.deadline 0 (p0 : Option (BitVec 64)) })
     match ← ((do
-      let i6 ← pure ((← get).deadline)
-      let i7 ← pure ((i6).timeout)
+      let i6 ← pure (← get).deadline
+      let i7 ← Zig.Bytes.get (Option (BitVec 64)) i6 0
       let i8 ← pure ((i7).isSome)
       if i8 then (do
         match ← ((do
@@ -264,15 +264,15 @@ def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Thread
             let _i18 ← pure (i17)
             throw .panic)) : Zig.CM Tgt Thread_Futex_Deadline_initLocals Thread_Futex_Deadline_initExit) with
         | .br11 v11 => (do
-          modify (fun s => { s with deadline := { s.deadline with started := v11 } })
+          modify (fun s => { s with deadline := Zig.Bytes.set s.deadline 16 (v11 : time_Timer) })
           pure .br5)
         | e => pure e)
       else (do
         pure .br5)) : Zig.CM Tgt Thread_Futex_Deadline_initLocals Thread_Futex_Deadline_initExit) with
     | .br5 => (do
-      let i24 ← pure ((← get).deadline)
+      let i24 ← pure (← get).deadline
       pure (.ret i24))
-    | e => pure e) : Zig.CM Tgt Thread_Futex_Deadline_initLocals Thread_Futex_Deadline_initExit).run' (default : Thread_Futex_Deadline_initLocals)
+    | e => pure e) : Zig.CM Tgt Thread_Futex_Deadline_initLocals Thread_Futex_Deadline_initExit).run' { (default : Thread_Futex_Deadline_initLocals) with deadline := Zig.Bytes.undef (Thread_Futex_Deadline) }
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -585,7 +585,7 @@ def Thread_Condition_FutexImpl_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Option (
         let _i25 ← Zig.callC (Thread_Mutex_unlock p1)
         let i26 ← pure (← get).futex_deadline
         let i27 ← Zig.callC (Thread_Futex_Deadline_init p2)
-        Zig.store (α := Thread_Futex_Deadline) 8 i26 i27
+        Zig.storeBytes i26 8 i27
         Zig.loop (Thread_Condition_FutexImpl_wait.loop29 p0 p1 i26) Thread_Condition_FutexImpl_wait.again29)
       | e => pure e)
     | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit).run' { (default : Thread_Condition_FutexImpl_waitLocals) with futex_deadline := s26 }
@@ -895,7 +895,7 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet (p0 : Zig.Ptr) (p1 : Option (BitVec
           if i31 then (do
             let i33 ← pure (← get).futex_deadline
             let i34 ← Zig.callC (Thread_Futex_Deadline_init p1)
-            Zig.store (α := Thread_Futex_Deadline) 8 i33 i34
+            Zig.storeBytes i33 8 i34
             match ← ((do
               Zig.loop (Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 p0 i33) Thread_ResetEvent_FutexImpl_waitUntilSet.again37) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit) with
             | .br36 => (do

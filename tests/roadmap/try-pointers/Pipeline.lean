@@ -89,7 +89,7 @@ private def reject (j : Json) (name expected : String) : IO Unit := do
 -- mode 3: used by a block's branch value. A bit-pointer still reads the entire host.
 private def loadFile (name : String) (mode : Nat) (bitPointer : Bool := false) : Json :=
   let ptr := if bitPointer then
-      ((pointer 0 2).setObjVal! "host_size" (num 2)).setObjVal! "bit_offset" (num 0)
+      (((pointer 0 2).setObjVal! "host_size" (num 2)).setObjVal! "bit_offset" (num 0)).setObjVal! "vector_index" .null
     else pointer 0 1
   let ts := #[int8, ptr, obj [("k", .str "void"), ("abi_size", num 0), ("abi_align", num 1)],
     obj [("k", .str "noreturn")], obj [("k", .str "bool"), ("abi_size", num 1), ("abi_align", num 1)]]
@@ -231,7 +231,7 @@ def main (args : List String) : IO Unit := do
     "volatile operand" "volatile pointer"
   reject (file "bad" "try_ptr" ((types false).set! 4 ((pointer 0 1).setObjVal! "volatile" (.bool true))))
     "volatile result" "volatile pointer"
-  reject (file "bad" "try_ptr" ((types false).set! 3 (((pointer 2 2).setObjVal! "host_size" (num 4)).setObjVal! "bit_offset" (num 0))))
+  reject (file "bad" "try_ptr" ((types false).set! 3 ((((pointer 2 2).setObjVal! "host_size" (num 4)).setObjVal! "bit_offset" (num 0)).setObjVal! "vector_index" .null)))
     "bit-pointer operand" "bit-pointer"
   reject (file "bad" "try_ptr" ((types false).set! 4 (obj [("k", .str "ptr"), ("size", .str "one"),
     ("const", .bool false), ("child", num 0), ("abi_size", num 8), ("abi_align", num 8)])))

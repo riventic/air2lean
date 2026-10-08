@@ -244,7 +244,8 @@ def parseTy (j : Json) : Except String Ty := do
   | other => throw s!"unknown type kind: {other}"
 
 /-- The memory facts of a type entry (schema 6): `abi_size`, `abi_align`, the fields' `offset`,
-`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`. -/
+`sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`,
+`vector_index`. -/
 def parseLayout (j : Json) : Except String Layout := do
   let nat? (k : String) : Except String (Option Nat) :=
     match optField j k with
@@ -268,11 +269,19 @@ def parseLayout (j : Json) : Except String Layout := do
       pure (some n)
   if hostSize != 0 && bitOffset.isNone then
     throw "a bit-pointer needs 'bit_offset' (schema ≥ 11)"
+  -- `null`: not a lane pointer. Absent: an older export, which did not tell the two apart.
+  let vectorIndexExported := (j.getObjVal? "vector_index").toOption.isSome
+  let (vectorIndex, runtimeLane) ← match optField j "vector_index" with
+    | none => pure (none, false)
+    | some (.str "runtime") => pure (none, true)
+    | some v => match v.getNat? with
+      | .ok i => pure (some i, false)
+      | .error _ => throw "vector_index must be null, a lane index or \"runtime\""
   return { size := ← nat? "abi_size", align := ← nat? "abi_align", offsets,
            ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel", sentinelByte,
            isVolatile := ← bool "volatile",
            allowzero := ← bool "allowzero", hostSize,
-           bitOffset := bitOffset.getD 0 }
+           bitOffset := bitOffset.getD 0, vectorIndex, runtimeLane, vectorIndexExported }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=

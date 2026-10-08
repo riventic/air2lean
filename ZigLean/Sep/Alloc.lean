@@ -6,8 +6,8 @@ import ZigLean.Mem.Alloc
 
 Rules for the allocator model (`ZigLean/Mem/Alloc.lean`). An allocation gives a new block of kind
 `.heap` that nothing else owns, or `error.OutOfMemory` and no bytes: `Mem.failAt` and
-`Mem.allocPolicy` decide. A triple holds for every memory and therefore every cap and
-failure trace, so a spec covers both. A free needs the whole block, of kind `.heap`.
+`Mem.allocPolicy` decide. A triple holds for every memory and therefore every cap, failure
+oracle and budget, so a spec covers both outcomes. A free needs the whole block, of kind `.heap`.
 -/
 
 namespace Zig
@@ -16,6 +16,27 @@ open Assn
 
 /-- The memory with a new allocation count has the same heap. -/
 theorem Mem.heap_allocs (m : Mem) (k : Nat) : ({ m with allocs := k } : Mem).heap = m.heap := rfl
+
+/-- Every failure decision of `rawAlloc`: a fixed/legacy rule or the general oracle/budget. -/
+def Mem.allocDenied (m : Mem) (n : Nat) : Prop :=
+  (m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures) ∨
+    m.oracleDenies n = true
+
+/-- `rawAlloc` counts the attempt, then fails without changing the heap or allocates a block. -/
+theorem rawAlloc_eq (m : Mem) (n align : Nat) [Decidable (m.allocDenied n)] :
+    (rawAlloc n align).run m =
+      if m.allocDenied n then pure (none, { m with allocs := m.allocs + 1 })
+      else (some <$> alloc .heap n align).run { m with allocs := m.allocs + 1 } := by
+  by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
+  · simp only [show m.allocDenied n from .inl hc, ↓reduceIte]
+    simp [rawAlloc, hc, zig_unfold, set, StateT.set, MonadStateOf.set]
+  by_cases ho : m.oracleDenies n = true
+  · simp only [show m.allocDenied n from .inr ho, ↓reduceIte]
+    simp only [not_or] at hc
+    simp [rawAlloc, hc, ho, zig_unfold, set, StateT.set, MonadStateOf.set]
+  · simp only [show ¬ m.allocDenied n from fun h => h.elim hc ho, ↓reduceIte]
+    simp only [not_or] at hc
+    simp [rawAlloc, hc, ho, zig_unfold, set, StateT.set, MonadStateOf.set]
 
 /-- `rawAlloc` gives `none` and changes no byte, or a new heap block, as `alloc_run`. -/
 theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF)
@@ -30,19 +51,61 @@ theorem rawAlloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.h
   let m₁ : Mem := { m with allocs := m.allocs + 1 }
   have hm₁ : m₁.heap = h ∪ hF := by rw [Mem.heap_allocs]; exact hm
   have hst₁ : m₁.Seq := ⟨hst.single, hst.addr⟩
-  by_cases hc : m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures
-  · refine ⟨none, m₁, ?_, hst₁, Nat.le_refl _, hm₁⟩
-    simp [rawAlloc, hc, zig_unfold, m₁, set, StateT.set, MonadStateOf.set]
+  classical
+  rw [rawAlloc_eq]
+  by_cases hdn : m.allocDenied n
+  · exact ⟨none, m₁, by simp only [hdn, ↓reduceIte]; rfl, hst₁, Nat.le_refl _, hm₁⟩
   · obtain ⟨p, m', h', hr, h0, hd', hm', hdd, hst', hsz, A, hA, hb, hab⟩ :=
       alloc_run hd hm₁ .heap n align ha hst₁
     refine ⟨some p, m', ?_, hst', by rw [hsz]; exact Nat.le_succ _, h0, h', hd', hm', hdd, A, hA, hb,
       hab⟩
-    simp only [StateT.run] at hr
-    simp [rawAlloc, hc, zig_unfold, set, StateT.set, MonadStateOf.set, m₁] at hr ⊢
-    simp [hr, ExceptT.bindCont]
+    simp only [hdn, ↓reduceIte]
+    simp only [StateT.run] at hr ⊢
+    simp [zig_unfold, hr, m₁]
+
+/-- A policy as a general failure oracle with no fixed cap or failure list: its cap and finite
+failure indices move into `fails`; the budget, remap mode and the oracle itself are kept. -/
+def AllocPolicy.asOracle (P : AllocPolicy) : AllocPolicy :=
+  { P with
+    maxBytes := unboundedAllocBytes
+    failures := []
+    fails := fun i n => (decide (P.maxBytes < n) || P.failures.contains i) || P.fails i n }
+
+/-- The finite-list policy embeds in the oracle policy: every `usize` request gets the same
+failure decision. -/
+theorem allocDenied_asOracle (m : Mem) (n : Nat) (hn : n < unboundedAllocBytes) :
+    ({ m with allocPolicy := m.allocPolicy.asOracle } : Mem).allocDenied n ↔ m.allocDenied n := by
+  have hcap : ¬ unboundedAllocBytes < n := Nat.not_lt.mpr (Nat.le_of_lt hn)
+  simp only [Mem.allocDenied, Mem.oracleDenies, AllocPolicy.asOracle, Mem.liveHeapBytes, hcap,
+    List.not_mem_nil, or_false, Bool.or_eq_true, decide_eq_true_eq, List.contains_iff_mem]
+  constructor
+  · rintro (h | ((h | h) | h) | h)
+    · exact .inl (.inl h)
+    · exact .inl (.inr (.inl h))
+    · exact .inl (.inr (.inr h))
+    · exact .inr (.inl h)
+    · exact .inr (.inr h)
+  · rintro ((h | h | h) | h | h)
+    · exact .inl h
+    · exact .inr (.inl (.inl (.inl h)))
+    · exact .inr (.inl (.inl (.inr h)))
+    · exact .inr (.inl (.inr h))
+    · exact .inr (.inr h)
+
+/-- The embedding at the level of runs: the list policy and its oracle form give the same
+outcome and the same memory apart from the policy field. -/
+theorem rawAlloc_asOracle (m : Mem) (n align : Nat) (hn : n < unboundedAllocBytes) :
+    (rawAlloc n align).run m =
+      (fun r : Option Ptr × Mem => (r.1, { r.2 with allocPolicy := m.allocPolicy })) <$>
+        (rawAlloc n align).run { m with allocPolicy := m.allocPolicy.asOracle } := by
+  classical
+  rw [rawAlloc_eq, rawAlloc_eq]
+  by_cases hd : m.allocDenied n
+  · simp only [hd, (allocDenied_asOracle m n hn).mpr hd, ↓reduceIte]; rfl
+  · simp only [hd, mt (allocDenied_asOracle m n hn).mp hd, ↓reduceIte]; rfl
 
 /-- A nonempty whole heap block has the access, size and kind required by both free paths. -/
-private theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}
+theorem heapBlock_access {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat}
     {bs : Array Byte} (hb : bytesAt p A S .heap bs h) (hm : m.heap = h ∪ hF)
     (hS : bs.size = S) (hpos : 0 < S) :
     ∃ b blk, m.access p S 1 = pure (b, blk, p.off.toNat) ∧
