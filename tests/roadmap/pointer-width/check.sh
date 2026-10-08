@@ -24,6 +24,12 @@ case "${1:---check}" in
         "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
         -target "$t" "${cpu[@]}" "$src"
     done
+    out="$2/wasm32-reject"
+    mkdir -p "$out"
+    [ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$out must be empty" >&2; exit 1; }
+    ZIG_AIR_JSON_DIR="$(cd -- "$out" && pwd)" ZIG_AIR_JSON_FILTER=reject. \
+      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
+      -target wasm32-freestanding "$case_dir/reject.zig"
     exit ;;
   --native)
     [ "$#" -eq 1 ] || { echo 'usage: check.sh --native' >&2; exit 2; }
