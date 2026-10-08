@@ -277,4 +277,115 @@ theorem awaitError_zero (io : Io) {fuel : Nat} {o : Nat → Nat}
       some (.ok (v, m))) : v = .error "Zero" :=
   awaitError_result io 0 h
 
+/-! ## Cancelation: `cancelValue` -/
+
+/-- The storage dictionary of `Io.Cancelable!u32`. -/
+abbrev canceledEnc : Enc (Except ErrName (BitVec 32)) :=
+  errorUnionEnc (⟨#["Canceled"], by decide, by decide⟩ : ErrorDomain) inferInstance
+
+/-- The task's result, or `error.Canceled` if it observed the request. -/
+def CancelSpec (x : BitVec 32) (r : Except ErrName (BitVec 32)) : Prop :=
+  r = .ok (x + 1) ∨ r = .error "Canceled"
+
+/-- The cancelable task of `x` only. -/
+def cancelSlot (x : BitVec 32) : Tgt → Option Ptr
+  | .cancellable_future slot (_, y) => if y = x then some slot else none
+  | _ => none
+
+abbrev cancelProto (x : BitVec 32) :=
+  @futureProto Tgt (Except ErrName (BitVec 32)) canceledEnc (cancelSlot x) (CancelSpec x)
+
+theorem cancellable_dispatch (slot : Ptr) (io : Io) (x : BitVec 32) :
+    Futures.dispatch (.cancellable_future slot (io, x)) =
+      (Futures.cancellable io x >>= fun r => ConcM.liftMem (@Future.complete _ canceledEnc slot r)) :=
+  rfl
+
+theorem cancelSpec_lawful (x : BitVec 32) (r : Except ErrName (BitVec 32)) (hr : CancelSpec x r) :
+    (canceledEnc.encode r).size = canceledEnc.size ∧
+      canceledEnc.decode (canceledEnc.encode r) = pure r := by
+  refine errorUnionEnc_lawful _ _ fun e he => ?_
+  rcases hr with rfl | rfl
+  · cases he
+  · cases he; exact Array.contains_iff_mem.mpr (by simp)
+
+/-- The task body: its only stop is the cancelation point, which keeps the protocol; its result
+is `x + 1` or `error.Canceled`. -/
+theorem cancellable_body (x : BitVec 32) (io : Io) (u : ThreadId) (slot : Ptr)
+    (G : ThreadId → FGh) (m : Mem) (n : Nat) (hgu : G u = .task slot false)
+    (hi : (cancelProto x).inv G m) :
+    (cancelProto x).WP u (Futures.cancellable io x) (fun r G' m' _ => CancelSpec x r ∧
+      G' u = .task slot false ∧ (cancelProto x).inv G' m') G m n := by
+  unfold Futures.cancellable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  refine WP.bind (FutureProto.wp_checkCancelC rfl fun k _ => ⟨.task slot false, ?_,
+    fun G₁ m₁ hg hi₁ c m₂ ht => ?_⟩)
+  · rw [← hgu, upd_same]; exact hi
+  obtain ⟨hb, -, hc⟩ := Future.takeCancel_eq ht
+  have hi₂ := @FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ hi₁ hb
+  rcases hc with rfl | rfl
+  · dsimp only
+    refine WP.pure' (WP.pure' ⟨.inl rfl, hg, hi₂⟩)
+  · dsimp only
+    simp only [StateT.run_bind]
+    refine WP.bind (WP.callRC_ok rfl ?_)
+    exact WP.pure' (WP.pure' ⟨.inr rfl, hg, hi₂⟩)
+
+theorem cancellable_task (x : BitVec 32) (tgt : Tgt) (g : FGh) (hg : (cancelProto x).init tgt g)
+    (u : ThreadId) (G : ThreadId → FGh) (m : Mem) (n : Nat) (hu : 0 < u) (hgu : G u = g)
+    (hi : (cancelProto x).inv G m) :
+    (cancelProto x).WP u (Futures.dispatch tgt) ((cancelProto x).QKid u) G
+      { m with current := u } n := by
+  obtain ⟨slot, hs, rfl⟩ := hg
+  cases tgt with
+  | cancellable_future slot' a =>
+    obtain ⟨io, y⟩ := a
+    simp only [cancelSlot] at hs
+    split at hs
+    · rename_i hy
+      cases hs; subst hy
+      rw [cancellable_dispatch]
+      exact @FutureProto.task_wp Tgt _ canceledEnc _ _ _ _ _ _ _ _ hu (cancelSpec_lawful y)
+        (cancellable_body y io u slot G _ n hgu (@FutureProto.inv_of_blocks Tgt _ canceledEnc _ _ _ _ _ hi rfl))
+    · cases hs
+  | _ => cases hs
+
+theorem cancelValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
+    (cancelProto x).WP 0 (Futures.cancelValue io x) (fun v _ _ _ => CancelSpec x v)
+      (fun _ => .none) { Futures.mem0 with current := 0 } n := by
+  letI : Enc (Except ErrName (BitVec 32)) := canceledEnc
+  unfold Futures.cancelValue
+  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s2 m₁ ha => ⟨?_, ?_⟩)
+  · obtain ⟨-, rfl⟩ := alloc_ok ha; rfl
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (FutureProto.wp_asyncC (α := Except ErrName (BitVec 32)) rfl
+    fun slot m₂ _ k _ => ⟨.none, ?_, fun G₁ m₃ hg hi₃ =>
+    ⟨.task slot false, ⟨slot, by simp [cancelSlot], rfl⟩, fun child m₄ _ m₅ _ => ?_⟩⟩)
+  · exact no_task
+  refine WP.bind (WP.liftM (fun _ _ => rfl) fun _ m₆ hs => ⟨by rw [FutureProto.store_threads hs], ?_⟩)
+  refine WP.bind (FutureProto.cancel_wp
+    (reads_pending (α := Except ErrName (BitVec 32)) (by decide) hs rfl) (only_child hg hi₃)
+    fun r G' m' d hr => ?_)
+  refine WP.pure' ?_
+  refine WP.bind (WP.liftMem (fun _ _ => rfl) fun _ m₇ hf => ⟨?_, ?_⟩)
+  · obtain ⟨_, _, -, -, rfl⟩ := free_ok hf; rfl
+  exact WP.pure' hr
+
+/-- **Cancelation.** Under every schedule, every result of `cancelValue(io, x)` is the task's
+own result `x +% 1` or `error.Canceled` (when the task's `io.checkCancel()` observed the
+request): `cancel` never reports another value, and in particular never success with a value
+that the task did not compute. -/
+theorem cancelValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → Nat}
+    {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run Futures.dispatch fuel o (Futures.cancelValue io x) Futures.mem0).run =
+      some (.ok (v, m))) : v = .ok (x + 1) ∨ v = .error "Canceled" := by
+  obtain ⟨_, _, hv⟩ := run_sound (P := cancelProto x) Futures.dispatch (fun _ => .none)
+    (cancellable_task x) (fun h => by cases h) rfl (cancelValue_wp io x) h
+  exact hv
+
 end Futures.Proofs

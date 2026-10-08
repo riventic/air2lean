@@ -374,6 +374,22 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
   · rw [store_threads hs]
   · exact Proto.WP.pure' (hk' child m₃ hf m₄ hs)
 
+/-- `Io.checkCancel` in thread `t`: a stop, then the cancelation point. -/
+theorem wp_checkCancelC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {s : σ}
+    {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : Except ErrName Unit × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      ∀ c m₂, (Future.takeCancel.run { m₁ with current := t }).run = some (.ok (c, m₂)) →
+        Q (c, s) G₁ m₂ k) :
+    P.WP t ((checkCancelC io : CM Tgt σ (Except ErrName Unit)).run s) Q G m n := by
+  unfold checkCancelC
+  simp only [StateT.run_bind, StateT.run_lift]
+  refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync fun k hk => ?_)))
+  obtain ⟨g, hi, hc⟩ := h k hk
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => Proto.WP.pure' ?_⟩
+  refine Proto.WP.callMC (fun _ _ => hns) fun c m₂ ht => ⟨?_, hc G₁ m₁ hg hi₁ c m₂ ht⟩
+  rw [(Future.takeCancel_eq ht).2.1]
+
 /-- The spawner's `await` of its pending future at `p`, with record `slot` and task `child`, in
 the future protocol. Before the join the task has not run (`htasks`); after it, the record
 holds a result satisfying `R`, which `await` returns. -/
