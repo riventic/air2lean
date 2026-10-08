@@ -1,4 +1,5 @@
 import ZigLean.Conc.Share
+import ZigLean.Conc.Csl
 
 /-!
 # Detached threads and join-handle ownership (C07)
@@ -344,6 +345,45 @@ theorem frame_exit_kills {b : BlockId} (h : ((free ⟨some b, 0⟩).run m).run =
     simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt
       (Array.getElem?_eq_some_iff.mp hblk).1]
   exact ⟨fun T _ => load_dead hdead rfl u off a, fun T _ v => store_dead hdead rfl u off a v⟩
+
+/-! ## Rules for a proof over all schedules -/
+
+/-- A detach or a transfer changes only the thread table, with the same size: it keeps every
+thread's part (`Owned`). -/
+theorem Owned.setThread {own : ThreadId → Heap} (ho : Owned own m) (r : ThreadRec) :
+    Owned own { m with threads := m.threads.set! tid r } :=
+  Owned.keep ho (by simp [Array.set!_eq_setIfInBounds]) rfl (fun u => ho.sub u) (Nat.le_refl _)
+    (fun _ _ => VClock.le_refl _) fun _ he => .inl he
+
+variable {Tgt γ σ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {n : Nat}
+
+/-- `detachC` of a handle that the current thread owns and has not consumed: no stop, no error;
+the record is consumed. -/
+theorem WP.detachC {rec : ThreadRec} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
+    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with joined := true } } n) :
+    P.WP t ((detachC tid : CM Tgt σ Unit).run s) Q G m n := by
+  refine WP.callMC (fun e he => ?_) fun a m' hr' => ?_
+  · rw [detach_run hr hs hj] at he; cases he
+  · rw [detach_run hr hs hj] at hr'
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr'
+    obtain ⟨-, rfl⟩ := hr'
+    exact ⟨by simp [Array.set!_eq_setIfInBounds], h⟩
+
+/-- `transferHandleC` of a handle that the current thread owns and has not consumed, to another
+existing thread: no stop, no error; `owner` owns the handle. -/
+theorem WP.transferHandleC {owner : ThreadId} {rec : ThreadRec} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
+    (hne : owner ≠ tid) (hlt : owner < m.threads.size)
+    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with spawner := owner } } n) :
+    P.WP t ((transferHandleC tid owner : CM Tgt σ Unit).run s) Q G m n := by
+  refine WP.callMC (fun e he => ?_) fun a m' hr' => ?_
+  · rw [transfer_run hr hs hj hne hlt] at he; cases he
+  · rw [transfer_run hr hs hj hne hlt] at hr'
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr'
+    obtain ⟨-, rfl⟩ := hr'
+    exact ⟨by simp [Array.set!_eq_setIfInBounds], h⟩
 
 end Detach
 end Conc
