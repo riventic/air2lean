@@ -340,11 +340,10 @@ theorem futexWaitCancelableC_eq {σ : Type} (p : Ptr) (e : BitVec 32) :
         futexWaitC ⟨⟩ p e
         afterWait) := rfl
 
-theorem wp_afterWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : Words}
-    {d : BitVec 32} (hc : m.current = 1) (hi : Inv G m) (hg : G 1 = .task h W 0 d false)
+theorem wp_afterWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh}
+    (hc : m.current = 1) (hi : Inv (upd G 1 gT) m)
     {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hQ : ∀ r G' m' k, m'.current = 1 → Inv G' m' → G' 1 = .task h W 0 d false →
-      Q (r, ()) G' m' k) :
+    (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 gT) m' → Q (r, ()) G' m' k) :
     proto.WP 1 ((afterWait : CM Tgt Unit _).run ()) Q G m n := by
   unfold afterWait
   simp only [StateT.run_bind]
@@ -352,25 +351,24 @@ theorem wp_afterWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : W
   dsimp only
   split
   · simp only [StateT.run_bind]
-    refine WP.bind (WP.pickC (P := proto) fun k _ => ⟨G 1, by rw [upd_same]; exact hi,
-      fun G₂ m₂ hg₂ hi₂ c _ => ?_⟩)
+    refine WP.bind (WP.pickC (P := proto) fun k _ => ⟨gT, hi, fun G₂ m₂ hg₂ hi₂ c _ => ?_⟩)
+    have hi₂' : Inv (upd G₂ 1 gT) m₂ := by rw [← hg₂, upd_same]; exact hi₂
     dsimp only
     split
     · simp only [StateT.run_bind]
       refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
-      exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂ rfl rfl rfl rfl rfl) (by rw [hg₂, hg]))
-    · exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂ rfl rfl rfl rfl rfl) (by rw [hg₂, hg]))
-  · exact WP.pure' (hQ _ _ _ _ hc hi hg)
+      exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl))
+    · exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl))
+  · exact WP.pure' (hQ _ _ _ _ hc hi)
 
-/-- The task's cancelation point (`io.futexWait(u32, status, 7)`): whatever it returns, the task
-keeps its words and the invariant. It may sleep (if another value were there), return
-spuriously, see the value differ, observe a pending request, or have one delivered. -/
-theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : Words}
-    {d : BitVec 32} (hc : m.current = 1) (hi : Inv G m) (hg : G 1 = .task h W 0 d false)
+/-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value
+`gT`: whatever it returns, the invariant holds with `gT`. It may sleep, return spuriously, see
+the value differ, observe a pending request, or have one delivered. -/
+theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh} {p : Ptr}
+    (hc : m.current = 1) (hi : Inv (upd G 1 gT) m)
     {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hQ : ∀ r G' m' k, m'.current = 1 → Inv G' m' → G' 1 = .task h W 0 d false →
-      Q (r, ()) G' m' k) :
-    proto.WP 1 ((futexWaitCancelableC ⟨⟩ W.st (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
+    (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 gT) m' → Q (r, ()) G' m' k) :
+    proto.WP 1 ((futexWaitCancelableC ⟨⟩ p (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
   rw [futexWaitCancelableC_eq]
   simp only [StateT.run_bind]
   refine WP.bind (WP.callMC_keep (cancelPending_run m) ?_ rfl)
@@ -378,22 +376,98 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : 
   split
   · simp only [StateT.run_bind]
     refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
-    exact WP.pure' (hQ _ _ _ _ hc (inv_keep hi rfl rfl rfl rfl rfl) hg)
+    exact WP.pure' (hQ _ _ _ _ hc (inv_keep hi rfl rfl rfl rfl rfl))
   · simp only [StateT.run_bind]
-    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨G 1, by rw [upd_same]; exact hi,
+    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨gT, hi,
       fun G₁ m₁ hg₁ hi₁ => ⟨fun h => absurd h not_strict, fun _ =>
         ⟨fun h => absurd h not_strict, fun b m' hr => ?_⟩⟩⟩)
-    have hg' : G₁ 1 = .task h W 0 d false := by rw [hg₁, hg]
+    have hi₁' : Inv (upd G₁ 1 gT) m₁ := by rw [← hg₁, upd_same]; exact hi₁
     rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, -, -, -, -, -, -, ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
     all_goals simp only [Bool.false_eq_true, ↓reduceIte]
-    · refine wp_afterWait ?_ ?_ hg' hQ
+    · refine wp_afterWait ?_ ?_ hQ
       · rfl
-      · exact inv_keep hi₁ rfl rfl rfl rfl rfl
-    · refine ⟨inv_keep hi₁ rfl rfl rfl rfl rfl, wp_afterWait ?_ ?_ hg' hQ⟩
+      · exact inv_keep hi₁' rfl rfl rfl rfl rfl
+    · refine ⟨inv_keep hi₁ rfl rfl rfl rfl rfl, wp_afterWait ?_ ?_ hQ⟩
       · rfl
-      · exact inv_keep hi₁ rfl rfl rfl rfl rfl
-    · refine wp_afterWait ?_ ?_ hg' hQ
+      · exact inv_keep hi₁' rfl rfl rfl rfl rfl
+    · refine wp_afterWait ?_ ?_ hQ
       · rfl
-      · exact inv_keep hi₁ rfl rfl rfl rfl rfl
+      · exact inv_keep hi₁' rfl rfl rfl rfl rfl
+
+/-! ## The task's steps -/
+
+/-- The task at its step `i` with `k` steps left: it keeps the invariant at every stop and ends
+with `Outcome`. -/
+theorem steps_spec (k : Nat) : ∀ (i : Nat) (G : ThreadId → Gh) (m : Mem) (n : Nat) (h : Heap)
+    (W : Words), i + k = 3 → m.current = 1 →
+    Inv (upd G 1 (.task h W 0 (BitVec.ofNat 32 i) false)) m →
+    proto.WP 1 ((steps W.st W.dn i k).run ()) (fun a G m d => proto.QKid 1 a.1 G m d) G m n := by
+  induction k with
+  | zero =>
+    intro i G m n h W hik hc hi
+    obtain rfl : i = 3 := by omega
+    have hg := upd_self G 1 (Gh.task h W 0 (BitVec.ofNat 32 3) false)
+    obtain ⟨⟨hs0, -, hAs, -⟩, hA, -⟩ := hi.task 1 _ _ _ _ _ hg
+    obtain ⟨-, hj, hsz⟩ := task_live hi hg
+    have hown : ownOf (upd G 1 (.task h W 0 (BitVec.ofNat 32 3) false)) m 1 = h := by
+      simp [ownOf, hj, Gh.heap]
+    have ho := hi.own
+    have hcv := hi.cover
+    rw [← upd_same (ownOf _ m) 1, hown] at ho hcv
+    simp only [steps]
+    refine WP.callMC_step ((word_store hs0 hAs 1).frame) ho hcv hc (by rw [hsz]; decide) hA
+      fun _ m' h' ho' hcv' hq hs => ?_
+    have := inv_task_step hi hg ho' hcv' hs.threads hs.groups hq
+      (show TaskOk 1 (BitVec.ofNat 32 3) true from .inl ⟨rfl, rfl⟩)
+    rw [upd_upd] at this
+    exact ⟨_, this, ⟨_, _, _, _, rfl⟩, fun h => absurd h not_strict⟩
+  | succ k ih =>
+    intro i G m n h W hik hc hi
+    simp only [steps, StateT.run_bind]
+    refine WP.bind (wp_cancelWait hc hi fun r G' m' k' hc' hi' => ?_)
+    have hg' := upd_self G' 1 (Gh.task h W 0 (BitVec.ofNat 32 i) false)
+    obtain ⟨⟨hs0, hd0, hAs, hAd⟩, hA, -⟩ := hi'.task 1 _ _ _ _ _ hg'
+    obtain ⟨-, hj, hsz⟩ := task_live hi' hg'
+    have hown : ownOf (upd G' 1 (.task h W 0 (BitVec.ofNat 32 i) false)) m' 1 = h := by
+      simp [ownOf, hj, Gh.heap]
+    have ho := hi'.own
+    have hcv := hi'.cover
+    rw [← upd_same (ownOf _ m') 1, hown] at ho hcv
+    have hi3 : i < 3 := by omega
+    dsimp only
+    cases r with
+    | error e =>
+      refine WP.callMC_step ((word_store hs0 hAs 2).frame) ho hcv hc' (by rw [hsz]; decide) hA
+        fun _ m'' h' ho' hcv' hq hs => ?_
+      have hok : TaskOk 2 (BitVec.ofNat 32 i) true := .inr ⟨rfl, by
+        simp only [BitVec.toNat_ofNat]; omega⟩
+      have := inv_task_step hi' hg' ho' hcv' hs.threads hs.groups hq hok
+      rw [upd_upd] at this
+      exact ⟨_, this, ⟨_, _, _, _, rfl⟩, fun h => absurd h not_strict⟩
+    | ok u =>
+      cases u
+      simp only [StateT.run_bind]
+      refine WP.bind (WP.callMC_step ((word_store hd0 hAd (BitVec.ofNat 32 (i + 1))).frameL) ho
+        hcv hc' (by rw [hsz]; decide) hA fun _ m'' h' ho' hcv' hq hs => ?_)
+      have hok : TaskOk 0 (BitVec.ofNat 32 (i + 1)) false := ⟨rfl, by
+        simp only [BitVec.toNat_ofNat]; omega⟩
+      have := inv_task_step hi' hg' ho' hcv' hs.threads hs.groups hq hok
+      rw [upd_upd] at this
+      exact ih (i + 1) _ _ _ h' W (by omega) (by rw [hs.current, hc']) this
+
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (n : Nat) (_hu : 0 < u) (hgu : G u = g) (hi : Inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } n := by
+  cases tgt with
+  | worker st dn =>
+    obtain ⟨h, W, rfl, rfl, rfl⟩ := hg
+    obtain ⟨rfl, -, -⟩ := task_live hi hgu
+    show proto.WP 1 ((steps W.st W.dn 0 3).run' ()) _ G _ n
+    rw [StateT.run'_eq]
+    refine WP.map (steps_spec 3 0 G _ n h W rfl rfl ?_)
+    have e : upd G 1 (Gh.task h W 0 (BitVec.ofNat 32 0) false) = G := by
+      rw [show BitVec.ofNat 32 0 = (0 : BitVec 32) from rfl, ← hgu, upd_same]
+    rw [e]
+    exact inv_keep hi rfl rfl rfl rfl rfl
 
 end Cancel.Group
