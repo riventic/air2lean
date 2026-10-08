@@ -1476,7 +1476,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .cmpxchg _ p expected new _ _ => (if fc.isMemPtr p then #[p] else #[]) ++ #[expected, new]
   | .sliceFieldPtr _ p => if fc.isMemPtr p then #[p] else #[]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
-  | .memset a b | .memcpy a b => #[a, b]
+  | .memset a b | .memcpy _ a b => #[a, b]
   | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
   | .sliceLen s => #[s]
   | .sliceElemVal s i => #[s, i]
@@ -2253,8 +2253,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
-    -- A pure function has the items (`Array`); a function that uses memory reads them.
-    let expr := if fc.mem then s!"{fc.callMName} ({fc.loadItem s s!"{rv s}.ptr" (rv i)})"
+    -- A pure function has the items (`Array`); a function that uses memory reads them, after
+    -- its own bounds check (`Zig.checkIndex`: `.illegal` where no Sema check precedes it).
+    let expr := if fc.mem then
+        s!"{fc.callMName} (Zig.checkIndex {rv s} {rv i} >>= fun _ => {fc.loadItem s s!"{rv s}.ptr" (rv i)})"
       else fc.liftR s!"Zig.index {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>
@@ -2287,15 +2289,20 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
     let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
     (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
-  | .memcpy dst src =>
-    -- The item count of the operand that has one (the AIR checks that both agree).
+  | .memcpy move dst src =>
+    -- The item count of the operand that has one. `memcpy` also passes the source's count,
+    -- which must agree (`Zig.memcpy` checks it and the overlap itself).
     let hasLen (v : Val) : Bool :=
       fc.isSlice v || match fc.pointeeOf v with | .array .. => true | _ => false
-    let (dptr, n) := fc.itemsOf dst (rv dst)
-    let n := if hasLen dst then n else (fc.itemsOf src (rv src)).2
+    let (dptr, dn) := fc.itemsOf dst (rv dst)
+    let (_, sn) := fc.itemsOf src (rv src)
+    let n := if hasLen dst then dn else sn
+    let m := if hasLen src then sn else n
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
-    (env, some s!"{fc.callMName} (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
+    let args := s!"{size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n}"
+    let call := if move then s!"Zig.memmove {args}" else s!"Zig.memcpy {args} {m}"
+    (env, some s!"{fc.callMName} ({call})")
   | .tagName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.{fc.helperName (fc.valTy a) "tagName"} {rv a}")
     (env, some l)

@@ -146,7 +146,7 @@ def valueOperands (op : Op) : Array Val :=
   | .atomicRmw _ _ _ v => #[v]
   | .cmpxchg _ _ expected new _ _ => #[expected, new]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
-  | .memset a b | .memcpy a b => #[a, b]
+  | .memset a b | .memcpy _ a b => #[a, b]
   | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
   | .setUnionTag _ tag => #[tag]
   | .store _ v => #[v]

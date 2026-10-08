@@ -541,8 +541,9 @@ inductive Op where
   | sliceFieldPtr (len : Bool) (p : Val)
   /-- `memset`, `memset_safe`: each item of the slice or array pointer `dst` becomes `v`. -/
   | memset (dst v : Val)
-  /-- `memcpy`, `memmove`: copy the items of `src` to the slice or array pointer `dst`. -/
-  | memcpy (dst src : Val)
+  /-- `memcpy` (`move = false`), `memmove` (`move = true`): copy the items of `src` to the slice
+  or array pointer `dst`. Only `memmove` allows the two ranges to overlap. -/
+  | memcpy (move : Bool) (dst src : Val)
   /-- `tag_name`: the name of the enum value `a`, a `[:0]const u8`. -/
   | tagName (a : Val)
   /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/

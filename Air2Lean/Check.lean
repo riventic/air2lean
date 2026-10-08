@@ -663,7 +663,7 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
     | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
     | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _ | .cmpxchg _ p .. =>
       #[(p, "atomic access")]
-    | .memcpy dst src => #[(dst, "store"), (src, "load")]
+    | .memcpy _ dst src => #[(dst, "store"), (src, "load")]
     | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p | .tryPtr p _ => #[(p, "load")]
     | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
     | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
@@ -1030,7 +1030,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | cx.fail line "pointer arithmetic result is not a pointer"
     cx.knownSize line child
     pure line
-  | .memcpy dst src =>
+  | .memcpy _ dst src =>
     cx.rejectNullableProjection line dst
     cx.rejectNullableProjection line src
     let _ ← cx.memPtrTy line src
@@ -1614,7 +1614,7 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
   | .call _ args =>
     for v in args do
       if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
-  | .memcpy dst src =>
+  | .memcpy _ dst src =>
     for v in #[dst, src] do
       if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
   | .memset p _ =>
