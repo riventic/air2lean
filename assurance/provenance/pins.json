@@ -1,0 +1,9 @@
+{
+  "manifest_sha256": "468016aed3b6be79486e53a58ebe25019d62c476d4306a5cd805cba9ee009d1e",
+  "native_binary_sha256": "d3ccd02c0b7546b8657ead2bd668350ee14cb4de6fc870fced42256d2ee82cd6",
+  "native_sha256": "4dd269d2802fd693a73c178b9176a5a58606a6152956d1c19feb4aadd4c92f85",
+  "note": "Reviewer pins for assurance/provenance/manifest.json (scripts/provenance-evidence.py). Update only with a regenerated, reviewed manifest.",
+  "profile_sha256": "91c228fb2bfdc29d908dca761e333c646c805f67476c5839189104ef278a98b1",
+  "source_sha256": "fff4bb7ac66b2d68e496256f1f3edb8975fc445da984421cfabea39777740d3c",
+  "zig_version": "0.16.0"
+}

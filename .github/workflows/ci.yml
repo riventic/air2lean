@@ -150,6 +150,14 @@ jobs:
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
+      # Committed receipt-chained fixture (fresh schema-12 export, schema-2 receipt, native identity):
+      # edit-one-link tests on copies plus the offline recheck. No Zig, Lake or Lean.
+      # Heavy counterpart (local, guarded): scripts/provenance-evidence.py regenerate WORKDIR.
+      - name: Provenance fixture edit-one-link tests and recheck
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_fixture.py
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py check
+
       # Rebinding, mutant shapes and proof separation of the A03 asm-wrapper harness (no Lean).
       - name: Asm wrapper harness offline regressions
         env:

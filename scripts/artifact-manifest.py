@@ -26,7 +26,7 @@ MAX_JSON, MAX_FILES = receipt.MAX_JSON, receipt.MAX_FILES
 
 MANIFEST_FORMAT = 'air2lean-artifact-manifest-v1'
 LINKS = ('source', 'compiler_patch', 'air', 'profile', 'translator', 'generated', 'runtime',
-         'toolchain', 'proofs', 'theorems', 'receipt')
+         'toolchain', 'proofs', 'theorems', 'receipt', 'native')
 DIAGNOSIS = {
     'source': 'wrong source: the Zig source closure differs from the recorded export input',
     'compiler_patch': 'changed compiler patch: the AIR exporter/hook or pinned Zig release differs',
@@ -39,7 +39,9 @@ DIAGNOSIS = {
     'proofs': 'changed proof sources: theorem files differ from the recorded ones',
     'theorems': 'changed theorem inventory: theorem names differ from the recorded ones',
     'receipt': 'changed proof receipt: the bound receipt/audit evidence differs',
+    'native': 'wrong native binary: the binary, its stock compiler, target/mode or source differs from the recorded build',
 }
+MODES = ('Debug', 'ReleaseSafe', 'ReleaseFast', 'ReleaseSmall')
 THEOREM = re.compile(r'^\s*(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|nonrec|unsafe|partial)\s+)*'
                      r'(?:theorem|lemma)\s+(«[^»]+»|[^\s:({\[⦃]+)')
 SCOPE = re.compile(r'^\s*(?:(?:public|noncomputable)\s+)*(namespace|section|mutual|end)\b[ \t]*([^\s]*)')
@@ -48,6 +50,7 @@ TRANSLATOR = ('Air2Lean.lean', 'Air2Lean', 'scripts/check.sh', 'scripts/translat
 RUNTIME = ('ZigLean.lean', 'ZigLean')
 TOOLCHAIN = ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json')
 RECEIPT_FILES = ('receipt.json', 'plan.json', 'audit.json', 'after.json')
+NATIVE_KEYS = ('target', 'mode', 'cpu', 'compiler_version', 'compiler_sha256', 'binary_sha256', 'binary_bytes')
 
 
 def canonical(value):
@@ -135,7 +138,7 @@ def default_inputs(root, example, zig_version):
     return {'example': example, 'zig_version': zig_version, 'sources': ['examples/' + example],
             'air_dir': 'tests/golden/%s/%s/air' % (zig_version, example),
             'generated': 'Proofs/%s/Gen.lean' % module, 'proofs': proofs,
-            'audit': None, 'receipt': None}
+            'audit': None, 'receipt': None, 'native': None}
 
 
 def toml_pin(root, zig_version):
@@ -228,7 +231,65 @@ def link_scopes(inputs):
             *([] if audit is None else [audit]), *receipt_files]
 
 
-def compute_links(root, inputs):
+def stock_compiler(path):
+    path = Path(os.path.abspath(path))
+    demand(path.is_file(), 'native compiler is not a file: ' + str(path))
+    demand(not (path.parent / 'zig-unlocked').exists() and path.name != 'zig-unlocked',
+           'native builds need a stock Zig, not the AIR-only patched compiler: ' + str(path))
+    return fingerprint(path)['sha256']
+
+
+def native_inputs(a):
+    """Recorded native build identity: stock compiler hash, target/mode/cpu and the binary's sha256."""
+    demand(a.native_compiler and a.native_compiler_version and a.native_target and a.native_mode and a.native_cpu,
+           'a native binary needs --native-compiler, --native-compiler-version, --native-target, --native-mode '
+           'and --native-cpu')
+    demand(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', a.native_compiler_version), 'invalid native compiler version')
+    demand(re.fullmatch(r'[a-z0-9_]+(?:-[a-z0-9_.]+){1,3}', a.native_target), 'invalid native target')
+    demand(a.native_mode in MODES, 'invalid native mode (choose %s)' % ', '.join(MODES))
+    demand(re.fullmatch(r'[a-z0-9_+-]+', a.native_cpu), 'invalid native cpu')
+    binary = Path(os.path.abspath(a.native_binary))
+    demand(binary.is_file() and not binary.is_symlink(), 'native binary is not a regular file: ' + str(binary))
+    row = fingerprint(binary)
+    return {'target': a.native_target, 'mode': a.native_mode, 'cpu': a.native_cpu,
+            'compiler_version': a.native_compiler_version, 'compiler_sha256': stock_compiler(a.native_compiler),
+            'binary_sha256': row['sha256'], 'binary_bytes': row['bytes']}
+
+
+def native_link(native, links, overrides):
+    """The recorded native build, with a supplied binary/compiler replacing the recorded hash.
+
+    The link value also binds the current source and profile identities, so a binary built from
+    another source or checked against another profile is stale even though its own bytes are unchanged.
+    """
+    demand(isinstance(native, dict) and set(native) == set(NATIVE_KEYS), 'malformed native inputs')
+    for name in ('source', 'profile'):
+        demand('error' not in links.get(name, {'error': 1}), 'native link needs a readable ' + name + ' link')
+    value = dict(native)
+    if overrides.get('binary') is not None:
+        row = fingerprint(Path(overrides['binary']))
+        value.update(binary_sha256=row['sha256'], binary_bytes=row['bytes'])
+    if overrides.get('compiler') is not None:
+        value['compiler_sha256'] = stock_compiler(overrides['compiler'])
+    profile = links['profile']['value']['profile']
+    def arch_os(text):  # 'x86_64-linux.5.10...6.19-musl' and 'x86_64-linux' both name x86_64 + linux.
+        parts = text.split('-')
+        return parts[0], parts[1].split('.')[0] if len(parts) > 1 else ''
+    value['profile_agreement'] = {'target': arch_os(value['target']) == arch_os(profile['target_triple']), 'mode': value['mode'] == profile['build_mode'],
+                                  'zig_version': value['compiler_version'] == profile['zig_version']}
+    value['source_link_sha256'] = links['source']['sha256']
+    value['profile_sha256'] = links['profile']['value']['profile_sha256']
+    return link_record(None, [], value)
+
+
+def receipt_files(root, attempt):
+    """The receipt, plan and audit are required; after.json (MBs, hash-bound by receipt.json) may be omitted."""
+    base = absolute(root, attempt)
+    names = [n for n in RECEIPT_FILES if n != 'after.json' or (base / n).exists()]
+    return [base / n for n in names]
+
+
+def compute_links(root, inputs, overrides=None):
     """Return {link: record or {'error': text}} for every link applicable to these inputs."""
     links, state = {}, {}
 
@@ -274,7 +335,9 @@ def compute_links(root, inputs):
     attempt('proofs', lambda: link_record(root, proof_files))
     attempt('theorems', theorems)
     if inputs['receipt'] is not None:
-        attempt('receipt', lambda: link_record(root, [Path(inputs['receipt']) / n for n in RECEIPT_FILES]))
+        attempt('receipt', lambda: link_record(root, receipt_files(root, inputs['receipt'])))
+    if inputs.get('native') is not None:
+        attempt('native', lambda: native_link(inputs['native'], links, overrides or {}))
     return links
 
 
@@ -324,7 +387,7 @@ def manifest_integrity(manifest):
            'unsupported manifest format/schema (proof receipt schema 1 is checked with `verify`)')
     links = mapping(manifest.get('links'), 'manifest links')
     inputs = mapping(manifest.get('inputs'), 'manifest inputs')
-    expected = set(LINKS) - ({'receipt'} if inputs.get('receipt') is None else set())
+    expected = set(LINKS) - {n for n in ('receipt', 'native') if inputs.get(n) is None}
     demand(set(links) == expected, 'unknown or missing manifest link')
     for name, record in links.items():
         mapping(record, 'link ' + name)
@@ -354,7 +417,8 @@ def compare_link(name, recorded, current):
     return result
 
 
-def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=False):
+def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=False, native_binary=None,
+                   native_compiler=None, require_native_binary=False, allow_native_mismatch=False):
     report = {'format': MANIFEST_FORMAT, 'manifest': str(path), 'checking': 'not_rerun',
               'authentication': 'not_attested', 'problems': [], 'stale_links': []}
     manifest = load(path)
@@ -376,7 +440,9 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
         if got != wanted:
             report['problems'].append('expected %s=%s but manifest records %s: proof is for another %s'
                                       % (name, wanted, got, name))
-    current = compute_links(root, manifest['inputs'])
+    demand('native' in links or not (native_binary or native_compiler or require_native_binary),
+           'manifest has no chained native build')
+    current = compute_links(root, manifest['inputs'], {'binary': native_binary, 'compiler': native_compiler})
     report['links'] = {name: compare_link(name, links[name], current.get(name, {'error': 'link missing'}))
                        for name in LINKS if name in links}
     report['stale_links'] = [n for n, r in report['links'].items() if r['status'] != 'current']
@@ -392,10 +458,21 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
             'dirty-tree provenance: recorded at %s with modified %s and untracked %s link files; '
             'not reproducible from that revision (pass --allow-dirty to accept)'
             % (recorded.get('head'), recorded.get('modified_link_paths'), recorded.get('untracked_link_paths')))
+    if 'native' in links:
+        value = links['native']['value']
+        report['native'] = {'binary_checked': native_binary is not None, 'compiler_checked': native_compiler is not None,
+                            'binary_sha256': value['binary_sha256'], 'profile_agreement': value['profile_agreement']}
+        if require_native_binary and native_binary is None:
+            report['problems'].append('native binary not supplied: pass --native-binary to tie a binary to this manifest')
+        if (native_binary or native_compiler) and report['links']['native']['status'] != 'current':
+            report['problems'].append('supplied binary/compiler is not the manifest\'s native build')
+        if not allow_native_mismatch and not all(value['profile_agreement'].values()):
+            report['problems'].append('native build disagrees with the proved profile %s (pass --allow-native-mismatch '
+                                      'to accept)' % sorted(k for k, v in value['profile_agreement'].items() if not v))
     if verify_receipt:
         demand('receipt' in links, 'manifest has no chained proof receipt')
         try:
-            report['receipt_verify'] = receipt.verify(Path(manifest['inputs']['receipt']))
+            report['receipt_verify'] = receipt.verify(absolute(root, manifest['inputs']['receipt']))
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
             report['problems'].append('chained proof receipt is not current: ' + str(error))
     report['status'] = 'stale' if report['stale_links'] or report['problems'] else 'current'
@@ -417,6 +494,17 @@ def manifest_main(argv):
     parser.add_argument('--expect', action='append', default=[],
                         help='LINK=SHA256, profile=PROFILE_SHA256 or zig_version=VERSION')
     parser.add_argument('--allow-dirty', action='store_true', help='accept a manifest recorded from a dirty tree')
+    parser.add_argument('--native-binary', type=Path,
+                        help='record: native build of the same source (diff-tested binary); check: binary to tie to the manifest')
+    parser.add_argument('--native-compiler', type=Path, help='stock Zig that built the native binary (hashed)')
+    parser.add_argument('--native-compiler-version')
+    parser.add_argument('--native-target', help='e.g. x86_64-linux')
+    parser.add_argument('--native-mode', help='Debug, ReleaseSafe, ReleaseFast or ReleaseSmall')
+    parser.add_argument('--native-cpu', help='e.g. baseline')
+    parser.add_argument('--require-native-binary', action='store_true',
+                        help='fail unless --native-binary is supplied (otherwise the recorded binary hash is not rechecked)')
+    parser.add_argument('--allow-native-mismatch', action='store_true',
+                        help='accept a native build whose target/mode/Zig version differs from the proved profile')
     parser.add_argument('--verify-receipt', action='store_true',
                         help='also rerun proof-receipt verify on the chained attempt (needs its toolchain)')
     a = parser.parse_args(argv)
@@ -429,7 +517,10 @@ def manifest_main(argv):
             for key, value in (('air_dir', a.air_dir), ('generated', a.generated), ('sources', a.source),
                                ('proofs', a.proof), ('audit', a.audit), ('receipt', a.receipt)):
                 if value is not None:
-                    inputs[key] = str(Path(os.path.abspath(value))) if key in ('audit', 'receipt') else value
+                    # Repository-relative when inside, so a committed manifest is relocatable.
+                    inputs[key] = label(root, Path(os.path.abspath(value))) if key in ('audit', 'receipt') else value
+            if a.native_binary is not None:
+                inputs['native'] = native_inputs(a)
             demand(inputs['proofs'], 'no proof files selected')
             manifest = build_manifest(root, inputs)
             physical(path.parent)
@@ -437,7 +528,8 @@ def manifest_main(argv):
             print(json.dumps({'manifest': str(path), 'manifest_sha256': manifest['manifest_sha256'],
                               'provenance': manifest['provenance']['status']}))
             return 0
-        report = check_manifest(root, path, a.expect, a.allow_dirty, a.verify_receipt)
+        report = check_manifest(root, path, a.expect, a.allow_dirty, a.verify_receipt, a.native_binary,
+                                a.native_compiler, a.require_native_binary, a.allow_native_mismatch)
         print(json.dumps(report, indent=2, sort_keys=True))
         if report['status'] != 'current':
             print('artifact manifest %s: stale links %s; problems %s'
