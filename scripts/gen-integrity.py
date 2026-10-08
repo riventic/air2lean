@@ -179,17 +179,24 @@ def split_generated():
     return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))["split_generated"]
 
 
-def comparable(data, mode, committed=False):
-    """The compared bytes: all of them (`exact`), else the body after the profile record. A
-    committed record must be valid: a malformed one is an error, not ignorable metadata."""
+def comparable(data, mode):
+    """The compared bytes: all of them (`exact`), else the body after the profile record."""
     if mode == "exact":
         return data
     first, _, rest = data.partition(b"\n")
-    if not first.startswith(PROFILE_PREFIX):
-        return data
-    if committed:
-        split_generated()(data, required=True)
-    return rest
+    return rest if first.startswith(PROFILE_PREFIX) else data
+
+
+def header_error(committed, fresh):
+    """A committed profile record must be valid (not ignorable metadata) and name the float
+    semantics the translation used: consumers attach it to the generated module."""
+    if not committed.startswith(PROFILE_PREFIX):
+        return None
+    mine = split_generated()(committed, required=True)[0]
+    theirs = split_generated()(fresh)[0] if fresh.startswith(PROFILE_PREFIX) else None
+    if theirs and mine["float_semantics"] != theirs["float_semantics"]:
+        return f"profile record says float_semantics {mine['float_semantics']!r}, translation used {theirs['float_semantics']!r}"
+    return None
 
 
 def first_difference(committed, fresh):
@@ -231,7 +238,9 @@ class Translator:
         """None if `path` equals the fresh output of `case`, else the difference."""
         fresh = self.output(index, case)
         committed = (ROOT / path).read_bytes()
-        mine, theirs = comparable(committed, case.mode, committed=True), comparable(fresh, case.mode)
+        if case.mode != "exact" and (error := header_error(committed, fresh)):
+            return error
+        mine, theirs = comparable(committed, case.mode), comparable(fresh, case.mode)
         return None if mine == theirs else first_difference(mine, theirs)
 
 
@@ -316,25 +325,10 @@ def main(argv=None):
     if args.paths and args.command != "attest":
         parser.error("paths are only accepted by attest")
     cases = all_cases()
-    if args.command == "list":
-        for case in cases:
-            dirs = ",".join(str(d.relative_to(ROOT)) for d in case.dirs)
-            print(f"{case.label}\t{case.path}\t{case.mode}\t{dirs}\t{' '.join(case.args)}")
-        for path, reason in EXCEPTIONS.items():
-            print(f"exception\t{path}\t{reason}")
-        errors = coverage_errors(cases)
-    else:
-        if not os.access(args.translator, os.X_OK):
-            parser.exit(2, f"error: translator not found: {args.translator} (lake build air2lean)\n")
-        with tempfile.TemporaryDirectory(prefix="air2lean-gen-integrity.") as work:
-            translator = Translator(args.translator, work)
-            try:
-                if args.command == "check":
-                    errors = run_check(translator, cases, args.only)
-                else:
-                    errors = run_attest(translator, cases, [str(Path(p)) for p in args.paths])
-            except (ValueError, OSError) as error:
-                errors = [str(error)]
+    try:
+        errors = run(args, cases)
+    except (ValueError, OSError) as error:
+        errors = [str(error)]
     for error in errors:
         print(f"error: {error}", file=sys.stderr)
     if errors:
@@ -342,6 +336,23 @@ def main(argv=None):
               "(scripts/check.sh) and put hand-written definitions in a separate module", file=sys.stderr)
         return 1
     return 0
+
+
+def run(args, cases):
+    if args.command == "list":
+        for case in cases:
+            dirs = ",".join(str(d.relative_to(ROOT)) for d in case.dirs)
+            print(f"{case.label}\t{case.path}\t{case.mode}\t{dirs}\t{' '.join(case.args)}")
+        for path, reason in EXCEPTIONS.items():
+            print(f"exception\t{path}\t{reason}")
+        return coverage_errors(cases)
+    if not os.access(args.translator, os.X_OK):
+        return [f"translator not found: {args.translator} (lake build air2lean)"]
+    with tempfile.TemporaryDirectory(prefix="air2lean-gen-integrity.") as work:
+        translator = Translator(args.translator, work)
+        if args.command == "check":
+            return run_check(translator, cases, args.only)
+        return run_attest(translator, cases, [str(Path(p)) for p in args.paths])
 
 
 if __name__ == "__main__":

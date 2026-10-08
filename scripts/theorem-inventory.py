@@ -464,7 +464,8 @@ def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path)
                 'path': str(module_path(mod)), 'sha256': sha256(root / module_path(mod))}
         else:
             sources[mod] = sha256(root / module_path(mod))
-    attest_generated(root, sorted({gen['path'] for gen in gens.values()}))
+    if gens:
+        attest_generated(root, sorted({gen['path'] for gen in gens.values()}))
     toolchain = [p for p in report.get('pins', []) if p.get('path', '').endswith('lean-toolchain')]
     return {
         'zig': zig, 'target': target, 'command': [portable(root, c) for c in command],
