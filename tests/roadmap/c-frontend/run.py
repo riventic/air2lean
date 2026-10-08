@@ -179,10 +179,18 @@ def c_symbols(zig, src, work):
 
 def stage_translate_c(zig, src, work, out_name, defined):
     zig_file = work / out_name
-    code, out = run([zig, "translate-c", "-target", TC_TARGET, "-lc", str(src)], TIMEOUT["tc"])
+    # stdout must be a regular file: Zig 0.16 copies its result to stdout with fcopyfile,
+    # which spins forever when stdout is a pipe on macOS 27.
+    try:
+        with open(zig_file, "w") as stdout:
+            p = subprocess.run([zig, "translate-c", "-target", TC_TARGET, "-lc", str(src)], stdout=stdout,
+                               stderr=subprocess.PIPE, timeout=TIMEOUT["tc"], text=True, errors="replace")
+        code, err = p.returncode, p.stderr
+    except subprocess.TimeoutExpired:
+        code, err = -1, f"[timeout after {TIMEOUT['tc']}s]"
     if code != 0:
-        return {"status": "failed", "log": tail(out)}, None
-    zig_file.write_text(out)
+        return {"status": "failed", "log": tail(err)}, None
+    out = zig_file.read_text()
     warnings = sorted({re.sub(r"^.*/", "", m["loc"]) + ": " + m["msg"] for m in WARNING.finditer(out)
                        if str(src.name) in m["loc"]})
     externs = set(EXTERN_FN.findall(out))
