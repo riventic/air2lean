@@ -388,4 +388,91 @@ theorem cancelValue_result (io : Io) (x : BitVec 32) {fuel : Nat} {o : Nat → N
     (cancellable_task x) (fun h => by cases h) rfl (cancelValue_wp io x) h
   exact hv
 
+/-! ## Idempotence -/
+
+/-- **Idempotence.** A consumed future (`any_future = null`) returns its stored result again,
+with no sync op: `awaitTwice` returns the same value twice. -/
+theorem second_await {σ : Type} (io : Io) (p : Ptr) (r : BitVec 32) (s : σ) (m m' : Mem) (n : Nat)
+    (hl : (load (Future (BitVec 32)) (Future.align (BitVec 32)) p).run m =
+      pure ({ task := none, result := some r }, m')) :
+    ((awaitC io p : CM Tgt σ (BitVec 32)).run s) n m = .leaf (some (.ok ((r, s), m'))) :=
+  Future.awaitC_consumed n hl
+
+/-- The stored consumed future reads back as itself. -/
+theorem consumed_reads_back (r : BitVec 32) :
+    (Enc.decode (Enc.encode ({ task := none, result := some r } : Future (BitVec 32))) :
+      Result (Future (BitVec 32))) = pure { task := none, result := some r } :=
+  Future.decode_consumed (LawfulEnc.size_encode r) (LawfulEnc.decode_encode r) (by
+    rw [Array.all_eq_false]
+    refine ⟨0, by rw [LawfulEnc.size_encode]; decide, ?_⟩
+    simp [Enc.encode, padTo, intBytes, intSize])
+
+/-! ## Rejected uses
+
+Hand-written clients of the model, each checked by the kernel on one schedule (`decide
++kernel`, no `native_decide`); `Futures/Runtime.lean` enumerates every schedule of each. -/
+
+/-- A squaring task and a thread that awaits a future it did not create. -/
+inductive H where
+  | square (slot : Ptr) (x : BitVec 32)
+  | awaiter (p : Ptr)
+
+def hDispatch : H → ConcM H Unit
+  | .square slot x => ConcM.liftMem (Future.complete slot (x * x))
+  | .awaiter p => discard ((awaitC (α := BitVec 32) ⟨⟩ p : CM H Unit (BitVec 32)).run' ())
+
+/-- `Io.async` without `await`/`cancel`. -/
+def leak : ConcM H Unit := (do
+  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  pure () : CM H Unit Unit).run' ()
+
+/-- A second thread awaits the main thread's future. -/
+def foreignAwait : ConcM H Unit := (do
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let p ← callMC (alloc .stack 16 8)
+  callMC (store 8 p f)
+  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  joinC helper
+  let _ ← awaitC (α := BitVec 32) ⟨⟩ p
+  pure () : CM H Unit Unit).run' ()
+
+/-- Two threads await one future concurrently. -/
+def doubleAwait : ConcM H (BitVec 32) := (do
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let p ← callMC (alloc .stack 16 8)
+  callMC (store 8 p f)
+  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let r ← awaitC (α := BitVec 32) ⟨⟩ p
+  joinC helper
+  pure r : CM H Unit (BitVec 32)).run' ()
+
+def outcome {α : Type} (r : Option (Except Error (α × Mem))) : Option (Except Error Unit) :=
+  r.map (·.map fun _ => ())
+
+/-- **Leak.** A future that is never awaited or canceled is reported: its task is an unjoined
+thread of the spawner (`.illegal`). -/
+theorem leak_illegal :
+    outcome (Sched.run hDispatch 10 (fun _ => 0) leak {}).run = some (.error .illegal) := by
+  decide +kernel
+
+/-- **Foreign consumer.** Only the spawner may consume a future (`.illegal`). -/
+theorem foreignAwait_illegal :
+    outcome (Sched.run hDispatch 20 (fun _ => 0) foreignAwait {}).run = some (.error .illegal) := by
+  decide +kernel
+
+/-- **Concurrent double await.** `await` is not threadsafe: two consumers race on the future
+value or join a task that is not theirs (`.illegal`), on both orders of the two awaits. -/
+theorem doubleAwait_illegal :
+    outcome (Sched.run hDispatch 20 (fun _ => 0) doubleAwait {}).run = some (.error .illegal) ∧
+      outcome (Sched.run hDispatch 20 (fun _ => 1) doubleAwait {}).run = some (.error .illegal) := by
+  decide +kernel
+
+/-- The model rule behind both: a join by a thread other than the spawner throws. -/
+theorem join_foreign_illegal (m : Mem) (tid : ThreadId) (rec : ThreadRec)
+    (hr : m.threads[tid]? = some rec) (hs : rec.spawner ≠ m.current) :
+    ((Thread.join tid).run m).run = some (.error .illegal) := by
+  simp [Thread.join, hr, hs, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
+    throw, throwThe, MonadExceptOf.throw, StateT.lift]
+
 end Futures.Proofs
