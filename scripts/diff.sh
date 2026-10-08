@@ -389,7 +389,7 @@ for ex in $examples; do
       if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
         bufs_match "$zbufs" "$lbufs" && [ "$zlive" = "$llive" ]; then
         fn_ok=$((fn_ok + 1))
-      elif [ "$exclude_ub" -eq 1 ] && [ "$lkind" = fail ] &&
+      elif [ "${exclude_ub:-0}" -eq 1 ] && [ "$lkind" = fail ] &&
         [ "$lval" != Zig.Error.unspecified ] && [ "$lval" != Zig.Error.illegal ] &&
         [ "$lval" != Zig.Error.capped ] && [ "$lval" != Zig.Error.deadlock ]; then
         # The model throws: illegal behavior in a build without safety checks.

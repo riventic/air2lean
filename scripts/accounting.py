@@ -41,7 +41,7 @@ MATRIX = load('air2lean_support_matrix', 'support-matrix.py')
 S = REPORT.Status
 # Each comparison status lands in exactly one column; `skipped` rows are selections, not cases.
 COLUMN = {status: 'exact_matches' for status in REPORT.MATCHES} | {
-    S.HOST: 'host_differences', S.ILLEGAL: 'illegal',
+    S.HOST: 'host_differences', S.ILLEGAL: 'illegal', S.UB_EXCLUDED: 'illegal',
     S.UNSPECIFIED: 'unspecified', S.SEARCH_CAP: 'capped_searches',
     S.BOUNDED_NO_RESULT: 'bounded_no_result', S.MISMATCH: 'mismatches',
     S.INPUT_FAILURE: 'setup_failures', S.NATIVE_HARNESS_FAILURE: 'setup_failures',
