@@ -239,3 +239,24 @@ to CPU time, cache behavior, instruction counts, or a native allocator's memory 
 Such a claim needs a separate calibration argument, which this layer does not
 provide. The counts cover only successful runs: a panic or divergence has no
 `LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
+
+### Resource-bounded total triples (P05)
+
+`ZigLean.Sep.Bounded` defines `TotalTripleWithin B P body again s Q`: from every framed
+precondition, the loop `loop body again` exits with `Q` after at most `B` body runs (a
+`LoopRuns` witness). `toTotal` gives the total triple; the bound is extra information.
+`count_le` applies the bound to the loop's single run, because the body is deterministic.
+The rules are `mono` (a larger bound is weaker), `conseq` and `frame`. `step` composes one
+body run (a `TotalTriple` of the body) with a bounded rest and adds one to the bound. `exit`
+is the one-run case. `then_total` composes a bounded loop with a total continuation.
+`of_ghost` is `TotalTriple.loop_ghost` with the bound `n + 1`. `not_within_of_count` and
+`not_within_of_stuck` refute a bound from an admissible input. A run with more body runs
+refutes it, and so does a loop with no counted run. So divergence cannot satisfy it
+vacuously.
+
+`Proofs/Lists/Bounded.lean` proves `sum_loop_within`: the generated `sum` loop over
+`xs.length` items exits within `xs.length + 1` body runs with the sum. `sum_loop_total` is
+the total triple it implies, and `sum_total` is the function-level total triple for `sum`.
+`sum_loop_not_within` shows that the bound is tight. Only body runs of the counted loop
+count, and straight-line code outside it does not. Build with `lake build ZigLean.Sep.Bounded
+Proofs.Lists.Bounded`.

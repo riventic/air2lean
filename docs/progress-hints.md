@@ -71,6 +71,16 @@ fairness assumption. This proves completion of the model fragment, not a source
 export or native program. The worker idle loop below terminates only under an
 explicit fairness premise. General fork/join completion, other retry loops and
 weak-CAS success assumptions remain open.
+
+Two more interfaces sit beside it. `ReturnsWithin B` bounds the budget uniformly: every
+oracle returns for every fuel of at least `B` turns (`countdown_within`). It implies
+`EventuallyReturns`. `EventuallyReturnsUnder Fair` is the conditional form: only oracles
+satisfying the explicit premise `Fair` must return. It follows from `EventuallyReturns` for
+any premise, and with the premise `True` it is equivalent to it. Since `under_false` proves
+it for any program under an unsatisfiable premise, it never implies an unconditional return;
+`EventuallyReturnsUnder.discharge` needs a proof that every oracle satisfies the premise.
+`stuck_not_eventuallyReturns` and `stuck_not_returnsWithin` refute both unconditional forms
+for a program that never returns.
 `tests/roadmap/progress/Total.lean` checks the positive theorem families and a
 symbolic counterexample showing that readiness alone does not imply fair task
 selection. CI kernel-checks it with plain `lake env lean` in full non-mutation rows.
@@ -99,6 +109,8 @@ After the loop, the worker reads `data` and panics on any value other than 42.
 | `idle_progress` | If `Cooperative o`, every fuel above a bound returns after `main` joins the worker, so the loop exited. | THR-09 |
 | `idle_starves` | Under `favorWorker` (always run the worker while it is ready), no fuel gives a result. The worker spins and yields forever. | none |
 | `progress_needs_premise`, `not_eventuallyReturns` | The progress conclusion fails for some legal oracle, so it is not a model theorem without THR-09. | none |
+| `idle_total_under` | `idle_progress` through `EventuallyReturnsUnder Cooperative`: the premise is an explicit argument of the interface. | THR-09 |
+| `cooperative_not_all` | Some legal oracle is not cooperative, so the premise cannot be discharged. | none |
 
 `Cooperative o` (premise [THR-09](premises.md#thr-09)) says that from some oracle
 index on, every choice is option 0. The scheduler then prefers the lowest-numbered

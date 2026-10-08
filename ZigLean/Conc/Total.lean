@@ -11,6 +11,14 @@ fail. No fairness axiom is added to the existing safety logic.
 The proof below inducts on remaining hints and follows `Sched.go`'s actual turn rule.
 It quantifies over every oracle and every sufficiently large fuel; finite testing is
 not used to justify termination. Fork/join and weak-CAS retry liveness remain separate.
+
+Three return interfaces, from strongest to weakest:
+
+* `ReturnsWithin B`: every oracle returns once the budget is at least `B` turns (uniform bound).
+* `EventuallyReturns`: every oracle returns for every large enough budget (oracle-dependent).
+* `EventuallyReturnsUnder Fair`: only oracles satisfying the explicit premise `Fair` return.
+  The premise is part of the statement, never an implicit axiom; `under_false` shows that an
+  unsatisfiable premise makes it vacuous, so it cannot stand in for the unconditional forms.
 -/
 
 namespace Zig.Conc.Total
@@ -23,6 +31,96 @@ def EventuallyReturns {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit)
     (main : ConcM Tgt α) (m : Mem) (Q : α → Mem → Prop) : Prop :=
   ∀ o, ∃ bound, ∀ fuel, bound ≤ fuel →
     ∃ v m', (Sched.run dispatch fuel o main m).run = some (.ok (v, m')) ∧ Q v m'
+
+/-- Bounded concurrent total correctness: under every oracle, every budget of at least `B`
+scheduler turns gives a successful result. The bound is uniform in the oracle. -/
+def ReturnsWithin {Tgt α : Type} (B : Nat) (dispatch : Tgt → ConcM Tgt Unit)
+    (main : ConcM Tgt α) (m : Mem) (Q : α → Mem → Prop) : Prop :=
+  ∀ o fuel, B ≤ fuel →
+    ∃ v m', (Sched.run dispatch fuel o main m).run = some (.ok (v, m')) ∧ Q v m'
+
+/-- Guaranteed return under an explicit schedule premise `Fair`: every oracle that satisfies
+`Fair` eventually returns. This is weaker than `EventuallyReturns`: it says nothing about
+oracles outside `Fair`, and an unsatisfiable `Fair` makes it vacuous (`under_false`). -/
+def EventuallyReturnsUnder {Tgt α : Type} (Fair : (Nat → Nat) → Prop)
+    (dispatch : Tgt → ConcM Tgt Unit) (main : ConcM Tgt α) (m : Mem) (Q : α → Mem → Prop) :
+    Prop :=
+  ∀ o, Fair o → ∃ bound, ∀ fuel, bound ≤ fuel →
+    ∃ v m', (Sched.run dispatch fuel o main m).run = some (.ok (v, m')) ∧ Q v m'
+
+section Interfaces
+
+variable {Tgt α : Type} {dispatch : Tgt → ConcM Tgt Unit} {main : ConcM Tgt α} {m : Mem}
+  {Q Q' : α → Mem → Prop} {Fair Fair' : (Nat → Nat) → Prop} {B B' : Nat}
+
+theorem ReturnsWithin.eventually (h : ReturnsWithin B dispatch main m Q) :
+    EventuallyReturns dispatch main m Q := fun o => ⟨B, h o⟩
+
+theorem ReturnsWithin.mono (h : ReturnsWithin B dispatch main m Q) (hB : B ≤ B') :
+    ReturnsWithin B' dispatch main m Q := fun o fuel hf => h o fuel (Nat.le_trans hB hf)
+
+theorem EventuallyReturns.conseq (h : EventuallyReturns dispatch main m Q)
+    (hq : ∀ v m', Q v m' → Q' v m') : EventuallyReturns dispatch main m Q' := by
+  intro o
+  obtain ⟨b, hb⟩ := h o
+  refine ⟨b, fun fuel hf => ?_⟩
+  obtain ⟨v, m', hr, hv⟩ := hb fuel hf
+  exact ⟨v, m', hr, hq _ _ hv⟩
+
+/-- An unconditional result holds under any premise. -/
+theorem EventuallyReturns.under (h : EventuallyReturns dispatch main m Q)
+    (Fair : (Nat → Nat) → Prop) : EventuallyReturnsUnder Fair dispatch main m Q :=
+  fun o _ => h o
+
+/-- The conditional form with the trivial premise is the unconditional one. -/
+theorem eventuallyReturnsUnder_true :
+    EventuallyReturnsUnder (fun _ => True) dispatch main m Q ↔
+      EventuallyReturns dispatch main m Q :=
+  ⟨fun h o => h o trivial, fun h => h.under _⟩
+
+/-- Discharging the premise for every oracle gives the unconditional form. -/
+theorem EventuallyReturnsUnder.discharge (h : EventuallyReturnsUnder Fair dispatch main m Q)
+    (hall : ∀ o, Fair o) : EventuallyReturns dispatch main m Q := fun o => h o (hall o)
+
+/-- A stronger premise gives a weaker statement. -/
+theorem EventuallyReturnsUnder.mono (h : EventuallyReturnsUnder Fair dispatch main m Q)
+    (hF : ∀ o, Fair' o → Fair o) : EventuallyReturnsUnder Fair' dispatch main m Q :=
+  fun o ho => h o (hF o ho)
+
+theorem EventuallyReturnsUnder.conseq (h : EventuallyReturnsUnder Fair dispatch main m Q)
+    (hq : ∀ v m', Q v m' → Q' v m') : EventuallyReturnsUnder Fair dispatch main m Q' := by
+  intro o ho
+  obtain ⟨b, hb⟩ := h o ho
+  refine ⟨b, fun fuel hf => ?_⟩
+  obtain ⟨v, m', hr, hv⟩ := hb fuel hf
+  exact ⟨v, m', hr, hq _ _ hv⟩
+
+/-- Vacuity: an unsatisfiable premise proves any conditional result, even a false
+postcondition for a program that never returns. Hence the conditional form can never stand
+in for `EventuallyReturns`. -/
+theorem under_false : EventuallyReturnsUnder (fun _ => False) dispatch main m Q :=
+  fun _ h => h.elim
+
+end Interfaces
+
+/-- A program that never returns: its first step has no result. -/
+def stuck {Tgt α : Type} : ConcM Tgt α := fun _ _ => .leaf none
+
+theorem stuck_run {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
+    (m : Mem) : (Sched.run dispatch fuel o (stuck : ConcM Tgt α) m).run = none := rfl
+
+/-- Divergence has no unconditional or bounded guaranteed return. -/
+theorem stuck_not_eventuallyReturns {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (m : Mem)
+    (Q : α → Mem → Prop) : ¬ EventuallyReturns dispatch (stuck : ConcM Tgt α) m Q := by
+  intro h
+  obtain ⟨b, hb⟩ := h (fun _ => 0)
+  obtain ⟨v, m', hr, -⟩ := hb b (Nat.le_refl _)
+  rw [stuck_run] at hr
+  cases hr
+
+theorem stuck_not_returnsWithin {Tgt α : Type} (B : Nat) (dispatch : Tgt → ConcM Tgt Unit)
+    (m : Mem) (Q : α → Mem → Prop) : ¬ ReturnsWithin B dispatch (stuck : ConcM Tgt α) m Q :=
+  fun h => stuck_not_eventuallyReturns dispatch m Q h.eventually
 
 /-- A useful bounded backoff fragment: expose `n` scheduling opportunities and return.
 Unlike a polling/retry loop, this always decreases its remaining-work measure. -/
@@ -101,5 +199,10 @@ theorem countdown_total (n : Nat) :
     EventuallyReturns (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) := by
   intro o
   exact ⟨n, fun fuel hf => ⟨(), {}, countdown_run n fuel o hf, rfl⟩⟩
+
+/-- The bound is uniform in the oracle: `n` scheduler turns suffice for `n` hints. -/
+theorem countdown_within (n : Nat) :
+    ReturnsWithin n (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) :=
+  fun o fuel hf => ⟨(), {}, countdown_run n fuel o hf, rfl⟩
 
 end Zig.Conc.Total

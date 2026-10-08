@@ -39,3 +39,23 @@ example : ¬ (∀ t ∈ (twoReady 0).ready.toList, ∃ step,
   have hz : ((twoReady step).choose (fun _ => 0) (twoReady step).ready.size).1 = 0 := rfl
   rw [hz] at hs
   omega
+
+-- P05 bounded and conditional interfaces. The bound is uniform in the oracle.
+example (n : Nat) :
+    ReturnsWithin n (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) :=
+  countdown_within n
+
+-- An unconditional result holds under any premise; the conditional form needs the premise
+-- for every oracle before it yields the unconditional one.
+example (n : Nat) (Fair : (Nat → Nat) → Prop) :
+    EventuallyReturnsUnder Fair (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) :=
+  (countdown_total n).under Fair
+
+-- Vacuity: an unsatisfiable premise "proves" return for a program that never returns,
+-- which has neither unconditional form.
+example : EventuallyReturnsUnder (fun _ => False) (fun (_ : Unit) => pure ())
+    (stuck : ConcM Unit Unit) {} (fun _ _ => False) := under_false
+example : ¬ EventuallyReturns (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {}
+    (fun _ _ => True) := stuck_not_eventuallyReturns _ _ _
+example (B : Nat) : ¬ ReturnsWithin B (fun (_ : Unit) => pure ()) (stuck : ConcM Unit Unit) {}
+    (fun _ _ => True) := stuck_not_returnsWithin B _ _ _
