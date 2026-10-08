@@ -155,6 +155,16 @@ class SeededLoop(unittest.TestCase):
             finally:
                 edited.write_text(original)
 
+    def test_committed_example_replays_sequentially_without_zig(self):
+        """A differential-style row of the committed basic.scale is confirmed by Lean evaluation alone."""
+        for args, line, status in [([3, 4], '{"ok":12}', 'verified'),
+                                   ([4294967295, 2], '{"fail":"Zig.Error.overflow"}', 'verified'),
+                                   ([3, 4], '{"ok":13}', 'not_reproduced')]:
+            request = CX.lean_request(ROOT, 'basic', 'scale', args, line)
+            self.assertIsNotNone(request)
+            self.assertEqual(CX.lean_confirm(ROOT, request, 600)['status'], status, (args, line))
+        self.assertIsNone(CX.lean_request(ROOT, 'basic', 'sum', [[1, 2]], '{"ok":"3"}'))  # slice parameter: unsupported
+
     def test_cli_headline_and_bundle_file(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp)/'goal.json'
