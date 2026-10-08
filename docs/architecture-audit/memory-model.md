@@ -206,6 +206,10 @@ with no address observation, no out-of-allocation pointer arithmetic, and bounde
 Restore it after MM-1, MM-3 and MM-5. This is a documentation change and a claim downgrade, not
 a model change.
 
+**Status: qualified** (`codex/fix-mm-failclosed`). `docs/build-modes.md` lists the open
+exceptions (MM-1/MM-2, MM-3, MM-5, float `@divExact`) under the premise, and the README sentence
+names them.
+
 ### MM-8. Sep exports allocation-order address facts
 
 `alloc_run` (`ZigLean/Sep/Block.lean`) concludes `∀ l c, m.heap l = some c → c.addr + c.size <
