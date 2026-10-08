@@ -293,6 +293,14 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
+  /-- The explicit oracle of arbitrary words (`arbitraryWord`, `--allocator-model translated`,
+  `docs/allocator-model.md`): query `k` (from 0, in execution order) returns `arbitrary[k]`,
+  `0` past the end. `@returnAddress()` and an `undefined` pointer operand read it. Every finite
+  run makes finitely many queries, so a theorem about every initial `Mem` holds for every
+  sequence of values; nothing ties a value to a real code address. -/
+  arbitrary : Array (BitVec 64) := #[]
+  /-- The number of `arbitraryWord` queries so far. -/
+  arbitraryNext : Nat := 0
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -300,6 +308,22 @@ abbrev MemM (α : Type) := StateT Mem Result α
 
 /-- The body monad of a function that uses memory: its locals over `MemM`. -/
 abbrev MM (σ α : Type) := StateT σ MemM α
+
+/-- The next value of the explicit oracle `Mem.arbitrary`. No memory access. -/
+def arbitraryWord : MemM (BitVec 64) := do
+  let m ← get
+  set { m with arbitraryNext := m.arbitraryNext + 1 }
+  pure (m.arbitrary.getD m.arbitraryNext 0)
+
+/-- `@returnAddress()`: an arbitrary `usize` (`arbitraryWord`). Allocators only pass it along
+as `ret_addr`. -/
+def returnAddress : MemM (BitVec 64) := arbitraryWord
+
+/-- An `undefined` pointer operand (`--allocator-model translated`, e.g. the `ptr` of
+`std.heap.page_allocator`): a pointer without a block at an arbitrary address
+(`arbitraryWord`), so every access through it throws `.illegal`. -/
+def undefPtr : MemM Ptr := do
+  pure ⟨none, (← arbitraryWord).toNat⟩
 
 /-- `n` rounded up to a multiple of `a` (`a = 0`: `n`). -/
 def alignUp (n a : Nat) : Nat := if a = 0 then n else (n + a - 1) / a * a

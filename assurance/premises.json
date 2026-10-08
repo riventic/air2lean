@@ -82,6 +82,7 @@
     "ZigLean.Conc.Share": ["THR-08"],
     "ZigLean.Conc.Word": ["THR-08", "THR-05", "ORD-01"],
     "ZigLean.Conc.WeakWord": ["THR-08", "THR-05", "ORD-04"],
+    "ZigLean.Conc.AtomicWord": ["ORD-01", "THR-01"],
     "ZigLean.Conc.WeakCas": ["ORD-04"],
     "ZigLean.Conc.WeakCasLemmas": ["ORD-04"],
     "ZigLean.Conc.Progress": ["THR-07"],
@@ -126,7 +127,8 @@
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
-    "ZigLean.VC.Result": ["SEM-03"]
+    "ZigLean.VC.Result": ["SEM-03"],
+    "ZigLean.Os.Mmap": ["OSM-01"]
   },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
@@ -153,7 +155,8 @@
     {"premise": "MTH-03", "scope": "closure", "pattern": "Rt016|(?:^|\\.)mulRt$|RtChk"},
     {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
     {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
-    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
+    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
+    {"premise": "OSM-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:mmap|munmap|mremap)$"}
   ],
   "implies": {
     "ALC-02": ["ALC-01"],
@@ -173,6 +176,7 @@
     "ORD-01": ["ORD-02"],
     "ORD-03": ["ORD-01"],
     "ORD-04": ["ORD-01"],
+    "OSM-01": ["SEM-02"],
     "MTH-02": ["MTH-01", "TRU-04"],
     "MTH-03": ["MTH-01"],
     "ASM-01": ["TRU-04"],

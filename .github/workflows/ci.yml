@@ -502,6 +502,14 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
           bash tests/roadmap/undef-locals/check.sh
+      # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
+      # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
+      - name: Translated allocators
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/alloc-translated/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers

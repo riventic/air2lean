@@ -377,7 +377,9 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     if seen.contains m.symbol then throw s!"duplicate model symbol '{m.symbol}'"
     seen := seen.insert m.symbol
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
-    if functionNames.contains m.symbol || (stdModel? m.symbol).isSome then
+    -- Any mode's row: a project binding never shadows a built-in model, the OS boundary included.
+    if functionNames.contains m.symbol || (stdModel? m.symbol).isSome ||
+        (stdModel? m.symbol .translated).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"

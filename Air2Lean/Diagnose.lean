@@ -14,11 +14,18 @@ structure CheckArgs where
   profile : Option String := none
   limit : Nat := 256
   spawnPolicy : SpawnSemantics := .available
+  allocatorModel : AllocatorModel := .std
+  allocatorModelSeen : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
   match args with
   | [] => return out
+  | "--allocator-model" :: value :: rest =>
+    if out.allocatorModelSeen then throw "duplicate --allocator-model"
+    let allocatorModel ← parseAllocatorModel value
+    parseOptions rest { out with allocatorModel, allocatorModelSeen := true } spawnPolicySeen
+  | ["--allocator-model"] => throw "missing value for --allocator-model"
   | "--profile" :: p :: rest =>
     unless p == BuildProfile.legacyName || p == BuildProfile.currentName do throw "invalid --profile"
     if out.profile.isSome then throw "duplicate --profile"
@@ -32,15 +39,15 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     let spawnPolicy ← parseSpawnPolicy value
     parseOptions rest { out with spawnPolicy } true
   | ["--spawn-policy"] => throw "missing value for --spawn-policy"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit and --spawn-policy; emission flags are incompatible"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --spawn-policy and --allocator-model; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
   | "--diagnostics-json" :: directory :: options =>
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
-    parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+    parseOptions (splitAllocatorModelFlag options) { directory := directory }
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--allocator-model std|translated]"
 
 structure FileResult where
   file : String
@@ -72,7 +79,7 @@ structure Edge where
 
 /-- Only named direct calls and explicit comptime spawn workers are observed.
 Recognized runtime models do not need an AIR definition. -/
-def edges (units : Array FileResult) : Array Edge := Id.run do
+def edges (units : Array FileResult) (mode : AllocatorModel := .std) : Array Edge := Id.run do
   let mut result := #[]
   for u in units do
     let source := if u.structureValid then
@@ -81,7 +88,7 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
     if let some (caller, insts) := source then
       for i in insts do
         if let .call (.func callee false worker) _ := i.op then
-          if !modelledStdFn callee then
+          if !modelledStdFn callee mode then
             result := result.push { caller, callee, instruction := i.id, file := u.file }
           if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
             if let some callee := worker then
@@ -164,7 +171,8 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
   return (calls, log)
 
 /-- Pure per-file boundary used by both the CLI and kernel-checked regressions. -/
-def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.run do
+def inspect (file contents : String) (initial : Log) (mode : AllocatorModel := .std) :
+    FileResult × Log := Id.run do
   let mut log := initial
   let empty : FileResult := { file }
   let parsed := StrictJson.parse contents
@@ -176,7 +184,7 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     log := log.add (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters")
     return (empty, log.add (skipped file none .normalize "bounded_function_identity"))
   let unit := { empty with function := name }
-  let decoded := Raw.parseFunc json
+  let decoded := Raw.parseFunc json mode
   let .ok raw := decoded
     | log := log.record (boundary file name .airDecode .decode .validationFailure) decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))
@@ -216,7 +224,7 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     localPassed := checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log)
-    (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
+    (spawnPolicy : SpawnSemantics := .available) (mode : AllocatorModel := .std) : Log := Id.run do
   let mut log := initial
   let safe := units.filter (·.structureValid)
   let funcs := safe.filterMap (·.normalized)
@@ -236,7 +244,7 @@ def collectProgram (units : Array FileResult) (initial : Log)
     if let some f := u.normalized then
       log := collectCallChecksIndexed u.file f (u.operandIndex f) snapshot log
   if !log.truncated then
-    let graph := edges units
+    let graph := edges units mode
     let mut blockers : Array (Edge × Code × Option String) := #[]
     for edge in graph do
       let targets := selected[edge.callee]?.getD #[]
@@ -368,7 +376,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
   let renamed := Anon.renumberAll texts
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do
-    let result := inspect file contents log
+    let result := inspect file contents log a.allocatorModel
     log := result.2
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile
@@ -377,7 +385,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
         (BuildProfile.checkProgram #[baseline, profile] a.profile)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
-  return (units, collectProgram units log a.spawnPolicy)
+  return (units, collectProgram units log a.spawnPolicy a.allocatorModel)
 
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with

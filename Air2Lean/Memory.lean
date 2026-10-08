@@ -125,7 +125,7 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
 `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag`, `ret_load`, and `dbg`. -/
 def valueOperands (op : Op) : Array Val :=
   match op with
-  | .arg _ | .alloc | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
+  | .arg _ | .alloc | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ | .retAddr => #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
   | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
   | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
@@ -411,18 +411,20 @@ def Op.isSpinHint : Op → Bool
   | _ => false
 
 /-- An op that only a function that uses memory has. -/
-def memoryOp (op : Op) : Bool :=
+def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool :=
   op.isSpinHint || match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
-  | .call (.func name ..) _ => modelledStdFn name
+  -- `@returnAddress` reads the oracle in `Zig.Mem` (`Zig.returnAddress`).
+  | .retAddr => true
+  | .call (.func name ..) _ => modelledStdFn name mode
   | _ => false
 
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=
   match v with
-  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .sliceConst .. => true
+  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .ptrInt .. | .sliceConst .. => true
   | .agg _ elems => elems.any Val.pointsToMem
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
@@ -430,7 +432,7 @@ partial def Val.pointsToMem (v : Val) : Bool :=
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    f.allInsts.any fun i => memoryOp i.op || (valueOperands i.op).any Val.pointsToMem ||
+    f.allInsts.any fun i => memoryOp i.op f.allocatorModel || (valueOperands i.op).any Val.pointsToMem ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
       nullablePtrTy f.types f.layouts i.ty ||

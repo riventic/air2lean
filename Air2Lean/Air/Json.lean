@@ -100,6 +100,8 @@ structure RawFunc where
   types : Array Ty
   layouts : Array Layout
   globals : Array Global
+  /-- `--allocator-model` of this parse (`AllocatorModel`). -/
+  allocatorModel : AllocatorModel := .std
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -151,7 +153,7 @@ def parseIntLit (fnName : String) (s : String) : Except String Int := do
     | some n => return (n : Int)
     | none => throw s!"{fnName}: not an integer literal: {s}"
 
-def parseTy (j : Json) : Except String Ty := do
+def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String Ty := do
   let k ← (← j.getObjVal? "k").getStr?
   match k with
   | "int" =>
@@ -182,7 +184,8 @@ def parseTy (j : Json) : Except String Ty := do
     return .optional child
   | "struct" =>
     let name ← (← j.getObjVal? "name").getStr?
-    if name == "mem.Allocator" then return .allocator
+    -- `--allocator-model translated`: `mem.Allocator` is the ordinary struct `{ptr, vtable}`.
+    if name == "mem.Allocator" && allocatorModel == .std then return .allocator
     if name == "Thread" then return .thread
     if name == "Io" then return .io
     -- A struct that is only behind a pointer can have no known fields (`no_fields`).
@@ -522,7 +525,13 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
           throw s!"{fnName}: null pointer constant has a nonzero offset"
         return .ptrNull tyId
       if let some k := optField ptrJ "unsupported" then
-        return .ptrOther tyId (← k.getStr?)
+        let kind ← k.getStr?
+        -- An integer address (`@ptrFromInt` at comptime): `off` is the address. `Check.lean`
+        -- rejects it exactly as `ptrOther` outside `--allocator-model translated`.
+        if kind == "int" then
+          if let some offJ := optField ptrJ "off" then
+            if let .ok addr := offJ.getNat? then return .ptrInt tyId addr
+        return .ptrOther tyId kind
       return .ptrConst tyId (← (← ptrJ.getObjVal? "global").getNat?) (← (← ptrJ.getObjVal? "off").getNat?)
     else if let some pJ := optField j "slice_ptr" then
       let .ptr "slice" _ child := ty
@@ -684,13 +693,23 @@ def parseGlobal (fnName : String) (types : Array Ty) (j : Json) : Except String 
   return { name, ty, isConst := ← bool "const",
            threadlocal := ← bool "threadlocal", isExtern := ← bool "extern", init }
 
-def parseFunc (j : Json) : Except String RawFunc := do
+/-- `--allocator-model translated` translates `ret_addr` (`Op.retAddr`): drop the exporter's
+`unsupported` marker on that one tag, recursively. Every other marker stays. -/
+partial def admitRetAddr (body : Array RawInst) : Array RawInst :=
+  body.map fun i =>
+    { i with
+      unsupported := i.unsupported && i.tag != "ret_addr"
+      body := admitRetAddr i.body, thenBody := admitRetAddr i.thenBody,
+      elseBody := admitRetAddr i.elseBody,
+      cases := i.cases.map fun c => { c with body := admitRetAddr c.body } }
+
+def parseFunc (j : Json) (allocatorModel : AllocatorModel := .std) : Except String RawFunc := do
   let name ← (← j.getObjVal? "name").getStr?
   let schema ← (← j.getObjVal? "schema").getNat?
   let zigVersion ← (← j.getObjVal? "zig_version").getStr?
   let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
-  let types ← typesJ.mapM parseTy
+  let types ← typesJ.mapM (parseTy · allocatorModel)
   validateTypeGraph name types
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
@@ -698,6 +717,7 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst name types)
+  let body := if allocatorModel == .translated then admitRetAddr body else body
   let globalsJ ← match optField j "globals" with
     | some g => g.getArr?
     | none => pure #[]
@@ -713,11 +733,12 @@ def parseFunc (j : Json) : Except String RawFunc := do
     types
     layouts
     globals
+    allocatorModel
   }
 
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
-def parseFile (contents : String) : Except String RawFunc := do
+def parseFile (contents : String) (allocatorModel : AllocatorModel := .std) : Except String RawFunc := do
   let j ← StrictJson.parse contents
-  parseFunc j
+  parseFunc j allocatorModel
 
 end Air2Lean.Raw

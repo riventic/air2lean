@@ -27,8 +27,8 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--allocator-model std|translated]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--allocator-model std|translated]"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -43,6 +43,7 @@ def help : String :=
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
+  "  --allocator-model <mode>     std (default) or translated; see docs/allocator-model.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
@@ -73,6 +74,23 @@ structure Args where
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
   sourceMapJson : Option String := none
+  /-- `--allocator-model` (default `std`; `docs/allocator-model.md`). -/
+  allocatorModel : AllocatorModel := .std
+
+/-- Remove `--allocator-model V` (or `--allocator-model=V`) from `args`; at most once. -/
+private def takeAllocatorModel (args : List String) :
+    Except String (Option AllocatorModel × List String) := do
+  let rec go (args : List String) (seen : Option AllocatorModel) (acc : List String) :
+      Except String (Option AllocatorModel × List String) := do
+    match args with
+    | [] => pure (seen, acc.reverse)
+    | ["--allocator-model"] => throw s!"missing value for --allocator-model\n{usage}"
+    | "--allocator-model" :: v :: rest =>
+      if seen.isSome then throw s!"duplicate --allocator-model\n{usage}"
+      let mode ← (parseAllocatorModel v).mapError (fun message => s!"{message}\n{usage}")
+      go rest (some mode) acc
+    | a :: rest => go rest seen (a :: acc)
+  go (splitAllocatorModelFlag args) none []
 
 private partial def parseArgsGo (args : List String)
     (airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy : Option String)
@@ -120,7 +138,9 @@ private partial def parseArgsGo (args : List String)
     else .error s!"unexpected argument: '{v}'\n{usage}"
 
 def parseArgs (args : List String) : Except String Args := do
+  let (allocatorModel, args) ← takeAllocatorModel args
   let a ← parseArgsGo args none none none none none none none none false
+  let a := { a with allocatorModel := allocatorModel.getD .std }
   if a.registryTemplate && a.modelRegistry.isSome then
     throw "--model-registry-template cannot be combined with --model-registry"
   if a.registryTemplate && a.spawnSemantics == .fallible then
@@ -221,7 +241,7 @@ private def run (args : List String) : IO UInt32 := do
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
           -- Same stage order as `processRaw` (preflight, normalize, check), timed separately.
-          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents
+          let (parsed, parseNs) ← timed fun _ => Raw.parseFile contents a.allocatorModel
           times := { times with parse := times.parse + parseNs }
           match parsed with
           | .error e => err := some s!"{path}: {e}"
