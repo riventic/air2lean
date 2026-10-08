@@ -325,7 +325,7 @@ def covered(name, prefixes):
     return any(name.startswith(p) for p in prefixes)
 
 
-def report(closure, roots, base_prefixes, existing=None, source=None, unexported_label='exported'):
+def report(closure, roots, base_prefixes, existing=None, source=None):
     nodes = sorted(closure.nodes.values(), key=lambda n: n['name'])
     exported = [n['name'] for n in nodes if n['class'] == 'exported']
     missing = [n for n in nodes if n['class'] == 'missing']
@@ -435,17 +435,11 @@ def golden_sets(example, base=ROOT):
             yield version, os, functions
 
 
-class Merged(dict):
+def merged(groups):
     """Normalized name -> one scan merging every instance of a generic function."""
-
-    def __init__(self, groups):
-        super().__init__()
-        for key, infos in groups.items():
-            merged = {'name': key, 'calls': [], 'values': [], 'indirect': [], 'globals': []}
-            for info in infos:
-                for field in ('calls', 'values', 'indirect', 'globals'):
-                    merged[field].extend(info[field])
-            self[key] = merged
+    fields = ('calls', 'values', 'indirect', 'globals')
+    return {key: dict({'name': key}, **{f: [item for info in infos for item in info[f]] for f in fields})
+            for key, infos in groups.items()}
 
 
 def golden_closure(examples=None, base=ROOT, models=None):
@@ -456,7 +450,7 @@ def golden_closure(examples=None, base=ROOT, models=None):
         filter_file = base / 'examples' / example / 'filter'
         existing = [f'{example}.'] + (filter_file.read_text().split() if filter_file.is_file() else [])
         for version, os, groups in golden_sets(example, base):
-            functions = Merged(groups)
+            functions = merged(groups)
             roots = sorted(name for name in functions if name.startswith(f'{example}.'))
             closure = Closure(functions, version, models, (), normalized).run(roots)
             result = report(closure, roots, [f'{example}.'], existing,
