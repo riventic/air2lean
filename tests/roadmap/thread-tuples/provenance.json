@@ -16,7 +16,7 @@
   "qualification": {
     "0.14.1": "stdlib source inspected; live export/native pending",
     "0.15.2": "stdlib source inspected; live export/native pending",
-    "0.16.0": "source revision 61c7ced: live schema-11 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (2 tests); schema-11 target profile remains unverified; Linux CI pending"
+    "0.16.0": "groupMixed await fix (defer group.cancel): live schema-12 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, 256 fallible-policy groupMixed schedules, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (3 tests); Linux CI pending"
   },
   "functions": [
     "atomicShared",
