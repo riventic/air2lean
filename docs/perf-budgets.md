@@ -1,10 +1,8 @@
 # Translation and proof performance budgets
 
-Status: **pending**. The workload suite, recorder, baseline derivation and
-regression gate exist. No real-module baseline has been recorded yet, so
-`assurance/perf-budgets.json` has `"status": "pending"` and every workload has
-`"budget": null`. Until a baseline is committed, the gate reports `pending` and
-cannot catch a regression.
+Status: **recorded** (Darwin arm64 reference platform, 18 workloads). The gate has two
+modes: the strict reference-platform limits and a portable mode with generous limits that
+CI runs on any runner (see Gate).
 
 ## Workloads
 
@@ -29,6 +27,14 @@ or mismatched set.
 | `variants` | shared (0.15.2) | `Proofs/Variants/Gen.lean` | tagged unions, optionals |
 | `floatops` | shared (0.15.2) | `tests/golden/0.15.2/floatops/Gen.lean` | floats with `--float-semantics compiler-rt` |
 | `threadsync` | shared (0.15.2) | `tests/golden/0.15.2/threadsync/Gen-darwin.lean` | thread/mutex/wait-group models, concurrency proofs |
+
+Eleven more golden examples were added with the same shape (`asm`, `atomics`, `errors`,
+`floatconv`, `floats`, `iogroup`, `options`, `pointers`, `recursion`, `sync`, `threads`),
+for 18 workloads in all. `lists` is not a workload: its committed golden AIR lacks the std
+callees that `examples/lists/filter` adds, so it cannot be translated from the committed
+files alone. `sync` has `reference_gen: null`: `Proofs/Sync/Gen.lean` carries a hand-added
+function (`rwLockSnapshotPair`) that the golden AIR does not produce, so its output is
+pinned only by the recorded SHA-256.
 
 The golden AIR is legacy schema 11 (no target profile), so the translation step does
 not depend on the host. The proof phases build the committed `Proofs/<Ex>` modules
@@ -117,6 +123,17 @@ Commit the updated file together with the measurement's revision.
 python3 scripts/perf-budgets.py gate --measurement M.json [--json findings.json]
 ```
 
+`--portable` checks the `portable_max_*` limits instead, on any platform, over the
+phases that need no cold Lake build (`translate.*`, parse/normalize/check/emit and
+`elaborate`; `--phase` narrows further). `portable_tolerance` in the budgets file sets
+them from the baseline: translator phases `max(x10, +1 s)` time and `max(x3, +128 MiB)`
+RSS; Lean phases `max(x6, +30 s)` and `max(x2, +512 MiB)`. They ignore platform and
+absorb runner noise but still fail on a gross regression, any memory blow-up, a missing
+workload/phase or any change of emitted Lean (`output-changed`). CI runs
+`record --skip-proof` then `gate --portable` after building the translator (job step
+"Performance budget regression gate (portable)"). The strict gate remains the
+reference-platform check: record under the guard as above and run `gate`.
+
 Exit 0: every budgeted workload passed. Exit 1: any failure. Exit 3: no failure,
 but some budget is still pending (`--allow-pending` turns this into 0; pending never
 masks a failure). Findings:
@@ -141,8 +158,44 @@ example, `scripts/check.sh` golden/committed-translation comparison and proof
 builds on the changed output. Rebaseline a changed output with
 `baseline --workload ID` only in the same commit as that evidence.
 
-No lookup/indexing or modularization optimization is claimed here. Measurements
-must first show where time goes.
+## Measured hotspots and optimizations
+
+Measured on the reference platform (`record --per-module`, one serial lane, host shared
+with other jobs, so differences below about 20% are noise):
+
+- **Translator.** A whole translation takes 20-50 ms (sync: 115-157 ms, 1.5 MB of AIR)
+  at about 40 MiB. Of the four gated phases the largest is `parse` (up to 16 ms, sync).
+  The `renumber` stage (`Anon.renumberAll`, reported in `--timing-json` but not budgeted)
+  was larger than all four together: sync 91 ms of 146 ms wall, threadsync 14 of 44 ms.
+  It re-ran the whole rename-and-compress pipeline once per marker kind (5 passes) for
+  every function, although most functions contain no instance of most markers. The
+  change skips functions whose identity strings hold no instance of the marker, and
+  recompresses only changed texts after the first pass. renumber: layout 7.7 -> 3.1 ms,
+  threadsync 13.9 -> 6.8 ms, sync 91 -> 73 ms (the rest is the strict JSON parse).
+  Preservation: all 58 committed AIR directories under `tests/` and `case-studies/`,
+  translated plain and with `--source-map-json` (116 runs, 156 stored results including
+  exit codes and diagnostics), are byte-identical before and after; the gated workloads'
+  output hashes are unchanged; `stable-generation/test_cli.py` and `timing_cli.py` pass.
+- **Lean elaboration of generated modules** takes 0.3-2.3 s and 550-650 MiB, mostly
+  import cost; it scales weakly with output size.
+- **Proofs** dominate: 64 `Proofs.*` modules cost 116 s module-local cold. Slowest:
+  `Sync.RwLock` 11 s, `Threadsync.Handoff` 10-11 s (2.1 GB, `decide +kernel` and kernel
+  type checking), `Threadsync.WaitGroup` 9-10 s, `Sync.Handoff` 6.6 s. Warm rebuilds
+  (trace check only) take 0.15-0.18 s per workload.
+  `Sync.RwLock.live_all` proved two facts about `Ph` with `simp_all` inside a context
+  holding the whole protocol invariant (2.1 s by the profiler). They are now standalone
+  `Ph` lemmas; the module's standalone elaboration went from 11.3 s to 9.4 s. No theorem
+  statement changed; the dependents build and `scripts/no-sorry.sh` passes. The
+  module-local cold build in the two full recordings (11.5 s, 11.1 s) does not separate
+  this gain from host noise; the budget is not tightened on it.
+  Profile with `lake env lean -Dtrace.profiler=true -Dtrace.profiler.threshold=800
+  Proofs/X/Y.lean`. `Threadsync.WaitGroup` hits the 200000-heartbeat limit near line 3127
+  when profiler tracing is on, so it has little heartbeat headroom.
+
+No lookup-structure change in the translator is claimed: no translator phase other than
+`renumber` exceeds 16 ms. Remaining proof candidates are `Threadsync.Handoff.enc_box`
+(`decide +kernel` of seven byte-array equalities) and the `WaitGroup`/`Handoff`
+`refine` chains.
 
 `python3 tests/roadmap/perf-budgets/test_perf_budgets.py` tests the gate,
 baseline derivation, AIR overlay, module-local cold cleanup, `wait4` measurement
