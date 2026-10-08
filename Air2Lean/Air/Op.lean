@@ -190,6 +190,11 @@ structure Layout where
 def Layout.isLanePtr (l : Layout) : Bool :=
   l.vectorIndex.isSome || l.runtimeLane
 
+/-- A bit-pointer whose export has no `vector_index`. It can be a packed field pointer or a lane
+pointer. -/
+def Layout.unverifiedBitPtr (l : Layout) : Bool :=
+  l.hostSize != 0 && !l.vectorIndexExported
+
 /-- Both legacy exports may omit the byte value, preserving the presence-only
 comparison. Explicit values must agree; known and missing metadata cannot establish
 the same sentinel contract. Callers separately compare presence and the child type. -/

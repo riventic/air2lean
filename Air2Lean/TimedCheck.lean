@@ -90,6 +90,8 @@ def preflight (funcs : Array Func) (profiles : Array BuildProfile) : Except Stri
   for f in funcs do
     require (f.zigVersion == profile.zigVersion) "function/profile Zig version mismatch"
     check f
+    -- A byte local (`Zig.Bytes T`) is outside the timed subset.
+    require (byteLocals f).isEmpty s!"{f.name}: a local with undefined parts"
     for i in f.allInsts do
       require (admitted i.op) s!"{f.name}: inst {i.id}: unsupported timed opcode/control flow"
       if let .structFieldVal value field := i.op then

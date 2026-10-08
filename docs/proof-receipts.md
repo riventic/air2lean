@@ -101,7 +101,7 @@ sampled 8192 MiB RSS threshold, single-thread Lean setting, and process-group cl
 Their limitations remain exactly those documented in build-budgets.md. Receipt hashing
 and verification use streaming reads and explicit per-file/inventory limits; they are
 not another compiler process controller or incremental build cache. JSON is capped at
-64 MiB/64 nesting levels, with duplicate keys and oversized/nonfinite numbers rejected.
+256 MiB/64 nesting levels, with duplicate keys and oversized/nonfinite numbers rejected.
 Identity files are capped at 512 MiB each, 30000 files and 16 GiB per inventory. The
 remaining inventory allowance limits each streaming read; excess bytes stop hashing
 immediately rather than being checked after the whole inventory is consumed.

@@ -201,6 +201,10 @@ jobs:
           python3 -B scripts/mutation-map.py check
           python3 -B tests/roadmap/mutation-map/mutants.py
 
+      # P02: the report script surfaces Lean errors and open obligations (no Lean is run).
+      - name: Verification condition report script regressions
+        run: python3 -B -m unittest discover -s tests/roadmap/vcs -p 'test_*.py' -v
+
       # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
       - name: Build-mode qualification records
         run: |
@@ -486,13 +490,15 @@ jobs:
 
       # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
       # client proofs that reading them is `.unspecified`, and rejection of every other
-      # `undefined` operand. Hand-written AIR only.
+      # `undefined` operand. A store of `undefined` to a local: byte locals whose undefined
+      # parts read as `.unspecified`, copied without decoding. Hand-written AIR only.
       - name: Undefined constant operands
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
+          bash tests/roadmap/undef-locals/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
@@ -571,6 +577,23 @@ jobs:
         if: ${{ matrix.full && !matrix.mutate }}
         run: lake env lean tests/roadmap/progress/Total.lean
 
+      # Opt-in timed interpreter only: no translated source call, OS clock or futex backend.
+      - name: Deadline case contracts and solver budget path
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Conc.TimedBudget ZigLean.Conc.TimedCall
+          lake env lean tests/roadmap/deadline-cases/Contracts.lean
+          lake env lean --run tests/roadmap/deadline-cases/Runtime.lean
+          # Boundary and recheck mutants of the budget path must fail its soundness proofs.
+          python3 -B tests/roadmap/deadline-cases/mutations.py
+
+      # Translated worker idle loop: safety under every schedule, progress only under the
+      # explicit THR-09 fairness premise, and a starving schedule (docs/progress-hints.md).
+      - name: Worker idle-loop safety, fairness-premised progress and starvation
+        if: ${{ matrix.full && !matrix.mutate }}
+        run: bash tests/roadmap/idle-loops/check.sh
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: matrix.full && matrix.zig == '0.16.0'
@@ -631,6 +654,14 @@ jobs:
           python3 -B tests/roadmap/byte-sentinel/static.py
           bash tests/roadmap/byte-sentinel/check.sh
 
+      - name: Sentinel reallocation, raw allocator contracts and realloc recognition
+        if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_SENTINEL_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_SENTINEL_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_SENTINEL_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: bash tests/roadmap/sentinel-realloc/check.sh
+
       # Selected policy correspondence on the native 64-bit reference CI host. Keep
       # reports in RUNNER_TEMP, outside cached .lake directories; no artifact upload.
       - name: Allocation policy proofs, correspondence and semantic mutations
@@ -644,6 +675,11 @@ jobs:
           python3 tests/roadmap/allocation-policy/static.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/static.log"
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
+
+      # M01: allocator identity, arena/fixed-buffer policies and the arena client proof.
+      - name: Allocator identity proofs and model regressions
+        if: ${{ !matrix.mutate }}
+        run: bash tests/roadmap/allocator-identity/check.sh
 
       # C01's checked source/export/proof fragment is qualified on 0.16.0.
       # Fresh exports use the pinned patched compiler; native tests use stock Zig.
@@ -931,7 +967,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/vcs"
-          lake build ZigLean.VC Proofs.Pointers.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
+          lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
       - name: Result verification condition regressions
         if: ${{ !matrix.mutate }}
@@ -950,6 +986,23 @@ jobs:
         run: |
           set -euo pipefail
           lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
+
+      # Reflect committed loop-free translations into the VC AST; loops must request invariants.
+      - name: Automatic verification condition extraction regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+
+      - name: Verification condition report regressions
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          python3 -B scripts/vc-report.py --json \
+            --import Proofs.Basic.Gen --import Proofs.Pointers.Gen --import Proofs.Errors.Gen \
+            --namespace Basic --namespace Pointers --namespace Errors \
+            tests/roadmap/vcs/Extract.lean > "$RUNNER_TEMP/vcs/report.json"
+          diff -u tests/roadmap/vcs/report.json "$RUNNER_TEMP/vcs/report.json"
 
       # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
       # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).

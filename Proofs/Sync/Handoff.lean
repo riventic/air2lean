@@ -3384,7 +3384,7 @@ theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0) (h4 : W
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, by omega, by omega, by rw [hk]; decide⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
-    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩⟩, ?_, ?_⟩
+    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
 

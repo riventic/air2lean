@@ -161,7 +161,12 @@ theorem create_cost {a : Allocator} {size align : Nat} {m m' : Mem} {r : Except 
       MonadStateOf.set] at h
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨rfl, rfl⟩
-  · simp [Allocator.create, allocBytes, rawAlloc, alloc, hns, hc, zig_unfold, set, StateT.set,
+  by_cases ho : m.oracleDenies size = true
+  · simp [Allocator.create, allocBytes, rawAlloc, hns, hc, ho, zig_unfold, set, StateT.set,
+      MonadStateOf.set] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨rfl, rfl⟩
+  · simp [Allocator.create, allocBytes, rawAlloc, alloc, hns, hc, ho, zig_unfold, set, StateT.set,
       MonadStateOf.set] at h
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨rfl, by simp [Mem.liveHeap, List.countP_append, Block.retained, allocated]⟩

@@ -118,6 +118,24 @@ class ReceiptTests(unittest.TestCase):
         normalized = NORMALIZER["normalize"](changed, checked_profile=receipt, actual=True)
         self.assertEqual(normalized["body"][0]["profile"], changed["body"][0]["profile"])
 
+    def test_null_vector_index_matches_golden_without_field_but_lanes_stay_observable(self):
+        pointer = {"k": "ptr", "size": "one", "child": 0, "host_size": 4, "bit_offset": 3}
+        golden = copy.deepcopy(CURRENT)
+        golden["types"].append(dict(pointer))
+        fresh = copy.deepcopy(CURRENT)
+        fresh["types"].append(dict(pointer, vector_index=None))
+        self.assertEqual(NORMALIZER["normalize"](fresh), NORMALIZER["normalize"](golden))
+        for lane in (2, "runtime"):
+            lane_ptr = copy.deepcopy(CURRENT)
+            lane_ptr["types"].append(dict(pointer, vector_index=lane))
+            normalized = NORMALIZER["normalize"](lane_ptr)
+            self.assertEqual(normalized["types"][-1]["vector_index"], lane)
+            self.assertNotEqual(normalized, NORMALIZER["normalize"](golden))
+        # Only a type entry's field is dropped; the same key elsewhere stays observable.
+        nested = copy.deepcopy(CURRENT)
+        nested["body"].append({"vector_index": None})
+        self.assertIn("vector_index", NORMALIZER["normalize"](nested)["body"][-1])
+
     def test_unsupported_golden_schema_and_profile_are_not_stripped(self):
         receipt = json.loads(self.report.read_text())["metadata"]["profile"]
         changed = copy.deepcopy(CURRENT)

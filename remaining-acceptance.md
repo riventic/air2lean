@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 14 complete, 57 partial, 6 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 18 complete, 53 partial, 6 open and 11 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -64,6 +64,8 @@ Classification: partial.
 
 preserve their control-flow meaning, target scope and captured values. Add loop invariants and termination measures where applicable. Acceptance: nested dispatch loops and legal exits translate; malformed control-flow targets are rejected.
 
+Bounded progress ([PR124](https://github.com/riventic/air2lean/pull/124)): nested legal exits (two-level break, outer continue, inner return, inner loop result as outer selector, memory captures) translate; nested dispatches to an enclosing ordinary loop, a sibling loop-switch, itself, a non-control instruction or an absent ID, and wrong-kind/missing br/repeat targets are rejected; a loop invariant and termination measure are proved for the generated nested countdown machine (`Zig.loop_spec`). Remaining: invariants/measures are hand-written per client; unrestricted control flow is not implied.
+
 ## L04 — Pointer-form try
 
 Classification: partial.
@@ -100,7 +102,7 @@ Classification: partial.
 
 target-qualified lane stride, padding, packed bool addressing and element access metadata. Acceptance: memory round trips and lane writes preserve unrelated lanes; vector layout matches compiler probes.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): bit-packed `@Vector(n, uW/iW/fW)` memory layout as the LLVM backend lays it out (`Vec.packedEnc`); ZigLean/VecMem.lean proves the integer round trip at any width, LawfulEnc of the packed encodings and lane-write frames on lanes, on the image and through memory; the checker admits non-byte or ABI-padded lanes only for stage2_llvm profiles; stock Zig 0.16.0 probe images (aarch64-macos, CI x86_64-linux) match the model line for line. Remaining: lane pointers into bit-packed vectors, bool-lane pointers and other backends stay rejected.
+Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): bit-packed `@Vector(n, uW/iW/fW)` memory layout as the LLVM backend lays it out (`Vec.packedEnc`); ZigLean/VecMem.lean proves the integer round trip at any width, LawfulEnc of the packed encodings and lane-write frames on lanes, on the image and through memory; the checker admits non-byte or ABI-padded lanes only for stage2_llvm profiles; stock Zig 0.16.0 probe images (aarch64-macos, CI x86_64-linux) match the model line for line. [PR124](https://github.com/riventic/air2lean/pull/124) (soundness fix): the exporter writes `vector_index` (lane, "runtime" or null) for every bit-pointer and the checker rejects lane pointers wherever they appear, accepting a field-less bit-pointer only as a packed `struct_field_ptr` result. Remaining: lane pointers into bit-packed vectors, bool-lane pointers and other backends stay rejected.
 
 ## L10 — Error values and error layouts
 
@@ -120,7 +122,7 @@ Classification: partial.
 
 explicit initial-state parameters or contracts for external storage; qualified initialization and mutable-global ownership. Acceptance: generated proofs expose external initial-state assumptions and initialization order. No absent value is silently replaced with a default.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): a pointer-, union- and error-free named extern global becomes a field of a generated `ExternInit` and `mem0` takes `(ext : ExternInit)`; other externs are rejected; wholly undefined globals stay explicit undefined bytes; partly undefined global initializers, previously read as 0/false, are rejected (soundness fix); generated-client proofs over `mem0 ext`. Partly undefined constant operands are explicit undefined bytes or rejected (soundness fix). Remaining: TLS, pointer-bearing externs, source/native correspondence of extern storage, and wholly undefined stores to Locals fields (still defaulted).
+Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): a pointer-, union- and error-free named extern global becomes a field of a generated `ExternInit` and `mem0` takes `(ext : ExternInit)`; other externs are rejected; wholly undefined globals stay explicit undefined bytes; partly undefined global initializers, previously read as 0/false, are rejected (soundness fix); generated-client proofs over `mem0 ext`. Partly undefined constant operands are explicit undefined bytes or rejected (soundness fix). Wholly undefined stores to locals are dead stores or byte locals whose undefined bytes read as `.unspecified` ([PR124](https://github.com/riventic/air2lean/pull/124), soundness fix). Remaining: TLS, pointer-bearing externs and source/native correspondence of extern storage.
 
 ## L13 — Volatile and device effects
 
@@ -152,15 +154,19 @@ per-thread instances, initialization, address identity and lifetime rules. Accep
 
 ## C03 — Yield and spin hints
 
-Classification: partial.
+Classification: complete.
 
 map source operations to target-qualified scheduler/environment effects. Model a spin hint without assuming it guarantees progress. Acceptance: worker idle loops translate; safety proofs survive arbitrary schedules and progress claims require separate fairness premises.
 
+Completed in [PR124](https://github.com/riventic/air2lean/pull/124): the retained 0.16.0 `progress.idle` worker loop (acquire load, `spinLoopHint`, `Thread.yield`) translates unchanged (byte-compared in CI); `idle_safe` holds for every oracle and fuel; `idle_progress` needs the explicit fairness premise `Cooperative` (THR-09); `idle_starves` exhibits a legal schedule under which the spinning, yielding worker never returns, so hints are not progress guarantees. Skipped-loop and relaxed-publication mutants race. Target qualification of the hints is in docs/progress-hints.md.
+
 ## C04 — Clocks deadlines and timeout races
 
-Classification: partial.
+Classification: complete.
 
 explicit monotonic time observations, deadlines, timeout outcomes and wake-versus-timeout races. Distinguish monotonic duration clocks from wall-clock timestamps. Acceptance: deadline boundary, timeout, wake-before-timeout and wake-at-timeout cases have contracts and tests. Solver budget paths become provable.
+
+Completed in [PR124](https://github.com/riventic/air2lean/pull/124): tests/roadmap/deadline-cases states deadline boundary, timeout, wake-before-timeout and wake-at-timeout as kernel/interpreter theorems over explicit awake monotonic observations, with runtime cases. The opt-in `ZigLean.Conc.TimedBudget` solver budget path has distinct monotonic timestamp, monotonic duration and wall-clock types; `*_sound` holds for every oracle, fuel, wake schedule and monotone clock, and the one liveness theorem takes an explicit clock-reaches-deadline premise. Boundary and no-recheck mutants are rejected by the soundness proofs. Scope: the selected timed interpreter; no OS clock, cancellation or native correspondence.
 
 ## C05 — Cancellation and spurious wakeups
 
@@ -200,9 +206,11 @@ separate memory-order semantics, including a qualified SC order and the actual r
 
 ## C11 — Weak CAS and message precision
 
-Classification: partial.
+Classification: complete.
 
 qualified spurious failure, explicit write-event tracking and a policy/model for mixed-size atomic accesses. Acceptance: retry loops remain correct under permitted failures; modification-order tests include repeated equal values and overlapping sizes.
+
+Completed in [PR124](https://github.com/riventic/air2lean/pull/124): `locIdx` turns every plain write that did not happen before the newest message into its own write event (`plainSince`), so repeated equal values are distinct modification-order entries; overlapping atomic accesses of another offset or size are `.unspecified` (documented policy in docs/weak-cas.md). tests/roadmap/weak-cas/Messages.lean (kernel `decide +kernel` and runtime, in the weak-CAS gate) covers ABA values, coherent read pairs, CAS on an older equal message, release sequences through equal values and narrower/wider overlapping atomics; the qualified weak-CAS retry loops stay correct under permitted spurious failure. Proof invariants carry `PlainLe`.
 
 ## C12 — Memory-model adequacy
 
@@ -230,6 +238,8 @@ Classification: partial.
 
 allocator identity, allocation ownership and qualified policies for arenas, fixed buffers and custom allocators. Preserve their actual free/reset behavior. Acceptance: cross-allocator frees are checked where invalid; arena reset invalidates exactly its blocks; a production-style allocator client has a proof.
 
+Bounded progress ([PR124](https://github.com/riventic/air2lean/pull/124)): blocks record their owning allocator (`.owned a`); arena and fixed-buffer policies follow the Zig 0.16 sources; cross-allocator free/destroy/remap is `.illegal`; reset/deinit end exactly the arena's blocks; a request-scoped arena session client is proved for every failure policy. Remaining: the translator does not route `std.heap` arena/fixed-buffer calls (the client is hand-written), owned blocks get fresh model addresses, growing remap fails, and custom allocators are not modelled.
+
 ## M02 — Successful resize remap and realloc
 
 Classification: partial.
@@ -242,11 +252,15 @@ Classification: partial.
 
 parameterized size/resource bounds and arbitrary permitted failure decisions, including several failures in one run. Acceptance: resource-independent safety statements quantify over permitted outcomes; large valid engine fixtures do not fail solely because of the model's fixed cap.
 
+Bounded progress ([PR124](https://github.com/riventic/air2lean/pull/124)): `Mem.allocPolicy` adds an arbitrary failure oracle over (attempt, bytes) and an optional live-heap budget; the default has no fixed cap (the differential harness selects its 1 MiB cap explicitly); `appendEach_anyPolicy` proves a translated ArrayList append client for every policy with any number of failures in one run. Remaining: oracle/budget policies have no native differential counterpart, and large real engine fixtures are not yet exercised.
+
 ## M04 — Sentinel and lower-level allocator APIs
 
 Classification: partial.
 
 export required comptime parameters, extend selected allocator contracts and account for sentinel bytes during allocation, growth and free. Acceptance: sentinel invariants hold on success and failure; supported raw allocation APIs have alignment and size preconditions.
+
+Bounded progress ([PR124](https://github.com/riventic/air2lean/pull/124)): `realloc` of alignment-1 nonsentinel `[]u8` (Zig 0.16.0) is recognized and modelled; `Triple.reallocSentinel` keeps the sentinel invariant on success and failure for every policy and remap mode, with an append client; raw vtable alloc/resize/remap/free contracts require power-of-two alignment, nonzero size and the whole live block. Remaining: other item types, alignments and versions of `realloc`; raw vtable calls are contracts only, not recognized by the translator.
 
 ## M05 — Address reuse and provenance contracts
 
@@ -370,9 +384,11 @@ associative/commutative normalization, frame inference, array splitting and proo
 
 ## P02 — Verification condition generation
 
-Classification: partial.
+Classification: complete.
 
 compositional verification conditions for safety, functional results, memory effects and error returns. Expose unsolved obligations without inventing invariants. Acceptance: a contracted loop-free function receives complete checkable obligations; loop bodies request explicit invariants and variants.
+
+Completed in [PR124](https://github.com/riventic/air2lean/pull/124): `#vc_extract` reflects loop-free generated `Zig.Result`/`Zig.MemM` functions into the VC AST with a kernel-checked `vc_f_source` equality and transported soundness; `vc_gen` splits a contract into tagged safety, result, memory and error obligations (the complete obligations; a wrong contract leaves a refuted goal); generated loops yield explicit "invariant + variant required" requests; recursion, unknown operations and uncontracted calls are refused with a reason; scripts/vc-report.py reports per function (CI golden). Scope: the accepted fragment of docs/vcs.md (no heap splitting; tagged-union dispatch, stack allocation, packed fields, vectors, memset/memmove and allocator calls need a supplied contract).
 
 ## P03 — Loop recursion and arithmetic tactics
 
@@ -508,7 +524,7 @@ Classification: partial.
 
 identify those remaining trusted stages, add independent export validation, and investigate source/IR or IR/binary correspondence for the selected subset. Acceptance: the trust report distinguishes kernel-checked preservation, independently checked metadata and unverified compiler/export/backend assumptions.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): scripts/trust-report.py renders docs/trust-report.md from assurance/trust-stages.json and classifies every pipeline stage as kernel-checked, independently-checked-metadata or unverified-assumption; check fails on a stale report, a missing stage or class, an uncited premise, a missing checker/test or a check CI does not run. scripts/validate-air.py re-checks exported AIR JSON without the Lean decoder (ids, operand scoping, targets, terminators, type/global references, value-type cycles, per-version tag set); every committed golden AIR file passes. Known gap recorded: wholly undefined stores to Locals fields are still defaulted. Remaining: compiler/export/backend semantic preservation is unproved; decode, canonicalization, normalization, checker and emitter remain unverified assumptions.
+Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): scripts/trust-report.py renders docs/trust-report.md from assurance/trust-stages.json and classifies every pipeline stage as kernel-checked, independently-checked-metadata or unverified-assumption; check fails on a stale report, a missing stage or class, an uncited premise, a missing checker/test or a check CI does not run. scripts/validate-air.py re-checks exported AIR JSON without the Lean decoder (ids, operand scoping, targets, terminators, type/global references, value-type cycles, per-version tag set); every committed golden AIR file passes. The recorded undefined-local-store gap is fixed in [PR124](https://github.com/riventic/air2lean/pull/124). Remaining: compiler/export/backend semantic preservation is unproved; decode, canonicalization, normalization, checker and emitter remain unverified assumptions.
 
 ## V04 — Theorem dependency and assumption auditing
 

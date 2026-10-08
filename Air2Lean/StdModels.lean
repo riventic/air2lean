@@ -16,7 +16,7 @@ namespace Air2Lean
 
 /-- A function of `std.mem.Allocator` that the model has (`ZigLean/Mem/Alloc.lean`). -/
 inductive AllocFn where
-  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap
+  | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap | realloc
   deriving BEq, Repr
 
 /-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
@@ -101,6 +101,7 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.join" .join #["joinC"] through017,
   threadModel "Thread.yield" .yield #["threadYieldC"] through017,
   threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] through017,
+  allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
   threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
   threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] through017,
   threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] through017,

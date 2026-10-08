@@ -1,24 +1,42 @@
 # Allocation failure and request-size policies (M03)
 
-`Zig.AllocPolicy` is a model environment parameter in `Mem.allocPolicy`. It has a
-per-request `maxBytes` cap and a finite list of zero-based nonzero allocation attempt
-indices that fail. `Mem.failAt` remains an additive legacy failure index. All failures
-leave the caller's existing heap intact; each attempted nonzero request increments
-`Mem.allocs`, including cap failures. Zero-byte requests do not allocate or consume a
-policy decision. Duplicate indices have no extra effect.
+`Zig.AllocPolicy` is a model environment parameter in `Mem.allocPolicy`. A nonzero request
+fails when any of these selects it:
 
-The default policy (`maxBytes = 1048576`, `failures = []`) reproduces the original runtime.
-To select a 2 MiB cap and failures at attempts 0 and 2:
+- `Mem.failAt`, the additive legacy failure index;
+- `maxBytes`, a per-request cap;
+- `failures`, a finite list of zero-based attempt indices;
+- `fails`, an arbitrary failure oracle over (attempt index, request bytes);
+- `budget`, an optional bound on live heap bytes including the request
+  (`Mem.liveHeapBytes`, summed only when a budget is set).
+
+All failures leave the caller's existing heap intact. Each attempted nonzero request
+increments `Mem.allocs`, including failed ones. Zero-byte requests do not allocate or consume
+a policy decision. Duplicate indices have no extra effect.
+
+The default policy has no failures and no fixed cap (`maxBytes = unboundedAllocBytes = 2^64`,
+so every `usize` request passes the size check). The model therefore never rejects a valid
+large request only because of a model constant. Lean represents every allocated byte, so a Lean runtime run of a very large request under
+the default policy can exhaust host memory. Runners that accept untrusted sizes select an
+explicit cap or budget. The differential harness keeps its legacy
+1 MiB cap as an explicit choice: `AllocPolicy.harness` in `tests/diff/Diff.lean`, and
+`TestAllocator.max_alloc_bytes` natively. It does not use the model default. To select a 2 MiB cap, failures at attempts 0
+and 2, every odd attempt above 64 bytes and a 16 MiB live-heap budget:
 
 ```lean
-let initial : Zig.Mem := { allocPolicy := { maxBytes := 2097152, failures := [0, 2] } }
+let initial : Zig.Mem := { allocPolicy :=
+  { maxBytes := 2097152, failures := [0, 2], fails := fun i n => i % 2 == 1 && 64 < n,
+    budget := some 16777216 } }
 ```
 
-For every finite execution prefix, a finite list can represent its permitted failure
-decisions. The default beyond the list is success subject to the request cap and legacy
-index. This does not model an arbitrary infinite failure function or a total live-byte
-budget. It does not qualify native malloc, a custom allocator's policy, successful resize,
-address reuse or multiple allocator identities. Those remain separate M01/M02/M05 work.
+The finite list is a special case of the oracle. `AllocPolicy.asOracle` moves the cap and
+the list into `fails`. `allocDenied_asOracle` and `rawAlloc_asOracle` (`ZigLean/Sep/Alloc.lean`)
+prove that every `usize` request gets the same decision, outcome and memory apart from
+the policy field. `rawAlloc_eq` characterizes every `rawAlloc` run: it either fails after
+only counting the attempt, or allocates a new heap block. Policies do not qualify native malloc, a
+custom allocator's policy, successful resize or address reuse. Those remain separate M02/M05
+work. Allocator identities, arenas and fixed buffers (M01) are in
+[allocator-identity.md](allocator-identity.md); arena requests use this policy.
 
 `rawAlloc_run` and existing `create_run`/separation triples now quantify over the policy
 as part of arbitrary initial memory. `releaseAttempt_run` and `releaseAttempts_run` state
@@ -29,6 +47,23 @@ positive alignment and `Mem.Seq`; the theorem does not assume resources or succe
 These definitions passed the coordinator's kernel build at revision
 `853cef53211d08a62e368739160f56dea6a3408e`; the qualification record identifies the
 selected local profile and remaining review/regression gates.
+
+`Lists.appendEach` (`Proofs/Lists/Policy.lean`) calls the translated
+`ArrayListUnmanaged(u32).append` once per value and continues after `OutOfMemory`.
+`appendEach_run` and its explicit form `appendEach_anyPolicy` hold for every policy `P` and
+legacy index `f`, with no success or resource premise. The client returns one actual
+result per value, never a panic or `.illegal`. Each result is `ok` or `OutOfMemory`. The
+final well-formed list `alist` is the original items followed by exactly the successfully
+appended values, with the frame and `Mem.Seq` preserved. A failure leaves the list unchanged
+(`append_run`), and any number of failures can occur in one run.
+
+`tests/roadmap/allocation-policy/Oracle.lean` is a Lean-only runtime check. It covers
+index and size oracles, list-to-oracle agreement, a budget that is freed and reused, the
+uncapped default against the explicit harness cap, and a translated `Lists.dupe` of
+1 MiB + 1 bytes. That request succeeds by default and fails under the harness cap. It also
+runs `appendEach` with three failures before successful appends. These checks have no
+native counterpart because `TestAllocator` has neither an oracle nor a budget. `check.sh`
+runs this check after the ten native comparisons.
 
 The native differential `TestAllocator` uses the same explicit policy, over page allocation,
 and still reports actual harness allocation failure separately. Existing lists inputs retain
@@ -46,7 +81,7 @@ the host can satisfy a request. Zero-length allocations bypass policy in both mo
 
 The standalone fixture compares ten exact cases: legacy success/failure, several failures,
 combined legacy/trace failure, duplicate indices, all failures, cap equality/overflow,
-raised-cap success above 1 MiB, default-cap rejection, and zero-size allocation. Each
+raised-cap success above 1 MiB, harness-cap rejection (case `default-cap`, the legacy 1 MiB cap), and zero-size allocation. Each
 successful block is freed and each run checks attempt count and absence of live blocks.
 Small existing `sumRange` fixtures separately exercise the JSON object transport.
 
@@ -91,3 +126,20 @@ reference host. `AIR2LEAN_ALLOCATION_REPORT_DIR` retains raw Lean/native JSON co
 CI sets it under `RUNNER_TEMP` and retains run logs there, outside the cached `.lake`
 directories. It does not introduce an artifact upload or publish a qualified claim from
 an incomplete gate.
+
+## Sentinel bytes and raw allocator preconditions (M04)
+
+Sentinel bytes count in every request. `allocSentinel(u8, n, s)` asks for `n + 1` bytes;
+sentinel reallocation (`Zig.Allocator.reallocSentinel`, the `len + 1`-byte absorbed-buffer
+pattern over the recognized 0.16.0 byte `realloc`) asks for `n + 1` bytes and stores the
+sentinel at `n`; `freeSentinel` releases all `len + 1` bytes. The cap therefore applies to
+the request including the sentinel, and every attempt consumes one policy decision.
+`Triple.reallocSentinel` (`ZigLean/Sep/SentinelRealloc.lean`) proves for every policy, cap,
+failure trace and remap mode that success is a whole sentinel buffer of the new length and
+failure is `OutOfMemory` with the original block, bytes and sentinel intact.
+
+The raw interface contracts (`ZigLean/Sep/RawAlloc.lean`) require an alignment `2 ^ k`,
+`k < 64`, a nonzero length, and for resize/remap/free the whole live heap block allocated
+with that alignment; violations are `.illegal`. Allocation returns an aligned block or fails
+without changing the heap. These are model contracts, not translator recognition: the raw
+calls are `inline` vtable dispatch. See `tests/roadmap/sentinel-realloc/README.md`.

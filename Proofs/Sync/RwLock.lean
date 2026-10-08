@@ -58,7 +58,7 @@ theorem Inv.repart {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi :
   have hown_t : L.own G m t = L.part (G t) ∪ L.held (G t) := own_live hjt
   refine ⟨hown ▸ ho, fun u => ?_, fun u hu => ?_, fun u hu => hi.live u (by rw [← hphu]; exact hu),
     hi.blk, ?_, fun u v hu hv => hi.one u v (by rw [← hphu]; exact hu) (by rw [← hphu]; exact hv),
-    ⟨hi.loc.only, hi.loc.ok⟩, fun u => ?_, hi.wfpW (fun u h => by rw [← hphu]; exact h),
+    ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => ?_, hi.wfpW (fun u h => by rw [← hphu]; exact h),
     fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
     hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_⟩
   · unfold upd; split

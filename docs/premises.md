@@ -80,8 +80,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) |
-| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
+| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
@@ -141,13 +141,15 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### ALC-02 — Allocation failure and request-cap policy
 
 - Kind: environment.
-- Statement: `Mem.allocPolicy` (per-request `maxBytes`, finite failure indices) and the legacy
-  `Mem.failAt` decide `OutOfMemory`. Theorems over arbitrary `Mem` quantify over every
-  policy; a theorem that fixes initial memory fixes the policy. The cap is not a resource
-  guarantee of the host.
+- Statement: `Mem.allocPolicy` (per-request `maxBytes`, finite failure indices, an arbitrary
+  failure oracle `fails` and an optional live-heap `budget`) and the legacy `Mem.failAt`
+  decide `OutOfMemory`. The default has no fixed cap; the differential harness selects its
+  1 MiB cap explicitly. Theorems over arbitrary `Mem` quantify over every policy; a theorem
+  that fixes initial memory fixes the policy. Neither cap nor budget is a resource guarantee
+  of the host.
 - Derived from: `ZigLean.Mem.Alloc`; tokens `[Aa]llocPolicy.maxBytes`, `[Aa]llocPolicy.failures`,
-  `releaseAttempt`. The `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct
-  update) do not select it.
+  `[Aa]llocPolicy.fails`, `[Aa]llocPolicy.budget`, `releaseAttempt`. The
+  `Mem.allocPolicy`/`Mem.failAt` fields alone (for example in a struct update) do not select it.
 - Sources: [allocation-policy.md](allocation-policy.md), [allocation-policy-report.json](allocation-policy-report.json).
 
 <a id="alc-03"></a>
@@ -168,6 +170,44 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   offset `n`. The payload is undefined. Only Zig 0.16.0 with an explicit `sentinel_byte` is admitted.
 - Derived from: `ZigLean.Sep.Sentinel`; tokens `allocSentinel`, `freeSentinel`.
 - Sources: [std-models.md](std-models.md#allocator-model), [byte sentinel README](../tests/roadmap/byte-sentinel/README.md).
+
+<a id="alc-05"></a>
+### ALC-05 — Byte realloc and sentinel reallocation
+
+- Kind: environment.
+- Statement: `realloc(s, n)` of an alignment-1 nonsentinel `[]u8` (Zig 0.16.0) tries the
+  selected byte-remap policy, then allocates `n` bytes, copies the retained prefix
+  representation and poisons and frees the old block; allocation failure leaves `s` intact.
+  Sentinel reallocation is the client composition over the absorbed `len + 1`-byte buffer
+  with the sentinel stored at the new length; Zig rejects a sentinel-typed `realloc`.
+- Derived from: `ZigLean.Sep.SentinelRealloc`; tokens `realloc`, `reallocSentinel`, `appendSentinel`.
+- Sources: [std-models.md](std-models.md#allocator-model), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
+
+<a id="alc-06"></a>
+### ALC-06 — Raw allocator interface contracts
+
+- Kind: environment.
+- Statement: the raw vtable calls are modelled by contract only (`vtableAlloc`, `vtableResize`,
+  `vtableRemap`, `vtableFree`); the translator does not recognize them. Each requires an
+  alignment `2 ^ k` with `k < 64` and a nonzero length; resize, remap and free also require
+  the whole live heap block allocated with that alignment. A violation is `.illegal`.
+- Derived from: `ZigLean.Sep.RawAlloc`; tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
+- Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
+
+<a id="alc-07"></a>
+### ALC-07 — Allocator identity, arena and fixed-buffer policies
+
+- Kind: environment.
+- Statement: `Mem.allocators[a]` is allocator `a`; its blocks have kind `.owned a`. A free,
+  destroy or remap through one allocator of another's block is `.illegal`. An arena request is
+  an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end exactly the
+  arena's blocks. A fixed buffer pads from its base address, fails past its capacity and gives
+  bytes back only for its last allocation. Owned blocks get fresh model addresses; growing
+  remap fails; reset records no race-check access. The translator does not route
+  `std.heap` arena or fixed-buffer calls.
+- Derived from: `ZigLean.Mem.Owned`, `ZigLean.Sep.Owned`, `ZigLean.Sep.ArenaClient`; tokens
+  `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
+- Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
 
 ## Thread creation and scheduling
 
@@ -239,7 +279,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Thread.yield` and `spinLoopHint` are scheduling opportunities only. `yield`
   may return `SystemCannotYield`. No fence, happens-before edge or fairness follows. Total
-  results hold only for the finite single-task client in `ZigLean.Conc.Total`.
+  results hold for the finite single-task client in `ZigLean.Conc.Total`; any other
+  termination claim names an explicit fairness premise such as THR-09.
 - Derived from: `ZigLean.Conc.Progress`, `ZigLean.Conc.Total`; tokens `spinLoopHint`, `threadYield`.
 - Sources: [progress-hints.md](progress-hints.md).
 
@@ -254,6 +295,19 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
 - Sources: [proofs.md](proofs.md), [rwlock-contracts.md](rwlock-contracts.md).
 
+
+<a id="thr-09"></a>
+### THR-09 — Eventually cooperative schedule (progress premise)
+
+- Kind: environment.
+- Statement: `Cooperative o`: from some oracle index on, every choice of `o` is option 0.
+  The scheduler then runs the lowest-numbered ready thread, and each atomic read reads the
+  newest message. It is a hypothesis of a progress theorem, never a property of the model:
+  every oracle remains a legal schedule, and safety theorems quantify over all of them.
+  Spin hints and `Thread.yield` do not establish it (`IdleLoop.Client.idle_starves`).
+- Derived from: token `Cooperative`.
+- Sources: [progress-hints.md](progress-hints.md#worker-idle-loop),
+  `tests/roadmap/idle-loops/IdleLoop/Theorems.lean`.
 ## Memory ordering
 
 <a id="ord-01"></a>
@@ -262,9 +316,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: Each atomic location keeps a modification order of messages with release
   clocks. Reads may see any message not older than a happens-before or own observation.
-  RMWs read a message with no RMW after it. The model admits more outcomes than RC11 (a plain
-  write of the same value, read views not transferred through release/acquire), never fewer.
-  Atomic pointees are integers, enums, bools or packed structs.
+  RMWs read a message with no RMW after it. Messages are write events (equal values stay
+  distinct; a plain write of an equal value is its own message). The model admits more outcomes
+  than RC11 (no SC order, read views not transferred through release/acquire), never fewer.
+  Overlapping atomic accesses of another offset or size are `.unspecified`. Atomic pointees are
+  integers, enums, bools or packed structs.
 - Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
@@ -315,7 +371,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   timed scheduler lets mismatch, wake, timeout and spurious returns compete through an
   oracle. `NoCancellation` is an explicit premise. No OS clock correspondence is claimed.
 - Derived from: `ZigLean.Time`, `ZigLean.Conc.Timed*`; tokens `TimedSched`, `AwakeEnvironment`, `NoCancellation`.
-- Sources: [deadline-runtime.md](deadline-runtime.md), [deadline-futex-design.md](deadline-futex-design.md).
+- Sources: [deadline-runtime.md](deadline-runtime.md), [deadline-futex-design.md](deadline-futex-design.md), [deadline-cases.md](deadline-cases.md).
 
 ## Environment operations
 

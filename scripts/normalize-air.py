@@ -56,6 +56,11 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
     for key, item in value.items():
         if root and (key == "zig_version" or (key == "target_endian" and item == "little")):
             continue
+        # A packed field bit-pointer's `"vector_index": null` (the exporter's explicit "not a
+        # lane pointer") is the same AIR as a golden that predates the field. A lane number or
+        # "runtime" stays observable.
+        if type_entry and key == "vector_index" and item is None:
+            continue
         identity = key in ("func", "comptime_fn") or (key == "name" and (root or type_entry))
         if identity:
             result[key] = IDENTITY_MARKER.sub(r"__\1_N", item) if isinstance(item, str) else item

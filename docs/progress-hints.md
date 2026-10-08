@@ -68,11 +68,67 @@ client starts from the default memory `{}` and has exactly one ready task, no
 children, retries, blocking operations or memory accesses. Its remaining hint
 count decreases at each scheduler turn; the singleton ready set requires no
 fairness assumption. This proves completion of the model fragment, not a source
-export or native program. General fork/join completion and retry-loop termination,
-including scheduler fairness and weak-CAS success assumptions, remain open.
+export or native program. The worker idle loop below terminates only under an
+explicit fairness premise. General fork/join completion, other retry loops and
+weak-CAS success assumptions remain open.
 `tests/roadmap/progress/Total.lean` checks the positive theorem families and a
 symbolic counterexample showing that readiness alone does not imply fair task
 selection. CI kernel-checks it with plain `lake env lean` in full non-mutation rows.
+
+<a id="worker-idle-loop"></a>
+## Worker idle loop
+
+`tests/roadmap/idle-loops` checks the translated `progress.idle` loop
+(`while (@atomicLoad(u32, flag, .acquire) == 0) { spinLoopHint(); Thread.yield() catch {}; }`).
+The AIR is the retained 0.16.0 `x86_64-linux` baseline `ReleaseSafe` export from
+full progress-hint qualifications. Three clean revisions produced byte-identical AIR
+(`provenance.json`). `IdleLoop/Gen.lean` is the unmodified translator output, and the
+gate retranslates and compares it. `wLoop_eq` unfolds one iteration of the
+generated loop: an acquire load (a `pick` stop), then on 0 the spin `yield` stop
+and the two-outcome `Thread.yield` stop, then the loop again.
+
+The translated module has no spawn target. A spawn-target `retarget` therefore runs
+it as thread 1 of a hand-written harness. That harness is not translated source:
+`main` spawns the worker, writes 42 to `data`, release-stores 1 to `flag` and joins.
+After the loop, the worker reads `data` and panics on any value other than 42.
+`data` and `flag` are zero-initialized globals.
+
+| Theorem (`IdleLoop/Theorems.lean`) | Claim | Premises beyond the model |
+| --- | --- | --- |
+| `idle_safe` | For every oracle and fuel: no error (no panic, so no stale `data`; no race; no deadlock). No-result runs remain allowed. | none (only the model premises THR-01/07/08) |
+| `idle_progress` | If `Cooperative o`, every fuel above a bound returns after `main` joins the worker, so the loop exited. | THR-09 |
+| `idle_starves` | Under `favorWorker` (always run the worker while it is ready), no fuel gives a result. The worker spins and yields forever. | none |
+| `progress_needs_premise`, `not_eventuallyReturns` | The progress conclusion fails for some legal oracle, so it is not a model theorem without THR-09. | none |
+
+`Cooperative o` (premise [THR-09](premises.md#thr-09)) says that from some oracle
+index on, every choice is option 0. The scheduler then prefers the lowest-numbered
+ready thread (the setter, `main`). Every atomic read reads the newest message. This
+combines scheduler fairness with eventual store visibility, and the progress proof
+needs both. A fair scheduler alone still lets the worker reread the stale 0 forever.
+Fresh visibility alone still lets `favorWorker` starve the setter.
+`favorWorker_not_cooperative` and `zero_cooperative` show that the premise excludes
+the starving oracle and is satisfiable. The safety theorem has no premise. The
+premise index records THR-09 for the progress theorems only.
+
+Target qualification of the hints is unchanged from the table above. On x86 the
+hint exports `pause`, and on aarch64 it exports `isb`. The checked export is
+`x86_64-linux`, whose AIR has `pause`. Other targets have no spin-specific semantics.
+On every target, `Thread.yield` may return `SystemCannotYield`; the loop discards
+that error. Neither hint promises a handoff, a delay or visibility. `idle_starves`
+is a kernel-checked schedule in which both hints execute every iteration and the
+loop never exits. The client proofs cover the model, not native execution. The
+compiler/exporter correspondence remains trusted (TRU-02), and source/model
+correspondence is not proved.
+
+```sh
+lake build ZigLean air2lean
+bash tests/roadmap/idle-loops/check.sh
+```
+
+The gate checks the AIR and source hashes, retranslates and byte-compares
+`Gen.lean`, and compiles the proof modules. `Check.lean` restates the four claims and
+uses `#guard_msgs` to require only `propext`, `Classical.choice` and `Quot.sound`. CI
+runs the gate in full non-mutation rows.
 
 `tests/roadmap/progress/progress.zig` covers actual source hints, a yield error
 handler and an atomic idle loop. `Runtime.lean` exercises both yield returns,

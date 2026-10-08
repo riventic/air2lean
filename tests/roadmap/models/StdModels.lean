@@ -14,7 +14,7 @@ private def expectError {α : Type} (result : Except String α) (part : String) 
   | .error message => require (decide ((message.splitOn part).length > 1)) message
 
 private def allocFns : Array AllocFn :=
-  #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap]
+  #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
@@ -74,6 +74,8 @@ def main : IO Unit := do
   require (qualifies "Thread.detach" "0.17.0") "a rejection holds in every version"
   expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])
     "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2, 0.16.0"
+  expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
+    "mem.Allocator.realloc qualified Zig 0.16.0"
   -- A translated function cannot reuse a built-in std model name.
   for name in #["Thread.join", "Thread.spawn__anon_4", "Thread.detach", "mem.Allocator.free__anon_9"] do
     expectError (checkProgram #[f, { f with name }]) s!"{name}: translated function conflicts with built-in std model"

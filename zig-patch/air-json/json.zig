@@ -1637,13 +1637,18 @@ const W = struct {
                 // A pointer to one lane of a vector (`&v[i]`): its `host_size` is the vector
                 // length, not bytes, and the lane is only in the type. Before 0.17.0 only a lane
                 // that is not a whole power-of-two number of bytes gets one; 0.17.0 uses it for
-                // every lane.
+                // every lane. A bit-pointer always has the field, `null` for a packed field
+                // pointer: an export without it cannot tell the two apart, so the translator
+                // then accepts only bit-pointers that it sees made.
                 if (info.flags.vector_index != .none) {
                     try w.field("vector_index");
                     if (Compat.isRuntimeLane(info.flags.vector_index))
                         try w.j.write("runtime")
                     else
                         try w.j.write(@intFromEnum(info.flags.vector_index));
+                } else if (info.packed_offset.host_size != 0) {
+                    try w.field("vector_index");
+                    try w.j.write(null);
                 }
             },
             .array => {

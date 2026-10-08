@@ -547,7 +547,6 @@
         "Proofs.Lists.Sep",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
         "Proofs.Threads.Proofs",
@@ -557,16 +556,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "67d18dc374b91615f2e2af01a9830b7467db6573",
-        "tracked_dirty": true
+        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T23:56:39.959873+00:00",
-      "elapsed_seconds": 425.422,
+      "started_utc": "2026-10-07T23:13:07.679183+00:00",
+      "elapsed_seconds": 46.294,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1e86d6af47a3da8110a75bc0e74fac205a68882bb99fcb4f47c6114587e81a2c",
+      "log_sha256": "d1f486e31cbd5d9a2783ccdc0d6b1393ecc0ba010b0d4a187243677a774c9398",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -576,7 +575,6 @@
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
         "Proofs.Lists.Sep",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
@@ -607,18 +605,17 @@
         }
       },
       "sources": {
-        "Proofs.Atomics.MessagePassing": "932dcd2be646d8da7f2253d327c233c2edf8da86adce96680bb5c1bb9d15b029",
+        "Proofs.Atomics.MessagePassing": "5c8c65767d96d1383935a489608fa4149e069963635c0073fc62b18a2560bc67",
         "Proofs.Atomics.Proofs": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
-        "Proofs.Atomics.Relaxed": "b87fe441fa6eeb36d905feb309836db76cec0c2598a6385f93773bc381ef1497",
-        "Proofs.Atomics.Stack": "99fb80f3044e3cf535a48d92b1841f62736825cecb784ba50d4c364565e80a99",
+        "Proofs.Atomics.Relaxed": "561920c5823e70690898d3fbf294fd52acf0e41f50389ec93df1e0d09fab506b",
+        "Proofs.Atomics.Stack": "1d9bcbdd9a703a3bca2db7a4efd6b1b3f0d1b5950497956979567c716c5b1c38",
         "Proofs.Floatops.Proofs": "4f3757b9954f28585419d05752d4626315f96316f9bf4938e2fe00d3b190f9e0",
-        "Proofs.Lists.Append": "123f17bbbc4ee977cdd2d1b2678c5694e5a55c259c4d6ec3fa281ad08ec67ead",
+        "Proofs.Lists.Append": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
         "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
-        "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
         "Proofs.Lists.Sep": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
         "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
         "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
-        "Proofs.Threads.Counter": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
+        "Proofs.Threads.Counter": "a9cff3d6a39ef6485fe4e98e1f75ab683a34c653185d46b940c9f55826c78bcd",
         "Proofs.Threads.Disjoint": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
         "Proofs.Threads.Proofs": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c"
       }
@@ -640,16 +637,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "6fe2dfda14070ec1435a1b7b98bfb1c3ed8b9308",
+        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T10:05:32.720021+00:00",
-      "elapsed_seconds": 26.513,
+      "started_utc": "2026-10-07T23:12:16.904861+00:00",
+      "elapsed_seconds": 50.678,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d0da7a5358f2cab917128af2ef2728e3d238ce107471e84aa6b6788ae08526bb",
+      "log_sha256": "1dbc7ec4dc381b97dcd10895e02c05cd3d1ee0d395be77b6ae729ff28f486db9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -661,15 +658,15 @@
       "gens": {
         "threadsync": {
           "path": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
-          "sha256": "be5f7666af7feaca1523a5d4c7cd50d925fd8d9331209cd444264dd20d6e89ad"
+          "sha256": "09c60ff01c7b482a9f67499f558284b0daf23a2a4d3c25ed4e66b52f02b0fafa"
         }
       },
       "sources": {
-        "Proofs.Threadsync.Deadline": "67333b865ca6c1d573c02884b4311f137c959a397daa93436383ac7ffd1074b6",
-        "Proofs.Threadsync.Handoff": "a6364be6dfda3ddd5c0ce611248406ee55c794e7d4af942d58cb5422ea29a653",
+        "Proofs.Threadsync.Deadline": "01805fb84bb5db4c248073e1908566fa65d8ef54509969d1175969f6be21f83a",
+        "Proofs.Threadsync.Handoff": "03c3db7dad57eb60e3c5b42e99f9db66615eb417bad51ac7b8139608b8f6f0eb",
         "Proofs.Threadsync.Lock": "198e84d1e8de8e4b9008c66fd38217891331771e85ba91b802a77aa350426166",
         "Proofs.Threadsync.Mutex": "157a7780c83bc057fb4260b6982791d31fb8bf994edc3ddc629e7d31894e5577",
-        "Proofs.Threadsync.WaitGroup": "e750bc99ce52c619c5af7687c9091a78de528dee4a428a89da7c5f2b45a2e851"
+        "Proofs.Threadsync.WaitGroup": "33848af591482f9eaed7c62365e2b429cf6ede5cce70f5c97b7ab6683c2b6d8b"
       }
     },
     "0.14.1-linux-floatops": {
@@ -687,16 +684,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "6fe2dfda14070ec1435a1b7b98bfb1c3ed8b9308",
-        "tracked_dirty": true
+        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T10:05:59.276356+00:00",
-      "elapsed_seconds": 1.95,
+      "started_utc": "2026-10-07T23:13:54.118455+00:00",
+      "elapsed_seconds": 3.651,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "7ba9ab4e59402f5e22e64818101ba9af007fc2cba8f02390f216a5521f3aba58",
+      "log_sha256": "6cd3ecb984ef7811e3e976f43ced29e7144143ef180d48a2fbe6a8311463a905",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -722,16 +719,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "67d18dc374b91615f2e2af01a9830b7467db6573",
+        "head": "a3d71df9dca66fe27d815f6530af5342e90fb811",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-07T23:54:34.421002+00:00",
-      "elapsed_seconds": 46.542,
+      "started_utc": "2026-10-07T23:02:33.195067+00:00",
+      "elapsed_seconds": 583.592,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d635f59a95c3ff9520868780fb8dbe834ba0175e5076a87b1a0f99bfc85bc334",
+      "log_sha256": "88c9d3bce23ed2b0113a3a74248a5e2c754c4509eb52fa7ca62908107a386067",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
@@ -754,6 +751,7 @@
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
         "Proofs.Lists.Cost",
+        "Proofs.Lists.Policy",
         "Proofs.Lists.Sep",
         "Proofs.Options.Proofs",
         "Proofs.Pointers.Proofs",
@@ -849,7 +847,7 @@
         },
         "threadsync": {
           "path": "Proofs/Threadsync/Gen.lean",
-          "sha256": "69e4a521fc99d658ba2c4ed657b5e8eb89f2bb367e756a50fbc8def35791a56a"
+          "sha256": "b00f98a5928fe8c3dac4e38a4a3067c2ce2245fbab420db5aa00e9d553f65c7e"
         },
         "variants": {
           "path": "Proofs/Variants/Gen.lean",
@@ -862,10 +860,10 @@
       },
       "sources": {
         "Proofs.Asm.Proofs": "a61fe3cba03c5af350da81b0b65fdcdb24be1f3a87debe7a924c69f0356ff87d",
-        "Proofs.Atomics.MessagePassing": "932dcd2be646d8da7f2253d327c233c2edf8da86adce96680bb5c1bb9d15b029",
+        "Proofs.Atomics.MessagePassing": "5c8c65767d96d1383935a489608fa4149e069963635c0073fc62b18a2560bc67",
         "Proofs.Atomics.Proofs": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
-        "Proofs.Atomics.Relaxed": "b87fe441fa6eeb36d905feb309836db76cec0c2598a6385f93773bc381ef1497",
-        "Proofs.Atomics.Stack": "99fb80f3044e3cf535a48d92b1841f62736825cecb784ba50d4c364565e80a99",
+        "Proofs.Atomics.Relaxed": "561920c5823e70690898d3fbf294fd52acf0e41f50389ec93df1e0d09fab506b",
+        "Proofs.Atomics.Stack": "1d9bcbdd9a703a3bca2db7a4efd6b1b3f0d1b5950497956979567c716c5b1c38",
         "Proofs.Basic.Arith": "b6aba4d80fd8fdb7616934e423614a2dcfc206f3af8b2f2f1f4a9ad10eb987ec",
         "Proofs.Basic.Common": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
         "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
@@ -878,9 +876,10 @@
         "Proofs.Iogroup.Counter": "d733c9426e17453d9cac1410668a1bcf4788f8dcd7063665fddb0ea83231913f",
         "Proofs.Layout.Mem": "c04519a3c46c700cb17f8d2d48102efd62350cdfa85aef04ccd1da73cc9e57aa",
         "Proofs.Layout.Proofs": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
-        "Proofs.Lists.Append": "123f17bbbc4ee977cdd2d1b2678c5694e5a55c259c4d6ec3fa281ad08ec67ead",
+        "Proofs.Lists.Append": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
         "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
         "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
+        "Proofs.Lists.Policy": "ac275fe67274d15c721c843bca73db7d031540d2ec3661951163d7a4bbf7e41e",
         "Proofs.Lists.Sep": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
         "Proofs.Pointers.Proofs": "fe793fd054585fcd00c47da37114b2764478f599b8b6f0368910ffa5ae1d1b09",
@@ -888,107 +887,26 @@
         "Proofs.Recursion.Proofs": "9fb582b84b77d054fa9a231f0fcf2bf27456c4506c06625fe020df1c2f9d4961",
         "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
         "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
-        "Proofs.Sync.Handoff": "693b0687bf2315c9f9e39e8158eb49cd4f87569ebb9deb004c04e501884d4c86",
+        "Proofs.Sync.Handoff": "0294c1b3a15ca4531fbf6c8fadc86db928d8a9ff2f24c145d97ac216cefac71d",
         "Proofs.Sync.Lock": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
         "Proofs.Sync.Mutex": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
         "Proofs.Sync.Proofs": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
-        "Proofs.Sync.RwLock": "34c971bccdb739835aca01c6c63a59231f2cc34fce787f4822926b8f928c3b08",
+        "Proofs.Sync.RwLock": "eaaeba63ffa8e23e88229849b03c17ffe04fa0ae8a9f622bc8c71dba75605b3c",
         "Proofs.Sync.RwLockContract": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
         "Proofs.Sync.RwLockSnapshotPair": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
         "Proofs.Sync.SemCounter": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-        "Proofs.Sync.Semaphore": "324c188ca1c7d97f3f6436305dab9c4ceca6acc3347b4489bd71fa036aa8397c",
-        "Proofs.Threads.Counter": "114f3b15c882fd3769273ac41a6c93ff27d643d22fe39b626ffae85833f6990a",
+        "Proofs.Sync.Semaphore": "82ef144eb2b14f8baf55d839b672a4ae76f846e6b096e364731efe7520366fc3",
+        "Proofs.Threads.Counter": "a9cff3d6a39ef6485fe4e98e1f75ab683a34c653185d46b940c9f55826c78bcd",
         "Proofs.Threads.Disjoint": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
         "Proofs.Threads.Proofs": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c",
-        "Proofs.Threadsync.Deadline": "67333b865ca6c1d573c02884b4311f137c959a397daa93436383ac7ffd1074b6",
-        "Proofs.Threadsync.Handoff": "a6364be6dfda3ddd5c0ce611248406ee55c794e7d4af942d58cb5422ea29a653",
+        "Proofs.Threadsync.Deadline": "01805fb84bb5db4c248073e1908566fa65d8ef54509969d1175969f6be21f83a",
+        "Proofs.Threadsync.Handoff": "03c3db7dad57eb60e3c5b42e99f9db66615eb417bad51ac7b8139608b8f6f0eb",
         "Proofs.Threadsync.Lock": "198e84d1e8de8e4b9008c66fd38217891331771e85ba91b802a77aa350426166",
         "Proofs.Threadsync.Mutex": "157a7780c83bc057fb4260b6982791d31fb8bf994edc3ddc629e7d31894e5577",
-        "Proofs.Threadsync.WaitGroup": "e750bc99ce52c619c5af7687c9091a78de528dee4a428a89da7c5f2b45a2e851",
+        "Proofs.Threadsync.WaitGroup": "33848af591482f9eaed7c62365e2b429cf6ede5cce70f5c97b7ab6683c2b6d8b",
         "Proofs.Variants.Proofs": "dcecf6343b9008a2c08fd0339d17e399e524874da36fc42f703304f04a9cb5f8",
         "Proofs.Vectors.CheckedAdd": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
         "Proofs.Vectors.Proofs": "f3b67f3459c032b6a0a1819e3a5665cc3ef3805c986b3aed852d0fa2ec6748c5"
-      }
-    },
-    "0.17.0-linux-goldens": {
-      "zig": "0.17.0",
-      "target": "linux",
-      "command": [
-        "python3",
-        "scripts/theorem-inventory.py",
-        "swap-build",
-        "--swap",
-        "lists=tests/golden/0.17.0/lists/Gen.lean",
-        "--swap",
-        "sync=tests/golden/0.17.0/sync/Gen.lean",
-        "--",
-        "Proofs.Lists.Sep",
-        "Proofs.Lists.Append",
-        "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
-        "Proofs.Sync.Lock",
-        "Proofs.Sync.Mutex",
-        "Proofs.Sync.Semaphore",
-        "Proofs.Sync.SemCounter",
-        "Proofs.Sync.Handoff",
-        "Proofs.Sync.RwLock",
-        "Proofs.Sync.RwLockContract",
-        "Proofs.Sync.RwLockSnapshotPair",
-        "Proofs.Sync.Proofs"
-      ],
-      "outcome": "success",
-      "exit_code": 0,
-      "revision": {
-        "head": "67d18dc374b91615f2e2af01a9830b7467db6573",
-        "tracked_dirty": true
-      },
-      "started_utc": "2026-10-08T00:03:45.448290+00:00",
-      "elapsed_seconds": 221.833,
-      "host": {
-        "machine": "arm64",
-        "system": "Darwin"
-      },
-      "log_sha256": "3f0e6b20a9e6e8127aa056d3f77ee61275f71344d8681437aea3a1e83cd96b47",
-      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
-      "modules": [
-        "Proofs.Lists.Append",
-        "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
-        "Proofs.Lists.Sep",
-        "Proofs.Sync.Handoff",
-        "Proofs.Sync.Lock",
-        "Proofs.Sync.Mutex",
-        "Proofs.Sync.Proofs",
-        "Proofs.Sync.RwLock",
-        "Proofs.Sync.RwLockContract",
-        "Proofs.Sync.RwLockSnapshotPair",
-        "Proofs.Sync.SemCounter",
-        "Proofs.Sync.Semaphore"
-      ],
-      "gens": {
-        "lists": {
-          "path": "tests/golden/0.17.0/lists/Gen.lean",
-          "sha256": "5b6609a92629c1b63b3e47dda53937fa2af774e75c1e1e71f5b77d81f086bfec"
-        },
-        "sync": {
-          "path": "tests/golden/0.17.0/sync/Gen.lean",
-          "sha256": "ada512fb98e8b8db878e0c350301eb258f5579ab35a8f0b1df7fdd4193fd4d29"
-        }
-      },
-      "sources": {
-        "Proofs.Lists.Append": "123f17bbbc4ee977cdd2d1b2678c5694e5a55c259c4d6ec3fa281ad08ec67ead",
-        "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
-        "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
-        "Proofs.Lists.Sep": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
-        "Proofs.Sync.Handoff": "693b0687bf2315c9f9e39e8158eb49cd4f87569ebb9deb004c04e501884d4c86",
-        "Proofs.Sync.Lock": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
-        "Proofs.Sync.Mutex": "ddb11048653cf5cf29bcea2fe5ac0e4c851c32a6109d067ab19ae2c1e20103c2",
-        "Proofs.Sync.Proofs": "c356c026adb568bdace2e5f52787d9f7d664b5147debb1fbaddd33768eab53b3",
-        "Proofs.Sync.RwLock": "34c971bccdb739835aca01c6c63a59231f2cc34fce787f4822926b8f928c3b08",
-        "Proofs.Sync.RwLockContract": "b3dfabaf0960f52caf217c3a3374e84abb8d602e3c08c62d87ea12630709e843",
-        "Proofs.Sync.RwLockSnapshotPair": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
-        "Proofs.Sync.SemCounter": "f257e5e1163b1caaad45763375388bfa387579045f315fa3aa44b1f76fe2a599",
-        "Proofs.Sync.Semaphore": "324c188ca1c7d97f3f6436305dab9c4ceca6acc3347b4489bd71fa036aa8397c"
       }
     }
   }
