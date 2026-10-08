@@ -238,8 +238,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: The opt-in `fallible` policy adds the declared spawn errors and the `Io.Group`
-  caller-execution fallback. WP rules must cover every oracle outcome.
-- Derived from: `ZigLean.Conc.Spawn`, `ZigLean.Conc.SpawnLemmas`; tokens `SpawnPolicy`, `WithPolicyC`.
+  caller-execution fallback. The per-caller budget `Mem.spawnLimit` (default none) removes
+  assignment from the oracle range while the caller's live children reach it. WP rules must
+  cover every oracle outcome.
+- Derived from: `ZigLean.Conc.Spawn`, `ZigLean.Conc.SpawnLemmas`; tokens `SpawnPolicy`, `WithPolicyC`,
+  `spawnLimit`, `spawnAdmits`, `assignmentCount`, `assignmentOutcome`, `assignmentChoiceC`.
 - Sources: [spawn-failure.md](spawn-failure.md).
 
 <a id="thr-04"></a>

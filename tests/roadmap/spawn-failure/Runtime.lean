@@ -45,6 +45,20 @@ theorem refusedSecondThenJoin {own : ThreadId → Heap} {m m' : Mem} {t first c 
     Owned (upd (upd own t (own t ∪ own first)) first Heap.empty) m' := by
   exact ⟨failedSpawnLeaf c hc () _ depth, Owned.join ho ht hne hj⟩
 
+-- At an exhausted budget the oracle range holds only the five errors, and no choice
+-- decodes to assignment.
+theorem exhaustedBudgetExcludesAssignment (m : Mem) (h : m.spawnLimit = some 0) :
+    assignmentCount (spawnErrors.size + 1) m = spawnErrors.size ∧
+      ∀ c, assignmentOutcome m.spawnAdmits c ≠ 0 := by
+  have ha : m.spawnAdmits = false := by simp [Mem.spawnAdmits, h]
+  refine ⟨by simp [assignmentCount, ha], fun c => ?_⟩
+  simp [assignmentOutcome, ha]
+
+theorem noBudgetKeepsEveryOutcome (m : Mem) (h : m.spawnLimit = none) (total : Nat) :
+    assignmentCount total m = total ∧ ∀ c, assignmentOutcome m.spawnAdmits c = c := by
+  have ha : m.spawnAdmits = true := by simp [Mem.spawnAdmits, h]
+  exact ⟨by simp [assignmentCount, ha], fun c => by simp [assignmentOutcome, ha]⟩
+
 private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)
 
@@ -66,7 +80,44 @@ private def eagerCaller : ConcM Target ThreadId := do
   let m ← ConcM.liftMem get
   pure m.nextMsg
 
+-- Five assignments before any join: a budget of two live children refuses at least three.
+private def fiveSpawns : ConcM Target (Array (Except ErrName ThreadId)) := do
+  let mut results := #[]
+  for _ in [0:5] do
+    let r ← (spawnWithPolicyC .fallible .worker : CM Target Unit _).run' ()
+    results := results.push r
+  for r in results do
+    match r with
+    | .ok child => discard ((joinC child : CM Target Unit Unit).run' ())
+    | .error _ => pure ()
+  pure results
+
+private def failures (rs : Array (Except ErrName ThreadId)) : Nat :=
+  (rs.filter fun r => match r with | .error _ => true | .ok _ => false).size
+
+private def budgetRuns : IO Unit := do
+  for seed in List.range 12 do
+    let oracle := fun turn => seed + turn * 7
+    match (Sched.run dispatch 200 oracle fiveSpawns { spawnLimit := some 2 }).run with
+    | some (.ok (rs, m)) =>
+      require (failures rs ≥ 3 && m.threads.size ≤ 3) "budget exceeded"
+      require (rs.all fun r => match r with | .error e => spawnErrors.contains e | .ok _ => true)
+        "undeclared spawn error under budget"
+      require (m.threads.all (fun r => r.spawner != 0 || r.joined)) "budgeted child leaked"
+    | _ => throw (IO.userError "budgeted fixture did not return safely")
+  match (Sched.run dispatch 200 (fun _ => 0) fiveSpawns { spawnLimit := some 2 }).run with
+  | some (.ok (rs, _)) =>
+    require (failures rs == 3 && (rs.extract 0 2).all (fun r => match r with | .ok _ => true | _ => false))
+      "assignments below the budget were refused"
+  | _ => throw (IO.userError "budgeted fixture did not return safely")
+  match (Sched.run dispatch 20 (fun _ => 0) eagerCaller { spawnLimit := some 0 }).run with
+  | some (.ok (value, m)) =>
+    require (value == 41 && m.threads.size == 1 && m.groups.isEmpty)
+      "exhausted budget did not force the caller fallback"
+  | _ => throw (IO.userError "budgeted eager fixture failed")
+
 def main : IO Unit := do
+  budgetRuns
   let mut errors : Array String := #[]
   let mut concurrentFailure := false
   -- This fixture's choice counts are 1, 2, 3 and 6, so the affine oracle

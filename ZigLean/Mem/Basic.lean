@@ -282,6 +282,10 @@ structure Mem where
   groups : Array (Ptr × ThreadId) := #[]
   /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
   allocators : Array OwnedAlloc := #[]
+  /-- The thread-assignment budget of the `fallible` spawn policy (`ZigLean/Conc/Spawn.lean`):
+  at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
+  no budget. The `available` policy ignores it. -/
+  spawnLimit : Option Nat := none
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
