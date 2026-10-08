@@ -8,6 +8,7 @@ import ZigLean.Lemmas
 import ZigLean.Loop
 import ZigLean.Mem
 import ZigLean.Packed
+import ZigLean.Endian
 import ZigLean.PackedLemmas
 import ZigLean.Simp
 import ZigLean.Union

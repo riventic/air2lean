@@ -2,8 +2,9 @@ import Lean.Data.Json
 import Std.Data.HashSet
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
-Only the existing 64-bit little-endian memory model is admitted. Schema 12 makes the
-facts mandatory; schemas 1–11 retain the explicitly named, unverified legacy profile. -/
+Only the 64-bit memory model is admitted: little endian (x86_64-linux, aarch64-macos) or big
+endian (s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory; schemas 1–11
+retain the explicitly named, unverified legacy little-endian profile. -/
 namespace Air2Lean
 
 open Lean (Json)
@@ -31,6 +32,13 @@ namespace BuildProfile
 
 def legacyName : String := "legacy-abi64-le"
 def currentName : String := "abi64-le-v1"
+/-- The big-endian model profile (T03). The exporter writes `currentName` as the raw
+`profile.name` of every target; the translator names a qualified big-endian profile by its byte
+order, so a generated header and `--profile` distinguish the two models. -/
+def bigEndianName : String := "abi64-be-v1"
+
+/-- The profile's byte order is big endian (`profile.endian`). -/
+def isBigEndian (p : BuildProfile) : Bool := p.endian == "big"
 
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
@@ -46,7 +54,8 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
     throw s!"unsupported AIR schema {schema} (supported: 1–12)"
   if let .ok endian := j.getObjVal? "target_endian" then
     let endian ← endian.getStr?
-    unless endian == "little" do
+    -- Big endian needs a schema-12 profile of a qualified big-endian target (below).
+    unless endian == "little" || (endian == "big" && schema == 12) do
       throw s!"target_endian '{endian}' is outside the little-endian memory model"
   if schema < 12 then
     if (j.getObjVal? "profile").toOption.isSome then
@@ -66,8 +75,8 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless pointerBits == 64 do
     throw s!"profile.pointer_bits {pointerBits} is outside the 64-bit memory model"
   let endian ← strField p "endian"
-  unless endian == "little" do
-    throw s!"profile.endian '{endian}' is outside the little-endian memory model"
+  unless endian == "little" || endian == "big" do
+    throw s!"profile.endian '{endian}' is outside the little/big-endian memory model"
   let abi ← strField p "abi"
   -- Zig triples have arch-os-abi components (version suffixes are permitted).
   let [arch, os, tripleAbi] := targetTriple.splitOn "-"
@@ -75,9 +84,15 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless !arch.isEmpty && !os.isEmpty && (tripleAbi.splitOn ".").head! == abi do
     throw "profile.target_triple: empty component or ABI differs from profile.abi"
   let osName := (os.splitOn ".").head!
+  let big := arch == "s390x" && osName == "linux"
   unless (arch == "x86_64" && osName == "linux") ||
-      (arch == "aarch64" && osName == "macos") do
-    throw "profile.target_triple: outside the x86_64-linux/aarch64-macos model ABI scope"
+      (arch == "aarch64" && osName == "macos") || big do
+    throw "profile.target_triple: outside the x86_64-linux/aarch64-macos/s390x-linux model ABI scope"
+  let targetEndian := if big then "big" else "little"
+  unless endian == targetEndian do
+    throw s!"profile.endian '{endian}' differs from the {arch} target's {targetEndian}-endian byte order"
+  if let .ok te := j.getObjVal? "target_endian" then
+    unless te.getStr? == .ok endian do throw "target_endian differs from profile.endian"
   let profileVersion ← strField p "zig_version"
   unless profileVersion == zigVersion do
     throw "profile.zig_version differs from top-level zig_version"
@@ -111,7 +126,7 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   unless exportStage == "analyzed-air" do
     throw "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"
   return {
-    name
+    name := if endian == "big" then bigEndianName else name
     schema
     zigVersion
     targetTriple
