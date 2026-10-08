@@ -972,6 +972,11 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     exact hQ k hk G₁ _ rfl (hgo _ hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
   · -- it sleeps: the word is `e`
     simp only [↓reduceIte] at hl ⊢
+    refine ⟨?_, ?_⟩
+    rotate_left
+    · have hl := hi₁.1.spuriousOff hph hq0
+      obtain ⟨-, hl'⟩ := hl
+      exact hQ k hk G₁ _ rfl (hgo _ hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
     obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hw.access
     have : ({ m₁ with current := 0 } : Mem).access W.ptr 4 4 = m₁.access W.ptr 4 4 := rfl
     rw [this, ha₀] at ha

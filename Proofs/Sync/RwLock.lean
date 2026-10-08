@@ -1504,6 +1504,10 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
     exact h k hk G₁ _ rfl (hgo _ rfl rfl rfl rfl rfl rfl rfl hl.2)
   · -- it sleeps: the word is `2`, so the other thread holds the mutex
     simp only [↓reduceIte] at hl ⊢
+    refine ⟨?_, ?_⟩
+    rotate_left
+    · have hl := hi₁.1.spuriousOff hph hq0
+      exact h k hk G₁ _ rfl (hgo _ rfl rfl rfl rfl rfl rfl rfl hl.2)
     obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hw.access
     have : ({ m₁ with current := t } : Mem).access WM.ptr 4 4 = m₁.access WM.ptr 4 4 := rfl
     rw [this, ha₀] at ha

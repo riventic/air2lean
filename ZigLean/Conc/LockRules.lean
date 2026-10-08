@@ -1224,6 +1224,18 @@ theorem Inv.waitOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} 
       rw [Array.any_push, hvq]; simp [Ne.symm hvt]
   · exact ⟨rfl, hout _⟩
 
+/-- A spurious return of a futex wait of thread `t` (`away`, not in the queue) at another
+futex: `t` goes to `out` with the memory before the wait. -/
+theorem Inv.spuriousOff {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hi : L.Inv G m)
+    (hph : L.ph (G t) = .away) (hq : m.waiters.any (·.1 == t) = false) :
+    ({ m with current := t } : Mem).current = t ∧
+      L.Inv (upd G t (L.set (G t) .out Heap.empty)) { m with current := t } := by
+  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+  exact ⟨rfl, hi.queue (wk := m.woken) hnh hng (by decide) (by decide)
+    (hi.fq.mono (fun w hw => hw) fun w hw => by rw [ph_set_upd, if_neg (ne_of_notQ hq hw)])
+    (wit_keep hi hnh (by decide) fun h => by rw [hph] at h; cases h)⟩
+
 /-- A futex wake by thread `t` at another futex `p`: the threads at the word stay. -/
 theorem Inv.wakeOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} {n : Nat}
     (hi : L.Inv G m) (hp : p ≠ L.ptr)
