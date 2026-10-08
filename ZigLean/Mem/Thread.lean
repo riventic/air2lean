@@ -439,6 +439,10 @@ delivers it (`error.Canceled`). Thread 0 (`main`) is not an `Io` task: std's thr
 cancels only its worker threads (`Thread.current` is null elsewhere, `Io/Threaded.zig:1348`), so a
 request is never pending for it. -/
 
+/-- The current thread is an `Io` task (not `main`), so it can be canceled. -/
+def isTask : MemM Bool := do
+  pure ((← get).current != 0)
+
 /-- The current thread has a cancelation request that no cancelation point delivered. -/
 def cancelPending : MemM Bool := do
   let m ← get

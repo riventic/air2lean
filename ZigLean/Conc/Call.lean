@@ -180,7 +180,7 @@ def groupAwaitTaskC : List ThreadId → CM Tgt σ (Except ErrName Unit)
 an `Io` task and is never canceled; an awaiting task can be (`groupAwaitTaskC`). -/
 def groupAwaitC (g : Ptr) (_ : Io) : CM Tgt σ (Except ErrName Unit) := do
   let tids ← callMC (Thread.groupTake g)
-  if (← callMC (do pure ((← get).current != 0) : MemM Bool)) then
+  if ← callMC Thread.isTask then
     groupAwaitTaskC tids.toList
   else
     for tid in tids do joinC tid

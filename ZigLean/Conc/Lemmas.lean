@@ -168,6 +168,9 @@ theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ m' hw => WP.pure' (hc G₁ m₁ hg hi₁ m' hw)⟩
 
+/-- `Thread.isTask`: whether the current thread is an `Io` task; the memory stays. -/
+theorem isTask_run (m : Mem) : (Thread.isTask.run m).run = some (.ok (m.current != 0, m)) := rfl
+
 /-- `Thread.Futex.wait` is the futex wait of `Io.futexWait` (0.15.2 has no `Io`). -/
 theorem threadFutexWaitC_eq (p : Ptr) (e : BitVec 32) :
     (threadFutexWaitC p e : CM Tgt σ Unit) = futexWaitC ⟨⟩ p e := by
