@@ -108,3 +108,14 @@ and both suites.
 
 To qualify 0.17.0 later: set `status` to `qualified`, extend each class (b) gate after
 running it on 0.17.0, and then decide whether to move the default and the mutation shards.
+
+## Probe contracts (0.17.0)
+
+`scripts/abi-probe.py observe` selects `tests/roadmap/abi-probes/<version>/<profile>.json` for
+the stock compiler's `zig version`. The 0.17.0 contracts were recorded by running the probe with
+stock Zig 0.17.0 (checksums from `index.json`): aarch64-macos natively, aarch64-linux in a
+`linux/arm64` container, and x86_64-linux in a `linux/amd64` container (Rosetta; ReleaseFast
+ran without the `bss_size overflow` that 0.14.1 hit). Layouts, offsets and values equal
+0.16.0's. The Linux contracts differ only in `zig_version`; the macOS ones also in LLVM 22's
+apple_m1 feature names. `tests/floatprobe/expected.0.17.0.txt` comes from the x86_64-linux
+container run: the same two `f128 sqrt` lines as 0.16.0's override.

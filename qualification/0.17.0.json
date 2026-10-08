@@ -2323,6 +2323,76 @@
       "note": "Allocator/Thread/Io/time sources compared with 0.16.0 (docs/std-models.md); model rows list 0.17.0 only where re-qualified. Io.Condition.waitUncancelable (inlined loops) and ArrayListUnmanaged's pointer_stability are proved through their 0.17.0 translations; sync and lists translations and differential tests pass.",
       "recorded_at": "2026-10-08T08:58:55+00:00",
       "git_head": "efe4dd60028dce23358f11ce26ee91b7154bff92"
+    },
+    "probe:layout:aarch64-linux-gnu-ReleaseSafe": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/aarch64-linux-gnu-ReleaseSafe.json",
+        "qualification/0.17.0.d/logs/probe_layout_aarch64-linux-gnu-ReleaseSafe.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (aarch64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/arm64 (native on aarch64-macos), python:3.14-slim-trixie; exit 0 against tests/roadmap/abi-probes/0.17.0/aarch64-linux-gnu-ReleaseSafe.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-08T10:01:46+00:00",
+      "git_head": "6a7ddc3a0fe1b953b236f5296b5b2f4c34c25853"
+    },
+    "probe:layout:aarch64-linux-gnu-ReleaseFast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/aarch64-linux-gnu-ReleaseFast.json",
+        "qualification/0.17.0.d/logs/probe_layout_aarch64-linux-gnu-ReleaseFast.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (aarch64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/arm64 (native on aarch64-macos), python:3.14-slim-trixie; exit 0 against tests/roadmap/abi-probes/0.17.0/aarch64-linux-gnu-ReleaseFast.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-08T10:01:46+00:00",
+      "git_head": "6a7ddc3a0fe1b953b236f5296b5b2f4c34c25853"
+    },
+    "probe:layout:x86_64-linux-gnu-ReleaseSafe": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/x86_64-linux-gnu-ReleaseSafe.json",
+        "qualification/0.17.0.d/logs/probe_layout_x86_64-linux-gnu-ReleaseSafe.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (x86_64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/amd64 (Rosetta; ReleaseFast ran without a bss_size error), air2lean-local-ci:ubuntu24-amd64; exit 0 against tests/roadmap/abi-probes/0.17.0/x86_64-linux-gnu-ReleaseSafe.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-08T10:01:46+00:00",
+      "git_head": "6a7ddc3a0fe1b953b236f5296b5b2f4c34c25853"
+    },
+    "probe:layout:x86_64-linux-gnu-ReleaseFast": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/abi/x86_64-linux-gnu-ReleaseFast.json",
+        "qualification/0.17.0.d/logs/probe_layout_x86_64-linux-gnu-ReleaseFast.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh"
+      ],
+      "note": "abi-probe.py observe with stock Zig 0.17.0 (x86_64-linux-gnu tarball, sha256 matches index.json) in docker --platform linux/amd64 (Rosetta; ReleaseFast ran without a bss_size error), air2lean-local-ci:ubuntu24-amd64; exit 0 against tests/roadmap/abi-probes/0.17.0/x86_64-linux-gnu-ReleaseFast.json (differs from 0.16.0 only in zig_version).",
+      "recorded_at": "2026-10-08T10:01:46+00:00",
+      "git_head": "6a7ddc3a0fe1b953b236f5296b5b2f4c34c25853"
+    },
+    "probe:float": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": null,
+      "decision": null,
+      "evidence": [
+        "qualification/0.17.0.d/logs/probe_float.log",
+        "qualification/0.17.0.d/logs/linux-container-probe.sh",
+        "tests/floatprobe/expected.0.17.0.txt"
+      ],
+      "note": "scripts/floatprobe.sh with stock Zig 0.17.0 x86_64-linux (-mcpu=baseline) in docker linux/amd64; exit 0 with tests/floatprobe/expected.0.17.0.txt, whose two f128 sqrt lines come from this run's output and equal 0.16.0's override.",
+      "recorded_at": "2026-10-08T10:01:46+00:00",
+      "git_head": "6a7ddc3a0fe1b953b236f5296b5b2f4c34c25853"
     }
   },
   "plan_sha256": "52b63d69945ec49136bfff8448e5c3523f3b7bbf7439f0369958a99cc3447157"
