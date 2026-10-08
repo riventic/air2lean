@@ -57,7 +57,7 @@ resetting any state it uses. Inputs are Q01's `INPUTS` (`tests/roadmap/fuzz/zig_
 |---|---|---|
 | `c_native` | `zig cc -O0 -fsanitize=undefined -fsanitize-trap=undefined` on the host with a driver that calls `entry` twice per input | `ok` (expected values), `compile_error`, `runtime_error`, `nondeterministic` |
 | `translate_c` | `zig translate-c` 0.16.0; warnings, and C functions (from `nm` of the C object) that became `extern fn` | `ok`, `demoted`, `failed` |
-| `zig_native` | `zig test -OReleaseSafe -lc` of the translated Zig plus `expectEqual` against the C values | `ok`, `mismatch`, `compile_error`, `runtime_error` (a ReleaseSafe panic) |
+| `zig_native` | `zig test -OReleaseSafe -lc` on the host of the translated Zig (translated for x86_64-linux-musl) plus `expectEqual` against the C values; target-dependent header declarations such as `jmp_buf` are host-checked only | `ok`, `mismatch`, `compile_error`, `runtime_error` (a ReleaseSafe panic) |
 | `air_export` | patched Zig 0.16.0 AIR export (as `scripts/translate.sh`) | `ok`, `failed` |
 | `air2lean` | `air2lean --diagnostics-json`; diagnostic codes | `checked`, `rejected` |
 | `lean` | emission, Q01's `#guard` checks of `entry` on `mem0` (`zig_gen.lean_checks`), `lake env lean` | `ok`, `guard_failed`, `elab_failed`, `emit_failed` |
@@ -118,6 +118,29 @@ Shapes are quoted from the translated corpus (`.zig` files in the heavy work dir
 | function pointers | `?*const fn (…) callconv(.c) T`; calls `f.?(x)` | |
 | libc calls | `pub extern fn strlen([*c]const u8) usize;` (0.15.2: `c_ulong` for `size_t`) | |
 | struct layout | `extern struct`, so C layout; `sizeof`/`_Alignof`/`offsetof` are `@sizeOf`, `@alignOf`, `@offsetOf` | |
+
+**Zig 0.17.0 translate-c is no better.** Its `Translator.zig` keeps the same refusals
+(`.goto_stmt, .computed_goto_stmt, .labeled_stmt => fail "TODO goto"`, bitfield records
+demoted to `opaque`, variadic definitions demoted, "TODO complex switch"), and running the
+0.17.0 translator on the eight affected corpus files gives the same warnings and demotions;
+`sort_callback` still gets the `u1` comparator subtraction (G8).
+
+### goto
+
+translate-c (0.15.2, 0.16.0 and 0.17.0) never produces a labeled-switch dispatch loop
+from C `goto`: any function containing a `goto` or a label is demoted to `extern fn`,
+so a goto state machine reaches air2lean only as a call to a missing symbol (G1, then
+`CALLEE_MISSING`). air2lean's L03 loop-switch support would consume such a dispatch loop if
+something produced it. Options:
+
+| option | what | trust | size |
+|---|---|---|---|
+| reject (now) | a named gate: a translate-c "TODO goto" demotion of a corpus/project function is a typed rejection of that function, not a silent `extern` | no change | S |
+| patch translate-c (Aro backend) | forward `goto`s within one compound statement (cleanup ladders such as `goto_cleanup`) become nested labeled blocks left with `break :label`; general `goto` (backward jumps, `goto_state_machine`) becomes `state: switch (label_id) { … continue :state next … }` over the function's labels, with locals hoisted above the switch | the patched translator replaces stock translate-c in the trusted base, so it needs its own review and native differential (this harness) | M for forward-only, L for general; best done upstream |
+| C-side rewrite before translate-c | a goto-elimination pass (for example on Aro's or clang's AST) that emits structured C (flags + loops + `switch`) and then runs stock translate-c | the rewriter joins the trusted base and is C-semantics-sensitive (scopes of declarations jumped over, VLAs, computed goto) | L |
+
+Recommendation: the gate now (Phase 1), the forward-only Aro patch upstream next (it covers
+the error-cleanup idiom), general goto only with upstream acceptance (Phase 3).
 
 **Zig 0.16.0 compiler bug (not translate-c).** Indexing an array that is reached through a
 dereferenced C pointer, `p.*.data[i]` with `p: [*c]S` or `r.*[i]` with `r: [*c][3]T`,
@@ -282,7 +305,7 @@ blocked (alone or with other gaps).
 | G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | S: wrap the C-pointer offset modulo 2⁶⁴ (two's-complement index) in the `[*c]` `ptr_elem_*`/`ptr_add` emission | L05 |
 | G5 | **zero-initialised globals whose address escapes** | `pub var pool: [8]struct_node = std.mem.zeroes([8]struct_node);` with `&pool[i]` / `@intFromPtr(&data[1])` | AIR global without `init` → `STRUCTURE_FAILURE` "global has no initial value" (the same `mem.zeroes([4]c_uint)` global without escaping address exports its init) | 2 | M (exporter global-init emission; root cause not yet isolated) | L12, L06 |
 | G6 | **std callees other than `zig.c_translation`** | `std.mem.zeroes(T)` in function bodies (compound literals), `debug.assert` inside `signedRemainder` | `CALLEE_MISSING`; widening the AIR filter to `mem.zeroes`/`debug.assert` also selects std's own instances (`mem.asBytes`), which regressed 13 passing files and all 30 generated programs | 2 | S–M: select exactly the instances reachable from the C module, or a typed std model for `mem.zeroes` | I02, E04 |
-| G7 | **translate-c refusals** | `goto`/labels: function demoted ("TODO goto"); bitfields: record `opaque`, users demoted; variadic definitions: demoted; case labels inside nested statements (Duff): "TODO complex switch" | translate-c (the demoted functions then reach G1) | 6 | goto L (structured lowering to a labeled `switch` dispatch loop); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L (`@cVaStart`/`@cVaArg` and AIR va tags); Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
+| G7 | **translate-c refusals** | `goto`/labels: function demoted ("TODO goto"); bitfields: record `opaque`, users demoted; variadic definitions: demoted; case labels inside nested statements (Duff): "TODO complex switch" | translate-c 0.15.2/0.16.0/0.17.0 alike (the demoted functions then reach G1) | 6 | goto: gate S now, forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L (`@cVaStart`/`@cVaArg` and AIR va tags); Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | ReleaseSafe `integerOverflow` panic natively where C yields −1 (the standard `qsort` comparator idiom); `setjmp` loses a `volatile` local (Zig has no `returns_twice`) | 3 | S: upstream promotion fix; reject `setjmp`/`longjmp`/`sigsetjmp` at the libc boundary | upstream translate-c; G1 |
 | G9 | **patched compiler on invalid Zig** | any compile error (G3, demotions) | the Debug-built AIR exporter reaches `unreachable` instead of exiting with the compile error | 4 | S | V03, I08 |
 
@@ -316,7 +339,7 @@ so it is not a boundary symbol of the translated Zig.
 | phase | scope | acceptance |
 |---|---|---|
 | 0 (this change) | corpus, harness, generator, committed records, CI record check | `check.sh --light` exits 0 in CI; `--heavy` reproduces `record.json` on a host with the patched 0.16.0 compiler |
-| 1: libc-free C kernels | G2, G4, G6, G9 and a fail-closed G3 gate; generator gains `void *` casts and struct pointers | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or rejected by a named G3 gate (today 17 of 29); `cgen.py` seeds 0–299 all `lean_ok` |
+| 1: libc-free C kernels | G2, G4, G6, G9, a fail-closed G3 gate and a named gate for translate-c demotions (goto, bitfields, variadic definitions); generator gains `void *` casts and struct pointers | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or rejected by a named G3 gate (today 17 of 29); `cgen.py` seeds 0–299 all `lean_ok` |
 | 2: libc boundary | G1; musl string/ctype/`abs`/`qsort` translated with the musl revision recorded; malloc family as trusted base with contracts in `docs/premises.md`; `setjmp` rejected by name | `libc_string`, `libc_stdlib`, `malloc_vec` `lean_ok`; every `extern_calls` symbol in the record is either a registered trusted-base row or translated AIR; a proof of one libc-using function (e.g. a `memcpy`/`strlen` specification) is kernel-checked |
 | 3: translate-c completeness | G7, G8 upstream or as a pinned, reviewed translate-c patch; move the route to the first Zig version without G3 (Q07 qualification) | `goto_*`, `bitfields`, `bitfield_packet`, `varargs_sum`, `switch_fallthrough`, `arrays_2d`, `ring_buffer`, `struct_layout`, `hash_table`, `sort_callback` `lean_ok`; the comparator idiom agrees natively |
 | 4: realistic programs and proofs | project manifests accept C sources (I01); csmith (Docker image) differential at ≥ 1000 seeds; tutorial | csmith seeds with no out-of-scope constructs are `lean_ok` or carry a typed rejection; two kernel-checked proofs over translated C (ring buffer invariant, linked-list reversal) using P01–P05 tactics |

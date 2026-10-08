@@ -316,8 +316,8 @@ def run_file(stem, tools, out_dir, corpus=CORPUS):
     work = out_dir / stem
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    entry = {"source_sha256": sha256(src), "constructs": CONSTRUCTS.get(stem, ["generated" if stem.startswith("gen_") else "unclassified"]),
-             "stages": {}}
+    default = ["generated" if stem.startswith("gen_") else "unclassified"]
+    entry = {"source_sha256": sha256(src), "constructs": CONSTRUCTS.get(stem, default), "stages": {}}
     stages = entry["stages"]
     stages["c_native"], expected = stage_c_native(tools["native"], src, work)
     defined, undefined = c_symbols(tools["native"], src, work)
@@ -438,7 +438,7 @@ def cmd_heavy(args):
             files[stem] = run_file(stem, tools, out_dir, args.corpus)
         except Exception as error:  # a harness bug must not lose the other files' results
             files[stem] = {"source_sha256": sha256(Path(args.corpus) / f"{stem}.c"),
-                           "constructs": CONSTRUCTS.get(stem, ["generated"]),
+                           "constructs": CONSTRUCTS.get(stem, ["unclassified"]),
                            "stages": {}, "harness_error": repr(error)[:500]}
         print(f"{stem}: {outcome(files[stem])}", flush=True)
     files = {k: files[k] for k in sorted(files) if k in names}
