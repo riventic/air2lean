@@ -169,7 +169,7 @@ theorem create_cost {a : Allocator} {size align : Nat} {m m' : Mem} {r : Except 
   · simp [Allocator.create, allocBytes, rawAlloc, alloc, hns, hc, ho, zig_unfold, set, StateT.set,
       MonadStateOf.set] at h
     obtain ⟨rfl, rfl⟩ := h
-    exact ⟨rfl, by simp [Mem.liveHeap, List.countP_append, Block.retained, allocated]⟩
+    exact ⟨rfl, by simp [Mem.afterAlloc, Mem.liveHeap, List.countP_append, Block.retained, allocated]⟩
 
 /-- `destroy` of `size > 0` bytes frees exactly one retained block and is no allocation
 event. -/

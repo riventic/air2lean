@@ -9,7 +9,8 @@ same name here (`Air2Lean/Memory.lean`'s `allocFn?`).
 
 The model is one allocator, with its state in `Mem`:
 
-* Each allocation gets a new heap block. Allocation number `Mem.failAt` (from 0), every
+* Each allocation gets a new heap block (a new block id; its address is fresh unless the
+  opt-in `Mem.allocPolicy.reuseAddr` reuses a freed block's address, `docs/address-reuse.md`). Allocation number `Mem.failAt` (from 0), every
   index in `Mem.allocPolicy.failures`, requests above `Mem.allocPolicy.maxBytes`, requests the
   oracle `Mem.allocPolicy.fails` rejects and requests beyond `Mem.allocPolicy.budget` fail.
   The default has no failures and no fixed cap; the differential harness selects its 1 MiB
