@@ -278,6 +278,11 @@ private def run (args : List String) : IO UInt32 := do
                   "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++ body,
                 declNames)
             times := { times with emit := emitNs }
+            -- Fail closed: a 32-bit translation uses only width-parameterized runtime names.
+            if profile.pointerBits != 64 then
+              if let some name := width64Leak src then
+                throw (IO.userError s!"internal error: the {profile.pointerBits}-bit translation \
+                  uses the 64-bit runtime name '{name}'")
             let writeStart ← IO.monoNanosNow
             try IO.FS.writeFile a.outPath src catch e =>
               throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
