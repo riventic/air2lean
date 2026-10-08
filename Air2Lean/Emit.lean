@@ -3328,9 +3328,6 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
     footprintDef ++ [evidence])
 
-/-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
-stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
-`--float-semantics` (default `ieee`). Also returns each function's declaration name. -/
 /-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
 (`ZigLean/Mem/Width.lean`); a 64-bit program keeps the global ones. -/
 def wasm32Open (funcs : Array Func) : List String :=
@@ -3351,8 +3348,11 @@ def width64Leak (src : String) : Option String :=
     match rest.toList.head? with
     | some c => !(c.isAlphanum || c == '_')
     | none => true
-  if wholeSlice then some "Zig.Slice" else width64Names.find? (src.splitOn · |>.length > 1)
+  if wholeSlice then some "Zig.Slice" else width64Names.find? fun n => (src.splitOn n).length > 1
 
+/-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
+stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
+`--float-semantics` (default `ieee`). Also returns each function's declaration name. -/
 def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
     (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :

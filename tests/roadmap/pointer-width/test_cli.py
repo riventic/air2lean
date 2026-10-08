@@ -68,7 +68,9 @@ def main():
             for term in ("Zig.Slice ", "Zig.Slice)", "BitVec 64", "Zig.Allocator.alloc ", ".elem "):
                 assert term not in text, (target, term)
         else:
-            assert "Zig.Wasm32" not in text and "Zig.Slice32" not in text and "Of " not in text
+            for term in ("Zig.Wasm32", "Zig.Slice32", "allocOf", "freeOf", "elemOf", "indexOf",
+                         "lenOf", "memsetOf", "memmoveOf", "ptrAddrOf"):
+                assert term not in text, (target, term)
             assert "Zig.Allocator.alloc " in text and "BitVec 64" in text
         checks += 1
 
