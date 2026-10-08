@@ -78,13 +78,13 @@ def publishRead : Zig.ConcM Tgt (BitVec 32) := do
     match ← Zig.spawnC (Tgt.producer slot) with
     | .error _ => pure (0 : BitVec 32)
     | .ok h =>
-      let r ← match ← Zig.atomicLoadPtrC (Option Zig.Ptr) .acquire 8 slot with
+      let r ← ((match ← Zig.atomicLoadPtrC (Option Zig.Ptr) .acquire 8 slot with
         | some p => Zig.load (BitVec 32) 4 p
-        | none => pure 0
+        | none => pure 0) : Zig.CM Tgt Unit (BitVec 32))
       Zig.joinC h
-      match ← Zig.atomicLoadPtrC (Option Zig.Ptr) .relaxed 8 slot with
-      | some p => Zig.callMC (Zig.Allocator.destroy ⟨⟩ 4 p)
-      | none => pure ()
+      ((match ← Zig.atomicLoadPtrC (Option Zig.Ptr) .relaxed 8 slot with
+        | some p => Zig.callMC (Zig.Allocator.destroy ⟨⟩ 4 p)
+        | none => pure ()) : Zig.CM Tgt Unit Unit)
       pure r) : Zig.CM Tgt Unit (BitVec 32)).run' ()
   Zig.free slot
   pure r
@@ -877,7 +877,7 @@ theorem thr_fork {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (hg : G 0 = .pr
       rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
     by simp [hcs], .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false },
       by simp [Array.getElem_push, hs1], hc, by rw [hG0]; rfl⟩, .inl hG0, .inl hG1,
-      fun hp => by rw [hG0] at hp; cases hp, fun u hu => ?_⟩⟩⟩
+      fun hp => absurd (hG0.symm.trans hp) (by decide), fun u hu => ?_⟩⟩⟩
   rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
   exact hnone u (by unfold ThreadId at *; omega)
 
@@ -1083,7 +1083,7 @@ theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 0 = .r
   · rw [hg] at hp; cases hp
   exact {
     thr := ⟨t0, tc, .inr ⟨hs2, ⟨r, hr, hsp, by rw [hj, hg, h0]⟩, .inr (.inl h0), by rw [h1]; exact g1,
-      fun hp => by rw [h0] at hp; cases hp,
+      fun hp => absurd (h0.symm.trans hp) (by decide),
       fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact g2 u hu⟩⟩
     b0 := hi.b0
     start := by rw [h1]; exact hi.start
@@ -1157,8 +1157,8 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .
     fp := by
       intro e he
       rcases hi.fp e he with ⟨hk, hb⟩ | h | ⟨a, b, -⟩ | h
-      · refine .inl ⟨hk, fun u hu => VClock.le_trans (hb u ?_) (hcl u)⟩
-        simpa using hu
+      · refine .inl ⟨hk, fun (u : Nat) hu => VClock.le_trans (hb u ?_) (hcl u)⟩
+        simpa [Array.size_set!] using hu
       · exact .inr (.inl h)
       · exact .inr (.inr (.inl ⟨a, b, by rw [e1]; exact hfin⟩))
       · exact .inr (.inr (.inr h))
@@ -1217,7 +1217,7 @@ theorem step_last {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : Option Ptr} 
       rw [e]
       show VClock.le m1.clock (mr.clocks[mr.current]!) = true
       rw [hcur]
-      exact VClock.le_trans (hpost hg) hcl0
+      exact hpost hg
     have hflt := floorPos_lt (m := { mr with atomics := #[l], nextMsg := k }) (li := 0) (by rw [hsz2]; decide)
     rw [hsz2] at hflt
     have hro := readOpts_floor (m := { mr with atomics := #[l], nextMsg := k }) (li := 0)
@@ -1230,7 +1230,7 @@ theorem step_last {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : Option Ptr} 
     subst this
     rw [hl0, hms] at hv
     exact .inr ⟨decode_eq (by rw [show (#[m0, m1] : Array Msg)[1]! = m1 from rfl, h1]; exact decode_some) hv,
-      hn.congr hblk⟩
+      hn.congr hblk.symm⟩
 
 /-- `destroy(node)`: a free of the live heap block. -/
 theorem destroy_ok {m m' : Mem} (h : ((Allocator.destroy ⟨⟩ 4 nPtr).run m).run = some (.ok ((), m'))) :
@@ -1253,28 +1253,25 @@ theorem destroy_ok {m m' : Mem} (h : ((Allocator.destroy ⟨⟩ 4 nPtr).run m).r
 theorem destroy_noErr {m : Mem} (hn : NodeAt m) (e : Error) :
     ((Allocator.destroy ⟨⟩ 4 nPtr).run m).run ≠ some (.error e) := by
   obtain ⟨blk, hb, hk, hs, hacc⟩ := acc_node hn 4 1 (by decide) (by decide)
-  obtain ⟨-, -, hl, -⟩ := hn
+  have hl : blk.live = true := by
+    obtain ⟨b', hb', hl', -⟩ := hn; rw [hb] at hb'; cases hb'; exact hl'
   intro h
   simp only [Allocator.destroy, show ((4 : Nat) = 0) = False from by decide, if_false] at h
   unfold rawFree at h
   rcases MemM.bind_err h with h | ⟨a, m₁, hg, h₁⟩
   · exact MemM.get_err h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  rcases MemM.bind_err h₁ with h | ⟨⟨b, blk', o⟩, m₂, ha, h₂⟩
+  rcases MemM.bind_err h₁ with h | ⟨r, m₂, ha, h₂⟩
   · have := MemM.lift_err h
     rw [hacc] at this
     simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at this
   obtain ⟨ha, rfl⟩ := MemM.lift_ok ha
   rw [hacc] at ha
   simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha
-  obtain ⟨rfl, rfl, rfl⟩ := ha
+  subst ha
   dsimp only at h₂
   rw [if_pos ⟨hk, rfl, hs⟩] at h₂
-  obtain ⟨blk₁, hb₁, hl₁, -⟩ : ∃ blk₁, m₁.blocks[1]? = some blk₁ ∧ blk₁.live = true ∧ True :=
-    ⟨blk', hb, by
-      obtain ⟨blk'', hb'', hl'', -⟩ := (⟨blk', hb, hl, trivial⟩ : ∃ x, m₁.blocks[1]? = some x ∧ x.live = true ∧ True)
-      rw [hb] at hb''; cases hb''; exact hl'', trivial⟩
-  exact free_noErr hb₁ hl₁ e h₂
+  exact free_noErr hb hl e h₂
 
 /-- `main`: the slot, the store of `null`, the spawn, the acquire load (a stop), the read of the
 node, the join (a stop), the load after the join (a stop), the destroy, the free. -/

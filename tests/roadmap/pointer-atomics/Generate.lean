@@ -94,28 +94,28 @@ private def err? {α : Type} (r : Zig.Result (α × Zig.Mem)) : Option Zig.Error
   match r.run with | some (.error e) => some e | _ => none
 
 -- A load returns the pointer with its block; a read through it reaches node 2.
-example : ok? (run1 (withSlot fun s _ _ => PtrAtomics.ptrs_loadPtr s)) = some ⟨some 2, 0⟩ := by
+example : ok? (run1 (withSlot fun s _ _ => PtrAtomics.loadPtr s)) = some ⟨some 2, 0⟩ := by
   decide +kernel
 example : ok? (run1 (withSlot fun s _ _ => do
-    let p ← PtrAtomics.ptrs_loadPtr s
+    let p ← PtrAtomics.loadPtr s
     (Zig.load (BitVec 32) 4 p : Zig.MemM _))) = some 7 := by decide +kernel
 -- A store, then a load: node 1.
 example : ok? (run1 (withSlot fun s a _ => do
-    PtrAtomics.ptrs_storePtr s a
-    PtrAtomics.ptrs_loadPtr s)) = some ⟨some 1, 0⟩ := by decide +kernel
+    PtrAtomics.storePtr s a
+    PtrAtomics.loadPtr s)) = some ⟨some 1, 0⟩ := by decide +kernel
 -- `xchg` returns the old pointer.
-example : ok? (run1 (withSlot fun s a _ => PtrAtomics.ptrs_xchgPtr s a)) = some ⟨some 2, 0⟩ := by
+example : ok? (run1 (withSlot fun s a _ => PtrAtomics.xchgPtr s a)) = some ⟨some 2, 0⟩ := by
   decide +kernel
 -- CAS with the same identity succeeds; with another block it fails and returns the pointer read.
-example : ok? (run1 (withSlot fun s a b => PtrAtomics.ptrs_casPtr s b a)) = some none := by
+example : ok? (run1 (withSlot fun s a b => PtrAtomics.casPtr s b a)) = some none := by
   decide +kernel
-example : ok? (run1 (withSlot fun s a _ => PtrAtomics.ptrs_casPtr s a a)) = some (some ⟨some 2, 0⟩) := by
+example : ok? (run1 (withSlot fun s a _ => PtrAtomics.casPtr s a a)) = some (some ⟨some 2, 0⟩) := by
   decide +kernel
 -- Node 1 plus 8 has node 2's address, but another block: no success, `.unspecified`.
-example : err? (run1 (withSlot fun s a _ => PtrAtomics.ptrs_casPtr s (a.add 8) a)) =
+example : err? (run1 (withSlot fun s a _ => PtrAtomics.casPtr s (a.add 8) a)) =
     some .unspecified := by decide +kernel
 -- A raw address equal to node 2's has no block: `.unspecified`, not success.
-example : err? (run1 (withSlot fun s a _ => PtrAtomics.ptrs_casPtr s ⟨none, 4116⟩ a)) =
+example : err? (run1 (withSlot fun s a _ => PtrAtomics.casPtr s ⟨none, 4116⟩ a)) =
     some .unspecified := by decide +kernel
 -- `?*u32`: a `null` slot loads `null`; a weak CAS from `null` may succeed or fail spuriously.
 open Zig in
@@ -124,13 +124,13 @@ private def withNull {α : Type} (f : Ptr → Ptr → ConcM PtrAtomics.Tgt α) :
   let a ← (alloc .heap 4 4 : MemM Ptr)
   (store 8 s (none : Option Ptr) : MemM Unit)
   f s a
-example : ok? (run1 (withNull fun s _ => PtrAtomics.ptrs_loadOpt s)) = some none := by decide +kernel
+example : ok? (run1 (withNull fun s _ => PtrAtomics.loadOpt s)) = some none := by decide +kernel
 example : ok? (run1 (withNull fun s a => do
-    let r ← PtrAtomics.ptrs_casWeakOpt s none (some a)
-    let v ← PtrAtomics.ptrs_loadOpt s
+    let r ← PtrAtomics.casWeakOpt s none (some a)
+    let v ← PtrAtomics.loadOpt s
     pure (r, v))) = some (none, some ⟨some 1, 0⟩) := by decide +kernel
 example : ok? (Zig.Sched.run PtrAtomics.dispatch 100 (fun i => if i = 0 then 1 else 0)
-    (withNull fun s a => PtrAtomics.ptrs_casWeakOpt s none (some a)) {}) = some (some none) := by
+    (withNull fun s a => PtrAtomics.casWeakOpt s none (some a)) {}) = some (some none) := by
   decide +kernel
 "
 
