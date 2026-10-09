@@ -30,8 +30,10 @@
 # `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
 # legacy exclusion, counted separately against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
 #
-# The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
-# other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
+# The float model follows the translation's target profile (docs/floats.md §Targets): on
+# aarch64-macos run that host's translation (scripts/check.sh), whose exclusion pins are
+# tests/diff/<ex>/unspecified.<uname -s>-<uname -m>.txt (`pin_file` below). The compiled Zig can
+# still give other bits for some float results (NaN bits, the sign of a zero). tests/diff/<ex>/host.txt
 # lists the functions whose results depend on the target, each with the kinds of difference it
 # may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, libm_ulp). Only on a
 # host that is not x86_64-linux, and only when both sides returned a value, a disagreement of such

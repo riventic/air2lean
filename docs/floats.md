@@ -106,7 +106,7 @@ Clients: `isNan_allowed`, `isNan_zero_div_zero`, `clamp_allowed` (`Proofs/Floats
 | pseudo-infinity, pseudo-NaN | 0x7fff | 0 | NaN |
 | pseudo-denormal | 0 | 1 | the value `1.f × 2^(1 − 16383)` |
 
-The first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` and direct casts to f16 or f128 (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is group C for `@mulAdd` and for a direct cast to f128;
+This table is x86_64's (the x87). On aarch64 every op that reads an f80 operand of any of these three encodings is `.unspecified` (§Targets). On x86_64, the first two rows are group C for `@floor`/`@ceil`/`@trunc`/`@round`/`@rem`/`@mod`/`@mulAdd` and direct casts to f16 or f128 (`.unspecified`, both modes, always; §`--float-semantics` above). The third row (pseudo-denormal) is group C for `@mulAdd` and for a direct cast to f128;
 the model otherwise decodes its value as shown above.
 
 ## Targets
