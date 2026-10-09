@@ -1189,7 +1189,7 @@ def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   | _ => 0
 
 /-- `ptrTy` is a lane pointer into a bit-packed vector (`Layout.laneBitPtr`). -/
-def FCtx.laneBitPtr (fc : FCtx) (ptrTy : TyId) : Bool := (fc.layouts[ptrTy]?.map (·.laneBitPtr)).getD false
+def FCtx.laneBitPtr (fc : FCtx) (ptrTy : TyId) : Bool := laneBitPtrTy fc.layouts ptrTy
 
 /-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
 (`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
@@ -2335,7 +2335,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           | none => (env, some "(panic! \"air2lean: a store of a partly undefined value\")")
         else
         if host != 0 then
-          let f := if ((fc.valTyId? ptr).map fc.laneBitPtr).getD false then "Zig.storeLane"
+          let f := if ptrTy?.any fc.laneBitPtr then "Zig.storeLane"
             else "Zig.storeBits"
           (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))

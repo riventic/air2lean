@@ -426,7 +426,7 @@ checker rejects. -/
 def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
   match l.vectorIndex, types[child]? with
   | some lane, some t =>
-    let w := match t with | .int _ bits => bits | .bool => 1 | _ => 0
+    let w := (laneBits? t).getD 0
     if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize then l
     else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
   | _, _ => l

@@ -263,6 +263,13 @@ class CoverageTests(unittest.TestCase):
         self.assertIn('no declared theorem goals', root['blockers'])
         self.assertNotFunctional(root)
 
+    def test_evidence_cap_matches_the_receipt_writer(self):
+        # A receipt proof-receipt.py may write (an all-shipped audit.json exceeds 64 MiB) must be readable.
+        receipt_spec = importlib.util.spec_from_file_location('proof_receipt', SCRIPT.parent / 'proof-receipt.py')
+        receipt = importlib.util.module_from_spec(receipt_spec)
+        receipt_spec.loader.exec_module(receipt)
+        self.assertEqual(project.EVIDENCE_JSON['max_file_bytes'], receipt.MAX_JSON)
+
     def test_stale_receipt(self):
         (self.attempt / 'STALE').write_text('')
         root = self.run_coverage()

@@ -213,6 +213,16 @@ def lanePtrVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
 def Layout.laneBitPtr (l : Layout) : Bool :=
   l.vectorIndex.isSome && l.packedLanes
 
+/-- The pointer type `ty` is a `Layout.laneBitPtr` (false without a layout). -/
+def laneBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
+  (layouts[ty]?.map (·.laneBitPtr)).getD false
+
+/-- The bit width of a lane that a lane pointer may address: an integer's bits, 1 for `bool`. -/
+def laneBits? : Ty → Option Nat
+  | .int _ bits => some bits
+  | .bool => some 1
+  | _ => none
+
 /-- A bit-pointer whose export has no `vector_index`. It can be a packed field pointer or a lane
 pointer. -/
 def Layout.unverifiedBitPtr (l : Layout) : Bool :=
