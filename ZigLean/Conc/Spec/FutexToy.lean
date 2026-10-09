@@ -3,6 +3,9 @@ import ZigLean.Conc.Spec.Futex
 /-!
 # Futexes that satisfy the contract, and two that do not
 
+* `Futex.ref W`: the most permissive futex of the contract, on the queue itself. `ref_spec`.
+  A concrete futex (T2's OS rows) proves the contract by mapping each of its steps to a step of
+  `ref` (`FutexSpec.of_abs`); `fifo_spec_of_ref` does this for `fifo`.
 * `Futex.fifo W`: the queue itself is the state; a wait sleeps iff the word is the expected
   value, a sleeping thread goes on only after a wake, a wake wakes the oldest `min n c` waiters.
   `fifo_spec`: it satisfies `FutexSpec`. It is the hand model of `Thread.futexWait`/`futexWake`
@@ -35,6 +38,20 @@ abbrev fifo (W : M → A → Option (BitVec 32)) : Futex M A where
   resume t _ q r q' := q.has t = false ∧ r = .woken ∧ q' = q
   wake _ a n q k q' := k = (List.take n (q.waitersAt a)).length ∧
     q' = q.drop (List.take n (q.waitersAt a))
+
+/-- The most permissive futex of the contract (module doc): a wait sleeps only on the expected
+value and may always return instead; a resume may happen at any time; a wake wakes any set of
+the right size. Every futex that satisfies the contract has, step by step, steps of this one
+(on its queue view), so T2 proves its rows against it with `FutexSpec.of_abs`. -/
+abbrev ref (W : M → A → Option (BitVec 32)) : Futex M A where
+  F := Queue A
+  init q := q = []
+  queue q := q
+  wait t a e tm m q r q' := ∃ v, W m a = some v ∧
+    ((r = none ∧ v = e ∧ q' = q ++ [(t, a)]) ∨ (∃ r', r = some r' ∧ (r' = .timeout → tm = true) ∧ q' = q))
+  resume t tm q r q' := q' = q.drop [t] ∧ (r = .timeout → tm = true)
+  wake _ a n q k q' := ∃ ws : List Tid, ws.Nodup ∧ (∀ u ∈ ws, (u, a) ∈ q) ∧
+    ws.length = min n (q.waitersAt a).length ∧ k = ws.length ∧ q' = q.drop ws
 
 /-- The always-spurious futex (module doc). -/
 abbrev spin (W : M → A → Option (BitVec 32)) : Futex M A where
@@ -101,6 +118,53 @@ theorem fifo_spec : FutexSpec W (Futex.fifo W) where
     · exact ⟨some .again, q, v, hv, .inr ⟨he, rfl, rfl⟩⟩
   resume_total t _ q h := ⟨.woken, q, h, rfl, rfl⟩
   wake_total _ a n q _ := ⟨_, _, rfl, rfl⟩
+
+theorem ref_spec : FutexSpec W (Futex.ref W) where
+  init _ h := h
+  wait_word := by
+    rintro t a e tm m q r q' ⟨v, hv, ⟨rfl, rfl, -⟩ | ⟨r', rfl, -, -⟩⟩
+    · exact ⟨_, hv, fun _ => rfl⟩
+    · exact ⟨_, hv, fun h => by cases h⟩
+  wait_local := by
+    rintro t a e tm m m' q r q' he ⟨v, hv, h⟩
+    exact ⟨v, he ▸ hv, h⟩
+  wait_sleep := by
+    rintro t a e tm m q q' ⟨v, -, ⟨-, -, rfl⟩ | ⟨r', h, -⟩⟩
+    · exact List.Perm.refl _
+    · cases h
+  wait_ret := by
+    rintro t a e tm m q r q' ⟨v, -, ⟨h, -⟩ | ⟨r', h, ht, rfl⟩⟩
+    · cases h
+    · cases h; exact ⟨List.Perm.refl _, ht⟩
+  resume := by
+    rintro t tm q r q' ⟨rfl, ht⟩
+    exact ⟨List.Perm.refl _, ht⟩
+  wake := by
+    rintro t a n q k q' - ⟨ws, hn, hm, hl, hk, rfl⟩
+    exact ⟨ws, hn, hm, hl, hk, List.Perm.refl _⟩
+  wait_total := by
+    intro t a e tm m q v hv _
+    by_cases he : v = e
+    · exact ⟨none, q ++ [(t, a)], v, hv, .inl ⟨rfl, he, rfl⟩⟩
+    · exact ⟨some .again, q, v, hv, .inr ⟨.again, rfl, (fun (h : WaitRet.again = .timeout) => nomatch h), rfl⟩⟩
+  resume_total t _ q _ := ⟨.woken, q.drop [t], rfl, fun h => by cases h⟩
+  wake_total _ a n q hwf := ⟨_, _, _, (Queue.waitersAt_nodup hwf a).sublist (List.take_sublist _ _),
+    fun _ hu => Queue.mem_waitersAt.mp (List.mem_of_mem_take hu), List.length_take, rfl, rfl⟩
+
+/-- The FIFO futex is an instance of the reference futex, so it inherits the contract from it
+(`FutexSpec.of_abs`, the route of T2's rows). -/
+theorem fifo_spec_of_ref : FutexSpec W (Futex.fifo W) := by
+  refine FutexSpec.of_abs (ref_spec W) id (fun _ => rfl) (fun _ h => h) ?_
+    (fifo_spec W).wait_local ?_ ?_ (fifo_spec W).wait_total (fifo_spec W).resume_total
+    (fifo_spec W).wake_total
+  · rintro t a e tm m q r q' ⟨v, hv, ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+    · exact ⟨_, hv, .inl ⟨rfl, rfl, rfl⟩⟩
+    · exact ⟨_, hv, .inr ⟨_, rfl, (fun (h : WaitRet.again = .timeout) => nomatch h), rfl⟩⟩
+  · rintro t tm q r q' ⟨hq, rfl, rfl⟩
+    exact ⟨(Queue.drop_of_not_has hq).symm, fun h => by cases h⟩
+  · rintro t a n q k q' hwf ⟨rfl, rfl⟩
+    exact ⟨_, (Queue.waitersAt_nodup hwf a).sublist (List.take_sublist _ _),
+      fun _ hu => Queue.mem_waitersAt.mp (List.mem_of_mem_take hu), List.length_take, rfl, rfl⟩
 
 theorem spin_spec : FutexSpec W (Futex.spin W) where
   init _ _ := rfl

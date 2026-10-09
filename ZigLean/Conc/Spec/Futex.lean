@@ -305,7 +305,8 @@ end FutexSpec
 
 /-- A futex `Y` (T2's concrete rows) whose steps are steps of a futex `X` that satisfies the
 contract, under an abstraction of its state that keeps the queue, satisfies the contract too if
-it has the progress of the contract itself. This is the analogue of `AllocSpec.congr`. -/
+it has the progress of the contract itself. This is the analogue of `AllocSpec.congr`; T2 uses it
+with `X := Futex.ref W` (`ZigLean/Conc/Spec/FutexToy.lean`). -/
 theorem FutexSpec.of_abs {W : M → A → Option (BitVec 32)} {X Y : Futex M A} (hX : FutexSpec W X)
     (abs : Y.F → X.F) (hq : ∀ f, Y.queue f = X.queue (abs f))
     (hi : ∀ f, Y.init f → X.init (abs f))
@@ -313,7 +314,7 @@ theorem FutexSpec.of_abs {W : M → A → Option (BitVec 32)} {X Y : Futex M A} 
     (hloc : ∀ t a e tm m m' f r f', W m a = W m' a →
       Y.wait t a e tm m f r f' → Y.wait t a e tm m' f r f')
     (hr : ∀ t tm f r f', Y.resume t tm f r f' → X.resume t tm (abs f) r (abs f'))
-    (hk : ∀ t a n f k f', Y.wake t a n f k f' → X.wake t a n (abs f) k (abs f'))
+    (hk : ∀ t a n f k f', (Y.queue f).WF → Y.wake t a n f k f' → X.wake t a n (abs f) k (abs f'))
     (hwt : ∀ t a e tm m f v, W m a = some v → (Y.queue f).has t = false →
       ∃ r f', Y.wait t a e tm m f r f')
     (hrt : ∀ t tm f, (Y.queue f).has t = false → ∃ r f', Y.resume t tm f r f')
@@ -327,7 +328,7 @@ theorem FutexSpec.of_abs {W : M → A → Option (BitVec 32)} {X Y : Futex M A} 
     rw [hq, hq]; exact hX.wait_ret _ _ _ _ _ _ _ _ (hw _ _ _ _ _ _ _ _ h)
   resume t tm f r f' h := by rw [hq, hq]; exact hX.resume _ _ _ _ _ (hr _ _ _ _ _ h)
   wake t a n f k f' hwf h := by
-    rw [hq, hq]; rw [hq] at hwf; exact hX.wake _ _ _ _ _ _ hwf (hk _ _ _ _ _ _ h)
+    rw [hq, hq]; rw [hq] at hwf; exact hX.wake _ _ _ _ _ _ hwf (hk _ _ _ _ _ _ (by rw [hq]; exact hwf) h)
   wait_total := hwt
   resume_total := hrt
   wake_total := hkt
