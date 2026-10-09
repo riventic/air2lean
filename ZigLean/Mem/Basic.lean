@@ -388,8 +388,20 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
     nextAddr := addr + size + 1 }
   pure ⟨some m.blocks.size, 0⟩
 
+/-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
+`e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of
+`e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
+of the current thread that it joined (the join is after each access of the child). The end of a
+block is a write of all its bytes for the race check (C11: the bytes are reused). -/
+def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
+  let c := VClock.bump (m.clocks[m.current]!) m.current
+  m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
+    !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
+    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined)
+
 /-- Free the block that `p` points to the start of. A dead block or an inner pointer throws
-`.illegal`. -/
+`.illegal`; so does an end of the block that races with an access by another thread
+(`Mem.freeRaces`). It records nothing: a later access to the dead block is `.illegal`. -/
 def free (p : Ptr) : MemM Unit := do
   let m ← get
   match p.block with
@@ -397,7 +409,9 @@ def free (p : Ptr) : MemM Unit := do
   | some b =>
     match m.blocks[b]? with
     | some blk =>
-      if blk.live ∧ p.off = 0 then set { m with blocks := m.blocks.set! b { blk with live := false } }
+      if blk.live ∧ p.off = 0 then
+        if m.freeRaces b blk.bytes.size then throw .illegal
+        else set { m with blocks := m.blocks.set! b { blk with live := false } }
       else throw .illegal
     | none => throw .illegal
 

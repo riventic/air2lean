@@ -4563,18 +4563,23 @@ theorem main_spec (io : Io) (d : Nat) :
     (by rcases h3 with rfl | rfl | rfl <;> rfl) ?_)
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  -- the free of the `Shared`
+  -- the free of the `Shared`: every thread is joined
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₀.2.1.blk
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hblk₀ hl₀ e he).elim) fun _ m₁₁ hfr => ?_)
-  obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
-  refine ⟨rfl, WP.pure' ⟨by rcases h3 with rfl | rfl | rfl <;> simp, fun r hr hsp => ?_⟩⟩
-  -- every thread is joined
   obtain ⟨h0, ⟨-, hp, -⟩ | ⟨hs2', hr', -, -, -⟩⟩ := hi₁₀.2.1.shape
   · change (upd G₄ 0 _ 0).2.2 = _ at hp; rw [upd_self] at hp; cases hp
   have hj1 : m₁₀.threads[1]? = some { spawner := 0, joined := true } := by
     rcases hr' with ⟨-, hd⟩ | ⟨h, -⟩
     · change (upd G₄ 0 _ 0).2.2.jd = false at hd; rw [upd_self] at hd; cases hd
     · exact h
+  have hnr : m₁₀.freeRaces 0 blk₀.bytes.size = false :=
+    freeRaces_of_joined hi₁₀.1.own.csize fun u hu => by
+      rw [hs2'] at hu
+      rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+      · exact .inl hc₁₀.symm
+      · exact .inr ⟨_, hj1, hc₁₀ ▸ rfl, rfl⟩
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hblk₀ hl₀ hnr e he).elim) fun _ m₁₁ hfr => ?_)
+  obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
+  refine ⟨rfl, WP.pure' ⟨by rcases h3 with rfl | rfl | rfl <;> simp, fun r hr hsp => ?_⟩⟩
   simp only at hr
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
   rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl

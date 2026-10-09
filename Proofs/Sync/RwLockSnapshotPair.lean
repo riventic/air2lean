@@ -150,7 +150,7 @@ theorem main_spec (io : Io) (d : Nat) :
     (by rcases h3 with hk | hk | hk <;> simp only [upd0_1, hk] <;> rfl) ?_)
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  refine WP.bind (WP.mono ?_ (RwLockContract.reclaim_joined_wp hi₉ rfl))
+  refine WP.bind (WP.mono ?_ (RwLockContract.reclaim_joined_wp hi₉ rfl hc₉))
   rintro _ G₄ m₁₀ d₄ ⟨_, hj⟩
   refine WP.pure' ⟨?_, hj⟩
   rcases h3 with h0 | h1 | h2 <;> simp_all [QPair]

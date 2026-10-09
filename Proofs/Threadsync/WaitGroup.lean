@@ -3483,7 +3483,16 @@ theorem main_spec (d : Nat) :
   -- the free of the `Tally`
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₂.2.blk
   have hb₁₃ : m₁₃.blocks[0]? = some blk₀ := by rw [hm₁₃]; exact hblk₀
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₁₃ hl₀ e he).elim) fun _ m₁₄ hfr => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₁₃ hl₀ (freeRaces_of_joined
+    (by rw [hm₁₃]; simp only [Array.size_set!]; exact hi₁₂.1.own.csize) fun u hu => by
+      rw [hm₁₃] at hu ⊢
+      simp only [Array.size_set!, hs₁₂] at hu
+      rcases (by omega : u = 0 ∨ u = 1 ∨ u = 2) with rfl | rfl | rfl
+      · exact .inl rfl
+      · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, ht1'],
+          rfl, rfl⟩
+      · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, hs₁₂],
+          rfl, rfl⟩) e he).elim) fun _ m₁₄ hfr => ?_)
   obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hn], fun r hr hsp => ?_⟩⟩
   -- every thread is joined

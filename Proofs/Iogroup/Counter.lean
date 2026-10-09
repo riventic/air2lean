@@ -1374,7 +1374,8 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} {k : Nat}
     ∃ own : ThreadId → Heap, ∃ rest, Owned own m ∧
       (pts (cPtr.add 20) 4 (BitVec.ofNat 32 3) ∗ fun h => h = rest) (own 0) ∧
       m.threads.size = k + 1 ∧ k ≤ 3 ∧ joinedAll 0 m ∧ BlkOk m ∧ Blk1 m ∧
-      RegionOwned IoR m (m.clocks[0]!) := by
+      RegionOwned IoR m (m.clocks[0]!) ∧
+      ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[0]!) = true := by
   obtain ⟨h00, hrec, hnone, hph⟩ := hi.2.shape
   have hX0 : (upd G 0 (gJoins k k) 0).2 = .joins k k := by rw [upd_self]; rfl
   obtain ⟨j, k', -, -, h0, -⟩ | ⟨i, k', -, hk3, h0, hsz, -, hjb⟩ := hph
@@ -1435,7 +1436,7 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} {k : Nat}
     Heap.union_left_comm (Heap.disjoint_union_right.mp hd).1
   refine ⟨_, own 0 ∪ L.wordH m, ho, by rw [upd_self, heq]; exact ⟨hL, _, hd', rfl, hR3, rfl⟩, hsz,
     hk3, fun r hr hsp => ?_, hi.2.blk, hi.2.blk1,
-    (ioOk_iff.mp hi.2.io).reclaim (by rw [hsz]; exact Nat.succ_pos _) hall⟩
+    (ioOk_iff.mp hi.2.io).reclaim (by rw [hsz]; exact Nat.succ_pos _) hall, hall⟩
   obtain ⟨u, hu, rfl⟩ := Array.mem_iff_getElem.mp hr
   by_cases hu0 : u = 0
   · subst hu0
@@ -1569,7 +1570,7 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.pure' ?_
   simp only [StateT.run_bind]
   -- the counter holds 3
-  obtain ⟨own, rest, ho, hp, hsz, -, hja, hbk, hb1, hio⟩ := inv_final hi₁₁
+  obtain ⟨own, rest, ho, hp, hsz, -, hja, hbk, hb1, hio, hall⟩ := inv_final hi₁₁
   refine WP.bind (WP.liftM_owned (TTriple.load (p := cPtr.add 20) (a := 4)
     (v := BitVec.ofNat 32 3) (by decide)).frame ho hc₁₁ (by rw [hsz]; exact Nat.succ_pos _) hp
     fun a m₁₂ hQ hr ho' hq hs₁₂ _ _ => ?_)
@@ -1582,14 +1583,19 @@ theorem main_spec (io : Io) (d : Nat) :
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hbk
   obtain ⟨blk₁, hblk₁, hl₁, -⟩ := hb1
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]; rfl
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀ e he).elim)
+  -- every task is joined: the ends of the blocks race with no access
+  have hcl : m₁₂.ClocksLe := by
+    rw [hm₁₂]; exact (Mem.ClocksLe.of_threads ho.csize (by rw [hc₁₁]; exact hall)).recordAt _ _ _ _
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
+    (hcl.freeRaces _ _) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', hb', hblk', rfl⟩ := free_ok hfr
   cases hb'
   refine ⟨rfl, ?_⟩
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1)
+    (m := { m₁₂ with blocks := m₁₂.blocks.set! 0 { blk' with live := false } }) (by
     simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; rw [hb₁₂]; simpa using hblk₁)
-    hl₁ e he).elim) fun _ m₁₄ hfr' => ?_)
+    hl₁ (hcl.freeRaces _ _) e he).elim) fun _ m₁₄ hfr' => ?_)
   obtain ⟨b'', -, hb'', -, rfl⟩ := free_ok hfr'
   cases hb''
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_, ⟨{ blk' with live := false }, ?_, rfl⟩, ?_⟩⟩

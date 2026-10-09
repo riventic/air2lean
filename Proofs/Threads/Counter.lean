@@ -1276,7 +1276,8 @@ clock is `≥` every message's clock, so only the newest message is a read optio
 theorem final_load {G : ThreadId → Gh} {m m' : Mem} {J : List Nat} {c : Nat} {v : BitVec 32}
     (hi : Inv n G m) (hG0 : G 0 = .main 4 J) (hJ4 : J.length = 4) (hcur : m.current = 0)
     (h : ((atomicLoadAt c .seqCst 4 counterPtr).run m).run = some (.ok (v, m'))) :
-    v = BitVec.ofNat 32 (4 * n.toNat) ∧ m'.threads = m.threads ∧ m'.blocks = m.blocks := by
+    v = BitVec.ofNat 32 (4 * n.toNat) ∧ m'.threads = m.threads ∧ m'.blocks = m.blocks ∧
+      m'.ClocksLe := by
   have hnd' : ∀ q, G m.current ≠ .bump q n.toNat true := by
     intro q hq; rw [hcur, hG0] at hq; cases hq
   have hiR := inv_recordAt (b := 1) (o := 0) (len := 4) (k := .atomicRead) (hn1 := by decide) n hi hnd' (by
@@ -1334,11 +1335,16 @@ theorem final_load {G : ThreadId → Gh} {m m' : Mem} {J : List Nat} {c : Nat} {
   obtain ⟨rfl, rfl⟩ := hcp
   rw [getElem!_pos (m₁.atomics[li]!).msgs _ (by omega), hcat.val _ (by omega)] at hd
   simp only [Option.some.injEq, Except.ok.injEq] at hd
-  refine ⟨hd.symm, ?_, ?_⟩
+  refine ⟨hd.symm, ?_, ?_, ?_⟩
   · rw [hm']; show m₁.threads = m.threads; rw [hth1]; rfl
   · rw [hm']
     simp only [Proto.loadM, Proto.acqM, Proto.observeM, AtomicOrder.isAcq, ↓reduceIte]
     rw [hbl1]; rfl
+  · -- every thread joined into `main`: each clock is below its
+    have hR : (m.recordAt 1 0 4 .atomicRead).ClocksLe :=
+      (Mem.ClocksLe.of_threads (hcs.trans hsz.symm) (by rw [hcur]; exact hclk)).recordAt _ _ _ _
+    have hcl₁ : m₁.ClocksLe := by unfold Mem.ClocksLe; rw [hcl1, hcu1]; exact hR
+    rw [hm']; exact hcl₁.loadM _ _ _
 
 /-- The preparation of `main`'s load after the 4 joins: the counter holds `4 * n`, and the load
 reads the newest message only. -/
@@ -2221,7 +2227,7 @@ theorem main_spec (d : Nat) :
   have he₁' : Ex G₁ { m₁ with current := 0 } := he₁
   refine WP.bind (WP.callMC (fun e h => (final_noErr n hi₁' he₁' hg₁ hJ4 rfl hcr e h).elim)
     fun v m₂ hl => ?_)
-  obtain ⟨hv, hth₂, hbl₂⟩ := final_load n hi₁' hg₁ hJ4 rfl hl
+  obtain ⟨hv, hth₂, hbl₂, hcl₂⟩ := final_load n hi₁' hg₁ hJ4 rfl hl
   refine ⟨by rw [hth₂], ?_⟩
   simp only [StateT.run_pure]
   refine WP.pure' ?_
@@ -2231,18 +2237,20 @@ theorem main_spec (d : Nat) :
     intro r hr; rw [hth₂] at hr; exact joined_final n hi₁' hg₁ hJ4 r hr
   obtain ⟨⟨f0, hf0, hl0, -⟩, ⟨f1, hf1, hl1, -⟩, ⟨f2, hf2, hl2, -⟩, -⟩ := he₁'
   rw [← hbl₂] at hf0 hf1 hf2
-  refine WP.bind (WP.liftMem (fun e h => (free_noErr hf0 hl0 e h).elim) fun x m₃ hf => ?_)
+  refine WP.bind (WP.liftMem (fun e h => (free_noErr hf0 hl0 (hcl₂.freeRaces _ _) e h).elim) fun x m₃ hf => ?_)
   obtain ⟨b, blk, hb, hblk, rfl⟩ := Proto.free_ok hf
   simp only [Option.some.injEq] at hb; subst hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e h => (free_noErr (blk := f1)
-    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf1]) hl1 e h).elim)
+    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf1]) hl1
+    (by exact hcl₂.freeRaces _ _) e h).elim)
     fun x m₄ hf => ?_)
   obtain ⟨b, blk', hb, hblk', rfl⟩ := Proto.free_ok hf
   simp only [Option.some.injEq] at hb; subst hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e h => (free_noErr (blk := f2)
-    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf2]) hl2 e h).elim)
+    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf2]) hl2
+    (by exact hcl₂.freeRaces _ _) e h).elim)
     fun x m₅ hf => ?_)
   obtain ⟨b, blk'', hb, hblk'', rfl⟩ := Proto.free_ok hf
   refine ⟨rfl, ?_⟩

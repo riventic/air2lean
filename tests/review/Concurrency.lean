@@ -198,11 +198,30 @@ private def futexReadTests : IO Unit := do
       (some (.error .illegal))
   check "futex compare after the join" (run 0 true) (some (.ok 7))
 
+/-- Audit #3: the end of a block (a frame exit, `free`) is a write of all its bytes: a read by
+another thread that did not happen before it is `.illegal`, even if no schedule runs the read
+after the end; after the join of the reader it is not. -/
+private def freeTests : IO Unit := do
+  let run := fun (joinFirst : Bool) =>
+    let prog : MemM Unit := do
+      let p ← alloc .stack 4 4
+      store 4 p (5#32)
+      let child ← Thread.fork
+      modify fun m => { m with current := child }
+      let _ ← load (BitVec 32) 4 p
+      modify fun m => { m with current := 0 }
+      if joinFirst then Thread.join child
+      free p
+    ((prog.run {}).run).map fun r => r.map (·.1)
+  check "frame end races with an unordered read" (run false) (some (.error .illegal))
+  check "frame end after the join" (run true) (some (.ok ()))
+
 end ConcurrencyRegression
 
 def main : IO Unit := do
   ConcurrencyRegression.wakeTests
   ConcurrencyRegression.futexReadTests
+  ConcurrencyRegression.freeTests
   ConcurrencyRegression.traceTests
   ConcurrencyRegression.catchTests
   ConcurrencyRegression.joinTests

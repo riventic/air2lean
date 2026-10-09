@@ -826,7 +826,8 @@ theorem main_spec (io : Io) (d : Nat) :
       obtain ⟨hu2, -⟩ := hi₈.1.live u (by rw [hu]; decide)
       have : u = 1 := by unfold ThreadId at *; omega
       subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) (fun u hu => by
+  have hall₉ : ∀ u < m₉.threads.size, VClock.le (m₉.clocks[u]!) (m₉.clocks[0]!) = true :=
+    fun u hu => by
     rw [hm₉]
     simp only
     rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
@@ -836,7 +837,8 @@ theorem main_spec (io : Io) (d : Nat) :
     · subst h0; simp [VClock.le_refl]
     · have : u = 1 := by omega
       subst this
-      exact VClock.le_merge_right _ _)
+      exact VClock.le_merge_right _ _
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall₉
   -- the counter holds 4
   have hR4 : pts (cPtr.add 20) 4 (BitVec.ofNat 32 4) hL := by
     have : R (fun u => (upd G₃ 0 gEnd u).2) hL := hR
@@ -862,7 +864,9 @@ theorem main_spec (io : Io) (d : Nat) :
   -- the free of the `Counter`
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₈.2.blk
   have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
+        _ _ _ _).freeRaces _ _) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩

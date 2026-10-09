@@ -1092,25 +1092,28 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   obtain ⟨hja, -, hjb⟩ := join_final hi₁₃ hg₄ hj
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  -- the frees
+  -- the frees: the child is joined, so the ends of the blocks race with no access
+  have hcl : m₁₄.ClocksLe := Mem.ClocksLe.join2 hj
+    (by rw [hi₁₃.thr.2.1]; exact (thr_of hi₁₃.thr (.inr (.inl hg₄))).1)
   obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi₁₃.b0
   obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi₁₃.b1
   obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi₁₃.b2
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (m := m₁₄) (by rw [hjb]; exact hb₀) hl₀
+    (hcl.freeRaces _ _) e he).elim)
     fun _ m₁₅ hf₁ => ?_)
   obtain ⟨b, blk, hb, -, rfl⟩ := free_ok hf₁
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₁) hl₁ e he).elim) fun _ m₁₆ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₆ hf₂ => ?_)
   obtain ⟨b, blk', hb, -, rfl⟩ := free_ok hf₂
   cases hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide), hjb]
-      exact hb₂) hl₂ e he).elim) fun _ m₁₇ hf₃ => ?_)
+      exact hb₂) hl₂ (by exact hcl.freeRaces _ _) e he).elim) fun _ m₁₇ hf₃ => ?_)
   obtain ⟨b, blk'', hb, -, rfl⟩ := free_ok hf₃
   cases hb
   refine ⟨rfl, WP.pure' ⟨?_, hja⟩⟩

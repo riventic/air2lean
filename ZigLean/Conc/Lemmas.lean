@@ -323,7 +323,9 @@ theorem free_ok {m m' : Mem} {p : Ptr} {x : Unit}
     split at h₁
     · rename_i blk hblk
       split at h₁
-      · exact ⟨b, blk, hb, hblk, MemM.set_ok h₁⟩
+      · split at h₁
+        · exact (MemM.throw_ok h₁).elim
+        · exact ⟨b, blk, hb, hblk, MemM.set_ok h₁⟩
       · exact (MemM.throw_ok h₁).elim
     · exact (MemM.throw_ok h₁).elim
 
@@ -1710,16 +1712,16 @@ theorem alloc_noErr {m : Mem} {kind : BlockKind} {size align : Nat} (e : Error) 
   · exact MemM.set_err h₂
   · exact MemM.pure_err h₃
 
-/-- A free of a live block gives no error. -/
+/-- A free of a live block whose end races with no access (`Mem.freeRaces`) gives no error. -/
 theorem free_noErr {m : Mem} {b : Nat} {blk : Block} (hb : m.blocks[b]? = some blk)
-    (hl : blk.live = true) (e : Error) :
+    (hl : blk.live = true) (hnr : m.freeRaces b blk.bytes.size = false) (e : Error) :
     ((free ⟨some b, 0⟩).run m).run ≠ some (.error e) := by
   intro h
   unfold free at h
   rcases MemM.bind_err h with h₀ | ⟨a₁, m₁, hg, h₁⟩
   · exact MemM.get_err h₀
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  simp only [hb, hl] at h₁
+  simp only [hb, hl, hnr] at h₁
   simp at h₁
 
 /-- What a fork does (`Thread.fork`): the new thread's id is the number of threads; the parent's
@@ -1751,6 +1753,90 @@ theorem getElem!_set!_ite {α : Type} [Inhabited α] (xs : Array α) (i u : Nat)
     split
     · rename_i h; exact absurd (h.1 ▸ h.2) hu
     · rfl
+
+/-! ## The end of a block after the joins -/
+
+/-- Every thread's clock is below the current thread's (each other thread joined into it):
+the end of a block then races with no access (`Mem.freeRaces`). -/
+def _root_.Zig.Mem.ClocksLe (m : Mem) : Prop :=
+  ∀ u < m.clocks.size, VClock.le (m.clocks[u]!) (m.clocks[m.current]!) = true
+
+theorem _root_.Zig.Mem.ClocksLe.freeRaces {m : Mem} (h : m.ClocksLe) (b n : Nat) : m.freeRaces b n = false :=
+  freeRaces_of_le h
+
+/-- A record by the current thread keeps `ClocksLe`. -/
+theorem _root_.Zig.Mem.ClocksLe.recordAt {m : Mem} (h : m.ClocksLe) (b o n : Nat) (k : AccessKind) :
+    (m.recordAt b o n k).ClocksLe := by
+  intro u hu
+  have hs : (m.recordAt b o n k).clocks.size = m.clocks.size := by simp [Mem.recordAt]
+  rw [hs] at hu
+  show VClock.le ((m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current))[u]!)
+    ((m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current))[m.current]!) = true
+  rw [getElem!_set!_ite, getElem!_set!_ite]
+  by_cases hc : m.current < m.clocks.size
+  · rw [if_pos (⟨rfl, hc⟩ : m.current = m.current ∧ m.current < m.clocks.size)]
+    split
+    · exact VClock.le_refl _
+    · exact VClock.le_trans (h u hu) (VClock.le_bump _ _)
+  · rw [if_neg (fun h' => hc h'.2), if_neg (fun h' => hc h'.2)]; exact h u hu
+
+/-- A join of `tid` by the current thread, whose clock was above every other thread's but
+`tid`'s: after it, every clock is below the current thread's. -/
+theorem _root_.Zig.Mem.ClocksLe.join {m m' : Mem} {tid : ThreadId}
+    (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) (hc : m.current < m.clocks.size)
+    (hall : ∀ u < m.clocks.size, u ≠ tid → VClock.le (m.clocks[u]!) (m.clocks[m.current]!) = true) :
+    m'.ClocksLe := by
+  obtain ⟨rec, -, -, rfl⟩ := join_eq h
+  intro u hu
+  simp only [Array.size_set!] at hu
+  show VClock.le ((m.clocks.set! m.current _)[u]!) ((m.clocks.set! m.current _)[m.current]!) = true
+  rw [getElem!_set!_ite, getElem!_set!_ite,
+    if_pos (⟨rfl, hc⟩ : m.current = m.current ∧ m.current < m.clocks.size)]
+  split
+  · exact VClock.le_refl _
+  · rename_i hne
+    by_cases ht : u = tid
+    · subst ht; exact VClock.le_merge_right _ _
+    · exact VClock.le_trans (hall u hu ht)
+        (VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _))
+
+/-- The join of the other thread of two (`main` is 0, the child 1). -/
+theorem _root_.Zig.Mem.ClocksLe.join2 {m m' : Mem}
+    (h : ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m')))
+    (hcs : m.clocks.size = 2) : m'.ClocksLe :=
+  Zig.Mem.ClocksLe.join h (by show 0 < m.clocks.size; omega) fun u hu h1 => by
+    have : u = 0 := by simp only at hu; omega
+    subst this; exact VClock.le_refl _
+
+/-- An acquire (`acqM`) by the current thread keeps `ClocksLe`. -/
+theorem _root_.Zig.Mem.ClocksLe.acqM {m : Mem} (h : m.ClocksLe) (c : VClock) :
+    (Proto.acqM m c).ClocksLe := by
+  intro u hu
+  have hs : (Proto.acqM m c).clocks.size = m.clocks.size := by simp [Proto.acqM]
+  rw [hs] at hu
+  show VClock.le ((m.clocks.set! m.current (VClock.merge (m.clocks[m.current]!) c))[u]!)
+    ((m.clocks.set! m.current (VClock.merge (m.clocks[m.current]!) c))[m.current]!) = true
+  rw [getElem!_set!_ite, getElem!_set!_ite]
+  by_cases hc : m.current < m.clocks.size
+  · rw [if_pos (⟨rfl, hc⟩ : m.current = m.current ∧ m.current < m.clocks.size)]
+    split
+    · exact VClock.le_refl _
+    · exact VClock.le_trans (h u hu) (VClock.le_merge_left _ _)
+  · rw [if_neg (fun h' => hc h'.2), if_neg (fun h' => hc h'.2)]; exact h u hu
+
+/-- An atomic load (`loadM`) by the current thread keeps `ClocksLe`. -/
+theorem _root_.Zig.Mem.ClocksLe.loadM {m : Mem} (h : m.ClocksLe) (li : Nat) (ord : AtomicOrder)
+    (msg : Msg) : (Proto.loadM m li ord msg).ClocksLe := by
+  unfold Proto.loadM
+  split
+  · exact Zig.Mem.ClocksLe.acqM (m := Proto.observeM m li msg.id) h _
+  · exact h
+
+/-- From the joins: each thread's clock below the current thread's, as many clocks as threads. -/
+theorem _root_.Zig.Mem.ClocksLe.of_threads {m : Mem} (hcs : m.clocks.size = m.threads.size)
+    (h : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[m.current]!) = true) :
+    m.ClocksLe := fun u hu => h u (hcs ▸ hu)
+
 
 theorem getElem!_push {α : Type} [Inhabited α] (xs : Array α) (v : α) (u : Nat) :
     (xs.push v)[u]! = if u < xs.size then xs[u]! else if u = xs.size then v else default := by

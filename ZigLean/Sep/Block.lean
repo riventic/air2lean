@@ -132,10 +132,12 @@ theorem alloc_run {m : Mem} {h hF : Heap} (hd : Heap.Disjoint h hF) (hm : m.heap
   have := le_alignUp m.nextAddr align
   omega
 
-/-- `free` of a whole block (from offset 0, all `S > 0` bytes owned) removes it from the heap. -/
+/-- `free` of a whole block (from offset 0, all `S > 0` bytes owned, its end races with no
+access: `Mem.freeRaces`) removes it from the heap. -/
 theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
-    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S)
+    (hnr : ∀ b, p.block = some b → m.freeRaces b S = false) :
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧
       m'.blocks.size = m.blocks.size ∧ m.SameThreads m' ∧ m'.nextAddr = m.nextAddr := by
   obtain ⟨b, hpb, -, hown⟩ := id hb
@@ -146,7 +148,7 @@ theorem free_run_core {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKi
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
   refine ⟨{ m with blocks := m.blocks.set! b { blk with live := false } }, ?_, ?_, by simp,
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, rfl⟩
-  · simp [free, hpb, hblk, hl, h0, zig_unfold, set, StateT.set, MonadStateOf.set]
+  · simp [free, hpb, hblk, hl, h0, hsz, hnr b hpb, zig_unfold, set, StateT.set, MonadStateOf.set]
   · funext ⟨x, y⟩
     have hmx := congrFun hm (x, y)
     simp only [Heap.union_apply, Heap.empty, Option.none_or] at hmx ⊢
@@ -177,6 +179,7 @@ theorem free_run {m : Mem} {h hF : Heap} {p : Ptr} {A S : Nat} {K : BlockKind} {
     ∃ m', (free p).run m = pure ((), m') ∧ m'.heap = Heap.empty ∪ hF ∧ m'.Seq ∧
       m'.blocks.size = m.blocks.size := by
   obtain ⟨m', hr, hm', hsz, hs, hn⟩ := free_run_core hb hm hd hS h0 hpos
+    fun b _ => freeRaces_of_singleThread hst.single b S
   refine ⟨m', hr, hm', ⟨hs.singleThread hst.single, hst.addr.of_heap hn fun l c hc => ?_⟩, hsz⟩
   refine ⟨l, c, ?_, rfl, rfl⟩
   rw [hm', Heap.union_apply, Heap.empty, Option.none_or] at hc

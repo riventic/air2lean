@@ -39,5 +39,5 @@ grep -q 'lbRelaxed: .*exhaustive=true' "$work/model.txt"
 grep -q 'mpAllRelaxed: .*ok(100)' "$work/model.txt"         # stale MP allowed (sound)
 ! grep -q 'futexEarly: .*ok(1)' "$work/model.txt"           # no spurious wakeup (S2)
 grep -q 'groupGate: .*deadlock' "$work/model.txt"           # S1 fixed: async may run eagerly
-! grep -q 'stackLifetime: .*illegal' "$work/model.txt"      # frame end not an access (S3)
+grep -q 'stackLifetime: .*illegal' "$work/model.txt"        # S3 fixed: frame end is a write
 echo "audit observations reproduced"

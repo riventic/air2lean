@@ -1646,7 +1646,7 @@ theorem whole_noErr {G : ThreadId → Gh} {m : Mem} {w0 w1 w2 : BitVec 32} (hi :
 
 /-- `main`'s end: the frees of the three blocks; the result. -/
 theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi : Inv G m)
-    (hg : G 0 = .ld) (hv : v = 120 ∨ v = 210) :
+    (hg : G 0 = .ld) (hc : m.current = 0) (hv : v = 120 ∨ v = 210) :
     proto.WP 0 (do
       Zig.free sPtr
       Zig.free (cPtr 1)
@@ -1655,20 +1655,23 @@ theorem main_end {G : ThreadId → Gh} {m : Mem} {d : Nat} {v : BitVec 32} (hi :
   obtain ⟨blk₀, hb₀, hl₀, -⟩ := hi.b0
   obtain ⟨blk₁, hb₁, hl₁, -⟩ := hi.b1
   obtain ⟨blk₂, hb₂, hl₂, -⟩ := hi.b2
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ e he).elim) fun _ m₁ hf₁ => ?_)
+  -- each access happened before `main` (both joins): the ends of the blocks race with nothing
+  have hnr : ∀ b n, m.freeRaces b n = false := fun _ _ =>
+    freeRaces_of_clock fun e he _ _ => by rw [hc]; exact ld_le hi hg e he
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₀ hl₀ (hnr _ _) e he).elim) fun _ m₁ hf₁ => ?_)
   obtain ⟨b', blk, hb', -, rfl⟩ := free_ok hf₁
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 1) (by
       simp only [Array.set!_eq_setIfInBounds]; rw [Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₁) hl₁ e he).elim) fun _ m₂ hf₂ => ?_)
+      exact hb₁) hl₁ (by exact hnr _ _) e he).elim) fun _ m₂ hf₂ => ?_)
   obtain ⟨b', blk', hb', -, rfl⟩ := free_ok hf₂
   cases hb'
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr (b := 2) (by
       simp only [Array.set!_eq_setIfInBounds]
       rw [Array.getElem?_setIfInBounds_ne (by decide), Array.getElem?_setIfInBounds_ne (by decide)]
-      exact hb₂) hl₂ e he).elim) fun _ m₃ hf₃ => ?_)
+      exact hb₂) hl₂ (by exact hnr _ _) e he).elim) fun _ m₃ hf₃ => ?_)
   obtain ⟨b', blk'', hb', -, rfl⟩ := free_ok hf₃
   cases hb'
   refine ⟨rfl, WP.pure' ⟨?_, joinedAll_ld hi.thr hg⟩⟩
@@ -1947,7 +1950,7 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
       refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
         (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
       refine WP.pure' ?_
-      exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
+      exact main_end hi₂₄ hg₂₁ (by first | exact hc₂₁ | simp [Mem.recordAt, hc₂₁]) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
   | -- Zig 0.15.2: a load of the whole `Stack`, then an index into its `next`
     obtain ⟨w1, w2, hn1, hn2, hw⟩ : ∃ w1 w2 : BitVec 32, NextAt m₂₁ 1 w1 ∧ NextAt m₂₁ 2 w2 ∧
         ((a = 1 ∧ b = 2 ∧ w1 = 0 ∧ w2 = 1) ∨ (a = 2 ∧ b = 1 ∧ w1 = 2 ∧ w2 = 0)) := by
@@ -2003,7 +2006,7 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
     refine WP.bind (WP.callRC_ok (x := add false (BitVec.ofNat 32 (100 * b + 10 * a)) 0)
       (v := BitVec.ofNat 32 (100 * b + 10 * a)) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl) ?_)
     refine WP.pure' ?_
-    exact main_end hi₂₄ hg₂₁ (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
+    exact main_end hi₂₄ hg₂₁ (by first | exact hc₂₁ | simp [Mem.recordAt, hc₂₁]) (by rcases hab with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide)
 
 /-! ## The results -/
 
