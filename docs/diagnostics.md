@@ -10,7 +10,8 @@ air2lean --diagnostics-json ./air --diagnostic-limit 256
 It prints one JSON object to stdout and exits 0 for `checked` or 1 for `rejected`,
 including argument and directory errors. The leading `--diagnostics-json` selects
 this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096), and
-`--spawn-policy available|fallible`; `-o`,
+`--spawn-policy available|fallible`, and `--assume-no-lb` (the load-buffering shape is
+reported as a model failure without it, as translation rejects it); `-o`,
 `--namespace`, `--prefix`, and `--float-semantics` are incompatible. The ordinary
 emission mode keeps its fail-fast interfaces and generated source format.
 

@@ -14,6 +14,8 @@ structure CheckArgs where
   profile : Option String := none
   limit : Nat := 256
   spawnPolicy : SpawnSemantics := .available
+  /-- `--assume-no-lb`: do not report the load-buffering shape (premise ORD-02). -/
+  assumeNoLb : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -32,7 +34,10 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     let spawnPolicy ← parseSpawnPolicy value
     parseOptions rest { out with spawnPolicy } true
   | ["--spawn-policy"] => throw "missing value for --spawn-policy"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit and --spawn-policy; emission flags are incompatible"
+  | "--assume-no-lb" :: rest =>
+    if out.assumeNoLb then throw "duplicate --assume-no-lb"
+    parseOptions rest { out with assumeNoLb := true } spawnPolicySeen
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --spawn-policy and --assume-no-lb; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -40,7 +45,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb]"
 
 structure FileResult where
   file : String
@@ -216,7 +221,7 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     localPassed := checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log)
-    (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
+    (spawnPolicy : SpawnSemantics := .available) (assumeNoLb : Bool := false) : Log := Id.run do
   let mut log := initial
   let safe := units.filter (·.structureValid)
   let funcs := safe.filterMap (·.normalized)
@@ -287,8 +292,8 @@ def collectProgram (units : Array FileResult) (initial : Log)
           message := "not inspected: fallible spawn policy requires a valid selected program"
           prerequisites := #["validated_selected_program"]
           firstErrorInUnit := true }
-    -- Check-only mode has no `--assume-no-lb`: it reports the load-buffering shape.
-    if program.toOption.isSome then
+    -- The load-buffering shape, as in translation (unless `--assume-no-lb`).
+    if program.toOption.isSome && !assumeNoLb then
       log := log.record {
         code := .modelFailure
         phase := .program
@@ -385,7 +390,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
         (BuildProfile.checkProgram #[baseline, profile] a.profile)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
-  return (units, collectProgram units log a.spawnPolicy)
+  return (units, collectProgram units log a.spawnPolicy a.assumeNoLb)
 
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with

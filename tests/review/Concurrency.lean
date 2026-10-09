@@ -248,6 +248,16 @@ private def unfairTests : IO Unit := do
     (do let p ← ConcM.liftMem (alloc .heap 4 4); ConcM.liftMem (store 4 p (0#32))
         lock p; unlock p; unlock p; pure 7) {}).1) (some (.error .illegal))
 
+/-- Review of #1: a finished `Io.Threaded` task may still count as busy after `await` (the worker
+decrements `busy_count` after it signals the group), so the caller execution stays possible; a
+deferred task has no thread, so it does not use the spawn budget. -/
+private def envTests : IO Unit := do
+  let joined : Mem := { threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := true }] }
+  check "joined task may still be busy" (asyncOptions (.threaded 2) joined) #[0, 1]
+  let deferred : Mem := { threads := #[{ spawner := 0, joined := true },
+    { spawner := 0, joined := false, gated := true }], spawnLimit := some 1 }
+  check "deferred task uses no budget" (deferred.liveChildren 0, deferred.spawnAdmits) (0, true)
+
 end ConcurrencyRegression
 
 def main : IO Unit := do
@@ -255,6 +265,7 @@ def main : IO Unit := do
   ConcurrencyRegression.futexReadTests
   ConcurrencyRegression.freeTests
   ConcurrencyRegression.unfairTests
+  ConcurrencyRegression.envTests
   ConcurrencyRegression.traceTests
   ConcurrencyRegression.catchTests
   ConcurrencyRegression.joinTests

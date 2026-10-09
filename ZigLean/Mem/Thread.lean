@@ -63,7 +63,8 @@ unaffected; a plain write that overlaps the location becomes a message as above.
 
 **Trusted assumption** (`docs/std-models.md` §Thread model, premise ORD-02): the compiled code
 has no load buffering (RC11); LLVM does not promise that for relaxed atomics. The translator
-rejects the straight-line load-buffering shape unless `--assume-no-lb` (`checkLoadBuffering`,
+rejects the straight-line load-buffering shape (a relaxed read, then a relaxed write to another
+address) unless `--assume-no-lb` (`checkLoadBuffering`,
 `Air2Lean/Check.lean`).
 -/
 

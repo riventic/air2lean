@@ -34,7 +34,8 @@ default of the scheduler. -/
 /-- Whether thread assignment can fail (`Thread.spawn`, `Io.Group.concurrent`, and the thread of
 `Io.Group.async`). -/
 inductive SpawnPolicy where
-  /-- Assignment succeeds: an explicit environment permission. -/
+  /-- Assignment succeeds (a thread, and `Io.Threaded`'s allocation of an async task): an explicit
+  environment permission. -/
   | available
   /-- Every declared failure is possible (`spawnErrors`), and the per-caller budget
   `Mem.spawnLimit` excludes success at an exhausted budget. -/
@@ -52,9 +53,10 @@ inductive AsyncEnv where
   | any
   deriving DecidableEq, Repr, Inhabited
 
-/-- The environment of a run: how `Io.Group.async` executes and whether assignment can fail.
-The model's `std.mem.Allocator` is not thread-safe: concurrent allocator calls must be ordered
-(`ZigLean/Mem/Alloc.lean`), so its thread-safety is not an environment choice. -/
+/-- The environment of a run: how `Io.Group.async` executes and whether assignment can fail. The
+`Io.Group.async` outcomes come from the environment alone (the translation's `--spawn-policy`
+does not add any). The program's `std.mem.Allocator` is assumed thread-safe in a concurrent run
+(premise ALC-08, `ZigLean/Mem/Alloc.lean`): its state has no race footprint. -/
 structure Env where
   io : AsyncEnv
   spawn : SpawnPolicy
@@ -69,9 +71,10 @@ def spawnErrors : Array ErrName :=
 /-- A total lookup; the fallback only covers malformed direct callers. -/
 def spawnErrorAt (choice : Nat) : ErrName := spawnErrors[choice]?.getD "Unexpected"
 
-/-- The assigned children of thread `t` that no join has reclaimed. -/
+/-- The assigned children of thread `t` that no join has reclaimed. A deferred `Io.Group` task
+(`ThreadRec.gated`) has no thread of its own: it does not count. -/
 def Mem.liveChildren (m : Mem) (t : ThreadId) : Nat :=
-  (m.threads.filter fun r => r.spawner == t && !r.joined).size
+  (m.threads.filter fun r => r.spawner == t && !r.joined && !r.gated).size
 
 /-- The current thread may receive another child under `Mem.spawnLimit`. -/
 def Mem.spawnAdmits (m : Mem) : Bool :=
@@ -88,9 +91,10 @@ def assignmentCount (total : Nat) (m : Mem) : Nat :=
 def assignmentOutcome (admits : Bool) (c : Nat) : Nat :=
   if admits then c else c + 1
 
-/-- The threads that may be busy `Io.Threaded` tasks: every thread that no join has reclaimed
-(an upper bound of std's `busy_count`). -/
-def Mem.busyBound (m : Mem) : Nat := (m.threads.filter fun r => !r.joined).size
+/-- The threads that may count as busy `Io.Threaded` tasks: every thread but `main`, joined or
+not (an upper bound of std's `busy_count`: a worker decrements it only after it signalled the
+group, so `await` can return while a finished task still counts). -/
+def Mem.busyBound (m : Mem) : Nat := m.threads.size - 1
 
 /-- The executions of an `Io.Group.async` task that the environment allows, among 0 (a thread),
 1 (the caller, at once) and 2 (deferred until `await`). A thread is always possible (the model's

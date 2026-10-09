@@ -28,7 +28,7 @@ namespace Air2Lean
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb]"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
