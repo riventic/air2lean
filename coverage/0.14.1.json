@@ -14948,6 +14948,8 @@
       "tests/golden/0.15.2/atomics/air-linux/atomics.sbRelaxed.json": "b799a09d1e343bc16106fff8fb9aa4e4806b437b804d1916f5643f183a74dce5",
       "tests/golden/0.15.2/atomics/air-linux/atomics.stackPush.json": "d4545a499116a9df7b335da3a2372db8621c8362b898aeb15fe9c4998c1fb6f9",
       "tests/golden/0.15.2/atomics/air-linux/atomics.twoPlusTwoW.json": "507c41295da7ced81d8f831ca15c17d7d31d05ebe9d5541f94443d0a9cb69cf0",
+      "tests/golden/0.15.2/floatconv/Gen-darwin.lean": "8158c3e12d311d1bb6174be404dbe09e0c8e346b0e1cfc2bdd549a967955395e",
+      "tests/golden/0.15.2/floatops/Gen-darwin.lean": "0cb16d4f8c73f39e1dd5a6e3d0501bf8029cd32732c5e24af61b29055efb8261",
       "tests/golden/0.15.2/floatops/Gen.lean": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a",
       "tests/golden/0.15.2/layout/Gen.lean": "4f64bb0457721b85cda2a5ca92c54d125bfb416600b7339c7b8f56bb75685826",
       "tests/golden/0.15.2/layout/air/layout.bumpPair.json": "7e6fd6e45c2bb9f612f424b0c3b46a9f9b41f858cf86104328bda3aad1ddce8b",
