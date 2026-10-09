@@ -1,4 +1,5 @@
 import Proofs.Variants.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/variants/variants.zig`
@@ -282,5 +283,12 @@ theorem totalArea_spec (xs : Array Shape) (hs : xs.size < 2 ^ 64)
     rw [hrun]
     simp [zig_unfold]
   · rw [hpost, areaSum, List.take_of_length_le (by simp)]
+
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness area_spec := ⟨.square 3, by decide, trivial⟩
+nonvacuity_witness scale_spec := ⟨.square 3, 2, by unfold scaleFits; decide, trivial⟩
+nonvacuity_witness Zig.enumOf.eq_1 := ⟨Unit, (), trivial⟩
 
 end Variants
