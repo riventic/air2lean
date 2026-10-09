@@ -49,7 +49,7 @@ private theorem byteBits_intByte {m : Nat} (v : BitVec m) (i : Nat) (hi : 8 * i 
     exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) hlt
   · simp [h8]
 
-private theorem foldr_intBytes {m : Nat} (v : BitVec m) (s d : Nat) (hk : s + d = (m + 7) / 8) :
+theorem foldr_intBytes {m : Nat} (v : BitVec m) (s d : Nat) (hk : s + d = (m + 7) / 8) :
     ((List.range' s d).map fun i => (intByte m v i, i)).foldr
         (fun (b, i) (acc : Result (BitVec m)) => do
           let hi ← acc
