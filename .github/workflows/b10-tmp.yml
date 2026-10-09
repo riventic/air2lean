@@ -179,7 +179,8 @@ jobs:
             summary="$RUNNER_TEMP/build-modes/$mode.json"
             status=0
             AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
-              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
+              AIR2LEAN_DIFF_REPORT="$summary" timeout 1500 scripts/diff.sh > "$RUNNER_TEMP/build-modes/$mode.log" 2>&1 || status=$?
+            tail -n 25 "$RUNNER_TEMP/build-modes/$mode.log"
             echo "$mode diff.sh exit $status"
             echo "$status" > "$RUNNER_TEMP/build-modes/$mode.exit"
           done
