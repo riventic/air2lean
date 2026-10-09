@@ -1,5 +1,6 @@
 import ZigLean.Os.Mmap
 import ZigLean.Sep.Alloc
+import ZigLean.Sep.Total
 
 /-!
 # Separation-logic rules of the OS page-mapping model (premise OSM-01)
@@ -10,11 +11,13 @@ Proof-only module (not imported by `ZigLean.lean`): the rules of `Os.mmap`, `Os.
 `mapping P p A lo bs` owns the whole live range of one OS mapping: the bytes `bs` at `p`, which
 points at the mapping's first live offset `lo`, in a block at the page-aligned address `A`.
 
-* `Triple.mmap`: a fresh mapping of `len` zero bytes, or `error.OutOfMemory` and no change.
-* `Triple.munmapWhole`, `Triple.munmapPrefix`, `Triple.munmapTail`: `munmap` consumes the
-  permission of exactly the unmapped range; a trim leaves the rest as a mapping.
-* `Triple.mremapShrink`, `Triple.mremapGrow`: the new mapping (in place or moved), or an
-  `error.OutOfMemory` and the old mapping.
+Every rule is a total triple (the OS calls return).
+
+* `TotalTriple.mmap`: a fresh mapping of `len` zero bytes, or `error.OutOfMemory` and no change.
+* `TotalTriple.munmapWhole`, `TotalTriple.munmapPrefix`, `TotalTriple.munmapTail`: `munmap`
+  consumes the permission of exactly the unmapped range; a trim leaves the rest as a mapping.
+* `TotalTriple.mremapShrink`, `TotalTriple.mremapGrow`: the new mapping (in place or moved), or
+  an `error.OutOfMemory` and the old mapping.
 * `munmap_whole_then_illegal`, `munmap_prefix_access_illegal`, `munmap_tail_access_illegal`:
   after `munmap` every access to the unmapped bytes and a second `munmap` are `.illegal`.
 * `mapDenied_iff`: the failure decision is `rawAlloc`'s (`Mem.allocDenied`).
@@ -217,11 +220,11 @@ def mmapPost (P : Nat) (len : BitVec 64) : Except ErrName Slice → Assn
 
 /-- **mmap.** From nothing: a fresh, page-aligned mapping of exactly `len` zero bytes that
 nothing else owns, or an `MMapError` with the heap unchanged. For every failure policy. -/
-theorem Triple.mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64)
+theorem TotalTriple.mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64)
     (hlen : 0 < len.toNat) :
-    Triple emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
+    TotalTriple emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
       (mmapPost os.pageSize len) :=
-  Triple.of_run fun m hP' hF hd hm hp hst => by
+  TotalTriple.of_run fun m hP' hF hd hm hp hst => by
     have hP := os.pageSize_pos
     have hP0 : hP' = Heap.empty := hp
     subst hP0
@@ -384,10 +387,10 @@ theorem add_le_of_mod {a b P : Nat} (ha : a % P = 0) (hb : b % P = 0) (h : a < b
   rw [← Nat.mul_succ]; exact Nat.mul_le_mul_left _ this
 
 /-- **munmap, whole mapping.** Consumes the mapping's permission; nothing is left. -/
-theorem Triple.munmapWhole (os : Os.Target) {p : Ptr} {A lo : Nat} {bs : Array Byte}
+theorem TotalTriple.munmapWhole (os : Os.Target) {p : Ptr} {A lo : Nat} {bs : Array Byte}
     {len : BitVec 64} (hlen : 0 < len.toNat) (heq : alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
-    Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩) (fun _ => emp) :=
-  Triple.of_run fun m h hF hd hm hp hst => by
+    TotalTriple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩) (fun _ => emp) :=
+  TotalTriple.of_run fun m h hF hd hm hp hst => by
     have hpos := hp.2.1
     obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, -, hFb, m', hr, hm', hn', hs', hb'⟩ :=
       munmap_owned os (k := 0) (len := len) hp hm hd hst (Nat.zero_mod _)
@@ -402,14 +405,14 @@ theorem Triple.munmapWhole (os : Os.Target) {p : Ptr} {A lo : Nat} {bs : Array B
 
 /-- **munmap, page prefix.** `len` (rounded up to pages, `k`) is less than the mapping: the
 permission of its first `k` bytes is consumed; the rest is a mapping that starts `k` bytes later. -/
-theorem Triple.munmapPrefix (os : Os.Target) {p : Ptr} {A lo : Nat}
+theorem TotalTriple.munmapPrefix (os : Os.Target) {p : Ptr} {A lo : Nat}
     {bs : Array Byte} {len : BitVec 64} (hlen : 0 < len.toNat)
     (hlt : alignUp len.toNat os.pageSize < alignUp bs.size os.pageSize) :
-    Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩)
+    TotalTriple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p, len⟩)
       (fun _ => mapping os.pageSize (p.add (alignUp len.toNat os.pageSize)) A
         (lo + alignUp len.toNat os.pageSize)
         (bs.extract (alignUp len.toNat os.pageSize) bs.size)) :=
-  Triple.of_run fun m h hF hd hm hp hst => by
+  TotalTriple.of_run fun m h hF hd hm hp hst => by
     have hP := os.pageSize_pos
     have hpos := hp.2.1
     have hA0 := hp.2.2.1
@@ -447,13 +450,13 @@ theorem Triple.munmapPrefix (os : Os.Target) {p : Ptr} {A lo : Nat}
 
 /-- **munmap, page tail.** From byte `k` (a page multiple, inside the mapping) to the mapping's
 page end: the permission of those bytes is consumed; the first `k` bytes stay a mapping. -/
-theorem Triple.munmapTail (os : Os.Target) {p : Ptr} {A lo k : Nat} {bs : Array Byte}
+theorem TotalTriple.munmapTail (os : Os.Target) {p : Ptr} {A lo k : Nat} {bs : Array Byte}
     {len : BitVec 64} (hk : k % os.pageSize = 0) (hk0 : 0 < k) (hkS : k < bs.size)
     (hlen : 0 < len.toNat)
     (heq : k + alignUp len.toNat os.pageSize = alignUp bs.size os.pageSize) :
-    Triple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p.add k, len⟩)
+    TotalTriple (mapping os.pageSize p A lo bs) (Os.munmap os ⟨p.add k, len⟩)
       (fun _ => mapping os.pageSize p A lo (bs.extract 0 k)) :=
-  Triple.of_run fun m h hF hd hm hp hst => by
+  TotalTriple.of_run fun m h hF hd hm hp hst => by
     have hA0 := hp.2.2.1
     have hlo0 := hp.2.2.2.1
     obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, m', hr, hm', hn', hs', hb'⟩ :=
@@ -670,14 +673,14 @@ def mremapPost (P : Nat) (p : Ptr) (A lo : Nat) (bs : Array Byte) (n : Nat) (new
 
 /-- **mremap, shrink.** In place: the permission of the cut bytes is consumed, the first
 `newLen` bytes stay a mapping at the same pointer. -/
-theorem Triple.mremapShrink (os : Os.Target) (hhas : os.hasMremap = true)
+theorem TotalTriple.mremapShrink (os : Os.Target) (hhas : os.hasMremap = true)
     {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
     {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
     (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
     (hn0 : 0 < newLen.toNat) (hn : newLen.toNat ≤ bs.size) :
-    Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
+    TotalTriple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
       (fun r => ⌜r = .ok ⟨p, newLen⟩⌝ ∗ mapping os.pageSize p A lo (bs.extract 0 newLen.toNat)) :=
-  Triple.of_run fun m h hF hd hm hp hst => by
+  TotalTriple.of_run fun m h hF hd hm hp hst => by
     have hA0 := hp.2.2.1
     have hlo0 := hp.2.2.2.1
     obtain ⟨b, blk, rfl, hblk, hl, hK, hA, hS, hx, hFb, hh⟩ := mapping_block hp hm hd
@@ -704,14 +707,14 @@ theorem Triple.mremapShrink (os : Os.Target) (hhas : os.hasMremap = true)
 /-- **mremap, growth.** For every failure, move and placement decision: the grown mapping (the
 old bytes, then `mremapFill`), in place at the same pointer or moved to a fresh page-aligned
 block (the old block ends), or `error.OutOfMemory` with the old mapping unchanged. -/
-theorem Triple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
+theorem TotalTriple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
     {flags : BitVec 32} (hfl : flags = 0 ∨ flags = Os.mremapMayMove) {p : Ptr} {A lo : Nat}
     {bs : Array Byte} {oldLen newLen : BitVec 64} (hold0 : 0 < oldLen.toNat)
     (hold : alignUp oldLen.toNat os.pageSize = alignUp bs.size os.pageSize)
     (hn : bs.size < newLen.toNat) :
-    Triple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
+    TotalTriple (mapping os.pageSize p A lo bs) (Os.mremap os (some p) oldLen newLen flags none)
       (mremapPost os.pageSize p A lo bs newLen.toNat newLen) :=
-  Triple.of_run fun m h hF hd hm hp hst => by
+  TotalTriple.of_run fun m h hF hd hm hp hst => by
     have hP := os.pageSize_pos
     have hpos := hp.2.1
     have hA0 := hp.2.2.1

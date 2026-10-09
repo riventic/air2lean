@@ -91,12 +91,12 @@ address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not
 
 | Theorem | Statement |
 |---|---|
-| `Triple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, or `error.OutOfMemory` and no bytes. For every failure policy. |
-| `Triple.munmapWhole` | `mapping p A lo bs` before, `emp` after. |
-| `Triple.munmapPrefix` | `mapping p A lo bs` before; after, `mapping (p.add k) A (lo + k) (bs.extract k)` with `k = alignUp len page`. |
-| `Triple.munmapTail` | `munmap ⟨p.add k, len⟩` of a page tail: `mapping p A lo (bs.extract 0 k)` after. |
-| `Triple.mremapShrink` | `mapping p A lo (bs.extract 0 newLen)` after, the same pointer returned. |
-| `Triple.mremapGrow` | `mremapPost`: a `mapping` of `bs ++ mremapFill` at the returned pointer (in place or moved), or `error.OutOfMemory` with the old `mapping`. |
+| `TotalTriple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, or `error.OutOfMemory` and no bytes. For every failure policy. |
+| `TotalTriple.munmapWhole` | `mapping p A lo bs` before, `emp` after. |
+| `TotalTriple.munmapPrefix` | `mapping p A lo bs` before; after, `mapping (p.add k) A (lo + k) (bs.extract k)` with `k = alignUp len page`. |
+| `TotalTriple.munmapTail` | `munmap ⟨p.add k, len⟩` of a page tail: `mapping p A lo (bs.extract 0 k)` after. |
+| `TotalTriple.mremapShrink` | `mapping p A lo (bs.extract 0 newLen)` after, the same pointer returned. |
+| `TotalTriple.mremapGrow` | `mremapPost`: a `mapping` of `bs ++ mremapFill` at the returned pointer (in place or moved), or `error.OutOfMemory` with the old `mapping`. |
 | `munmap_whole_then_illegal` | after a whole `munmap`, every access to the block and a second `munmap` throw `.illegal`. |
 | `munmap_prefix_access_illegal`, `munmap_tail_access_illegal` | after a trim, every access that reaches an unmapped byte throws `.illegal`. |
 | `Os.munmap_dead`, `access_illegal` | `munmap` of a dead block, and an access below `lo`, past the bytes or into a dead block, throw `.illegal`. |

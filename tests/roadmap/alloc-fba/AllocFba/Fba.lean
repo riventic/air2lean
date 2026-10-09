@@ -353,17 +353,6 @@ theorem rem_one (d : BitVec 64) : Zig.rem false d 1 = pure 0 := by
 theorem divTrunc_one (d : BitVec 64) : Zig.divTrunc false d 1 = pure d := by
   simp [Zig.divTrunc]
 
-/-- Normalize a generated function that uses memory to its `MemM` program. -/
-macro "fba_norm" : tactic => `(tactic| (
-  simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, Norm.run_callM, Norm.run_callR,
-    Norm.run_liftM, Norm.run_liftR, Norm.run_ite, Norm.ite_bind, Norm.run_throw,
-    Norm.throw_bind, Norm.lift_pure, Norm.lift_throw, Norm.sub_zero, Norm.elem_zero,
-    Norm.run_get, Norm.run_modify, Norm.add_zero_ptr,
-    bind_assoc, pure_bind, map_pure, bind_map_left, map_bind, Norm.beq_true_iff, bind_pure_unit,
-    Zig.isNonErr, Zig.isErr, Bool.not_false, Bool.not_true, ↓reduceIte, Bool.false_eq_true]
-  try simp only [Norm.isSome_ite, Norm.elim_bind, bind_assoc, pure_bind, Norm.ite_bind,
-    bind_pure_unit]))
-
 /-- The result of `alignPointerOffset(x, 2 ^ k)`: `null` on address overflow, else an offset
 below `2 ^ k` that aligns the address `x`. -/
 def AlignRes (k : Nat) (x : Int) : Option (BitVec 64) → Prop
@@ -375,7 +364,7 @@ theorem alignPointerOffset_spec {P : Assn} {q : Ptr} {b : BlockId} {A k : Nat} (
     TotalTriple P (mem_alignPointerOffset__anon_1 q (BitVec.ofNat 64 (2 ^ k)))
       (fun r => ⌜AlignRes k ((A : Int) + q.off) r⌝ ∗ P) := by
   simp only [mem_alignPointerOffset__anon_1]
-  fba_norm
+  gen_norm
   simp only [isValidAlign_eq hk, debug_assert_true, Norm.lift_pure, pure_bind, le_eq,
     toNat_two_pow hk]
   by_cases hk0 : k = 0
@@ -520,7 +509,7 @@ theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 
   have hown := pin_ownsIn (ctx := ctx) (R := emp) hb hok'
   unfold impl
   simp only [heap_FixedBufferAllocator_alloc]
-  fba_norm
+  gen_norm
   have hpk := Nat.two_pow_pos k
   have hcap : B.cap < 2 ^ 64 := by unfold fits at hfit; omega
   have heN : (BitVec.ofNat 64 e).toNat = e := toNat_ofNat_lt (by omega)
@@ -596,7 +585,7 @@ theorem ownsSlice_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice} {b
     TotalTriple (state ctx B e ∗ R) (heap_FixedBufferAllocator_ownsSlice ctx s)
       (fun r => ⌜r = true⌝ ∗ (state ctx B e ∗ R)) := by
   simp only [heap_FixedBufferAllocator_ownsSlice, heap_FixedBufferAllocator_sliceContainsSlice]
-  fba_norm
+  gen_norm
   have hcap : B.cap < 2 ^ 64 := by omega
   refine TotalTriple.bind load_slice fun x => TotalTriple.lift fun hx => ?_
   subst hx
@@ -631,7 +620,7 @@ theorem isLast_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice}
     TotalTriple (state ctx B e ∗ R) (heap_FixedBufferAllocator_isLastAllocation ctx s)
       (fun r => ⌜r = decide (s.ptr.off + s.len.toNat = B.ptr.off + e)⌝ ∗ (state ctx B e ∗ R)) := by
   simp only [heap_FixedBufferAllocator_isLastAllocation]
-  fba_norm
+  gen_norm
   refine TotalTriple.bind load_ptr fun x => TotalTriple.lift fun hx => ?_
   subst hx
   refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
@@ -872,7 +861,7 @@ theorem resize_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (n ra : BitVec 6
   have hnc : n.toNat + B.cap < 2 ^ 64 := by unfold fits at hfit; have := Nat.two_pow_pos k; omega
   unfold impl
   simp only [heap_FixedBufferAllocator_resize]
-  fba_norm
+  gen_norm
   refine prologue hok' hin hlen ?_
   by_cases hl : s.ptr.off + bs.size = B.ptr.off + e
   · -- the last allocation
@@ -933,7 +922,7 @@ theorem remap_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (n ra : BitVec 64
   have hr := resize_spec ctx B s k n ra bs hn hfit hlen
   unfold impl at hr ⊢
   simp only [heap_FixedBufferAllocator_remap]
-  fba_norm
+  gen_norm
   refine TotalTriple.bind hr fun r => ?_
   cases r with
   | true =>
@@ -957,7 +946,7 @@ theorem free_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (ra : BitVec 64) (
   have heN : (BitVec.ofNat 64 e).toNat = e := toNat_ofNat_lt (by omega)
   unfold impl
   simp only [heap_FixedBufferAllocator_free]
-  fba_norm
+  gen_norm
   refine prologue hok' hin hlen ?_
   by_cases hl : s.ptr.off + bs.size = B.ptr.off + e
   · simp only [hl, decide_true, ↓reduceIte]
@@ -1058,7 +1047,7 @@ theorem reset_spec (ctx : Ptr) (B : Buf) {b : BlockId} (hb : B.ptr.block = some 
     TotalTriple (fun h => own ctx B h ∧ Covers b B.ptr.off.toNat (B.ptr.off.toNat + B.cap) h)
       (heap_FixedBufferAllocator_reset ctx) (fun _ => own ctx B) := by
   simp only [heap_FixedBufferAllocator_reset]
-  fba_norm
+  gen_norm
   intro m hP hF hd hm ⟨ho, hcov⟩ hst
   obtain ⟨e, tail, pb, hbd⟩ := ho
   obtain ⟨hok, hbd⟩ := sep_lift.mp hbd

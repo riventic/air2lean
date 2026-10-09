@@ -77,6 +77,17 @@ theorem beq_true_iff {α : Type} [BEq α] [LawfulBEq α] (a b : α) : ((a == b) 
 
 end Norm
 
+/-- Normalize a generated function that uses memory to its `MemM` program. -/
+macro "gen_norm" : tactic => `(tactic| (
+  simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, Norm.run_callM, Norm.run_callR,
+    Norm.run_liftM, Norm.run_liftR, Norm.run_ite, Norm.ite_bind, Norm.run_throw,
+    Norm.throw_bind, Norm.lift_pure, Norm.lift_throw, Norm.sub_zero, Norm.elem_zero,
+    Norm.run_get, Norm.run_modify, Norm.add_zero_ptr,
+    bind_assoc, pure_bind, map_pure, bind_map_left, map_bind, Norm.beq_true_iff, bind_pure_unit,
+    Zig.isNonErr, Zig.isErr, Bool.not_false, Bool.not_true, ↓reduceIte, Bool.false_eq_true]
+  try simp only [Norm.isSome_ite, Norm.elim_bind, bind_assoc, pure_bind, Norm.ite_bind,
+    bind_pure_unit]))
+
 /-- `@ctz` of a power of two below `2 ^ 64`: the exponent. (`decide` cannot evaluate `ctz` on a
 64-bit literal: `clzAuxRec` recurses on the bit index.) -/
 theorem ctz_twoPow {k : Nat} (hk : k < 64) :

@@ -11,7 +11,7 @@ This file adds the control flow of normalized generated code (`throw`, `if`, `ma
 `Os.munmap`, `Os.mremap`: they push blocks, or replace a block by one at the same address).
 
 `tame` proves `Tame c` for a `MemM` program built from these, after the generated function is
-normalized to its `MemM` program (`fba_norm`-style `simp` with `ZigLean/Sep/AllocSpec/Norm.lean`).
+normalized to its `MemM` program (`gen_norm`-style `simp` with `ZigLean/Sep/AllocSpec/Norm.lean`).
 -/
 
 namespace Zig
