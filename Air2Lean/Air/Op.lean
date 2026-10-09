@@ -315,6 +315,13 @@ def Val.constTy? (v : Val) : Option TyId :=
   | .sliceConst t .. => some t
   | _ => none
 
+/-- The member name of a default panic-handler callee, e.g. `exactDivisionRemainder` for
+`debug.FullPanic((function 'defaultPanic')).exactDivisionRemainder`, without the `__anon_<n>`
+suffix of a generic member (`inactiveUnionField`). `none` for any other callee. -/
+def panicMember? (calleeName : String) : Option String :=
+  if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
+  (calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m
+
 /-- The `Zig.Error` constructor for a noreturn panic-handler callee, e.g.
 `debug.FullPanic((function 'defaultPanic')).outOfBounds`: the member name after the last `.`,
 without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Panics). The same table as `scripts/diff.sh`'s
@@ -322,9 +329,7 @@ without the `__anon_<n>` suffix of a generic member (docs/generated-code.md §Pa
 as `panic`). `none`: a callee outside the table, which `Check.lean` rejects. -/
 def panicErrorFor? (calleeName : String) : Option String :=
   if calleeName == "debug.defaultPanic" then some ".panic" else
-  if !calleeName.startsWith "debug.FullPanic((function 'defaultPanic'))." then none else
-  -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
-  match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
+  match panicMember? calleeName with
   | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"
   | some "shlOverflow" | some "shrOverflow" | some "shiftRhsTooBig" => some ".overflow"
   | some "outOfBounds" => some ".outOfBounds"
@@ -564,8 +569,9 @@ inductive Op where
   | sliceFieldPtr (len : Bool) (p : Val)
   /-- `memset`, `memset_safe`: each item of the slice or array pointer `dst` becomes `v`. -/
   | memset (dst v : Val)
-  /-- `memcpy`, `memmove`: copy the items of `src` to the slice or array pointer `dst`. -/
-  | memcpy (dst src : Val)
+  /-- `memcpy` (`move = false`), `memmove` (`move = true`): copy the items of `src` to the slice
+  or array pointer `dst`. Only `memmove` allows the two ranges to overlap. -/
+  | memcpy (move : Bool) (dst src : Val)
   /-- `tag_name`: the name of the enum value `a`, a `[:0]const u8`. -/
   | tagName (a : Val)
   /-- `error_name`: the name of the error `a`, a `[:0]const u8`. -/

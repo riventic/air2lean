@@ -17,8 +17,8 @@ proof needs to show that a property holds for every one of them (`docs/floats.md
   may give either zero; otherwise `Float.Allowed` of the model's result.
 * `Float.AllowedSpec c P`: `c` succeeds, and `P` holds for every allowed result.
 
-Errors are not variation. An illegal input (`@intFromFloat` out of range: `.overflow`) or an
-open result the model refuses to pick (`.unspecified`) stays a `throw` for every allowed
+Errors are not variation. An illegal input (`@intFromFloat` out of range: `.overflow` with the
+safety check, `.illegal` for a NaN or without the check) stays a `throw` for every allowed
 operand (`Float.toInt_allowed`).
 -/
 
@@ -118,8 +118,8 @@ theorem Float.Allowed.conv_eq (fmt2 : FloatFmt) {a a' : Float fmt} (ha : Float.A
 /-! ## Errors stay errors -/
 
 /-- `@intFromFloat` gives the same outcome on every allowed operand, so an illegal input
-(`.overflow`: out of range, or ±inf, with the safety check) or an open one (`.unspecified`:
-NaN of any payload) is a `throw` for each of them, never absorbed into the variation. -/
+(`.overflow`: out of range, or ±inf, with the safety check; `.illegal`: NaN of any payload,
+which the check misses) is a `throw` for each of them, never absorbed into the variation. -/
 theorem Float.toInt_allowed (s : Bool) (n : Nat) (safe : Bool) {x r : Float fmt}
     (h : Float.Allowed x r) : Float.toInt s n safe r = Float.toInt s n safe x := by
   unfold Float.toInt; rw [h.classify_eq]

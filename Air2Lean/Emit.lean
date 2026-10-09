@@ -701,6 +701,46 @@ structure FCtx where
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
   rawRet : Bool := false
+  /-- The float `div_trunc`s that are the safety-checked lowering of `@divExact`
+  (`exactFloatDivs`). -/
+  exactFloatDivs : Array InstId := #[]
+  /-- The sentinel slicings that a Sema check compares (`sentinelCheckedSlices`). -/
+  sentinelChecked : Array InstId := #[]
+
+/-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
+`r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
+`cmp_vector` `eq`), and a `cond_br` on `ok` whose `else` calls the `exactDivisionRemainder`
+panic handler. Only a `floor` of a float reaches this shape, so `r` is a float division. That
+check only catches a NaN quotient, so the emitter lowers `r` with `Zig.Float.divExactTrunc`,
+which makes every other inexact quotient `.illegal` (`docs/illegal-behavior.md`). -/
+def exactFloatDivs (insts : Array Inst) : Array InstId := Id.run do
+  let byId : Std.HashMap InstId Inst := insts.foldl (fun m i => m.insert i.id i) {}
+  let opOf (v : Val) : Option Op := match v with
+    | .inst id => byId[id]?.map (·.op)
+    | _ => none
+  let isFloorOf (f : Val) (r : InstId) : Bool := match opOf f with
+    | some (.floatRound .floor (.inst r')) => r' == r
+    | _ => false
+  -- The truncated quotient compared with its own floor.
+  let checked (cmp : Val) : Option InstId := match opOf cmp with
+    | some (.cmp .eq (.inst r) f) =>
+      match opOf (.inst r) with
+      | some (.div .divTrunc ..) => if isFloorOf f r then some r else none
+      | _ => none
+    | _ => none
+  let callsExact (body : Array Inst) : Bool := body.any fun i => match i.op with
+    | .call (.func name ..) _ => panicMember? name == some "exactDivisionRemainder"
+    | _ => false
+  let mut out := #[]
+  for i in insts do
+    if let .condBr c _ elseBody := i.op then
+      if callsExact elseBody then
+        let cmp := match opOf c with
+          | some (.reduce .and v) => v
+          | _ => c
+        if let some r := checked cmp then
+          out := out.push r
+  return out
 
 private def prepareSpawnFallbackMap (fallbacks : Array (String × String)) : Std.HashMap String String :=
   let empty : Std.HashMap String String := {}
@@ -1095,6 +1135,24 @@ def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
 /-- The alignment of an access through the pointer `v`: its type's `align(N)`. -/
 def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
   ((fc.valTyId? v).bind fun t => fc.layouts[t]?.bind (·.ptrAlign)).getD 1
+
+/-- The op that defines `v`, if `v` is an instruction. -/
+def FCtx.opOf? (fc : FCtx) (v : Val) : Option Op :=
+  match v with
+  | .inst id => (fc.allInsts.find? (·.id == id)).map (·.op)
+  | _ => none
+
+/-- The alignment of the pointer type `tid`, or of an optional pointer's child. -/
+def FCtx.ptrAlignOf (fc : FCtx) (tid : TyId) : Nat :=
+  let t := match fc.tyOfId tid with | .optional c => c | _ => tid
+  (fc.layouts[t]?.bind (·.ptrAlign)).getD 1
+
+/-- `Zig.checkAddr … >>= fun _ => ` for `@ptrFromInt` of `n` to the pointer type `tid` (empty
+if no address can be illegal): the prefix of the conversion it guards. -/
+def FCtx.checkAddr (fc : FCtx) (tid : TyId) (nonNull : Bool) (n : String) : String :=
+  let align := fc.ptrAlignOf tid
+  if align ≤ 1 && !nonNull then "" else
+  s!"Zig.checkAddr {align} {nonNull} ({n}).toNat >>= fun _ => "
 
 /-- The Lean term of an atomic ordering (`Zig.AtomicOrder`; `Check.lean` rejects `unordered`). -/
 def orderTerm : AtomicOrder → String
@@ -1550,7 +1608,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .cmpxchg _ p expected new _ _ => (if fc.isMemPtr p then #[p] else #[]) ++ #[expected, new]
   | .sliceFieldPtr _ p => if fc.isMemPtr p then #[p] else #[]
   | .ptrAdd _ a b | .elemPtr a b | .ptrElemVal a b | .arrayElemVal a b | .slice a b
-  | .memset a b | .memcpy a b => #[a, b]
+  | .memset a b | .memcpy _ a b => #[a, b]
   | .slicePtr a | .arrayToSlice a | .tagName a | .errorName a => #[a]
   | .sliceLen s => #[s]
   | .sliceElemVal s i => #[s, i]
@@ -1611,6 +1669,27 @@ def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
   match fc.instUses with
   | some uses => uses.contains id
   | none => fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
+
+/-- A multi-operand `for` loop without safety: Sema still computes each operand's `slice_len`,
+but only the loop's own length bounds the loop (`cmp_lt(bitcast(i), bitcast(bound))`). A
+`slice_len` that nothing reads, followed by such a loop, is an operand whose length must equal
+`bound` (`Zig.forLen`). With safety, Sema's `forLenMismatch` check reads every length. -/
+def FCtx.forLenBound? (fc : FCtx) (id : InstId) : Option Val := do
+  guard (!fc.isReferenced id)
+  let after := fc.allInsts.filter (·.id > id)
+  let cmp ← after.findSome? fun i => match i.op with
+    | .cmp .lt (.inst idx) b => match fc.opOf? (.inst idx), b with
+      | some (.bitcast _), .inst _ => match fc.opOf? b with
+        | some (.bitcast bound) => some bound
+        | _ => none
+      -- A comptime-known first length (an array operand).
+      | some (.bitcast _), .int .. => some b
+      | _, _ => none
+    | _ => none
+  -- The bound must already be in scope at the `slice_len`.
+  let inScope : Bool := match cmp with | .inst b => decide (b < id) | _ => true
+  guard inScope
+  pure cmp
 
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
@@ -1827,14 +1906,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if fc.isFloat a then
         match op with
         | .divTrunc =>
-          let f := s!"Zig.Float.divTrunc{fc.divRtSuffix}"
-          s!"pure ({f} {rv a} {rv b})"
+          if fc.exactFloatDivs.contains inst.id then
+            -- `@divExact` with safety: an inexact non-NaN quotient is `.illegal`.
+            s!"Zig.Float.divExactTrunc {rv a} {rv b} (Zig.Float.div{fc.divRtSuffix} {rv a} {rv b})"
+          else
+            let f := s!"Zig.Float.divTrunc{fc.divRtSuffix}"
+            s!"pure ({f} {rv a} {rv b})"
         | .divFloor =>
           let f := s!"Zig.Float.divFloor{fc.divRtSuffix}"
           s!"pure ({f} {rv a} {rv b})"
         | .divExact =>
-          let f := s!"Zig.Float.div{fc.divRtSuffix}"
-          s!"pure ({f} {rv a} {rv b})"
+          -- `div_exact` (no safety): every inexact quotient, NaN included, is `.illegal`.
+          s!"Zig.Float.divExactChk {rv a} {rv b} (Zig.Float.div{fc.divRtSuffix} {rv a} {rv b})"
         | .rem => s!"Zig.Float.rem{fc.rtSuffix}Chk {rv a} {rv b}"
         | .mod => s!"Zig.Float.mod{fc.rtSuffix}Chk {rv a} {rv b}"
       else
@@ -1845,7 +1928,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         s!"{f} {sgn} {rv a} {rv b}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .divFloat a b =>
-    -- `div_float` (plain `/` on floats): group A's guard, same mode dispatch as `.divExact`.
+    -- `div_float` (plain `/` on floats): group A's guard, the same divide as `.divExact`.
     let f := s!"Zig.Float.div{fc.divRtSuffix}"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
@@ -1950,9 +2033,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
+    -- The count of a width that is not a power of two can reach the width: illegal behaviour
+    -- that only a safety check (rejected `shiftRhsTooBig`) would catch (`Zig.shiftCountOk`).
+    let countChecked := match fc.valTy a, b with
+      | .int _ w, .int _ k => k < w || k == 0
+      | .int _ w, _ => w &&& (w - 1) == 0  -- a power of two (or `u0`)
+      | _, _ => true
     let expr := match op with
-      | .shl => s!"pure (Zig.shl {rv a} {rv b})"
-      | .shr => s!"pure (Zig.shr {sgn} {rv a} {rv b})"
+      | .shl => if countChecked then s!"pure (Zig.shl {rv a} {rv b})" else s!"Zig.shlChk {rv a} {rv b}"
+      | .shr =>
+        if countChecked then s!"pure (Zig.shr {sgn} {rv a} {rv b})" else s!"Zig.shrChk {sgn} {rv a} {rv b}"
       | .shlSat => s!"pure (Zig.shlSat {sgn} {rv a} {rv b})"
       | .shlExact => s!"Zig.shlExact {sgn} {rv a} {rv b}"
       | .shrExact => s!"Zig.shrExact {sgn} {rv a} {rv b}"
@@ -2042,9 +2132,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else s!"{fc.callMName} (Zig.ptrAddrOf {fc.ptrWidthTerm} {rv a})"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && dstPtr then
-      -- `@ptrFromInt`.
-      let fromAddr := if nullablePtrTy fc.types fc.layouts inst.ty then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
-      let expr := s!"{fc.callMName} ({fromAddr} ({rv a}).toNat)"
+      -- `@ptrFromInt`, after its own address check (`Zig.checkAddr`).
+      let nullable := nullablePtrTy fc.types fc.layouts inst.ty
+      let fromAddr := if nullable then "Zig.ptrFromAddrNullable" else "Zig.ptrFromAddr"
+      let expr := s!"{fc.callMName} ({fc.checkAddr inst.ty (!nullable) (rv a)}{fromAddr} ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && fc.nullableVal a && fc.isOptScalarPtr (fc.tyOfId inst.ty) then
       -- A C/allowzero pointer to `?*T`: address zero is the explicit `none`.
@@ -2066,18 +2157,29 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && optSinglePtrTy fc.types fc.layouts inst.ty then
       -- `@ptrFromInt` to `?*T`: 0 is null.
-      let expr := s!"{fc.callMName} (Zig.optPtrFromAddr ({rv a}).toNat)"
+      let expr := s!"{fc.callMName} ({fc.checkAddr inst.ty false (rv a)}Zig.optPtrFromAddr ({rv a}).toNat)"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && dstPtr && fc.nullableVal a &&
         !(nullablePtrTy fc.types fc.layouts inst.ty) then
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})"
       (env, some l)
     else
+    -- `@errorCast` to a set that lacks some source error checks its error itself.
+    let narrowedTo : Option (Array String) := match fc.valTy a, fc.tyOfId inst.ty with
+      | .errorSet src, .errorSet (some dst) => if src.any (·.all dst.contains) then none else some dst
+      | _, _ => none
+    if let some dst := narrowedTo then
+      let names := ", ".intercalate (dst.toList.map fun n => (repr n).pretty)
+      let (env, l) := bindLet fc env inst.id s!"Zig.errorIn [{names}] {rv a}"; (env, some l)
+    else
     let srcFloat := fc.isFloat a
     let dstFloat := fc.isFloatTy inst.ty
     let expr :=
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
+      else if srcPtr && dstPtr && fc.isMemPtr a && fc.ptrAlignOf inst.ty > fc.ptrAlign a then
+        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`).
+        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {rv a} >>= fun _ => pure {rv a})"
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
@@ -2223,7 +2325,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A bit-pointer points to the host integer: the parent's own address.
       let bitPtr := ((fc.valTyId? fieldPtr).map fc.hostSize).getD 0 != 0
       let off := if bitPtr then 0 else fc.fieldOffsetOfPtrTy inst.ty idx
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
+      let q := s!"({rv fieldPtr}.add (-({off} : Int)))"
+      -- A parent with no defined layout must be a live, aligned object at `q`
+      -- (`Zig.checkParent`; `docs/illegal-behavior.md` row 40).
+      let expr := match fc.pointeeOf (.inst inst.id) with
+        | .struct _ "auto" _ =>
+          let parent := (ptrChild fc.types inst.ty).getD 0
+          let align := (fc.layouts[parent]?.bind (·.align)).getD 1
+          s!"{fc.callMName} (Zig.checkParent {fc.sizeOf parent} {align} {q} >>= fun _ => pure {q})"
+        | _ => s!"pure {q}"
+      let (env, l) := bindLet fc env inst.id expr
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
@@ -2352,12 +2463,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
-    let expr := if fc.mem then s!"pure {rv s}.len"
-      else s!"pure ({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
+    let len := if fc.mem then s!"{rv s}.len"
+      else s!"({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
+    let expr := match fc.forLenBound? inst.id with
+      | some bound => fc.liftR s!"Zig.forLen {len} {rv bound}"
+      | none => s!"pure {len}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
-    -- A pure function has the items (`Array`); a function that uses memory reads them.
-    let expr := if fc.mem then s!"{fc.callMName} ({fc.loadItem s s!"{rv s}.ptr" (rv i)})"
+    -- A pure function has the items (`Array`); a function that uses memory reads them, after
+    -- its own bounds check (`Zig.checkIndex`: `.illegal` where no Sema check precedes it).
+    let sentinel := ((fc.valTyId? s).bind (fc.layouts[·]?)).any (·.sentinel)
+    let check := if sentinel then "Zig.checkSentinelIndex" else "Zig.checkIndex"
+    let expr := if fc.mem then
+        s!"{fc.callMName} ({check} {rv s} {rv i} >>= fun _ => {fc.loadItem s s!"{rv s}.ptr" (rv i)})"
       else fc.liftR s!"{fc.widthFn "Zig.index" "Zig.indexOf"} {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>
@@ -2382,7 +2500,37 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let items := match fc.valTy a with | .vector .. => s!"{rv a}.lanes" | _ => rv a
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.widthFn "Zig.vindex" "Zig.vindexOf"} {items} {rv i}"); (env, some l)
   | .slice p len =>
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : {sliceTyName fc.ptrBits})"; (env, some l)
+    -- Each slicing checks its own bounds and sentinel (`docs/illegal-behavior.md` rows 5, 24):
+    -- Sema lowers `x[start..end]` to `slice(ptr_add(base, start), end - start)`, where `base` is
+    -- the `slice_ptr` of a slice or an array pointer cast to a many-pointer.
+    let (base, start) := match fc.opOf? p with
+      | some (.ptrAdd false b s) => (b, rv s)
+      | _ => (p, "(0 : BitVec 64)")
+    -- The source's item count, and whether a sentinel follows its items.
+    let srcLen : Option (String × Bool) := match fc.opOf? base with
+      | some (.slicePtr s) =>
+        let sentinel := ((fc.valTyId? s).bind (fc.layouts[·]?)).any (·.sentinel)
+        some (if s matches .inst _ then s!"{rv s}.len" else s!"({rv s}).len", sentinel)
+      | some (.bitcast a) => match fc.pointeeOf a with
+        | .array n _ sentinel => some (s!"({n} : BitVec 64)", sentinel)
+        | _ => none
+      | _ => none
+    let resultSentinel := (fc.layouts[inst.ty]?).any (·.sentinel)
+    -- A sentinel slicing reads the item at its end, which must be an item of the source unless
+    -- the source's own sentinel is there.
+    let checks := (srcLen.map fun (n, srcSentinel) =>
+        let extra := if resultSentinel && !srcSentinel then 1 else 0
+        [s!"Zig.checkSliceEnd {n} {start} {rv len} {extra}"]).getD [] ++
+      -- Sema's own sentinel check comes after the slicing and panics first when present.
+      (match ((fc.layouts[inst.ty]?).bind (·.sentinelByte)) with
+        | some byte =>
+          if fc.sentinelChecked.contains inst.id then []
+          else [s!"Zig.checkSentinelByte {rv p} {rv len} ({byte} : BitVec 8)"]
+        | none => [])
+    let value := s!"(⟨{rv p}, {rv len}⟩ : {sliceTyName fc.ptrBits})"
+    let expr := if checks.isEmpty then s!"pure {value}"
+      else s!"{fc.callMName} ({" >>= fun _ => ".intercalate checks} >>= fun _ => pure {value})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .slicePtr sl => let (env, l) := bindLet fc env inst.id s!"pure {rv sl}.ptr"; (env, some l)
   | .arrayToSlice p =>
     let (ptr, len) := fc.itemsOf p (rv p)
@@ -2398,15 +2546,31 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
     let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
     (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"{fc.widthFn "Zig.memset" "Zig.memsetOf"} (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
-  | .memcpy dst src =>
-    -- The item count of the operand that has one (the AIR checks that both agree).
+  | .memcpy move dst src =>
+    -- The item count of the operand that has one. `memcpy` also passes the source's count,
+    -- which must agree (`Zig.memcpy` checks it and the overlap itself; with safety Sema
+    -- checks it first, `copyLenMismatch`).
     let hasLen (v : Val) : Bool :=
       fc.isSlice v || match fc.pointeeOf v with | .array .. => true | _ => false
-    let (dptr, n) := fc.itemsOf dst (rv dst)
-    let n := if hasLen dst then n else (fc.itemsOf src (rv src)).2
+    let (dptr, dn) := fc.itemsOf dst (rv dst)
+    let (_, sn) := fc.itemsOf src (rv src)
+    let n := if hasLen dst then dn else sn
+    -- Sema passes a slice source as its `slice_ptr`; its count is the slice's length.
+    let slicePtrOf : Option Val := match src with
+      | .inst id => match (fc.allInsts.find? (·.id == id)).map (·.op) with
+        | some (Op.slicePtr sl) => some sl
+        | _ => none
+      | _ => none
+    let lenOf (sl : Val) : String := match sl with
+      | .inst _ => s!"{rv sl}.len"
+      | _ => s!"({rv sl}).len"
+    let m := if hasLen src then sn else (slicePtrOf.map lenOf).getD n
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
-    (env, some s!"{fc.callMName} ({fc.widthFn "Zig.memmove" "Zig.memmoveOf"} {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
+    let args := s!"{size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n}"
+    let call := if move then s!"{fc.widthFn "Zig.memmove" "Zig.memmoveOf"} {args}"
+      else s!"{fc.widthFn "Zig.memcpy" "Zig.memcpyOf"} {args} {m}"
+    (env, some s!"{fc.callMName} ({call})")
   | .tagName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.{fc.helperName (fc.valTy a) "tagName"} {rv a}")
     (env, some l)
@@ -2762,7 +2926,9 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
       if fc.rawRet then
         s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
       else s!"pure (.ret {v})"
-  | .unreach => "throw .unreachable"
+  -- A bare `unreach` (no panic call before it, which would end the body first) is
+  -- `unreachable` without a safety check: unchecked illegal behaviour.
+  | .unreach => "throw .illegal"
   | .trap => "throw .panic"
   | .condBr c thenBody elseBody =>
     s!"if {rv c} then {doBlock (emitStmts fc env thenBody.toList)}\nelse \
@@ -2991,7 +3157,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
-      rawRet := rawFuncs.contains f.name, targetArch := f.targetArch }
+      rawRet := rawFuncs.contains f.name, targetArch := f.targetArch,
+      exactFloatDivs := exactFloatDivs allInsts, sentinelChecked := sentinelCheckedSlices allInsts }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
   { fc with rawInsts := fc.computeRawInsts fc.rawRet }
 
@@ -3300,10 +3467,11 @@ def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : B
     let arms := fields.toList.zipIdx.map fun ((f, _), k) => s!"  | .{fm f} => pure {slice k f}"
     String.intercalate "\n" ([head, "  match e with"] ++ arms)
   else
-    -- A value without a name has no tag name: the AIR checks `is_named_enum_value` before.
+    -- A value without a name has no tag name: illegal behaviour, which with safety the AIR
+    -- checks before (`is_named_enum_value`).
     let arms := fields.toList.zipIdx.map fun ((f, v), k) =>
       s!"  if e.{hn "toBits"} == {tagLit bits v} then pure {slice k f} else"
-    String.intercalate "\n" ([head] ++ arms ++ ["  throw .panic"])
+    String.intercalate "\n" ([head] ++ arms ++ ["  throw .illegal"])
 
 /-! ## Call graph / emission order -/
 
@@ -3708,7 +3876,11 @@ width-parameterized form (`ZigLean/Mem/Width.lean`). `Main` refuses such an outp
 def width64Names : List String :=
   ["Zig.readSlice ", "Zig.memset ", "Zig.memmove ", "Zig.len ", "Zig.index ", "Zig.vindex ",
    "Zig.ptrAddr ", "Zig.Allocator.alloc ", "Zig.Allocator.create ", "Zig.Allocator.free ",
-   ".elem ", ".elemSub "]
+   ".elem ", ".elemSub ",
+   -- The unchecked-illegal-behaviour checks exist for the 64-bit model only: a 32-bit program
+   -- that needs one is refused, not translated without the check.
+   "Zig.memcpy ", "Zig.checkIndex ", "Zig.checkSentinelIndex ", "Zig.checkSliceEnd ",
+   "Zig.checkSentinelByte ", "Zig.forLen ", "Zig.checkAddr ", "Zig.checkAlign ", "Zig.checkParent "]
 
 /-- `Zig.Slice` as a whole identifier (not `Zig.Slice32`/`Zig.SliceOf`), or a name of
 `width64Names`, in a 32-bit translation's source. -/

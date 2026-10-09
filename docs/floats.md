@@ -17,7 +17,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 | `+ - * /` | `add sub mul div_float` | rounded exact result; IEEE 754 rules for inf, NaN and signed zero. `/` on `f128`: §`--float-semantics` group A; `*` on `f128` in compiler-rt mode: group F |
 | `@mulAdd` | `mul_add` (args `[lhs, rhs, addend]`) | rounded once. f16: rounded to f32, then to f16. f80: rounded to f128, then to f80. `compiler-rt` mode: §`--float-semantics` group B. f80 invalid encoding: §`--float-semantics` group C |
 | `@divTrunc`, `@divFloor` | `div_trunc`, `div_floor` | `trunc(a / b)`, `floor(a / b)`: the division rounds first. `f128`: §`--float-semantics` group A |
-| `@divExact` | with safety: `div_trunc`, `floor`, `cmp_eq`, panic `exactDivisionRemainder`; without: `div_exact` | the ops themselves; `div_exact` = `/`. `f128`: §`--float-semantics` group A |
+| `@divExact` | with safety: `div_trunc`, `floor`, `cmp_eq`, panic `exactDivisionRemainder`; without: `div_exact` | the truncated quotient, or `/` for `div_exact`. A quotient that is not a whole number `q` with `q * b == a` is illegal behaviour: `.illegal` (`Zig.Float.divExactTrunc`, `Zig.Float.divExactChk`). The safety check catches only a NaN quotient, which stays its panic ([illegal-behavior.md](illegal-behavior.md) row 11). `f128`: §`--float-semantics` group A |
 | `@rem` | `rem` | `a − b·trunc(a / b)`, exact (`frem`); the sign of a zero result is the sign of `a`; when the nonzero remainder equals `a`, its original representation is retained. f80 invalid encoding: group C; compiler-rt pseudo-denormal comparison: group G |
 | `@mod` | `mod` | `a < 0 ? rem(rem(a, b) + b, b) : rem(a, b)` (the LLVM lowering). f80 invalid encoding: group C; compiler-rt remainder follows group G |
 | `@sqrt` | `sqrt` | correctly rounded. Before 0.16.0, f128: §Per-version differences |
@@ -28,8 +28,8 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 | `< <= == != >= >` | `cmp_*` | IEEE: NaN is unordered, `−0 == +0` |
 | `@floatCast` | `fptrunc`, `fpext` | rounded / exact; value/class-changing casts: group C; f80→f16 in `compiler-rt` mode: group E |
 | `@floatFromInt` | `float_from_int` | rounded (also `u128`/`i128`) |
-| `@intFromFloat` | `int_from_float_safe` (0.15.2) | truncate. `x <= floor(min − 1)` or `x >= ceil(max + 1)`: panic `integerPartOutOfBounds` (`.overflow`). NaN: `.unspecified` (the check does not catch it) |
-| `@intFromFloat` | `int_from_float` (0.14.1, or no safety) | truncate; out of range or NaN: `.unspecified` |
+| `@intFromFloat` | `int_from_float_safe` (0.15.2) | truncate. `x <= floor(min − 1)` or `x >= ceil(max + 1)`: panic `integerPartOutOfBounds` (`.overflow`). NaN: `.illegal` (illegal behaviour that the check does not catch) |
+| `@intFromFloat` | `int_from_float` (0.14.1, or no safety) | truncate; out of range or NaN: `.illegal` |
 | `@bitCast` | `bitcast` | the bits; float → int of a NaN: `.unspecified` |
 | `@sin @cos @tan @exp @exp2 @log @log2 @log10` | same names | opaque (§Transcendental functions) |
 
@@ -91,7 +91,7 @@ An op that makes a NaN gives a negative quiet NaN on x86 for f16…f80 and a pos
 
 - Soundness: the model's result is allowed (`Float.Allowed.refl`, `Float.min_allowed`, `Float.max_allowed`, also in the group D case), and so is every value `Float.minChk`/`Float.maxChk` return (`Float.minChk_allowed`).
 - Payload independence: allowed results classify alike (`Float.Allowed.classify_eq`), so `isNaN`, `toRat?`, the comparisons, `Float.add`/`mul`/`div`, `Float.sqrt` and the unguarded `Float.conv` give the same result on every one of them (`Float.Allowed.lt_eq`, `add_eq`, …). The group C guards read bits, not just the class: `Float.convChk` f128→f80 throws for a NaN whose payload lies in the low 49 bits, and the f80 `Chk` guards throw for an unnormal or pseudo-NaN. So a guarded op on an allowed NaN may be `.unspecified` where the model's canonical NaN is not. Group D: every allowed `@min`/`@max` result `== +0` (`Float.MinAllowed.eq_zero`).
-- Errors are not variation: `@intFromFloat` has the same outcome on every allowed operand (`Float.toInt_allowed`). Out of range or ±inf with the safety check stays `.overflow` (illegal behavior), and a NaN of any payload stays `.unspecified`.
+- Errors are not variation: `@intFromFloat` has the same outcome on every allowed operand (`Float.toInt_allowed`). Out of range or ±inf with the safety check stays `.overflow` (illegal behavior), and a NaN of any payload stays `.illegal`.
 
 Clients: `isNan_allowed`, `isNan_zero_div_zero`, `clamp_allowed` (`Proofs/Floats`); `toByte_allowed_overflow`, `toByte_allowed_nan` (`Proofs/Floatconv`). Generated code still calls the deterministic model and the `Chk` guards; the relation is for proofs only.
 

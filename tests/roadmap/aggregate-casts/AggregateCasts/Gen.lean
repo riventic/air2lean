@@ -116,7 +116,7 @@ inductive optFromAddrExit where
 
 def optFromAddr (p0 : BitVec 64) : Zig.MemM (Option (Zig.Ptr)) := do
   let e ← ((do
-    let i1 ← Zig.callM (Zig.optPtrFromAddr (p0).toNat)
+    let i1 ← Zig.callM (Zig.checkAddr 4 false (p0).toNat >>= fun _ => Zig.optPtrFromAddr (p0).toNat)
     pure (.ret i1)) : Zig.MM optFromAddrLocals optFromAddrExit).run' (default : optFromAddrLocals)
   match e with
   | .ret v => pure v

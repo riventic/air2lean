@@ -14,18 +14,19 @@ open Floatconv
 
 namespace Zig
 
-/-- `@intFromFloat` of a NaN always throws `.unspecified`, whether or not the safety check is
-active (`Float.toInt`'s `.nan` case ignores `safe`). -/
+/-- `@intFromFloat` of a NaN always throws `.illegal`, whether or not the safety check is
+active (`Float.toInt`'s `.nan` case ignores `safe`): the check's comparisons are false for a
+NaN, so it is unchecked illegal behaviour. -/
 theorem Float.toInt_of_isNaN {fmt : FloatFmt} (s : Bool) (n : Nat) (safe : Bool) (x : Float fmt)
-    (h : x.isNaN) : Float.toInt s n safe x = throw .unspecified := by
+    (h : x.isNaN) : Float.toInt s n safe x = throw .illegal := by
   unfold Float.toInt
   rw [(Zig.isNaN_iff x).mp h]
 
 end Zig
 
-/-- `toByte` of a NaN throws `.unspecified` (`docs/floats.md`: `@intFromFloat` of NaN, the
-safety check does not catch it). -/
-theorem toByte_nan (x : Zig.F32) (h : x.isNaN) : toByte x = throw .unspecified := by
+/-- `toByte` of a NaN throws `.illegal` (`docs/floats.md`: `@intFromFloat` of NaN is illegal
+behaviour that the safety check does not catch). -/
+theorem toByte_nan (x : Zig.F32) (h : x.isNaN) : toByte x = throw .illegal := by
   unfold toByte
   simp [zig_unfold, Zig.Float.toInt_of_isNaN _ _ _ _ h]
 
@@ -111,8 +112,8 @@ theorem toByte_allowed_overflow {x r : Zig.F32} (h : Zig.Float.Allowed x r) (hx 
     toByte r = throw .overflow := by
   rw [toByte_allowed h, toByte_overflow_of_inf x hx]
 
-/-- `toByte` of every allowed result of a NaN — any sign or payload — throws `.unspecified`: no
+/-- `toByte` of every allowed result of a NaN — any sign or payload — throws `.illegal`: no
 payload makes it succeed. -/
 theorem toByte_allowed_nan {x r : Zig.F32} (h : Zig.Float.Allowed x r) (hx : x.isNaN) :
-    toByte r = throw .unspecified :=
+    toByte r = throw .illegal :=
   toByte_nan r (h.isNaN_of_isNaN hx)

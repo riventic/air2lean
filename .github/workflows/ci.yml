@@ -691,6 +691,14 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
           bash tests/roadmap/undef-locals/check.sh
+      # Illegal behaviour (docs/illegal-behavior.md): each op's own check gives `.illegal` on the
+      # retained 0.16.0 fixtures, emitter mutants that drop a check are killed, translator
+      # probes, and the trust-chain audit's unchecked-memcpy case stays fixed.
+      - name: Illegal behaviour
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          bash tests/roadmap/illegal-behavior/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers

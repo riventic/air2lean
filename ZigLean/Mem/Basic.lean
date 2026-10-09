@@ -586,7 +586,8 @@ def Bytes.get (β : Type) [Enc β] {α : Type} (bs : Bytes α) (off : Nat) : Res
 /-! ## Memory ops
 
 `@memset`, `@memcpy` and `@memmove` do nothing for 0 bytes (0 items or a zero-sized item), also through a pointer
-that is not valid. For more items, the access is checked before the bytes are made. -/
+that is not valid (`@memcpy` still checks its counts). For more items, the access is checked
+before the bytes are made. -/
 
 /-- `@memset`: each of the `n` items at `p` becomes `v`. `v = none`: `undefined`, every byte of
 the items becomes undefined. -/
@@ -599,14 +600,48 @@ def memset {α : Type} [Enc α] (align : Nat) (p : Ptr) (n : BitVec 64) (v : Opt
     | none => Array.replicate (Enc.size α) .undef
   storeBytes p align (Array.replicate n.toNat item).flatten
 
-/-- `@memcpy` and `@memmove`: copy `n` items of `size` bytes from `src` to `dst`. All bytes are
-read before the first write, so an overlap copies the old bytes (`@memmove`). For `@memcpy`, the
-AIR checks before that the two ranges do not overlap. -/
+/-- `@memmove`: copy `n` items of `size` bytes from `src` to `dst`. All bytes are read before the
+first write, so an overlap copies the old bytes. -/
 def memmove (size dstAlign srcAlign : Nat) (dst src : Ptr) (n : BitVec 64) : MemM Unit := do
   if n.toNat = 0 ∨ size = 0 then return
   let _ ← (← get).access dst (n.toNat * size) dstAlign
   let bs ← loadBytes src (n.toNat * size) srcAlign
   storeBytes dst dstAlign bs
+
+/-- The `len` bytes at `p` and at `q` overlap: the same block (or both raw addresses) and
+intersecting offset ranges. -/
+def Ptr.overlaps (p q : Ptr) (len : Nat) : Bool :=
+  len ≠ 0 && p.block == q.block && p.off < q.off + len && q.off < p.off + len
+
+/-- `@memcpy` (AIR `memcpy`): `@memmove` of `n` items, where `m` is the item count of `src` (`n`
+if `src` has no length). Unequal counts and overlapping ranges are illegal behaviour that only
+Sema's safety checks (`copyLenMismatch`, `memcpyAlias`) catch, so the model checks them itself:
+`.illegal` (`docs/illegal-behavior.md`). With the checks the panic comes first. -/
+def memcpy (size dstAlign srcAlign : Nat) (dst src : Ptr) (n m : BitVec 64) : MemM Unit :=
+  if n ≠ m || dst.overlaps src (n.toNat * size) then throw .illegal
+  else memmove size dstAlign srcAlign dst src n
+
+/-- `slice_elem_val` in memory: an index at or past the length is illegal behaviour that only
+Sema's bounds check (`outOfBounds`) catches, so the model checks it itself: `.illegal`. -/
+def checkIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
+  if i.toNat < s.len.toNat then pure () else throw .illegal
+
+/-- Slicing `[start..start + len]` of an operand with `srcLen` items: an end past the length is
+illegal behaviour that only Sema's bounds check (`outOfBounds`) catches: `.illegal`. `extra` is
+`1` for a sentinel slicing whose sentinel item must also be an item of the operand. -/
+def checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) : MemM Unit :=
+  if start.toNat + len.toNat + extra ≤ srcLen.toNat then pure () else throw .illegal
+
+/-- `@fieldParentPtr` to a struct with no defined layout: the parent pointer `q` must address a
+live, aligned object of the parent's `size` bytes. A field pointer that is not into such an
+object is illegal behaviour that nothing checks: `.illegal`. -/
+def checkParent (size align : Nat) (q : Ptr) : MemM Unit := do
+  let _ ← (← get).access q size align
+
+/-- `checkIndex` for a slice with a sentinel (`[:s]T`): its sentinel item, at the length, is an
+item too (Sema reads it to check sentinel slicing). -/
+def checkSentinelIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
+  if i.toNat ≤ s.len.toNat then pure () else throw .illegal
 
 /-- The items of `s`, for a call to a pure function with a `[]const T` parameter. An undefined
 byte in any item throws `.unspecified`, also in an item that the function does not read.

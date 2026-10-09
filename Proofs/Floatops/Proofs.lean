@@ -22,7 +22,8 @@ translation's profile.
   `ZigLean/Float/CompilerRt.lean` and `ZigLean/Float/RoundTrip.lean`.
   `op128_eq_opSpec_of_special`: on every version, a NaN, infinite or zero `a` (or `b`, except
   for `@sqrt`) gives `opSpec`, the IEEE result.
-- `divExact64_spec`: the truncated quotient, or a panic when it is not a whole number.
+- `divExact64_spec`: the truncated quotient; `.illegal` for an inexact quotient that is not
+  NaN, and a panic (the safety check) for a NaN one.
 - `cmp64_spec`: the bitmask is the 6 comparisons; `cmp64_nan`: with a NaN operand only `!=` is
   true (IEEE 754: NaN is unordered), so the mask is `8`.
 -/
@@ -493,18 +494,28 @@ theorem op128_eq_opSpec_of_special (sel : BitVec 8) (a b c : Zig.Float .f128)
     · exact congrArg pure (Zig.sqrtF128ViaF64_eq_sqrt_of_special ha)
     · rfl
 
-/-- `@divExact` on `f64`: the quotient rounded and truncated (`docs/floats.md` §Semantics); the
-safety check panics if it is not a whole number, so a NaN quotient panics too. -/
+/-- `@divExact` on `f64`: the quotient rounded and truncated (`docs/floats.md` §Semantics).
+An inexact quotient is illegal behaviour (`.illegal`, `docs/illegal-behavior.md`) unless it is
+NaN: ReleaseSafe's safety check catches only that one, and panics. -/
 theorem divExact64_spec (a b : Zig.F64) :
     divExact64 a b =
-      let q := Zig.Float.trunc (Zig.Float.div a b)
-      if Zig.Float.eq q (Zig.Float.floor q) then pure q else throw .panic := by
-  have hd : Zig.Float.divTruncRt016 a b = Zig.Float.trunc (Zig.Float.div a b) ∧
-      Zig.Float.divTruncRt a b = Zig.Float.trunc (Zig.Float.div a b) := ⟨rfl, rfl⟩
+      let q := Zig.Float.div a b
+      if q.isNaN || Zig.Float.exactQuotient a b q then
+        let t := Zig.Float.trunc q
+        if Zig.Float.eq t (Zig.Float.floor t) then pure t else throw .panic
+      else throw .illegal := by
+  have hd : Zig.Float.divRt016 a b = Zig.Float.div a b ∧ Zig.Float.divRt a b = Zig.Float.div a b :=
+    ⟨rfl, rfl⟩
   unfold divExact64
   simp only [hd.1, hd.2]
-  generalize Zig.Float.trunc (Zig.Float.div a b) = q
-  show _ = if Zig.Float.eq q (Zig.Float.floor q) then pure q else throw Zig.Error.panic
-  generalize hb : Zig.Float.eq q (Zig.Float.floor q) = t
-  cases t <;> simp only [Zig.Float.floorChk, Zig.Float.isInvalidF80, Bool.false_eq_true,
-    ↓reduceIte, zig_unfold, hb] <;> rfl
+  generalize Zig.Float.div a b = q
+  show _ = if q.isNaN || Zig.Float.exactQuotient a b q then
+      (if Zig.Float.eq (Zig.Float.trunc q) (Zig.Float.floor (Zig.Float.trunc q)) then
+        pure (Zig.Float.trunc q) else throw Zig.Error.panic)
+    else throw Zig.Error.illegal
+  generalize hx : (q.isNaN || Zig.Float.exactQuotient a b q) = x
+  cases x
+  · simp only [Zig.Float.divExactTrunc, hx, Bool.false_eq_true, ↓reduceIte, zig_unfold] <;> rfl
+  · generalize hb : Zig.Float.eq (Zig.Float.trunc q) (Zig.Float.floor (Zig.Float.trunc q)) = t
+    cases t <;> simp only [Zig.Float.divExactTrunc, hx, Zig.Float.floorChk,
+      Zig.Float.isInvalidF80, Bool.false_eq_true, ↓reduceIte, zig_unfold, hb] <;> rfl

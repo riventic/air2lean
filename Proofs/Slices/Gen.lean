@@ -189,7 +189,7 @@ def copy (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
         else (do
           throw .panic)) : Zig.MM copyLocals copyExit) with
       | .br17 => (do
-        Zig.callM (Zig.memmove 1 1 1 p0.ptr i10 p0.len)
+        Zig.callM (Zig.memcpy 1 1 1 p0.ptr i10 p0.len p1.len)
         pure .ret)
       | e => pure e)
     | e => pure e) : Zig.MM copyLocals copyExit).run' (default : copyLocals)
@@ -219,7 +219,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
       else (do
         throw .outOfBounds)) : Zig.MM copyWithinLocals copyWithinExit) with
     | .br9 => (do
-      let i14 ← pure (⟨i5, p3⟩ : Zig.Slice)
+      let i14 ← Zig.callM (Zig.checkSliceEnd p0.len p1 p3 0 >>= fun _ => pure (⟨i5, p3⟩ : Zig.Slice))
       let i15 ← pure p0.ptr
       let i16 ← pure (i15.elem 4 p2)
       let i17 ← Zig.add false p2 p3
@@ -231,7 +231,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
         else (do
           throw .outOfBounds)) : Zig.MM copyWithinLocals copyWithinExit) with
       | .br20 => (do
-        let i25 ← pure (⟨i16, p3⟩ : Zig.Slice)
+        let i25 ← Zig.callM (Zig.checkSliceEnd p0.len p2 p3 0 >>= fun _ => pure (⟨i16, p3⟩ : Zig.Slice))
         let i26 ← pure i14.len
         let i27 ← pure i25.len
         let i28 ← pure (i26 == i27)
@@ -478,7 +478,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
           else (do
             throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
         | .br27 => (do
-          let i32 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i24))
+          let i32 ← Zig.callM (Zig.checkIndex p0 i24 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i24))
           let i33 ← pure ((← get).i)
           let i34 ← pure p0.len
           let i35 ← pure (Zig.lt false i33 i34)
@@ -498,7 +498,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
               else (do
                 throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
             | .br45 => (do
-              let i50 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i42))
+              let i50 ← Zig.callM (Zig.checkIndex p0 i42 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i42))
               Zig.store (α := BitVec 32) 4 i41 i50
               let i52 ← pure ((← get).j)
               let i53 ← pure p0.len
@@ -652,8 +652,8 @@ def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slic
         else (do
           throw .outOfBounds)) : Zig.MM subZLocals subZExit) with
       | .br15 => (do
-        let i20 ← pure (⟨i4, i11⟩ : Zig.Slice)
-        let i21 ← Zig.callM (Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
+        let i20 ← Zig.callM (Zig.checkSliceEnd p0.len p1 i11 1 >>= fun _ => pure (⟨i4, i11⟩ : Zig.Slice))
+        let i21 ← Zig.callM (Zig.checkSentinelIndex i20 i11 >>= fun _ => Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
         let i22 ← pure ((0 : BitVec 8) == i21)
         match ← ((do
           if i22 then (do
@@ -749,7 +749,7 @@ def sumMid (p0 : Zig.Slice) : Zig.MemM (BitVec 32) := do
         else (do
           throw .outOfBounds)) : Zig.MM sumMidLocals sumMidExit) with
       | .br14 => (do
-        let i19 ← pure (⟨i4, i11⟩ : Zig.Slice)
+        let i19 ← Zig.callM (Zig.checkSliceEnd p0.len (1 : BitVec 64) i11 0 >>= fun _ => pure (⟨i4, i11⟩ : Zig.Slice))
         let i20 ← pure (i19)
         let i21 ← Zig.callR (sumSlice (← Zig.callM (Zig.readSlice (BitVec 32) 4 i20)))
         pure (.ret i21))

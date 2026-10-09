@@ -338,7 +338,8 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "ptr_slice_len_ptr" => let a ← arg1 fnName raw; return .sliceFieldPtr true a
   | "ptr_slice_ptr_ptr" => let a ← arg1 fnName raw; return .sliceFieldPtr false a
   | "memset" | "memset_safe" => let (a, b) ← arg2 fnName raw; return .memset a b
-  | "memcpy" | "memmove" => let (a, b) ← arg2 fnName raw; return .memcpy a b
+  | "memcpy" => let (a, b) ← arg2 fnName raw; return .memcpy false a b
+  | "memmove" => let (a, b) ← arg2 fnName raw; return .memcpy true a b
   | "tag_name" => let a ← arg1 fnName raw; return .tagName a
   | "error_name" => let a ← arg1 fnName raw; return .errorName a
   | "struct_field_val" =>

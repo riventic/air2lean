@@ -904,4 +904,18 @@ theorem size_encode_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.s
 
 theorem size_encode_ptr (p : Ptr) : (Enc.encode p).size = 8 := LawfulEnc.size_encode p
 
+/-- `@memcpy` with equal counts between different blocks, or of no bytes, is `@memmove`: its
+illegal-behaviour checks pass. -/
+theorem memcpy_eq_memmove {size da sa : Nat} {dst src : Ptr} {n m : BitVec 64} (hm : n = m)
+    (h : dst.block ≠ src.block ∨ n.toNat * size = 0) :
+    memcpy size da sa dst src n m = memmove size da sa dst src n := by
+  subst hm
+  unfold memcpy Ptr.overlaps
+  rcases h with h | h <;> simp [h]
+
+/-- An index below the length passes `slice_elem_val`'s bounds check. -/
+theorem checkIndex_bind_of_lt {α : Type} {s : Slice} {i : BitVec 64} (h : i.toNat < s.len.toNat)
+    (x : MemM α) : (checkIndex s i >>= fun _ => x) = x := by
+  simp [checkIndex, h]
+
 end Zig

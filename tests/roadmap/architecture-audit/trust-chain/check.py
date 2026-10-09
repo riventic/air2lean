@@ -84,14 +84,16 @@ def case_addrspace(binary, tmp):
 
 
 def case_unchecked_memcpy(binary, tmp):
-    # @setRuntimeSafety(false) (and ReleaseFast) drop Sema's memcpy alias/length checks; the
-    # model still copies like memmove (ZigLean/Mem/Basic.lean `memmove`).
+    # @setRuntimeSafety(false) (and ReleaseFast) drop Sema's memcpy alias/length checks. Fixed:
+    # `memcpy` lowers to `Zig.memcpy`, which checks the overlap and the counts itself and throws
+    # `.illegal` (ZigLean/Mem/Basic.lean); only `memmove` lowers to `Zig.memmove`.
     results = []
     for sub in ('air', 'air-releasefast'):
         rc, log, text = translate(binary, HERE / 'unchecked-memcpy' / sub, tmp / f'mc-{sub}.lean', 'mc.')
-        results.append((sub, rc, 'Zig.memmove' in text, log.strip()[:200]))
-    vulnerable = any(rc == 0 and mm for _, rc, mm, _ in results)
-    return vulnerable, '; '.join(f'{s}: rc={rc} memmove={mm} {l}' for s, rc, mm, l in results)
+        results.append((sub, rc, 'Zig.memmove' in text, 'Zig.memcpy' in text, log.strip()[:200]))
+    vulnerable = any(rc == 0 and (mm or not mc) for _, rc, mm, mc, _ in results)
+    return vulnerable, '; '.join(f'{s}: rc={rc} memmove={mm} memcpy={mc} {l}'
+                                 for s, rc, mm, mc, l in results)
 
 
 def case_volatile_asm(binary, tmp):

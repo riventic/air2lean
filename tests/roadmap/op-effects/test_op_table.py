@@ -171,9 +171,11 @@ class CliTests(unittest.TestCase):
             air.mkdir()
             (air / 'r.f.json').write_text(json.dumps(doc))
             out = Path(tmp) / 'Gen.lean'
-            translated = subprocess.run([BINARY, str(air), '-o', str(out), '--namespace', 'R', *extra],
+            # The synthetic file is schema 11: legacy AIR needs the explicit profile opt-in.
+            legacy = ['--profile', 'legacy-abi64-le'] if doc.get('schema', 12) < 12 else []
+            translated = subprocess.run([BINARY, str(air), '-o', str(out), '--namespace', 'R', *legacy, *extra],
                                         capture_output=True, text=True, timeout=600)
-            diagnosed = subprocess.run([BINARY, '--diagnostics-json', str(air)],
+            diagnosed = subprocess.run([BINARY, '--diagnostics-json', str(air), *legacy],
                                        capture_output=True, text=True, timeout=600)
             return translated, (out.read_text() if out.exists() else None), diagnosed
 
