@@ -161,8 +161,9 @@ Corpus: 40 files in `tests/roadmap/c-frontend/corpus/`, one construct family eac
 realistic programs (`strings_loops`, `memcpy_loops`, `linked_list`, `ring_buffer`,
 `sort_callback`, `hash_table`, `malloc_vec`, the goto state machine, the bitfield packet
 parser, `varargs_sum`). Recorded in `tests/roadmap/c-frontend/record.json` with stock Zig
-0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (exporter `zig-patch/air-json/json.zig` sha256 066fab37…, with the G5 fix), on
-aarch64-macos.
+0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (exporter `zig-patch/air-json/json.zig` sha256 066fab37…, with the G5 fix; the five files with
+libc calls re-recorded with sha256 40fef0e7…, which adds `@export` reporting and link units and
+writes the same AIR for the others apart from the additive `export` fields), on aarch64-macos.
 
 * **24 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
   program on all four inputs (`#guard`). These cover integer promotions, unsigned
@@ -494,4 +495,4 @@ Register row X01 in `ROADMAP.md` and `remaining-acceptance.md` (open):
 
 | ID | Title | Classification | Evidence / acceptance |
 |---|---|---|---|
-| X01 | C programs via translate-c | open | Route: C → stock `zig translate-c` (x86_64-linux-musl) → patched AIR export → air2lean; claims are about translate-c's Zig as compiled by Zig (translate-c and the musl headers join the trusted base), not ISO C semantics (`docs/c-frontend.md`). Baseline: 17/40 corpus files and 30/30 generated programs translate and agree with C under `#guard`. Close when phases 1–3 above are met: every corpus file is `lean_ok` or rejected by a named, documented gate (`setjmp`); every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; the G3 compiler bug is gated or fixed by a qualified Zig version; `check.sh --heavy` is reproducible and CI checks the record. |
+| X01 | C programs via translate-c | open | Route: C → stock `zig translate-c` (x86_64-linux-musl) → patched AIR export → air2lean; claims are about translate-c's Zig as compiled by Zig (translate-c and the musl headers join the trusted base), not ISO C semantics (`docs/c-frontend.md`). Baseline: 17/40 corpus files (24/40 with Zig's libc translated) and 30/30 generated programs translate and agree with C under `#guard`. Close when phases 1–3 above are met: every corpus file is `lean_ok` or rejected by a named, documented gate (`setjmp`); every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; the G3 compiler bug is gated or fixed by a qualified Zig version; `check.sh --heavy` is reproducible and CI checks the record. |

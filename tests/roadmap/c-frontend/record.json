@@ -1129,7 +1129,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 69349119 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10469291b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:124:10: 0x104654bbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:545:57: 0x104654a8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x104693277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0x8b34b73f\n"
+     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 69671893 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10089a91b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:124:10: 0x10085cbbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:545:57: 0x10085ca8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x10089b277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0xccf30ea0\n"
     },
     "air_export": {
      "status": "ok",
@@ -1382,7 +1382,7 @@
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is declared with another signature than its definition 'c.malloc.free': parameter 0 needs alignment 16, more than the declared 1 (C ABI conversion, docs/air-json.md \u00a7Extern calls) (docs/air-json.md \u00a7Extern calls)"
+       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is declared with another signature than its definition 'c.malloc.free': parameter 0 needs alignment 16, more than the declared 1 (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
@@ -2181,14 +2181,14 @@
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "malloc_vec.entry",
-       "message": "malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is declared with another signature than its definition 'c.malloc.free': parameter 0 needs alignment 16, more than the declared 1 (C ABI conversion, docs/air-json.md \u00a7Extern calls) (docs/air-json.md \u00a7Extern calls)"
+       "message": "malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is declared with another signature than its definition 'c.malloc.free': parameter 0 needs alignment 16, more than the declared 1 (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "malloc_vec.vec_push",
-       "message": "malloc_vec.vec_push: CALLEE_EXTERN_UNBOUND: extern function 'realloc' is declared with another signature than its definition 'c.malloc.realloc': parameter 0 needs alignment 16, more than the declared 1 (C ABI conversion, docs/air-json.md \u00a7Extern calls) (docs/air-json.md \u00a7Extern calls)"
+       "message": "malloc_vec.vec_push: CALLEE_EXTERN_UNBOUND: extern function 'realloc' is declared with another signature than its definition 'c.malloc.realloc': parameter 0 needs alignment 16, more than the declared 1 (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
@@ -2711,7 +2711,7 @@
     },
     "zig_native": {
      "status": "mismatch",
-     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0xa8e4b836\n"
+     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0x5e8b001f\n"
     },
     "air_export": {
      "status": "ok",
