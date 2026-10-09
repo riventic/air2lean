@@ -46,8 +46,8 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2794 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2368 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2804 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2383 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1205 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
@@ -59,7 +59,7 @@ premise was derived. This index covers the committed generated modules.
 | [TRU-03](premises.md#tru-03) | 1410 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
-| [ENV-01](premises.md#env-01) | 27 | Selected handle read/write/close contract |
+| [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
 
@@ -2763,10 +2763,10 @@ File premises: PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, E
 | `EnvStdIo.intCast64` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStdIo.min_cap` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStdIo.add_ofNat` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.OnlyWrites.append` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01 |
-| `EnvStdIo.written_append` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01 |
-| `EnvStdIo.OnlyWrites.not_closed` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01 |
-| `EnvStd15.Proofs.errno_err` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStdIo.OnlyWrites.append` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.written_append` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01 |
+| `EnvStdIo.OnlyWrites.not_closed` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.errno_err` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
 | `EnvStd15.Proofs.errno_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStd15.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStd15.Proofs.write_loop_body` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
@@ -2780,7 +2780,7 @@ File premises: PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, E
 | `EnvStd15.Proofs.writeAll_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
 | `EnvStd15.Proofs.fs_File_close_run` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
 | `EnvStd15.Proofs.writeAllClose_spec` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
-| `EnvStd16.Proofs.errno_err` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.errno_err` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
 | `EnvStd16.Proofs.errno_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStd16.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStd16.Proofs.read_loop_body` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
@@ -2791,20 +2791,20 @@ File premises: PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, E
 
 ## `tests/roadmap/env-boundaries/WriteAll.lean`
 
-File premises: TRU-01, ENV-01, ENV-02
+File premises: SEM-01, SEM-02, TRU-01, ENV-01, ENV-02
 
 | Theorem | Premises |
 |---|---|
-| `Zig.Env.Client.OnlyWrites.cons` | TRU-01, ENV-01 |
-| `Zig.Env.Client.OnlyWrites.not_closed` | TRU-01, ENV-01 |
-| `Zig.Env.Client.writeAll_spec` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.writeAllClose_spec` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.mem_allErrors` | TRU-01, ENV-01 |
-| `Zig.Env.Client.scripted_contract` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.scripted_wall_runs_backwards` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.demo_partial` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.demo_error` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.demo_closed` | TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.OnlyWrites.cons` | SEM-01, SEM-02, TRU-01 |
+| `Zig.Env.Client.OnlyWrites.not_closed` | SEM-01, SEM-02, TRU-01 |
+| `Zig.Env.Client.writeAll_spec` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.writeAllClose_spec` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.mem_allErrors` | SEM-01, SEM-02, TRU-01 |
+| `Zig.Env.Client.scripted_contract` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.scripted_wall_runs_backwards` | SEM-01, SEM-02, TRU-01, ENV-02 |
+| `Zig.Env.Client.demo_partial` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_error` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_closed` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
 
 ## `tests/roadmap/env-boundaries/expected/EnvStd15.lean`
 

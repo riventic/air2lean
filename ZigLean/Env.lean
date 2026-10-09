@@ -1,3 +1,5 @@
+import ZigLean.Env.Host
+
 /-!
 # Selected environment-operation interface (E03)
 
@@ -11,31 +13,6 @@ an operating system, CPython or browser host import is claimed; see
 `docs/env-boundaries.md`.
 -/
 namespace Zig.Env
-
-abbrev Handle := Nat
-
-/-- The enumerated environment error cases. A contract selects an allowed subset. -/
-inductive IoError where
-  | wouldBlock
-  | brokenPipe
-  | noSpaceLeft
-  | accessDenied
-  | inputOutput
-  | connectionReset
-  deriving DecidableEq, Repr
-
-/-- Environment operations. Results depend only on the supplied state, which is arbitrary.
-`monotonicNow` and `wallNow` are distinct observations (nanoseconds); only the monotonic
-clock carries an ordering contract. -/
-structure Ops (σ : Type) where
-  monotonicNow : σ → Nat
-  wallNow : σ → Int
-  isOpen : σ → Handle → Bool
-  /-- `.ok []` for a positive request means end of input. -/
-  read : σ → Handle → Nat → Except IoError (List UInt8) × σ
-  /-- `.ok n` reports that the first `n` bytes were accepted. -/
-  write : σ → Handle → List UInt8 → Except IoError Nat × σ
-  close : σ → Handle → σ
 
 /-- The selected contract on an open handle. Behavior on closed handles is unconstrained;
 the `World` wrappers below turn such uses into faults instead. -/
@@ -57,15 +34,6 @@ structure Contract {σ : Type} (ops : Ops σ) (errors : List IoError) : Prop whe
   readMonotone : ∀ s h max, ops.monotonicNow s ≤ ops.monotonicNow (ops.read s h max).2
   writeMonotone : ∀ s h buf, ops.monotonicNow s ≤ ops.monotonicNow (ops.write s h buf).2
   closeMonotone : ∀ s h, ops.monotonicNow s ≤ ops.monotonicNow (ops.close s h)
-
-/-- Observable boundary events, in order. -/
-inductive Event where
-  | wrote (h : Handle) (bytes : List UInt8)
-  | failed (h : Handle) (e : IoError)
-  | closed (h : Handle)
-  /-- A read of `h` that returned `bytes` (`[]`: end of input). -/
-  | received (h : Handle) (bytes : List UInt8)
-  deriving DecidableEq, Repr
 
 /-- Client-side faults: a use or second close of a non-open handle, or a write result
 outside the contract (Zig's `writeAll` would loop forever or slice out of bounds). -/
@@ -122,15 +90,6 @@ request histories, the current state and the event log. The bound primitives
 state: `Ops.replay` turns any `ops : Ops σ` with an initial state into an `Ops Hist` with the
 same results (`replay_state`), and `Contract.replay` transfers the contract, so theorems that
 quantify over every contracted `Ops Hist` cover every contracted `Ops σ`. -/
-
-/-- One environment request, as the replay records it. -/
-inductive Req where
-  | read (h : Handle) (max : Nat)
-  | write (h : Handle) (bytes : List UInt8)
-  | close (h : Handle)
-  deriving DecidableEq, Repr
-
-abbrev Hist := List Req
 
 /-- The state that `ops` reaches from `s0` after the requests `hist`, in order. -/
 def Ops.stateAfter {σ : Type} (ops : Ops σ) (s0 : σ) (hist : Hist) : σ :=
@@ -199,26 +158,5 @@ theorem Contract.replay {σ : Type} {ops : Ops σ} {errors : List IoError} (hc :
   · intro s h
     simp only [Ops.replay]
     simpa using hc.closeMonotone _ h
-
-/-- No handle is open; reads and writes fail with `inputOutput`. The default host. -/
-def Ops.closedAll : Ops Hist where
-  monotonicNow _ := 0
-  wallNow _ := 0
-  isOpen _ _ := false
-  read hist _ _ := (.error .inputOutput, hist)
-  write hist _ _ := (.error .inputOutput, hist)
-  close hist _ := hist
-
-/-- The environment installed in `Zig.Mem`: operations, current state, event log. -/
-structure Host where
-  ops : Ops Hist := Ops.closedAll
-  env : Hist := []
-  log : List Event := []
-
-instance : Inhabited Host := ⟨{}⟩
-
-/-- The operations are functions, so they are shown opaquely. -/
-instance : Repr Host where
-  reprPrec h _ := f!"\{ ops := <oracle>, env := {repr h.env}, log := {repr h.log} }"
 
 end Zig.Env

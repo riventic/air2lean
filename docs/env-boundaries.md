@@ -4,7 +4,10 @@
 handle-based reads and writes with partial success, enumerated errors, and cleanup.
 `Zig.Mem` carries one installed environment (`Mem.host : Zig.Env.Host`: operations over request
 histories, the current state and an event log). Its default has no open handle, so programs
-that never reach an I/O primitive are unaffected. The translator emits no built-in call to it.
+that never reach an I/O primitive are unaffected. Those data types are in
+`ZigLean/Env/Host.lean`, which the runtime imports and which carries no environment premise;
+the contract (`ZigLean/Env.lean`, ENV-01) and the bound primitives stay opt-in imports, so a
+theorem depends on ENV-01 only when it uses them. The translator emits no built-in call to it.
 Translated std I/O reaches it only through three bound Linux primitives
 ([Bound primitives](#bound-primitives)); everything above them is translated from AIR.
 

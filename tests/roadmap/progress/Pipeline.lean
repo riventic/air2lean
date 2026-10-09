@@ -28,7 +28,9 @@ def main (args : List String) : IO Unit := do
   let output := args.headD "/tmp/air2lean-progress-pipeline.lean"
   for version in supportedVersions do
     let spin := { (fixture "spin" (.asm "pause" true #[] #[] #[])) with zigVersion := version }
-    let arm := { (fixture "armSpin" (.asm "isb" true #[] #[] #[])) with zigVersion := version }
+    -- `isb` is the aarch64 spin hint only (Air2Lean/AsmAllowlist.lean).
+    let arm := { (fixture "armSpin" (.asm "isb" true #[] #[] #[])) with
+      zigVersion := version, targetArch := "aarch64" }
     let yielding := { (fixture "yielding" (.call (.func "Thread.yield" false none) #[]) 2) with zigVersion := version }
     accepted spin
     accepted arm
@@ -46,7 +48,8 @@ def main (args : List String) : IO Unit := do
   for source in ["pause; ud2", "yield", "or 27, 27, 27", "pause(#1)"] do
     let f := fixture "opaqueHint" (.asm source true #[] #[] #[])
     require (!f.syncLocally) "non-audited asm must not become a modeled hint"
-    require ((collectAsmOps #[f]).size == 1) "non-audited asm must stay opaque"
+    -- L13: asm off the reviewed allowlist is rejected, not a repeatable opaque.
+    rejected f "allowlist"
   require (!(Op.asm "pause" false #[] #[] #[]).isSpinHint) "nonvolatile asm is not a hint"
   require (!(Op.asm "pause" true #["cc"] #[] #[]).isSpinHint) "clobbered asm is not a hint"
   let fs := #[fixture "spin" (.asm "pause" true #[] #[] #[]),

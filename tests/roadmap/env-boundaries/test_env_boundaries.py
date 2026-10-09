@@ -12,6 +12,8 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[3]
 ENV = ROOT / "ZigLean/Env.lean"
+# `Ops` and the installed host are in the premise-free data module the runtime imports.
+ENV_HOST = ROOT / "ZigLean/Env/Host.lean"
 REGISTRY_FILL = ROOT / "tests/roadmap/env-boundaries/fill_registry.py"
 DOC = ROOT / "docs/env-boundaries.md"
 CATALOG = ROOT / "docs/premises.md"
@@ -102,7 +104,7 @@ def check(lean: str, doc: str, catalog: str, config: dict) -> list[str]:
 
 class EnvBoundaryTests(unittest.TestCase):
     def setUp(self):
-        self.lean = ENV.read_text()
+        self.lean = ENV_HOST.read_text() + "\n" + ENV.read_text()
         self.doc = DOC.read_text()
         self.catalog = CATALOG.read_text()
         self.config = json.loads(CONFIG.read_text())

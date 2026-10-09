@@ -68,6 +68,7 @@
     "ZigLean.Asm": ["ASM-03"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Env": ["ENV-01"],
+    "ZigLean.Env.Host": ["SEM-02"],
     "ZigLean.Env.Linux": ["ENV-01", "ENV-03"],
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
