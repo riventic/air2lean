@@ -14,12 +14,12 @@ bodies are stubs until the page-mapping model lands.
 | `provenance.json` | source, compiler and per-file hashes. The exporter is `codex/alloc-translated-p0`'s (vtable initializers and `VTable` fields); `main`'s exporter fails on these programs |
 | `AllocTranslated/*.lean` | the retained translations; `check.sh` requires the fresh ones to be byte-identical |
 | `Eval.lean` | `#guard`s: the `FixedBufferAllocator` clients evaluate to the native results on both targets, also with other `@returnAddress` values; the page clients reach the OS stub (`.unspecified`), and a zero-length allocation returns the integer sentinel without reaching it |
-| `native.zig`, `expected.txt`, `expected-linux.txt` | the native run of the same functions with a stock Zig 0.16.0 on aarch64-macos (16 KiB pages) and on x86_64-linux (4 KiB pages: `page_resize(10, 5000)` is `false`, `resize` never calls `mremap` on a stack-grows-down target) |
+| `native.zig`, `expected.txt`, `expected-linux.txt` | the native run of the same functions with a stock Zig 0.16.0 on aarch64-macos (16 KiB pages) and on x86_64-linux (4 KiB pages: `page_resize(10, 5000)` is `false`, `resize` never calls `mremap` on a stack-grows-down target); `check.sh` picks the file by the host's page size |
 | `PageObstruction.lean` | kernel-checked: the translated `PageAllocator` satisfies `AllocSpec` for no invariant that holds at program start, and `alloc` has no triple after a `free` of the hinted block ([alloc-page.md](../../../docs/alloc-page.md)) |
 | `test_cli.py` | std mode rejects the same AIR; flag spelling; and each admission's neighbouring case fails closed: a translated `posix.mmap`, an `mmap` error set without `OutOfMemory`, a weak pointer compare-exchange, an integer pointer constant at address 0 or misaligned, a non-`usize` `@returnAddress` |
 
 ```sh
-lake build ZigLean air2lean
+lake build ZigLean ZigLean.Sep.AllocSpec air2lean
 bash tests/roadmap/alloc-translated/check.sh
 AIR2LEAN_NATIVE_ZIG=/path/to/zig-0.16.0/zig bash tests/roadmap/alloc-translated/check.sh   # also the native run
 ```

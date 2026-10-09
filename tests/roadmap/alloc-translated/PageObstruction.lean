@@ -161,7 +161,6 @@ def cycle : Option Mem :=
 #guard (cycle.map fun m => (errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run m)).isNone) = some true
 #guard (errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run hinted)).isNone
 
-
 set_option maxHeartbeats 0 in
 /-- **O1.** No precondition that holds after the hinted block was unmapped makes `alloc` a
 triple of any logic. -/

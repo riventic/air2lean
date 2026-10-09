@@ -16,15 +16,16 @@ part and a frame. Everything in `Mem` outside the live bytes is unconstrained.
 | | what the allocator reads | why no assertion constrains it | evidence |
 |---|---|---|---|
 | O3 | the atomic location of `addr_hint` (`@atomicLoad(.unordered)`, `@cmpxchgStrong`) | atomic locations are `Mem.atomics`, not heap cells; a location of another size at the same bytes makes `locIdx` throw `.unspecified` | `not_allocSpec_at_start`, `alloc_no_triple_at_start` |
-| O1 | `@intFromPtr(addr_hint)` after the hinted mapping was unmapped, and the `@ptrFromInt` alignment check of the derived hint | a dead block's address is not in the heap; a memory with the same heap and the block's metadata missing or misaligned gives `.illegal` or `.panic` | `alloc_no_triple_after_free` |
+| O1 | `@intFromPtr(addr_hint)` after the hinted mapping was unmapped, and the `@ptrFromInt` alignment check of the derived hint | a dead block's address is not in the heap; a memory with the same heap and the block's metadata missing gives `.illegal` (a misaligned block, `.panic`, is not mechanised) | `alloc_no_triple_after_free` |
 | O2 | the size of the mapping, in `free` (`munmap(ptr[0..alignForward(len)])`) and `resize`/`remap` (tail `munmap`, `mremap` of the whole mapping) | `granted I p k bs = region p (2^k) bs ∗ I.tok p n k` hides the block of the region; when `len` is a page multiple the mapping has no tail for the token to own, so no token pins the mapping's size: with a larger mapping whose extra pages are in the frame, `free` is a legal prefix `munmap` that changes the frame's cells | argument below (not mechanised) |
 
 The theorems are in `tests/roadmap/alloc-translated/PageObstruction.lean` (checked by
 `check.sh`, axioms `propext`, `Classical.choice`, `Quot.sound`):
 
 * `not_allocSpec_at_start : ∀ L c I, (∃ split of mem0's heap with I.own) → ¬ AllocSpec L vt c I`
-  — the analogue of `Static.not_allocSpec`. `vt` is the generated vtable; `alloc` (a `ConcM`
-  function: it reaches sync ops at the atomics) is the scheduler's run of one thread.
+  — the analogue of `Static.not_allocSpec`. `vt` is assembled from the translated entry
+  functions (not read from the generated vtable global); `alloc` (a `ConcM` function: it reaches
+  sync ops at the atomics) is the scheduler's run of one thread (fuel 16, oracle `0`).
 * `alloc_no_triple_at_start`: `odd` has `mem0`'s heap and a 4-byte atomic location at
   `addr_hint`; `alloc(1, align 1)` from it throws `.unspecified` (`decide +kernel`).
 * `alloc_no_triple_after_free`: `hinted` is the state after `alloc` then `free` (the `#guard`s
@@ -49,21 +50,24 @@ hold after a real whole-page `alloc`.
   `new_len > maxInt(usize) - (page_size - 1)`; `resize(s, maxInt(usize))` panics.
 
 `AllocSpec.alloc` (every `len > 0`, `k < 64`) and `resize`/`remap` (every `n > 0`) are therefore
-also unsatisfiable at those sizes; a fixed spec needs the bounds as preconditions (the wrappers
-never pass such alignments, but `resize` passes any length). Not filed upstream (needs the user).
+also unsatisfiable at those sizes; a fixed spec needs the bounds as preconditions (`alignedAlloc`
+passes any comptime alignment, so the `alloc` overflow is reachable through the wrappers, and
+`resize` passes any length). Not filed upstream (needs the user).
 
 ## Native comparison (stock Zig 0.16.0, `ReleaseSafe`)
 
 | | aarch64-macos (16 KiB pages) | x86_64-linux (4 KiB pages, Docker `linux/amd64`) | model |
 |---|---|---|---|
-| `page_resize(10,20)`, `(10,5000)`, `(8192,10)`, `(10,20000)` | 1 1 1 0 | 1 0 1 0 | same per target (`Eval.lean`) |
+| `page_resize(10,20)`, `(10,5000)`, `(8192,10)`, `(10,20000)` | 1 1 1 0 | 1 0 1 0 | same per target (`Eval.lean`; the Linux guards stop at `(8192,10)`) |
 | `remap` 10→5000, 8192→10, 10→20000 | 1 1 0 | 1 1 1 (`mremap` may move) | — (no translated client) |
 | aligned alloc of 64 KiB / 1 MiB alignment, `resize` | aligned, `false` | aligned, `false` | — |
 | `page_sum(0,10,10000)`, `page_create(7)` | 0 10 10000, 7 | same | same |
 
 P2's claim holds natively: on x86_64-linux `resize` never calls `mremap` (stacks grow down and a
 `resize` may not move), so `page_resize(10, 5000)` is `false`. `expected.txt` was the macOS run
-only; `check.sh` now compares with `expected-linux.txt` on Linux hosts.
+only; `check.sh` now picks `expected-linux.txt` on 4 KiB-page hosts (the output depends on the
+page size only), and CI runs the comparison. `native.zig` prints the first three `page_resize`
+cases; the `(10,20000)`, `remap` and aligned-alloc rows are from one-off native runs.
 
 ## What a fix needs
 

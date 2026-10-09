@@ -3,7 +3,8 @@
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.AllocSpec`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
-# expected.txt (aarch64-macos, 16 KiB pages) or expected-linux.txt (x86_64-linux, 4 KiB pages).
+# expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
+# recorded on x86_64-linux): the output depends on the page size only, not on the OS.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -46,8 +47,12 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
     --global-cache-dir "$work/cache" -femit-bin="$work/native"
   "$work/native" 2> "$work/native.txt"
-  expected=$here/expected.txt
-  if [ "$(uname -s)" = Linux ]; then expected=$here/expected-linux.txt; fi
+  page_size=$(getconf PAGESIZE)
+  case "$page_size" in
+    16384) expected=$here/expected.txt ;;
+    4096) expected=$here/expected-linux.txt ;;
+    *) echo "alloc-translated: no native expectation for $page_size-byte pages" >&2; exit 1 ;;
+  esac
   diff "$expected" "$work/native.txt"
 fi
 echo "alloc-translated: ok"
