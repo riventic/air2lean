@@ -36,6 +36,11 @@ f.c ──zig translate-c──▶ f.zig ──patched Zig 0.16.0 (AIR only)─�
 > air2lean under its existing claims ([claim-strength.md](claim-strength.md)). It is not a
 > claim about `f.c` under ISO C or as compiled by gcc or clang. translate-c, the musl headers
 > it reads, the Zig front end up to AIR and the patched AIR exporter are in the trusted base.
+> A program with libc calls is the executable Zig links with its own libc: lib/c and
+> compiler_rt are translated with it (§libc boundary), and the trusted base adds Zig's link
+> configuration (which compilation defines a symbol, cross-checked by a link census) and the C
+> calling convention's passing of a pointer or integer between two declarations of one
+> symbol (the C ABI conversion).
 > Where translate-c's Zig is stricter than C (a ReleaseSafe panic on signed overflow, on a
 > `@intCast` or on `@alignCast`) or differs from C (the findings below), the theorem follows
 > the Zig meaning.
@@ -159,7 +164,7 @@ parser, `varargs_sum`). Recorded in `tests/roadmap/c-frontend/record.json` with 
 0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (exporter `zig-patch/air-json/json.zig` sha256 066fab37…, with the G5 fix), on
 aarch64-macos.
 
-* **23 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
+* **24 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
   program on all four inputs (`#guard`). These cover integer promotions, unsigned
   wrapping, signed arithmetic, 64-bit arithmetic, floats, `_Bool` and short-circuit logic,
   side-effecting expressions, designated initializers and compound literals, `switch` (incl.
@@ -167,14 +172,20 @@ aarch64-macos.
   string literals, static locals, globals, function pointer tables, recursion, macros, a
   pointer-walking `strlen`/`strcpy`/`strcmp`/`strrev`, `char *` and `void *` views of objects
   (`casts`), `void *` byte loops (`memcpy_loops`), a linked list over a static node pool with
-  removal through a pointer to a link (`linked_list`) and pointer/integer round trips
-  (`ptr_int_casts`).
+  removal through a pointer to a link (`linked_list`), pointer/integer round trips
+  (`ptr_int_casts`) and libc string calls (`libc_string`: `memset`, `memcpy`, `strlen`,
+  `memcmp` translated from compiler_rt, `strcmp` and `strchr` from lib/c, §libc boundary).
 * Of the 29 files with no libc call and no translate-c demotion, 23 pass, 1 is accepted
   but evaluates to `.illegal` (G4), 4 hit the Zig 0.16.0 bug (G3) and 1 (`sort_callback`,
   accepted by air2lean) diverges natively (G8).
-* The other 11 are rejected by name: the 6 translate-c demotions (G7), the 4 libc users at
-  `CALLEE_EXTERN_UNBOUND` (no libc symbol is bound yet, §libc boundary; `snprintf` as a
-  variadic callee) and `setjmp_longjmp` (the `noreturn` extern `longjmp`, and unbound `setjmp`).
+* Of the 4 libc users, `libc_string` passes (it was rejected before Zig's libc was
+  translated). The other 3 are rejected by name (§libc boundary): `libc_stdio` for the
+  variadic `snprintf` (musl C); `malloc_vec` and `libc_stdlib` because lib/c's `free` and
+  `realloc` take `?[*]align(16) u8`, more aligned than the declared `void *` (the C ABI
+  conversion does not check alignment), and below them `std.heap.SmpAllocator` uses
+  `unordered` atomics and musl's `__errno_location`; `libc_stdlib` also panics natively (G8).
+* The other 7 are rejected by name: the 6 translate-c demotions (G7) and `setjmp_longjmp`
+  (the `noreturn` extern `longjmp`, and `setjmp`, both musl C).
 * Every C program ran cleanly under UBSan; translate-c's Zig agreed with C natively in 27
   files. The 13 others: 9 do not compile (6 demotions, 3 × G3), `hash_table` diverges
   silently (G3: a wrong value in Debug, a panic in ReleaseSafe), `libc_stdlib`/`sort_callback` panic in ReleaseSafe on the
