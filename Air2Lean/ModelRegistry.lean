@@ -457,9 +457,13 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
         unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
-          entries := entries.push <| Json.mkObj [("symbol", .str name),
+          -- An extern callee keeps its declared library; its premise is the author's to name.
+          let library := (externSymbol? name).map fun symbol =>
+            ("extern", Json.mkObj [("library", Lean.toJson
+              ((f.externs.find? (·.name == symbol)).bind (·.library)))])
+          entries := entries.push <| Json.mkObj ([("symbol", .str name),
             ("profile", profile.toJson),
-            ("signature", Json.mkObj [("params", .arr params), ("return", ret)])]
+            ("signature", Json.mkObj [("params", .arr params), ("return", ret)])] ++ library.toList)
   pure <| Json.mkObj [("schema", Lean.toJson (1 : Nat)), ("models", .arr entries)]
 
 /-- Report trust separately from the qualified runtime semantics. No proved label is evidence

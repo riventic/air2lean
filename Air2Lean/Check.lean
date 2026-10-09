@@ -2464,7 +2464,8 @@ def externUnbound (caller : String) (e : ExternDecl) (why : String) : String :=
 /-- Bind each extern call (`externCallee`, `docs/air-json.md` §Extern calls) at its linker
 symbol, never at a Zig declaration name:
 (a) to a registry model whose `symbol` is the extern callee and whose `extern.library` is the
-    declared library; the call stays an extern callee, which the model implements;
+    declared library, if the program does not define the symbol; the call stays an extern
+    callee, which the model implements;
 (b) else to the one `export fn` of the program that defines the symbol, with the declared
     calling convention; the call becomes a direct call of that function, whose signature
     `checkProgram` then checks like any direct call's.
@@ -2496,7 +2497,11 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       else if let some m := models.find? (·.symbol == callee) then
         let some binding := m.externBinding
           | throw s!"{f.name}: model '{m.symbol}' has no extern binding"
-        unless binding.library == e.library do
+        -- The linker would resolve the symbol to the program's own definition, not the model's.
+        if let some target := exports[symbol]? then
+          unbound := unbound.push (f.name, externUnbound f.name e
+            s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)")
+        else unless binding.library == e.library do
           unbound := unbound.push (f.name, externUnbound f.name e
             s!"is declared with another library than its registry model's ({binding.library.getD "none"})")
       else if let some target := exports[symbol]? then

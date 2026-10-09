@@ -182,7 +182,8 @@ function name has. Before the whole-program checks it binds each extern call
 1. **Trusted base model.** A `--model-registry` entry whose `symbol` is `extern:<symbol>` and
    whose `extern` object gives the declared `library` and the `premise` (a `docs/premises.md`
    ID) that states the model's correspondence to the real primitive
-   (`docs/external-models.md` §Extern functions). The call stays a model call. A registry entry
+   (`docs/external-models.md` §Extern functions), when the AIR set does not define the symbol
+   (that combination is rejected). The call stays a model call. A registry entry
    for the Zig declaration's name does not bind the extern call.
 2. **Translated definition.** Else the one function of the AIR set whose `export.name` is the
    symbol, with the declared `cc`. The call becomes a direct call of that definition, and its
