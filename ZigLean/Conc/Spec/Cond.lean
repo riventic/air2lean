@@ -409,5 +409,184 @@ variable {Fx : Futex (Nat × Nat) CA}
 def CState.proj {X : Type} (s : CState (ioCond Fx) X) : MState (ioMutex Fx.atMtx) X :=
   ⟨(s.sh.m, s.sh.f), fun u => projCtl (s.ctl u), s.cur, s.val⟩
 
+/-! ## The invariant -/
+
+namespace CPlace
+
+/-- `lock`'s places in `Io.Mutex`'s code. -/
+def lockL : IL → Bool
+  | .cas | .xchg | .wait | .asleep | .fin true => true
+  | _ => false
+
+/-- `tryLock`'s places. -/
+def tryL : IL → Bool
+  | .attempt | .fin _ => true
+  | _ => false
+
+/-- `unlock`'s places. -/
+def unlL : IL → Bool
+  | .rel | .wake | .fin false => true
+  | _ => false
+
+/-- The places that a thread can be at. -/
+def ok : CCtl CL → Bool
+  | .idle | .holds => true
+  | .run .lock (.m l) => lockL l
+  | .run .tryLock (.m l) => tryL l
+  | .run .unlock (.m l) => unlL l
+  | .run .wait .le0 | .run .wait (.add _) | .run .wait (.fw _) | .run .wait (.sleep _)
+  | .run .wait .le | .run .wait (.ls _) | .run .wait (.cx _ _ _) => true
+  | .run .wait (.wu _ l) => unlL l
+  | .run .wait (.wl l) => lockL l
+  | .run (.signal _) (.scx false w s) | .run (.broadcast _) (.scx true w s) => decide (s < w)
+  | .run (.signal _) (.sld false) | .run (.broadcast _) (.sld true)
+  | .run (.signal _) (.bump _) | .run (.broadcast _) (.bump _)
+  | .run (.signal _) (.swake _) | .run (.broadcast _) (.swake _)
+  | .run (.signal _) .fin | .run (.broadcast _) .fin => true
+  | _ => false
+
+/-- A waiter counted in `waiters` (registered, no signal taken yet). -/
+def reg : CCtl CL → Nat
+  | .run .wait (.wu _ _) | .run .wait (.fw _) | .run .wait (.sleep _) | .run .wait .le
+  | .run .wait (.ls _) | .run .wait (.cx _ _ _) => 1
+  | _ => 0
+
+/-- A waiter that took a signal and re-takes the mutex. -/
+def cwl : CCtl CL → Nat
+  | .run .wait (.wl _) => 1
+  | _ => 0
+
+/-- A `signal` before its `cmpxchg`. -/
+def spend : CCtl CL → Nat
+  | .run (.signal _) (.sld _) | .run (.signal _) (.scx _ _ _) => 1
+  | _ => 0
+
+/-- A `broadcast` before its `cmpxchg`. -/
+def bpend : CCtl CL → Bool
+  | .run (.broadcast _) (.sld _) | .run (.broadcast _) (.scx _ _ _) => true
+  | _ => false
+
+/-- A `signal`/`broadcast` that has not bumped the epoch yet. -/
+def nb : CCtl CL → Nat
+  | .run (.signal _) (.sld _) | .run (.signal _) (.scx _ _ _) | .run (.signal _) (.bump _)
+  | .run (.broadcast _) (.sld _) | .run (.broadcast _) (.scx _ _ _) | .run (.broadcast _) (.bump _) => 1
+  | _ => 0
+
+/-- A waiter that still owns the mutex: before its `mutex.unlock()`'s `xchg`. -/
+def preRel : CCtl CL → Bool
+  | .run .wait .le0 | .run .wait (.add _) | .run .wait (.wu _ .rel) => true
+  | _ => false
+
+/-- The waiters that a signaler will wake, before its epoch bump. -/
+def bW : CCtl CL → Nat
+  | .run _ (.bump n) => n
+  | _ => 0
+
+/-- The same, after its epoch bump. -/
+def wW : CCtl CL → Nat
+  | .run _ (.swake n) => n
+  | _ => 0
+
+/-- The epoch that a waiter loaded. -/
+def eOf : CCtl CL → Nat
+  | .run _ (.add e) | .run _ (.wu e _) | .run _ (.fw e) | .run _ (.sleep e) | .run _ (.ls e)
+  | .run _ (.cx e _ _) => e
+  | _ => 0
+
+/-- A registered waiter that will see a new epoch or the state before it sleeps again (it is
+not about to sleep on the current epoch `ep`); asleep waiters count here too, and the queue is
+subtracted (`CInv.epoch`). -/
+def aw (ep : Nat) : CCtl CL → Nat
+  | .run .wait (.wu e _) | .run .wait (.fw e) => if e = ep then 0 else 1
+  | .run .wait (.sleep _) | .run .wait .le | .run .wait (.ls _) | .run .wait (.cx _ _ _) => 1
+  | _ => 0
+
+end CPlace
+
+open CPlace
+
+/-- Thread `u` sleeps at the epoch. -/
+def CState.qi {X : Type} (s : CState (ioCond Fx) X) (u : Tid) : Nat :=
+  if (u, CA.ep) ∈ Fx.queue s.sh.f then 1 else 0
+
+/-- The invariant of `Io.Condition` with `Io.Mutex` (module doc). -/
+structure CInv {X : Type} (N : Nat) (s : CState (ioCond Fx) X) : Prop where
+  mtx : IoInv s.proj
+  ok : ∀ t, CPlace.ok (s.ctl t) = true
+  idle : ∀ t, N ≤ t → s.ctl t = .idle
+  qwf : (Fx.queue s.sh.f).WF
+  qep : ∀ u, (u, CA.ep) ∈ Fx.queue s.sh.f → ∃ e, s.ctl u = .run .wait (.sleep e)
+  eload : ∀ u, eOf (s.ctl u) ≤ s.sh.ep
+  /-- Every epoch bump, done or to come, belongs to a `signal`/`broadcast` call. -/
+  epc : s.sh.ep + tsum N (fun u => nb (s.ctl u)) ≤ s.calls
+  wcnt : s.sh.w = tsum N (fun u => reg (s.ctl u))
+  sgw : s.sh.sg ≤ s.sh.w
+  seen : ∀ t, s.seen t ≤ s.gen
+  /-- A waiter that has not released the mutex called `wait` at the current acquisition. -/
+  wgen : ∀ u, preRel (s.ctl u) = true → s.wgen u = s.gen
+  /-- No more returns are owed than there are waiters. -/
+  oblW : s.O ≤ s.sh.w + tsum N (fun u => cwl (s.ctl u))
+  /-- With no `broadcast` pending, the owed returns are covered by the signals, the pending
+  `signal`s and the waiters that took one. -/
+  oblS : (∀ u, bpend (s.ctl u) = false) →
+    s.O ≤ s.sh.sg + tsum N (fun u => spend (s.ctl u)) + tsum N (fun u => cwl (s.ctl u))
+  /-- **The epoch argument**: the signals pending are covered by the waiters awake that will see
+  them, the signalers that have not bumped the epoch, and those that will wake sleepers. -/
+  epoch : s.sh.ep < 2 ^ 32 →
+    s.sh.sg + tsum N s.qi ≤ tsum N (fun u => aw s.sh.ep (s.ctl u)) + tsum N (fun u => bW (s.ctl u)) +
+      min (tsum N (fun u => wW (s.ctl u))) (tsum N s.qi)
+
+/-! ### The mutex part follows `Io.Mutex` -/
+
+theorem proj_tset (f : Tid → CCtl CL) (t : Tid) (c : CCtl CL) :
+    (fun u => projCtl (tset f t c u)) = tset (fun u => projCtl (f u)) t (projCtl c) := by
+  funext u; by_cases hu : u = t
+  · rw [hu, tset_self, tset_self]
+  · rw [tset_ne _ _ hu, tset_ne _ _ hu]
+
+theorem mstate_eq {I : MutexImpl} {X : Type} {p q : MState I X} (h1 : p.sh = q.sh) (h2 : p.ctl = q.ctl)
+    (h3 : p.cur = q.cur) (h4 : p.val = q.val) : p = q := by
+  cases p; cases q; simp_all
+
+section
+variable {X : Type} {s s' : CState (ioCond Fx) X}
+
+/-- A step of the mutex's client. -/
+theorem proj_sim (hFs : FutexSafe condView Fx) (hi : IoInv s.proj) {t : Tid}
+    {p' : MState (ioMutex Fx.atMtx) X} (hs : MStep (ioMutex Fx.atMtx) t s.proj p') (he : p' = s'.proj) :
+    IoInv s'.proj :=
+  he ▸ ioMutex_step hFs.atMtx hi hs
+
+/-- A step that the mutex does not see, but for the futex's other address. -/
+theorem proj_frame (hi : IoInv s.proj) (hctl : ∀ u, projCtl (s'.ctl u) = projCtl (s.ctl u))
+    (hm : s'.sh.m = s.sh.m) (hcur : s'.cur = s.cur) (hval : s'.val = s.val)
+    (hq : (mtxQ (Fx.queue s'.sh.f)).Perm (mtxQ (Fx.queue s.sh.f))) : IoInv s'.proj := by
+  have hc : (fun u => projCtl (s'.ctl u)) = fun u => projCtl (s.ctl u) := funext hctl
+  have hmem : ∀ x, x ∈ mtxQ (Fx.queue s'.sh.f) ↔ x ∈ mtxQ (Fx.queue s.sh.f) := fun x => hq.mem_iff
+  obtain ⟨hok, hexcl, hb, hword, hview, hmsg, hqwf, hqloc, hwit⟩ := hi
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> simp only [CState.proj, hc, hm, hcur, hval] at * <;>
+    try assumption
+  · exact hqwf.perm hq
+  · intro u a ha; exact hqloc u a ((hmem _).mp ha)
+  · intro hne
+    have hne' : mtxQ (Fx.queue s.sh.f) ≠ [] := fun he => hne (List.eq_nil_iff_forall_not_mem.mpr
+      fun x hx => by have := (hmem x).mp hx; rw [he] at this; cases this)
+    obtain ⟨v, hv, hw⟩ := hwit hne'
+    exact ⟨v, Queue.has_eq_false.mpr fun a ha => Queue.has_eq_false.mp hv a ((hmem _).mp ha), hw⟩
+
+/-- `mtxQ` of a queue that changed only at the epoch. -/
+theorem mtxQ_drop_ep {q : Queue CA} {ws : List Tid} (hq : q.WF) (hws : ∀ u ∈ ws, (u, CA.ep) ∈ q) :
+    (mtxQ q).drop ws = mtxQ q := by
+  unfold Queue.drop
+  refine List.filter_eq_self.mpr fun x hx => ?_
+  have hx' : (x.1, CA.mtx) ∈ q := mem_mtxQ.mp (by cases x; exact hx)
+  simp only [Bool.not_eq_eq_eq_not, Bool.not_true, List.contains_eq_any_beq, List.any_eq_false,
+    beq_iff_eq]
+  intro u hu he
+  subst he
+  cases hq.unique hx' (hws _ hu)
+
+end
+
 end Spec
 end Zig

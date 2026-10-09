@@ -113,6 +113,57 @@ theorem tsum_le_one {N : Nat} {g : Nat → Nat} (hg : ∀ u, g u ≤ 1)
       have := hg N
       omega
 
+/-- **How a sum changes when the summand changes at `t` only.** -/
+theorem tsum_update {N : Nat} {g g' : Nat → Nat} {t : Nat} (ht : t < N) (h : ∀ u, u ≠ t → g' u = g u) :
+    tsum N g' + g t = tsum N g + g' t := by
+  revert ht
+  induction N with
+  | zero => intro ht; omega
+  | succ N ih =>
+    intro ht
+    rw [tsum_succ, tsum_succ]
+    by_cases hN : N = t
+    · subst hN
+      rw [tsum_congr (h := g) fun u hu => h u (Nat.ne_of_lt hu)]
+      omega
+    · have := ih (by omega)
+      rw [h N hN]
+      omega
+
+theorem tsum_one (N : Nat) : tsum N (fun _ => 1) = N := by
+  induction N with
+  | zero => rfl
+  | succ N ih => rw [tsum_succ, ih]
+
+/-- A sum of indicators is at most `N`, and below `N` if one is `0`. -/
+theorem tsum_lt_of_zero {N : Nat} {g : Nat → Nat} (hg : ∀ u, g u ≤ 1) {t : Nat} (ht : t < N)
+    (h0 : g t = 0) : tsum N g + 1 ≤ N := by
+  have hle : tsum N (fun u => if u = t then 1 else g u) ≤ tsum N (fun _ => 1) :=
+    tsum_le fun u _ => by split <;> simp_all
+  have hN := tsum_one N
+  have := tsum_update (g := g) (g' := fun u => if u = t then 1 else g u) ht
+    fun u hu => by simp [hu]
+  simp at this
+  omega
+
+/-- The sum of the indicator of a list without duplicates whose elements are below `N` is its
+length. -/
+theorem tsum_mem_length {N : Nat} {l : List Nat} (hnd : l.Nodup) (hlt : ∀ x ∈ l, x < N) :
+    tsum N (fun u => if u ∈ l then 1 else 0) = l.length := by
+  induction l with
+  | nil => exact tsum_eq_zero fun u _ => by simp
+  | cons a l ih =>
+    have ha : a ∉ l := (List.nodup_cons.mp hnd).1
+    have := tsum_update (N := N) (t := a) (g := fun u => if u ∈ l then 1 else 0)
+      (g' := fun u => if u ∈ a :: l then 1 else 0) (hlt a List.mem_cons_self)
+      fun u hu => by simp [hu]
+    rw [ih (List.nodup_cons.mp hnd).2 fun x hx => hlt x (List.mem_cons_of_mem _ hx)] at this
+    have e1 : (if a ∈ l then 1 else 0) = 0 := by simp [ha]
+    have e2 : (if a ∈ a :: l then 1 else 0) = 1 := by simp
+    rw [e1, e2] at this
+    simp only [List.length_cons]
+    omega
+
 /-! ## Join semilattices of views -/
 
 /-- A join semilattice (module doc). -/
