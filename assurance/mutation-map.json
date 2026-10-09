@@ -1511,7 +1511,7 @@
         },
         {
           "path": "tests/roadmap/models/StdModels.lean",
-          "anchor": "no reviewed std source for Zig 0.17.0"
+          "anchor": "no reviewed std source for Zig 0.16.0"
         },
         {
           "path": "tests/roadmap/models/StdModels.lean",
