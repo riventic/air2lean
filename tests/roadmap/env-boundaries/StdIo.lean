@@ -226,11 +226,13 @@ structure BodyFacts (s : Slice) (i : Nat) : Prop where
   le1 : Zig.le false (BitVec.ofNat 64 i) s.len = true
   le2 : Zig.le false s.len s.len = true
   sub : Zig.sub false s.len (BitVec.ofNat 64 i) = pure (BitVec.ofNat 64 (s.len.toNat - i))
+  /-- The slicing `s[i..]` stays within `s` (the unchecked-illegal slice-end check). -/
+  sliceEnd : Zig.checkSliceEnd s.len (BitVec.ofNat 64 i) (BitVec.ofNat 64 (s.len.toNat - i)) 0 = pure ()
 
 theorem bodyFacts {s : Slice} {i : Nat} (hi : i < s.len.toNat) : BodyFacts s i := by
   have hlen := s.len.isLt
   have hi64 : (BitVec.ofNat 64 i).toNat = i := by simp; omega
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · simp [Zig.lt, BitVec.ult, hi64]; omega
   · simp [Zig.le, BitVec.ule, hi64]; omega
   · simp [Zig.le, BitVec.ule]
@@ -241,6 +243,9 @@ theorem bodyFacts {s : Slice} {i : Nat} (hi : i < s.len.toNat) : BodyFacts s i :
     apply BitVec.eq_of_toNat_eq
     simp [BitVec.toNat_sub, hi64]
     omega
+  · have hsub : (BitVec.ofNat 64 (s.len.toNat - i)).toNat = s.len.toNat - i := by simp; omega
+    simp only [Zig.checkSliceEnd, hi64, hsub]
+    rw [if_pos (by omega)]
 
 theorem writeAll_body_err {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLocals} {m m' : Mem}
     {n : ErrName} {i : Nat} (hidx : st.index = BitVec.ofNat 64 i) (hb : BodyFacts s i)
@@ -249,7 +254,7 @@ theorem writeAll_body_err {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLoc
     ((fs_File_writeAll.loop5 ⟨fd⟩ s).run st).run m = pure ((.ret (.error n), st), m') := by
   simp only [StateT.run] at hfw
   simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, Zig.callM, Zig.callR, hidx, hb.lt,
-    hb.le1, hb.le2, hb.sub, hfw, ↓reduceIte, Zig.unwrapErr]
+    hb.le1, hb.le2, hb.sub, hb.sliceEnd, hfw, ↓reduceIte, Zig.unwrapErr]
 
 theorem writeAll_body_ok {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLocals} {m m' : Mem}
     {v w : BitVec 64} {i : Nat} (hidx : st.index = BitVec.ofNat 64 i) (hb : BodyFacts s i)
@@ -259,7 +264,7 @@ theorem writeAll_body_ok {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLoca
     ((fs_File_writeAll.loop5 ⟨fd⟩ s).run st).run m = pure ((.rep5, { st with index := w }), m') := by
   simp only [StateT.run] at hfw
   simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, Zig.callM, Zig.callR, hidx, hb.lt,
-    hb.le1, hb.le2, hb.sub, hfw, ha, ↓reduceIte]
+    hb.le1, hb.le2, hb.sub, hb.sliceEnd, hfw, ha, ↓reduceIte]
 
 /-- What a loop iteration keeps: memory blocks, single-threadedness, the operations and the
 open handles. -/

@@ -36,6 +36,11 @@
  },
  "name": "ib.copyOverlapUnsafe",
  "module": "root",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 59
+ },
  "params": [
   0,
   1
@@ -86,7 +91,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 24
   },
   {
    "id": 6,
@@ -106,7 +112,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 16
   },
   {
    "id": 8,
@@ -163,7 +170,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 33
   },
   {
    "id": 13,

@@ -36,6 +36,11 @@
  },
  "name": "ib.divExactIntUnsafe",
  "module": "root",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 25
+ },
  "params": [
   0,
   0
@@ -58,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 12
   },
   {
    "id": 3,
@@ -77,7 +83,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,

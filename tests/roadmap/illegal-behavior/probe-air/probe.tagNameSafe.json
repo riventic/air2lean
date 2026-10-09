@@ -36,6 +36,11 @@
  },
  "name": "probe.tagNameSafe",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 32
+ },
  "params": [
   0
  ],
@@ -51,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 2,
@@ -127,7 +133,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 10,

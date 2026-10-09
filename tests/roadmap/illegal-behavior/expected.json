@@ -6,7 +6,7 @@
   "errorCastUnionUnsafe": {"files": ["probe.errorCastUnionUnsafe.json"], "result": "rejected", "diagnostic": "error-union error storage"},
   "tagNameSafe": {"files": ["probe.tagNameSafe.json"], "result": "accepted", "contains": ["E.isNamed p0", "throw .illegal"]},
   "tagNameUnsafe": {"files": ["probe.tagNameUnsafe.json"], "result": "accepted", "contains": ["Zig.callR (E.tagName p0)", "throw .illegal"]},
-  "shl24Safe": {"files": ["probe.shl24Safe.json"], "result": "rejected", "diagnostic": "shiftRhsTooBig"},
+  "shl24Safe": {"files": ["probe.shl24Safe.json"], "result": "accepted", "contains": ["throw .overflow", "Zig.shlChk p0 p1"]},
   "vecPtrCast": {"files": ["probe.vecPtrCast.json"], "result": "rejected", "diagnostic": "pointer cast between a vector and another pointee"},
   "noreturnCall": {"files": ["probe.noreturnCall.json", "probe.die.json"], "result": "rejected", "diagnostic": "is not a known panic-handler function"},
   "sentinelUnsafe": {"files": ["probe.sentinelUnsafe.json"], "result": "accepted", "contains": ["Zig.checkSentinelByte i3 i4 (0 : BitVec 8)", "Zig.checkSliceEnd p0.len"]},

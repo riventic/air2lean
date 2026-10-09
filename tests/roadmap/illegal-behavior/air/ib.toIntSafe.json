@@ -36,6 +36,11 @@
  },
  "name": "ib.toIntSafe",
  "module": "root",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 48
+ },
  "params": [
   0
  ],
@@ -51,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 2,
@@ -67,7 +73,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 4,

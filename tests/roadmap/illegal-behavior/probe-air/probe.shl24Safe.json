@@ -36,6 +36,11 @@
  },
  "name": "probe.shl24Safe",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 41
+ },
  "params": [
   0,
   1
@@ -58,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 14
   },
   {
    "id": 3,
@@ -141,7 +147,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 11,

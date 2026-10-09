@@ -36,6 +36,11 @@
  },
  "name": "probe.sentinelWords",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 72
+ },
  "params": [
   0,
   1
@@ -86,7 +91,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 13
   },
   {
    "id": 6,
@@ -153,7 +159,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 12,

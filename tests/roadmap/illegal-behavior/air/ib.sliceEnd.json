@@ -36,6 +36,11 @@
  },
  "name": "ib.sliceEnd",
  "module": "root",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 79
+ },
  "params": [
   0,
   1,
@@ -65,7 +70,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 15
   },
   {
    "id": 4,
@@ -130,7 +136,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 10,

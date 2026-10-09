@@ -36,6 +36,11 @@
  },
  "name": "probe.forLenUnsafe",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 55
+ },
  "params": [
   0,
   0
@@ -58,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 3,
@@ -113,7 +119,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 13
   },
   {
    "id": 9,
@@ -255,7 +262,8 @@
            "id": 22,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 23
           },
           {
            "id": 23,
@@ -310,7 +318,8 @@
            "id": 27,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 36
           },
           {
            "id": 28,
@@ -388,7 +397,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 36,
@@ -404,7 +414,8 @@
    "id": 37,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 38,

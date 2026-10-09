@@ -36,6 +36,11 @@
  },
  "name": "probe.die",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 67
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -43,7 +48,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,

@@ -36,6 +36,11 @@
  },
  "name": "probe.errorCastUnionUnsafe",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 27
+ },
  "params": [
   0
  ],
@@ -51,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 12
   },
   {
    "id": 2,
@@ -67,7 +73,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 4,

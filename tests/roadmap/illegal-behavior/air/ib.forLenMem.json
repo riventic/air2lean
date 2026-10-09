@@ -36,6 +36,11 @@
  },
  "name": "ib.forLenMem",
  "module": "root",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 105
+ },
  "params": [
   0,
   0
@@ -58,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 3,
@@ -113,7 +119,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 10
   },
   {
    "id": 9,
@@ -129,7 +136,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 15
   },
   {
    "id": 11,
@@ -281,7 +289,8 @@
            "id": 25,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 27
           },
           {
            "id": 26,
@@ -336,7 +345,8 @@
            "id": 30,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 40
           },
           {
            "id": 31,
@@ -414,7 +424,8 @@
    "id": 38,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 39,
@@ -430,7 +441,8 @@
    "id": 40,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 41,

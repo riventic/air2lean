@@ -36,6 +36,11 @@
  },
  "name": "ib.forRange",
  "module": "root",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 113
+ },
  "params": [
   0,
   1
@@ -58,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 3,
@@ -113,7 +119,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 13
   },
   {
    "id": 9,
@@ -232,7 +239,8 @@
            "id": 20,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 26
           },
           {
            "id": 21,
@@ -248,7 +256,8 @@
            "id": 22,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 48
           },
           {
            "id": 23,
@@ -303,7 +312,8 @@
            "id": 27,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 60
           },
           {
            "id": 28,
@@ -381,7 +391,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 36,
@@ -397,7 +408,8 @@
    "id": 37,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 38,

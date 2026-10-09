@@ -36,6 +36,11 @@
  },
  "name": "probe.noreturnCall",
  "module": "root",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 62
+ },
  "params": [
   0
  ],
@@ -51,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 2,
@@ -86,7 +92,8 @@
        "id": 4,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 20
       },
       {
        "id": 5,
@@ -127,7 +134,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 10,
