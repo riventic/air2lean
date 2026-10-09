@@ -422,7 +422,9 @@ class ManifestTests(unittest.TestCase):
         self.assertIn('no chained native build', err)
 
     def test_relocatable_receipt_inside_repository(self):
-        for name in ('receipt.json', 'plan.json', 'after.json'):
+        tree = {'head': 'f' * 40, 'tracked_dirty': False, 'dirty_allowed': False}
+        self.write('evidence/receipt/receipt.json', json.dumps({'schema': 2, 'tree': tree}) + '\n')
+        for name in ('plan.json', 'after.json'):
             self.write('evidence/receipt/' + name, '{"schema": 2}\n')
         self.write('evidence/receipt/audit.json', json.dumps({'status': 'pass', 'theorems': [
             {'name': 'toplevel', 'module': 'Proofs.Demo.Proofs', 'allowed': True}]}))

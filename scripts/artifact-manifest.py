@@ -471,7 +471,7 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
                                       'to accept)' % sorted(k for k, v in value['profile_agreement'].items() if not v))
     if 'receipt' in links and not allow_dirty:
         try:
-            receipt.release_ready(load(Path(manifest['inputs']['receipt']) / 'receipt.json'))
+            receipt.release_ready(load(absolute(root, manifest['inputs']['receipt']) / 'receipt.json'))
         except (OSError, ValueError) as error:
             report['problems'].append('chained proof receipt: %s (pass --allow-dirty to accept)' % error)
     if verify_receipt:

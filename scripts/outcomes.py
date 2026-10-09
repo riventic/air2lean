@@ -56,6 +56,7 @@ REFUSAL_REASONS = {
     Outcome.ILLEGAL: 'observed illegal behavior',
     Outcome.DEADLOCK: 'observed deadlock',
     Outcome.HARDWARE_TRAP: 'observed hardware trap',
+    Outcome.STACK_OVERFLOW: 'observed stack overflow',
 }
 # Absence claims (scripts/claims.py names) and the outcomes each one denies.
 ABSENCE_CLAIMS = {
