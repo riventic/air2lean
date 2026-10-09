@@ -252,6 +252,8 @@ def programViolations (profiles : Array BuildProfile) (expected : Option String 
         let other := current.getObjValD key
         unless value == other do
           errors := errors.push s!"mixed AIR profiles: field '{key}' differs ({value.compress} vs {other.compress})"
+    -- `first`'s own unit is compared field by field above, build mode included.
+    if p.linkUnit == first.linkUnit then continue
     let unit := p.linkUnit.getD ""
     match unitModes[unit]? with
     | some mode =>

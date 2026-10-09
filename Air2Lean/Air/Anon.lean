@@ -228,7 +228,7 @@ private def globalNames (j : Lean.Json) : Array String :=
 /-- A separately compiled library linked into the program (a link unit) has its own `root`,
 `std` and every other declaration, compiled with its own build mode: its `std.mem.len` is not
 the program's. So each identity of a link unit's function (its name, the functions it names,
-its types and globals) is qualified with the unit's label, `<unit>#<name>`, before anything
+its named types and globals) is qualified with the unit's label, `<unit>#<name>`, before anything
 else reads it. No identity of the program's own functions may start with `<unit>#` for a unit
 of the input. Extern calls cross units by linker symbol only (`docs/air-json.md` §Link units). -/
 def qualifyLinkUnits (texts : Array String) : Except String (Array String) := do
@@ -241,6 +241,12 @@ def qualifyLinkUnits (texts : Array String) : Except String (Array String) := do
     match linkUnit? j with
     | some unit =>
       let q := mapIdentities (s!"{unit}#" ++ ·) j
+      -- A printed type (`other`: `anyopaque`, `fn (u32) u32`) names no declaration of the unit;
+      -- its spelling is what classifies it (`isFnTy`, `*anyopaque`), so it stays as it is.
+      let q := match (j.getObjVal? "types").bind (·.getArr?), (q.getObjVal? "types").bind (·.getArr?) with
+        | .ok ts, .ok qs => q.setObjVal! "types" (.arr ((ts.zip qs).map fun ((t, qt) : Lean.Json × Lean.Json) =>
+            if (t.getObjValAs? String "k").toOption == some "other" then t else qt))
+        | _, _ => q
       let q := match (q.getObjVal? "globals").bind (·.getArr?) with
         | .ok gs => q.setObjVal! "globals" (.arr (gs.map fun (g : Lean.Json) =>
             match g.getObjValAs? String "name" with

@@ -563,8 +563,10 @@ fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []
 /// calls).
 const Exports = struct {
     const Key = struct { zcu: usize, nav: u32 };
-    const Dumped = struct { count: usize, cc: []const u8, fqn: []const u8 };
+    const Dumped = struct { signature: u64, cc: []const u8, fqn: []const u8 };
 
+    /// Not `page_allocator`: one page per function name.
+    const allocator = std.heap.smp_allocator;
     var lock: std.atomic.Mutex = .unlocked;
     var dumped: std.AutoHashMapUnmanaged(Key, Dumped) = .empty;
 
@@ -598,14 +600,24 @@ const Exports = struct {
         try list.insert(gpa, at, e.opts);
     }
 
-    fn recordDumped(zcu: *Zcu, nav: InternPool.Nav.Index, count: usize, cc: []const u8, fqn: []const u8) void {
+    /// A hash of every symbol's name, linkage and visibility, in order.
+    fn signature(ip: *const InternPool, symbols: []const Zcu.Export.Options) u64 {
+        var h = std.hash.Wyhash.init(0);
+        for (symbols) |e| {
+            h.update(e.name.toSlice(ip));
+            h.update(&.{ 0, @intFromEnum(e.linkage), @intFromEnum(e.visibility) });
+        }
+        return h.final();
+    }
+
+    fn recordDumped(zcu: *Zcu, nav: InternPool.Nav.Index, sig: u64, cc: []const u8, fqn: []const u8) void {
         acquire();
         defer lock.unlock();
-        const a = std.heap.page_allocator;
+        const a = allocator;
         const owned = a.dupe(u8, fqn) catch fatalOom();
         const gop = dumped.getOrPut(a, .{ .zcu = @intFromPtr(zcu), .nav = @intFromEnum(nav) }) catch fatalOom();
         if (gop.found_existing) a.free(gop.value_ptr.fqn);
-        gop.value_ptr.* = .{ .count = count, .cc = cc, .fqn = owned };
+        gop.value_ptr.* = .{ .signature = sig, .cc = cc, .fqn = owned };
     }
 
     fn fatalOom() noreturn {
@@ -677,13 +689,21 @@ pub fn checkExports(pt: Zcu.PerThread) void {
         if (entry.key_ptr.zcu != @intFromPtr(zcu)) continue;
         const nav: InternPool.Nav.Index = @enumFromInt(entry.key_ptr.nav);
         const now = Exports.ofNav(zcu, arena.allocator(), nav) catch Exports.fatalOom();
-        if (now.len == entry.value_ptr.count) continue;
+        if (Exports.signature(ip, now) == entry.value_ptr.signature) continue;
         Exports.rewrite(pt, arena.allocator(), entry.value_ptr.*, now) catch |err| {
-            std.log.err("air2lean: '{s}' was dumped with {d} exported symbol(s), but the compilation exports it " ++
-                "as {d}, and its file cannot be updated: {s} (docs/air-json.md §Extern calls)", .{ ip.getNav(nav).fqn.toSlice(ip), entry.value_ptr.count, now.len, @errorName(err) });
+            std.log.err("air2lean: '{s}' was dumped with other exported symbols than the compilation exports it with " ++
+                "now, and its file cannot be updated: {s} (docs/air-json.md §Extern calls)", .{ ip.getNav(nav).fqn.toSlice(ip), @errorName(err) });
             std.process.exit(1);
         };
-        entry.value_ptr.count = now.len;
+    }
+    // The entries of this compilation are done: a later compilation can reuse its address.
+    var stale: std.ArrayListUnmanaged(Exports.Key) = .empty;
+    var keys = Exports.dumped.keyIterator();
+    while (keys.next()) |k| {
+        if (k.zcu == @intFromPtr(zcu)) stale.append(arena.allocator(), k.*) catch Exports.fatalOom();
+    }
+    for (stale.items) |k| {
+        if (Exports.dumped.fetchRemove(k)) |kv| Exports.allocator.free(kv.value.fqn);
     }
 }
 
@@ -865,7 +885,7 @@ const W = struct {
         // an extern call elsewhere in the program can resolve to (docs/air-json.md §Extern calls).
         if (Compat.v16) {
             const symbols = try Exports.ofNav(zcu, w.gpa, owner_nav);
-            Exports.recordDumped(zcu, owner_nav, symbols.len, @tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc), fqn);
+            Exports.recordDumped(zcu, owner_nav, Exports.signature(ip, symbols), @tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc), fqn);
             if (symbols.len > 0) {
                 try w.field("export");
                 try w.j.beginObject();

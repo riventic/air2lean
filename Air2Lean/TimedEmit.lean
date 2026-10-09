@@ -128,7 +128,7 @@ def emitSelected (funcs : Array Func) (profiles : Array BuildProfile) (ns prefix
 /-- Parse and normalize the actual compiler AIR together, retaining metadata. No
 handwritten replacement of the generated declarations is part of this path. -/
 def translateSelected (contents : Array String) (ns prefix_ : String) : Except String String := do
-  let raw ← (Anon.renumberAll contents).mapM Raw.parseFile
+  let raw ← (Anon.renumberAll (← Anon.qualifyLinkUnits contents)).mapM Raw.parseFile
   let funcs ← raw.mapM normalize
   emitSelected funcs (raw.map (·.profile)) ns prefix_
 

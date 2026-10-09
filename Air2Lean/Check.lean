@@ -3391,7 +3391,6 @@ private structure ThunkState where
   types : Array Ty
   layouts : Array Layout
   imported : Std.HashMap TyId TyId := {}
-  added : Std.HashMap String TyId := {}
   next : Nat := 0
 
 private abbrev ThunkM := StateT ThunkState (Except String)
@@ -3409,13 +3408,13 @@ private partial def importTy (src : Func) (t : TyId) : ThunkM TyId := do
   modify fun s => { s with types := s.types.set! id ty', layouts := s.layouts.set! id (src.layouts[t]?.getD {}) }
   return id
 
-/-- A type the thunk's own instructions need (`bool`, `usize`, `noreturn`). -/
-private def thunkTy (key : String) (ty : Ty) (layout : Layout) : ThunkM TyId := do
-  if let some id := (← get).added[key]? then return id
-  let id := (← get).types.size
-  modify fun s => { s with types := s.types.push ty, layouts := s.layouts.push layout,
-                           added := s.added.insert key id }
-  return id
+/-- A type the thunk's own instructions need (`bool`, `usize`, `noreturn`): an identical entry of
+the table, else a new one. -/
+private def thunkTy (ty : Ty) (layout : Layout) : ThunkM TyId := do
+  let st ← get
+  if let some id := (st.types.zip st.layouts).findIdx? (· == (ty, layout)) then return id
+  modify fun s => { s with types := s.types.push ty, layouts := s.layouts.push layout }
+  return st.types.size
 
 private def freshInst (ty : TyId) (op : Op) : ThunkM Inst := do
   let id := (← get).next
@@ -3427,8 +3426,8 @@ then continue with `k`. A check wraps the continuation in a `cond_br` whose othe
 `unreach`. -/
 private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiClass)
     (k : Val → ThunkM (Array Inst)) : ThunkM (Array Inst) := do
-  let noret ← thunkTy "noreturn" .noreturn {}
-  let boolTy ← thunkTy "bool" .bool { size := some 1, align := some 1 }
+  let noret ← thunkTy .noreturn {}
+  let boolTy ← thunkTy .bool { size := some 1, align := some 1 }
   let guarded (pre : Array Inst) (c : Val) (rest : Array Inst) : ThunkM (Array Inst) := do
     let br ← freshInst noret (.condBr c rest #[← freshInst noret .unreach])
     return pre.push br
@@ -3457,7 +3456,7 @@ private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiC
     let c ← freshInst boolTy (.isNonNull v)
     guarded #[c] (.inst c.id) (← cast v child .optPayload fun p => cast p dst .bitcast k)
   | .ptr true _, .ptr false _ =>
-    let usize ← thunkTy "usize" (.int false 64) { size := some 8, align := some 8 }
+    let usize ← thunkTy (.int false 64) { size := some 8, align := some 8 }
     let addr ← freshInst usize (.bitcast v)
     let c ← freshInst boolTy (.cmp .ne (.inst addr.id) (.int usize 0))
     guarded #[addr, c] (.inst c.id) (← cast v dst .bitcast k)
@@ -3473,7 +3472,9 @@ private def abiMismatch (f target : Func) (d u : TyId) (what : String) (toDef : 
   | some (.int ..), some (.int ..) => return none
   | some (.ptr _ a), some (.ptr _ b) | some (.ptr _ a), some (.optPtr b)
   | some (.optPtr a), some (.ptr _ b) | some (.optPtr a), some (.optPtr b) =>
-    if b > a then return some s!"{what} needs alignment {b}, more than the declared {a}"
+    if b > a then
+      return some (if toDef then s!"{what} needs alignment {b}, more than the declared {a}"
+        else s!"{what} is declared with alignment {b}, more than the defined {a}")
     return none
   | _, _ => return some s!"{what} has another type, with no value-preserving C ABI conversion"
 
@@ -3481,11 +3482,10 @@ private def abiMismatch (f target : Func) (d u : TyId) (what : String) (toDef : 
 agrees (the call binds to `target` directly), else a C ABI conversion thunk, or why there is
 none. Pointer conversions assume 64-bit addresses (x86_64, aarch64). -/
 def abiThunk (f target : Func) (e : ExternDecl) : Except String (Option Func) := do
-  let some _ := externSignatureMismatch f target e | return none
-  unless f.targetArch == "x86_64" || f.targetArch == "aarch64" do
-    throw ((externSignatureMismatch f target e).getD "")
-  unless e.params.size == target.params.size do
-    throw s!"{e.params.size} parameters declared, {target.params.size} defined"
+  let some why := externSignatureMismatch f target e | return none
+  unless (f.targetArch == "x86_64" || f.targetArch == "aarch64") &&
+      e.params.size == target.params.size do
+    throw why
   for (p, k) in e.params.zipIdx do
     if let some why := abiMismatch f target p target.params[k]! s!"parameter {k}" true then throw why
   if let some why := abiMismatch f target e.ret target.ret "the result" false then throw why
@@ -3493,7 +3493,7 @@ def abiThunk (f target : Func) (e : ExternDecl) : Except String (Option Func) :=
     let args ← e.params.zipIdx.mapM fun (p, k) => freshInst p (.arg k)
     let defParams ← target.params.mapM (importTy target)
     let defRet ← importTy target target.ret
-    let noret ← thunkTy "noreturn" .noreturn {}
+    let noret ← thunkTy .noreturn {}
     let ret (v : Val) : ThunkM (Array Inst) := return #[← freshInst noret (.ret v)]
     let classes (src dst : TyId) : ThunkM (AbiClass × AbiClass) := do
       let st ← get

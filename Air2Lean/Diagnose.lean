@@ -525,14 +525,22 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     texts := #[]
     files := #[]
   let renamed := Anon.renumberAll texts
-  let mut firstProfile : Option BuildProfile := none
+  -- The first profile of the program and of each link unit (`docs/air-json.md` §Link units).
+  let mut baselines : Array BuildProfile := #[]
   for (file, contents) in files.zip renamed do
     let result := inspect file contents log device
     log := result.2
     if let some profile := result.1.decodedProfile then
-      let baseline := firstProfile.getD profile
-      firstProfile := some baseline
-      for message in BuildProfile.programViolations #[baseline, profile] a.profile do
+      let own := baselines.find? fun (b : BuildProfile) => b.linkUnit == profile.linkUnit
+      let baseline := ((baselines.find? fun (b : BuildProfile) => b.linkUnit.isNone) <|> baselines[0]?).getD profile
+      let mut messages := BuildProfile.programViolations #[baseline, profile] a.profile
+      -- Across units the build mode is not compared; within one it must agree.
+      if let some own := own then
+        if baseline.linkUnit != profile.linkUnit && own.buildMode != profile.buildMode then
+          messages := messages.push s!"mixed AIR profiles: field 'build_mode' differs within link \
+            unit '{profile.linkUnit.getD "program"}' ({own.buildMode} vs {profile.buildMode})"
+      if own.isNone then baselines := baselines.push profile
+      for message in messages do
         log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
