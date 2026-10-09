@@ -132,6 +132,13 @@ The checker compares types across the caller and worker's separate AIR type tabl
 
 **Known limit**: a spin-wait on a flag that another thread sets goes on for every turn of the scheduler in which the other thread does not run: the search reaches a schedule that sets the flag, but a spin-wait without an atomic op in its loop never stops, and `Zig.loop` returns `none` for it.
 
+**OS primitives (planned translated thread mode)**: the hand rows above sit at the `std.Io` and
+`std.Thread` interfaces. The planned `--thread-model translated` cuts at the OS instead, and only
+these calls get a trusted model: futex wait and wake, `clone`/`pthread_*`, clocks, sleep,
+`SIG.IO` interrupts and macOS `malloc`/`free`. They are in `ZigLean/Os/`
+([os-threads.md](os-threads.md), premises OSF/OST/OSY/OSK/OSG/OSM-02). They use the same scheduler
+ops and memory. No translator binding emits them yet.
+
 ## Versions
 
 The std code differs between Zig versions: 0.15.2's `growCapacity` has a loop, 0.16.0's does not. So an example with translated std code has a translation per version (`tests/golden/<version>/<ex>/Gen.lean`), and the proofs hold for each of them (CI builds `Proofs/` after `check.sh` writes that version's translation). 0.14.1 does not run `lists`: its `ArrayListUnmanaged` is a different type (`ArrayListAlignedUnmanaged`).
