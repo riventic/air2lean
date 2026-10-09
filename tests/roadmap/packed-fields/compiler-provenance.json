@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "source": "packed_fields.zig",
+  "source_sha256": "55d85249ff459dc24d851e29089d3287cc745991fd9805a647cb05762f40b0aa",
+  "exporter": {
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM)",
+    "zig_patch_tree": "5715fa4a64800793f7d3c82f43136eb9cf1de53e",
+    "json_zig_sha256": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0",
+    "install": "/opt/dev/air2lean-build/zig-air-0.16.0-5715fa4a"
+  },
+  "commands": {
+    "llvm": "ZIG_AIR_JSON_FILTER=packed_fields. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline packed_fields.zig",
+    "x86_64": "ZIG_AIR_JSON_FILTER=packed_fields.hostAbi zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline packed_fields.zig",
+    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host)"
+  },
+  "functions": {
+    "llvm": [
+      "boolOn",
+      "bytePtr",
+      "hostAbi",
+      "innerC",
+      "innerCKeepsA",
+      "innerCKeepsAPtr",
+      "innerCPtr",
+      "innerPartial",
+      "localUndef",
+      "modeHigh",
+      "setA",
+      "setInner",
+      "setInnerPtr",
+      "signedS",
+      "undefField",
+      "undefKeepsA",
+      "unionBadMode",
+      "unionRaw"
+    ],
+    "x86_64": [
+      "hostAbi"
+    ]
+  },
+  "artifacts": {
+    "air-fresh/0.16.0/llvm/packed_fields.boolOn.json": "947432ee6510e51b06796de8b537057d7720eafddf4063f7f4b097fe18c9ff6b",
+    "air-fresh/0.16.0/llvm/packed_fields.bytePtr.json": "545b6a3679b80dc39c3e64b6fc5b1b14d015f1e9a51a344b1a4c8c662ed292fd",
+    "air-fresh/0.16.0/llvm/packed_fields.hostAbi.json": "7e8af17f64781761ccacbda472ea3b758afd84024860ecf1ba1c66783c55833f",
+    "air-fresh/0.16.0/llvm/packed_fields.innerC.json": "1cbc3390af658714ea1c1b40289ec8e707a8e3c983a22746d65695383565e47a",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCKeepsA.json": "69362d2e9f31e672f53a8552726dfaa404e3a03cb7418be5be11650edcf09d3c",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCKeepsAPtr.json": "041903b062eff4b887b3a7733cfd0ebc88e30949de2c7fdff711d4da86400313",
+    "air-fresh/0.16.0/llvm/packed_fields.innerCPtr.json": "d62d0f25e9714b81e24a7cdb0d467a84bb7994e3cc753319d9c34248344991e3",
+    "air-fresh/0.16.0/llvm/packed_fields.innerPartial.json": "9573d039c43e4bfba326ff849fe27ce846d63d739901616aac73e7f30d1cae06",
+    "air-fresh/0.16.0/llvm/packed_fields.localUndef.json": "6c2a4ab3aa12dfa13e2a8c76a3b7275b054077cceaaa6b932f9b04f7789dd93a",
+    "air-fresh/0.16.0/llvm/packed_fields.modeHigh.json": "a714c83d3a10643521ef59e85e037975e0412999820465e16fee9c30123db429",
+    "air-fresh/0.16.0/llvm/packed_fields.setA.json": "9aa2ba42ebfab3d56c69540117ded02e3c4557838ccbf7b3e9f0d7301590bda3",
+    "air-fresh/0.16.0/llvm/packed_fields.setInner.json": "f8f6cffd841fbb600a140e72df43087142ab7e4f282e0f8c40e1a023759320c4",
+    "air-fresh/0.16.0/llvm/packed_fields.setInnerPtr.json": "2a42dbbb78cf98db1325765f029c8cb5a0f1b0108502f81d9fb70b83ce0f5d02",
+    "air-fresh/0.16.0/llvm/packed_fields.signedS.json": "bef47e9bc7cf69c2958c66a7f6732b8761ea40782938d9f66e004729b22938ae",
+    "air-fresh/0.16.0/llvm/packed_fields.undefField.json": "a7e497315c69a9027f325ff78c09e622e9ee23ecbe2134405df61f8dd7ec15ad",
+    "air-fresh/0.16.0/llvm/packed_fields.undefKeepsA.json": "b2dcab424536a4596386f4b2e4ad82d94e5c72c754dc21555ed3de4a9d414050",
+    "air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "1e04061884892755f0c9efb7d850459d5d40bff2ab5b38d2fb7e848e1d03e805",
+    "air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "cc0f8cb0bce8e1edb7feece88c7743dff32b026d0cbad20adfb8f346d0cb6a34",
+    "air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "8d1ce7525a256e009764d5d59332a4c38d92a0f66a0a06226b670a8d5b63498c",
+    "PackedFieldsFresh/Gen.lean": "285a4eefa9352e878d2e7b7264d954ac3730837629d7c5572641a7cd2936d397",
+    "PackedFieldsX86/Gen.lean": "a2a4ab8212d255809325488196029a83fdcb82d29a03f5bfa6cdcc96045c47f9"
+  },
+  "qualification": {
+    "compiler_export": "passed",
+    "native": "passed (aarch64-macos host; not executed on x86_64-linux)",
+    "lean": "passed"
+  }
+}

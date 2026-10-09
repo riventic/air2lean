@@ -322,7 +322,12 @@ NON_COMPILER_AIR = {
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/aggregate-casts/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
-    'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; compiler export pending)',
+    'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; the compiler export is aliases/air-fresh)',
+    # B10 L04/L08: retained patched-compiler exports that duplicate the tags of the reviewed
+    # fixtures above; evidence for their qualification records only, not for this inventory.
+    'tests/roadmap/try-pointers/air-fresh': 'fresh export of try_pointers.zig (compiler-qualification.json)',
+    'tests/roadmap/try-pointers/aliases/air-fresh': 'fresh export of try_aliases.zig (compiler-qualification.json)',
+    'tests/roadmap/packed-fields/air-fresh': 'fresh export of packed_fields.zig (compiler-provenance.json)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/const-bases/air': 'hand-written AIR in the exporter schema (README)',

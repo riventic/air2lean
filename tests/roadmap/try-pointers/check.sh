@@ -19,8 +19,16 @@ case "${1:---check-artifacts}" in
       "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
       -target x86_64-linux -mcpu=baseline tests/roadmap/try-pointers/try_pointers.zig
     exit ;;
+  --check-qualification)
+    # The retained fresh exports (air-fresh, aliases/air-fresh): hashes, profile, tags, and that
+    # they translate to the retained Gen modules up to the profile header. Runs no compiler.
+    [ "$#" -eq 1 ] || { echo 'usage: check.sh --check-qualification' >&2; exit 2; }
+    translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
+    [ -x "$translator" ] || { echo 'build translator first' >&2; exit 1; }
+    PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/try-pointers/compiler-qualification.py --translator "$translator"
+    exit ;;
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check-artifacts|--check-qualification|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
 esac
 python3 tests/roadmap/try-pointers/check-artifacts.py
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}

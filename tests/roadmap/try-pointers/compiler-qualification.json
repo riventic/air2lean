@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "status": "retained-export-and-native-run; hashes do not attest that a compiler ran",
+  "exporter": {
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM)",
+    "zig_patch_tree": "5715fa4a64800793f7d3c82f43136eb9cf1de53e",
+    "json_zig_sha256": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0",
+    "install": "/opt/dev/air2lean-build/zig-air-0.16.0-5715fa4a"
+  },
+  "export_command": "ZIG_AIR_JSON_FILTER=<try_pointers.|try_aliases.> zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>",
+  "native_command": "zig test <source> -OReleaseSafe  (stock 0.16.0, aarch64-macos host)",
+  "fixtures": {
+    "try_pointers": {
+      "source": "tests/roadmap/try-pointers/try_pointers.zig",
+      "source_sha256": "aad39573829fc836459f05ea466e4d296751bd190610a7b0baa77e08e2207347",
+      "air_dir": "air-fresh/0.16.0",
+      "name_prefix": "try_pointers.",
+      "namespace": "TryPointers",
+      "generated": "TryPointers/Gen.lean",
+      "functions": [
+        "payload8",
+        "payload64",
+        "writeAlias",
+        "cleanup",
+        "coldPayload"
+      ],
+      "required_tags": [
+        "try_ptr",
+        "try_ptr_cold"
+      ],
+      "native": "4 of 4 tests passed",
+      "translation": "fresh export translates to TryPointers/Gen.lean up to the profile header"
+    },
+    "try_aliases": {
+      "source": "tests/roadmap/try-pointers/try_aliases.zig",
+      "source_sha256": "4f0675dc9859a006f40d8a69919116153f4ceb62294f1af1a4b24161204c2710",
+      "air_dir": "aliases/air-fresh/0.16.0",
+      "name_prefix": "try_aliases.",
+      "namespace": "TryAliases",
+      "generated": "aliases/TryAliases/Gen.lean",
+      "functions": [
+        "twoPaths",
+        "resetOnError"
+      ],
+      "required_tags": [
+        "try_ptr"
+      ],
+      "native": "8 of 8 tests passed (4 imported from try_pointers.zig)",
+      "translation": "fresh export translates to aliases/TryAliases/Gen.lean up to the profile header"
+    }
+  },
+  "artifacts": {
+    "air-fresh/0.16.0/try_pointers.cleanup.json": "ed98af3a38eeeba33e95bff4e5618ba9c3d569f52ca74b3104aa14cb0503ac0f",
+    "air-fresh/0.16.0/try_pointers.coldPayload.json": "66a10f891a7bbc10634f2bb639f570990d0914d897d6053fb2b8fa022e7c412e",
+    "air-fresh/0.16.0/try_pointers.payload64.json": "80931bc79d385f6742208839833ff9bfcefcd49727bc43acb0675fbace63701b",
+    "air-fresh/0.16.0/try_pointers.payload8.json": "a414e18eefd0f6a607964be30949c9050d9b22f34bb7587c4decd1101741d2e8",
+    "air-fresh/0.16.0/try_pointers.writeAlias.json": "a915d0c4a9458780cf346c42992ab551ef3e3a3a460adaa7ae9654de3c0ad208",
+    "aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "c20452439fd110dddbfa5413638669bcb1d950feac05227262488be9bbd1d3c9",
+    "aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "c4aa55c4c54389ed45378e933f55d4af9f12e7833f316c320e9324f27631daf0"
+  }
+}
