@@ -41,7 +41,8 @@ theorem OwnsIn.block {m : Mem} {b : BlockId} {A : Nat} {h hF : Heap} (ho : OwnsI
     (hm : m.heap = h ∪ hF) : ∃ blk, m.blocks[b]? = some blk ∧ blk.addr = A := by
   obtain ⟨o, c, hc, hA⟩ := ho
   have : m.heap (b, o) = some c := by rw [hm]; simp [hc]
-  obtain ⟨blk, hblk, -, -, rfl⟩ := Mem.heap_some this
+  obtain ⟨blk, hblk, -, ho, hcb⟩ := Mem.heap_some this
+  subst hcb
   exact ⟨blk, hblk, hA⟩
 
 /-- A nonempty `bytesAt` owns a cell of its block. -/
@@ -98,5 +99,63 @@ theorem ptsR_load {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.s
   refine ⟨v, _, hP, load_run (by simpa using hacc) hv' (noRace_of_singleThread hst.single _ _ _ _),
     hd, ?_, sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
   funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+
+/-- Use a pure fact that the precondition implies. -/
+theorem TotalTriple.of_pure {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} {φ : Prop}
+    (hφ : ∀ h, P h → φ) (ht : φ → TotalTriple P c Q) : TotalTriple P c Q := by
+  intro m hP hF hd hm hp hst
+  exact ht (hφ hP hp) m hP hF hd hm hp hst
+
+theorem regionIn_facts {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+    {h : Heap} (hr : regionIn p A S K a bs h) :
+    (A + p.off.toNat) % a = 0 ∧ 0 ≤ p.off ∧ K ≠ .constGlobal ∧ p.block.isSome := by
+  obtain ⟨ha, hK, b, hpb, h0, -⟩ := hr
+  exact ⟨ha, h0, hK, by simp [hpb]⟩
+
+/-- A load of an item from the bytes of a region. -/
+theorem loadItemIn {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {a al o : Nat}
+    {bs : Array Byte} {v : T} (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size)
+    (hal : al ∣ a) (halo : al ∣ o) (hv : Enc.decode (bs.extract o (o + Enc.size T)) = pure v) :
+    TotalTriple (regionIn p A S K a bs) (load T al (p.add o))
+      (fun r => ⌜r = v⌝ ∗ regionIn p A S K a bs) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨hA, hK, hb⟩ := id hp
+  have ha : (A + p.off.toNat + o) % al = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero hA)) halo)
+  obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
+    bytesAt_access (q := p.add o) (k := o) (n := Enc.size T) (a := al) hb hm rfl hpos ho ha
+  have hv' : Enc.decode (blk.bytes.extract (p.off.toNat + o) (p.off.toNat + o + Enc.size T)) =
+      pure v := by rw [hx]; exact hv
+  refine ⟨v, _, hP, load_run hacc hv' (noRace_of_singleThread hst.single _ _ _ _), hd, ?_,
+    sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
+  funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
+
+/-! ## Arithmetic of the wrappers' checks -/
+
+namespace Ops
+
+/-- The `@alignCast` test passes for an address that is a multiple of `2 ^ k`. -/
+theorem and_mask_eq_zero {x : Int} {k : Nat} (hk : k < 64) (h0 : 0 ≤ x) (hx : x % 2 ^ k = 0) :
+    (BitVec.ofInt 64 x &&& BitVec.ofNat 64 (2 ^ k - 1)) = 0 := by
+  obtain ⟨N, rfl⟩ : ∃ N : Nat, x = N := ⟨x.toNat, (Int.toNat_of_nonneg h0).symm⟩
+  have hN : N % 2 ^ k = 0 := by exact_mod_cast hx
+  have hpk : 2 ^ k ∣ 2 ^ 64 := Nat.pow_dvd_pow 2 (Nat.le_of_lt hk)
+  have hlt : 2 ^ k - 1 < 2 ^ 64 := by
+    have := Nat.pow_lt_pow_right (a := 2) (by decide) hk; omega
+  apply BitVec.eq_of_toNat_eq
+  rw [BitVec.toNat_and, BitVec.ofInt_natCast, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hlt, Nat.and_two_pow_sub_one_eq_mod, Nat.mod_mod_of_dvd _ hpk, hN]
+  rfl
+
+/-- `math.mul(usize, size, n)` overflows exactly when the product reaches `2 ^ 64`. -/
+theorem umulOverflow_ofNat {size : Nat} (hs : size < 2 ^ 64) (n : BitVec 64) :
+    (BitVec.ofNat 64 size).umulOverflow n = decide (2 ^ 64 ≤ size * n.toNat) := by
+  simp [BitVec.umulOverflow, Nat.mod_eq_of_lt hs]
+
+theorem toNat_mul_ofNat {size : Nat} (hs : size < 2 ^ 64) {n : BitVec 64}
+    (h : size * n.toNat < 2 ^ 64) : (BitVec.ofNat 64 size * n).toNat = size * n.toNat := by
+  simp [BitVec.toNat_mul, Nat.mod_eq_of_lt hs, Nat.mod_eq_of_lt h]
+
+end Ops
 
 end Zig

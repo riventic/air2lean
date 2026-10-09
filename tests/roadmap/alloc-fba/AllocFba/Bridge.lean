@@ -48,6 +48,10 @@ theorem mul_one (x : BitVec 64) : math_mul__anon_1 1 x = pure (.ok x) := by
   rw [Norm.mulWithOverflow_one]
   rfl
 
+theorem mask_three : BitVec.ofNat 64 (2 ^ 2 - 1) = 3 := rfl
+theorem enc_size_u8 : Enc.size (BitVec 8) = 1 := rfl
+theorem enc_align_u8 : Enc.align (BitVec 8) = 1 := rfl
+
 theorem isSome_ite {α β : Type} (o : Option α) (f : α → MemM β) (g : MemM β) :
     (if o.isSome = true then (StateT.lift (optPayload o) : MemM α) >>= f else g) =
       match o with
@@ -66,8 +70,8 @@ macro "bridge_norm" : tactic => `(tactic| (
     Norm.throw_bind, Norm.lift_pure, Norm.lift_throw, Norm.sub_zero, Norm.elem_zero,
     Norm.run_get, Norm.run_modify,
     bind_assoc, pure_bind, map_pure, bind_map_left, map_bind, Norm.beq_true_iff,
-    fromByteUnits_one, fromByteUnits_four, mul_one]
-  try simp only [isSome_ite, bind_assoc, pure_bind, Norm.ite_bind]))
+    fromByteUnits_one, fromByteUnits_four, mul_one, bind_pure_unit, mask_three, enc_size_u8, enc_align_u8]
+  try simp only [isSome_ite, bind_assoc, pure_bind, Norm.ite_bind, bind_pure_unit]))
 
 theorem bind_ext {α β : Type} {x : MemM α} {f g : α → MemM β} (h : ∀ a, f a = g a) :
     x >>= f = x >>= g := by
@@ -77,9 +81,10 @@ theorem bind_ext {α β : Type} {x : MemM α} {f g : α → MemM β} (h : ∀ a,
 results of the allocator calls, and normalize again. -/
 macro "bridge_close" : tactic => `(tactic| (
   repeat' (first
-    | rfl
+    | with_reducible rfl
     | (refine bind_ext fun _ => ?_)
-    | (split <;> (try simp only [↓reduceIte, *])))))
+    | (split <;> (try simp only [↓reduceIte, *]) <;> (try bridge_norm))
+    | rfl)))
 
 theorem allocBytes4_eq (a : mem_Allocator) (n ra : BitVec 64) :
     mem_Allocator_allocBytesWithAlignment__anon_1 a n ra = Wrap.allocBytes (vt a) a.ptr 2 n ra := by
@@ -95,6 +100,64 @@ theorem alloc_eq (a : mem_Allocator) (n : BitVec 64) :
     allocBytes1_eq]
   bridge_norm
   bridge_close
-  done
+
+theorem alignedAlloc_eq (a : mem_Allocator) (n : BitVec 64) :
+    mem_Allocator_alignedAlloc__anon_1 a n = Wrap.allocSlice (vt a) a.ptr 1 2 n := by
+  simp only [mem_Allocator_alignedAlloc__anon_1, mem_Allocator_allocWithSizeAndAlignment__anon_2,
+    allocBytes4_eq]
+  bridge_norm
+  bridge_close
+
+theorem create_eq (a : mem_Allocator) :
+    mem_Allocator_create__anon_1 a = Wrap.create (vt a) a.ptr 4 2 := by
+  simp only [mem_Allocator_create__anon_1, allocBytes4_eq]
+  bridge_norm
+  bridge_close
+
+theorem destroy_eq (a : mem_Allocator) (p : Ptr) :
+    mem_Allocator_destroy__anon_1 a p = Wrap.destroy (vt a) a.ptr 4 2 p := by
+  simp only [mem_Allocator_destroy__anon_1]
+  bridge_norm
+  bridge_close
+
+theorem free_eq (a : mem_Allocator) (s : Slice) :
+    mem_Allocator_free__anon_2 a s = Wrap.free (vt a) a.ptr 1 0 s := by
+  simp only [mem_Allocator_free__anon_2, mem_absorbSentinel__anon_2]
+  bridge_norm
+  bridge_close
+
+theorem freeAligned_eq (a : mem_Allocator) (s : Slice) :
+    mem_Allocator_free__anon_1 a s = Wrap.free (vt a) a.ptr 1 2 s := by
+  simp only [mem_Allocator_free__anon_1, mem_absorbSentinel__anon_1]
+  bridge_norm
+  bridge_close
+
+theorem freeSentinel_eq (a : mem_Allocator) (s : Slice) :
+    mem_Allocator_free__anon_3 a s = Wrap.freeSentinel (vt a) a.ptr 1 0 s := by
+  simp only [mem_Allocator_free__anon_3, mem_absorbSentinel__anon_3]
+  bridge_norm
+  bridge_close
+
+theorem dupe_eq (a : mem_Allocator) (s : Slice) :
+    mem_Allocator_dupe__anon_1 a s = Wrap.dupe (vt a) a.ptr 1 0 1 s := by
+  simp only [mem_Allocator_dupe__anon_1, alloc_eq]
+  bridge_norm
+  bridge_close
+
+set_option maxHeartbeats 1000000 in
+theorem realloc_eq (a : mem_Allocator) (s : Slice) (n : BitVec 64) :
+    mem_Allocator_realloc__anon_1 a s n = Wrap.realloc (vt a) a.ptr 1 0 s n := by
+  simp only [mem_Allocator_realloc__anon_1, mem_Allocator_reallocAdvanced__anon_1,
+    mem_Allocator_allocWithSizeAndAlignment__anon_1, mem_Allocator_allocBytesWithAlignment__anon_2,
+    mem_Allocator_free__anon_2, mem_absorbSentinel__anon_2]
+  bridge_norm
+  bridge_close
+
+theorem allocSentinel_eq (a : mem_Allocator) (n : BitVec 64) :
+    mem_Allocator_allocSentinel__anon_1 a n = Wrap.allocSentinel (vt a) a.ptr 0 n (7 : BitVec 8) := by
+  simp only [mem_Allocator_allocSentinel__anon_1, mem_Allocator_allocWithOptionsRetAddr__anon_1,
+    mem_Allocator_allocWithSizeAndAlignment__anon_1, mem_Allocator_allocBytesWithAlignment__anon_2]
+  bridge_norm
+  bridge_close
 
 end AllocFba
