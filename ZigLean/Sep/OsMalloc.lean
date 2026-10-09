@@ -69,18 +69,18 @@ theorem Triple.mfreeNull : Triple emp (Darwin.free none) (fun _ => emp) :=
 theorem Os.Darwin.free_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hb : p.block = some b)
     (hblk : m.blocks[b]? = some blk) (hl : blk.live = false) :
     ((Darwin.free (some p)).run m).run = some (.error .illegal) := by
-  simp [Darwin.free, Darwin.heapBlockAt, zig_unfold, hb, hblk, hl]
+  simp [Darwin.free, Darwin.heapBlockAt, zig_unfold, hb, hblk, hl, ExceptT.run]
 
 /-- `free` of a pointer that is not at offset 0 of its block is `.illegal`. -/
 theorem Os.Darwin.free_inner {m : Mem} {p : Ptr} (h0 : p.off ≠ 0) :
     ((Darwin.free (some p)).run m).run = some (.error .illegal) := by
   simp only [Darwin.free, Darwin.heapBlockAt]
   cases hb : p.block with
-  | none => simp [zig_unfold]
+  | none => simp [zig_unfold, ExceptT.run]
   | some b =>
     cases hblk : m.blocks[b]? with
-    | none => simp [zig_unfold, hblk]
-    | some blk => simp [zig_unfold, hblk, h0]
+    | none => simp [zig_unfold, hblk, ExceptT.run]
+    | some blk => simp [zig_unfold, hblk, h0, ExceptT.run]
 
 /-! ## Kernel-checked examples (`aarch64-macos`) -/
 
@@ -102,19 +102,19 @@ def malloc8 : MemM Ptr := do
   | none => throw .panic
 
 /-- A store into a fresh block returns. -/
-example : returns (do let p ← malloc8; store 1 (p.add 7) (1 : BitVec 8)) = true := by decide
+example : returns (do let p ← malloc8; store 1 (p.add 7) (1 : BitVec 8)) = true := by decide +kernel
 
 /-- A double free is illegal. -/
 example : isIllegal (do let p ← malloc8; Darwin.free (some p); Darwin.free (some p)) = true := by
-  decide
+  decide +kernel
 
 /-- Use after free is illegal. -/
 example : isIllegal (do let p ← malloc8; Darwin.free (some p); load (BitVec 8) 1 p) = true := by
-  decide
+  decide +kernel
 
 /-- Freeing an inner pointer, or a stack block, is illegal. -/
-example : isIllegal (do let p ← malloc8; Darwin.free (some (p.add 1))) = true := by decide
-example : isIllegal (do let p ← alloc .stack 8 8; Darwin.free (some p)) = true := by decide
+example : isIllegal (do let p ← malloc8; Darwin.free (some (p.add 1))) = true := by decide +kernel
+example : isIllegal (do let p ← alloc .stack 8 8; Darwin.free (some p)) = true := by decide +kernel
 
 end OsMallocExamples
 
