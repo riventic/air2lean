@@ -866,8 +866,8 @@ theorem mutexCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : E
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem mutexCounter_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) mutexCounter mem0) = some 4 := by
-  unroll_sched 10
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) mutexCounter (mem0 σ)) = some 4 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 nonvacuity_witness cnt_decode :=
   ⟨Enc.encode (0 : BitVec 32) ++ Enc.encode (4 : BitVec 32), 0, by decide +kernel,

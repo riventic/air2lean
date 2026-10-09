@@ -789,8 +789,8 @@ theorem cache_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32
 /-- One schedule completes: under the oracle that always picks option 0, the cache client
 returns 10 within fuel 1000. The kernel computes the run. -/
 theorem cache_completes :
-    Witness.okVal (Sched.run stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) mem0) = some 10 := by
-  decide +kernel
+    ∃ σ, Witness.okVal (Sched.run stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) (mem0 σ)) = some 10 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- **No run of the cache client gives an error**: no data race on `a` or `b`, no deadlock at
 the futex, no lifetime error at the free, under every schedule. -/

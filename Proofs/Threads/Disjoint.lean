@@ -666,8 +666,8 @@ theorem disjoint_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Excep
 /-- One schedule completes: under the oracle that always picks option 0, `disjoint 1 2` returns
 3 within fuel 1000. The kernel computes the run. -/
 theorem disjoint_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (disjoint 1 2) mem0) = some 3 := by
-  decide +kernel
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (disjoint 1 2) (mem0 σ)) = some 3 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/

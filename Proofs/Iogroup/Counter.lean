@@ -1419,8 +1419,8 @@ theorem groupCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : E
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem groupCounter_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) mem0) = some 3 := by
-  unroll_sched 10
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) (mem0 σ)) = some 3 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 /-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block
 0, `ZigLean/Conc/Share.lean`'s `ReadShared`); `main` frees the block only with every task joined

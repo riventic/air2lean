@@ -3515,8 +3515,8 @@ theorem waitGroup_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Erro
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem waitGroup_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) waitGroup mem0) = some 2 := by
-  unroll_sched 10
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) waitGroup (mem0 σ)) = some 2 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 nonvacuity_witness tally_decode :=
   ⟨Array.replicate 24 (.int 0), 0, 0, 0, 0, by with_unfolding_all rfl, by with_unfolding_all rfl,

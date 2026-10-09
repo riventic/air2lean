@@ -4604,7 +4604,7 @@ theorem rwLockRead_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Err
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem rwLockRead_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (rwLockRead ⟨⟩) mem0) = some 2 := by
-  unroll_sched 10
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (rwLockRead ⟨⟩) (mem0 σ)) = some 2 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 end Sync.RwLockRead

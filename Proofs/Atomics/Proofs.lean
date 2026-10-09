@@ -44,8 +44,9 @@ theorem twoPlusTwoW_weak :
   ⟨.fresh, by decide +kernel⟩
 
 /-- Relaxed message passing completes under the sequentially consistent schedule, with 0. -/
-theorem mpRelaxed_completes : okVal (Sched.run dispatch 100 (sched []) mpRelaxed mem0) = some 0 := by
-  decide +kernel
+theorem mpRelaxed_completes :
+    ∃ σ, okVal (Sched.run dispatch 100 (sched []) mpRelaxed (mem0 σ)) = some 0 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- Message passing: the reader sees the flag and then the data. -/
 theorem mp_sees_data :

@@ -2029,8 +2029,8 @@ theorem stackPush_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Erro
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem stackPush_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) stackPush mem0) = some 210 := by
-  unroll_sched 10
+    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 :=
+  ⟨.fresh, by unroll_sched 10⟩
 
 /-! ## Non-vacuity witnesses
 
