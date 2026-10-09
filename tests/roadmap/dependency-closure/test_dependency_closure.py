@@ -167,7 +167,11 @@ class ClassTests(unittest.TestCase):
         # coverage.py lists only mem.Allocator/Thread/Io/time rows; this reader reads every row.
         self.assertLessEqual(names, set(models))
         self.assertIn('atomic.spinLoopHint', models)
-        self.assertEqual(models['mem.Allocator.allocSentinel'][:2], ('modelled', ('0.16.0',)))
+        self.assertEqual(models['mem.Allocator.allocSentinel'][:2], ('modelled', ('0.16.0', '0.17.0')))
+        # A row without versions is `baseZigVersions` only; `through017` adds 0.17.0 (Zig 0.17 audit).
+        self.assertEqual(models['Thread.Futex.wait'][1], closure.BASE_ZIG_VERSIONS)
+        self.assertEqual(models['Thread.spawn'][1], closure.THROUGH_017)
+        self.assertEqual(closure.instance_base('Io.Future(error{Canceled}!u32).cancel'), 'Io.Future.cancel')
         self.assertEqual(models['Thread.detach'][:2], ('modelled', ('0.16.0',)))
         self.assertEqual(models['Io.futexWaitTimeout'][0], 'rejected')
         self.assertEqual(models['Io.concurrent'][0], 'rejected')

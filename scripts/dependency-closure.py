@@ -32,6 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 1
 KIND = 'air2lean-dependency-closure'
 VERSIONS = ('0.14.1', '0.15.2', '0.16.0')
+# `Air2Lean/StdModels.lean`: a row without `zigVersions` qualifies for `baseZigVersions` only;
+# `through017` adds 0.17.0.
+BASE_ZIG_VERSIONS = ('0.14.1', '0.15.2', '0.16.0')
+THROUGH_017 = BASE_ZIG_VERSIONS + ('0.17.0',)
 OSES = ('linux', 'darwin')
 IDENTITY_MARKER = re.compile(r'__(anon|enum|opaque|union|struct)_[0-9]+')
 # A compiler identity number, raw or normalized (`__anon_N`): not stable across exports.
@@ -43,7 +47,9 @@ PANIC_HANDLERS = frozenset(
     'divideByZero reachedUnreachable exactDivisionRemainder unwrapNull unwrapError forLenMismatch '
     'invalidEnumValue inactiveUnionField corruptSwitch call sentinelMismatch copyLenMismatch '
     'memcpyAlias castToNull incorrectAlignment startGreaterThanEnd'.split())
-MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\](?: #\[([^\]]*)\])?', re.M)
+MODEL_ROW = re.compile(r'^  (allocModel|threadModel) "([^"\n]+)" \.\w+ #\[[^\]]*\](?: (#\[[^\]]*\]|through017))?', re.M)
+# Zig 0.17.0 names a generic instance `<fn>__func_<n>` (`Air2Lean/Air/Anon.lean` `funcInstances017`).
+FUNC_017 = re.compile(r'__func_([0-9])')
 REJECTED_ROW = re.compile(r'symbol := "([^"\n]+)",\s*kind := \.rejected "([^"\n]*)"')
 # `Air2Lean/StdModels.lean`'s `asyncReason symbol reason` (C08 futures).
 ASYNC_REJECTED_ROW = re.compile(
@@ -55,8 +61,14 @@ class Invalid(ValueError):
 
 
 def instance_base(name):
-    """`Air2Lean/StdModels.lean` `stdModelBase`: an instance `<fn>__anon_<n>` names `<fn>`."""
-    return name.split('__anon_')[0]
+    """`Air2Lean/StdModels.lean` `stdModelBase`: an instance `<fn>__anon_<n>` names `<fn>`, and a
+    method of an instantiated generic type (`Io.Future(u32).await`) names its generic method."""
+    base = name.split('__anon_')[0]
+    for generic in ('Io.Future', 'Io.Select'):
+        parts = base.split(').')
+        if base.startswith(generic + '(') and len(parts) >= 2:
+            return f'{generic}.{parts[-1]}'
+    return base
 
 
 def filter_prefix(name):
@@ -78,7 +90,8 @@ def std_models(text=None):
     table = text[start:] if end < 0 else text[start:end]
     models = {}
     for _, symbol, versions in MODEL_ROW.findall(table):
-        models[symbol] = ('modelled', tuple(re.findall(r'"([^"]+)"', versions or '')), None)
+        listed = THROUGH_017 if versions == 'through017' else tuple(re.findall(r'"([^"]+)"', versions or ''))
+        models[symbol] = ('modelled', listed or BASE_ZIG_VERSIONS, None)
     for symbol, reason in REJECTED_ROW.findall(table):
         models[symbol] = ('rejected', (), reason)
     for symbol, named, reason in ASYNC_REJECTED_ROW.findall(table):
@@ -113,6 +126,8 @@ def scan(air):
     """References of one AIR function: calls, function values, indirect calls, globals."""
     if not isinstance(air, dict) or not isinstance(air.get('name'), str) or not isinstance(air.get('body'), list):
         raise Invalid('AIR must be an object with a function name and body')
+    if air.get('zig_version') == '0.17.0':
+        air = json.loads(FUNC_017.sub(r'__anon_\1', json.dumps(air)))
     types = air.get('types') if isinstance(air.get('types'), list) else []
     insts, calls, values, indirect = {}, [], [], []
 
@@ -214,7 +229,7 @@ class Closure:
             status, versions, reason = model
             if status == 'rejected':
                 return 'unresolvable', 'rejected_std_model', reason
-            if versions and self.version not in versions:
+            if self.version not in versions:
                 return 'unresolvable', 'std_model_not_qualified', \
                     f'std model {instance_base(name)} is qualified only for Zig {", ".join(versions)}'
             if self.key(name) in self.functions:
@@ -459,9 +474,12 @@ def golden_closure(examples=None, base=ROOT, models=None):
     names = examples or sorted(p.name for p in (base / 'examples').iterdir() if p.is_dir())
     results = []
     for example in names:
-        filter_file = base / 'examples' / example / 'filter'
-        existing = [f'{example}.'] + (filter_file.read_text().split() if filter_file.is_file() else [])
         for version, os, groups in golden_sets(example, base):
+            # `scripts/check.sh`: examples/<ex>/filter, then examples/<ex>/filter-<version>.
+            existing = [f'{example}.']
+            for filter_file in (base / 'examples' / example / 'filter',
+                                base / 'examples' / example / f'filter-{version}'):
+                existing += filter_file.read_text().split() if filter_file.is_file() else []
             functions = merged(groups)
             roots = sorted(name for name in functions if name.startswith(f'{example}.'))
             closure = Closure(functions, version, models, (), normalized).run(roots)

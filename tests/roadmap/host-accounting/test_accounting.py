@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location('air2lean_accounting', ROOT/'scripts/accounting.py')
 ACC = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(ACC)
 EXAMPLES = sorted(p.name for p in (ROOT/'examples').iterdir() if p.is_dir())
+IN_QUALIFICATION = {'0.17.0'}
 CLAIMED = {  # README's default selections (x86_64); the committed-tree test pins them to CI.
     '0.17.0': [e for e in EXAMPLES if e != 'threadsync'],  # in qualification; full CI job
     '0.16.0': [e for e in EXAMPLES if e != 'threadsync'],
@@ -213,7 +214,8 @@ class Published(unittest.TestCase):
                                    *(a for path in summaries for a in ('--summary', path)))
                 self.assertEqual(code, 0, output)
                 versions = {r['version'] for r in json.loads(table.read_text())['rows']}
-                self.assertLessEqual(set(CLAIMED), versions)
+                # A table records one CI run: a version still in qualification (0.17.0) may postdate it.
+                self.assertLessEqual(set(CLAIMED) - IN_QUALIFICATION, versions)
 
 
 class Claims(Temp):

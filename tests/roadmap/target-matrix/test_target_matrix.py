@@ -79,7 +79,7 @@ class CommittedMatrix(Scratch):
             '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1'})
         self.assertEqual(paths['0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1']['job'], 'macos')
         self.assertEqual({row['status'] for row in paths.values()}, {'backed'})
-        self.assertEqual([row['gaps'] for row in paths.values()], [[]] * 5)
+        self.assertEqual([row["gaps"] for row in paths.values()], [[]] * len(paths))
         self.assertEqual(report['input_only_profiles'], ['legacy-abi64-le'])
 
     def test_committed_matrix_passes_strict(self):
