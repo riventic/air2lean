@@ -3308,6 +3308,30 @@ File premises: SEM-01, SEM-02, EXT-01, TRU-01
 | `RegistryExample.client_rule` | SEM-01, SEM-02, EXT-01, TRU-01 |
 | `RegistryExample.tupleEvidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
 
+## `tests/roadmap/noreturn-variants/NoreturnVariants/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `NoreturnVariantsClients.get_mk` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.roundTrip_7` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.roundTrip_255` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memRoundTrip_7` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memRoundTrip_255` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.mkV_500` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.mkV_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.vTag_x` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.vTag_y` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memV_1234` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memV_0` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.oneRoundTrip_max` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.colorOf_1` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.colorOf_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.decode_noreturn_tag` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+
 ## `tests/roadmap/outcome-accounting/Check.lean`
 
 File premises: SEM-01, TRU-01

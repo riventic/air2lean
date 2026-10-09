@@ -3115,7 +3115,9 @@
           "tests/golden/layout/air/layout.wordOf.json",
           "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
           "tests/golden/threads/air/atomic.Value(u32).init.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json"
         ]
       },
       "proofs": {
@@ -10747,7 +10749,9 @@
           "tests/golden/layout/air/layout.wordOf.json",
           "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
           "tests/golden/threads/air/atomic.Value(u32).init.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json"
         ]
       },
       "proofs": {
@@ -10859,7 +10863,9 @@
           "tests/golden/layout/air/layout.bumpDigit.json",
           "tests/golden/slices/air/slices.localArr.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.memV.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json"
         ]
       },
       "proofs": {
@@ -12569,7 +12575,12 @@
           "tests/golden/threadsync/air/Thread.WaitGroup.finish.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.startMany.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderColor.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json"
         ]
       },
       "proofs": {
@@ -12669,7 +12680,9 @@
           "tests/golden/threads/air/threads.claim.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.finish.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json"
         ]
       },
       "proofs": {
@@ -12731,7 +12744,9 @@
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.task.json",
           "tests/golden/layout/air/layout.setMode.json",
           "tests/golden/pointers/air/pointers.setOptJob.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.bump.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json"
         ]
       },
       "proofs": {
@@ -12917,7 +12932,12 @@
         "paths": [
           "tests/golden/layout/air/layout.setCircle.json",
           "tests/golden/layout/air/layout.setNum.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.bump.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json"
         ]
       },
       "proofs": {
@@ -12976,7 +12996,12 @@
           "tests/golden/variants/air/variants.area.json",
           "tests/golden/variants/air/variants.isRound.json",
           "tests/golden/variants/air/variants.radius.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.get.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vTag.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json"
         ]
       },
       "proofs": {
@@ -15130,7 +15155,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.15.2/layout/air/layout.growCircle.json",
-          "tests/golden/slices/air/slices.colorName.json"
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json"
         ]
       },
       "proofs": {

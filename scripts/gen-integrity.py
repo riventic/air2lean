@@ -85,6 +85,8 @@ FIXTURES = [
      ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
     ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.0",
      ["--namespace", "DivCeil", "--prefix", "divceil."], "body"),  # committed without the host header
+    ("tests/roadmap/noreturn-variants/NoreturnVariants/Gen.lean", "tests/roadmap/noreturn-variants/air/0.16.0",
+     ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
      ["--namespace", "Provenance", "--prefix", "provenance."], "exact"),
     ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",

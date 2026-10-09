@@ -1,0 +1,314 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "noreturn_variants.memRoundTrip",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "call",
+   "ty": 4,
+   "callee": {
+    "ty": 5,
+    "func": "noreturn_variants.mk",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "u"
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 8,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 6,
+    "func": "noreturn_variants.bump",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4
+  },
+  {
+   "id": 10,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 6,
+    "func": "noreturn_variants.bump",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 12,
+   "tag": "bitcast",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 14,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 8,
+    "func": "noreturn_variants.readU",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5
+  },
+  {
+   "id": 16,
+   "tag": "ret_safe",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 14
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "union",
+   "name": "noreturn_variants.U",
+   "layout": "auto",
+   "tag": 10,
+   "fields": [
+    {
+     "name": "a",
+     "ty": 0
+    },
+    {
+     "name": "b",
+     "ty": 9
+    },
+    {
+     "name": "c",
+     "ty": 1
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (u8) noreturn_variants.U"
+  },
+  {
+   "k": "other",
+   "name": "fn (*noreturn_variants.U) void"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 4,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*const noreturn_variants.U) u32"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "enum",
+   "name": "@typeInfo(noreturn_variants.U).@\"union\".tag_type.?",
+   "tag": 11,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "a",
+     "value": "0"
+    },
+    {
+     "name": "b",
+     "value": "1"
+    },
+    {
+     "name": "c",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

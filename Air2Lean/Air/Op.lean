@@ -85,6 +85,15 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- A type without values (`noreturn`). A union field of this type can never be active: it
+adds no payload bytes, has no constructor in the translation, and every instruction or constant
+that activates or reads it is rejected (`Check.lean`'s `uninhabitedUnionField?`). -/
+def uninhabitedTy (types : Array Ty) (id : TyId) : Bool := types[id]? == some .noreturn
+
+/-- The fields of a union that can be active (`uninhabitedTy`). -/
+def inhabitedFields (types : Array Ty) (fields : Array (String × TyId)) : Array (String × TyId) :=
+  fields.filter fun (_, t) => !uninhabitedTy types t
+
 /-- Children traversed through values; a pointer ends a value-type path. -/
 def valueChildTys (ty : Ty) : Array TyId :=
   match ty with
