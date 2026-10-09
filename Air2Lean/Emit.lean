@@ -1092,6 +1092,12 @@ def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
 def FCtx.ptrAlign (fc : FCtx) (v : Val) : Nat :=
   ((fc.valTyId? v).bind fun t => fc.layouts[t]?.bind (·.ptrAlign)).getD 1
 
+/-- The op that defines `v`, if `v` is an instruction. -/
+def FCtx.opOf? (fc : FCtx) (v : Val) : Option Op :=
+  match v with
+  | .inst id => (fc.allInsts.find? (·.id == id)).map (·.op)
+  | _ => none
+
 /-- The alignment of the pointer type `tid`, or of an optional pointer's child. -/
 def FCtx.ptrAlignOf (fc : FCtx) (tid : TyId) : Nat :=
   let t := match fc.tyOfId tid with | .optional c => c | _ => tid
@@ -1549,6 +1555,23 @@ def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
   match fc.instUses with
   | some uses => uses.contains id
   | none => fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
+
+/-- A multi-operand `for` loop without safety: Sema still computes each operand's `slice_len`,
+but only the loop's own length bounds the loop (`cmp_lt(bitcast(i), bitcast(bound))`). A
+`slice_len` that nothing reads, followed by such a loop, is an operand whose length must equal
+`bound` (`Zig.forLen`). With safety, Sema's `forLenMismatch` check reads every length. -/
+def FCtx.forLenBound? (fc : FCtx) (id : InstId) : Option Val := do
+  guard (!fc.isReferenced id)
+  let after := fc.allInsts.filter (·.id > id)
+  let cmp ← after.findSome? fun i => match i.op with
+    | .cmp .lt (.inst idx) (.inst b) => match fc.opOf? (.inst idx), fc.opOf? (.inst b) with
+      | some (.bitcast _), some (.bitcast bound) => some bound
+      | _, _ => none
+    | _ => none
+  -- The bound must already be in scope at the `slice_len`.
+  let inScope : Bool := match cmp with | .inst b => decide (b < id) | _ => true
+  guard inScope
+  pure cmp
 
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
@@ -2160,7 +2183,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A bit-pointer points to the host integer: the parent's own address.
       let bitPtr := ((fc.valTyId? fieldPtr).map fc.hostSize).getD 0 != 0
       let off := if bitPtr then 0 else fc.fieldOffsetOfPtrTy inst.ty idx
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
+      let q := s!"({rv fieldPtr}.add (-({off} : Int)))"
+      -- A parent with no defined layout must be a live, aligned object at `q`
+      -- (`Zig.checkParent`; `docs/illegal-behavior.md` row 40).
+      let expr := match fc.pointeeOf (.inst inst.id) with
+        | .struct _ "auto" _ =>
+          let parent := (ptrChild fc.types inst.ty).getD 0
+          let align := (fc.layouts[parent]?.bind (·.align)).getD 1
+          s!"{fc.callMName} (Zig.checkParent {fc.sizeOf parent} {align} {q} >>= fun _ => pure {q})"
+        | _ => s!"pure {q}"
+      let (env, l) := bindLet fc env inst.id expr
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
@@ -2274,7 +2306,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
-    let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
+    let len := if fc.mem then s!"{rv s}.len" else s!"(Zig.len {rv s})"
+    let expr := match fc.forLenBound? inst.id with
+      | some bound => fc.liftR s!"Zig.forLen {len} {rv bound}"
+      | none => s!"pure {len}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them, after
@@ -2300,7 +2335,34 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .arrayElemVal a i =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.vindex {rv a} {rv i}"); (env, some l)
   | .slice p len =>
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : Zig.Slice)"; (env, some l)
+    -- Each slicing checks its own bounds and sentinel (`docs/illegal-behavior.md` rows 5, 24):
+    -- Sema lowers `x[start..end]` to `slice(ptr_add(base, start), end - start)`, where `base` is
+    -- the `slice_ptr` of a slice or an array pointer cast to a many-pointer.
+    let (base, start) := match fc.opOf? p with
+      | some (.ptrAdd false b s) => (b, rv s)
+      | _ => (p, "(0 : BitVec 64)")
+    -- The source's item count, and whether a sentinel follows its items.
+    let srcLen : Option (String × Bool) := match fc.opOf? base with
+      | some (.slicePtr s) =>
+        let sentinel := ((fc.valTyId? s).bind (fc.layouts[·]?)).any (·.sentinel)
+        some (if s matches .inst _ then s!"{rv s}.len" else s!"({rv s}).len", sentinel)
+      | some (.bitcast a) => match fc.pointeeOf a with
+        | .array n _ sentinel => some (s!"({n} : BitVec 64)", sentinel)
+        | _ => none
+      | _ => none
+    let resultSentinel := (fc.layouts[inst.ty]?).any (·.sentinel)
+    -- A sentinel slicing reads the item at its end, which must be an item of the source unless
+    -- the source's own sentinel is there.
+    let checks := (srcLen.map fun (n, srcSentinel) =>
+        let extra := if resultSentinel && !srcSentinel then 1 else 0
+        [s!"Zig.checkSliceEnd {n} {start} {rv len} {extra}"]).getD [] ++
+      (match ((fc.layouts[inst.ty]?).bind (·.sentinelByte)) with
+        | some byte => [s!"Zig.checkSentinelByte {rv p} {rv len} ({byte} : BitVec 8)"]
+        | none => [])
+    let value := s!"(⟨{rv p}, {rv len}⟩ : Zig.Slice)"
+    let expr := if checks.isEmpty then s!"pure {value}"
+      else s!"{fc.callMName} ({" >>= fun _ => ".intercalate checks} >>= fun _ => pure {value})"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .slicePtr sl => let (env, l) := bindLet fc env inst.id s!"pure {rv sl}.ptr"; (env, some l)
   | .arrayToSlice p =>
     let (ptr, len) := fc.itemsOf p (rv p)

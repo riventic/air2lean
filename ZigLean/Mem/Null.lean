@@ -27,6 +27,11 @@ illegal behaviour that only Sema's check (`incorrectAlignment`) catches: `.illeg
 def checkAlign (align : Nat) (p : Ptr) : MemM Unit := do
   if (← ptrAddr p) % align != 0 then throw .illegal
 
+/-- Sentinel slicing `[..len :s]` of bytes at `p`: the byte at `len` must be `s`. Otherwise
+illegal behaviour that only Sema's check (`sentinelMismatch`) catches: `.illegal`. -/
+def checkSentinelByte (p : Ptr) (len : BitVec 64) (s : BitVec 8) : MemM Unit := do
+  if (← load (BitVec 8) 1 (p.elem 1 len)) != s then throw .illegal
+
 /-- Null tests observe the address and do not dereference the pointer. -/
 def ptrIsNull (p : Ptr) : MemM Bool := do
   pure (decide ((← ptrAddr p) = 0))

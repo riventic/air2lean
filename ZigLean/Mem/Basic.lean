@@ -503,6 +503,18 @@ Sema's bounds check (`outOfBounds`) catches, so the model checks it itself: `.il
 def checkIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
   if i.toNat < s.len.toNat then pure () else throw .illegal
 
+/-- Slicing `[start..start + len]` of an operand with `srcLen` items: an end past the length is
+illegal behaviour that only Sema's bounds check (`outOfBounds`) catches: `.illegal`. `extra` is
+`1` for a sentinel slicing whose sentinel item must also be an item of the operand. -/
+def checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) : MemM Unit :=
+  if start.toNat + len.toNat + extra ≤ srcLen.toNat then pure () else throw .illegal
+
+/-- `@fieldParentPtr` to a struct with no defined layout: the parent pointer `q` must address a
+live, aligned object of the parent's `size` bytes. A field pointer that is not into such an
+object is illegal behaviour that nothing checks: `.illegal`. -/
+def checkParent (size align : Nat) (q : Ptr) : MemM Unit := do
+  let _ ← (← get).access q size align
+
 /-- `checkIndex` for a slice with a sentinel (`[:s]T`): its sentinel item, at the length, is an
 item too (Sema reads it to check sentinel slicing). -/
 def checkSentinelIndex (s : Slice) (i : BitVec 64) : MemM Unit :=

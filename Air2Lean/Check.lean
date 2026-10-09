@@ -429,6 +429,28 @@ def ptrOrOptChild (types : Array Ty) (id : TyId) : Option TyId :=
   | some (.optional child) => ptrChild types child
   | _ => ptrChild types id
 
+/-- The `slice` results whose sentinel a Sema check compares (`slice_elem_val` or
+`ptr_elem_val` of the slice, in a `cmp_eq` whose `cond_br` calls `sentinelMismatch`). Only
+these sentinel slicings may lack an exported sentinel value: the check panics before the model
+needs one. -/
+def sentinelCheckedSlices (insts : Array Inst) : Array InstId := Id.run do
+  let opOf (v : Val) : Option Op := match v with
+    | .inst id => (insts.find? (·.id == id)).map (·.op)
+    | _ => none
+  let itemOf (v : Val) : Option InstId := match opOf v with
+    | some (.sliceElemVal (.inst s) _) | some (.ptrElemVal (.inst s) _) => some s
+    | _ => none
+  let mut out := #[]
+  for i in insts do
+    if let .condBr c _ elseBody := i.op then
+      let mismatch := elseBody.any fun j => match j.op with
+        | .call (.func name ..) _ => panicMember? name == some "sentinelMismatch"
+        | _ => false
+      if mismatch then
+        if let some (.cmp .eq a b) := opOf c then
+          for s in [itemOf a, itemOf b].filterMap id do out := out.push s
+  return out
+
 structure CheckCtx where
   fnName : String
   types : Array Ty
@@ -448,6 +470,8 @@ structure CheckCtx where
   /-- The function's `zig_version`: up to 0.16.0 `@bitCast` reinterprets memory
   (`memoryBitCastVersion`). Empty in bare contexts, which then reject representation casts. -/
   zigVersion : String := ""
+  /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
+  sentinelChecked : Array InstId := #[]
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -762,6 +786,19 @@ def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool �
     | _ => none
   | _ => none
 
+/-- Sentinel slicing (a `slice` of a type with a sentinel) needs the sentinel value for its own
+check (`Zig.checkSentinelByte`), which the export records only for a `u8` pointer on 0.16.0.
+Without it, only a Sema `sentinelMismatch` check can stand in (`sentinelCheckedSlices`);
+otherwise the sentinel is never checked, so the function is rejected (`docs/illegal-behavior.md`
+row 24). -/
+def CheckCtx.checkSentinelSlice (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Unit := do
+  if let .slice .. := inst.op then
+    if let some l := cx.layouts[inst.ty]? then
+      if l.sentinel && l.sentinelByte.isNone && !cx.sentinelChecked.contains inst.id then
+        throw s!"{cx.fnName}: near line {line}: sentinel slicing without a safety check needs the \
+          exported sentinel value (only `u8` sentinels on Zig 0.16.0 have one); slice without the \
+          sentinel or keep runtime safety on"
+
 /-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
 def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
 
@@ -770,6 +807,7 @@ mutual
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
   cx.checkBitPtrSource line inst.ty inst.op
+  cx.checkSentinelSlice line inst
   checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
 
 partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
@@ -1789,7 +1827,7 @@ def check (f : Func) : Except String Unit := do
                          errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
-                         zigVersion := f.zigVersion }
+                         zigVersion := f.zigVersion, sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -2583,7 +2621,8 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .line n => line := n
     | _ =>
       if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome then
-        log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
+        log := log.record (checkDiagnostic file f .instructionFailure anchor)
+          (do cx.checkSentinelSlice line i; checkOp cx line i.ty i.op)
   return (line, log)
 
 structure FunctionChecks where
@@ -2655,7 +2694,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     places
     localRoots
     localPaths := localPlacePaths f.types f.layouts insts
-    zigVersion := f.zigVersion }
+    zigVersion := f.zigVersion
+    sentinelChecked := sentinelCheckedSlices insts }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/
