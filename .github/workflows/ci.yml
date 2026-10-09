@@ -510,6 +510,14 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
+      # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
+      # proofs of the native values and fail-closed rejections. Runs no compiler.
+      - name: Noreturn union variants
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/noreturn-variants/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 

@@ -385,11 +385,14 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2)) s.errBits).getD (0, 0)
     let tagTy := emitTy structNames s.srcTypes s.srcTypes[tag]!
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
-    let enc := fields.toList.map fun (f, id) =>
+    let enc := (inhabitedFields s.srcTypes fields).toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
       else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes s.errBits id "Zig.Enc.encode x" s.srcLayouts})]"
+    -- The tag of a `noreturn` variant names no value: its bytes are illegal, like an enum tag
+    -- without a name.
     let dec := fields.toList.map fun (f, id) =>
-      if isVoid id then s!"    | .{fm f} => pure .{fm f}"
+      if uninhabitedTy s.srcTypes id then s!"    | .{fm f} => throw .illegal"
+      else if isVoid id then s!"    | .{fm f} => pure .{fm f}"
       else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes s.errBits id s!"Zig.Enc.decodeAt bs {po}" s.srcLayouts}))"
     String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
@@ -472,6 +475,8 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       | some t => emitTy structNames s.srcTypes t
       | none => "Unit"
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
+    -- A `noreturn` variant has no constructor and no accessors (`uninhabitedTy`).
+    let fields := inhabitedFields s.srcTypes fields
     let wild := if fields.size > 1 then ["  | _ => throw .panic"] else []
     let ctors := fields.toList.map fun (f, id) =>
       if isVoid id then s!"  | {fm f}" else s!"  | {fm f} (v : {tyStr id})"

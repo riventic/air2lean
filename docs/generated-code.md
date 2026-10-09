@@ -79,6 +79,8 @@ A `switch` on an exhaustive enum that names every value becomes a `match` with o
 
 A bare union has a hidden tag in `ReleaseSafe` (the exporter's `safety_tag`): it is a tagged union, and a read of a field that is not active panics (`inactiveUnionField`). An `extern` or `packed` union is its bytes (§Casts, layout and function pointers).
 
+A `noreturn` field (`std.Io.Terminal.Mode.windows_api` off Windows) is never active: it has no constructor and no accessors, adds no payload bytes, and its tag value stays in the tag enum. An instruction that activates, reads or points to it, and a constant with it active, are rejected; in memory its tag throws `.illegal` (`tests/roadmap/noreturn-variants`).
+
 ### Vectors
 
 The checked vector subset has integer, float, or bool lanes. Vectors of pointers and bitcasts

@@ -196,6 +196,15 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .union name layout tag fields =>
     if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
       throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    -- A `noreturn` field is a variant that is never active (`uninhabitedTy`); the union needs
+    -- another field to have a value, and only a tagged union can have one.
+    if fields.any (uninhabitedTy types ·.2) then
+      if tag.isNone then
+        throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) has a noreturn \
+          field: outside the subset"
+      if (inhabitedFields types fields).isEmpty then
+        throw s!"{fnName}: near line {line}: union '{name}' has only noreturn fields: it has no \
+          values, outside the subset"
     match tag with
     | none =>
       -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). In `ReleaseSafe` a bare union
@@ -251,6 +260,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
+  | some .noreturn => throw "noreturn has no values and no storage"
   -- A C/allowzero pointer is stored with `Zig.nullablePtrEnc` (null = eight zero bytes).
   | some (.ptr size ..) => pure (if size == "slice" then 16 else 8, 8)
   | some .allocator => pure (16, 8)
@@ -324,10 +334,18 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
       throw s!"an error set storage layout must be the profile's {errBits}-bit error integer \
         ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits})"
     pure (Zig.errCodeSize errBits, Zig.errCodeAlign errBits)
-  | some (.union _ _ (some tag) fields) =>
+  | some (.union name _ (some tag) fields) =>
+    -- A `noreturn` field is never active: no payload bytes (`uninhabitedTy`).
     let (ts, ta) ← modelLayout types layouts tag errBits
-    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t errBits
+    let fs ← (inhabitedFields types fields).mapM fun (_, t) => modelLayout types layouts t errBits
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
+    -- Also inside a struct, whose check compares only its own size: the generated `Zig.Enc`
+    -- has the exporter's size and the model's offsets. 0.16.0 stores no tag for a union with
+    -- one possible active field.
+    let (s', a') ← exported
+    unless s == s' && a == a' do
+      throw s!"the memory model gives union '{name}' size {s} and alignment {a}, the compiler \
+        {s'} and {a'}"
     pure (s, a)
   | some (.union name layout none fields) =>
     unless layout == "extern" || layout == "packed" do
@@ -339,11 +357,12 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | none => throw s!"unknown type id {id}"
 
 /-- The tag and payload offsets of a tagged union with the tag type `tag` and the field types
-`fields` in memory (`unionLayout`). -/
+`fields` in memory (`unionLayout`); a `noreturn` field adds no payload bytes. -/
 def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId)
     (errBits : Nat := 16) : Option (Nat × Nat) := do
   let (ts, ta) ← (modelLayout types layouts tag errBits).toOption
-  let fs ← fields.mapM fun t => (modelLayout types layouts t errBits).toOption
+  let fs ← (fields.filter (!uninhabitedTy types ·)).mapM fun t =>
+    (modelLayout types layouts t errBits).toOption
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
@@ -759,6 +778,38 @@ def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool �
 /-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
 def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
 
+/-- The union and field names of field `idx` of the union `uty` if that field is `noreturn`
+(`uninhabitedTy`): a variant that is never active. -/
+def uninhabitedUnionField? (types : Array Ty) (uty : TyId) (idx : Nat) : Option (String × String) :=
+  match types[uty]? with
+  | some (.union name _ _ fields) => match fields[idx]? with
+    | some (f, t) => if uninhabitedTy types t then some (name, f) else none
+    | none => none
+  | _ => none
+
+/-- An instruction that activates, reads or points to a `noreturn` variant of a union. Zig code
+that reaches one is unreachable, so the variant has no value in the translation; fail closed
+instead of emitting one. -/
+def CheckCtx.checkNoreturnVariant (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let pointee (v : Val) : Option TyId := (cx.valTy? v).bind (ptrChild cx.types)
+  let (what, hit) := match op with
+    | .unionInit idx _ => ("union_init of", uninhabitedUnionField? cx.types ty idx)
+    | .structFieldVal s idx =>
+      ("a read of", (cx.valTy? s).bind (uninhabitedUnionField? cx.types · idx))
+    | .fieldPtr b idx => ("a pointer to", (pointee b).bind (uninhabitedUnionField? cx.types · idx))
+    | .setUnionTag p (.enumTag _ v) =>
+      ("set_union_tag to", (pointee p).bind fun uty => do
+        let some (.union _ _ (some tagTy) fields) := cx.types[uty]? | none
+        let some (.enum _ _ _ tags) := cx.types[tagTy]? | none
+        let (name, _) ← tags.find? (fun (t : String × Int) => t.2 == v)
+        uninhabitedUnionField? cx.types uty
+          (← fields.findIdx? (fun (field : String × TyId) => field.1 == name)))
+    | _ => ("", none)
+  if let some (u, f) := hit then
+    cx.fail line s!"{what} the noreturn variant '{f}' of union '{u}': the variant has no \
+      values, so this code is unreachable in Zig and outside the subset"
+
 mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
@@ -771,6 +822,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   let fnName := cx.fnName
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
+  cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -1922,8 +1974,11 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
   | .ptrOther .., .ptr .. => pure ()
   | .optSome _ payload, .optional child => recur child payload
   | .errUnionOk _ payload, .errorUnion _ child => recur child payload
-  | .unionVal _ field payload, .union _ _ _ fields =>
-    let some (_, ty) := fields[field]? | fail
+  | .unionVal _ field payload, .union name _ _ fields =>
+    let some (fname, ty) := fields[field]? | fail
+    if uninhabitedTy f.types ty then
+      throw s!"{f.name}: a constant of union '{name}' with the noreturn variant '{fname}' active \
+        is outside the subset (the variant has no values)"
     recur ty payload
   | .agg _ elems, .array n child sentinel =>
     unless elems.size == n + (if sentinel then 1 else 0) do fail

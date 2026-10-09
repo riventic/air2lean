@@ -1,0 +1,280 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "noreturn_variants.vValue",
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "get_union_tag",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 12,
+     "tag": "switch_br",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 3
+      }
+     ],
+     "cases": [
+      {
+       "items": [
+        {
+         "ty": 3,
+         "enum": "3"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 4,
+         "tag": "struct_field_val",
+         "ty": 1,
+         "args": [
+          {
+           "inst": 0
+          }
+         ],
+         "index": 0
+        },
+        {
+         "id": 5,
+         "tag": "dbg_var_val",
+         "ty": 2,
+         "args": [
+          {
+           "inst": 4
+          }
+         ],
+         "name": "n"
+        },
+        {
+         "id": 6,
+         "tag": "br",
+         "ty": 4,
+         "target": 2,
+         "args": [
+          {
+           "inst": 4
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 3,
+         "enum": "7"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 7,
+         "tag": "unreach",
+         "ty": 4
+        }
+       ]
+      },
+      {
+       "items": [
+        {
+         "ty": 3,
+         "enum": "9"
+        }
+       ],
+       "ranges": [],
+       "body": [
+        {
+         "id": 8,
+         "tag": "br",
+         "ty": 4,
+         "target": 2,
+         "args": [
+          {
+           "ty": 1,
+           "val": "0"
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 9,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 2
+      },
+      {
+       "id": 10,
+       "tag": "call",
+       "ty": 4,
+       "callee": {
+        "ty": 5,
+        "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+        "noreturn": true
+       },
+       "args": []
+      },
+      {
+       "id": 11,
+       "tag": "unreach",
+       "ty": 4
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 14,
+   "tag": "ret_safe",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "union",
+   "name": "noreturn_variants.V",
+   "layout": "auto",
+   "tag": 3,
+   "fields": [
+    {
+     "name": "x",
+     "ty": 1
+    },
+    {
+     "name": "gone",
+     "ty": 4
+    },
+    {
+     "name": "y",
+     "ty": 2
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "enum",
+   "name": "noreturn_variants.Kind",
+   "tag": 6,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "x",
+     "value": "3"
+    },
+    {
+     "name": "gone",
+     "value": "7"
+    },
+    {
+     "name": "y",
+     "value": "9"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

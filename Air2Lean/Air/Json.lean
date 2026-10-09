@@ -492,6 +492,9 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
           | throw s!"{fnName}: union constant: no field {fname}"
         if let .union _ _ (some tag) _ := ty then
           checkConstType fnName types tag (.enumTag tagTy v)
+        if uninhabitedTy types fields[idx]!.2 then
+          throw s!"{fnName}: union constant with the noreturn variant '{fname}' active (the \
+            variant has no values)"
         let payload ← parseVal fnName types uvalJ
         checkConstType fnName types fields[idx]!.2 payload
         return .unionVal tyId idx payload
