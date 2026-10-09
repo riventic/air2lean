@@ -1,5 +1,6 @@
 import Proofs.Floatops.Gen
 import ZigLean.Float.RoundTrip
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/floatops/floatops.zig`
@@ -523,3 +524,16 @@ theorem divExact64_spec (a b : Zig.F64) :
   · generalize hb : Zig.Float.eq (Zig.Float.trunc q) (Zig.Float.floor (Zig.Float.trunc q)) = t
     cases t <;> simp only [Zig.Float.divExactTrunc, hx, Zig.Float.floorChk,
       Zig.Float.isInvalidF80, Bool.false_eq_true, ↓reduceIte, zig_unfold, hb] <;> rfl
+
+/-! ## Non-vacuity witnesses: a quiet NaN, the first selector that is not an op -/
+
+nonvacuity_witness cmp64_nan :=
+  ⟨Zig.Float.ofBits 0x7ff8000000000000, Zig.Float.ofBits 0, .inl (by decide +kernel), trivial⟩
+nonvacuity_witness op16_other := ⟨26, by decide, Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0, trivial⟩
+nonvacuity_witness op32_other := ⟨26, by decide, Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0, trivial⟩
+nonvacuity_witness op64_other := ⟨26, by decide, Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0, trivial⟩
+nonvacuity_witness op80_other := ⟨26, by decide, Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0, trivial⟩
+nonvacuity_witness op128_other :=
+  ⟨26, by decide, Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0, trivial⟩
+nonvacuity_witness opSpec_other :=
+  ⟨.f32, 26, by decide, Zig.Float.ofBits 0, Zig.Float.ofBits 0, Zig.Float.ofBits 0, trivial⟩

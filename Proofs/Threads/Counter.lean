@@ -1,5 +1,6 @@
 import Proofs.Threads.Gen
 import ZigLean.Conc.Lemmas
+import ZigLean.Mem.Witness
 
 /-!
 # `parallelCounter` over all schedules
@@ -2276,5 +2277,34 @@ theorem parallelCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
   (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
     (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n)
+
+/-! ## Non-vacuity witnesses -/
+
+/-- The counter's location with its first message, `0`, as `main` leaves it before the
+spawns. -/
+def cntLoc : ALoc :=
+  { block := 1, off := 0, len := 4,
+    msgs := #[{ id := 0, bytes := Enc.encode (0 : BitVec 32), clock := #[], relClock := #[] }] }
+
+/-- A memory whose block 1 is the counter, `0`, with its atomic location. -/
+def cntMem : Mem :=
+  { blocks := #[Witness.blk #[], { Witness.blk (Enc.encode (0 : BitVec 32)) with addr := 8192 }],
+    nextAddr := 8192 + 5, atomics := #[cntLoc] }
+
+theorem cntAt_cntMem : CntAt 0 0 cntMem where
+  find := by decide +kernel
+  only := fun l hl _ => by simp [cntMem] at hl; subst hl; exact ⟨rfl, rfl⟩
+  size := rfl
+  chain := fun j h => by simp [cntMem, cntLoc] at h
+  val := fun j h => by
+    simp [cntMem, cntLoc] at h; subst h; with_unfolding_all rfl
+  last := by decide +kernel
+  clk := fun j h => by
+    simp [cntMem, cntLoc] at h; subst h; exact ⟨0, by decide, by with_unfolding_all rfl⟩
+  plain := fun e he => by simp [cntMem] at he
+  pw := fun e he => by simp [cntMem] at he
+
+nonvacuity_witness CntAt.val := ⟨0, 0, cntMem, cntAt_cntMem, 0, by decide +kernel, trivial⟩
+nonvacuity_witness decode_tid := ⟨0, by decide, trivial⟩
 
 end Threads.Counter

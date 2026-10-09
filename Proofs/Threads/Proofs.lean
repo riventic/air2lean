@@ -2,6 +2,7 @@ import Proofs.Threads.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Mem.Thread
 import ZigLean.Simp
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/threads/threads.zig`
@@ -73,5 +74,7 @@ theorem decode_writeBytes32' (a : Array Byte) (o : Nat) (v : BitVec 32) (h : o +
   rw [LawfulEnc.size_encode v, hsz] at hx
   show Enc.decode ((writeBytes a o (Enc.encode v)).extract o (o + 4)) = pure v
   rw [hx]; exact LawfulEnc.decode_encode v
+
+nonvacuity_witness decode_writeBytes32' := ⟨Array.replicate 4 .undef, 0, 0, by decide, trivial⟩
 
 end Zig

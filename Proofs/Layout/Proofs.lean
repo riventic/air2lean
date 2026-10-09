@@ -1,6 +1,7 @@
 import Proofs.Layout.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Simp
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/layout/layout.zig`
@@ -83,6 +84,8 @@ theorem twice_spec (m : Mem) (x : BitVec 32) :
 theorem headerLen_short (m : Mem) (s : Slice) (h : s.len.toNat < 8) :
     (headerLen s).run m = pure (none, m) := by
   simp [headerLen, zig_unfold, Zig.lt, BitVec.ult, h]
+
+nonvacuity_witness headerLen_short := ⟨{}, ⟨⟨none, 0⟩, 0⟩, by decide, trivial⟩
 
 /-- `headerLen` from the results of its two loads: the magic number, then the length. -/
 theorem headerLen_run {m m₁ m₂ : Mem} {s : Slice} {mg : BitVec 32} {len : BitVec 16}

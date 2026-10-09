@@ -1,6 +1,7 @@
 import Proofs.Slices.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Simp
+import ZigLean.Mem.Witness
 
 /-!
 # Proofs about `examples/slices/slices.zig`
@@ -95,3 +96,13 @@ example :
     Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
     Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set,
     StateT.set, zig_unfold]
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness factorial_spec := ⟨0, by decide, trivial⟩
+nonvacuity_witness failName_other := ⟨1, by decide, {}, trivial⟩
+nonvacuity_witness second_spec :=
+  ⟨_, Witness.p0, Witness.mem1 (Enc.encode (0 : BitVec 32) ++ Enc.encode (1 : BitVec 32)), 1,
+    by with_unfolding_all rfl, trivial⟩
+nonvacuity_witness fill_spec :=
+  ⟨⟨Witness.p0, 1⟩, 7, Witness.mem1 #[.int 0], _, by with_unfolding_all rfl, trivial⟩

@@ -118,6 +118,11 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duplicate JSON key'):
             fs.load_registry(root=self.root)
 
+    def test_witness_commands_declare_companions(self):
+        text = 'namespace A\nnonvacuity_witness t := ⟨Float.zero⟩\nliveness_witness t :=\n  rfl\nend A\n'
+        self.assertEqual([(k, n) for k, n, _ in fs.declarations(text)],
+                         [('theorem', 'A.t.nonvacuous'), ('theorem', 'A.t.returns')])
+
     def test_removed_label_is_reported_by_source_check(self):
         registry = fs.load_registry()
         del registry['theorems']['Proofs.Floatops.Proofs::op16_spec']

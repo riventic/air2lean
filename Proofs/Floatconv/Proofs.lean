@@ -1,6 +1,7 @@
 import ZigLean.Float.Allowed
 import ZigLean.Float.RoundTrip
 import Proofs.Floatconv.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/floatconv/floatconv.zig`
@@ -117,3 +118,9 @@ payload makes it succeed. -/
 theorem toByte_allowed_nan {x r : Zig.F32} (h : Zig.Float.Allowed x r) (hx : x.isNaN) :
     toByte r = throw .illegal :=
   toByte_nan r (h.isNaN_of_isNaN hx)
+
+/-! ## Non-vacuity witnesses: the IEEE value `1` -/
+
+nonvacuity_witness bits32_ok := ⟨Zig.Float.ofBits 0x3f800000, by decide +kernel, trivial⟩
+nonvacuity_witness toByte_ok :=
+  ⟨Zig.Float.ofBits 0x3f800000, 1, by decide +kernel, by decide, by decide, trivial⟩

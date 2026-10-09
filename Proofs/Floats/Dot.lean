@@ -1,5 +1,6 @@
 import ZigLean.Float.Error
 import Proofs.Floats.Gen
+import ZigLean.Witness
 
 /-!
 # Numerical bounds for `dot` (`examples/floats/floats.zig`)
@@ -172,3 +173,8 @@ theorem dot_pos_of_gap (xs ys : Array Zig.F64) (hs : xs.size < 2 ^ 64) (hlen : x
     ∃ r, dot xs ys = pure r ∧ Zig.Float.lt (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) r = true := by
   obtain ⟨r, q, hdot, hq, -, -, -, herr⟩ := dot_error xs ys hs hlen hB hx hy hov
   exact ⟨r, hdot, Zig.lt_of_error (w := 0) hq dot_init_toRat herr (by grind)⟩
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness dot_eq_sumLeft :=
+  ⟨#[Zig.Float.ofBits 0], #[Zig.Float.ofBits 0], by decide, rfl, trivial⟩

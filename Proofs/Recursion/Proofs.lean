@@ -1,4 +1,5 @@
 import Proofs.Recursion.Gen
+import ZigLean.Witness
 
 /-!
 # Proofs about `examples/recursion/recursion.zig`
@@ -157,3 +158,9 @@ theorem gcd_spec_aux :
 
 theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
   gcd_spec_aux b.toNat a b rfl
+
+/-! ## Non-vacuity witnesses -/
+
+nonvacuity_witness fact_ok := ⟨5, by decide, trivial⟩
+nonvacuity_witness fact_ok_aux := ⟨5, 5, rfl, by decide, trivial⟩
+nonvacuity_witness gcd_spec_aux := ⟨6, 4, 6, rfl, trivial⟩

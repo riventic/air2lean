@@ -2,6 +2,7 @@ import Proofs.Lists.Gen
 import ZigLean.Sep
 import ZigLean.VersionGate
 import ZigLean.Sep.Cost
+import ZigLean.Sep.Witness
 
 /-!
 # `ArrayListUnmanaged(u32).append`
@@ -295,6 +296,10 @@ theorem ptrAddr_run {q : Ptr} {b : BlockId} {blk : Block} (hq : q.block = some b
 theorem ptrAddr_none {q : Ptr} (hq : q.block = none) : (ptrAddr q).run m = pure (q.off, m) := by
   simp [ptrAddr, hq, zig_unfold]
 
+nonvacuity_witness ptrAddr_run :=
+  ⟨Witness.mem1 #[], Witness.p0, 0, Witness.blk #[], rfl, rfl, trivial⟩
+nonvacuity_witness ptrAddr_none := ⟨{}, ⟨none, 0⟩, rfl, trivial⟩
+
 /-- `ptrAddr` of a pointer whose block exists does not throw. -/
 theorem ptrAddr_ok {q : Ptr} (hq : ptrOk m q) : ∃ x, (ptrAddr q).run m = pure (x, m) := by
   cases hb : q.block with
@@ -308,6 +313,8 @@ theorem ptrLe_run {q r : Ptr} {x y : Int} (hq : (ptrAddr q).run m = pure (x, m))
     (hr : (ptrAddr r).run m = pure (y, m)) : (ptrLe q r).run m = pure (decide (x ≤ y), m) := by
   simp only [StateT.run] at hq hr
   simp [ptrLe, zig_unfold, hq, hr]
+
+nonvacuity_witness ptrLe_run := ⟨{}, ⟨none, 0⟩, ⟨none, 0⟩, 0, 0, rfl, rfl, trivial⟩
 
 end Load
 

@@ -44,6 +44,9 @@ FLOAT_WORDS = re.compile(r'\bZig\.F(?:16|32|64|80|128)\b|\bF(?:16|32|64|80|128)\
 RT_WORDS = re.compile(r'\b\w+Rt(?:016)?(?:Chk|LegacyChk)?\b')
 DECLARATION = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|nonrec)\s+)*"
                          r"(theorem|lemma|example)\b\s*([^\s:({\[]*)")
+# A claim witness command (`ZigLean/Witness.lean`) declares the theorem `T.nonvacuous` or `T.returns`.
+WITNESS = re.compile(r"^(nonvacuity_witness|liveness_witness)\s+(\S+)")
+WITNESS_SUFFIX = {'nonvacuity_witness': '.nonvacuous', 'liveness_witness': '.returns'}
 BINARY_KEYS = ('binary_correspondence', 'native_correspondence')
 NOT_ATTESTED_KEYS = ('native_adequacy', 'source_correspondence')
 VERSION = re.compile(r'^\["(\d+\.\d+\.\d+)"\]\s*$')
@@ -306,13 +309,17 @@ def declarations(text):
         elif words[:1] == ['end'] and scopes:
             scopes.pop()
         match = DECLARATION.match(line)
-        if not match:
+        witness = WITNESS.match(line)
+        if not match and not witness:
             i += 1
             continue
         j = i + 1
         while j < len(lines) and (not lines[j] or lines[j][0].isspace()):
             j += 1
-        kind, declared = match.groups()
+        if witness:
+            kind, declared = 'theorem', witness.group(2) + WITNESS_SUFFIX[witness.group(1)]
+        else:
+            kind, declared = match.groups()
         body = '\n'.join(lines[i:j])
         if kind == 'example':
             yield kind, None, body
