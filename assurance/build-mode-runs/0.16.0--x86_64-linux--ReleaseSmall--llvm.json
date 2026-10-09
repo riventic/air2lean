@@ -1,23 +1,23 @@
 {
   "backend": "llvm",
-  "cases": 87084,
+  "cases": 87409,
   "counts": {
     "error_return_match": 892,
     "illegal_exclusion": 497,
     "mismatch": 85,
     "ub_excluded": 4975,
     "unspecified_exclusion": 580,
-    "value_match": 80055
+    "value_match": 80380
   },
-  "emulated": true,
+  "emulated": false,
   "examples": {
     "asm": 1200,
     "atomics": 100,
     "basic": 2400,
     "errors": 900,
     "floatconv": 3000,
-    "floatops": 39600,
-    "floats": 1800,
+    "floatops": 39625,
+    "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
     "lists": 1503,
@@ -387,7 +387,7 @@
       "status": "ub_excluded"
     }
   ],
-  "flags": "-OReleaseSmall -mcpu=baseline -fllvm -z norelro",
+  "flags": "-OReleaseSmall -mcpu=baseline -fllvm",
   "float_mode_optimized_sources": [],
   "host": "Linux-x86_64",
   "mode": "ReleaseSmall",
@@ -396,7 +396,7 @@
   "skipped_examples": {
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "e9736375afe7c03e1aa51c066e2ec488f315ad0c3b2d0fa98fd9f5327ecfa86d",
+  "sources_sha256": "7bebaca312a3e03284dbe15c8a966eb31eb5765e098b5800fb382b924bd9253e",
   "stock_zig_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "target": "x86_64-linux",
   "triage": [
