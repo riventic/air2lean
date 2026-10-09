@@ -71,6 +71,8 @@ lake env lean tutorials/mutable-arrays/Negative.lean   # must fail
   (the committed `Proofs/Slices/Gen.lean` has no profile header).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): Zig
   value/safety semantics and the byte-level block memory model.
+- [SEM-06](../../docs/premises.md#sem-06): block addresses are the environment's placement
+  (`docs/address-placement.md`); the result holds for every placement.
 - [SEM-03](../../docs/premises.md#sem-03): `Triple` is partial correctness. The theorem says
   nothing about runs that do not finish; it does not prove termination.
 - [TRU-01](../../docs/premises.md#tru-01): the Lean kernel and standard axioms.

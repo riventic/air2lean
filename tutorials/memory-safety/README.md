@@ -149,11 +149,13 @@ The theorems of `Main.lean` hold in the model under the premises of
   a free must name the start and the whole length of a live heap block, or it is `.illegal`.
 * [ALC-02](../../docs/premises.md#alc-02): the allocation policy (`failAt`, `allocPolicy`).
   The theorems quantify over it.
-* [ALC-08](../../docs/premises.md#alc-08): the opt-in address-reuse policy and provenance mode
+* [ALC-08](../../docs/premises.md#alc-08): address reuse and the provenance mode
   (`buildThenFree_address_reuse`). The theorem quantifies over both.
 * [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): safety
   checks are `Zig.Error`s, and memory is the byte-level block model. A dead access is
   `.illegal`.
+* [SEM-06](../../docs/premises.md#sem-06): block addresses are the environment's placement
+  (`docs/address-placement.md`); the theorems hold for every placement.
 * [SEM-03](../../docs/premises.md#sem-03), [SEM-04](../../docs/premises.md#sem-04): loops are
   `partial_fixpoint`s, and the specs here are total. Each run provably returns.
 * [PRF-01](../../docs/premises.md#prf-01): the committed `Gen.lean` uses the legacy 64-bit

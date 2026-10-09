@@ -9,8 +9,8 @@ premise was derived. This index covers the committed generated modules.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 924 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 59 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 601 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 382 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 79 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 74 | Allocation failure and request-cap policy |
@@ -447,38 +447,38 @@ File premises: PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, S
 
 ## `Proofs/Layout/Mem.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `fields_num` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Num.decode_int` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `numInt_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Num.decode_of_int` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `setNum_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `bump_ok_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `writeTable_illegal` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Num.decode_int` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `numInt_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Num.decode_of_int` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `setNum_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `bump_ok_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `writeTable_illegal` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Layout/Proofs.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Flags.ofBits_toBits` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Flags.toBits_ofBits` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Ctl.ofBits_toBits` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Ctl.valid_iff` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `ctlSum_illegal` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Flags.ofBits_toBits` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Flags.toBits_ofBits` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Ctl.ofBits_toBits` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Ctl.valid_iff` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `ctlSum_illegal` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `boolVec4_bytes` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `setMode_spec` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `applyOp_spec` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `applyOp_oob` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `applyTwice_illegal` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `twice_spec` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `headerLen_short` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `headerLen_run` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `headerLen_spec` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `setMode_spec` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `applyOp_spec` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `applyOp_oob` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `applyTwice_illegal` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `twice_spec` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `headerLen_short` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `headerLen_run` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `headerLen_spec` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Append.lean`
 
@@ -687,7 +687,7 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Sync/Handoff.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -698,34 +698,34 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.apE` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.apV` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.R_none` | SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.off_own` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.own_none` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.off_own` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.off_R` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.blk_heap` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.blk_keep` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.U_keep` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.before_same` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.U_upd` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.U_stepIn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.U_stepIn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.noRace_io` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.step_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.step_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.Wd.ok` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.Wd.ap` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.Wd.blk` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_cur` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.hcs_of` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.linv_op` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_cur` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.hcs_of` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.linv_op` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.op_of_cur` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.wp_loadAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_load` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_rmw` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_rmwAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_casAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_weakCasAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_loadAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_load` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_rmw` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_rmwAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_casAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_weakCasAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.Wd.lo` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.Wd.apart` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.hist_op` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
@@ -735,7 +735,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.R_congr` | SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.shape_p` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.parts_p` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_p` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_p` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.R_cell` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.decode_bool` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.R_rdy` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
@@ -743,180 +743,180 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.get_push_eq` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.get_push_eq'` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.rmwEnt_val` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.ofBits_cst` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ofBits_cst` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.val_eq` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.upd_g` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.U_mem` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.qok_main` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.live_all` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.live_all` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.linv0` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.shape_m` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.parts_m` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.U_lock0` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_away` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_mwait` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_mstep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.early_of` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_away` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_mwait` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_mstep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.early_of` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.RegHB.mono` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.before_op` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_load` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_mload` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_mx` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.qok_out` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.qok_of` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_seen` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_load` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_mload` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_mx` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.qok_out` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.qok_of` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_seen` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.sv_two` | TRU-01 |
-| `Sync.Handoff.bits_take` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.bits_sv2` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sig_of` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_cons` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.seen_noFail` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_ep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.bits_one` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_reg` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.main_alive` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sub_w` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sub_s` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.dbg_true` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.state_read` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wt_sleep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sig_pos` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.loop56_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.loop23_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.rdy_now` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.bits_take` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.bits_sv2` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sig_of` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_cons` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.seen_noFail` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_ep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.bits_one` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_reg` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.main_alive` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sub_w` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sub_s` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.dbg_true` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.state_read` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wt_sleep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sig_pos` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop56_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop23_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.rdy_now` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.reg_x0` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.lt_w` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.waitInner_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.condWait_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.ofBits_ev0` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.ofBits_ev1` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.ofBits_ev2` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.lt_w` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.waitInner_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.condWait_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ofBits_ev0` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ofBits_ev1` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ofBits_ev2` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.sN_cw` | TRU-01 |
 | `Sync.Handoff.eN_eq` | TRU-01 |
 | `Sync.Handoff.vok_push` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.ev_read` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_ev1` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ev_read` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_ev1` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.vL_vals` | TRU-01 |
-| `Sync.Handoff.ev_dec` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_evd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.loop17_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.event_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wp_mres` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.loop24_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.live1` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ev_dec` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_evd` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop17_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.event_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_mres` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop24_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.live1` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.Flags.early` | TRU-01 |
 | `Sync.Handoff.RegHB.early` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Handoff.QOk.p` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.wp_pstep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wp_pstep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.linv_x` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.ht1` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_sgp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_wk` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ht1` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_sgp` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_wk` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.wake_w` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_set` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_sload` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.add16` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sg1_hist` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.bits10` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.bits11` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sg1_noFail` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.gt10` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.gt00` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.sig_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.signal_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.ev_last` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_xset` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_set` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_sload` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.add16` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sg1_hist` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.bits10` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.bits11` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sg1_noFail` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.gt10` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.gt00` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.sig_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.signal_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.ev_last` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_xset` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.same_q` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_fin` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.set_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.producer_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_end` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.joinedAll_kid` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.dispatch_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wb_size` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_fin` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.set_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.producer_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_end` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.joinedAll_kid` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.dispatch_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wb_size` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.rb_size` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.wb_s` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wb_e` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.wb_v` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wb_s` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wb_e` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.wb_v` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.rb_v` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.rb_r` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.enc_mutex` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.enc_mutex` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.word_init` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.enc_io` | THR-01, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Handoff.allLe_one` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Handoff.inv_start` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_spawn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_ev0` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.inv_joins` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_start` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_spawn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_ev0` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.inv_joins` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.vOf_of_rdy` | TRU-01 |
-| `Sync.Handoff.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.handoff_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.handoff_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.handoff_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.handoff_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Lock.lean`
 
-File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Sync.MutexOps.loop23_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexOps.lock_specOn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexOps.unlock_specOn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexOps.lock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexOps.unlock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexOps.loop23_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexOps.lock_specOn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexOps.unlock_specOn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexOps.lock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexOps.unlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Mutex.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Sync.MutexCounter.stable` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.mptr` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.shape_work` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.shape_upd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.stable` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.mptr` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.shape_work` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.shape_upd` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.pts_none` | SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.MutexCounter.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.own_none` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.blk_heap` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.MutexCounter.blk_keep` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.MutexCounter.U_stepIn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.U_stepIn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.noRace_io` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.MutexCounter.step_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.io_noErr` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.sum_le` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.sum_succ` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.wp_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.wp_cntLoad` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.wp_cntStore` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.loop4_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.work_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.inv_end` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.joinedAll_kid` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.dispatch_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.step_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.io_noErr` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.sum_le` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.sum_succ` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.wp_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.wp_cntLoad` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.wp_cntStore` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.loop4_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.work_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.inv_end` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.joinedAll_kid` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.dispatch_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.enc_io` | THR-01, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.MutexCounter.enc_mutex` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.enc_mutex` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.enc_u32` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.MutexCounter.inv_pre` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.mutexCounter_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.MutexCounter.mutexCounter_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.inv_pre` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.mutexCounter_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.mutexCounter_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Proofs.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `tryLock_new` | PRF-01, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `tryLock_twice` | PRF-01, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `wait_alone_deadlock` | PRF-01, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `wait_other_value` | PRF-01, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `snapshot_without_clock_edge_rejected` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `tryLock_new` | PRF-02, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `tryLock_twice` | PRF-02, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `wait_alone_deadlock` | PRF-02, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `wait_other_value` | PRF-02, THR-01, THR-02, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `snapshot_without_clock_edge_rejected` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/RwLock.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -924,12 +924,12 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.ok_cur` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.op_cur` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.hist_cur` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.wp_load` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_rmw` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_cas` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_weakCas` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_rmwAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_casAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_load` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_rmw` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_cas` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_weakCas` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_rmwAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_casAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.Ph.mp_setM` | TRU-01 |
 | `Sync.RwLockRead.Ph.wb_setM` | TRU-01 |
 | `Sync.RwLockRead.Ph.ib_setM` | TRU-01 |
@@ -978,8 +978,8 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.R_none` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.part_none` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.own_none'` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.off_own` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.own_none` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.off_own` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.off_R` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.ws_free` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.wm_free` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
@@ -999,7 +999,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.econd0` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.pnone` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.op_fp` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_mop` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_mop` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.Frame.refl` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.calm` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.get_push_lt` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
@@ -1010,33 +1010,33 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.val_eq` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.U_lph` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.mq_wait` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.live_all` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.live_all` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.U_q` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.wmL` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_away` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.bits_contended` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_mwait` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wat` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_away` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.bits_contended` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_mwait` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wat` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.noWM` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.mdec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.mdec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.setM_setM` | TRU-01 |
 | `Sync.RwLockRead.mpush` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.holder_of` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_mstep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_mcalm` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.bits_unlocked` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.bits_once` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.bits_cont` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.mloop_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.mlock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_mstep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_mcalm` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.bits_unlocked` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.bits_once` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.bits_cont` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.mloop_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.mlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.Ph.same_unl` | TRU-01 |
 | `Sync.RwLockRead.Ph.isMx_of_unl` | TRU-01 |
 | `Sync.RwLockRead.UnlAt.isUnl` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.flags_unl` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_mghost` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wm_only` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_mwake` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.munlock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_mghost` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wm_only` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_mwake` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.munlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.car_rmw` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.own_rmw` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.linv_gain` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
@@ -1044,165 +1044,165 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.mfacts` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.U_sop` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.R_nohas` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_sstep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_sstep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.car_lose` | THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.own_nN` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.lws_keep` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.lws_gain` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.lws_lose` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.own_nN` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.lws_keep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.lws_gain` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.lws_lose` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.sold` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.wsptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.wmptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.semptr` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.wlock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.not_both` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wunlock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.not_both` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wunlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.noRace_io` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.step_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wp_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.step_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.diff_n` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.mustN_lt` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.other_nN` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.other_nN` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.mustN_noP` | TRU-01 |
-| `Sync.RwLockRead.wp_n` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_cur` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.wloop_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.writer_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_wend` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wp_n` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_cur` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wloop_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.writer_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_wend` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.joinedAll_w` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.dispatch_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_sread` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.dispatch_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_sread` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.w_isW` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.w_free` | TRU-01 |
-| `Sync.RwLockRead.inv_lsl` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.ls_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.lockS_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_g0` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.unlockS_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_lsl` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.ls_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.lockS_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_g0` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.unlockS_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.cnt_le` | TRU-01 |
-| `Sync.RwLockRead.readS_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.readS_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.keep_sm` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.noff_of` | THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.stableU` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.ownU` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.noP_of_pz` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.frame₀` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_wgn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_wgn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.semPtr_eq` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockRead.ws_one` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.wait₀` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.post₀` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.live₀` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.sem_s` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.sem_e` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.start₀` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.spec₀` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rw_size` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rw_state` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rw_sem` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rw_mutex` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.wait₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.post₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.live₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.sem_s` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.sem_e` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.start₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.spec₀` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rw_size` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rw_state` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rw_sem` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rw_mutex` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.enc_io` | THR-01, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.RwLockRead.enc_u32` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.rw_smx` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rw_c` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rw_smx` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rw_c` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.allLe_one` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.RwLockRead.blk_rw` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_pre` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.blk_rw` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_pre` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.sph_none` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockRead.inv_spawn` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.inv_join` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rwLockRead_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.rwLockRead_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_spawn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.inv_join` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rwLockRead_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rwLockRead_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/RwLockContract.lean`
 
-File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Sync.RwLockContract.held_facts` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockContract.acquire_shared` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockContract.read_with_facts` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.held_facts` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.acquire_shared` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.read_with_facts` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockContract.load_pair_owned` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.RwLockContract.load_pair_frame` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.RwLockContract.held_snapshot_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockContract.held_pair_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockContract.joined_of_phase` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockContract.reclaim_joined_wp` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.held_snapshot_wp` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.held_pair_wp` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.joined_of_phase` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockContract.reclaim_joined_wp` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/RwLockSnapshotPair.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `Sync.RwLockSnapshotPair.result_of_same_snapshot` | TRU-01 |
 | `Sync.RwLockSnapshotPair.split_snapshot_result_rejected` | TRU-01 |
-| `Sync.RwLockSnapshotPair.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockSnapshotPair.snapshotPair_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockSnapshotPair.snapshotPair_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockSnapshotPair.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockSnapshotPair.snapshotPair_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockSnapshotPair.snapshotPair_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/SemCounter.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `Sync.SemCounter.enc_u32` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.SemCounter.np_off` | SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.SemCounter.shape_work` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.holds_work` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.shape_work` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.holds_work` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.blk_heap` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.SemCounter.blk_keep` | SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.SemCounter.own_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.held_of_pz` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.stable` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.own_step` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.R_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.own_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.held_of_pz` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.stable` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.own_step` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.R_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.noRace_io` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.SemCounter.step_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.wp_io` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.XG_upd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.shape_set` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.R_held` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.other_free` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.wp_n` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.np_e` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.U_retag` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.step_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.wp_io` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.XG_upd` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.shape_set` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.R_held` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.other_free` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.wp_n` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.np_e` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.U_retag` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.np_cell` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.SemCounter.sum_flag` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.hone_w` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.hmv_w` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.holds_of_held` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.hU_w` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.hmv_p` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.hU_p` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sum_le` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sum_succ` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.loop4_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.work_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.inv_end` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.joinedAll_kid` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.dispatch_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sum_flag` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.hone_w` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.hmv_w` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.holds_of_held` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.hU_w` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.hmv_p` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.hU_p` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sum_le` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sum_succ` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.loop4_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.work_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.inv_end` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.joinedAll_kid` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.dispatch_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.enc_io` | THR-01, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.SemCounter.sem_size` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sem_c` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sem_m` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sem_w` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sem_s` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.sem_e` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sem_size` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sem_c` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sem_m` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sem_w` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sem_s` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.sem_e` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.allLe_one` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.SemCounter.inv_pre` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.semaphoreCounter_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.SemCounter.semaphoreCounter_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.inv_pre` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.semaphoreCounter_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.semaphoreCounter_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Semaphore.lean`
 
-File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -1222,28 +1222,28 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, S
 | `Sync.Sem.Step.of_lock` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.Step.of_op` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.Inv.lockStep` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.Fits.lf` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.Fits.split` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.Fits.pack` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.lf` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.split` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.pack` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.Inv.congr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.Step.cur` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.Step.refl` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.Fits.cur` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.cur` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.R_off` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.own_off` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.wd_off` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.wd_ok` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.wd_ap` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.Fits.op` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.op` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.op_of_cur` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Sem.alive` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.hcs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_load` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_loadAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_rmw` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_rmwAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_casAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_weakCasAs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.alive` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.hcs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_load` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_loadAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_rmw` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_rmwAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_casAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_weakCasAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.sph_upd` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.Inv.mono` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.Inv.opKeep` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
@@ -1268,60 +1268,60 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, S
 | `Sync.Sem.HBH.le` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.crit_one` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.reg_le` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.Fits.retag` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.ofBits_cst` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.bits1` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.bits11` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.bits_sig` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.bits_take` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.gt_sv` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.sig_sv` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.add_sig` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.sub_w` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.sub_s` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.bits_take'` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.retag` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.ofBits_cst` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.bits1` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.bits11` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.bits_sig` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.bits_take` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.gt_sv` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.sig_sv` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.add_sig` | PRF-02, THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.sub_w` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.sub_s` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.bits_take'` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.Step.wake` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.Fits.requeue` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.Fits.wakeE` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.requeue` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.wakeE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.holds_notQ` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.Fits.pstNone` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.Fits.toPst` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.pstNone` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.toPst` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.sv_of` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.read_noR` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.sig_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.signal_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.sig_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.signal_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.enc_u64` | SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.pts_same` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.pts_eq` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
 | `Sync.Sem.sub_union_left` | THR-01, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.Inv.congrG` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.wp_cnt` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_cnt` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.R_upd1` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.holds_runs` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.live_reg` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.holds_runs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.live_reg` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.Step.sleep` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.wp_ewait` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.dbg_true` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.lt_w` | PRF-01, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.bits_add1` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.held_sub` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.out_notQ` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_ldE` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.wp_regS` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_ewait` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.dbg_true` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.lt_w` | PRF-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.bits_add1` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.held_sub` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.out_notQ` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_ldE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_regS` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.Inv.see` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
-| `Sync.Sem.loop56_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.loop23_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.condWait_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.loop56_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.loop23_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.condWait_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.ptr0` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.sub1_run` | SEM-01, TRU-01 |
 | `Sync.Sem.add1_run` | SEM-01, TRU-01 |
 | `Sync.Sem.xs_upd` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.xs_self` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Sem.wp_cntLoad` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.loop5_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wp_cntLoad` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.loop5_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.xs_eq` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
-| `Sync.Sem.wait_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.post_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.wait_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.post_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.word_init` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.allLe_nil` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-06, TRU-01 |
 | `Sync.Sem.Inv.start` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01 |
@@ -3005,19 +3005,19 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-06, T
 
 ## `tutorials/concurrent-clients/Main.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `ConcurrentClients.finished_run_returns_four` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `ConcurrentClients.finished_run_returns_four` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/concurrent-clients/Solution.lean`
 
-File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `ConcurrentClients.never_three` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
+| `ConcurrentClients.never_three` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/external-contracts/Main.lean`
 
