@@ -763,6 +763,16 @@ jobs:
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
           bash tests/roadmap/error-width/check.sh
 
+      # OSF/OST/OSY/OSK/OSG/OSM-02: the trusted OS thread primitives (futex, clone/pthread,
+      # clocks, interrupts, macOS malloc): proof-only rules with kernel-checked schedules, and
+      # runtime regressions over every schedule.
+      - name: OS thread primitive models, rules and runtime regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake env lean tests/roadmap/os-threads/Check.lean
+
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate.
       - name: Vector memory layouts, compiler probe and checker controls

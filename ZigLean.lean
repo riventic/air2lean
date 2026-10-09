@@ -16,3 +16,4 @@ import ZigLean.Vec
 import ZigLean.External
 import ZigLean.VersionGate
 import ZigLean.External.Callback
+import ZigLean.Os

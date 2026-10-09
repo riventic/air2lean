@@ -53,6 +53,16 @@ premise was derived. This index covers the committed generated modules.
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
+| [OSF-01](premises.md#osf-01) | 0 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
+| [OSF-02](premises.md#osf-02) | 0 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
+| [OSG-01](premises.md#osg-01) | 0 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
+| [OSK-01](premises.md#osk-01) | 0 | Clock reads |
+| [OSK-02](premises.md#osk-02) | 0 | Sleep |
+| [OSM-02](premises.md#osm-02) | 0 | macOS `malloc`/`free`/`malloc_size` |
+| [OST-01](premises.md#ost-01) | 0 | Thread creation (`clone`, `pthread_create`) |
+| [OST-02](premises.md#ost-02) | 0 | Thread exit, join and detach |
+| [OST-03](premises.md#ost-03) | 0 | Thread ids, process id and CPU count |
+| [OSY-01](premises.md#osy-01) | 0 | Yield |
 
 ## `Proofs/Asm/Proofs.lean`
 
