@@ -23,8 +23,9 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
   `gate` while its record is gated (`Mem.isGated`): an `Io.Group.async` task that runs only once its group's
   `await` or `cancel` releases it (`Thread.groupTake`). Its clock is its spawner's at the
   spawn; the model gives it no edge from the awaiter, which only adds outcomes.
-- **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p` (the
-  waiters wake in the order they began to wait); else it goes on. A wake gives no happens-before
+- **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p`;
+  else it goes on. A `wake` wakes up to `n` of the waiters at `p`, which the oracle picks
+  (`chooseWake`, `Thread.wakeSet`): no queue order is promised. A wake gives no happens-before
   edge (the std code reads the value again with an acquire). The model has no spurious wakeup.
   The queue is in `Mem` (`Thread.futexWait`, `Thread.futexWake`).
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
@@ -136,6 +137,20 @@ def State.spawnOutcome (env : Env) (s : State Tgt α) (o : Nat → Nat) : Nat ×
     let (c, s') := s.choose o (assignmentCount (spawnErrors.size + 1) s.mem)
     (assignmentOutcome s.mem.spawnAdmits c, s')
 
+/-- Choices of the oracle with the option counts `counts`, in order. -/
+def State.chooseMany (s : State Tgt α) (o : Nat → Nat) : List Nat → List Nat × State Tgt α
+  | [] => ([], s)
+  | c :: cs =>
+    let (x, s) := s.choose o c
+    let (xs, s) := s.chooseMany o cs
+    (x :: xs, s)
+
+/-- The waiters that a wake of up to `n` waiters at `p` wakes: one choice for each, among the
+waiters at `p` not picked yet (`Thread.wakeSet`). -/
+def State.chooseWake (s : State Tgt α) (o : Nat → Nat) (p : Ptr) (n : Nat) : List Nat × State Tgt α :=
+  let k := Thread.waitersAt s.mem.waiters p
+  s.chooseMany o ((List.range (Nat.min n k)).map (k - ·))
+
 /-- The execution of an `Io.Group.async` task that the oracle picks among the environment's
 `asyncOptions`. -/
 def State.asyncChoice (env : Env) (s : State Tgt α) (o : Nat → Nat) : Nat × State Tgt α :=
@@ -185,8 +200,9 @@ def turnTrace {β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel 
       let (sleep, s) ← s.onMem (Thread.futexWait ptr e)
       if sleep then .ok (.paused ⟨d, .wait ptr e, k⟩, none, s) else settle t s (k () s.mem), s.trace)
   | ⟨_, .wake ptr n, k⟩ =>
+    let (cs, s) := s.chooseWake o ptr n
     (do
-      let ((), s) ← s.onMem (Thread.futexWake ptr n)
+      let ((), s) ← s.onMem (Thread.futexWake ptr n cs)
       settle t s (k () s.mem), s.trace)
 
 /-- The semantic result of one turn; `turnTrace` also retains its oracle choices. -/

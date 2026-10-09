@@ -1152,25 +1152,22 @@ theorem Inv.wait {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {b : Bool} (h
 
 /-- `unlock`'s futex wake of `n ≥ 1` waiters by thread `t` (at `wake`): `t` goes to `out`; a woken
 thread is the new witness of the queue. -/
-theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} (hi : L.Inv G m)
-    (hph : L.ph (G t) = .wake) (hn : 1 ≤ n)
-    (h : ((Thread.futexWake L.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
+theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {cs : List Nat}
+    (hi : L.Inv G m) (hph : L.ph (G t) = .wake) (hn : 1 ≤ n)
+    (h : ((Thread.futexWake L.ptr n cs).run { m with current := t }).run = some (.ok ((), m'))) :
     L.Step t m m' ∧ m'.current = t ∧ L.Inv (upd G t (L.set (G t) .out Heap.empty)) m' := by
   have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
   have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
   have hm' := Proto.modify_ok h
-  generalize hwk : ((m.waiters.filter (·.2 == L.ptr)).extract 0 n).map (·.1) = woke at hm'
+  generalize hwk : Thread.wakeSet m.waiters L.ptr n cs = woke at hm'
   -- a woken thread waited at the word, so it is not at another futex
   have hwoke : ∀ u ∈ woke, L.ph (G u) = .wait := by
     intro u hu
     rw [← hwk] at hu
-    obtain ⟨w, hw, rfl⟩ := Array.mem_map.mp hu
-    have hw' : w ∈ m.waiters.filter (·.2 == L.ptr) := by
-      obtain ⟨k, -, rfl⟩ := Array.mem_extract_iff_getElem.mp hw; exact Array.getElem_mem _
-    replace hw' := Array.mem_filter.mp hw'
-    rcases hi.fq w hw'.1 with ⟨-, h⟩ | ⟨h1, -⟩
+    obtain ⟨w, hw, hp, rfl⟩ := Thread.mem_wakeSet hu
+    rcases hi.fq w hw with ⟨-, h⟩ | ⟨h1, -⟩
     · exact h
-    · exact absurd (by simpa using hw'.2) h1
+    · exact absurd hp h1
   subst hm'
   refine ⟨Step.same rfl rfl rfl rfl rfl rfl fun w hw => ?_, rfl,
     hi.queue hnh hng (by decide) (by decide)
@@ -1183,19 +1180,16 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} (hi
     rcases hi.fq w hwm with ⟨h1, -⟩ | ⟨-, h2⟩
     · exact hw h1
     · rw [hwoke w.1 (Array.contains_iff_mem.mp hc)] at h2; cases h2
-  -- the first waiter at the word was woken
-  have h0 : 0 < (m.waiters.filter (·.2 == L.ptr)).size := by
-    obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp hpos
-    have hm := Array.mem_filter.mp (Array.getElem_mem hi')
-    exact Array.size_pos_of_mem (Array.mem_filter.mpr ⟨hm.1, he⟩)
-  let w0 := (m.waiters.filter (·.2 == L.ptr))[0]
-  have hw0 : w0.1 ∈ woke := by
+  -- a waiter at the word was woken (the oracle picks which)
+  obtain ⟨u0, hw0⟩ : ∃ u0, u0 ∈ woke := by
     rw [← hwk]
-    exact Array.mem_map.mpr ⟨w0, Array.mem_extract_iff_getElem.mpr ⟨0, by simp; omega, rfl⟩, rfl⟩
-  have hw0p : L.ph (G w0.1) = .wait := hwoke _ hw0
-  have hw0t : w0.1 ≠ t := fun e => by rw [e, hph] at hw0p; cases hw0p
-  obtain ⟨hw0s, -⟩ := hi.live w0.1 (by rw [hw0p]; decide)
-  refine ⟨w0.1, hw0s, ?_, by rw [ph_set_upd, if_neg hw0t, hw0p]; rfl, fun hh => ?_⟩
+    refine Thread.wakeSet_nonempty (by omega) ?_
+    obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp hpos
+    exact ⟨_, (Array.mem_filter.mp (Array.getElem_mem hi')).1, by simpa using he⟩
+  have hw0p : L.ph (G u0) = .wait := hwoke _ hw0
+  have hw0t : u0 ≠ t := fun e => by rw [e, hph] at hw0p; cases hw0p
+  obtain ⟨hw0s, -⟩ := hi.live u0 (by rw [hw0p]; decide)
+  refine ⟨u0, hw0s, ?_, by rw [ph_set_upd, if_neg hw0t, hw0p]; rfl, fun hh => ?_⟩
   · apply Array.any_eq_false.mpr
     intro i hi' he
     have hm := Array.getElem_mem hi'
@@ -1254,21 +1248,18 @@ theorem Inv.waitOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} 
 
 /-- A futex wake by thread `t` at another futex `p`: the threads at the word stay. -/
 theorem Inv.wakeOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} {n : Nat}
-    (hi : L.Inv G m) (hp : p ≠ L.ptr)
-    (h : ((Thread.futexWake p n).run { m with current := t }).run = some (.ok ((), m'))) :
+    {cs : List Nat} (hi : L.Inv G m) (hp : p ≠ L.ptr)
+    (h : ((Thread.futexWake p n cs).run { m with current := t }).run = some (.ok ((), m'))) :
     L.Inv G m' := by
   have hm' := Proto.modify_ok h
-  generalize hwk : ((m.waiters.filter (·.2 == p)).extract 0 n).map (·.1) = woke at hm'
+  generalize hwk : Thread.wakeSet m.waiters p n cs = woke at hm'
   -- a woken thread waited at `p`, so it is `away`
   have hwoke : ∀ u ∈ woke, L.ph (G u) = .away := by
     intro u hu
     rw [← hwk] at hu
-    obtain ⟨w, hw, rfl⟩ := Array.mem_map.mp hu
-    have hw' : w ∈ m.waiters.filter (·.2 == p) := by
-      obtain ⟨k, -, rfl⟩ := Array.mem_extract_iff_getElem.mp hw; exact Array.getElem_mem _
-    replace hw' := Array.mem_filter.mp hw'
-    rcases hi.fq w hw'.1 with ⟨h1, -⟩ | ⟨-, h⟩
-    · exact absurd (by simpa [h1] using hw'.2) (Ne.symm hp)
+    obtain ⟨w, hw, hwp, rfl⟩ := Thread.mem_wakeSet hu
+    rcases hi.fq w hw with ⟨h1, -⟩ | ⟨-, h⟩
+    · exact absurd (hwp.symm.trans h1) hp
     · exact h
   subst hm'
   have hsub : ∀ w ∈ m.waiters.filter (fun w => !woke.contains w.1), w ∈ m.waiters :=
@@ -2104,7 +2095,7 @@ theorem wp_wakeOn (hP : L.FitsOn P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       P.inv (upd G₁ t (L.set g .out Heap.empty)) m' → Q ((), s) G₁ m' k) :
     P.WP t ((futexWakeC io L.ptr (1 : BitVec 32) : CM Tgt σ Unit).run s) Q G m n := by
-  refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ m' hw => ?_⟩
+  refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ cs m' hw => ?_⟩
   obtain ⟨hst, hcu, hl⟩ := (hP.lock hi₁).wake (by rw [hg₁]; exact hg) (by decide) hw
   refine h k hk G₁ m' hcu ?_
   have := hP.step (p := .out) (h := Heap.empty) hi₁ (by rw [hg₁]; exact hok)

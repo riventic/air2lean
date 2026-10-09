@@ -1453,9 +1453,9 @@ theorem task_rank {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {t : Thre
   · omega
 
 /-- The futex wake of the setter (`wk`) at the event: no thread waits at the event after it. -/
-theorem wake_q {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (hn : 1 ≤ n)
+theorem wake_q {cs : List Nat} {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (hn : 1 ≤ n)
     (hq : QOk G m)
-    (hw : ((Thread.futexWake EV.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
+    (hw : ((Thread.futexWake EV.ptr n cs).run { m with current := t }).run = some (.ok ((), m'))) :
     QOk G' m' ∧ m'.blocks = m.blocks ∧ m'.atomics = m.atomics ∧ m'.footprint = m.footprint ∧
       m'.threads = m.threads ∧ m'.clocks = m.clocks := by
   have hm' := Proto.modify_ok hw
@@ -1466,22 +1466,12 @@ theorem wake_q {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (h
   rcases hq w hwm with h | ⟨h1, h2, -⟩
   · exact h
   · exfalso
-    -- the first waiter at the event is `main`, so `main` is woken
-    have hne : (m.waiters.filter (·.2 == EV.ptr)).size ≠ 0 := by
-      intro h0
-      have : w ∈ m.waiters.filter (·.2 == EV.ptr) := Array.mem_filter.mpr ⟨hwm, by simp [h2]⟩
-      rw [Array.size_eq_zero_iff.mp h0] at this; simp at this
-    have hf0 := Array.getElem_mem (xs := m.waiters.filter (·.2 == EV.ptr)) (i := 0) (by omega)
-    obtain ⟨hf0m, hf0p⟩ := Array.mem_filter.mp hf0
-    have hf01 : ((m.waiters.filter (·.2 == EV.ptr))[0]'(by omega)).1 = 0 := by
-      rcases hq _ hf0m with h | ⟨a, b, -⟩
-      · exfalso; rw [beq_iff_eq.mp hf0p] at h; exact absurd h (by decide)
+    -- every waiter at the event is `main`, so `main` is woken
+    have hin : (0 : ThreadId) ∈ Thread.wakeSet m.waiters EV.ptr n cs := by
+      refine Thread.mem_wakeSet_of_all (by omega) ⟨w, hwm, h2⟩ fun v hv hvp => ?_
+      rcases hq v hv with h | ⟨a, -, -⟩
+      · exfalso; rw [hvp] at h; exact absurd h (by decide)
       · exact a
-    have hin : (0 : ThreadId) ∈ ((m.waiters.filter (·.2 == EV.ptr)).extract 0 n).map (·.1) := by
-      rw [Array.mem_map]
-      refine ⟨_, ?_, hf01⟩
-      rw [Array.mem_extract_iff_getElem]
-      exact ⟨0, by simp; omega, by simp⟩
     rw [h1] at hnot
     simp only [Bool.not_eq_eq_eq_not, Bool.not_true] at hnot
     rw [Array.contains_iff_mem.mpr hin] at hnot; cases hnot
@@ -1531,7 +1521,7 @@ theorem set_spec {t : ThreadId} (ht : t = 1 ∨ t = 2) (a b : VClock) (G : Threa
     simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind, bind_assoc,
       pure_bind]
     rw [evptr4, threadFutexWakeC_eq]
-    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi'', fun G₃ m₃ hg₃ hi₃ m₄ hw => ?_⟩)
+    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi'', fun G₃ m₃ hg₃ hi₃ cs m₄ hw => ?_⟩)
     simp only [if_pos rfl] at hg₃
     have hl := hi₃.1.wakeOff (by decide) hw
     obtain ⟨hq, hb, ha, hf, hth, hc⟩ := wake_q (G' := upd G₃ t (gS .dn a (m''.clocks[t]!) true))

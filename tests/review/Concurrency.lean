@@ -163,9 +163,26 @@ private def joinTests : IO Unit := do
     check "child marked joined" (m.threads[1]!).joined true
   | _ => throw (IO.userError "valid join had no memory result")
 
+/-- Audit #6: a futex wake wakes the waiters that the oracle picks, not the earliest ones. -/
+private def wakeTests : IO Unit := do
+  let p : Ptr := ⟨some 0, 0⟩
+  let m : Mem := { waiters := #[(1, p), (2, p), (3, ⟨some 1, 0⟩)] }
+  let woken := fun (n : Nat) (cs : List Nat) =>
+    (((Thread.futexWake p n cs).run m).run).map fun r => r.map fun (_, m') => (m'.woken, m'.waiters)
+  check "wake picks the first waiter" (woken 1 [0]) (some (.ok (#[1], #[(2, p), (3, ⟨some 1, 0⟩)])))
+  check "wake picks a later waiter" (woken 1 [1]) (some (.ok (#[2], #[(1, p), (3, ⟨some 1, 0⟩)])))
+  check "wake of two in either order" (woken 2 [1, 0]) (some (.ok (#[2, 1], #[(3, ⟨some 1, 0⟩)])))
+  check "a wake never wakes a waiter at another futex" (woken 5 [2, 2, 2])
+    (some (.ok (#[1, 2], #[(3, ⟨some 1, 0⟩)])))
+  -- The scheduler asks the oracle for one choice per woken waiter: 2 options, then 1.
+  let s : Sched.State Unit Unit := { main := .done, kids := #[], mem := m, step := 0, trace := #[] }
+  check "wake choices" ((s.chooseWake (fun _ => 1) p 2).1, (s.chooseWake (fun _ => 1) p 2).2.trace)
+    ([1, 0], #[2, 1])
+
 end ConcurrencyRegression
 
 def main : IO Unit := do
+  ConcurrencyRegression.wakeTests
   ConcurrencyRegression.traceTests
   ConcurrencyRegression.catchTests
   ConcurrencyRegression.joinTests

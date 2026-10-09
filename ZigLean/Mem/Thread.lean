@@ -486,11 +486,75 @@ def futexWait (p : Ptr) (e : BitVec 32) : MemM Bool := do
       pure true
     else pure false
 
-/-- A futex wake at `p`: the first `n` waiters at `p` are woken. No happens-before edge (the std
+/-- `n` of the threads `ws` (the waiters at one futex, in queue order) that a wake wakes: each
+choice of `cs` picks one of those not picked yet (`c % count`; a missing choice picks the first).
+No order is promised by Linux or darwin, so the choices are the oracle's (`Sched`). -/
+def wakePick : Nat → List ThreadId → List Nat → List ThreadId
+  | 0, _, _ => []
+  | _, [], _ => []
+  | n + 1, w :: ws, cs =>
+    let i := cs.headD 0 % (ws.length + 1)
+    (w :: ws)[i]'(Nat.mod_lt _ (Nat.succ_pos _)) :: wakePick n ((w :: ws).eraseIdx i) cs.tail
+
+/-- The waiters that a wake of up to `n` waiters at `p` wakes, picked by the choices `cs`. -/
+def wakeSet (ws : Array (ThreadId × Ptr)) (p : Ptr) (n : Nat) (cs : List Nat) : Array ThreadId :=
+  (wakePick n ((ws.filter (·.2 == p)).toList.map (·.1)) cs).toArray
+
+/-- A futex wake at `p`: up to `n` of the waiters at `p` are woken, the ones that the choices
+`cs` pick (`wakeSet`; the scheduler takes them from the oracle). No happens-before edge (the std
 code reads the value again with an acquire). -/
-def futexWake (p : Ptr) (n : Nat) : MemM Unit := modify fun m =>
-  let woke := (m.waiters.filter (·.2 == p)).extract 0 n |>.map (·.1)
+def futexWake (p : Ptr) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
+  let woke := wakeSet m.waiters p n cs
   { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
+
+/-- The number of waiters at `p`. -/
+def waitersAt (ws : Array (ThreadId × Ptr)) (p : Ptr) : Nat := (ws.filter (·.2 == p)).size
+
+theorem wakePick_mem : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat} {u : ThreadId},
+    u ∈ wakePick n l cs → u ∈ l
+  | 0, _, _, _, h => by simp [wakePick] at h
+  | _ + 1, [], _, _, h => by simp [wakePick] at h
+  | n + 1, w :: ws, cs, u, h => by
+    simp only [wakePick, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact List.getElem_mem _
+    · exact List.mem_of_mem_eraseIdx (wakePick_mem h)
+
+theorem wakePick_ne_nil {n : Nat} {l : List ThreadId} {cs : List Nat} (hn : 0 < n)
+    (hl : l ≠ []) : wakePick n l cs ≠ [] := by
+  obtain ⟨n, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (Nat.pos_iff_ne_zero.mp hn)
+  obtain ⟨w, ws, rfl⟩ := List.exists_cons_of_ne_nil hl
+  simp [wakePick]
+
+/-- A woken thread waited at `p`. -/
+theorem mem_wakeSet {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+    {u : ThreadId} (h : u ∈ wakeSet ws p n cs) : ∃ w ∈ ws, w.2 = p ∧ w.1 = u := by
+  unfold wakeSet at h
+  have := wakePick_mem (List.mem_toArray.mp h)
+  simp only [List.mem_map, Array.mem_toList_iff, Array.mem_filter, beq_iff_eq] at this
+  obtain ⟨w, ⟨hw, hp⟩, rfl⟩ := this
+  exact ⟨w, hw, hp, rfl⟩
+
+/-- A wake of at least one waiter at `p`, where one waits, wakes one. -/
+theorem wakeSet_nonempty {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+    (hn : 0 < n) (hw : ∃ w ∈ ws, w.2 = p) : ∃ u, u ∈ wakeSet ws p n cs := by
+  have hl : (ws.filter (·.2 == p)).toList.map (·.1) ≠ [] := by
+    obtain ⟨w, hw, hp⟩ := hw
+    intro h
+    have : w.1 ∈ (ws.filter (·.2 == p)).toList.map (·.1) :=
+      List.mem_map.mpr ⟨w, by simp [hw, hp], rfl⟩
+    rw [h] at this; cases this
+  obtain ⟨u, us, he⟩ := List.exists_cons_of_ne_nil (wakePick_ne_nil (cs := cs) hn hl)
+  exact ⟨u, by unfold wakeSet; rw [he]; simp⟩
+
+/-- A wake of at least one waiter at `p`, where every waiter at `p` is thread `u` and one waits,
+wakes `u`. -/
+theorem mem_wakeSet_of_all {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+    {u : ThreadId} (hn : 0 < n) (hw : ∃ w ∈ ws, w.2 = p) (hall : ∀ w ∈ ws, w.2 = p → w.1 = u) :
+    u ∈ wakeSet ws p n cs := by
+  obtain ⟨v, hv⟩ := wakeSet_nonempty (cs := cs) hn hw
+  obtain ⟨w, hw', hp, rfl⟩ := mem_wakeSet hv
+  rw [← hall w hw' hp]; exact hv
 
 end Thread
 end Zig

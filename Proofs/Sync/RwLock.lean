@@ -1894,7 +1894,7 @@ theorem wp_mwake (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
     (hq : ∀ k, d = k + 1 → ∀ G₁ m', m'.current = t →
       (proto E).inv (upd G₁ t (gA x.unl h sx)) m' → Q ((), s₀) G₁ m' k) :
     (proto E).WP t ((futexWakeC io WM.ptr (1 : BitVec 32) : CM Tgt σ Unit).run s₀) Q G m d := by
-  refine WP.futexWakeC fun k hk => ⟨_, hi, fun G₁ m₁ hg₁ hi₁ m' hw => ?_⟩
+  refine WP.futexWakeC fun k hk => ⟨_, hi, fun G₁ m₁ hg₁ hi₁ cs m' hw => ?_⟩
   have hu₁ := hi₁.2.1
   have hgt : (G₁ t).2.2 = x := by rw [hg₁]; rfl
   have hux : UnlAt G₁ t := by
@@ -1903,33 +1903,26 @@ theorem wp_mwake (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
     · exact .inr ⟨rfl, k', p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
   have ht01 : t = 0 ∨ t = 1 := by rcases hux with ⟨h, -⟩ | ⟨h, -⟩ <;> simp [h]
   have hm' := Proto.modify_ok hw
-  generalize hwk : ((m₁.waiters.filter (·.2 == WM.ptr)).extract 0 (1 : BitVec 32).toNat).map (·.1) =
-    woke at hm'
+  generalize hwk : Thread.wakeSet m₁.waiters WM.ptr (1 : BitVec 32).toNat cs = woke at hm'
   -- every thread at the mutex was woken: it is the other thread
   have hno : ∀ w ∈ m'.waiters, w.2 ≠ WM.ptr := by
     intro w hw' hp
     rw [hm'] at hw'
     have hw'' := Array.mem_filter.mp hw'
-    have hpos : 0 < (m₁.waiters.filter (·.2 == WM.ptr)).size :=
-      Array.size_pos_of_mem (Array.mem_filter.mpr ⟨hw''.1, by simp [hp]⟩)
-    have hw0 := Array.getElem_mem (xs := m₁.waiters.filter (·.2 == WM.ptr)) hpos
-    have hw0m := Array.mem_filter.mp hw0
-    have hin : (m₁.waiters.filter (·.2 == WM.ptr))[0].1 ∈ woke := by
-      rw [← hwk]
-      exact Array.mem_map.mpr ⟨_, Array.mem_extract_iff_getElem.mpr ⟨0, by simp; omega, rfl⟩, rfl⟩
-    -- both waiters at the mutex are the thread other than `t`
+    -- every waiter at the mutex is the thread other than `t`, so the wake wakes it
     have hother : ∀ v ∈ m₁.waiters, v.2 = WM.ptr → v.1 ≠ t := fun v hv hvp e => by
       have := mq_wait hu₁ hv hvp; rw [e, hgt, hxw] at this; cases this
-    have h1 := hother w hw''.1 hp
-    have h2 := hother _ hw0m.1 (by simpa using hw0m.2)
-    have heq : w.1 = (m₁.waiters.filter (·.2 == WM.ptr))[0].1 := by
+    have hin : w.1 ∈ woke := by
+      rw [← hwk]
+      refine Thread.mem_wakeSet_of_all (by decide) ⟨w, hw''.1, hp⟩ fun v hv hvp => ?_
+      have h1 := hother w hw''.1 hp
+      have h2 := hother v hv hvp
       have a := mp_lt hu₁ (u := w.1) (by rw [mq_wait hu₁ hw''.1 hp]; simp)
-      have b := mp_lt hu₁ (u := (m₁.waiters.filter (·.2 == WM.ptr))[0].1)
-        (by rw [mq_wait hu₁ hw0m.1 (by simpa using hw0m.2)]; simp)
+      have b := mp_lt hu₁ (u := v.1) (by rw [mq_wait hu₁ hv hvp]; simp)
       unfold ThreadId at *; omega
     have := hw''.2
     simp only [Bool.not_eq_true'] at this
-    rw [heq, Array.contains_iff_mem.mpr hin] at this
+    rw [Array.contains_iff_mem.mpr hin] at this
     cases this
   have hl := hi₁.1.wakeOff wmL hw
   have hU := U_q (c := t) hu₁ hm' fun w hw' hp => absurd hp (hno w (by rw [hm']; exact hw'))
@@ -1943,11 +1936,8 @@ theorem wp_mwake (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
           simp only [Bool.not_eq_true']
           apply Bool.eq_false_iff.mpr; intro hc
           rw [← hwk] at hc
-          obtain ⟨v, hv, hve⟩ := Array.mem_map.mp (Array.contains_iff_mem.mp hc)
-          have hv' : v ∈ m₁.waiters.filter (·.2 == WM.ptr) := by
-            obtain ⟨j, -, rfl⟩ := Array.mem_extract_iff_getElem.mp hv; exact Array.getElem_mem _
-          have hv'' := Array.mem_filter.mp hv'
-          exact hw2 (wm_only hE hi₁ hv''.1 (by simpa using hv''.2) hwm hve.symm),
+          obtain ⟨v, hv, hvp, hve⟩ := Thread.mem_wakeSet (Array.contains_iff_mem.mp hc)
+          exact hw2 (wm_only hE hi₁ hv hvp hwm hve.symm),
       fun _ => by rw [hm']; exact VClock.le_refl _⟩
       (econd0 hu₁)
   have hxu : x.isUnl := by rw [← hgt]; exact hux.isUnl

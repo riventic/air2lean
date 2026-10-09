@@ -1204,23 +1204,19 @@ theorem Inv.epoch {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {old : Bi
 
 /-- `signal`'s futex wake at the epoch: the waiter (if it sleeps) wakes, and no thread is left at
 the epoch's futex. -/
-theorem wakeE_none {G : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m) :
-    ∀ w ∈ m.waiters.filter (fun w => !(((m.waiters.filter (·.2 == S.WE.ptr)).extract 0 1).map
-      (·.1)).contains w.1), w.2 = S.WE.ptr → False := by
+theorem wakeE_none {cs : List Nat} {G : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m) :
+    ∀ w ∈ m.waiters.filter (fun w =>
+      !(Thread.wakeSet m.waiters S.WE.ptr (1 : BitVec 32).toNat cs).contains w.1),
+      w.2 = S.WE.ptr → False := by
   intro w hw he
   obtain ⟨hw, hnc⟩ := Array.mem_filter.mp hw
-  have hwf : w ∈ m.waiters.filter (·.2 == S.WE.ptr) := Array.mem_filter.mpr ⟨hw, by simp [he]⟩
-  have hpos : 0 < (m.waiters.filter (·.2 == S.WE.ptr)).size := by
-    obtain ⟨k, hk, -⟩ := Array.mem_iff_getElem.mp hwf; omega
-  have h0 := Array.getElem_mem hpos
-  obtain ⟨h0w, h0e⟩ := Array.mem_filter.mp h0
   obtain ⟨i, jr, ee, h1, -⟩ := hi.q w hw he
-  obtain ⟨i', jr', ee', h1', -⟩ := hi.q _ h0w (by simpa using h0e)
-  have e := hi.one _ _ _ _ _ _ _ _ _ _ h1' h1
-  have : (((m.waiters.filter (·.2 == S.WE.ptr)).extract 0 1).map (·.1)).contains w.1 = true := by
-    rw [Array.contains_iff_mem, Array.mem_map]
-    exact ⟨_, Array.mem_extract_iff_getElem.mpr ⟨0, by simp; omega, rfl⟩, e⟩
-  rw [this] at hnc; cases hnc
+  -- every waiter at the epoch is the same thread, so the wake wakes it
+  have hin : w.1 ∈ Thread.wakeSet m.waiters S.WE.ptr (1 : BitVec 32).toNat cs :=
+    Thread.mem_wakeSet_of_all (by decide) ⟨w, hw, he⟩ fun v hv hvp => by
+      obtain ⟨i', jr', ee', h1', -⟩ := hi.q v hv hvp
+      exact hi.one _ _ _ _ _ _ _ _ _ _ h1' h1
+  rw [Array.contains_iff_mem.mpr hin] at hnc; cases hnc
 
 /-- A step of the holder `t` on its own part (`WP.liftMem_owned`): the words, the clocks of the
 others and the futex queue stay. -/
@@ -1386,9 +1382,9 @@ theorem Fits.requeue (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : T
     rwa [upd_upd] at this
 
 /-- `signal`'s futex wake at the epoch by `t` at `wk`: it goes on outside the condition. -/
-theorem Fits.wakeE (hP : S.Fits P U) {G : ThreadId → SGh X} {m m' : Mem} {t : ThreadId} {a : LG}
+theorem Fits.wakeE {cs : List Nat} (hP : S.Fits P U) {G : ThreadId → SGh X} {m m' : Mem} {t : ThreadId} {a : LG}
     {x : X} (hinS : S.inS x) (hi : P.inv (upd G t (a, .wk, x)) m)
-    (hw : ((Thread.futexWake S.WE.ptr (1 : BitVec 32).toNat).run { m with current := t }).run =
+    (hw : ((Thread.futexWake S.WE.ptr (1 : BitVec 32).toNat cs).run { m with current := t }).run =
       some (.ok ((), m'))) :
     m'.current = t ∧ P.inv (upd G t (a, .none, x)) m' := by
   have hl' := (hP.split hi).1.wakeOff ptr_ne hw
@@ -1518,7 +1514,7 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
       have hs₄ := hs₃.epoch (by rw [hg₂]) hh₂ (crit_one hl₂ hs₃ hh₂) hop₃ hw₃ hv₃ hh₃
       have hi₄ := hP.retag hL₃ hu₃ hs₄ rfl rfl (fun h => by simp [SPh.waits] at h) (by rw [hg₂]; exact hinS)
       rw [hg₂] at hi₄
-      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨(a, .wk, x), hi₄, fun G₃ m₄ hg₃ hi₅ m₅ hw => ?_⟩)
+      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨(a, .wk, x), hi₄, fun G₃ m₄ hg₃ hi₅ cs m₅ hw => ?_⟩)
       rw [← upd_same G₃ t, hg₃] at hi₅
       obtain ⟨hc₅, hi₆⟩ := hP.wakeE hinS hi₅ hw
       simp only [StateT.run_pure]

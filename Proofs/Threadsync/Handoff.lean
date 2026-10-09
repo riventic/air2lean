@@ -2528,37 +2528,30 @@ theorem inv_wk {G : ThreadId → Gh} {m₁ m' : Mem} {old : BitVec 32}
   · intro h; rw [upd_self] at h; cases h
 
 /-- After a futex wake of `n ≥ 1` at a shared word, no thread waits at it. -/
-theorem wake_w {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {W : Word 32 4} {n : Nat} (hq : QOk G m)
+theorem wake_w {cs : List Nat} {G : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {W : Word 32 4} {n : Nat} (hq : QOk G m)
     (hW : W.ptr ≠ L.ptr) (hn : 1 ≤ n)
-    (h : ((Thread.futexWake W.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
+    (h : ((Thread.futexWake W.ptr n cs).run { m with current := t }).run = some (.ok ((), m'))) :
     m'.current = t ∧ m'.threads = m.threads ∧ (∀ w ∈ m'.waiters, w ∈ m.waiters ∧ w.2 ≠ W.ptr) ∧
       m' = { m with current := t, waiters := m'.waiters, woken := m'.woken } := by
   have hm' := Proto.modify_ok h
-  generalize hwk : ((m.waiters.filter (·.2 == W.ptr)).extract 0 n).map (·.1) = woke at hm'
   subst hm'
   refine ⟨rfl, rfl, fun w hw => ?_, rfl⟩
   have hw' := Array.mem_filter.mp hw
   refine ⟨hw'.1, fun he => ?_⟩
   have hw0 : w.1 = 0 := qok_main hq hw'.1 (by rw [he]; exact hW)
-  have hmem : w ∈ m.waiters.filter (·.2 == W.ptr) := Array.mem_filter.mpr ⟨hw'.1, by simp [he]⟩
-  have hpos : 0 < (m.waiters.filter (·.2 == W.ptr)).size := Array.size_pos_of_mem hmem
-  obtain ⟨w0, hw0f, hin⟩ : ∃ w0, w0 ∈ m.waiters.filter (·.2 == W.ptr) ∧ w0.1 ∈ woke :=
-    ⟨_, Array.getElem_mem hpos, by
-      rw [← hwk]
-      exact Array.mem_map.mpr ⟨_, Array.mem_extract_iff_getElem.mpr ⟨0, by simp; omega, rfl⟩, rfl⟩⟩
-  have hw0m := Array.mem_filter.mp hw0f
-  have hw00 : w0.1 = 0 := qok_main hq hw0m.1 (by
-    have : w0.2 = W.ptr := by simpa using hw0m.2
-    rw [this]; exact hW)
+  -- every waiter at the word is `main`, so the wake wakes `main`
+  have hin : (0 : ThreadId) ∈ Thread.wakeSet m.waiters W.ptr n cs :=
+    Thread.mem_wakeSet_of_all (by omega) ⟨w, hw'.1, he⟩ fun v hv hvp =>
+      qok_main hq hv (by rw [hvp]; exact hW)
   have := hw'.2
   simp only [Bool.not_eq_true'] at this
-  rw [hw0, ← hw00, Array.contains_iff_mem.mpr hin] at this
+  rw [hw0, Array.contains_iff_mem.mpr hin] at this
   cases this
 
 /-- The producer's futex wake at the epoch: it goes to `set`. -/
-theorem inv_set {G : ThreadId → Gh} {m₁ m' : Mem}
+theorem inv_set {cs : List Nat} {G : ThreadId → Gh} {m₁ m' : Mem}
     (hi : proto.inv (upd G 1 (gP { ph := .wk, cw := true })) m₁)
-    (h : ((Thread.futexWake WE.ptr 1).run { m₁ with current := 1 }).run = some (.ok ((), m'))) :
+    (h : ((Thread.futexWake WE.ptr 1 cs).run { m₁ with current := 1 }).run = some (.ok ((), m'))) :
     proto.inv (upd G 1 (gP { ph := .set, cw := true })) m' := by
   have hu := hi.2
   obtain ⟨hc', ht', hws, hm'⟩ := wake_w hu.q (by decide) (Nat.le_refl _) h
@@ -2770,7 +2763,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
       refine WP.pure' ?_
       dsimp only
       rw [threadFutexWakeC_eq, StateT.run_bind]
-      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi₄, fun G₃ m₄ hg₃ hi₅ m₅ hw => ?_⟩)
+      refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi₄, fun G₃ m₄ hg₃ hi₅ cs m₅ hw => ?_⟩)
       have hi₆ := inv_set (G := G₃) (by rw [upd_g hg₃]; exact hi₅) hw
       have hc₅ := (wake_w hi₅.2.q (by decide) (Nat.le_refl _) hw).1
       repeat (first
@@ -2970,9 +2963,9 @@ theorem same_q {m m' : Mem} {c : ThreadId} {ws : Array (ThreadId × Ptr)} {wk : 
   subst h; exact ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The producer's futex wake at the event: it goes to its end. -/
-theorem inv_fin {G : ThreadId → Gh} {m₁ m' : Mem} {b : Bool} {n : Nat} (hn : 1 ≤ n)
+theorem inv_fin {cs : List Nat} {G : ThreadId → Gh} {m₁ m' : Mem} {b : Bool} {n : Nat} (hn : 1 ≤ n)
     (hi : proto.inv (upd G 1 (gP { ph := .setw, cw := b, vw := true })) m₁)
-    (h : ((Thread.futexWake WV.ptr n).run { m₁ with current := 1 }).run = some (.ok ((), m'))) :
+    (h : ((Thread.futexWake WV.ptr n cs).run { m₁ with current := 1 }).run = some (.ok ((), m'))) :
     proto.inv (upd G 1 (gP { ph := .fin, cw := b, vw := true })) m' := by
   have hu := hi.2
   obtain ⟨hc', ht', hws, hm'⟩ := wake_w hu.q (by decide) hn h
@@ -3043,7 +3036,7 @@ theorem set_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (b : Bool)
     dsimp only
     simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind]
     rw [show ((bPtr.add 12).add 0).add 0 = WV.ptr from rfl, threadFutexWakeC_eq]
-    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi₄, fun G₃ m₃ hg₃ hi₅ m₄ hw => ?_⟩)
+    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi₄, fun G₃ m₃ hg₃ hi₅ cs m₄ hw => ?_⟩)
     have hi₆ := inv_fin (G := G₃) (by decide) (by rw [upd_g hg₃]; exact hi₅) hw
     have hc₄ := (wake_w hi₅.2.q (by decide) (by decide) hw).1
     repeat (first

@@ -113,15 +113,15 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
         ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
       ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
         if b then P.inv G m' else K () G m')
-  | .wake p n, K => ∀ m',
-      ((Thread.futexWake p n).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
+  | .wake p n, K => ∀ cs m',
+      ((Thread.futexWake p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
 theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Mem}
     {K K' : op.Resp → (ThreadId → γ) → Mem → Prop} (h : ∀ r G m, K r G m → K' r G m)
     (hs : P.Step t op G m K) : P.Step t op G m K' := by
   cases op with
   | yield => exact h _ _ _ hs
-  | wake => exact fun m' hr => h _ _ _ (hs m' hr)
+  | wake => exact fun cs m' hr => h _ _ _ (hs cs m' hr)
   | wait =>
     refine ⟨hs.1, fun hq => ⟨(hs.2 hq).1, fun b m' hr => ?_⟩⟩
     have := (hs.2 hq).2 b m' hr
@@ -425,9 +425,33 @@ theorem set_ok {x : Mem} {m m' : Mem} {a : PUnit}
 end MemM
 
 /-- A futex wake does not throw, and keeps the threads. -/
-theorem futexWake_ok (p : Ptr) (n : Nat) (m : Mem) :
-    ∃ m', ((Thread.futexWake p n).run m).run = some (.ok ((), m')) ∧ m'.threads = m.threads :=
+theorem futexWake_ok (p : Ptr) (n : Nat) (cs : List Nat) (m : Mem) :
+    ∃ m', ((Thread.futexWake p n cs).run m).run = some (.ok ((), m')) ∧ m'.threads = m.threads :=
   ⟨_, rfl, rfl⟩
+
+/-- The oracle's choices change only the oracle position. -/
+theorem chooseMany_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} :
+    ∀ {counts : List Nat} {cs : List Nat}, s.chooseMany o counts = (cs, s') →
+      ∃ st tr, s' = { s with step := st, trace := tr }
+  | [], cs, h => by
+    simp only [Sched.State.chooseMany, Prod.mk.injEq] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨s.step, s.trace, rfl⟩
+  | c :: counts, cs, h => by
+    simp only [Sched.State.chooseMany] at h
+    generalize hx : (s.choose o c) = x at h
+    obtain ⟨x, s₁⟩ := x
+    generalize hy : s₁.chooseMany o counts = y at h
+    obtain ⟨xs, s₂⟩ := y
+    simp only [Prod.mk.injEq] at h
+    obtain ⟨-, rfl⟩ := h
+    obtain ⟨st, tr, rfl⟩ := chooseMany_eq hy
+    simp only [Sched.State.choose, Prod.mk.injEq] at hx
+    obtain ⟨-, rfl⟩ := hx
+    exact ⟨st, tr, rfl⟩
+
+theorem chooseWake_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} {p : Ptr} {n : Nat}
+    {cs : List Nat} (h : s.chooseWake o p n = (cs, s')) :
+    ∃ st tr, s' = { s with step := st, trace := tr } := chooseMany_eq h
 
 /-- What a futex wait did: a woken thread goes on (it leaves `woken`); else the kernel read the
 `u32` `v` at `p`, and the thread sleeps (it joins `waiters`) if `v = e`. -/
@@ -611,9 +635,14 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
     simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
     exact settle_turnPost h (hstep _ (choice_lt _ _)) hsz rfl rfl rfl
   | wake ptr n =>
-    obtain ⟨m₁, hw, hth⟩ := futexWake_ok ptr n { s.mem with current := t }
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
-    exact settle_turnPost h (hstep m₁ hw) hsz rfl rfl (congrArg Array.size hth)
+    simp only [Sched.turn, Sched.turnTrace] at h
+    generalize hso : Sched.State.chooseWake { s with mem := { s.mem with current := t } } o ptr n = so
+      at h
+    obtain ⟨cs, s₀⟩ := so
+    obtain ⟨st, tr, rfl⟩ := chooseWake_eq hso
+    obtain ⟨m₁, hw, hth⟩ := futexWake_ok ptr n cs { s.mem with current := t }
+    simp only [Sched.State.onMem, bind, Except.bind, hw] at h
+    exact settle_turnPost h (hstep cs m₁ hw) hsz rfl rfl (congrArg Array.size hth)
   | wait ptr e =>
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
     match hw : ((Thread.futexWait ptr e).run { s.mem with current := t }).run with
@@ -736,9 +765,14 @@ theorem turn_safe {α β : Type} (env : Env) (henv : env.spawn = .fallible → P
     simp only [Sched.turn, Sched.turnTrace, Sched.State.choose] at h
     exact settle_safe hstr (hstep _ (choice_lt _ _)) hQ e h
   | wake ptr n =>
-    obtain ⟨m₁, hw, -⟩ := futexWake_ok ptr n { s.mem with current := t }
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
-    exact settle_safe hstr (hstep m₁ hw) hQ e h
+    simp only [Sched.turn, Sched.turnTrace] at h
+    generalize hso : Sched.State.chooseWake { s with mem := { s.mem with current := t } } o ptr n = so
+      at h
+    obtain ⟨cs, s₀⟩ := so
+    obtain ⟨st, tr, rfl⟩ := chooseWake_eq hso
+    obtain ⟨m₁, hw, -⟩ := futexWake_ok ptr n cs { s.mem with current := t }
+    simp only [Sched.State.onMem, bind, Except.bind, hw] at h
+    exact settle_safe hstr (hstep cs m₁ hw) hQ e h
   | wait ptr e' =>
     have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
       simpa [Sched.canGo] using hgo

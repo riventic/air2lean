@@ -170,14 +170,14 @@ wake. -/
 theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∀ m', ((Thread.futexWake p c.toNat).run { m₁ with current := t }).run =
+      ∀ cs m', ((Thread.futexWake p c.toNat cs).run { m₁ with current := t }).run =
         some (.ok ((), m')) → Q ((), s) G₁ m' k) :
     P.WP t ((futexWakeC io p c : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.wake p c.toNat)) >>= fun a =>
     pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ m' hw => WP.pure' (hc G₁ m₁ hg hi₁ m' hw)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ cs m' hw => WP.pure' (hc G₁ m₁ hg hi₁ cs m' hw)⟩
 
 /-- `Thread.Futex.wait` is the futex wait of `Io.futexWait` (0.15.2 has no `Io`). -/
 theorem threadFutexWaitC_eq (p : Ptr) (e : BitVec 32) :

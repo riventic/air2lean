@@ -6,7 +6,16 @@ namespace DeadlineKernelTests
 
 /-- The new queue wake is exactly the existing memory wake, with the same ordering. -/
 theorem wake_legacy (s : Kernel) (p : Ptr) (n : Nat) :
-    ((Thread.futexWake p n).run s.mem).run = some (.ok ((), (s.wake p n).mem)) := rfl
+    ((Thread.futexWake p n []).run s.mem).run = some (.ok ((), (s.wake p n).mem)) := by
+  unfold Kernel.wake
+  split
+  · simp_all
+  · rename_i heq
+    simp [Thread.futexWake, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
+      StateT.run, ExceptT.run, pure, ExceptT.pure, ExceptT.mk] at heq
+  · rename_i heq
+    simp [Thread.futexWake, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
+      StateT.run, ExceptT.run, pure, ExceptT.pure, ExceptT.mk] at heq
 
 /-- Cleanup is an actual function over the Mem queue, not an assumed relation. -/
 theorem release_registration (s : Kernel) (r : Registration)
