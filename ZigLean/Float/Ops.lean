@@ -290,6 +290,12 @@ root and extends back (`docs/floats.md` §Per-version differences). The emitter 
 def Float.sqrtF128ViaF64 (x : Float .f128) : Float .f128 :=
   Float.conv .f128 (Float.sqrt (Float.conv .f64 x))
 
+/-- `@sqrt` on `f80` on aarch64 before Zig 0.16.0: compiler_rt's soft-float `__sqrtx` is
+`sqrtq` of the `f128` extension, so it rounds to `f64` too (`docs/floats.md` §Targets). x86_64
+uses the x87 `fsqrt` (`Float.sqrt`), and 0.16.0's `__sqrtx` is correctly rounded. -/
+def Float.sqrtF80ViaF64 (x : Float .f80) : Float .f80 :=
+  Float.conv .f80 (Float.sqrt (Float.conv .f64 x))
+
 /-! ## Remainder, modulo, integer division -/
 
 /-- `@rem`: `a - b * trunc(a / b)`, exact — no rounding is needed since the true remainder of

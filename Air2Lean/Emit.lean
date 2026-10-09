@@ -2006,6 +2006,8 @@ def emitScalarOp (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a}"; (env, some l)
   | .sqrt a =>
     let f := if fc.zigBefore016 && fc.valTy a == .float 128 then "Zig.Float.sqrtF128ViaF64"
+      else if fc.zigBefore016 && fc.aarch64Floats && fc.valTy a == .float 80 then
+        "Zig.Float.sqrtF80ViaF64"
       else "Zig.Float.sqrt"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a})"; (env, some l)
   | .libm op a =>

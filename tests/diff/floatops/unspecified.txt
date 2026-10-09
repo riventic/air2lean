@@ -1,17 +1,35 @@
 # Per-input exclusion pins (F3, scripts/diff-report.py): <fn> <input_sha256> <count>|<min>-<max> <reason>.
+op128 07f2143e5b85427d0c95664b54b3489810ebe459c9ddee0bb0baef8306cbc386 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op128 472ab3d1aa4673565d93efebfd9f4123f6835f33e76691a4a4e7ff65eb49135b 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op128 86d95fb85a8bc9518ec5222f56c5be090580d689e7c2fc046ea5e489ca6e32c7 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op128 9e55499e2e61786200372cf225dfd6d066cc9142d7ca59dc430df974029fb5b9 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op16 094e322ad9b1037feb24ffc5a9640865a27c736a9a12ea94a58a43a532fcb59d 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op16 4bf74f93cc9b1cbb792656fa83d103209d9ec0a4bc6eb76d30e41a000522fb5d 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op16 795f808ba2c29984ee1cc09af5b094178e4ca55df2c474ceb41b64f20f571164 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op16 901421aad6d6294acde34b56129faccb7a40f8a4e51c91d169fe81911dc4038d 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op16 efb87122c719f776f53c2a6c285a126525aeef92a2612eced9669feea5be3d51 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op32 310cfea49a275d70563d5dff5ab9ac3c83dc007565b74ef4b513dddcf28c9d50 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op32 86f4251b4ecb577111592b89055683de5598802162465e66b9e0c9797672a0d6 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op32 98989ca03a20a3a37b01e43a984c0bd4925f90238434e576293f631d5b09dd3d 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op32 ab3c2fc73d8feb4fc989d7fca6167f61db6a8b5145d4b9f5b61d605d420be880 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op32 b2fda7282c93009dbc84468521e7e6467f27aeb196644316466e69599474d2ac 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op32 b74b1e26729a7e04757fd536250436bf58eba60cf5df6159c6c66124b2fc0f2b 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op32 b7975d45e594f87c0fae21c5071a5f35d9801da1e98590cf80ed81e7209b0674 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op32 bb99903ba1fb17f976d98d1b0fa69b5b4bb6217c9428a8eecd92f959fba81986 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op64 22cdb74c028197adc71292dcfb5e4f3569c1a64cc4920f88db78ae77e754bdcc 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op64 3b01612143d892a559b84fae3dc8d9e40d134752d492949c992a65c5c733942e 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op64 5a5673fa29c160a068fc55319ef0eee4a5b676bb605d259b6468f14b4db3c3bd 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
+op64 7cc85f7d438e6e734c28da8340859cf1bb71176b6f2a03fc75bb547ed431945f 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op64 84b9205eac9c2e4ce787c86321251699a0688122daa38edf8e7d0c6409e7c5b8 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op64 8529d0f52243d9d75b7117e0ce5b46b9026432da926215b75cf358881da7240d 3 @min/@max of opposite-sign zeros: the sign of the result is open
 op64 8a7e829af3b69064ae243352f8a8dc4cfb26fec41684495af4488bb5903920a1 3 @min/@max of opposite-sign zeros: the sign of the result is open
+op64 a633dc69061e8bad7fabd0e28847c839b643202664f21a307b633fdbfb7b1f61 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op80 007a3de9fab7cd651a627fd591d63927aca414d336be4e74d8bdb4c5cde6cc18 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 00ae4c354d4752a8e3faae8a05e26a92dd46317776a75ef9292ca5e5d858c384 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 0221f169524e079224fb87d99b50fdefc8d183e3477099fc81b44c085d98b3eb 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 0224fe74f88889cc78df4e63cde1a0ce4ebce4b6517b3ff3363942c80d2bb4cb 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 024a0f4528b83469eafed67c939f5e3a671bacb6c69490e0f4644d4b351b6967 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
+op80 02dc33f5dc30b729cc7680be48e81f0e082190b24de25ff26f3f7803a8e2d082 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op80 03066edd3a0c1bf72171a8ffc2189a2fff58dd6636cbca1b84d3d10beb37d0f0 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 0320bd947196d1f943bd847aa8847b46f8a834988055aaf6bb4a6d993b9039fb 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 03a7a8a3ece23618beb9bc84eecd3d3707bd221f73b5a2dcac95ea5628d2a9c3 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
@@ -218,6 +236,7 @@ op80 8120e03f4b37efd881205747f185c8d22b850b81b7ce72600cea402a55aaa99c 1 f80 inva
 op80 8131a550b7a899630b59d154dd76ccae9062ca993bc727a86c168cf10b81de8b 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 815e2316ec3fd47a547be864fec1aa416ce698bb4534957092d748356e88cbe7 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 82956eb700b6da13aae9238369a28e2f2ad57d68a5332afede63e7e842c7eadc 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
+op80 83969375bcb00fe61556274748d2c6cf92be3092d83c52e806119df3b6d78b29 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op80 83d61393a3d775438806d377ca7e85bf5c29c56bff0af9ad0f87ad1a856fbd36 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 83fed927705036a0e73dcf354ec54e33b846927034f2c7f626053dfc329316f6 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 84160fb65e9b6396b5664d198aa0cfbc399d71fcee2625afaa83ea5c0371ed1b 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
@@ -347,6 +366,7 @@ op80 e349c7f4f8c803c5a25f740e40a94ced3860d592a49039287ca7e29669e2f4f5 1 f80 inva
 op80 e4e34ae19bb2dbeb5d083753d7c1a529bea4db18f136038f04a0ef792c287b57 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 e50887dd1580b17aeb251c979ae78dee0e9247c14feb34d24cd8e0c9d72c5562 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 e5bd92828be4e7c40cbe90869f16a8e918e66e540832eaac8e1900e423c4d6ff 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
+op80 e6268456c84335357915588ee2a098c671271482c020db49895e66e83bc1ab10 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op80 e6a29c09ce18c8647e35e85b931421291d653eceba18ace17374f930e4191c2f 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 e6dd33023819cf5f9e4d632af77fc4a46d9fed84ba9f18fe05c40518115ca97c 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 e7eef48de96f82360e06686c1bef63a6fa7dc0f90958cb1db9b0cc999da647d7 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
@@ -361,6 +381,7 @@ op80 ebc2c081c34e460edb5f035b7f9f075ed59622f576c2b7746d7fd465ece0623e 1 f80 inva
 op80 ec28b040f0fd63d07590c7d7ac9f60ec2d0fbf2b148bd396b43924287e5187d1 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 ec5bdafdfafc2fe651cc10cae2ee981457226fc226cc44ab3be6bd8fe92cefc9 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 ed7c1544aca0401d0b2adcecac42f773ba868132cfbc29b53a92b8947e7414ee 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
+op80 ee0655e376de63198d56cec08bb44a6a614beba0623540322bd18973094f817f 1 @min/@max of a signaling NaN and a number: the NaN or the number (group I)
 op80 ee808b68279d10c2e1861bccab40a126835e7033ffb3d7935b5b2f3273a544b1 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 efe09dc59b811125cc537727e206b8ea9acbce6c8d403358fd52ae54bd65bf76 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
 op80 efe7efa0349be5ba68491dad8677ffa9f4188265dbd44a02952aa5460433a2d2 1 f80 invalid or pseudo encoding operand (docs/floats.md group C)
