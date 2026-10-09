@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2974 theorems in 176 files.
+2975 theorems in 176 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 741 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 635 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 726 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 651 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
@@ -46,17 +46,17 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2840 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2409 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2841 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2410 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1214 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2974 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1451 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1451 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2975 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1452 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1452 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
@@ -2327,25 +2327,26 @@ File premises: ALC-01, ALC-08, SEM-01, SEM-02, SEM-04, TRU-01
 
 ## `tests/roadmap/aggregate-casts/AggregateCasts/Proofs.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `AggregateCastsClients.bytesToU32_roundtrip` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.pair_roundtrip` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.bytesToU32_generic` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.bytesToPadded_val` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.paddedToBytes_padding` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.u24x2ToU56_padding` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.u56ToU24x2_lossy` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.u32ToWord_fields` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.shortToU32_padding` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.optAddr_null` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.optFromAddr_zero` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.optUnwrap_null` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.optUnwrap_some` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.ptrWrap_some` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `AggregateCastsClients.wrap_unwrap` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.bytesToU32_roundtrip` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.pair_roundtrip` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.bytesToU32_generic` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.bytesToPadded_val` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.paddedToBytes_padding` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.u24x2ToU56_padding` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.u56ToU24x2_lossy` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.u32ToWord_fields` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.shortToU32_padding` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.optAddr_null` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.optFromAddr_zero` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.optFromAddr_misaligned` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.optUnwrap_null` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.optUnwrap_some` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.ptrWrap_some` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AggregateCastsClients.wrap_unwrap` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/allocator-identity/Kernel.lean`
 

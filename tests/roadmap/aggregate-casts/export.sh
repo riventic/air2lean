@@ -15,6 +15,7 @@ cd "$repo"
 here=tests/roadmap/aggregate-casts
 root=${AIR2LEAN_ZIG_AIR:-/opt/dev/air2lean-build}
 mode=${1:-export}
+case "$mode" in export | --check) ;; *) echo "usage: export.sh [export|--check]" >&2; exit 2 ;; esac
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-aggregate-casts.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
