@@ -288,7 +288,7 @@ theorem bv_two {n : Nat} (hn : n ≤ 2) (h : wordView n () = some 2) : n = 2 := 
   omega
 
 section
-variable (hF : FutexSpec wordView Fx)
+variable (hF : FutexSafe wordView Fx)
 include hF
 
 theorem ioMutex_init {X : Type} {s : MState (ioMutex Fx) X} (h : (mgc (ioMutex Fx) X).init s) :
@@ -522,9 +522,16 @@ theorem ioMutex_step {X : Type} {t : Tid} {s s' : MState (ioMutex Fx) X} (hi : I
           · exact Queue.has_eq_false.mp hv a (hF.mem_wake hi.qwf hfk ha)
           · rw [tset_ne _ _ hvt]; exact hwv
 
-/-- The invariant of `Io.Mutex` is inductive over every futex that satisfies the contract. -/
+/-- The invariant of `Io.Mutex` is inductive over every futex that satisfies the safety part of
+the contract. -/
 theorem ioMutex_inductive (X : Type) : (mgc (ioMutex Fx) X).Inductive IoInv :=
   ⟨fun _ h => ioMutex_init hF h, fun _ _ _ hi hs => ioMutex_step hF hi hs⟩
+
+end
+
+section
+variable (hF : FutexSpec wordView Fx)
+include hF
 
 /-- No deadlock: a thread in `Io.Mutex`'s code that is not asleep in the futex queue can step. -/
 theorem ioMutex_enabled {X : Type} {s : MState (ioMutex Fx) X} (hi : IoInv s) {t : Tid}
@@ -574,10 +581,10 @@ theorem ioMutex_enabled {X : Type} {s : MState (ioMutex Fx) X} (hi : IoInv s) {t
 /-- **`std.Io.Mutex` satisfies the mutex contract over every futex that satisfies the futex
 contract.** -/
 theorem ioMutex_spec : MutexSpec (ioMutex Fx) where
-  excl X := (ioMutex_inductive hF X).invariant fun s hi t u ht hu =>
+  excl X := (ioMutex_inductive hF.toFutexSafe X).invariant fun s hi t u ht hu =>
     hi.excl t u (by rw [ht]; rfl) (by rw [hu]; rfl)
-  view X := (ioMutex_inductive hF X).invariant fun s hi t ht => hi.view t (by rw [ht]; rfl)
-  live X := (ioMutex_inductive hF X).invariant fun s hi ⟨⟨t, op, l, h⟩, hnh, hn⟩ => by
+  view X := (ioMutex_inductive hF.toFutexSafe X).invariant fun s hi t ht => hi.view t (by rw [ht]; rfl)
+  live X := (ioMutex_inductive hF.toFutexSafe X).invariant fun s hi ⟨⟨t, op, l, h⟩, hnh, hn⟩ => by
     -- every thread in the code is disabled, so each one is asleep in the queue
     have hall : ∀ u op l, s.ctl u = .run op l → (Fx.queue s.sh.2).has u = true := by
       intro u op l hu

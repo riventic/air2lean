@@ -175,8 +175,10 @@ structure Futex (M A : Type) where
 
 variable {M A : Type} [DecidableEq A]
 
-/-- The futex contract (module doc). `W m a` is the atomic `u32` at `a` in `m`. -/
-structure FutexSpec (W : M → A → Option (BitVec 32)) (X : Futex M A) : Prop where
+/-- The safety part of the futex contract: every clause but progress. A client's inductive
+invariant needs only this (`ioMutex_inductive`), so it also holds over a futex seen through a
+restriction to one address (`ZigLean/Conc/Spec/Cond.lean`). -/
+structure FutexSafe (W : M → A → Option (BitVec 32)) (X : Futex M A) : Prop where
   init : ∀ f, X.init f → X.queue f = []
   wait_word : ∀ t a e tm m f r f', X.wait t a e tm m f r f' →
     ∃ v, W m a = some v ∧ (r = none → v = e)
@@ -192,14 +194,18 @@ structure FutexSpec (W : M → A → Option (BitVec 32)) (X : Futex M A) : Prop 
     ∃ ws : List Tid, ws.Nodup ∧ (∀ u ∈ ws, (u, a) ∈ X.queue f) ∧
       min n ((X.queue f).waitersAt a).length ≤ ws.length ∧
       (X.queue f').Perm ((X.queue f).drop ws)
+
+/-- The futex contract (module doc). `W m a` is the atomic `u32` at `a` in `m`. -/
+structure FutexSpec (W : M → A → Option (BitVec 32)) (X : Futex M A) : Prop
+    extends FutexSafe W X where
   wait_total : ∀ t a e tm m f v, W m a = some v → (X.queue f).has t = false →
     ∃ r f', X.wait t a e tm m f r f'
   resume_total : ∀ t tm f, (X.queue f).has t = false → ∃ r f', X.resume t tm f r f'
   wake_total : ∀ t a n f, (X.queue f).WF → ∃ f', X.wake t a n f f'
 
-namespace FutexSpec
+namespace FutexSafe
 
-variable {W : M → A → Option (BitVec 32)} {X : Futex M A} (h : FutexSpec W X)
+variable {W : M → A → Option (BitVec 32)} {X : Futex M A} (h : FutexSafe W X)
 include h
 
 /-! ## The lemma library for clients -/
@@ -296,7 +302,7 @@ theorem wake_all {t a n f f'} (hq : (X.queue f).WF) (hw : X.wake t a n f f')
     omega
   exact hu0.2 (hall u (Queue.mem_waitersAt.mpr hu0.1))
 
-end FutexSpec
+end FutexSafe
 
 /-! ## Instantiation by an abstraction (what T2 proves) -/
 
