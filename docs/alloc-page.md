@@ -81,7 +81,7 @@ knowledge after `free` (`known`, O1).
 | | status | where |
 |---|---|---|
 | O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`) | `PageSpec.tok` |
-| `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only | `tests/roadmap/alloc-translated/PageSpec.lean` |
+| `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only; x86_64-linux and aarch64-macos (no `mremap`: `remap` stays in place) | `tests/roadmap/alloc-translated/PageSpec.lean`, `PageSpecMacos.lean` |
 | size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
 | O1, O3 | specifiable (`known`, `apts`); not needed by `free`/`resize`/`remap` | `ZigLean/Sep/Full/Triple.lean`, `Atomic.lean` |
 | `alloc` | **open: O4** | below |

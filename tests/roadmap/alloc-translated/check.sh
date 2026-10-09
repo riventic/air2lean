@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # `--allocator-model translated` (P1): std.heap.page_allocator and FixedBufferAllocator clients
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
-# P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean), the alloc
+# P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean,
+# PageSpecMacos.lean), the alloc
 # obstructions (PageObstruction.lean), a mutant (mutant.sh). Needs a built translator and
 # `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops
 # ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame`; runs no compiler. With
@@ -45,14 +46,21 @@ done
 "${lean_cmd[@]}" "$here/Eval.lean"
 # P4b: the translated PageAllocator cannot satisfy AllocSpec (docs/alloc-page.md).
 "${lean_cmd[@]}" "$here/PageObstruction.lean"
-# P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean), its axioms, and a
-# mutant that frees one page too few (mutant.sh).
-"${lean_cmd[@]}" -R "$here" -o "$work/PageSpec.olean" "$here/PageSpec.lean"
+# P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
+# PageSpecMacos.lean for aarch64-macos), their axioms, and a mutant whose shrink leaks the cut
+# pages (mutant.sh).
+for spec in PageSpec PageSpecMacos; do
+  "${lean_cmd[@]}" -R "$here" -o "$work/$spec.olean" "$here/$spec.lean"
+done
 cat > "$work/Axioms.lean" <<'AX'
 import PageSpec
+import PageSpecMacos
 #print axioms AllocTranslated.PageSpec.free_spec
 #print axioms AllocTranslated.PageSpec.resize_spec
 #print axioms AllocTranslated.PageSpec.remap_spec
+#print axioms AllocTranslated.PageSpecMacos.free_spec
+#print axioms AllocTranslated.PageSpecMacos.resize_spec
+#print axioms AllocTranslated.PageSpecMacos.remap_spec
 AX
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
 if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep -q .; then
