@@ -182,5 +182,250 @@ theorem locIdx_post {m m₁ : Mem} {b o len li : Nat} (hw : ShapesWF (shapes m))
         rw [this]; rfl
       · simp
 
+/-! ## Sequential choices: the newest message, a write at the end -/
+
+theorem readOpts_zero {m : Mem} {li : Nat} (h : 0 < (m.atomics[li]!).msgs.size) :
+    (readOpts m li false)[0]? = some ((m.atomics[li]!).msgs.size - 1) := by
+  have hf := floorPos_lt h
+  obtain ⟨k, hk⟩ : ∃ k, (m.atomics[li]!).msgs.size - floorPos m li = k + 1 :=
+    ⟨_, (Nat.succ_pred_eq_of_pos (by omega)).symm⟩
+  unfold readOpts
+  rw [← Array.getElem?_toList]
+  simp [hk, List.range_succ_eq_map, List.filter_cons]
+
+theorem writeSlots_zero {m : Mem} {li : Nat} (h : 0 < (m.atomics[li]!).msgs.size) :
+    (writeSlots m li)[0]? = some (m.atomics[li]!).msgs.size := by
+  have hf := floorPos_lt h
+  obtain ⟨k, hk⟩ : ∃ k, (m.atomics[li]!).msgs.size - floorPos m li = k + 1 :=
+    ⟨_, (Nat.succ_pred_eq_of_pos (by omega)).symm⟩
+  unfold writeSlots
+  rw [← Array.getElem?_toList]
+  simp [hk, List.range_succ_eq_map, List.filter_cons]
+
+theorem lastBytes_eq {l : ALoc} (h : 0 < l.msgs.size) :
+    (l.msgs[l.msgs.size - 1]!).bytes = ALoc.lastBytes l := by
+  unfold ALoc.lastBytes
+  rw [Array.back?_eq_getElem?, getElem!_pos _ _ (by omega)]
+  simp [Array.getElem?_eq_getElem (show l.msgs.size - 1 < l.msgs.size by omega)]
+
+/-! ## Helpers: the owned word, the frame, the thread -/
+
+theorem locIdx_noErr_tag {m : Mem} {b o len : Nat} (hw : ShapesWF (shapes m)) (hlen : 0 < len)
+    (ht : TagOk (shapes m) b o len) (e : Error) :
+    ((locIdx b o len).run m).run ≠ some (.error e) := by
+  apply locIdx_noErr_of _ _ e
+  · intro i hi
+    obtain ⟨hlt, hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hi
+    simp only [Bool.and_eq_true, beq_iff_eq] at hp
+    have hmem := shape_mem hlt
+    have hpos := hw.1 _ hmem
+    simp only [ALoc.shape] at hpos
+    obtain ⟨-, hl⟩ := overlap_eq hw hlen ht hmem hp.1 (by simp only [ALoc.shape]; omega)
+      (by simp only [ALoc.shape]; omega)
+    rw [getElem!_pos m.atomics i hlt]; exact hl
+  · intro hi l hl hb h1 h2
+    obtain ⟨j, hj, rfl⟩ := Array.mem_iff_getElem.mp hl
+    obtain ⟨ho, -⟩ := overlap_eq hw hlen ht (shape_mem hj) hb h1 h2
+    have := Array.findIdx?_eq_none_iff.mp hi m.atomics[j] (Array.getElem_mem hj)
+    simp only [ALoc.shape] at hb ho
+    simp [hb, ho] at this
+
+theorem Holds.own {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {fc : FCell}
+    (h : r.heap l = some fc) : m.fheap l = some fc := by
+  rw [hh.heap, FHeap.union_apply, h]; rfl
+
+theorem fheap_tag {m : Mem} {l : Loc} {fc : FCell} (h : m.fheap l = some fc) :
+    fc.atom = tagOf (shapes m) l.1 l.2 ∧ m.heap l = some fc.cell := by
+  simp only [Mem.fheap, Option.map_eq_some_iff] at h
+  obtain ⟨c, hc, rfl⟩ := h
+  exact ⟨rfl, hc⟩
+
+/-- The owned word of `apts` has a uniform tag: `TagOk` for `(p.off, 8)`. -/
+theorem tagOk_of_own {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    (hsz : bs.size = 8) (htg : tg = none ∨ tg = some (p.off.toNat, 8)) {b : BlockId}
+    (hpb : p.block = some b) : TagOk (shapes m) b p.off.toNat 8 := by
+  obtain ⟨-, b0, hb0, -, hl⟩ := hab
+  rw [hpb] at hb0; cases hb0
+  have key : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + 8 → tagOf (shapes m) b x = tg := by
+    intro x h1 h2
+    have hr := hl (b, x)
+    rw [if_pos ⟨rfl, h1, by omega⟩] at hr
+    exact ((fheap_tag (hh.own hr)).1).symm
+  rcases htg with rfl | rfl
+  · exact .inl key
+  · exact .inr key
+
+theorem singleThread_acqM {m : Mem} (h : m.SingleThread) (c : VClock) : (acqM m c).SingleThread := by
+  refine ⟨by simpa [acqM] using h.1, fun e he => ?_⟩
+  obtain ⟨h1, h2⟩ := h.2 e he
+  refine ⟨h1, ?_⟩
+  show VClock.le e.clock ((m.clocks.set! m.current
+    (VClock.merge (m.clocks[m.current]!) c))[m.current]!) = true
+  rw [Array.getElem!_set!_self _ _ _ h.1]
+  exact VClock.le_trans h2 (VClock.le_merge_left _ _)
+
+theorem singleThread_loadM {m : Mem} (h : m.SingleThread) (li : Nat) (ord : AtomicOrder) (msg : Msg) :
+    (loadM m li ord msg).SingleThread := by
+  unfold loadM
+  split
+  · exact singleThread_acqM h _
+  · exact h
+
+theorem singleThread_insertM {m : Mem} (h : m.SingleThread) (li p : Nat) (msg : Msg) :
+    (insertM m li p msg).SingleThread := by
+  unfold insertM
+  dsimp only
+  split
+  · split <;> exact h
+  · exact h
+
+/-- After an atomic op on the owned word: the memory has new bytes `bs'` there (the same for a
+load), the layout gets the location `(p.off, 8)`, the rest is unchanged. Then the memory holds the
+word with the new bytes and the tag of that location, and the frame. -/
+theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
+    {K : BlockKind} {bs bs' : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
+    (hsz : bs'.size = bs.size) {b : BlockId} (hpb : p.block = some b)
+    (hheap : ∀ l, m'.heap l = if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
+      then some ⟨bs'[l.2 - p.off.toNat]!, A, S, K⟩ else m.heap l)
+    (htag : ∀ b' x, tagOf (shapes m') b' x = if Covers b' x (b, p.off.toNat, bs.size)
+      then some (p.off.toNat, bs.size) else tagOf (shapes m) b' x)
+    (hkn : KMono m m') (hA : m.AddrBelow) (hn : m'.nextAddr = m.nextAddr) :
+    m'.AddrBelow ∧
+      ∃ r', Holds m' r' rF ∧ abytesAt p A S K bs' (some (p.off.toNat, bs.size)) r' := by
+  obtain ⟨-, b0, hb0, h0, hl⟩ := id hab
+  rw [hpb] at hb0; cases hb0
+  refine ⟨hA.of_heap hn fun l c hc => ?_, ?_⟩
+  · rw [hheap] at hc
+    split at hc
+    · rename_i hin
+      cases hc
+      have hr := hl l
+      rw [if_pos hin] at hr
+      exact ⟨l, _, (fheap_tag (hh.own hr)).2, rfl, rfl⟩
+    · exact ⟨l, c, hc, rfl, rfl⟩
+  let h' : FHeap := fun l =>
+    if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
+    then some ⟨⟨bs'[l.2 - p.off.toNat]!, A, S, K⟩, some (p.off.toNat, bs.size)⟩ else none
+  refine ⟨⟨h', Know.none⟩, ⟨fun l => ?_, funext fun l => ?_, Know.sub_none _,
+    hh.knowF.trans hkn⟩, rfl, b, hpb, h0, fun l => rfl⟩
+  · by_cases hc : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
+    · right
+      have : r.heap l ≠ none := by rw [hl l, if_pos (by rw [← hsz]; exact hc)]; simp
+      exact (hh.disj l).resolve_left this
+    · left; simp only [h']; rw [if_neg hc]
+  · obtain ⟨x, y⟩ := l
+    simp only [Mem.fheap, hheap, FHeap.union_apply, htag]
+    by_cases hc : x = b ∧ p.off.toNat ≤ y ∧ y < p.off.toNat + bs.size
+    · obtain ⟨rfl, h1, h2⟩ := hc
+      have hcov : Covers x y (x, p.off.toNat, bs.size) := ⟨rfl, h1, h2⟩
+      have hc : x = x ∧ p.off.toNat ≤ y ∧ y < p.off.toNat + bs.size := ⟨rfl, h1, h2⟩
+      simp only [hc, hcov, and_self, ↓reduceIte, h', hsz, Option.map_some, Option.some_or]
+    · have hcov : ¬ Covers x y (b, p.off.toNat, bs.size) := fun h => hc ⟨h.1.symm, h.2.1, h.2.2⟩
+      have hr : r.heap (x, y) = none := by rw [hl]; simp only; rw [if_neg hc]
+      have e := congrFun hh.heap (x, y)
+      rw [FHeap.union_apply, hr, Option.none_or] at e
+      have hc' : ¬ (x = b ∧ p.off.toNat ≤ y ∧ y < p.off.toNat + bs'.size) := by rw [hsz]; exact hc
+      simp only [hc, hcov, ↓reduceIte, h', hc', Option.none_or]
+      exact e
+
+theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' := KMono.of_blocks h
+
+theorem heap_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m'.heap = m.heap := by
+  funext l; simp [Mem.heap, h]
+
+/-! ## The rules -/
+
+theorem intSize_64 : intSize 64 = 8 := by decide
+
+theorem access_inj {x y : BlockId × Block × Nat} (h : (pure x : Result _) = pure y) : x = y := by
+  have := congrArg ExceptT.run h
+  simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using this
+
+/-- **Atomic load** of an owned word (sequential: choice 0). -/
+theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
+    FTriple (apts p v) (Zig.atomicLoadAt (n := 64) 0 ord 8 p)
+      (fun w => ⟪w = v⟫ ⋆ apts p v) := by
+  intro m r rF hh hp hs
+  obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, htg, hab⟩ := hp
+  have hm : m.heap = r.heap.erase ∪ rF.heap.erase := by
+    rw [← fheap_erase, hh.heap, FHeap.erase_union]
+  obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
+    (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
+  have hpb := (access_eq hacc).1
+  have hacc8 : m.access p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
+    rw [intSize_64]; simpa using hacc
+  have htok := tagOk_of_own hh hab hsz htg hpb
+  have hcur : ∀ m₀ : Mem, m₀.blocks = m.blocks → curBytes m₀ b p.off.toNat 8 = bs := by
+    intro m₀ e
+    simp only [curBytes, e, hblk, Option.map_some, Option.getD_some]
+    have : bs.extract 0 8 = bs := by rw [← hsz]; simp
+    simpa [this] using hx
+  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2
+    (by decide) htok e
+  -- A successful preparation reads the newest message, which has the owned bytes.
+  have hnewest : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
+      (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
+      (readOpts m₁ li false)[0]? = some ((m₁.atomics[li]!).msgs.size - 1) ∧
+      ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
+      (∃ a next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, nextMsg := next }) ∧
+      ShapesWF (shapes m₁) ∧
+      ∀ b' x, tagOf (shapes m₁) b' x =
+        if Covers b' x (b, p.off.toNat, 8) then some (p.off.toNat, 8) else tagOf (shapes m) b' x := by
+    intro li m₁ hl
+    rw [intSize_64] at hl
+    have := locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2 (by decide) htok
+      (by rw [hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl, hsz]) hl
+    obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ := this
+    refine ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl], ?_⟩
+    exact ⟨hupd, hwf, htag⟩
+  cases hrun : ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run with
+  | none => trivial
+  | some x =>
+    cases x with
+    | error e =>
+      refine (atomicLoadAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) e hrun).elim
+      · exact loadPrep_noErr (by simpa using hacc8) (noRace_of_singleThread hs.1.single _ _ _ _)
+          (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
+      · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := loadPrep_ok hp
+        simp only [Bool.false_eq_true, ↓reduceIte] at ha'
+        obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
+        obtain ⟨hz, hbytes, -⟩ := hnewest li m₁ hl
+        exact ⟨_, hz, v, by rw [hbytes, hv]; rfl⟩
+    | ok x =>
+      obtain ⟨w, m'⟩ := x
+      obtain ⟨b', blk', o', li, m₁, pos, ha', -, hl, hpos, hw, hm'⟩ := atomicLoadAt_ok hrun
+      obtain ⟨rfl, rfl, rfl⟩ := access_inj (hacc8.symm.trans ha')
+      obtain ⟨hz, hbytes, ⟨a, next, hm₁⟩, hwf, htag⟩ := hnewest li m₁ hl
+      rw [hz] at hpos; cases hpos
+      have hwv : w = v := by
+        rw [hbytes, hv] at hw
+        simpa [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] using hw.symm
+      subst hm'
+      have hblocks : (loadM m₁ li ord ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)).blocks
+          = m.blocks := by
+        unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]
+      have hshapes : shapes (loadM m₁ li ord
+          ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)) = shapes m₁ := by
+        unfold loadM acqM observeM; split <;> rfl
+      have hnext : (loadM m₁ li ord
+          ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)).nextAddr = m.nextAddr := by
+        unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]
+      obtain ⟨hAB, r', hh', hab'⟩ := holds_after hh hab (bs' := bs) rfl hpb
+        (fun l => by
+          rw [heap_of_blocks hblocks]
+          split
+          · rename_i hin
+            obtain ⟨-, b0, hb0, -, hl0⟩ := hab
+            rw [hpb] at hb0; cases hb0
+            have hr := hl0 l
+            rw [if_pos hin] at hr
+            exact (fheap_tag (hh.own hr)).2
+          · rfl)
+        (fun b' x => by rw [hshapes, htag, hsz]) (kmono_of_blocks hblocks) hs.1.addr hnext
+      refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, _, hal, hK, hsz, hv, .inr (by rw [hsz]), hab'⟩,
+        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _,
+          hAB⟩, by rw [hshapes]; exact hwf⟩⟩
+
 end Full
 end Zig
