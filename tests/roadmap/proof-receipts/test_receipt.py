@@ -381,7 +381,7 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(receipt['kernel_replay']['status'], 'pass')
         self.assertEqual(receipt['tree'], {'head': self.plan['revision']['head'], 'tracked_dirty': False,
                                            'dirty_allowed': False})
-        self.assertEqual(r.verify(self.attempt)['status'], 'current')
+        self.assertEqual(r.verify(self.attempt, release=True)['tree'], 'clean')
         (self.attempt / 'receipt.json').write_text(json.dumps({k: v for k, v in receipt.items() if k != 'kernel_replay'}))
         with self.assertRaisesRegex(ValueError, 'invalid receipt'):
             r.verify(self.attempt)
@@ -396,7 +396,9 @@ class ReceiptTests(unittest.TestCase):
         self.attempt_files()
         r.seal(self.attempt)
         self.assertEqual(r.load(self.attempt / 'receipt.json')['tree']['dirty_allowed'], True)
-        self.assertEqual(r.verify(self.attempt)['status'], 'current')
+        self.assertEqual(r.verify(self.attempt)['tree'], 'dirty-allowed')
+        with self.assertRaisesRegex(ValueError, 'sealed over a dirty tree'):
+            r.verify(self.attempt, release=True)
         fresh = self.base / 'dirty-attempt'
         arguments = ['proof-receipt.py', 'prepare', str(fresh), '--toolchain', str(self.tc),
                      '--profile', 'dirty', '--module', 'Proofs.One', '--lock', str(self.lock)]
