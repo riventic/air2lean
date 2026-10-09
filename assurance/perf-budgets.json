@@ -721,7 +721,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Asm",
       "prefix": "asm.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Asm/Gen.lean",
       "proof_modules": [
         "Proofs.Asm.Gen",
@@ -813,7 +816,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Atomics",
       "prefix": "atomics.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Atomics/Gen.lean",
       "proof_modules": [
         "Proofs.Atomics.Gen",
@@ -908,7 +914,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Errors",
       "prefix": "errors.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Errors/Gen.lean",
       "proof_modules": [
         "Proofs.Errors.Gen",
@@ -1000,7 +1009,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Floatconv",
       "prefix": "floatconv.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Floatconv/Gen.lean",
       "proof_modules": [
         "Proofs.Floatconv.Gen",
@@ -1092,7 +1104,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Floats",
       "prefix": "floats.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Floats/Gen.lean",
       "proof_modules": [
         "Proofs.Floats.Dot",
@@ -1185,7 +1200,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Iogroup",
       "prefix": "iogroup.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Iogroup/Gen.lean",
       "proof_modules": [
         "Proofs.Iogroup.Counter",
@@ -1277,7 +1295,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Options",
       "prefix": "options.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Options/Gen.lean",
       "proof_modules": [
         "Proofs.Options.Gen",
@@ -1369,7 +1390,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Pointers",
       "prefix": "pointers.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Pointers/Gen.lean",
       "proof_modules": [
         "Proofs.Pointers.Gen",
@@ -1462,7 +1486,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Recursion",
       "prefix": "recursion.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Recursion/Gen.lean",
       "proof_modules": [
         "Proofs.Recursion.Gen",
@@ -1554,7 +1581,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Sync",
       "prefix": "sync.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": null,
       "proof_modules": [
         "Proofs.Sync.Contracts",
@@ -1657,7 +1687,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Threads",
       "prefix": "threads.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Threads/Gen.lean",
       "proof_modules": [
         "Proofs.Threads.Counter",

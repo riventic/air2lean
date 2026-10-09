@@ -18,3 +18,7 @@ tests/roadmap/models/registry.json
 tests/roadmap/models/TupleGenerated.lean
 tests/roadmap/models/tuple-registry.json
 tests/roadmap/models/CollisionGenerated.lean
+
+# Python bytecode (never committed)
+__pycache__/
+*.pyc
