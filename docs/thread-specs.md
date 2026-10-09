@@ -1,4 +1,4 @@
-# Generic sync specifications (`FutexSpec`, `MutexSpec`, `EventSpec`)
+# Generic sync specifications (`FutexSpec`, `MutexSpec`, `EventSpec`, `WaitGroupSpec`, `CondSpec`)
 
 Status: proof-only modules, not imported by `ZigLean.lean`. This is phase T3 of the plan in `docs/thread-io-translation.md` on branch
 `codex/spike-thread-io`. Threads, futexes and `std.Io` are to be translated from their
@@ -22,8 +22,11 @@ The allocator track does the same with `AllocSpec` (`docs/alloc-spec.md` on bran
 | `ZigLean/Conc/Spec/MutexToy.lean` | a spin mutex satisfies it; one with a monotonic `unlock` does not |
 | `ZigLean/Conc/Spec/IoMutex.lean` | std `Io.Mutex` satisfies `MutexSpec` over **every** futex that satisfies `FutexSpec`; it deadlocks over `lazyWake` and `noRecheck` |
 | `ZigLean/Conc/Spec/Event.lean` | `EventSpec`, and a spin event that satisfies it |
+| `ZigLean/Conc/Spec/Count.lean` | sums over the threads `u < N` (`tsum`), join semilattices of views (`Lat`) |
+| `ZigLean/Conc/Spec/WaitGroup.lean` | `WaitGroupSpec`; std `Io.Threaded.WaitGroup` satisfies it over **every** futex that satisfies `FutexSpec` |
+| `ZigLean/Conc/Spec/Cond.lean` | `CondSpec`; std `Io.Condition` with `Io.Mutex` satisfies it over **every** futex that satisfies `FutexSpec` |
 
-CI builds all seven (`Generic sync specifications`). None of them uses `sorry`, `admit` or
+CI builds all ten (`Generic sync specifications`). None of them uses `sorry`, `admit` or
 `native_decide`. They import nothing outside `ZigLean/Conc/Spec`, and they state no premise
 beyond TRU-01 (`assurance/premises.json`). How `ioMutex` and `spinEvent` relate to the real std
 code is described in [What the translated std code must satisfy](#what-the-translated-std-code-must-satisfy).
@@ -49,7 +52,9 @@ every point, with no spawn, no allocation and no CPU count. So each theorem here
 in `ThreadSpec` (T4: spawn may fail) and `IoSpec` (T5: `async_limit = cpus - 1`, `Group.async`
 runs inline or deferred, `Task` blocks come from `t.allocator`). Their systems must take an
 explicit environment record with `cpus`, the spawn policy and the allocator's thread-safety
-premise, and every theorem must state it.
+premise, and every theorem must state it. `WaitGroupSpec` and `CondSpec` quantify over the number of threads
+`N` of their most general client (a count of threads at a place needs a finite set); `CondSpec`'s
+liveness holds for `N ≤ 65535`, std's limit.
 
 ## `FutexSpec`
 
@@ -87,7 +92,12 @@ happens-before edge.
 A thread that is still in the queue need not be able to resume. Only a wake is sure to make it
 go on, so a client needs a wake for progress and re-checks the word after every return.
 
-**Lemmas for clients** (`FutexSpec.*`): `sleep_word`, `mem_wait`, `mem_resume`, `mem_wake`,
+**Safety and progress.** `FutexSpec` extends `FutexSafe`, which has every clause but the three
+progress ones. An inductive invariant of a client needs only `FutexSafe` (`ioMutex_inductive`),
+so it also holds over a futex seen through a restriction to one address (`Futex.atMtx`, the
+mutex word inside `Io.Condition`'s futex, satisfies `FutexSafe` but not the progress clauses).
+
+**Lemmas for clients** (`FutexSafe.*`): `sleep_word`, `mem_wait`, `mem_resume`, `mem_wake`,
 `wake_keeps`, `wf_wait`/`wf_resume`/`wf_wake` (the queue stays well formed), `wake_one` (a wake
 of `n ≥ 1` at an address where a thread sleeps removes a thread asleep there), and `wake_all` (a
 wake of at least as many threads as sleep at `a` empties `a`; this is `Event.set`'s
@@ -183,24 +193,91 @@ writes with a release store and that `wait`/`isSet` read with acquire loads sati
 contract. `reset` is outside the contract: std allows it only with no pending wait, and
 `Io.Threaded` never calls it.
 
-## Not mechanised yet: `CondSpec`, `WaitGroupSpec`
+## `WaitGroupSpec`
 
-These are the statements the next T3 step must mechanise in the same style.
+`Io.Threaded`'s private `WaitGroup` (`Io/Threaded.zig:18592`) counts the worker threads: `start`
+before a worker is spawned, `finish` when it ends, one `wait` in `join`. `value` is a `monotonic`
+load used as a pool-size hint and is not part of the contract.
 
-* **`WaitGroupSpec`** (`Threaded.WaitGroup`: `start`, `finish`, `wait`, `value`; one waiter).
-  `wait` returns only when every `start` has a matching `finish`. Each finisher's writes before
-  `finish` happen before the return of `wait`, through the `acq_rel` `fetchSub` and the release
-  of `eventSet`. `Threaded.WaitGroup` is a counter plus an `Io.Event`, so the proof combines a
-  counter invariant with `EventSpec`. Stating the happens-before part for several finishers
-  needs views that merge (a join of the views, not only adoption). This extends `AWord`.
-* **`CondSpec`** (`Io.Condition`, `Threaded.condWait`/`condSignal`/`condBroadcast`, Mesa
-  semantics). Its most general client has the mutex's clauses (`excl`, `view`), and `wait`,
-  called by a holder, returns holding the mutex. A return may be spurious, so a client
-  re-checks its predicate. For progress, a `signal` (or `broadcast`) made while holding the
-  mutex creates an obligation: one waiter that called `wait` before it (or all such waiters)
-  returns from `wait`. The `live` clause is "no reachable state has an open obligation, no
-  holder, and no thread in an op that can step". A later waiter may take the signal, as std's
-  `signals` counter allows.
+**Views that merge.** Several finishers publish their writes to one waiter, so a view is an
+element of a join semilattice (`Lat`), and an acquire joins the message's view into the reader's.
+A release RMW puts the writer's view joined with the message's old view (the release sequence
+goes on through an RMW). An implementation (`JImpl`) gets the join as a parameter and nothing
+else, so it cannot invent a view.
+
+**The most general client** (`wmgc I X L N`), for every `N` threads `0 … N-1`: an idle thread
+calls `start` while no `wait` was called (a `start` that returns makes a token); an idle thread
+calls `finish` while there is a token, and takes it; one idle thread calls `wait` once, when no
+`start` runs (std's contract: every `start` happens before `wait`, and the assertion
+`prev_state & is_waiting == 0`); idle threads, and the one that got the wait, learn anything (their
+own writes). A `finish` that returns joins the finisher's view into the ghost `fin`.
+
+| clause | statement |
+|---|---|
+| `view` | the thread that got the wait sees `fin`: everything every finisher saw when its `finish` returned |
+| `done` | when a thread got the wait, every token was taken by a `finish` |
+| `live` | no deadlock: if no token is left and a thread runs an op, some thread in an op can step |
+
+`threadedWG_spec (hF : FutexSpec wordView Fx) : WaitGroupSpec (threadedWG Fx)`: the std algorithm
+(a counter with `is_waiting = 1`, `one_pending = 2`, and `eventWait`/`eventSet` inlined), one
+atomic step per atomic op, satisfies the contract. The finisher's `acq_rel` `fetchSub` collects the
+earlier finishers' views in the counter's message, the last finisher's `release` `xchg` of the
+event carries them on, and the waiter's `acquire` (`fetchAdd`, `cmpxchg` or load) joins them. The
+invariant (`WgInv`) states the counter as `2 × pending + is_waiting`, where `pending` counts the
+tokens, the `start`s whose `fetchAdd` ran and the `finish`es whose `fetchSub` has not. A sleeping
+waiter has a witness: the event is `waiting` and something is pending or about to set it, or a
+wake is coming (`wit`, `wwait`). `threadedWG_fifo` instantiates it with the FIFO futex.
+
+## `CondSpec`
+
+`Io.Condition` (`lib/std/Io.zig:1653`; `Threaded.condWait`/`condSignal`/`condBroadcast` are the same
+code), Mesa semantics. The object proved is the mutex and the condition together, because `wait`
+releases and re-takes the mutex.
+
+**The most general client** (`cmgc I X N`): an idle thread calls `lock`/`tryLock`; a holder calls
+`unlock` or `wait`, or writes the resource; any thread calls `signal`/`broadcast`, holding the
+mutex or not (`Io.Threaded` signals after `mutexUnlock`; `signal h` records which).
+
+**Obligations** (ghost). The mutex's acquisitions are numbered (`gen`); `seen t` is the number of
+`t`'s last acquisition, `wgen u` the number current when `u` called `wait`. A `wait` with
+`wgen u < seen t` happened before every later op of `t`, so it is **eligible** for `t`'s signals.
+A `signal` raises the owed returns `O` by one if fewer are owed than there are eligible waiters; a
+`broadcast` raises `O` to their number; a return from `wait` pays one. A later waiter may take a
+signal (std's `signals` counter allows it), which pays as well. A `wait` that races with the
+signal (called after the signaler's last acquisition) is owed nothing.
+
+| clause | statement |
+|---|---|
+| `excl` | at most one thread holds the mutex |
+| `view` | a holder's view is the real value (also after `wait`) |
+| `live` | for at most `M` threads: no deadlock while a thread runs `lock`, `tryLock`, `unlock`, `signal` or `broadcast` |
+| `wake` | for at most `M` threads and fewer than `B` `signal`/`broadcast` calls: no lost wakeup — a return is owed and no thread holds the mutex ⇒ some thread in an op can step |
+
+`ioCond_spec (hF : FutexSpec condView Fx) : CondSpec (ioCond Fx) 65535 (2 ^ 32)`. Both bounds are
+std's: `wait` asserts `waiters < maxInt(u16)`, and the `u32` epoch wraps: a waiter that loaded the
+epoch misses a signal if a multiple of `2^32` increments happen before it sleeps on the loaded
+value (std's comment in `condSignal`: "extraordinarily unlikely"). The model keeps the epoch as an
+unbounded number whose low 32 bits are the futex word, so the futex compares modulo `2^32`
+(`condView`), and the bound is where the proof needs it. `ioCond_fifo` instantiates it.
+
+The proof (`CInv`) has three parts:
+
+* **The mutex** is `IoMutex.lean`'s invariant: the state, seen as a most general client of
+  `Io.Mutex` (`CState.proj`; `wait`'s unlock and re-lock are an `unlock` and a `lock`), makes only
+  `Io.Mutex` steps, over the futex restricted to the mutex word (`Futex.atMtx`, `FutexSafe.atMtx`).
+* **The obligations**: `O ≤ waiters + re-lockers`, and with no `broadcast` before its `cmpxchg`,
+  `O ≤ signals + signal calls before their cmpxchg + re-lockers`.
+* **The epoch**: `signals + Q ≤ A + B + min W Q`, where `Q` counts the waiters asleep at the
+  epoch, `A` the registered waiters that are not about to sleep on the current epoch (asleep ones
+  included), `B` the waiters that signalers will wake before their epoch bump, `W` after it. A
+  bump makes every loaded epoch stale; a wake of `n` wakes at least `min n Q`. In a stuck state
+  every thread in an op sleeps at the epoch (a thread asleep at the mutex has a witness that can
+  step, `IoInv.wit`), so `A ≤ Q`, `B = W = 0`, no signal is pending, and nothing is owed.
+
+The cond words' own acquire/release edges are not modelled: the resource moves only through the
+mutex, so the model's views are a lower bound of the real ones. The invariant was found with an
+explicit-state model check of the algorithm (2–4 threads); it also showed that a `signal` without
+the epoch bump loses a wakeup under this `wake` clause. That broken variant is not mechanised.
 
 ## What T2 must provide
 
