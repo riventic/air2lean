@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2363 theorems in 135 files.
+2366 theorems in 135 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 648 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 649 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 452 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
@@ -37,33 +37,35 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-01](premises.md#mth-01) | 73 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
-| [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
+| [ASM-01](premises.md#asm-01) | 5 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2231 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1887 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1065 | Loops and triples are partial correctness |
+| [ASM-03](premises.md#asm-03) | 5 | Allowlisted assembly faults exactly on its entry's condition |
+| [SEM-01](premises.md#sem-01) | 2234 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1888 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1066 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2363 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1118 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1118 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 2366 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1119 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1119 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 29 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 
 ## `Proofs/Asm/Proofs.lean`
 
-File premises: PRF-01, ASM-01, ASM-02, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
+File premises: PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
 
 | Theorem | Premises |
 |---|---|
-| `bswap32_involutive` | PRF-01, ASM-01, ASM-02, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `popcnt64_le_width` | PRF-01, ASM-01, ASM-02, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `lzcnt64_allOnes` | PRF-01, ASM-01, ASM-02, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `divmod_spec` | PRF-01, ASM-01, ASM-02, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `bswap32_involutive` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `popcnt64_le_width` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `lzcnt64_allOnes` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `divmod_spec` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `divmod_zero_traps` | PRF-01, ASM-01, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Atomics/MessagePassing.lean`
 
@@ -2690,10 +2692,12 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 | `OutcomeTaxonomy.unspecified_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.illegal_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.deadlock_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `OutcomeTaxonomy.trap_not_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `OutcomeTaxonomy.diverge_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L57` | SEM-01, TRU-01 |
-| `example@L58` | SEM-01, TRU-01 |
-| `example@L59` | SEM-01, TRU-01 |
+| `example@L61` | SEM-01, TRU-01 |
+| `example@L62` | SEM-01, TRU-01 |
+| `example@L63` | SEM-01, TRU-01 |
+| `example@L64` | SEM-01, TRU-01 |
 
 ## `tests/roadmap/packed-fields/PackedFields/Proofs.lean`
 
