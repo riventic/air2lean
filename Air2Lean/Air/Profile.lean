@@ -31,6 +31,8 @@ structure BuildProfile where
 
 namespace BuildProfile
 
+/-- The value of every profile field that a schema 1–11 file leaves unnamed. -/
+def unverified : String := "unverified"
 def legacyName : String := "legacy-abi64-le"
 def currentName : String := "abi64-le-v1"
 /-- The big-endian model profile (T03). The exporter writes `currentName` as the raw

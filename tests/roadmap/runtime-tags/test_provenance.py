@@ -40,7 +40,8 @@ def current():
 def refresh():
     record = current()
     zig_root = Path(os.environ.get("AIR2LEAN_ZIG_AIR", "/opt/dev/air2lean-build"))
-    record["patched_compiler_sha256"] = {v: sha(zig_root / f"zig-air-{v}/bin/zig") for v in VERSIONS}
+    # bin/zig is the AIR-only lock wrapper (zig-patch/lock.sh), the same file for every version.
+    record["patched_compiler_sha256"] = {v: sha(zig_root / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
     record["qualification"] = ("Compiler exports of every function in runtime_tags.zig with patched "
                                "0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter. One "
                                "lowering per tag, not universal tag semantics; no translation or proof is claimed.")
@@ -53,7 +54,9 @@ class Provenance(unittest.TestCase):
         now = current()
         for key in ("source", "source_sha256", "exporter", "exporter_sha256", "air", "air_sha256"):
             self.assertEqual(recorded[key], now[key], key)
-        self.assertEqual(sorted(recorded["patched_compiler_sha256"]), sorted(VERSIONS))
+        compilers = recorded["patched_compiler_sha256"]
+        self.assertEqual(sorted(compilers), sorted(VERSIONS))
+        self.assertEqual(len(set(compilers.values())), len(VERSIONS), "one digest for several compilers")
 
     def test_every_file_is_this_versions_export(self):
         for version in VERSIONS:

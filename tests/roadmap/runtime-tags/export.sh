@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # L14: export runtime_tags.zig with the patched compilers (0.16.0, 0.15.2, 0.14.1) into
 # air/<version>, or with --check compare a fresh export byte for byte with the committed one.
-# Needs zig-air-<version>/bin/zig under $AIR2LEAN_ZIG_AIR (default /opt/dev/air2lean-build);
+# Needs zig-air-<version>/bin/zig under $AIR2LEAN_ZIG_AIR (default /opt/dev/air2lean-build). The
+# committed exports come from compilers built by zig-patch/build.sh from this tree's exporter;
+# an older install (no `src`/`column` fields) makes --check differ.
 # on macOS 0.15.2/0.14.1 also a failing `xcrun` shim first on PATH (zig-patch/README.md).
 # After a re-export, run `python3 tests/roadmap/runtime-tags/test_provenance.py --refresh`.
 set -euo pipefail

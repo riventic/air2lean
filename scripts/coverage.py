@@ -481,8 +481,7 @@ NO_ERROR_TRACE_PRODUCER = ('0.15.2 and 0.14.1 call analyzePtrIsNonErr only from 
                            'error-union return emitted no ret_load); 0.16.0 emits it for a by-reference error-union '
                            'capture with an error switch (switchErrRef, exported)')
 # Versions for which a tag has no candidate although FIXTURE_REQUESTS names one for others.
-VERSION_NO_PRODUCER = {('is_non_err_ptr', '0.15.2'): NO_ERROR_TRACE_PRODUCER,
-                       ('is_non_err_ptr', '0.14.1'): NO_ERROR_TRACE_PRODUCER}
+VERSION_NO_PRODUCER = {('is_non_err_ptr', v): NO_ERROR_TRACE_PRODUCER for v in ('0.15.2', '0.14.1')}
 # Rows are kept while any inventory (0.17.0 has no runtime_tags export yet) still needs a request.
 FIXTURE_REQUESTS = {
     'add_with_overflow': 'addOverflow', 'sub_with_overflow': 'subOverflow',

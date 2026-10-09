@@ -1824,7 +1824,7 @@ def euPayloadMisplacedBackends : List String := ["stage2_llvm", "stage2_wasm"]
 the program is unknown and the LLVM backend, the default of every optimized build, cannot be
 excluded. -/
 def mayMisplaceEuPayload (backend : String) : Bool :=
-  euPayloadMisplacedBackends.contains backend || backend == "unverified"
+  euPayloadMisplacedBackends.contains backend || backend == BuildProfile.unverified
 
 /-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
 (`euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
@@ -1838,7 +1838,7 @@ private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) 
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
   if affected then
-    let legacyNote := if f.backend == "unverified" then
+    let legacyNote := if f.backend == BuildProfile.unverified then
       " (a legacy profile names no backend, so the LLVM backend cannot be excluded)" else ""
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
       alignment-1 error-union payload, which this backend lowers at the error code \

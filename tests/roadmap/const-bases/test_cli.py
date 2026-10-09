@@ -174,83 +174,57 @@ def main():
                      "a pointer constant at offset 40 is outside global 0 (32 bytes)",
                      "STRUCTURE_FAILURE")
 
-    # LLVM: every constant into the alignment-1 `Failure![3]u8` payload (offsets 22..25, one
-    # past its end included) is rejected on stage2_llvm; the same program is accepted on
+    # LLVM and legacy: every constant into the alignment-1 `Failure![3]u8` payload (offsets
+    # 22..25, one past its end included) is rejected; the same program is accepted on
     # stage2_x86_64 (above). `resCodePtr` is retargeted to each offset.
     misplaced = ("const_bases.resElemPtr.json", "const_bases.readResElem.json")
 
-    def retarget(off):
+    # `profile` is `llvm` or `legacy`: both make the backend one that misplaces the payload.
+    def retarget(profile, off):
         def edit(d):
-            llvm(d)
+            profile(d)
             if d["name"] == "const_bases.resCodePtr":
                 ret_value(d)["ptr"]["off"] = off
         return {k: v for k, v in program(edit).items() if k not in misplaced}
 
-    checks += reject(binary, program(llvm), "offset 24 of global 0 may address")
+    def aligned(profile, off):
+        def edit(d):
+            profile(d)
+            d["types"][9]["payload"] = 1
+            d["types"][9]["abi_size"] = 4
+            if "globals" in d:
+                d["globals"][0]["init"]["elems"][2] = {"ty": 9, "payload": {"ty": 1, "val": "7"}}
+            if d["name"] == "const_bases.resCodePtr":
+                ret_value(d)["ptr"]["off"] = off
+        return {k: v for k, v in program(edit).items() if k in (
+            "const_bases.resCodePtr.json", "const_bases.maybeElemPtr.json")}
+
     checks += reject(binary, program(llvm), LLVM)
     # The wasm backend's `lowerPtr` has the same `eu_payload` measure (codegen/wasm/CodeGen.zig).
     def wasm(d):
         d["profile"]["backend"] = "stage2_wasm"
     checks += reject(binary, program(wasm), "such constants are outside the stage2_wasm profile")
-    for off in (22, 25):
-        checks += reject(binary, retarget(off), f"offset {off} of global 0 may address")
-
-    # Controls on stage2_llvm: the error union itself (20) and its code (21), the optional
-    # payload's nested element and slice (15), other fields, and runtime projections.
-    llvm_text = accept(binary, {k: v for k, v in program(llvm).items() if k not in misplaced})
-    assert "(⟨some 0, 20⟩ : Zig.Ptr)" in llvm_text and "(⟨some 0, 15⟩ : Zig.Ptr)" in llvm_text
-    for off in (8, 20, 21, 26):
-        accept(binary, retarget(off))
-    checks += 1
-
-    # An aligned (`Failure!u16`) payload starts at 0 on every backend: offsets 20 (payload)
-    # and 22 (code) are accepted on stage2_llvm.
-    for off in (20, 22):
-        def aligned(d, off=off):
-            llvm(d)
-            d["types"][9]["payload"] = 1
-            d["types"][9]["abi_size"] = 4
-            if "globals" in d:
-                d["globals"][0]["init"]["elems"][2] = {"ty": 9, "payload": {"ty": 1, "val": "7"}}
-            if d["name"] == "const_bases.resCodePtr":
-                ret_value(d)["ptr"]["off"] = off
-        accept(binary, {k: v for k, v in program(aligned).items() if k in (
-            "const_bases.resCodePtr.json", "const_bases.maybeElemPtr.json")})
-    checks += 1
-
-    # Legacy schema 1-11: no profile, so the backend that compiled the program is unknown and
-    # the LLVM backend cannot be excluded. The same constants are rejected as on stage2_llvm,
-    # with the same controls accepted, and the rejection says why.
-    checks += reject(binary, program(legacy), "offset 24 of global 0 may address")
+    # Legacy schema 1-11: no profile, so the backend that compiled the program is unknown and the
+    # LLVM backend cannot be excluded. The rejection says why.
     checks += reject(binary, program(legacy), LEGACY)
 
-    def legacy_retarget(off):
-        def edit(d):
-            legacy(d)
-            if d["name"] == "const_bases.resCodePtr":
-                ret_value(d)["ptr"]["off"] = off
-        return {k: v for k, v in program(edit).items() if k not in misplaced}
+    for profile in (llvm, legacy):
+        checks += reject(binary, program(profile), "offset 24 of global 0 may address")
+        for off in (22, 25):
+            checks += reject(binary, retarget(profile, off), f"offset {off} of global 0 may address")
 
-    for off in (22, 25):
-        checks += reject(binary, legacy_retarget(off), f"offset {off} of global 0 may address")
-    legacy_text = accept(binary, {k: v for k, v in program(legacy).items() if k not in misplaced})
-    assert "(⟨some 0, 15⟩ : Zig.Ptr)" in legacy_text and '"backend":"unverified"' in legacy_text
-    for off in (8, 20, 21, 26):
-        accept(binary, legacy_retarget(off))
-    checks += 1
-    # An aligned (`Failure!u16`) payload starts at 0 on every backend, legacy included.
-    for off in (20, 22):
-        def legacy_aligned(d, off=off):
-            legacy(d)
-            d["types"][9]["payload"] = 1
-            d["types"][9]["abi_size"] = 4
-            if "globals" in d:
-                d["globals"][0]["init"]["elems"][2] = {"ty": 9, "payload": {"ty": 1, "val": "7"}}
-            if d["name"] == "const_bases.resCodePtr":
-                ret_value(d)["ptr"]["off"] = off
-        accept(binary, {k: v for k, v in program(legacy_aligned).items() if k in (
-            "const_bases.resCodePtr.json", "const_bases.maybeElemPtr.json")})
-    checks += 1
+        # Controls: the error union itself (20) and its code (21), the optional payload's nested
+        # element and slice (15), other fields, and runtime projections.
+        text_ok = accept(binary, {k: v for k, v in program(profile).items() if k not in misplaced})
+        assert "(⟨some 0, 20⟩ : Zig.Ptr)" in text_ok and "(⟨some 0, 15⟩ : Zig.Ptr)" in text_ok
+        for off in (8, 20, 21, 26):
+            accept(binary, retarget(profile, off))
+        # An aligned (`Failure!u16`) payload starts at 0 on every backend: offsets 20 (payload)
+        # and 22 (code) are accepted.
+        for off in (20, 22):
+            accept(binary, aligned(profile, off))
+        checks += 1
+    assert '"backend":"unverified"' in text_ok
 
     # Fresh exports (patched 0.16.0, 0.15.2 and 0.14.1 compilers, stage2_x86_64 x86_64-linux-musl
     # baseline ReleaseSafe; README §Fresh export). Each returned constant has the hand-written
