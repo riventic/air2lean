@@ -469,6 +469,11 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
         if not allow_native_mismatch and not all(value['profile_agreement'].values()):
             report['problems'].append('native build disagrees with the proved profile %s (pass --allow-native-mismatch '
                                       'to accept)' % sorted(k for k, v in value['profile_agreement'].items() if not v))
+    if 'receipt' in links and not allow_dirty:
+        try:
+            receipt.release_ready(load(Path(manifest['inputs']['receipt']) / 'receipt.json'))
+        except (OSError, ValueError) as error:
+            report['problems'].append('chained proof receipt: %s (pass --allow-dirty to accept)' % error)
     if verify_receipt:
         demand('receipt' in links, 'manifest has no chained proof receipt')
         try:

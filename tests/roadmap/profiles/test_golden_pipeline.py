@@ -331,8 +331,20 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
                         AIR2LEAN_CI="1", AIR2LEAN_DIFF="0", AIR2LEAN_ZIG_VERSION="0.16.0",
                         AIR2LEAN_OUT_DIR="", AIR2LEAN_CHECK_REPORT_DIR=".lake/check-reports/0.16.0")
         self.git("init", "-q")
-        self.git("add", "Proofs")
-        self.git("-c", "user.name=Profile Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "baseline")
+        (self.repo / ".gitignore").write_text(".lake/\ncalls.log\n")
+        self.commit("baseline")
+
+    def commit(self, message):
+        self.git("add", "-A")
+        self.git("-c", "user.name=Profile Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false",
+                 "-c", "core.hooksPath=/dev/null", "commit", "-qm", message)
+
+    def assert_checkout_unchanged(self):
+        self.assertEqual(self.proof.read_bytes(), BODY)
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all"), b"")
+
+    def build_tree(self):
+        return Path((self.repo / ".lake/check-reports/0.16.0/build-tree").read_text().strip())
 
     def tearDown(self):
         self.temp.cleanup()
@@ -344,69 +356,98 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
         return subprocess.run(["bash", "scripts/check.sh"], cwd=self.repo, env=dict(self.env, **env),
                               text=True, capture_output=True, check=False)
 
-    def test_new_profile_against_legacy_air_and_head_passes_with_header_retained(self):
-        result = self.pipeline()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.proof.read_bytes(), generated(self.fixture))
-        report = self.repo / ".lake/check-reports/0.16.0/basic.json"
-        self.assertEqual(json.loads(report.read_text())["generated_sha256"], hashlib.sha256(self.proof.read_bytes()).hexdigest())
+    def test_same_body_builds_the_checkout_and_writes_nothing_tracked(self):
+        for _ in range(2):
+            result = self.pipeline()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assert_checkout_unchanged()
+            self.assertEqual(self.build_tree(), self.repo.resolve())
+        # The receipt binds the actual translation, kept beside it; the checkout's file is the body.
+        actual = self.repo / ".lake/check-reports/0.16.0/basic.Gen.lean"
+        self.assertEqual(actual.read_bytes(), generated(self.fixture))
+        report = json.loads((self.repo / ".lake/check-reports/0.16.0/basic.json").read_text())
+        self.assertEqual(report["generated_sha256"], hashlib.sha256(actual.read_bytes()).hexdigest())
         self.assertIn("build Proofs.Basic.Gen", (self.repo / "calls.log").read_text())
-        self.assertEqual(self.pipeline().returncode, 0, "validated header-only dirty Gen should pass")
 
-    def test_version_and_os_gen_goldens_also_accept_only_header_transition(self):
+    def test_version_golden_is_built_in_a_check_tree(self):
         os_name = subprocess.run(["uname", "-s"], check=True, capture_output=True, text=True).stdout.strip().lower()
         golden = self.repo / f"tests/golden/0.16.0/basic/Gen-{os_name}.lean"
         golden.parent.mkdir(parents=True)
-        golden.write_bytes(BODY)
+        version_body = BODY.replace(b"42", b"40")
+        golden.write_bytes(version_body)
+        (self.repo / "generated.txt").write_bytes(generated(self.fixture, version_body))
+        self.commit("version golden")
         result = self.pipeline()
         self.assertEqual(result.returncode, 0, result.stderr)
-        golden.write_bytes(BODY.replace(b"42", b"40"))
+        self.assert_checkout_unchanged()
+        tree = self.build_tree()
+        self.assertEqual(tree, (self.repo / ".lake/check-tree/0.16.0").resolve())
+        self.assertEqual((tree / "Proofs/Basic/Gen.lean").read_bytes(), generated(self.fixture, version_body))
+        self.assertIn("build Proofs.Basic.Gen", (tree / "calls.log").read_text())
+        self.assertNotIn("build", (self.repo / "calls.log").read_text())
+        # A golden that is not this translation fails, still without writing.
+        golden.write_bytes(BODY.replace(b"42", b"39"))
+        self.commit("stale golden")
         result = self.pipeline()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("generated semantics changed", result.stderr)
+        self.assert_checkout_unchanged()
 
-    def test_real_body_change_and_dirty_index_fail_before_replacement(self):
+    def test_new_translation_outside_ci_is_tested_in_a_check_tree(self):
+        changed = BODY.replace(b"42", b"41")
+        (self.repo / "generated.txt").write_bytes(generated(self.fixture, changed))
+        self.commit("translator change")
+        result = self.pipeline(AIR2LEAN_CI="0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("to commit it: cp .lake/check-reports/0.16.0/basic.Gen.lean Proofs/Basic/Gen.lean", result.stderr)
+        self.assert_checkout_unchanged()
+        self.assertEqual((self.build_tree() / "Proofs/Basic/Gen.lean").read_bytes(), generated(self.fixture, changed))
+
+    def test_real_body_change_fails_in_ci(self):
         (self.repo / "generated.txt").write_bytes(generated(self.fixture, BODY.replace(b"42", b"41")))
+        self.commit("translator change")
         result = self.pipeline()
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(self.proof.read_bytes(), BODY)
         self.assertIn("differs from the translator output", result.stderr)
-        (self.repo / "generated.txt").write_bytes(generated(self.fixture))
-        self.proof.write_bytes(BODY + b"-- manual body edit\n")
-        self.git("add", "Proofs/Basic/Gen.lean")
-        self.proof.write_bytes(BODY)
-        result = self.pipeline()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("first-line profile record", result.stderr)
-        self.assertEqual(self.proof.read_bytes(), BODY)
+        self.assert_checkout_unchanged()
+        self.assertFalse((self.repo / ".lake/check-reports/0.16.0/build-tree").exists())
 
-    def test_untracked_and_unrelated_proof_changes_fail(self):
-        other = self.repo / "Proofs/Basic/Proofs.lean"
-        other.write_text("theorem extra : True := trivial\n")
-        result = self.pipeline()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unrelated or untracked proof change", result.stderr)
-        self.git("add", "Proofs/Basic/Proofs.lean")
-        self.git("-c", "user.name=Profile Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "proof baseline")
-        other.write_text("changed proof\n")
-        result = self.pipeline()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unrelated or untracked proof change", result.stderr)
+    def test_any_proof_or_golden_change_fails_in_ci(self):
+        for path, text in (("Proofs/Basic/Proofs.lean", "theorem extra : True := trivial\n"),
+                           ("Proofs/Basic/Gen.lean", "-- a header-only edit is a change too\n" + BODY.decode()),
+                           ("tests/golden/basic/air/basic.fixture.json", "{}")):
+            with self.subTest(path=path):
+                target = self.repo / path
+                original = target.read_bytes() if target.exists() else None
+                target.write_text(text)
+                result = self.pipeline()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("differ from HEAD in CI", result.stderr)
+                self.assertNotIn("dumping AIR", result.stderr)
+                if original is None:
+                    target.unlink()
+                else:
+                    target.write_bytes(original)
+        self.proof.write_bytes(BODY + b"-- staged\n")
+        self.git("add", "Proofs/Basic/Gen.lean")  # A staged change is a change.
+        self.proof.write_bytes(BODY)
+        self.assertIn("differ from HEAD in CI", self.pipeline().stderr)
 
     def test_invalid_actual_profile_precedes_any_golden_comparison(self):
         golden = self.repo / "tests/golden/basic/air/basic.fixture.json"
         golden.write_text("invalid golden JSON")
+        self.commit("invalid golden")
         result = self.pipeline(FAKE_TRANSLATOR_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("invalid actual profile rejected", result.stderr)
         self.assertNotIn("checking against golden", result.stderr)
-        self.assertEqual(self.proof.read_bytes(), BODY)
+        self.assert_checkout_unchanged()
 
     def test_proof_gate_remains_mandatory_when_diff_is_disabled(self):
         result = self.pipeline(FAKE_PROOF_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("proof gate rejected generated source", result.stderr)
-        self.assertTrue(self.proof.read_bytes().startswith(HELPER["PREFIX"]))
+        self.assert_checkout_unchanged()
 
 
 if __name__ == "__main__":

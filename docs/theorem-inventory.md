@@ -59,8 +59,9 @@ python3 scripts/theorem-inventory.py record --run 0.15.2-linux-lists --zig 0.15.
 python3 scripts/theorem-inventory.py write
 ```
 
-`swap-build` copies each translation over `Proofs/<Ex>/Gen.lean`, runs `lake build` and puts
-the committed file back. `record` checks the log against the report, refuses a translation
+`swap-build` builds in a check tree (`.lake/check-tree/theorem-inventory`, a copy of the
+checkout with each translation in place of `Proofs/<Ex>/Gen.lean`;
+[generated-code.md](generated-code.md#check-trees)), so the committed files are never written. `record` checks the log against the report, refuses a translation
 file that `scripts/gen-integrity.py attest` does not find to be a fresh translation of its
 committed AIR (so it needs the built translator), and stores the outcome, revision and hashes. `check` (CI, offline) needs no Lean.
 

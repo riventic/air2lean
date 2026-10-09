@@ -282,53 +282,31 @@ def compare(baseline, generated, report):
         raise ValueError(f"{baseline} differs from the translator output (generated semantics changed)")
 
 
-def check_tracked(path, generated, report):
-    """Reject staged, working-tree and untracked body changes before replacement."""
-    _, _, metadata = checked_generated(generated, report)
-    def git(*args):
-        return subprocess.run(["git", *args], check=True, capture_output=True).stdout
-    committed = git("show", f"HEAD:{path}")
-    _, committed_body = split_generated(committed)
-    for label, content in [("index", git("show", f":{path}")), ("working tree", Path(path).read_bytes())]:
-        if content == committed:
-            continue
-        header, body = split_generated(content, required=True)
-        if header != metadata or body != committed_body:
-            raise ValueError(f"{path}: {label} has changes beyond the validated profile header")
-
-
-def check_proof_status(examples):
-    allowed = {f"Proofs/{ex[0].upper() + ex[1:]}/Gen.lean" for ex in examples.split()}
-    result = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all", "--", "Proofs"],
-                            check=True, capture_output=True)
-    for entry in result.stdout.split(b"\0"):
-        if not entry:
-            continue
-        status, path = entry[:2], entry[3:].decode("utf-8")
-        if status == b"??" or b"R" in status or b"C" in status or path not in allowed:
-            raise ValueError(f"{path}: unrelated or untracked proof change in CI")
+def check_proof_status():
+    """check.sh compares and builds the working tree's translations: in CI they must be HEAD's."""
+    result = subprocess.run(["git", "status", "--porcelain", "-z", "--untracked-files=all", "--",
+                             "Proofs", "tests/golden"], check=True, capture_output=True)
+    changed = [entry[3:].decode("utf-8") for entry in result.stdout.split(b"\0") if entry]
+    if changed:
+        raise ValueError(f"{changed[0]}: proofs or committed translations differ from HEAD in CI")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    status = sub.add_parser("proof-status")
-    status.add_argument("examples")
+    sub.add_parser("proof-status")
     report = sub.add_parser("report")
     report.add_argument("generated"); report.add_argument("air_dir"); report.add_argument("output")
-    for command in ("compare", "tracked"):
-        p = sub.add_parser(command)
-        p.add_argument("baseline"); p.add_argument("generated"); p.add_argument("report")
+    compared = sub.add_parser("compare")
+    compared.add_argument("baseline"); compared.add_argument("generated"); compared.add_argument("report")
     args = parser.parse_args()
     try:
         if args.command == "proof-status":
-            check_proof_status(args.examples)
+            check_proof_status()
         elif args.command == "report":
             write_report(args.generated, args.air_dir, args.output)
-        elif args.command == "compare":
-            compare(args.baseline, args.generated, args.report)
         else:
-            check_tracked(args.baseline, args.generated, args.report)
+            compare(args.baseline, args.generated, args.report)
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"error: {error}\n")
 

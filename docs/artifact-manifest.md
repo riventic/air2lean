@@ -53,7 +53,9 @@ the AIR profile, a missing pin, or any unreadable link. Schema < 12 AIR records 
 under a link's named inputs that differs from `HEAD`, staged or not, including deletions),
 `untracked_link_paths` (hashed link files not in the index) and `external_link_paths` (outside the
 repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
-reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given.
+reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given. For
+the same reason it rejects a chained proof receipt sealed over a dirty tree
+(`tree.dirty_allowed`, [proof-receipts.md](proof-receipts.md)) unless `--allow-dirty` is given.
 
 ### Native-binary identity
 

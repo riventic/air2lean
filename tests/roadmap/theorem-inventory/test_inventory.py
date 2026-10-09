@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -295,7 +296,9 @@ class FixtureTests(unittest.TestCase):
                              '--guard-log', str(log)], code=1)
         self.assertEqual(self.fx.load()['runs'], {})
 
-    def test_swap_build_restores_the_committed_translation(self):
+    def test_swap_build_never_writes_the_committed_translation(self):
+        subprocess.run(['git', 'init', '-q', str(self.fx.root)], check=True)
+        subprocess.run(['git', '-C', str(self.fx.root), 'add', '.'], check=True)
         bin_dir = Path(self.temp.name) / 'bin'
         bin_dir.mkdir()
         lake = bin_dir / 'lake'
