@@ -8,7 +8,7 @@ compared by check.sh) or a minimal evidence fixture through the shipped claim to
 Default mode pins the *current* verdicts: every case is EXPOSED (the tooling reports a claim it
 should not). A fix flips its case; update EXPECTED_EXPOSED together with the fix so the
 regression then guards the secure verdict. `--require-fixed` fails on any exposure (use it to
-gate a hardening branch).
+gate a hardening branch); `--finding ID` (repeatable) restricts the run to those findings' cases.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 
@@ -52,8 +53,9 @@ LEAN_CASES = {
     'AuditClaims.spin_partial': ('AuditClaims.spin', 'partial_correctness', 'S6'),
     'AuditClaims.asm_divmod_total': ('Asm.divmod', 'total_correctness', 'S7'),
 }
-EXPECTED_EXPOSED = set(LEAN_CASES) | {'receipt-schema-skew', 'host-allowlist-masks-panic',
-                                      'model-illegal-masks-native-value'}
+# S1 is fixed: kernel replay rejects AuditClaims.Unchecked, so its theorem is not `allowed`.
+EXPECTED_EXPOSED = (set(LEAN_CASES) - {'AuditClaims.unchecked_total'}) | {
+    'receipt-schema-skew', 'host-allowlist-masks-panic', 'model-illegal-masks-native-value'}
 
 
 def coverage_level(theorem_name, definition, strength):
@@ -127,15 +129,77 @@ def model_illegal_masks_native_value():
     return status == diff_report.Status.ILLEGAL, f'native ok / model illegal -> {status.value}'
 
 
-PY_CASES = {'receipt-schema-skew': receipt_schema_skew, 'host-allowlist-masks-panic': host_allowlist_masks_panic,
-            'model-illegal-masks-native-value': model_illegal_masks_native_value}
+def indexed_theorems_unaudited():
+    """F2: every theorem file docs/premise-index.md indexes must be compiled and audited (axioms,
+    sorryAx, kernel replay), and a `declaration uses 'sorry'` warning must fail its compilation;
+    Lean itself exits 0 on it."""
+    if not (ROOT / 'scripts/theorem_universe.py').is_file():
+        return True, 'no theorem universe: tutorials and tests/roadmap theorems are checked by exit code only'
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    import premises
+    import theorem_universe as universe
+    shipped, units = universe.universe()
+    repo = premises.load_repository(ROOT, premises.load_config(ROOT / premises.CONFIG))
+    indexed = {f.rel for f in premises.theorem_files(repo)}
+    unaudited = indexed - {u.file for u in units} - {m.replace('.', '/') + '.lean' for m in shipped}
+    original = universe.run
+    universe.run = lambda *a, **k: subprocess.CompletedProcess(a, 0, "F.lean:1:0: warning: declaration uses 'sorry'\n")
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            sorry = universe.compile_unit('F.lean', '.', Path(temp) / 'F.olean', [], Path(temp) / 'F.log')
+    finally:
+        universe.run = original
+    return bool(unaudited) or sorry is None, f'{len(indexed)} indexed files, {len(unaudited)} unaudited; sorry warning -> {sorry!r}'
+
+
+def stale_report_accepted():
+    """H1: claims.py check must bind an assurance report to the tree: a report whose recorded
+    olean changed since the audit is stale, whatever its `status`."""
+    with tempfile.TemporaryDirectory() as temp:
+        base = Path(temp)
+        olean = base / 'Stale.olean'
+        olean.write_bytes(b'audited bytes')
+        digest = hashlib.sha256(olean.read_bytes()).hexdigest()
+        olean.write_bytes(b'bytes compiled after the audit')
+        head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+        report = {'schema_version': 1, 'status': 'pass', 'theorems': [THEOREMS['AuditClaims.hyp_is_claim']],
+                  'freshness': {'revision': {'head': head, 'tracked_dirty': False},
+                                'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+                                'artifacts': [{'module': 'Stale', 'olean': str(olean), 'olean_sha256': digest,
+                                               'source': None, 'source_sha256': None}]}}
+        (base / 'assurance.json').write_text(json.dumps(report))
+        (base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
+        manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
+                    'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
+                    'allowed_assumptions': [],
+                    'roots': [{'id': 'r', 'function': 'f', 'air': ['f.json'], 'namespace': 'AuditClaims', 'prefix': '',
+                               'contracts': ['Vacuous.lean'], 'assumptions': [], 'exclusions': [],
+                               'goals': [{'theorem': 'AuditClaims.hyp_is_claim', 'strength': 'safety', 'domain': 'all'}]}]}
+        (base / 'project.json').write_text(json.dumps(manifest))
+        command = [sys.executable, '-B', str(ROOT / 'scripts/claims.py'), 'check', str(base / 'project.json'),
+                   '--assurance', str(base / 'assurance.json')]
+        usage = subprocess.run(command[:4] + ['--help'], capture_output=True, text=True).stdout
+        # A dirty checkout must not be the reason for the refusal: the stale olean must be.
+        result = subprocess.run(command + (['--allow-dirty'] if '--allow-dirty' in usage else []),
+                                capture_output=True, text=True)
+    return 'stale' not in result.stderr, f'claims.py check on a stale report exits {result.returncode}: {result.stderr.strip()[-120:]}'
+
+
+# name -> (finding, case)
+PY_CASES = {'receipt-schema-skew': ('F1', receipt_schema_skew),
+            'host-allowlist-masks-panic': ('F3', host_allowlist_masks_panic),
+            'model-illegal-masks-native-value': ('F3', model_illegal_masks_native_value),
+            'indexed-theorems-unaudited': ('F2', indexed_theorems_unaudited),
+            'stale-report-accepted': ('H1', stale_report_accepted)}
 
 
 def main(argv):
     require_fixed = '--require-fixed' in argv
+    findings = {argv[i + 1] for i, arg in enumerate(argv) if arg == '--finding'}
+    selected = lambda finding: not findings or finding in findings
     failures = []
-    results = {name: lean_case(name) for name in LEAN_CASES}
-    results.update({name: case() for name, case in PY_CASES.items()})
+    results = {name: lean_case(name) for name, (_, _, finding) in LEAN_CASES.items() if selected(finding)}
+    results.update({name: case() for name, (finding, case) in PY_CASES.items() if selected(finding)})
     for name, (exposed, detail) in results.items():
         print(f'{"EXPOSED" if exposed else "fixed  "} {name}: {detail}')
         if require_fixed and exposed:

@@ -1340,9 +1340,19 @@
         {
           "path": "tests/roadmap/artifact-manifest/test_manifest.py",
           "anchor": "def test_profile_mismatch_between_air_and_generated"
+        },
+        {
+          "path": "tests/roadmap/proof-receipts/test_receipt.py",
+          "anchor": "def test_dirty_tree_receipt_needs_recorded_permission"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "receipt-dirty-tree-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I08": {
       "categories": [
@@ -1418,11 +1428,70 @@
         {
           "path": "tests/roadmap/assurance/test_policy.py",
           "anchor": "def test_transitive_hidden_sorry"
+        },
+        {
+          "path": "tests/roadmap/assurance/test_policy.py",
+          "anchor": "def test_kernel_replay_rejection_fails_dependent_theorems"
+        },
+        {
+          "path": "tests/roadmap/assurance/test_policy.py",
+          "anchor": "def test_module_outside_replay_is_not_trusted"
+        },
+        {
+          "path": "tests/roadmap/theorem-universe/test_universe.py",
+          "anchor": "def test_every_indexed_theorem_file_is_audited"
+        },
+        {
+          "path": "tests/roadmap/theorem-universe/test_universe.py",
+          "anchor": "def test_compile_rejects_sorry_warnings"
+        },
+        {
+          "path": "tests/roadmap/theorem-universe/test_universe.py",
+          "anchor": "def test_changed_artifact_or_revision_is_stale"
+        },
+        {
+          "path": "tests/roadmap/proof-receipts/test_receipt.py",
+          "anchor": "def test_receipt_requires_kernel_replay_by_planned_toolchain"
         }
       ],
       "mutants": [
         {
           "name": "audit-dependency-violation-not-transferred",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-kernel-replay-rejection-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-unreplayed-module-trusted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-replay-cache-ignores-digest",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "audit-freshness-digest-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "universe-sorry-warning-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "universe-kernel-bypass-unscanned",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "receipt-replay-tool-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "invariant-transfer"
         }

@@ -10,7 +10,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-REPORTS = [ROOT / '.lake/architecture-audit/claims' / f'assurance-{name}.json' for name in ('Vacuous', 'Shadow')]
+REPORTS = [ROOT / '.lake/architecture-audit/claims' / f'assurance-{name}.json' for name in ('Vacuous', 'Shadow', 'Unchecked')]
 GENERATED = ('AuditClaims.root', 'AuditClaims.spin', 'Asm.divmod')
 SNAPSHOT = HERE / 'exposure-report.json'
 FIELDS = ('name', 'module', 'axioms', 'conclusion', 'statement_dependencies', 'conclusion_dependencies',
@@ -21,7 +21,10 @@ def extract():
     theorems, nodes = [], {}
     for path in REPORTS:
         report = json.loads(path.read_text())
-        if report.get('status') != 'pass':
+        # Kernel replay rejects AuditClaims.Unchecked (S1 fixed): its report fails on exactly that.
+        violations = report.get('violations') or []
+        replay_only = bool(violations) and all(v['trust_class'] == 'kernel-replay-rejected' for v in violations)
+        if report.get('status') != 'pass' and not (report.get('status') == 'fail' and replay_only):
             raise SystemExit(f'{path}: assurance audit did not pass: {report.get("violations") or report.get("error")}')
         theorems += [{k: t[k] for k in FIELDS} for t in report['theorems'] if '._proof' not in t['name']]
         nodes.update({n['name']: {'module': n['module'], 'kind': n['kind']} for n in report['nodes']

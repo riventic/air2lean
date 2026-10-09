@@ -18,6 +18,13 @@ MARKER = "AIR2LEAN_ASSURANCE_JSON:"
 STANDARD_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
 POLICY_FIELDS = {"schema_version", "standard_logical_axioms", "project_axioms",
                  "project_opaques", "project_compiler_redirections", "project_externs"}
+# Modules under these roots ship with the pinned toolchain; every other module in a theorem's
+# dependency graph must be replayed through the kernel (`leanchecker`) before it is trusted.
+TOOLCHAIN_ROOTS = ("Init", "Std", "Lean", "Lake")
+# Module roots of the lakefile.toml targets: their oleans are trace-checked by Lake.
+LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
+REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
+                 "modules", "modules_sha256", "reused", "rejected", "status"}
 
 
 def is_compiler_axiom(name: str) -> bool:
@@ -78,6 +85,30 @@ def policy_key(node: dict) -> str:
     return node["module"] + "::" + node.get("user_name", node["name"])
 
 
+def needs_replay(module: str) -> bool:
+    return bool(module) and module.split(".")[0] not in TOOLCHAIN_ROOTS
+
+
+def modules_digest(modules: list[str]) -> str:
+    return hashlib.sha256("".join(m + "\n" for m in modules).encode()).hexdigest()
+
+
+def replay_record(replay) -> tuple[set[str], set[str]]:
+    """Validate a kernel-replay record; return the replayed and the rejected modules."""
+    if not isinstance(replay, dict) or set(replay) != REPLAY_FIELDS or replay["schema_version"] != 1:
+        raise ValueError("missing or malformed kernel replay record")
+    modules, rejected = replay["modules"], replay["rejected"]
+    if (replay["tool"] != "leanchecker" or not isinstance(modules, list)
+            or modules != sorted(set(modules)) or not all(isinstance(m, str) and m for m in modules)
+            or replay["modules_sha256"] != modules_digest(modules) or not isinstance(rejected, list)
+            or not all(isinstance(r, dict) and set(r) == {"module", "output"} and r["module"] in modules
+                       for r in rejected)
+            or not isinstance(replay["reused"], list) or not set(replay["reused"]) <= set(modules)
+            or replay["status"] != ("fail" if rejected else "pass")):
+        raise ValueError("inconsistent kernel replay record")
+    return set(modules), {r["module"] for r in rejected}
+
+
 def is_project_module(module: str, modules: set[str]) -> bool:
     return module in modules or not module.startswith(("Init.", "Std.", "Lean."))
 
@@ -122,16 +153,25 @@ def float_semantics():
     return module
 
 
-def apply_policy(raw: dict, policy: dict, labels: dict | None = None) -> dict:
+def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_theorems: bool = True) -> dict:
     if raw.get("schema_version") != 1:
         raise ValueError("unsupported extractor schema")
     modules = set(raw["modules"])
     nodes = {n["name"]: dict(n) for n in raw["nodes"]}
     if len(nodes) != len(raw["nodes"]):
         raise ValueError("duplicate declaration in extracted graph")
+    replayed, rejected = replay_record(raw.get("kernel_replay"))
+    if not modules <= replayed:
+        raise ValueError("kernel replay does not cover the selected modules")
     issues: dict[str, dict] = {}
     for name, node in nodes.items():
         trust, problem = classify(node, policy, modules)
+        # TRU-01 is enforced, not assumed: a declaration counts only if the kernel re-checked its
+        # module. An elaborator option such as debug.skipKernelTC writes unchecked oleans.
+        if node["module"] in rejected:
+            trust, problem = "kernel-replay-rejected", "module rejected by kernel replay"
+        elif needs_replay(node["module"]) and node["module"] not in replayed:
+            trust, problem = "kernel-replay-missing", "module was not replayed through the kernel"
         node["trust_class"] = trust
         issue_trust = trust
         key = policy_key(node)
@@ -220,10 +260,11 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None) -> dict:
         theorem["violations"] = sorted(visited.intersection(issues))
         theorem["allowed"] = not theorem["violations"]
         theorems.append(theorem)
-    if not theorems:
+    if not theorems and require_theorems:
         raise ValueError("no checked theorems selected; nothing was audited")
     return {"schema_version": 1, "status": "fail" if issues else "pass",
             "modules": sorted(modules), "theorem_count": len(theorems),
+            "kernel_replay": raw["kernel_replay"],
             "theorems": sorted(theorems, key=lambda t: t["name"]),
             "project_declarations": raw.get("project_declarations", []),
             "nodes": sorted(nodes.values(), key=lambda n: n["name"]),
@@ -310,6 +351,127 @@ def extract(modules: list[str], build: bool) -> dict:
     return raw
 
 
+def lake_env(name: str) -> str:
+    return run(["lake", "env", "printenv", name]).strip()
+
+
+def git_revision(root: Path = ROOT) -> dict:
+    def git(*args):
+        return subprocess.run(["git", "-C", str(root), *args], check=True, text=True,
+                              capture_output=True, timeout=30).stdout
+    try:
+        return {"head": git("rev-parse", "HEAD").strip(),
+                "tracked_dirty": bool(git("status", "--porcelain", "--untracked-files=no"))}
+    except (OSError, subprocess.SubprocessError):
+        return {"head": None, "tracked_dirty": True}
+
+
+def locate(module: str, lean_path: list[Path]) -> Path:
+    relative = module.replace(".", "/") + ".olean"
+    for directory in lean_path:
+        if (directory / relative).is_file():
+            return directory / relative
+    raise ValueError(f"no compiled module for {module}")
+
+
+def display(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
+
+
+def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
+                  cacheable: frozenset = frozenset()) -> dict:
+    """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
+
+    Imports are loaded from oleans, so the caller passes every non-toolchain module of the
+    dependency graph: together they replay the complete closure above the toolchain. `cache`
+    (one build only; receipts never use it) holds `cacheable` (Lake-built) modules that already
+    passed with the same checker and identical olean bytes. Their imports are Lake-built too, so
+    any differing digest among them drops the whole cache."""
+    from concurrent.futures import ThreadPoolExecutor  # Lazy: the offline receipt suite has a 32 MiB budget.
+    checker = toolchain / "bin/leanchecker"
+    checker_sha = file_sha256(checker)
+    environment = {**os.environ, "LEAN_PATH": lean_path}
+    jobs = max(1, int(os.environ.get("AIR2LEAN_REPLAY_JOBS") or min(4, os.cpu_count() or 1)))
+    try:
+        cached = json.loads(cache.read_text()) if cache else {}
+    except FileNotFoundError:
+        cached = {}
+    passed = cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha else {}
+    if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
+        passed = {}  # Another build: a reused module could depend on a changed one.
+    modules = sorted(digests)
+    reused = [m for m in modules if m in cacheable and passed.get(m) == digests[m]]
+
+    def check(module: str):
+        result = subprocess.run([str(checker), module], cwd=ROOT, env=environment, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return None if result.returncode == 0 else {"module": module, "output": result.stdout[-2000:]}
+
+    with ThreadPoolExecutor(jobs) as pool:
+        rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
+    if cache:
+        failed = {r["module"] for r in rejected}
+        passed.update({m: d for m, d in digests.items() if m in cacheable and m not in failed})
+        write_report(cache, {"tool_sha256": checker_sha, "passed": passed})
+    return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
+            "lean_sha256": file_sha256(toolchain / "bin/lean"),
+            "toolchain": (ROOT / "lean-toolchain").read_text().strip(),
+            "modules": modules, "modules_sha256": modules_digest(modules), "reused": reused,
+            "rejected": rejected, "status": "fail" if rejected else "pass"}
+
+
+def replay_and_freshness(raw: dict, cache: Path | None = None) -> dict:
+    """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
+    toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
+    lean_path_text = lake_env("LEAN_PATH")
+    lean_path = [Path(p).resolve() for p in lean_path_text.split(os.pathsep) if p]
+    standard = toolchain / "lib/lean"
+    graph_modules = {n["module"] for n in raw["nodes"]}
+    for module in sorted(m for m in graph_modules if m and not needs_replay(m)):
+        if not locate(module, lean_path).is_relative_to(standard):
+            raise ValueError(f"toolchain module {module} is shadowed by a project olean")
+    built = ROOT / ".lake/build/lib/lean"
+    artifacts, lake_modules = [], []
+    for module in sorted(set(raw["modules"]) | {m for m in graph_modules if needs_replay(m)}):
+        olean = locate(module, lean_path)
+        row = {"module": module, "olean": display(olean), "olean_sha256": file_sha256(olean),
+               "source": None, "source_sha256": None}
+        source = ROOT / (module.replace(".", "/") + ".lean")
+        if olean.is_relative_to(built) and module.split(".")[0] in LAKE_ROOTS and source.is_file():
+            row.update(source=display(source), source_sha256=file_sha256(source))
+            lake_modules.append(module)
+        artifacts.append(row)
+    if lake_modules:
+        # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
+        run(["lake", "--rehash", "build", "--no-build", *lake_modules])
+    raw["kernel_replay"] = kernel_replay({r["module"]: r["olean_sha256"] for r in artifacts},
+                                         toolchain, lean_path_text, cache, frozenset(lake_modules))
+    return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
+            "artifacts": artifacts}
+
+
+def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
+    """Recompute the digests a report was bound to; fail on a stale report or tree (H1)."""
+    freshness = report.get("freshness")
+    if not isinstance(freshness, dict) or not isinstance(freshness.get("artifacts"), list):
+        raise ValueError("assurance report carries no freshness binding; re-run scripts/assumptions.py")
+    recorded, current = freshness.get("revision"), git_revision()
+    if not isinstance(recorded, dict) or recorded.get("head") is None or recorded.get("head") != current["head"]:
+        raise ValueError(f"assurance report is not for revision {current['head']}")
+    dirty = recorded.get("tracked_dirty") or current["tracked_dirty"]
+    if dirty and not allow_dirty:
+        raise ValueError("assurance report or tree has uncommitted tracked changes (pass --allow-dirty to record them)")
+    if (freshness.get("lake_trace_check") or {}).get("status") != "up-to-date":
+        raise ValueError("assurance report has no passing Lake trace check")
+    for row in freshness["artifacts"]:
+        for kind in ("olean", "source"):
+            path = row[kind] and (ROOT / row[kind] if not Path(row[kind]).is_absolute() else Path(row[kind]))
+            if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):
+                raise ValueError(f"assurance report is stale: {row['module']} {kind} changed")
+    return {"head": current["head"], "tracked_dirty": dirty, "dirty_allowed": bool(dirty and allow_dirty),
+            "artifacts": len(freshness["artifacts"])}
+
+
 def write_report(path: Path, report: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
@@ -335,7 +497,12 @@ def main() -> int:
     parser.add_argument("--float-semantics", type=Path, default=ROOT / "assurance/float-semantics.json",
                         help="float-semantics label registry (docs/float-semantics.md)")
     parser.add_argument("--module", action="append", help="audit explicit modules instead of the complete shipped scope")
-    parser.add_argument("--no-build", action="store_true", help="audit prebuilt modules (caller must ensure artifacts are current)")
+    parser.add_argument("--no-build", action="store_true",
+                        help="audit prebuilt modules; Lake-built ones must still pass Lake's trace check")
+    parser.add_argument("--replay-cache", type=Path,
+                        help="reuse kernel replays of identical oleans within one run (never for receipts)")
+    parser.add_argument("--allow-no-theorems", action="store_true",
+                        help="audit declarations of modules whose only proofs are examples")
     args = parser.parse_args()
     try:
         policy = load_policy(args.policy)
@@ -344,7 +511,9 @@ def main() -> int:
         raw = extract(modules, not args.no_build)
         if raw["modules"] != modules:
             raise ValueError("extractor scope differs from requested module inventory")
-        report = apply_policy(raw, policy, labels)
+        freshness = replay_and_freshness(raw, args.replay_cache)
+        report = apply_policy(raw, policy, labels, not args.allow_no_theorems)
+        report["freshness"] = freshness
         report["extractor"] = raw["extractor"]
         del raw
         report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"

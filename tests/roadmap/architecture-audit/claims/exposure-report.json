@@ -850,8 +850,10 @@
     "Nat.sub"
    ],
    "compiler_redirections": [],
-   "violations": [],
-   "allowed": true
+   "violations": [
+    "AuditClaims.unchecked_total"
+   ],
+   "allowed": false
   },
   {
    "name": "AuditClaims.unsat_pre",

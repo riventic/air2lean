@@ -13,8 +13,9 @@ for module in Gen Vacuous Shadow Unchecked AsmTotal; do
   lake env lean -R "$src" -o "$out/lib/AuditClaims/$module.olean" "$src/AuditClaims/$module.lean"
 done
 # Separate audits: Shadow declares its own Zig.TotalTriple and cannot share an environment with
-# ZigLean.Sep.Total, exactly as a project contract audited alone with --module.
-for group in "Vacuous Unchecked AsmTotal" "Shadow"; do
+# ZigLean.Sep.Total, exactly as a project contract audited alone with --module. Unchecked is
+# audited alone because kernel replay (S1) rejects its module and so fails its whole report.
+for group in "Vacuous AsmTotal" "Shadow" "Unchecked"; do
   name=${group%% *}
   args=()
   for module in $group; do args+=(--module "AuditClaims.$module"); done
