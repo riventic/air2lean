@@ -33,7 +33,7 @@ export or `.lake/check-reports` file). The output path must not exist; it is nev
 | `toolchain` | `lean-toolchain`, `lakefile.toml`, `lake-manifest.json` | changed toolchain/build configuration |
 | `proofs` | `--proof` (default `Proofs/Ex/*.lean` except `Gen.lean`) | changed proof sources |
 | `theorems` | namespace-qualified theorem names scanned from the proof files; with `--audit` or `--receipt`, also the compiled audit's theorem names, statuses and non-allowed names for those modules | changed theorem inventory |
-| `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json` and `after.json` when present (`receipt.json` hash-binds the rest, so the multi-MB `after.json` may be omitted from a committed copy). Receipt schema 1 and 2 are both just hashed bytes. A receipt inside the repository is recorded repository-relative | changed proof receipt |
+| `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json` and `after.json` when present (`receipt.json` hash-binds the rest, so the multi-MB `after.json` may be omitted from a committed copy). Receipt schemas 1 to 3 are all just hashed bytes. A receipt inside the repository is recorded repository-relative | changed proof receipt |
 | `native` | only with `--native-binary`: stock-Zig build of the same source; target, mode, cpu, compiler version, compiler sha256, binary sha256, plus the current `source` and `profile` link digests and whether target/mode/Zig version agree with the proved profile | wrong native binary |
 
 Each link digest is SHA-256 over canonical JSON of its `{files, value}`; each chain entry
