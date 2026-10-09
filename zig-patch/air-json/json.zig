@@ -604,6 +604,8 @@ const W = struct {
     /// The globals that pointer constants point into, in first-encounter order: the `globals`
     /// table. Grows while `writeFunc` drains it, like `queue`.
     globals: std.ArrayListUnmanaged(Global) = .empty,
+    /// The extern functions this body calls, in first-encounter order: the `externs` table.
+    externs: std.ArrayListUnmanaged(InternPool.Index) = .empty,
 
     const Global = union(enum) {
         nav: InternPool.Nav.Index,
@@ -705,8 +707,26 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
+        // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
+        // program can resolve to (docs/air-json.md §Extern calls).
+        if (w.exportedName(owner_nav)) |symbol| {
+            try w.field("export");
+            try w.j.beginObject();
+            try w.field("name");
+            try w.j.write(symbol);
+            try w.field("cc");
+            try w.j.write(@tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc));
+            try w.j.endObject();
+        }
         try w.field("body");
         try w.writeBody(w.air.getMainBody());
+        // Only a function that calls an extern function has externs.
+        if (w.externs.items.len > 0) {
+            try w.field("externs");
+            try w.j.beginArray();
+            for (w.externs.items) |e| try w.writeExternEntry(ip.indexToKey(e).@"extern");
+            try w.j.endArray();
+        }
         // Only a function with a pointer constant has globals.
         if (w.globals.items.len > 0) {
             try w.field("globals");
@@ -722,6 +742,42 @@ const W = struct {
             try w.writeTypeEntry(Type.fromInterned(w.queue.items[i]));
         }
         try w.j.endArray();
+        try w.j.endObject();
+    }
+
+    /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
+    /// symbol `f`), else null. `@export` aliases are not reported: an extern call to one stays
+    /// unbound, which the translator rejects.
+    fn exportedName(w: *W, nav_index: InternPool.Nav.Index) ?[]const u8 {
+        const zcu = w.pt.zcu;
+        const ip = &zcu.intern_pool;
+        const nav = ip.getNav(nav_index);
+        const analysis = nav.analysis orelse return null;
+        const inst = analysis.zir_index.resolve(ip) orelse return null;
+        const zir = zcu.navFileScope(nav_index).zir orelse return null;
+        if (zir.getDeclaration(inst).linkage != .@"export") return null;
+        return nav.name.toSlice(ip);
+    }
+
+    /// One `externs` entry: an extern function's linker identity and full function type.
+    fn writeExternEntry(w: *W, e: InternPool.Key.Extern) Error!void {
+        const ip = &w.pt.zcu.intern_pool;
+        const fn_info = ip.indexToKey(e.ty).func_type;
+        try w.j.beginObject();
+        try w.field("name");
+        try w.j.write(e.name.toSlice(ip));
+        try w.field("library");
+        try w.j.write(e.lib_name.toSlice(ip));
+        try w.field("cc");
+        try w.j.write(@tagName(fn_info.cc));
+        try w.field("params");
+        try w.j.beginArray();
+        for (fn_info.param_types.get(ip)) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
+        try w.j.endArray();
+        try w.field("ret");
+        try w.writeTypeRef(Type.fromInterned(fn_info.return_type));
+        try w.field("varargs");
+        try w.j.write(fn_info.is_var_args);
         try w.j.endObject();
     }
 
@@ -1321,6 +1377,18 @@ const W = struct {
                             }
                         }
                     }
+                },
+                // An extern function: its symbol; the `externs` table has its declaration.
+                .@"extern" => |e| if (ip.isFunctionType(e.ty)) {
+                    try w.field("extern");
+                    try w.j.write(e.name.toSlice(ip));
+                    try w.field("noreturn");
+                    try w.j.write(Type.fromInterned(e.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
+                    if (std.mem.indexOfScalar(InternPool.Index, w.externs.items, ip_index) == null)
+                        try w.externs.append(w.gpa, ip_index);
+                } else {
+                    try w.field("val");
+                    try w.writeFmt(val.fmtValue(w.pt));
                 },
                 .err => |e| {
                     try w.field("err");

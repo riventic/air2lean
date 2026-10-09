@@ -32,6 +32,8 @@ inductive Shape where
   | oneOf (values : List String)
   /-- A vector lane index: a natural number, `"runtime"` or `null`. -/
   | lane
+  /-- A string or `null`. -/
+  | strOrNull
   deriving BEq, Repr
 
 def Shape.accepts : Shape → Json → Bool
@@ -45,6 +47,7 @@ def Shape.accepts : Shape → Json → Bool
     | .ok s => values.contains s
     | .error _ => false
   | .lane, v => v.isNull || v == .str "runtime" || v.getNat?.toOption.isSome
+  | .strOrNull, v => v.isNull || v.getStr?.toOption.isSome
 
 def Shape.describe : Shape → String
   | .nat => "a natural number"
@@ -55,6 +58,7 @@ def Shape.describe : Shape → String
   | .marker => "the literal true"
   | .oneOf values => s!"one of {values}"
   | .lane => "a lane index, \"runtime\" or null"
+  | .strOrNull => "a string or null"
 
 structure Key where
   name : String
@@ -136,6 +140,8 @@ def refForms : List (String × List Key) :=
      opt "comptime_fn" .str, opt "comptime_fn_module" .str,
      -- Content-addressed instance identity (`docs/air-json.md` §Instances).
      opt "instance_key" .str, opt "comptime_fn_instance_key" .str]),
+   -- An extern function (G1, `docs/air-json.md` §Extern calls): its linker symbol.
+   ("extern", [req "ty" .nat, req "extern" .str, req "noreturn" .bool]),
    ("undef", [req "ty" .nat, req "undef" .marker]),
    ("err", [req "ty" .nat, req "err" .str]),
    ("payload", [req "ty" .nat, req "payload" .obj]),
@@ -161,8 +167,17 @@ def laneForms : List (String × List Key) :=
 
 def topKeys : List Key :=
   [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, req "profile" .obj,
-   req "name" .str, moduleKey, opt "src" .obj, opt "instance_key" .str, req "params" .arr, req "ret" .nat, req "body" .arr,
-   opt "globals" .arr, req "types" .arr]
+   req "name" .str, moduleKey, opt "src" .obj, opt "instance_key" .str, opt "export" .obj,
+   opt "externs" .arr, req "params" .arr, req "ret" .nat, req "body" .arr, opt "globals" .arr,
+   req "types" .arr]
+
+/-- An `export fn`'s linker symbol and calling convention (`export`, G1). -/
+def exportKeys : List Key := [req "name" .str, req "cc" .str]
+
+/-- One extern function the body calls (an `externs` entry, G1). -/
+def externKeys : List Key :=
+  [req "name" .str, req "library" .strOrNull, req "cc" .str, req "params" .arr, req "ret" .nat,
+   req "varargs" .bool]
 
 /-- A declaration site (`src`, I05): of the file's function and of a `dbg_inline_block`'s
 inlined function. Diagnostics read it; translation does not. -/
@@ -340,6 +355,11 @@ def checkType (path : String) (j : Json) : Except String Unit := do
 def validate (j : Json) : Except String Unit := do
   checkKeys "AIR file" topKeys j
   if let some src := child? j "src" then checkKeys "AIR file src" srcKeys src
+  if let some e := child? j "export" then checkKeys "AIR file export" exportKeys e
+  for (e, i) in (← items "AIR file" j "externs").zipIdx do
+    checkKeys s!"externs[{i}]" externKeys e
+    for p in (← items s!"externs[{i}]" e "params") do
+      unless Shape.nat.accepts p do throw s!"externs[{i}]: params must be type ids"
   let types ← items "AIR file" j "types"
   for (t, i) in types.zipIdx do checkType s!"types[{i}]" t
   for p in (← items "AIR file" j "params") do

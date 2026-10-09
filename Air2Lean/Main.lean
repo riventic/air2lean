@@ -326,15 +326,19 @@ private def run (args : List String) : IO UInt32 := do
               | .ok () => funcs := funcs.push f
       let (checked, programNs) ← timed fun _ => (do
         match err with | some e => throw e | none => pure ()
-        if !a.registryTemplate then
-          checkProgram funcs models profiles[0]?
-          if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
-        : Except String Unit)
+        -- A template lists the extern calls that bind to no definition as model symbols.
+        if a.registryTemplate then return (← resolveExternsCollect funcs models).1
+        let resolved ← resolveExterns funcs models
+        checkProgram resolved models profiles[0]?
+        if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
+        return resolved
+        : Except String (Array Func))
       times := { times with check := times.check + programNs }
       let inputBytes := texts.foldl (fun n text => n + text.utf8ByteSize) 0
       match checked with
       | .error e => die e
-      | .ok () =>
+      | .ok resolved =>
+        funcs := resolved
         match BuildProfile.checkProgram profiles a.profile a.allowUnqualified with
         | .error e => die e
         | .ok profile =>
