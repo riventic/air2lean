@@ -140,7 +140,7 @@
     {"premise": "ALC-07", "scope": "closure", "pattern": "AllocRef|(?:^|\\.)(?:Arena\\.(?:init|deinit)|FixedBuffer\\.init|Owned\\.(?:init|reset))|owned(?:RawAlloc|AllocBytes|Free|RemapBytes|State)|resetOwned"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
     {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC|spawnAdmits|assignment(?:Count|Outcome|ChoiceC)"},
-    {"premise": "THR-04", "scope": "closure", "pattern": "group(?:Async|Await|Concurrent|Cancel)C"},
+    {"premise": "THR-04", "scope": "closure", "pattern": "group(?:Async|Defer|Await|Concurrent|Cancel)C|groupAsyncWithPolicyC"},
     {"premise": "THR-05", "scope": "closure", "pattern": "[Ff]utex"},
     {"premise": "THR-06", "scope": "closure", "pattern": "osUnfairLock|DarwinImpl"},
     {"premise": "THR-07", "scope": "closure", "pattern": "spinLoopHint|threadYield"},

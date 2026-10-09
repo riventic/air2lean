@@ -779,13 +779,13 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
 
 /-! ## Spawn and join -/
 
-theorem fork_eq {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
+theorem fork_eq {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     c = m.threads.size ∧ m' = { m with
       current := t,
       clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
-      threads := m.threads.push { spawner := t, joined := false } } := by
-  rw [Proto.fork_run] at hf
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } := by
+  rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
   exact ⟨rfl, rfl⟩
@@ -810,9 +810,9 @@ theorem fork_clocks {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) :
 
 /-- A spawn by `t`, which is out of the lock's code: `t` keeps `part g₁`, the new thread gets
 `part g₀` and starts out of the lock's code. -/
-theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ : γ} (hi : L.Inv G m)
-    (hout : L.ph (G t) = .out)
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m')))
+theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ : γ} {gt : Bool}
+    (hi : L.Inv G m) (hout : L.ph (G t) = .out)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
     (hsplit : L.part (G t) = L.part g₁ ∪ L.part g₀) (hd : Heap.Disjoint (L.part g₁) (L.part g₀))
     (h₁ : L.ph g₁ = .out) (h₁h : L.held g₁ = Heap.empty)
     (h₀ : L.ph g₀ = .out) (h₀h : L.held g₀ = Heap.empty)
@@ -845,7 +845,7 @@ theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ 
   have hown : L.own (upd (upd G m.threads.size g₀) t g₁) { m with
       current := t,
       clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
-      threads := m.threads.push { spawner := t, joined := false } } =
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } =
       upd (upd (L.own G m) t (L.part g₁)) m.threads.size (L.part g₀) := by
     funext u
     unfold Lock.own; rw [hjb]
@@ -858,7 +858,7 @@ theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ 
   have hall : ∀ {c : VClock}, L.LiveLe G m c → L.LiveLe (upd (upd G m.threads.size g₀) t g₁) { m with
       current := t,
       clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
-      threads := m.threads.push { spawner := t, joined := false } } c := by
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } c := by
     intro c h u hu hg
     simp only [Array.size_push] at hu
     by_cases hu' : u < m.threads.size
@@ -869,7 +869,7 @@ theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ 
   have hsome : ∀ {c : VClock}, SomeLe m c → SomeLe { m with
       current := t,
       clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
-      threads := m.threads.push { spawner := t, joined := false } } c := by
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } c := by
     rintro c ⟨u, hu, hle⟩
     exact ⟨u, by simp only [Array.size_push]; exact Nat.lt_succ_of_lt hu,
       VClock.le_trans hle (hcl u (hcs ▸ hu))⟩

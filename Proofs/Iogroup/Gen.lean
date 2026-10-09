@@ -459,7 +459,7 @@ def groupCounter.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt
     let i17 ← pure (Zig.lt false i16 (3 : BitVec 64))
     if i17 then (do
       let i19 ← pure (i1)
-      let _i20 ← Zig.groupAsyncC i8 p0 (Tgt.add i19)
+      let _i20 ← Zig.groupAsyncWithPolicyC .available i8 p0 (Tgt.add i19) ((fun a => (do discard (add a) : Zig.ConcM Tgt Unit)) i19)
       pure .br15)
     else (do
       pure .br12)) : Zig.CM Tgt groupCounterLocals groupCounterExit) with

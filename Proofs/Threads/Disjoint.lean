@@ -539,7 +539,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
     have hr := r1₁₅
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r1₁₅ rfl rfl, fun m₁₆ hj => ?_⟩⟩
   obtain ⟨hk1, c', ac', x', ax', v', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₅
@@ -593,7 +593,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
     have hr := r2₁₇
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r2₁₇ rfl rfl, fun m₁₈ hj₂ => ?_⟩⟩
   obtain ⟨hk2, c'', ac'', x'', ax'', v'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₇

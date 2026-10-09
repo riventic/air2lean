@@ -3456,7 +3456,7 @@ theorem main_spec (d : Nat) :
   rw [← upd_g hg₁₀] at hi₁₀
   obtain ⟨hs₁₀, -, ht1, -⟩ := shape3 hi₁₀ (by decide)
   rw [upd_g hg₁₀] at hi₁₀
-  refine ⟨fun _ => ⟨by decide, by rw [hs₁₀]; decide, ⟨rfl, .inl rfl⟩, by simp [Thread.joinValid, ht1]⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs₁₀]; decide, ⟨rfl, .inl rfl⟩, by simp [Thread.joinValid, Mem.isGated, ht1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₁₀ with current := 0 }) ht1 rfl rfl, fun m₁₁ hj₁ => ?_⟩⟩
   obtain ⟨hc₁₁, hi₁₁⟩ := inv_j1 hi₁₀ hg₁₀ hj₁
   -- the join of task 2
@@ -3464,7 +3464,7 @@ theorem main_spec (d : Nat) :
   rw [← upd_g hg₁₂] at hi₁₂
   obtain ⟨hs₁₂, ht0, ht1', ht2⟩ := shape3 hi₁₂ (by decide)
   rw [upd_g hg₁₂] at hi₁₂
-  refine ⟨fun _ => ⟨by decide, by rw [hs₁₂]; decide, ⟨rfl, .inr rfl⟩, by simp [Thread.joinValid, ht2]⟩, fun hfin₂ => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs₁₂]; decide, ⟨rfl, .inr rfl⟩, by simp [Thread.joinValid, Mem.isGated, ht2]⟩, fun hfin₂ => ⟨fun _ =>
     join_run (m := { m₁₂ with current := 0 }) ht2 rfl rfl, fun m₁₃ hj₂ => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₃⟩ := join_eq hj₂
   change m₁₂.threads[2]? = some rec at hrec

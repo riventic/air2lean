@@ -228,11 +228,11 @@ theorem current (ho : Owned own m) (t : ThreadId) : Owned own { m with current :
   ⟨ho.sub, ho.disj, ho.owns, ho.outside, ho.csize⟩
 
 /-- Spawn: the parent `t` gives `h₂` of its part `h₁ ∪ h₂` to the new thread. -/
-theorem fork {h₁ h₂ : Heap} {c : ThreadId} (ho : Owned own m) (ht : t < m.threads.size)
+theorem fork {h₁ h₂ : Heap} {c : ThreadId} {gt : Bool} (ho : Owned own m) (ht : t < m.threads.size)
     (hsplit : own t = h₁ ∪ h₂) (hd12 : Heap.Disjoint h₁ h₂)
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     Owned (upd (upd own t h₁) c h₂) m' := by
-  rw [Proto.fork_run] at hf
+  rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
   have hcs := ho.csize
@@ -399,10 +399,10 @@ namespace Conc
 def joinedB (m : Mem) (u : ThreadId) : Bool :=
   u != 0 && ((m.threads[u]?).map (·.joined)).getD false
 
-theorem joinedB_fork {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
+theorem joinedB_fork {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     joinedB m' = joinedB m := by
-  rw [Proto.fork_run] at hf
+  rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨-, rfl⟩ := hf
   funext u
@@ -412,10 +412,10 @@ theorem joinedB_fork {m m' : Mem} {t c : ThreadId}
   · rename_i h; subst h; simp
   · rfl
 
-theorem fork_threads {m m' : Mem} {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false } := by
-  rw [Proto.fork_run] at hf
+theorem fork_threads {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false, gated := gt } := by
+  rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
   exact ⟨rfl, rfl⟩

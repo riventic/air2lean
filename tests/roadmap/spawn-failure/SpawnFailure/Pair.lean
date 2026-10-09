@@ -483,7 +483,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
     refine ⟨fun _ => ⟨by decide, by rw [hsz₉]; decide, ⟨_, B, .inl rfl⟩, by
       have hr := r1₉
       unfold KidRec at hr
-      simp [Thread.joinValid, hr]⟩,
+      simp [Thread.joinValid, Mem.isGated, hr]⟩,
       fun hfin => ⟨fun _ => join_run r1₉ rfl rfl, fun m₁₀ hj => ?_⟩⟩
     obtain ⟨hk1, x', ax', w', hf1⟩ := hfin
     obtain ⟨h', d', -, hk1'⟩ := k1₉
@@ -572,7 +572,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₁]; decide, ⟨_, B, .inr (.inl rfl)⟩, by
     have hr := r1₁₁
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r1₁₁ rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨hk1, x', ax', w', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₁
@@ -628,7 +628,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₃]; decide, ⟨_, B, .inr (.inr rfl)⟩, by
     have hr := r2₁₃
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r2₁₃ rfl rfl, fun m₁₄ hj₂ => ?_⟩⟩
   obtain ⟨hk2, x'', ax'', w'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₃

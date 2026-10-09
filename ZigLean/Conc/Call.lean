@@ -123,13 +123,24 @@ def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
 
 /-! ### `Io.Group` (0.16.0; `docs/std-models.md` §Thread model)
 
-A task of a group is a thread: `Group.async` is a spawn that the group records (`Mem.groups`),
-`Group.await` a join of each task of the group. The available policy assumes assignment succeeds and never cancels,
-so `Group.concurrent` is `async`, and `Group.cancel` is `await`. -/
+A task of a group that gets its own thread is a model thread: the group records it
+(`Mem.groups`), and `Group.await` joins each task of the group. `Group.async` does not promise a
+thread: std runs the task in the caller or defers it until `await`, so the generated code calls
+`groupAsyncWithPolicyC` (`ZigLean/Conc/Spawn.lean`), an oracle choice among `groupAsyncC` (a
+thread), the caller (eager) and `groupDeferC` (deferred). The available policy assumes that
+`Group.concurrent` gets a thread; the model never cancels, so `Group.cancel` is `await`. -/
 
-/-- `Io.Group.async(g, io, function, args)`: the task `t` runs as a thread of the group. -/
+/-- One outcome of `Io.Group.async(g, io, function, args)`: the task `t` runs as a new thread of
+the group. -/
 def groupAsyncC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ Unit := do
   let tid ← StateT.lift (ConcM.sync (.spawn t))
+  callMC (Thread.groupAdd g tid)
+
+/-- One outcome of `Io.Group.async`: the task `t` is deferred until the group's `await` or
+`cancel` (`SyncOp.spawnGated`): a thread of the group that starts only once `Thread.groupTake`
+releases it. In std this is the task that runs inside `await`. -/
+def groupDeferC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ Unit := do
+  let tid ← StateT.lift (ConcM.sync (.spawnGated t))
   callMC (Thread.groupAdd g tid)
 
 /-- `Io.Group.concurrent`: as `async` (a spawn never fails, `error.ConcurrencyUnavailable` does

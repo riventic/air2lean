@@ -39,6 +39,13 @@ inductive SyncOp (Tgt : Type) where
   | pick (count : Mem → Nat)
   /-- `Thread.spawn` of `t`. -/
   | spawn (t : Tgt)
+  /-- A spawn of `t` whose thread does not start yet: an `Io.Group.async` task deferred until its
+  group's `await` or `cancel` (`ThreadRec.gated`, `Thread.forkGated`). The new thread waits at `gate`
+  until `Thread.groupTake` releases it. -/
+  | spawnGated (t : Tgt)
+  /-- The first stop of a deferred task (`spawnGated`): it goes on once it is no longer gated
+  (`Mem.isGated`). Only the scheduler makes this stop. -/
+  | gate
   /-- `Thread.join`: waits until thread `tid` ends. -/
   | join (tid : ThreadId)
   /-- A futex wait (`Io.futexWait`): if the `u32` at `p` is `expected`, the thread waits until a
@@ -50,8 +57,8 @@ inductive SyncOp (Tgt : Type) where
 /-- The response of the scheduler to a sync op. -/
 def SyncOp.Resp {Tgt : Type} : SyncOp Tgt → Type
   | .choose _ | .pick _ => Nat
-  | .spawn _ => ThreadId
-  | .yield | .join _ | .wait .. | .wake .. => Unit
+  | .spawn _ | .spawnGated _ => ThreadId
+  | .yield | .gate | .join _ | .wait .. | .wake .. => Unit
 
 /-- A run of a thread with at most `n` sync ops on each path. `leaf none`: no result. `sync op m
 k`: the thread stops at `op` with the memory `m`; `k` is the rest, from the response and the

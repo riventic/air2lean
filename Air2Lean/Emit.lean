@@ -1296,16 +1296,18 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
   | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
   | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unspecified)"
-  -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`).
+  -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`). `async`
+  -- is an oracle choice under every policy (a thread, the caller, deferred), so it always gets
+  -- the task's caller execution; `concurrent` gets a thread unless the policy is fallible.
   | .groupAsync | .groupConcurrent =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     let capture := rv (args[2]?.getD .void)
-    let op := if fn == .groupAsync then "groupAsyncC" else "groupConcurrentC"
-    let op := if fc.spawnSemantics == .fallible then
-      (if fn == .groupAsync then "groupAsyncWithPolicyC .fallible" else "groupConcurrentWithPolicyC .fallible")
-      else op
-    let fallback := if fc.spawnSemantics == .fallible && fn == .groupAsync then
+    let policy := if fc.spawnSemantics == .fallible then ".fallible" else ".available"
+    let op := if fn == .groupAsync then s!"groupAsyncWithPolicyC {policy}"
+      else if fc.spawnSemantics == .fallible then "groupConcurrentWithPolicyC .fallible"
+      else "groupConcurrentC"
+    let fallback := if fn == .groupAsync then
       let body := fc.spawnFallback spawnFn
       s!" (({body}) {capture})"
       else ""
@@ -3495,9 +3497,9 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)
-  let spawnFallbacks := if spawnSemantics == .fallible then
-    emitSpawnFallbacksWithStorage funcs targetDescriptions
-    else #[]
+  -- Every `Io.Group.async` call needs the task's caller execution (the eager outcome) under
+  -- every spawn policy (`ZigLean/Conc/Spawn.lean`'s `groupAsyncWithPolicyC`).
+  let spawnFallbacks := emitSpawnFallbacksWithStorage funcs targetDescriptions
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))

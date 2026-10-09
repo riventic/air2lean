@@ -15,6 +15,10 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
   first turn; a valid `join tid` waits until thread `tid` has ended, while an invalid handle
   goes on immediately to report `.illegal`. The clock and join rules are
   those of `ZigLean/Mem/Thread.lean` (`Thread.fork`, `Thread.join`, `checkJoinedByChild`).
+- **Deferred tasks.** `spawnGated t` adds a thread as `spawn t` does, but the thread waits at
+  `gate` while its record is gated (`Mem.isGated`): an `Io.Group.async` task that runs only once its group's
+  `await` or `cancel` releases it (`Thread.groupTake`). Its clock is its spawner's at the
+  spawn; the model gives it no edge from the awaiter, which only adds outcomes.
 - **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p` (the
   waiters wake in the order they began to wait); else it goes on. A wake gives no happens-before
   edge (the std code reads the value again with an acquire). The model has no spurious wakeup.
@@ -71,6 +75,7 @@ check immediately; only a valid handle can wait for its target. -/
 def canGo (s : State Tgt α) (t : ThreadId) : SyncOp Tgt → Bool
   | .join tid => !Thread.joinValid s.mem t tid || s.isDone tid
   | .wait .. => !(s.mem.waiters.any (·.1 == t))
+  | .gate => !s.mem.isGated t
   | _ => true
 
 /-- The threads that can go on, in thread order. -/
@@ -137,6 +142,13 @@ def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : 
       -- The new thread starts with `dispatch tgt` at its first turn, as thread `child`.
       let s := { s with kids := s.kids.push (.paused ⟨fuel, .yield, fun _ m => dispatch tgt fuel m⟩) }
       settle t s (k child s.mem), s.trace)
+  | ⟨_, .spawnGated tgt, k⟩ =>
+    (do
+      let (child, s) ← s.onMem Thread.forkGated
+      -- The deferred task waits at `gate` until its group releases it, then runs `dispatch tgt`.
+      let s := { s with kids := s.kids.push (.paused ⟨fuel, .gate, fun _ m => dispatch tgt fuel m⟩) }
+      settle t s (k child s.mem), s.trace)
+  | ⟨_, .gate, k⟩ => (settle t s (k () s.mem), s.trace)
   | ⟨_, .join tid, k⟩ =>
     (do
       let ((), s) ← s.onMem (Thread.join tid)

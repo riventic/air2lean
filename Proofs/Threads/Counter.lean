@@ -119,7 +119,7 @@ def HdOk (s : Nat) (m : Mem) : Prop := ∀ blk, m.blocks[2]? = some blk → ∀ 
 /-- The facts of strict mode that `Inv` does not have. -/
 def Ex (G : ThreadId → Gh) (m : Mem) : Prop :=
   BlkAt m 0 64 8 ∧ BlkAt m 1 4 4 ∧ BlkAt m 2 32 8 ∧ FpOk m ∧
-    (∀ r ∈ m.threads, r.spawner = 0) ∧ ∃ s J, G 0 = .main s J ∧ HdOk s m
+    (∀ r ∈ m.threads, r.spawner = 0 ∧ r.gated = false) ∧ ∃ s J, G 0 = .main s J ∧ HdOk s m
 
 /-- The protocol, in strict mode: `Ex` (below) has the facts for "no error". -/
 def proto : Proto Tgt Gh where
@@ -1022,7 +1022,7 @@ theorem fork_eq {m m' : Mem} {c : ThreadId}
       clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
         (VClock.bump (m.clocks[m.current]!) m.current),
       threads := m.threads.push { spawner := m.current, joined := false } } := by
-  simp [Thread.fork, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+  simp [Thread.fork, Thread.forkWith, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
     StateT.get, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
     ExceptT.bind, ExceptT.bindCont, Option.bind] at h
   obtain ⟨rfl, rfl⟩ := h
@@ -1610,7 +1610,7 @@ theorem ex_start {m : Mem} (hpa : PreA m) (hpb : PreB m) : Ex G0 m := by
     · exact .inr (.inr (.inr ⟨hb, hf e he⟩))
   · rw [ht] at hr
     simp [mem0, Mem.ofGlobals] at hr
-    rw [hr]
+    rw [hr]; exact ⟨rfl, rfl⟩
 
 
 /-- The invariant of `main`'s first loop: slots `0 … local6 - 1` are filled. -/
@@ -1757,7 +1757,7 @@ theorem ex_fork {G G' : ThreadId → Gh} {m m₂ : Mem} {child : ThreadId} (he :
   · simp only [Array.mem_push] at hr
     rcases hr with hr | rfl
     · exact hsp r hr
-    · rfl
+    · exact ⟨rfl, rfl⟩
 
 /-- `main`'s store of handle `k` (thread `k + 1`) keeps `Ex`, with one more handle. -/
 theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (he : Ex G m)
@@ -1987,7 +1987,8 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
           · omega
           · have := hJle _ h; omega
       exact Proto.join_run (rec := m₂.threads[s.local85.toNat + 1])
-        (Array.getElem?_eq_getElem hlt₂) (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)) hjf
+        (Array.getElem?_eq_getElem hlt₂) (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)).1 hjf
+        (.inl (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)).2)
     refine ⟨fun _ => ?_, fun hfin => ⟨fun _ => hjoin, fun m' hj => ?_⟩⟩
     · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
       rw [hg₁] at hG₂; cases hG₂
@@ -2036,7 +2037,7 @@ theorem ex_congr {G G' : ThreadId → Gh} {m : Mem} (h0 : G' 0 = G 0) (he : Ex G
 theorem ex_joinedAll {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hu : u ≠ 0) (he : Ex G m) :
     joinedAll u m := by
   intro r hr hs
-  have := he.2.2.2.2.1 r hr
+  have := (he.2.2.2.2.1 r hr).1
   rw [this] at hs; exact absurd hs.symm hu
 
 /-- A `bump` thread keeps the protocol. -/

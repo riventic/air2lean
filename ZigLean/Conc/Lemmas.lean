@@ -110,6 +110,16 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
   exact ⟨g₀, hg₀, fun child m' hf => WP.pure' (WP.pure' (hk' child m' hf))⟩
 
+/-- The spawn of a deferred task `tgt` (`SyncOp.spawnGated`, `groupDeferC`): as `WP.spawnC`;
+in strict mode the new thread's ghost value `g₀` satisfies `joins` (it waits at its `gate`). -/
+theorem WP.spawnGated {tgt : Tgt} {Q : ThreadId → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      ∃ g₀, P.init tgt g₀ ∧ (P.strict = true → P.joins g₀) ∧ ∀ child m',
+        (Thread.forkGated.run { m₁ with current := t }).run = some (.ok (child, m')) →
+        Q child (upd G₁ child g₀) m' k) :
+    P.WP t (ConcM.sync (.spawnGated tgt)) Q G m n :=
+  WP.sync h
+
 /-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
 strict mode, `tid` is a later thread with a valid handle even before it ends, and the join
 does not throw. -/
@@ -1188,11 +1198,13 @@ theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
 
 /-- `Thread.join` of a thread that the current thread spawned and did not join yet. -/
 theorem join_run {m : Mem} {tid : ThreadId} {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
-    (hs : rec.spawner = m.current) (hj : rec.joined = false) :
+    (hs : rec.spawner = m.current) (hj : rec.joined = false)
+    (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     ∃ m', ((Thread.join tid).run m).run = some (.ok ((), m')) := by
+  have hng : m.isGated tid = false := by rcases hg with hg | hg <;> simp [Mem.isGated, hr, hg]
   unfold Thread.join
   simp [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, ExceptT.run,
-    ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj]
+    ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj, hng]
 
 
 /-- `locIdx` does not throw: a location at `(b, o)` has the length `len`, and if there is none, no
@@ -1660,7 +1672,7 @@ theorem join_eq {m m' : Mem} {tid : ThreadId}
       throw, throwThe, MonadExceptOf.throw, StateT.lift]
   | some rec =>
     refine ⟨rec, rfl, ?_⟩
-    by_cases hc : (rec.spawner != m.current || rec.joined) = true <;>
+    by_cases hc : (rec.spawner != m.current || rec.joined || m.isGated tid) = true <;>
       simp_all [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
         ExceptT.run, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure,
         throw, throwThe, MonadExceptOf.throw, StateT.lift, set, StateT.set]
@@ -1696,6 +1708,13 @@ theorem fork_run (m : Mem) :
       clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
         (VClock.bump (m.clocks[m.current]!) m.current),
       threads := m.threads.push { spawner := m.current, joined := false } })) := rfl
+
+/-- `fork_run` for a spawn or a deferred task (`Thread.forkWith`). -/
+theorem forkWith_run (gt : Bool) (m : Mem) :
+    ((Thread.forkWith gt).run m).run = some (.ok (m.threads.size, { m with
+      clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
+        (VClock.bump (m.clocks[m.current]!) m.current),
+      threads := m.threads.push { spawner := m.current, joined := false, gated := gt } })) := rfl
 
 /-! ## Frames: steps that change only clocks, `current` or `seen` -/
 
@@ -1940,6 +1959,27 @@ theorem WP.groupAsyncC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
   refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
   refine ⟨g₀, hg₀, fun child m' hf => WP.pure' ?_⟩
+  refine WP.callMC (fun e he => (MemM.modify_err he).elim) fun a m'' hr => ?_
+  have := modify_ok hr
+  subst this
+  exact ⟨rfl, hk' child m' hf⟩
+
+/-- A deferred `Io.Group.async` task (`groupDeferC`): a gated spawn of `tgt`, which the group at
+`g` records; in strict mode the task's ghost value satisfies `joins` (it waits at its `gate`). -/
+theorem WP.groupDeferC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ gh, P.inv (upd G t gh) m ∧ ∀ G₁ m₁, G₁ t = gh → P.inv G₁ m₁ →
+      ∃ g₀, P.init tgt g₀ ∧ (P.strict = true → P.joins g₀) ∧ ∀ child m',
+        (Thread.forkGated.run { m₁ with current := t }).run = some (.ok (child, m')) →
+        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k) :
+    P.WP t ((Zig.groupDeferC g io tgt : CM Tgt σ Unit).run s) Q G m n := by
+  unfold Zig.groupDeferC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  obtain ⟨gh, hi, hc⟩ := h k hk
+  refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
+  obtain ⟨g₀, hg₀, hj₀, hk'⟩ := hc G₁ m₁ hg hi₁
+  refine ⟨g₀, hg₀, hj₀, fun child m' hf => WP.pure' ?_⟩
   refine WP.callMC (fun e he => (MemM.modify_err he).elim) fun a m'' hr => ?_
   have := modify_ok hr
   subst this

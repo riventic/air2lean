@@ -84,7 +84,7 @@ join yet. -/
 def ThrOk (G : ThreadId → Gh) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧ m.clocks.size = m.threads.size ∧
   ((m.threads.size = 1 ∧ G 0 = .pre ∧ ∀ u, 1 ≤ u → G u = .none) ∨
-   (m.threads.size = 2 ∧ (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = false) ∧
+   (m.threads.size = 2 ∧ (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = false ∧ r.gated = false) ∧
     (G 0 = .run ∨ G 0 = .joins) ∧ (G 1 = .start ∨ G 1 = .wrote ∨ G 1 = .fin) ∧
     ∀ u, 2 ≤ u → G u = .none))
 
@@ -891,7 +891,7 @@ theorem thr_fork {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (hg : G 0 = .pr
   refine ⟨hs1, hnone, by rw [hcs, hs1], ⟨by
       rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
     by simp [hcs], .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false },
-      by simp [Array.getElem_push, hs1], hc, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
+      by simp [Array.getElem_push, hs1], hc, rfl, rfl⟩, .inl (upd_self _ _ _), .inl hG1, fun u hu => ?_⟩⟩⟩
   rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
   exact hnone u (by unfold ThreadId at *; omega)
 
@@ -944,9 +944,9 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
 /-- `main`'s join of the writer is possible: thread 1, spawned by `main`, not joined. -/
 theorem join_ok {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .joins) :
     ∃ m', ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m')) := by
-  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj⟩, -⟩⟩ := hi.thr
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj, hgt⟩, -⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
-  · exact join_run (m := { m with current := 0 }) hr hs hj
+  · exact join_run (m := { m with current := 0 }) hr hs hj (.inl hgt)
 
 /-- After the join: `main` joined every thread; the blocks are the same. -/
 theorem join_final {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .joins)

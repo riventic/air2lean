@@ -114,7 +114,7 @@ def stdModels : Array StdModel := #[
   threadModel "time.Timer.start" .timerStart #["callRC", "Error.unspecified"],
   threadModel "time.Timer.read" .timerRead #["callRC", "Error.unspecified"],
   threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unspecified"],
-  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] through017,
+  threadModel "Io.Group.async" .groupAsync #["groupAsyncWithPolicyC", "groupAsyncC", "groupDeferC"] through017,
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] through017,
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] through017,
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] through017,

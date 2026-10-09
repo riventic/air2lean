@@ -745,7 +745,7 @@ theorem main_spec (d : Nat) :
   have hsh₈ := hi₈.2.shape
   obtain ⟨h08, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, hn2⟩⟩ := hsh₈
   · exfalso; change (G₃ 0).2 = _ at h0; rw [hg₃] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₈ with current := 0 }) hr1 rfl rfl, fun m₉ hj => ?_⟩⟩
   -- `main` takes the kid's part, then the lock's resource and word
   let gEnd : Gh := (⟨.out, L.part (G₃ 0) ∪ L.own G₃ m₈ 1, Heap.empty⟩, .joins)

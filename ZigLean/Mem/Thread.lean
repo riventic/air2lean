@@ -411,22 +411,31 @@ def checkJoinedByChild (t : ThreadId) : MemM Unit := do
 
 /-- The bookkeeping of a spawn: a new thread, spawned by the current one, whose clock is the
 spawner's clock after a bump (the fork edge of the happens-before order). The current thread
-does not change. -/
-def fork : MemM ThreadId := do
+does not change. `gated`: the record of a deferred task (`forkGated`). -/
+def forkWith (gated : Bool) : MemM ThreadId := do
   let m ← get
   let parent := m.current
   let parentClock := VClock.bump (m.clocks[parent]!) parent
   let child := m.threads.size
   set { m with
     clocks := (m.clocks.set! parent parentClock).push parentClock
-    threads := m.threads.push { spawner := parent, joined := false } }
+    threads := m.threads.push { spawner := parent, joined := false, gated } }
   pure child
 
-/-- A join handle exists, was spawned by the caller and has not already been joined.
-The scheduler uses the same validation to reject invalid handles before waiting. -/
+/-- `Thread.spawn`'s bookkeeping (`forkWith`). -/
+def fork : MemM ThreadId := forkWith false
+
+/-- A spawn whose thread does not start yet (`SyncOp.spawnGated`, a deferred `Io.Group.async`
+task): `fork`, with a gated record. Once its group records it, it waits until the group's
+`groupTake` (`Mem.isGated`). -/
+def forkGated : MemM ThreadId := forkWith true
+
+/-- A join handle exists, was spawned by the caller, has not already been joined and is not a
+deferred task that its group has not released (`Mem.isGated`). The scheduler uses the same
+validation to reject invalid handles before waiting. -/
 def joinValid (m : Mem) (caller tid : ThreadId) : Bool :=
   match m.threads[tid]? with
-  | some rec => rec.spawner == caller && !rec.joined
+  | some rec => rec.spawner == caller && !rec.joined && !m.isGated tid
   | none => false
 
 /-- `std.Thread.join`: `tid` must have been spawned by the thread running this join, and not
@@ -437,7 +446,7 @@ def join (tid : ThreadId) : MemM Unit := do
   let m ← get
   let some rec := m.threads[tid]?
     | throw .illegal
-  if rec.spawner != m.current || rec.joined then throw .illegal
+  if rec.spawner != m.current || rec.joined || m.isGated tid then throw .illegal
   let callerClock := VClock.bump (m.clocks[m.current]!) m.current
   let merged := VClock.merge callerClock (m.clocks[tid]!)
   set { m with
@@ -448,7 +457,8 @@ def join (tid : ThreadId) : MemM Unit := do
 def groupAdd (g : Ptr) (tid : ThreadId) : MemM Unit := modify fun m =>
   { m with groups := m.groups.push (g, tid) }
 
-/-- `Io.Group`: the tasks of the group at `g`, in the order of their spawn; they leave the group. -/
+/-- `Io.Group`: the tasks of the group at `g`, in the order of their spawn; they leave the group,
+which releases its deferred tasks (`forkGated`, `Mem.isGated`): they can start now. -/
 def groupTake (g : Ptr) : MemM (Array ThreadId) := do
   let m ← get
   set { m with groups := m.groups.filter (·.1 != g) }

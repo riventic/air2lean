@@ -249,9 +249,12 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-04 — `Io.Group` tasks are model threads
 
 - Kind: environment.
-- Statement: `Group.async`/`concurrent` spawn a recorded task; `Group.await` joins the tasks
-  in spawn order. Cancellation is not modelled, so `Group.cancel` is `await`.
-- Derived from: tokens `groupAsyncC`, `groupAwaitC`, `groupConcurrentC`, `groupCancelC`.
+- Statement: `Group.async` is an oracle choice under every policy: a recorded task thread, the
+  caller at once, or a task deferred until the group's `await`/`cancel` (gated). `concurrent`
+  spawns a recorded task. `Group.await` joins the tasks in spawn order. Cancellation is not
+  modelled, so `Group.cancel` is `await`.
+- Derived from: tokens `groupAsyncC`, `groupDeferC`, `groupAsyncWithPolicyC`, `groupAwaitC`,
+  `groupConcurrentC`, `groupCancelC`.
 - Sources: [std-models.md](std-models.md#thread-model).
 
 <a id="thr-05"></a>

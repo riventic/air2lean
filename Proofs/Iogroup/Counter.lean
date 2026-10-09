@@ -1,29 +1,35 @@
 import Proofs.Iogroup.Gen
 import ZigLean.Conc.LockRules
 import ZigLean.Conc.Share
+import ZigLean.Conc.SpawnLemmas
 
 /-!
 # `groupCounter` over all schedules
 
-`groupCounter` runs three tasks in an `Io.Group` (`Group.async`; each task is a thread in the
-model); each task adds 1 to a counter under an `Io.Mutex` (translated from Zig 0.16.0's std
-code). After `Group.await` the result is 3 under every schedule (`groupCounter_spec`), and no
-schedule gives an error (`groupCounter_safe`).
+`groupCounter` runs three tasks in an `Io.Group` (`Group.async`); each task adds 1 to a counter
+under an `Io.Mutex` (translated from Zig 0.16.0's std code). `Group.async` is an oracle choice
+(`ZigLean/Conc/Spawn.lean`): the task gets its own thread, runs in `main` at once (eager), or is
+deferred until `Group.await` (a gated thread). After `Group.await` the result is 3 under every
+schedule and every choice (`groupCounter_spec`), and no schedule gives an error
+(`groupCounter_safe`).
 
 The proof uses the rules of a lock that owns a resource (`ZigLean/Conc/Lock.lean`,
 `ZigLean/Conc/LockRules.lean`), as `Proofs/Sync/Mutex.lean` does for `mutexCounter`: the mutex
 (bytes 16..20 of the `Counter`, block 0) owns the counter (bytes 20..24), whose value is the
 number of tasks that did their increment (`R`). This file proves the rest:
 
-- **Ghost values** (`Gh = LG × Ph`): the lock's part, and where the thread is: `main` at its
-  spawns (`spawn j`) and at its joins (`joins i`), a task before and after its increment.
+- **Ghost values** (`Gh = LG × Ph`): the lock's part, and where the thread is: `main` after
+  `j` asyncs of which `k` made a task (`spawn j k`; the other `j - k` it ran itself) and at its
+  joins (`joins i k`), a task before and after its increment. `main`'s eager increments count
+  with the tasks' (`sum`).
 - **The rest of the invariant** (`U`): the threads and the group's tasks (`Shape`), the bytes of
   `io` (each access is a read, or happened before every thread), no thread has a part of the
   heap, the two blocks, and each joined task has ended and happened before `main` (`Jle`).
 - **`main`**: before its first spawn it gives the mutex and the counter to the lock
   (`Inv.make`); the `Io.Group` (block 1) and `io` belong to no thread. `Group.async` is a spawn
-  (`WP.groupAsyncC`); `Group.await` joins the three tasks; then `main` takes the counter back
-  (`Inv.take`) and reads 3.
+  (`WP.groupAsyncC`), a deferred spawn (`WP.groupDeferC`; the task waits at its gate with a ghost
+  value that satisfies `joins`) or `main`'s own `add` (`add_spec` with `main`'s ghost value);
+  `Group.await` joins the `k` tasks; then `main` takes the counter back (`Inv.take`) and reads 3.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Iogroup Assn
@@ -33,17 +39,20 @@ namespace Iogroup.GroupCounter
 /-- Where a thread is, outside the lock's code. -/
 inductive Ph where
   | none
-  /-- `main` after `j` spawns. -/
-  | spawn (j : Nat)
-  /-- `main` after `i` joins. -/
-  | joins (i : Nat)
+  /-- `main` after `j` asyncs, `k` of which made a task (threads `1 … k`). -/
+  | spawn (j k : Nat)
+  /-- `main` after `Group.await` took its `k` tasks and `i` joins. -/
+  | joins (i k : Nat)
   /-- A task; `done`: it did its increment. -/
   | task (done : Bool)
   /-- A task that has ended. -/
   | fin
 
-/-- The increment of a thread. -/
+/-- The increments of a thread: one for a task that did its increment; for `main`, the asyncs
+it ran itself. -/
 def Ph.count : Ph → Nat
+  | .spawn j k => j - k
+  | .joins _ k => 3 - k
   | .task true | .fin => 1
   | _ => 0
 
@@ -55,8 +64,14 @@ def cPtr : Ptr := ⟨some 0, 0⟩
 /-- The `Io.Group` (block 1). -/
 def gPtr : Ptr := ⟨some 1, 0⟩
 
-/-- The increments of the three tasks. -/
-def sum (X : ThreadId → Ph) : Nat := (X 1).count + (X 2).count + (X 3).count
+/-- The increments of `main` and of the tasks. -/
+def sum (X : ThreadId → Ph) : Nat := (X 0).count + (X 1).count + (X 2).count + (X 3).count
+
+/-- The sum reads only the threads 0 … 3. -/
+theorem sum_congr {X X' : ThreadId → Ph} (h : ∀ u, u ≤ 3 → (X' u).count = (X u).count) :
+    sum X' = sum X := by
+  unfold sum
+  rw [h 0 (by decide), h 1 (by decide), h 2 (by decide), h 3 (by decide)]
 
 /-- The counter holds the increments of the tasks. -/
 def R (X : ThreadId → Ph) : Assn := pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum X))
@@ -94,19 +109,21 @@ theorem ioOk_iff {m : Mem} : IoOk m ↔ ReadShared IoR m :=
 
 theorem covers_io : Covers IoR 0 0 16 := fun _ hb _ h2 => ⟨hb, by omega⟩
 
-/-- The tasks of the group after `j` spawns. -/
+/-- The tasks of the group after `j` tasks. -/
 def grp (j : Nat) : Array (Ptr × ThreadId) := (Array.range j).map fun i => (gPtr, i + 1)
 
-/-- The threads: `main` and its tasks, which it spawned; a joined task has ended. Before the
-`await` the group records the tasks; after it, `main` joins them in order. -/
+/-- The threads: `main` and its tasks (spawned or deferred, `gated`), which it spawned; a joined
+task has ended. Before the `await` the group records the tasks; after it, `main` joins them in
+order. -/
 def Shape (X : ThreadId → Ph) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧
-  (∀ u, 1 ≤ u → u < m.threads.size → ∃ jn, m.threads[u]? = some { spawner := 0, joined := jn } ∧
+  (∀ u, 1 ≤ u → u < m.threads.size → ∃ jn gt,
+    m.threads[u]? = some { spawner := 0, joined := jn, gated := gt } ∧
     (jn = true → X u = .fin) ∧ ((∃ d, X u = .task d) ∨ X u = .fin)) ∧
   (∀ u, m.threads.size ≤ u → X u = .none) ∧
-  ((∃ j ≤ 3, X 0 = .spawn j ∧ m.threads.size = j + 1 ∧ m.groups = grp j ∧
+  ((∃ j k, k ≤ j ∧ j ≤ 3 ∧ X 0 = .spawn j k ∧ m.threads.size = k + 1 ∧ m.groups = grp k ∧
       ∀ u, joinedB m u = false) ∨
-   (∃ i ≤ 3, X 0 = .joins i ∧ m.threads.size = 4 ∧ m.groups = #[] ∧
+   (∃ i k, i ≤ k ∧ k ≤ 3 ∧ X 0 = .joins i k ∧ m.threads.size = k + 1 ∧ m.groups = #[] ∧
       ∀ u, joinedB m u = true ↔ 1 ≤ u ∧ u ≤ i))
 
 /-- Block 0 is the live `Counter`: 24 bytes on the stack, at an address that is a multiple of 8. -/
@@ -134,7 +151,7 @@ def proto : Proto Tgt Gh where
     | .add p => p = cPtr ∧ g = (⟨.out, Heap.empty, Heap.empty⟩, .task false)
   fin g := g.1.ph = .gone ∧ g.2 = .fin
   strict := true
-  joins g := g.1.ph = .out ∧ ∃ i, g.2 = .joins i
+  joins g := g.1.ph = .out ∧ ((∃ i k, g.2 = .joins i k) ∨ g.2 = .task false)
 
 /-- Join before free: block 0 (the `Counter`, with the read-shared `io`) is freed, and every
 access to `io` happened before `main` (`ZigLean/Conc/Share.lean`'s `RegionOwned`). -/
@@ -326,7 +343,7 @@ theorem unlock_spec (t : ThreadId) (g : Gh) (hg : g.1.ph = .holds) (io : Io) (G 
 /-! ## The threads and the heap -/
 
 theorem shape_size {X : ThreadId → Ph} {m : Mem} (h : Shape X m) : m.threads.size ≤ 4 := by
-  obtain ⟨-, -, -, ⟨j, hj, -, hs, -⟩ | ⟨-, -, -, hs, -⟩⟩ := h <;> omega
+  obtain ⟨-, -, -, ⟨j, k, hk, hj, -, hs, -⟩ | ⟨i, k, -, hk, -, hs, -⟩⟩ := h <;> omega
 
 /-- A task is thread 1, 2 or 3. -/
 theorem task_at {X : ThreadId → Ph} {m : Mem} {t : ThreadId} {d : Bool} (h : Shape X m)
@@ -340,7 +357,7 @@ theorem task_at {X : ThreadId → Ph} {m : Mem} {t : ThreadId} {d : Bool} (h : S
   have h1 : 1 ≤ t := by
     by_cases hc : t = 0
     · subst hc
-      rcases hph with ⟨j, -, h0, -⟩ | ⟨i, -, h0, -⟩ <;> rw [h0] at hx <;> cases hx
+      rcases hph with ⟨j, k, -, -, h0, -⟩ | ⟨i, k, -, -, h0, -⟩ <;> rw [h0] at hx <;> cases hx
     · exact Nat.pos_of_ne_zero hc
   exact ⟨h1, ht, Nat.le_of_lt_succ (Nat.lt_of_lt_of_le ht hs4)⟩
 
@@ -352,8 +369,8 @@ theorem shape_task {X : ThreadId → Ph} {m : Mem} {t : ThreadId} {d : Bool} (h 
   obtain ⟨h00, hrec, hn, hph⟩ := h
   have h0t : (0 : Nat) ≠ t := by unfold ThreadId at *; omega
   refine ⟨h00, fun u hu1 hu => ?_, fun u hu => ?_, ?_⟩
-  · obtain ⟨jn, hr, hj, hk⟩ := hrec u hu1 hu
-    refine ⟨jn, hr, fun hjn => ?_, ?_⟩
+  · obtain ⟨jn, gt, hr, hj, hk⟩ := hrec u hu1 hu
+    refine ⟨jn, gt, hr, fun hjn => ?_, ?_⟩
     · by_cases hut : u = t
       · subst hut; rw [hj hjn] at hx; cases hx
       · rw [upd_ne _ _ hut]; exact hj hjn
@@ -366,21 +383,79 @@ theorem shape_task {X : ThreadId → Ph} {m : Mem} {t : ThreadId} {d : Bool} (h 
   · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn u hu
   · rw [upd_ne _ _ h0t]; exact hph
 
-theorem count_le (p : Ph) : p.count ≤ 1 := by
-  unfold Ph.count; split <;> decide
+/-- `main`'s own increment, at its `j`-th async (`j < 3`): `spawn j k` to `spawn (j + 1) k`. -/
+theorem shape_main {X : ThreadId → Ph} {m : Mem} {j k : Nat} (h : Shape X m)
+    (hx : X 0 = .spawn j k) (hj : j < 3) : Shape (upd X 0 (.spawn (j + 1) k)) m := by
+  obtain ⟨h00, hrec, hn, hph⟩ := h
+  refine ⟨h00, fun u hu1 hu => ?_, fun u hu => ?_, ?_⟩
+  · have hu0 : u ≠ 0 := by unfold ThreadId at *; omega
+    obtain ⟨jn, gt, hr, hj', hk⟩ := hrec u hu1 hu
+    exact ⟨jn, gt, hr, fun h => by rw [upd_ne _ _ hu0]; exact hj' h, by rw [upd_ne _ _ hu0]; exact hk⟩
+  · by_cases hu0 : u = 0
+    · exfalso; subst hu0
+      have h4 : 0 < m.threads.size := by
+        rcases hph with ⟨_, _, _, _, _, hs, _⟩ | ⟨_, _, _, _, _, hs, _⟩
+        · rw [hs]; exact Nat.succ_pos _
+        · rw [hs]; exact Nat.succ_pos _
+      exact absurd hu (Nat.not_le.mpr h4)
+    · rw [upd_ne _ _ hu0]; exact hn u hu
+  · rcases hph with ⟨j', k', hk, -, h0, hs, hg, hjb⟩ | ⟨i, k', -, -, h0, -⟩
+    · rw [hx] at h0; cases h0
+      exact .inl ⟨j + 1, k, by omega, by omega, upd_self _ _ _, hs, hg, hjb⟩
+    · rw [hx] at h0; cases h0
+
+/-- The increments of thread `u ≥ 1`: at most one, and none for a thread that does not exist. -/
+theorem count_kid {X : ThreadId → Ph} {m : Mem} {u : ThreadId} (h : Shape X m) (h1 : 1 ≤ u) :
+    (X u).count ≤ 1 ∧ (m.threads.size ≤ u → (X u).count = 0) := by
+  obtain ⟨-, hrec, hn, -⟩ := h
+  by_cases hu : u < m.threads.size
+  · obtain ⟨jn, gt, -, -, hk⟩ := hrec u h1 hu
+    refine ⟨?_, fun h => absurd h (Nat.not_le.mpr hu)⟩
+    rcases hk with ⟨d, hd⟩ | hd <;> rw [hd]
+    · cases d <;> decide
+    · decide
+  · rw [hn u (Nat.le_of_not_lt hu)]; exact ⟨by decide, fun _ => rfl⟩
+
+/-- `main`'s increments and the number of threads: `j - k` or `3 - k` with `k + 1` threads. -/
+theorem count_main {X : ThreadId → Ph} {m : Mem} (h : Shape X m) :
+    ∃ k, k ≤ 3 ∧ m.threads.size = k + 1 ∧
+      ((∃ j, k ≤ j ∧ j ≤ 3 ∧ X 0 = .spawn j k ∧ (X 0).count = j - k) ∨
+       (∃ i, X 0 = .joins i k ∧ (X 0).count = 3 - k)) := by
+  obtain ⟨-, -, -, ⟨j, k, hk, hj, h0, hs, -⟩ | ⟨i, k, -, hk, h0, hs, -⟩⟩ := h
+  · exact ⟨k, by omega, hs, .inl ⟨j, hk, hj, h0, by rw [h0]; rfl⟩⟩
+  · exact ⟨k, hk, hs, .inr ⟨i, h0, by rw [h0]; rfl⟩⟩
 
 /-- The sum, when task `t` did not do its increment: at most 2. -/
 theorem sum_le {X : ThreadId → Ph} {m : Mem} {t : ThreadId} (h : Shape X m)
     (hx : X t = .task false) : sum X ≤ 2 := by
-  obtain ⟨h1, -, h3⟩ := task_at h hx
-  have c1 := count_le (X 1)
-  have c2 := count_le (X 2)
-  have c3 := count_le (X 3)
+  obtain ⟨h1, htl, h3⟩ := task_at h hx
+  obtain ⟨k, hk3, hs, hm⟩ := count_main h
+  obtain ⟨c1, z1⟩ := count_kid h (u := 1) (by decide)
+  obtain ⟨c2, z2⟩ := count_kid h (u := 2) (by decide)
+  obtain ⟨c3, z3⟩ := count_kid h (u := 3) (by decide)
   have c0 : (X t).count = 0 := by rw [hx]; rfl
-  have ht : t = 1 ∨ t = 2 ∨ t = 3 := by unfold ThreadId at *; omega
-  clear h hx
   unfold sum
-  rcases ht with rfl | rfl | rfl <;> omega
+  rw [hs] at z1 z2 z3 htl
+  have ht : t = 1 ∨ t = 2 ∨ t = 3 := by unfold ThreadId at *; omega
+  rcases hm with ⟨j, -, hj, -, e0⟩ | ⟨i, -, e0⟩ <;> rw [e0] <;>
+    rcases ht with rfl | rfl | rfl <;>
+    rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl <;>
+    simp_all <;> omega
+
+/-- The sum at `main`'s `j`-th async (`j < 3`): at most 2. -/
+theorem sum_le_main {X : ThreadId → Ph} {m : Mem} {j k : Nat} (h : Shape X m)
+    (hx : X 0 = .spawn j k) (hj : j < 3) : sum X ≤ 2 := by
+  obtain ⟨k', -, hs, hm⟩ := count_main h
+  obtain ⟨c1, z1⟩ := count_kid h (u := 1) (by decide)
+  obtain ⟨c2, z2⟩ := count_kid h (u := 2) (by decide)
+  obtain ⟨c3, z3⟩ := count_kid h (u := 3) (by decide)
+  rcases hm with ⟨j', hk, -, e, e0⟩ | ⟨i, e, -⟩
+  · rw [hx] at e; cases e
+    unfold sum
+    rw [hs] at z1 z2 z3
+    rw [e0]
+    rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> simp_all <;> omega
+  · rw [hx] at e; cases e
 
 /-- Task `t`'s increment: the sum is one more. -/
 theorem sum_succ {X : ThreadId → Ph} {t : ThreadId} (h1 : 1 ≤ t) (h3 : t ≤ 3)
@@ -388,12 +463,24 @@ theorem sum_succ {X : ThreadId → Ph} {t : ThreadId} (h1 : 1 ≤ t) (h3 : t ≤
   have c0 : (X t).count = 0 := by rw [hx]; rfl
   unfold sum
   rcases (by unfold ThreadId at *; omega : t = 1 ∨ t = 2 ∨ t = 3) with rfl | rfl | rfl
-  · rw [upd_self, upd_ne _ _ (by decide : (2 : Nat) ≠ 1), upd_ne _ _ (by decide : (3 : Nat) ≠ 1)]
-    show 1 + _ + _ = _; omega
-  · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 2), upd_ne _ _ (by decide : (3 : Nat) ≠ 2)]
-    show _ + 1 + _ = _; omega
-  · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 3), upd_ne _ _ (by decide : (2 : Nat) ≠ 3)]
-    show _ + _ + 1 = _; omega
+  · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 1), upd_ne _ _ (by decide : (2 : Nat) ≠ 1),
+      upd_ne _ _ (by decide : (3 : Nat) ≠ 1)]
+    show _ + 1 + _ + _ = _; omega
+  · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 2), upd_ne _ _ (by decide : (1 : Nat) ≠ 2),
+      upd_ne _ _ (by decide : (3 : Nat) ≠ 2)]
+    show _ + _ + 1 + _ = _; omega
+  · rw [upd_self, upd_ne _ _ (by decide : (0 : Nat) ≠ 3), upd_ne _ _ (by decide : (1 : Nat) ≠ 3),
+      upd_ne _ _ (by decide : (2 : Nat) ≠ 3)]
+    show _ + _ + _ + 1 = _; omega
+
+/-- `main`'s own increment: the sum is one more. -/
+theorem sum_succ_main {X : ThreadId → Ph} {j k : Nat} (hk : k ≤ j) (hx : X 0 = .spawn j k) :
+    sum (upd X 0 (.spawn (j + 1) k)) = sum X + 1 := by
+  unfold sum
+  rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 0), upd_ne _ _ (by decide : (2 : Nat) ≠ 0),
+    upd_ne _ _ (by decide : (3 : Nat) ≠ 0), hx]
+  show (j + 1 - k) + _ + _ + _ = (j - k) + _ + _ + _ + 1
+  omega
 
 /-- The counter's bytes: in block 0, from byte 20 on. -/
 theorem pts_none {v : BitVec 32} {h : Heap} (hp : pts (cPtr.add 20) 4 v h) {b x : Nat}
@@ -536,14 +623,17 @@ theorem wp_io {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem
 
 /-! ## A task -/
 
-/-- A task at `out`; `done`: after its increment. -/
-def gTask (done : Bool) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .task done)
+/-- A thread at `out`, at the place `p`. -/
+def gOut (p : Ph) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, p)
 
-/-- A task that holds the mutex and the counter `h`. -/
-def gHold (done : Bool) (h : Heap) : Gh := (⟨.holds, Heap.empty, h⟩, .task done)
+/-- A task at `out`; `done`: after its increment. -/
+abbrev gTask (done : Bool) : Gh := gOut (.task done)
+
+/-- A thread at the place `p` that holds the mutex and the counter `h`. -/
+def gHold (p : Ph) (h : Heap) : Gh := (⟨.holds, Heap.empty, h⟩, p)
 
 /-- The holder's load of the counter: the increments of the tasks. -/
-theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {dn : Bool} {hL : Heap} {G : ThreadId → Gh}
+theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {dn : Ph} {hL : Heap} {G : ThreadId → Gh}
     {m : Mem} {d : Nat} (hi : proto.inv (upd G t (gHold dn hL)) m) (hc : m.current = t)
     {Q : BitVec 32 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m' hQ, m'.current = t → m'.threads = m.threads →
@@ -568,58 +658,75 @@ theorem wp_cntLoad {σ : Type} {s : σ} {t : ThreadId} {dn : Bool} {hL : Heap} {
       rw [snd_upd_upd G t (gHold dn hL) (gHold dn hQ) rfl]; exact hq')
   rw [upd_upd] at hl
   refine h m' hQ (hs.current.trans hc) hs.threads ⟨hl, ?_⟩
-  have hx : (fun u => (upd G t (gHold dn hL) u).2) t = .task dn := by
+  have hx : (fun u => (upd G t (gHold dn hL) u).2) t = dn := by
     show (upd G t (gHold dn hL) t).2 = _; rw [upd_self]; rfl
   have := U_stepIn (g := gHold dn hQ) hi hc hjt hs hm' hd (by
-    show Shape (upd _ t (Ph.task dn)) m
-    rw [← hx, upd_same]; exact hi.2.shape) rfl
+    show Shape (upd _ t dn) m
+    have e : upd (fun u => (upd G t (gHold dn hL) u).2) t dn = fun u => (upd G t (gHold dn hL) u).2 := by
+      funext u; by_cases h : u = t
+      · subst h; simp [upd, gHold]
+      · simp [upd, h]
+    rw [e]; exact hi.2.shape) rfl
   rwa [upd_upd] at this
 
 /-- The holder's store of `w`, the increments of the tasks after its own. -/
 theorem wp_cntStore {σ : Type} {s : σ} {t : ThreadId} {hL : Heap} {G : ThreadId → Gh}
-    {m : Mem} {d : Nat} (w : BitVec 32) (hi : proto.inv (upd G t (gHold false hL)) m)
+    {m : Mem} {d : Nat} {p₀ p₁ : Ph} (w : BitVec 32) (hi : proto.inv (upd G t (gHold p₀ hL)) m)
     (hc : m.current = t)
-    (hw : w = BitVec.ofNat 32 (sum fun u => (upd G t (gHold true hL) u).2))
+    (hw : w = BitVec.ofNat 32 (sum fun u => (upd G t (gHold p₁ hL) u).2))
+    (hsh : Shape (upd (fun u => (upd G t (gHold p₀ hL) u).2) t p₁) m)
     {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m' hQ, m'.current = t → m'.threads = m.threads →
-      proto.inv (upd G t (gHold true hQ)) m' → Q ((), s) G m' d) :
+      proto.inv (upd G t (gHold p₁ hQ)) m' → Q ((), s) G m' d) :
     proto.WP t ((liftM (store (α := BitVec 32) 4 (cPtr.add 20) w) : CM Tgt σ Unit).run s) Q G m d := by
-  have hh : L.ph (upd G t (gHold false hL) t) = .holds := by rw [upd_self]; rfl
+  have hh : L.ph (upd G t (gHold p₀ hL) t) = .holds := by rw [upd_self]; rfl
   obtain ⟨ht, hjt⟩ := hi.1.live t (by rw [hh]; decide)
-  have hres : R (fun u => (upd G t (gHold false hL) u).2) hL := by
+  have hres : R (fun u => (upd G t (gHold p₀ hL) u).2) hL := by
     have := hi.1.res t hh
-    rwa [show L.held (upd G t (gHold false hL) t) = hL by rw [upd_self]; rfl] at this
-  have hown : L.own (upd G t (gHold false hL)) m t = hL := by
+    rwa [show L.held (upd G t (gHold p₀ hL) t) = hL by rw [upd_self]; rfl] at this
+  have hown : L.own (upd G t (gHold p₀ hL)) m t = hL := by
     rw [L.own_live hjt, upd_self]; exact Heap.empty_union hL
   refine WP.liftM_owned (TTriple.store (by decide) w) hi.1.own hc ht (by rw [hown]; exact hres)
     fun a m' hQ hr ho' hq hs hm' hd => ?_
-  have hQe : L.part (gHold true hQ) ∪ L.held (gHold true hQ) = hQ := Heap.empty_union hQ
-  have hX : (fun u => (upd (upd G t (gHold false hL)) t (gHold true hQ) u).2) =
-      fun u => (upd G t (gHold true hL) u).2 := by
+  have hQe : L.part (gHold p₁ hQ) ∪ L.held (gHold p₁ hQ) = hQ := Heap.empty_union hQ
+  have hX : (fun u => (upd (upd G t (gHold p₀ hL)) t (gHold p₁ hQ) u).2) =
+      fun u => (upd G t (gHold p₁ hL) u).2 := by
     rw [upd_upd]; funext u; unfold upd; split <;> rfl
-  have hl := hi.1.stepIn (g := gHold true hQ) hc hjt (by rw [hQe]; exact ho') hs
+  have hl := hi.1.stepIn (g := gHold p₁ hQ) hc hjt (by rw [hQe]; exact ho') hs
     (by rw [hQe]; exact hm') (by rw [hQe]; exact hd) (by rw [upd_self]; rfl) (fun _ => .inl rfl)
     (fun h => absurd rfl h) (fun h => absurd hh h) (fun _ => by
-      show R (fun u => (upd (upd G t (gHold false hL)) t (gHold true hQ) u).2) hQ
+      show R (fun u => (upd (upd G t (gHold p₀ hL)) t (gHold p₁ hQ) u).2) hQ
       rw [hX]; unfold R; rw [← hw]; exact hq)
   rw [upd_upd] at hl
   refine h m' hQ (hs.current.trans hc) hs.threads ⟨hl, ?_⟩
-  have hx : (fun u => (upd G t (gHold false hL) u).2) t = .task false := by
-    show (upd G t (gHold false hL) t).2 = _; rw [upd_self]; rfl
-  have := U_stepIn (g := gHold true hQ) hi hc hjt hs hm' hd
-    (shape_task hi.2.shape hx _ (.inl ⟨true, rfl⟩)) rfl
+  have := U_stepIn (g := gHold p₁ hQ) hi hc hjt hs hm' hd hsh rfl
   rwa [upd_upd] at this
 
-/-- A task's `add`: `io`, `lock`, the increment of the counter, `io`, `unlock`. -/
-theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : proto.inv (upd G t (gTask false)) m) (hc : m.current = t) :
-    proto.WP t (add cPtr) (fun _ G' m' _ => m'.current = t ∧ proto.inv (upd G' t (gTask true)) m')
-      G m d := by
-  have hx : (fun u => (upd G t (gTask false) u).2) t = .task false := by
-    show (upd G t (gTask false) t).2 = _; rw [upd_self]; rfl
-  obtain ⟨h1, ht, h3⟩ := task_at hi.2.shape hx
-  have hjt : joinedB m t = false :=
-    (hi.1.live t (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).2
+/-- The place `p₀` of thread `t` before its increment and `p₁` after it: in every shape the sum is
+at most 2 before it, one more after it, and the shape stays. -/
+def IncStep (t : ThreadId) (p₀ p₁ : Ph) : Prop :=
+  ∀ X m, Shape X m → X t = p₀ → sum X ≤ 2 ∧ sum (upd X t p₁) = sum X + 1 ∧ Shape (upd X t p₁) m
+
+/-- A task's increment. -/
+theorem incStep_task (t : ThreadId) : IncStep t (.task false) (.task true) := fun _ _ hsh hx => by
+  obtain ⟨h1, -, h3⟩ := task_at hsh hx
+  exact ⟨sum_le hsh hx, sum_succ h1 h3 hx, shape_task hsh hx _ (.inl ⟨true, rfl⟩)⟩
+
+/-- `main`'s own increment at its `j`-th async. -/
+theorem incStep_main {j k : Nat} (hj : j < 3) : IncStep 0 (.spawn j k) (.spawn (j + 1) k) :=
+  fun _ _ hsh hx => by
+    obtain ⟨k', -, -, ⟨j', hk, -, e, -⟩ | ⟨i, e, -⟩⟩ := count_main hsh
+    · rw [hx] at e; cases e
+      exact ⟨sum_le_main hsh hx hj, sum_succ_main hk hx, shape_main hsh hx hj⟩
+    · rw [hx] at e; cases e
+
+/-- `add` by thread `t` at the place `p₀` (a task, or `main` that runs the task itself): `io`,
+`lock`, the increment of the counter, `io`, `unlock`; then `t` is at `p₁`. -/
+theorem add_spec (t : ThreadId) (p₀ p₁ : Ph) (hinc : IncStep t p₀ p₁) (G : ThreadId → Gh)
+    (m : Mem) (d : Nat) (hi : proto.inv (upd G t (gOut p₀)) m) (hc : m.current = t) :
+    proto.WP t (add cPtr) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+      proto.inv (upd G' t (gOut p₁)) m') G m d := by
+  obtain ⟨ht, hjt⟩ := hi.1.live t (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))
   unfold add
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -629,15 +736,18 @@ theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
   -- the read of `io`
   refine WP.bind (wp_io hi hc ht hjt fun m₁ hc₁ ht₁ hi₁ => ?_)
   -- `lock`
-  refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t (gTask false) rfl _ G m₁ d hi₁)))
+  refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t (gOut p₀) rfl _ G m₁ d hi₁)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
-  have hi₂' : proto.inv (upd G₂ t (gHold false hL)) m₂ := hi₂
+  have hi₂' : proto.inv (upd G₂ t (gHold p₀ hL)) m₂ := hi₂
   -- the load of the counter
   refine WP.bind (wp_cntLoad hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
-  have hx₂ : (fun u => (upd G₂ t (gHold false hL) u).2) t = .task false := by
-    show (upd G₂ t (gHold false hL) t).2 = _; rw [upd_self]; rfl
-  have hsum := sum_le hi₂'.2.shape hx₂
-  generalize hS : (sum fun u => (upd G₂ t (gHold false hL) u).2) = S at hsum ⊢
+  have hsh₂ : Shape (upd (fun u => (G₂ u).2) t p₀) m₂ := by
+    have := hi₂'.2.shape; rw [snd_upd] at this; exact this
+  obtain ⟨hsum, hsucc0, -⟩ := hinc _ _ hsh₂ (upd_self _ _ _)
+  have hS0 : (sum fun u => (upd G₂ t (gHold p₀ hL) u).2) = sum (upd (fun u => (G₂ u).2) t p₀) := by
+    rw [snd_upd]; rfl
+  rw [← hS0] at hsum
+  generalize hS : (sum fun u => (upd G₂ t (gHold p₀ hL) u).2) = S at hsum hS0 ⊢
   have hS3 : S + 1 < 2 ^ 32 := Nat.lt_of_le_of_lt (by omega : S + 1 ≤ 3) (by decide)
   have hS32 : (BitVec.ofNat 32 S).toNat = S := by
     rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
@@ -647,22 +757,23 @@ theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
   have hv₃ := add_one_ok hadd (by rw [hS32]; exact hS3)
   rw [hS32] at hv₃
   -- the store
-  have hsucc : (sum fun u => (upd G₂ t (gHold true hQ) u).2) = S + 1 := by
-    rw [← hS, snd_upd, snd_upd]
-    have := sum_succ (X := upd (fun u => (G₂ u).2) t (.task false)) h1 h3 (upd_self _ _ _)
-    rw [upd_upd] at this; exact this
-  refine WP.bind (wp_cntStore v₃ hi₃ hc₃ (by
+  have hsh₃ : Shape (upd (fun u => (G₂ u).2) t p₀) m₃ := by
+    have := hi₃.2.shape; rw [snd_upd] at this; exact this
+  have hsucc : (sum fun u => (upd G₂ t (gHold p₁ hQ) u).2) = S + 1 := by
+    rw [hS0, ← hsucc0, snd_upd, upd_upd]; rfl
+  refine WP.bind (wp_cntStore (p₁ := p₁) v₃ hi₃ hc₃ (by
     apply BitVec.eq_of_toNat_eq
-    rw [hv₃, hsucc, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3]) fun m₄ hQ' hc₄ ht₄ hi₄ => ?_)
+    rw [hv₃, hsucc, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3])
+    (by rw [snd_upd]; exact (hinc _ _ hsh₃ (upd_self _ _ _)).2.2) fun m₄ hQ' hc₄ ht₄ hi₄ => ?_)
   -- the read of `io`
   have hl₄ := hi₄.1.live t (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))
   refine WP.bind (wp_io hi₄ hc₄ hl₄.1 hl₄.2 fun m₅ hc₅ ht₅ hi₅ => ?_)
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t (gHold true hQ') rfl _ G₂ m₅ d₂ hi₅)))
+  refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t (gHold p₁ hQ') rfl _ G₂ m₅ d₂ hi₅)))
   rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
-  exact WP.pure' ⟨hc₆, hi₆⟩
+  exact WP.pure' ⟨by omega, hc₆, hi₆⟩
 
 /-- A task at its end: `out` to `gone`, `task true` to `fin`. -/
 theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
@@ -674,8 +785,10 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
       upd (fun u => (upd G t (gTask true) u).2) t .fin := snd_upd _ _ _
   have hsum : sum (fun u => (upd (upd G t (gTask true)) t (⟨.gone, Heap.empty, Heap.empty⟩, .fin) u).2) =
       sum (fun u => (upd G t (gTask true) u).2) := by
-    rw [hX]; unfold sum; unfold upd
-    split <;> split <;> split <;> simp_all [Ph.count]
+    rw [hX]; apply sum_congr; intro u _
+    by_cases h : u = t
+    · subst h; simp [upd, gOut, Ph.count]
+    · simp [upd, h]
   have hl := hi.1.ghost (t := t) (g := (⟨.gone, Heap.empty, Heap.empty⟩, .fin))
     (by rw [upd_self]; rfl) (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl
     (fun h => absurd rfl h)
@@ -707,7 +820,7 @@ theorem joinedAll_task {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hi : prot
   · subst hi0
     rw [Array.getElem?_eq_getElem hi'] at h0
     rw [Option.some.inj h0] at hs; exact absurd hs (Nat.ne_of_lt hu)
-  · obtain ⟨jn, hr', -⟩ := hrec i (Nat.pos_of_ne_zero hi0) hi'
+  · obtain ⟨jn, gt, hr', -⟩ := hrec i (Nat.pos_of_ne_zero hi0) hi'
     rw [Array.getElem?_eq_getElem hi'] at hr'
     rw [Option.some.inj hr'] at hs; exact absurd hs (Nat.ne_of_lt hu)
 
@@ -719,10 +832,10 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
   | add p =>
     obtain ⟨rfl, rfl⟩ := hg
     show proto.WP u ((fun _ => ()) <$> add cPtr) _ G _ d
-    refine WP.map (WP.mono ?_ (add_spec u G _ d
-      (by rw [show gTask false = G u from hgu.symm, upd_same]
+    refine WP.map (WP.mono ?_ (add_spec u _ _ (incStep_task u) G _ d
+      (by rw [show gOut (.task false) = G u from hgu.symm, upd_same]
           exact fits.cur u hi (by rw [hgu]; exact (by decide : LPh.out ≠ LPh.gone))) rfl))
-    rintro _ G' m' _ ⟨-, hi'⟩
+    rintro _ G' m' _ ⟨-, -, hi'⟩
     exact ⟨_, inv_end hi', ⟨rfl, rfl⟩, fun _ => joinedAll_task hi' hu⟩
 
 /-! ## `main` -/
@@ -742,11 +855,11 @@ def group0 : Io_Group := { token := { raw := none }, state := 0 }
 
 theorem enc_group : (Enc.encode group0).size = 16 := by decide +kernel
 
-/-- `main` after `j` spawns. -/
-def gSpawn (j : Nat) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .spawn j)
+/-- `main` after `j` asyncs, `k` of which made a task. -/
+abbrev gSpawn (j k : Nat) : Gh := gOut (.spawn j k)
 
-/-- `main` after `i` joins. -/
-def gJoins (i : Nat) : Gh := (⟨.out, Heap.empty, Heap.empty⟩, .joins i)
+/-- `main` after the `await` of `k` tasks and `i` joins. -/
+abbrev gJoins (i k : Nat) : Gh := gOut (.joins i k)
 
 /-- The start: no thread. -/
 def G0 : ThreadId → Gh := fun _ => (⟨.gone, Heap.empty, Heap.empty⟩, .none)
@@ -763,7 +876,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
     (hp : Parts io A h) (hg : bytesAt gPtr A' 16 .stack (Enc.encode group0) hG) (hA : A % 8 = 0)
     (hth : m.threads = #[{ spawner := 0, joined := true }]) (hat : m.atomics = #[])
     (hq : m.waiters = #[]) (hgr : m.groups = #[]) :
-    proto.inv (upd G0 0 (gSpawn 0)) m := by
+    proto.inv (upd G0 0 (gSpawn 0 0)) m := by
   obtain ⟨hI, hWC, dI, rfl, hio, hW, hC, dWC, rfl, hw, hc⟩ := hp
   have hs : ((hI ∪ (hW ∪ hC)) ∪ hG).Sub m.heap := by have := ho.sub 0; rwa [upd_self] at this
   have hs0 : (hI ∪ (hW ∪ hC)).Sub m.heap := Heap.sub_union_left.trans hs
@@ -798,7 +911,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
     exact (Heap.sub_union_right dI).trans Heap.sub_union_left
   have ho' := ho.shrink (t := 0) (by rw [upd_self]; exact hsub)
   rw [upd_upd] at ho'
-  have hGu : ∀ u, u ≠ 0 → upd G0 0 (gSpawn 0) u = G0 u := fun u h => upd_ne _ _ h
+  have hGu : ∀ u, u ≠ 0 → upd G0 0 (gSpawn 0 0) u = G0 u := fun u h => upd_ne _ _ h
   have hjt : joinedB m 0 = false := rfl
   have hjb : ∀ u, joinedB m u = false := by
     intro u; unfold joinedB
@@ -821,22 +934,22 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
     · rw [hGu u hu]; rfl
   · -- the counter holds `0`
     show pts (cPtr.add 20) 4 (BitVec.ofNat 32 (sum _)) hC
-    have hsum : sum (fun u => (upd G0 0 (gSpawn 0) u).2) = 0 := by
-      show (upd G0 0 (gSpawn 0) 1).2.count + (upd G0 0 (gSpawn 0) 2).2.count +
-        (upd G0 0 (gSpawn 0) 3).2.count = 0
-      rw [hGu 1 (by decide), hGu 2 (by decide), hGu 3 (by decide)]; rfl
+    have hsum : sum (fun u => (upd G0 0 (gSpawn 0 0) u).2) = 0 := by
+      show (upd G0 0 (gSpawn 0 0) 0).2.count + (upd G0 0 (gSpawn 0 0) 1).2.count +
+        (upd G0 0 (gSpawn 0 0) 2).2.count + (upd G0 0 (gSpawn 0 0) 3).2.count = 0
+      rw [upd_self, hGu 1 (by decide), hGu 2 (by decide), hGu 3 (by decide)]; rfl
     rw [hsum]
     exact ⟨A, 24, .stack, Enc.encode (0 : BitVec 32), by simp [cPtr, Ptr.add]; omega, enc_u32 0,
       LawfulEnc.decode_encode _, hc, by decide⟩
   · have : u = 0 := by rw [h1] at hu; unfold ThreadId at *; omega
     subst this; exact VClock.le_refl _
   · refine ⟨⟨by rw [hth]; rfl, fun u hu1 hu => by rw [h1] at hu; unfold ThreadId at *; omega,
-      fun u hu => ?_, .inl ⟨0, by decide, ?_, h1, by rw [hgr]; simp [grp], hjb⟩⟩,
+      fun u hu => ?_, .inl ⟨0, 0, Nat.le_refl _, by decide, ?_, h1, by rw [hgr]; simp [grp], hjb⟩⟩,
       fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG⟩,
       fun v hv => by rw [hjb v] at hv; cases hv⟩
-    · show (upd G0 0 (gSpawn 0) u).2 = _
+    · show (upd G0 0 (gSpawn 0 0) u).2 = _
       rw [hGu u (by rw [h1] at hu; unfold ThreadId at *; omega)]; rfl
-    · show (upd G0 0 (gSpawn 0) 0).2 = _; rw [upd_self]; rfl
+    · show (upd G0 0 (gSpawn 0 0) 0).2 = _; rw [upd_self]; rfl
     · have : u = 0 := by rw [h1] at hu; unfold ThreadId at *; omega
       subst this
       exact ho.owns 0 (by rw [h1]; decide) e he (.inl ⟨e.off, Nat.le_refl _, .inr rfl, by
@@ -852,79 +965,84 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
 theorem grp_succ (j : Nat) : grp (j + 1) = (grp j).push (gPtr, j + 1) := by
   simp [grp, Array.range_succ]
 
-/-- The sum reads only the tasks 1, 2, 3. -/
-theorem sum_congr {X X' : ThreadId → Ph} (h : ∀ u, 1 ≤ u → u ≤ 3 → (X' u).count = (X u).count) :
-    sum X' = sum X := by
-  unfold sum
-  rw [h 1 (by decide) (by decide), h 2 (by decide) (by decide), h 3 (by decide) (by decide)]
-
-theorem R_main {G : ThreadId → Gh} {hL : Heap} {g : Gh} (hR : L.R G hL) :
-    L.R (upd G 0 g) hL := by
+/-- A new ghost value for `main` with the same count keeps the counter's resource. -/
+theorem R_main {G : ThreadId → Gh} {hL : Heap} {g : Gh} (hR : L.R G hL)
+    (hc : g.2.count = (G 0).2.count) : L.R (upd G 0 g) hL := by
   have hR' : R (fun u => (G u).2) hL := hR
   show R _ hL; unfold R at hR' ⊢
-  rw [sum_congr (X := fun u => (G u).2) fun u h1 _ => by
-    show (upd G 0 g u).2.count = _; rw [upd_ne _ _ (by unfold ThreadId at *; omega)]]
+  rw [sum_congr (X := fun u => (G u).2) fun u _ => by
+    show (upd G 0 g u).2.count = _
+    by_cases hu : u = 0
+    · subst hu; rw [upd_self]; exact hc
+    · rw [upd_ne _ _ hu]]
   exact hR'
 
-/-- The spawn of task `j + 1` by `main` (`Group.async`): the group records it. -/
-theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j : Nat} (hj : j < 3)
-    (hi : proto.inv G₁ m₁) (hg : G₁ 0 = gSpawn j)
-    (hf : (Thread.fork.run { m₁ with current := 0 }).run = some (.ok (child, m'))) :
-    child = j + 1 ∧ m'.current = 0 ∧
-      proto.inv (upd (upd G₁ child (gTask false)) 0 (gSpawn (j + 1)))
+/-- The spawn of task `k + 1` by `main` at its `j`-th async (`Group.async`; a deferred task if
+`gt`): the group records it. -/
+theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j k : Nat} {gt : Bool}
+    (hj : j < 3) (hi : proto.inv G₁ m₁) (hg : G₁ 0 = gSpawn j k)
+    (hf : ((Thread.forkWith gt).run { m₁ with current := 0 }).run = some (.ok (child, m'))) :
+    child = k + 1 ∧ m'.current = 0 ∧
+      proto.inv (upd (upd G₁ child (gTask false)) 0 (gSpawn (j + 1) (k + 1)))
         { m' with groups := m'.groups.push (gPtr, child) } := by
   obtain ⟨h00, hrec, hnone, hph⟩ := hi.2.shape
-  have hX0 : (G₁ 0).2 = .spawn j := by rw [hg]; rfl
-  obtain ⟨j', -, h0, hsz, hgr, hjb⟩ | ⟨i, -, h0, -⟩ := hph
+  have hX0 : (G₁ 0).2 = .spawn j k := by rw [hg]; rfl
+  obtain ⟨j', k', hk', -, h0, hsz, hgr, hjb⟩ | ⟨i, k', -, -, h0, -⟩ := hph
   rotate_left
   · exfalso; change (G₁ 0).2 = _ at h0; rw [hX0] at h0; cases h0
-  have : j' = j := by change (G₁ 0).2 = _ at h0; rw [hX0] at h0; cases h0; rfl
-  subst this
-  have hcs : m₁.clocks.size = j' + 1 := by rw [hi.1.own.csize, hsz]
+  obtain ⟨e1, e2⟩ : j' = j ∧ k' = k := by
+    change (G₁ 0).2 = _ at h0; rw [hX0] at h0; cases h0; exact ⟨rfl, rfl⟩
+  subst j' k'
+  have hcs : m₁.clocks.size = k + 1 := by rw [hi.1.own.csize, hsz]
   have hfk := hf
   obtain ⟨hch, hm'⟩ := Lock.fork_eq hf
   rw [hsz] at hch
   subst hch hm'
-  have hne : (j' + 1 : Nat) ≠ 0 := by omega
-  have hX : ∀ u, (upd (upd G₁ (j' + 1) (gTask false)) 0 (gSpawn (j' + 1)) u).2 =
-      if u = 0 then .spawn (j' + 1) else if u = j' + 1 then .task false else (G₁ u).2 := by
+  have hne : (k + 1 : Nat) ≠ 0 := by omega
+  have hX : ∀ u, (upd (upd G₁ (k + 1) (gTask false)) 0 (gSpawn (j + 1) (k + 1)) u).2 =
+      if u = 0 then .spawn (j + 1) (k + 1) else if u = k + 1 then .task false else (G₁ u).2 := by
     intro u; unfold upd; split
     · rfl
     · split <;> rfl
   refine ⟨rfl, rfl, (hi.1.fork (t := 0) (by rw [hg]; rfl) hfk (by rw [hg]; rfl) (fun _ => .inl rfl)
     rfl rfl rfl rfl fun hL hR => ?_).groups _, ⟨⟨?_, fun u hu1 hu => ?_, fun u hu => ?_,
-      .inl ⟨j' + 1, by omega,
-        by show (upd (upd G₁ (j' + 1) (gTask false)) 0 (gSpawn (j' + 1)) 0).2 = _
+      .inl ⟨j + 1, k + 1, by omega, by omega,
+        by show (upd (upd G₁ (k + 1) (gTask false)) 0 (gSpawn (j + 1) (k + 1)) 0).2 = _
            rw [upd_self]; rfl, by simp [hsz],
         by rw [hgr, grp_succ], fun u => ?_⟩⟩, ?_, fun u => ?_, hi.2.blk,
       hi.2.blk1, fun v hv => ?_⟩⟩
-  · -- the counter does not change: the new task has not done its increment
-    apply R_main
+  · -- the counter does not change: the new task has not done its increment, and `main` made
+    -- one more task
     have hR' : R (fun u => (G₁ u).2) hL := hR
     show R _ hL; unfold R at hR' ⊢
-    rw [sum_congr (X := fun u => (G₁ u).2) fun u h1 _ => by
-      show (upd G₁ (j' + 1) (gTask false) u).2.count = _
-      by_cases hu : u = j' + 1
-      · subst hu
-        have h1 : (G₁ (j' + 1)).2 = .none := hnone _ (by rw [hsz]; exact Nat.le_refl _)
-        rw [upd_self, h1]; rfl
-      · rw [upd_ne _ _ hu]]
+    rw [sum_congr (X := fun u => (G₁ u).2) fun u _ => by
+      show (upd (upd G₁ (k + 1) (gTask false)) 0 (gSpawn (j + 1) (k + 1)) u).2.count = _
+      rw [hX u]
+      by_cases hu0 : u = 0
+      · subst hu0; rw [if_pos rfl, hX0]; show (j + 1) - (k + 1) = j - k; omega
+      · rw [if_neg hu0]
+        by_cases hu : u = k + 1
+        · subst hu
+          rw [if_pos rfl, show (G₁ (k + 1)).2 = .none from hnone _ (by rw [hsz]; exact Nat.le_refl _)]
+          rfl
+        · rw [if_neg hu]]
     exact hR'
   · simp only [Array.getElem?_push]; rw [if_neg (by omega)]; exact h00
   · simp only [Array.size_push] at hu
-    show ∃ jn, (m₁.threads.push _)[u]? = _ ∧ _
+    show ∃ jn gt', (m₁.threads.push _)[u]? = _ ∧ _
     simp only [Array.getElem?_push]
     rw [hX u]
-    by_cases hu' : u = j' + 1
+    by_cases hu' : u = k + 1
     · subst hu'
-      refine ⟨false, by simp [hsz], fun h => absurd h (by decide), ?_⟩
+      refine ⟨false, gt, by simp [hsz], fun h => absurd h (by decide), ?_⟩
       simp [hne]
     · have hu0 : u ≠ 0 := by unfold ThreadId at *; omega
       rw [if_neg (by rw [hsz]; exact hu'), if_neg hu0, if_neg hu']
       exact hrec u hu1 (by rw [hsz]; unfold ThreadId at *; omega)
   · simp only [Array.size_push] at hu
-    show (upd (upd G₁ (j' + 1) (gTask false)) 0 (gSpawn (j' + 1)) u).2 = _
-    rw [hX u, if_neg (by unfold ThreadId at *; omega), if_neg (by rw [hsz] at hu; unfold ThreadId at *; omega)]
+    show (upd (upd G₁ (k + 1) (gTask false)) 0 (gSpawn (j + 1) (k + 1)) u).2 = _
+    rw [hX u, if_neg (by unfold ThreadId at *; omega),
+      if_neg (by rw [hsz] at hu; unfold ThreadId at *; omega)]
     exact hnone u (by rw [hsz] at hu ⊢; unfold ThreadId at *; omega)
   · unfold joinedB
     simp only [Array.getElem?_push]
@@ -953,27 +1071,29 @@ theorem inv_spawn {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadId} {j
     rw [hjb v] at this; cases this
 
 /-- `Group.await` takes the three tasks: `main` goes to its joins. -/
-theorem inv_await {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gSpawn 3)) m) :
-    proto.inv (upd G 0 (gJoins 0)) { m with groups := #[] } := by
+theorem inv_await {G : ThreadId → Gh} {m : Mem} {k : Nat} (hi : proto.inv (upd G 0 (gSpawn 3 k)) m) :
+    proto.inv (upd G 0 (gJoins 0 k)) { m with groups := #[] } := by
   obtain ⟨h00, hrec, hnone, hph⟩ := hi.2.shape
-  have hX0 : (upd G 0 (gSpawn 3) 0).2 = .spawn 3 := by rw [upd_self]; rfl
-  obtain ⟨j, -, h0, hsz, -, hjb⟩ | ⟨i, -, h0, -⟩ := hph
+  have hX0 : (upd G 0 (gSpawn 3 k) 0).2 = .spawn 3 k := by rw [upd_self]; rfl
+  obtain ⟨j, k', hk, -, h0, hsz, -, hjb⟩ | ⟨i, k', -, -, h0, -⟩ := hph
   rotate_left
-  · exfalso; change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [hX0] at h0; cases h0
-  have : j = 3 := by change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [hX0] at h0; cases h0; rfl
-  subst this
-  have hl := hi.1.ghost (t := 0) (g := gJoins 0) (by rw [upd_self]; rfl) (.inl rfl)
-    (by rw [upd_self]; rfl) rfl (fun _ => ⟨by rw [hsz]; decide, rfl⟩) fun hL hR => R_main hR
+  · exfalso; change (upd G 0 (gSpawn 3 k) 0).2 = _ at h0; rw [hX0] at h0; cases h0
+  obtain ⟨e1, e2⟩ : j = 3 ∧ k' = k := by
+    change (upd G 0 (gSpawn 3 k) 0).2 = _ at h0; rw [hX0] at h0; cases h0; exact ⟨rfl, rfl⟩
+  subst j k'
+  have hl := hi.1.ghost (t := 0) (g := gJoins 0 k) (by rw [upd_self]; rfl) (.inl rfl)
+    (by rw [upd_self]; rfl) rfl (fun _ => ⟨by rw [hsz]; exact Nat.succ_pos _, rfl⟩)
+    fun hL hR => R_main hR (by rw [upd_self]; rfl)
   rw [upd_upd] at hl
-  have hX : ∀ u, u ≠ 0 → (upd G 0 (gJoins 0) u).2 = (upd G 0 (gSpawn 3) u).2 := fun u hu => by
+  have hX : ∀ u, u ≠ 0 → (upd G 0 (gJoins 0 k) u).2 = (upd G 0 (gSpawn 3 k) u).2 := fun u hu => by
     rw [upd_ne _ _ hu, upd_ne _ _ hu]
-  refine ⟨hl.groups _, ⟨⟨h00, fun u hu1 hu => ?_, fun u hu => ?_, .inr ⟨0, by decide,
-    by show (upd G 0 (gJoins 0) 0).2 = _; rw [upd_self]; rfl, hsz, rfl, fun u => ?_⟩⟩,
+  refine ⟨hl.groups _, ⟨⟨h00, fun u hu1 hu => ?_, fun u hu => ?_, .inr ⟨0, k, Nat.zero_le _,
+    by omega, by show (upd G 0 (gJoins 0 k) 0).2 = _; rw [upd_self]; rfl, hsz, rfl, fun u => ?_⟩⟩,
     hi.2.io, fun u => ?_, hi.2.blk, hi.2.blk1, fun v hv => ?_⟩⟩
-  · obtain ⟨jn, hr, hj, hk⟩ := hrec u hu1 hu
+  · obtain ⟨jn, gt, hr, hj, hk'⟩ := hrec u hu1 hu
     have hu0 : u ≠ 0 := by unfold ThreadId at *; omega
-    exact ⟨jn, hr, by show _ → (upd G 0 _ u).2 = _; rw [hX u hu0]; exact hj,
-      by show (∃ d, (upd G 0 _ u).2 = _) ∨ (upd G 0 _ u).2 = _; rw [hX u hu0]; exact hk⟩
+    exact ⟨jn, gt, hr, by show _ → (upd G 0 _ u).2 = _; rw [hX u hu0]; exact hj,
+      by show (∃ d, (upd G 0 _ u).2 = _) ∨ (upd G 0 _ u).2 = _; rw [hX u hu0]; exact hk'⟩
   · show (upd G 0 _ u).2 = _
     rw [hX u (by rw [hsz] at hu; unfold ThreadId at *; omega)]; exact hnone u hu
   · have := hjb u
@@ -985,38 +1105,40 @@ theorem inv_await {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gSpa
     · rename_i h; have := hi.2.parts u; rwa [upd_ne _ _ h] at this
   · change joinedB m v = true at hv; rw [hjb v] at hv; cases hv
 
-/-- The join of task `i + 1` is possible: `main` spawned it and did not join it. -/
-theorem join_ok {G : ThreadId → Gh} {m : Mem} {i : Nat} (hi3 : i < 3) (hi : proto.inv G m)
-    (hg : (G 0).2 = .joins i) :
+/-- The join of task `i + 1 ≤ k` is possible: `main` spawned it, did not join it, and the group no
+longer records it (a deferred task is released). -/
+theorem join_ok {G : ThreadId → Gh} {m : Mem} {i k : Nat} (hik : i < k) (hi : proto.inv G m)
+    (hg : (G 0).2 = .joins i k) :
     i + 1 < m.threads.size ∧ ∃ m', ((Thread.join (i + 1)).run { m with current := 0 }).run =
       some (.ok ((), m')) := by
   obtain ⟨-, hrec, -, hph⟩ := hi.2.shape
-  obtain ⟨j, -, h0, -⟩ | ⟨i', -, h0, hsz, -, hjb⟩ := hph
+  obtain ⟨j, k', -, -, h0, -⟩ | ⟨i', k', -, -, h0, hsz, hgr, hjb⟩ := hph
   · exfalso; change (G 0).2 = _ at h0; rw [hg] at h0; cases h0
-  have : i' = i := by change (G 0).2 = _ at h0; rw [hg] at h0; cases h0; rfl
-  subst this
-  have hlt : i' + 1 < m.threads.size := by rw [hsz]; omega
-  obtain ⟨jn, hr, -, -⟩ := hrec (i' + 1) (by omega) hlt
+  obtain ⟨e1, e2⟩ : i' = i ∧ k' = k := by
+    change (G 0).2 = _ at h0; rw [hg] at h0; cases h0; exact ⟨rfl, rfl⟩
+  subst i' k'
+  have hlt : i + 1 < m.threads.size := by rw [hsz]; omega
+  obtain ⟨jn, gt, hr, -, -⟩ := hrec (i + 1) (by omega) hlt
   have hjn : jn = false := by
-    have := hjb (i' + 1)
+    have := hjb (i + 1)
     unfold joinedB at this; rw [hr] at this
     cases jn
     · rfl
     · simp at this; exfalso; unfold ThreadId at *; omega
   subst hjn
-  exact ⟨hlt, join_run (m := { m with current := 0 }) hr rfl rfl⟩
+  exact ⟨hlt, join_run (m := { m with current := 0 }) hr rfl rfl (.inr (by simp [hgr]))⟩
 
-/-- `main`'s join of task `i + 1`: it takes the task's part (none). -/
-theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (hi : proto.inv G₁ m)
-    (hg : G₁ 0 = gJoins i) (hfin : proto.fin (G₁ (i + 1)))
+theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i k : Nat} (hik : i < k) (hi : proto.inv G₁ m)
+    (hg : G₁ 0 = gJoins i k) (hfin : proto.fin (G₁ (i + 1)))
     (hj : ((Thread.join (i + 1)).run { m with current := 0 }).run = some (.ok ((), m'))) :
-    m'.current = 0 ∧ proto.inv (upd G₁ 0 (gJoins (i + 1))) m' := by
+    m'.current = 0 ∧ proto.inv (upd G₁ 0 (gJoins (i + 1) k)) m' := by
   obtain ⟨h00, hrec, hnone, hph⟩ := hi.2.shape
-  have hX0 : (G₁ 0).2 = .joins i := by rw [hg]; rfl
-  obtain ⟨j, -, h0, -⟩ | ⟨i', -, h0, hsz, hgr, hjb⟩ := hph
+  have hX0 : (G₁ 0).2 = .joins i k := by rw [hg]; rfl
+  obtain ⟨j, k', -, -, h0, -⟩ | ⟨i', k', -, hk3, h0, hsz, hgr, hjb⟩ := hph
   · exfalso; change (G₁ 0).2 = _ at h0; rw [hX0] at h0; cases h0
-  have : i' = i := by change (G₁ 0).2 = _ at h0; rw [hX0] at h0; cases h0; rfl
-  subst this
+  obtain ⟨e1, e2⟩ : i' = i ∧ k' = k := by
+    change (G₁ 0).2 = _ at h0; rw [hX0] at h0; cases h0; exact ⟨rfl, rfl⟩
+  subst i k
   have hu0 : (i' + 1 : Nat) ≠ 0 := by omega
   have hown : L.own G₁ m (i' + 1) = Heap.empty := by
     have : joinedB m (i' + 1) = false := by
@@ -1027,14 +1149,14 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
     show (G₁ (i' + 1)).1.part ∪ L.held (G₁ (i' + 1)) = _
     rw [hi.2.parts, hi.1.idle _ (by rw [show L.ph (G₁ (i' + 1)) = .gone from hfin.1]; decide),
       Heap.empty_union]
-  have hl := hi.1.join (t := 0) (u := i' + 1) (g := gJoins (i' + 1)) hu0 hu0
+  have hl := hi.1.join (t := 0) (u := i' + 1) (g := gJoins (i' + 1) k') hu0 hu0
     (by rw [hg]; rfl) hfin.1 hj (by
       show Heap.empty = (G₁ 0).1.part ∪ _
-      rw [hi.2.parts, hown, Heap.empty_union]) rfl rfl fun hL hR => R_main hR
+      rw [hi.2.parts, hown, Heap.empty_union]) rfl rfl fun hL hR => R_main hR (by rw [hg]; rfl)
   obtain ⟨rec, hrec', hjf, hm'⟩ := join_eq hj
-  have hcs : m.clocks.size = 4 := by rw [hi.1.own.csize, hsz]
+  have hcs : m.clocks.size = k' + 1 := by rw [hi.1.own.csize, hsz]
   have hth : m'.threads = m.threads.set! (i' + 1) { rec with joined := true } := by rw [hm']
-  have hsz' : m'.threads.size = 4 := by rw [hth, Array.size_set!, hsz]
+  have hsz' : m'.threads.size = k' + 1 := by rw [hth, Array.size_set!, hsz]
   have hc0 : m'.clocks[0]! = VClock.merge (VClock.bump (m.clocks[0]!) 0) (m.clocks[i' + 1]!) := by
     rw [hm']; show (m.clocks.set! 0 _)[0]! = _
     rw [Proto.getElem!_set!_ite]; simp [hcs]
@@ -1047,30 +1169,30 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
     intro u; unfold joinedB; rw [hth]
     simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
     by_cases hu : u = i' + 1
-    · subst hu; simp [hsz, show i' + 1 < 4 by omega]
+    · subst hu; simp [hsz, show i' + 1 < k' + 1 by omega]
     · simp [hu, Ne.symm hu]
-  have hrec_r : rec = { spawner := 0, joined := false } := by
-    obtain ⟨jn, hr, -, -⟩ := hrec (i' + 1) (by omega) (by rw [hsz]; omega)
+  obtain ⟨gt₀, hrec_r⟩ : ∃ gt, rec = { spawner := 0, joined := false, gated := gt } := by
+    obtain ⟨jn, gt, hr, -, -⟩ := hrec (i' + 1) (by omega) (by rw [hsz]; omega)
     simp only at hrec'
-    rw [hr] at hrec'; cases hrec'; simp only at hjf; subst hjf; rfl
-  have hX : ∀ u, u ≠ 0 → (upd G₁ 0 (gJoins (i' + 1)) u).2 = (G₁ u).2 := fun u hu => by
+    rw [hr] at hrec'; cases hrec'; simp only at hjf; subst hjf; exact ⟨gt, rfl⟩
+  have hX : ∀ u, u ≠ 0 → (upd G₁ 0 (gJoins (i' + 1) k') u).2 = (G₁ u).2 := fun u hu => by
     rw [upd_ne _ _ hu]
-  refine ⟨by rw [hm'], hl, ⟨⟨?_, fun u hu1 hu => ?_, fun u hu => ?_, .inr ⟨i' + 1, by omega,
+  refine ⟨by rw [hm'], hl, ⟨⟨?_, fun u hu1 hu => ?_, fun u hu => ?_, .inr ⟨i' + 1, k', by omega, hk3,
     by show (upd G₁ 0 _ 0).2 = _; rw [upd_self]; rfl, hsz', by rw [hm']; exact hgr, fun u => ?_⟩⟩,
     ?_, fun u => ?_, ?_, ?_, fun v hv => ?_⟩⟩
   · rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_neg (by omega)]
     exact h00
   · rw [hsz'] at hu
     have hu0' : u ≠ 0 := by unfold ThreadId at *; omega
-    obtain ⟨jn, hr, hj, hk⟩ := hrec u hu1 (by rw [hsz]; exact hu)
+    obtain ⟨jn, gt, hr, hj, hk⟩ := hrec u hu1 (by rw [hsz]; exact hu)
     dsimp only
     rw [hX u hu0']
     by_cases hui : u = i' + 1
     · subst hui
-      refine ⟨true, ?_, fun _ => hfin.2, hk⟩
+      refine ⟨true, gt₀, ?_, fun _ => hfin.2, hk⟩
       rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_pos rfl,
         if_pos (by rw [hsz]; omega), hrec_r]
-    · refine ⟨jn, ?_, hj, hk⟩
+    · refine ⟨jn, gt, ?_, hj, hk⟩
       rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_neg (Ne.symm hui)]
       exact hr
   · rw [hsz'] at hu
@@ -1105,16 +1227,51 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i : Nat} (hi3 : i < 3) (
       refine ⟨by rw [upd_ne _ _ hv0]; exact h1, ?_⟩
       rw [hcv _ hv0]; exact VClock.le_trans h2 hgrow
 
-/-! ## `main`'s spawns and joins -/
+/-! ## `main`'s asyncs and joins -/
 
-/-- The spawn loop's invariant: `main` did `local10` spawns. -/
+/-- One `Group.async` by `main` at its `j`-th async (`j < 3`, `k` tasks so far), under every
+outcome of the oracle: a thread (task `k + 1`), `main`'s own `add`, or a deferred task (task
+`k + 1`, gated until the `await`). -/
+theorem async_spec {σ : Type} {s : σ} {j k : Nat} (hj : j < 3) (hk : k ≤ j) (io : Io)
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} (hi : proto.inv (upd G 0 (gSpawn j k)) m) :
+    proto.WP 0 ((groupAsyncWithPolicyC .available gPtr io (Tgt.add cPtr)
+        ((fun a => (do discard (add a) : ConcM Tgt Unit)) cPtr) : CM Tgt σ Unit).run s)
+      (fun r G' m' d' => r = ((), s) ∧ d' < d ∧ m'.current = 0 ∧
+        ∃ k' ≤ j + 1, proto.inv (upd G' 0 (gSpawn (j + 1) k')) m') G m d := by
+  refine WP.groupAsyncAvailableC fun k₁ hk₁ => ⟨gSpawn j k, hi, fun G₁ m₁ hg₁ hi₁ c hc3 => ?_⟩
+  have hi₁' : proto.inv (upd G₁ 0 (gSpawn j k)) { m₁ with current := 0 } := by
+    rw [← hg₁, upd_same]; exact fits.cur 0 hi₁ (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))
+  unfold groupAsyncOutcomes at hc3
+  rcases (by omega : c = 0 ∨ c = 1 ∨ c = 2) with rfl | rfl | rfl
+  · -- a thread
+    rw [groupAsyncOutcomeC, if_pos rfl]
+    refine WP.groupAsyncC fun k₂ hk₂ => ⟨gSpawn j k, hi₁', fun G₂ m₂ hg₂ hi₂ =>
+      ⟨gTask false, ⟨rfl, rfl⟩, fun child m' hf => ?_⟩⟩
+    obtain ⟨rfl, hc', hi'⟩ := inv_spawn hj hi₂ hg₂ hf
+    exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
+  · -- `main` runs the task itself
+    rw [groupAsyncOutcomeC, if_neg (by decide), if_pos rfl]
+    refine WP.callC ?_
+    show proto.WP 0 ((fun _ => ()) <$> add cPtr) _ G₁ _ k₁
+    refine WP.map (WP.mono ?_ (add_spec 0 _ _ (incStep_main (k := k) hj) G₁ _ k₁ hi₁' rfl))
+    rintro _ G' m' d' ⟨hd', hc', hi'⟩
+    exact ⟨rfl, by omega, hc', k, by omega, hi'⟩
+  · -- a deferred task
+    rw [groupAsyncOutcomeC, if_neg (by decide), if_neg (by decide)]
+    refine WP.groupDeferC fun k₂ hk₂ => ⟨gSpawn j k, hi₁', fun G₂ m₂ hg₂ hi₂ =>
+      ⟨gTask false, ⟨rfl, rfl⟩, fun _ => ⟨rfl, .inr rfl⟩, fun child m' hf => ?_⟩⟩
+    obtain ⟨rfl, hc', hi'⟩ := inv_spawn hj hi₂ hg₂ hf
+    exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
+
+/-- The async loop's invariant: `main` did `local10` asyncs. -/
 def spawnInv (s : groupCounterLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  m.current = 0 ∧ s.local10.toNat ≤ 3 ∧ proto.inv (upd G 0 (gSpawn s.local10.toNat)) m
+  m.current = 0 ∧ s.local10.toNat ≤ 3 ∧
+    ∃ k ≤ s.local10.toNat, proto.inv (upd G 0 (gSpawn s.local10.toNat k)) m
 
-/-- The spawn loop ends after 3 spawns. -/
+/-- The async loop ends after 3 asyncs. -/
 def spawnPost (r : groupCounterExit × groupCounterLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) :
     Prop :=
-  r.1 = .br12 ∧ m.current = 0 ∧ proto.inv (upd G 0 (gSpawn 3)) m
+  r.1 = .br12 ∧ m.current = 0 ∧ ∃ k ≤ 3, proto.inv (upd G 0 (gSpawn 3 k)) m
 
 theorem loop13_body (io : Io) (s : groupCounterLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (h : spawnInv s G m d) :
@@ -1122,16 +1279,15 @@ theorem loop13_body (io : Io) (s : groupCounterLocals) (G : ThreadId → Gh) (m 
       if groupCounter.again13 r.1 then spawnInv r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : groupCounterLocals) => 0) s)
       else spawnPost r G' m' d') G m d := by
-  obtain ⟨hc, hle, hi⟩ := h
+  obtain ⟨hc, hle, k, hk, hi⟩ := h
   unfold groupCounter.loop13
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   split
   · rename_i hlt
     have hlt' : s.local10.toNat < 3 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc, pure_bind]
-    refine WP.bind (WP.groupAsyncC fun k hk => ⟨gSpawn s.local10.toNat, hi, fun G₁ m₁ hg₁ hi₁ =>
-      ⟨gTask false, ⟨rfl, rfl⟩, fun child m' hf => ?_⟩⟩)
-    obtain ⟨rfl, hc', hi'⟩ := inv_spawn hlt' hi₁ hg₁ hf
+    refine WP.bind (WP.mono ?_ (async_spec hlt' hk io hi))
+    rintro r G' m' d' ⟨rfl, hd', hc', k', hk', hi'⟩
     simp only [StateT.run_pure, pure_bind, StateT.run_bind]
     refine WP.bind (WP.callRC (fun e he =>
       (add_one_noErr (a := s.local10) (by have := s.local10.isLt; omega) e he).elim) fun i23 hadd => ?_)
@@ -1139,55 +1295,79 @@ theorem loop13_body (io : Io) (s : groupCounterLocals) (G : ThreadId → Gh) (m 
     simp only [StateT.run_modify, StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     simp only [groupCounter.again13, ↓reduceIte]
-    refine ⟨⟨hc', by simp only; omega, by simp only; rw [h23]; exact hi'⟩, .inl (by omega)⟩
+    refine ⟨⟨hc', by simp only; omega, k', by simp only; omega, by simp only; rw [h23]; exact hi'⟩,
+      .inl hd'⟩
   · rename_i hge
     have hge' : ¬ s.local10.toNat < 3 := by simpa [lt, BitVec.ult] using hge
     have heq : s.local10.toNat = 3 := by omega
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
     simp only [groupCounter.again13, Bool.false_eq_true, ↓reduceIte]
-    exact ⟨rfl, hc, heq ▸ hi⟩
+    exact ⟨rfl, hc, k, by omega, heq ▸ hi⟩
 
-/-- `main`'s join of task `i + 1`, at `joins i`. -/
-theorem wp_join {σ : Type} {s : σ} {i : Nat} (u : ThreadId) (hu : u = i + 1) (hi3 : i < 3)
-    {G : ThreadId → Gh} {m : Mem} {n : Nat} (hi : proto.inv (upd G 0 (gJoins i)) m)
+/-- `main`'s join of task `i + 1`, at `joins i k`. -/
+theorem wp_join {σ : Type} {s : σ} {i k : Nat} (u : ThreadId) (hu : u = i + 1) (hik : i < k)
+    {G : ThreadId → Gh} {m : Mem} {n : Nat} (hi : proto.inv (upd G 0 (gJoins i k)) m)
     {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = 0 → proto.inv (upd G₁ 0 (gJoins (i + 1))) m' →
-      Q ((), s) G₁ m' k) :
+    (h : ∀ k₁, n = k₁ + 1 → ∀ G₁ m', m'.current = 0 →
+      proto.inv (upd G₁ 0 (gJoins (i + 1) k)) m' → Q ((), s) G₁ m' k₁) :
     proto.WP 0 ((joinC u : CM Tgt σ Unit).run s) Q G m n := by
   subst hu
-  refine WP.joinC fun k hk => ⟨gJoins i, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩
-  have hX : (G₁ 0).2 = .joins i := by rw [hg₁]; rfl
-  obtain ⟨hlt, hex⟩ := join_ok hi3 hi₁ hX
-  refine ⟨fun _ => ⟨Nat.succ_pos _, hlt, ⟨rfl, i, rfl⟩, by
+  refine WP.joinC fun k₁ hk₁ => ⟨gJoins i k, hi, fun G₁ m₁ hg₁ hi₁ => ?_⟩
+  have hX : (G₁ 0).2 = .joins i k := by rw [hg₁]; rfl
+  obtain ⟨hlt, hex⟩ := join_ok hik hi₁ hX
+  refine ⟨fun _ => ⟨Nat.succ_pos _, hlt, ⟨rfl, .inl ⟨i, k, rfl⟩⟩, by
     obtain ⟨m', hj⟩ := hex
     exact Proto.join_valid hj⟩, fun hfin => ⟨fun _ => hex, fun m' hj => ?_⟩⟩
-  obtain ⟨hc', hi'⟩ := inv_join hi3 hi₁ hg₁ hfin hj
-  exact h k hk G₁ m' hc' hi'
+  obtain ⟨hc', hi'⟩ := inv_join hik hi₁ hg₁ hfin hj
+  exact h k₁ hk₁ G₁ m' hc' hi'
 
-/-- After 3 spawns the group records the three tasks. -/
-theorem groups_spawn3 {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gSpawn 3)) m) :
-    m.groups = grp 3 := by
-  obtain ⟨-, -, -, ⟨j, -, h0, -, hgr, -⟩ | ⟨i, -, h0, -⟩⟩ := hi.2.shape
-  · change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [upd_self] at h0; cases h0; exact hgr
-  · change (upd G 0 (gSpawn 3) 0).2 = _ at h0; rw [upd_self] at h0; cases h0
+/-- `Group.await`'s joins of the tasks `i + 1 … k`, in order. -/
+theorem joins_spec {σ : Type} {s : σ} {k : Nat} :
+    ∀ (n i : Nat), i + n = k → ∀ {G : ThreadId → Gh} {m : Mem} {d : Nat}, m.current = 0 →
+      proto.inv (upd G 0 (gJoins i k)) m →
+      ∀ {Q : PUnit × σ → (ThreadId → Gh) → Mem → Nat → Prop},
+      (∀ G' m' d', m'.current = 0 → proto.inv (upd G' 0 (gJoins k k)) m' → Q (PUnit.unit, s) G' m' d') →
+      proto.WP 0 ((forIn (List.range' (i + 1) n) PUnit.unit fun tid (_ : PUnit) =>
+        (do joinC tid; pure (ForInStep.yield PUnit.unit) : CM Tgt σ (ForInStep PUnit))).run s)
+        Q G m d
+  | 0, i, hik, G, m, d, hc, hi, Q, h => by
+    simp only [List.range'_zero, List.forIn_nil, StateT.run_pure]
+    obtain rfl : i = k := by omega
+    exact WP.pure' (h G m d hc hi)
+  | n + 1, i, hik, G, m, d, hc, hi, Q, h => by
+    rw [List.range'_succ]
+    simp only [List.forIn_cons, StateT.run_bind, bind_assoc]
+    refine WP.bind (wp_join (i + 1) rfl (by omega) hi fun k₁ _ G₁ m' hc' hi' => ?_)
+    simp only [StateT.run_pure, pure_bind]
+    exact joins_spec n (i + 1) (by omega) hc' hi' h
 
-/-- After the three joins: `main` owns the counter, which holds 3; every thread is joined, and
-the tasks' read shares of `io` are back: `main` owns `io` alone (`ReadShared.reclaim`). -/
-theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoins 3)) m) :
+/-- After the asyncs the group records the `k` tasks. -/
+theorem groups_spawn3 {G : ThreadId → Gh} {m : Mem} {k : Nat}
+    (hi : proto.inv (upd G 0 (gSpawn 3 k)) m) : m.groups = grp k := by
+  obtain ⟨-, -, -, ⟨j, k', -, -, h0, -, hgr, -⟩ | ⟨i, k', -, -, h0, -⟩⟩ := hi.2.shape
+  · change (upd G 0 (gSpawn 3 k) 0).2 = _ at h0; rw [upd_self] at h0; cases h0; exact hgr
+  · change (upd G 0 (gSpawn 3 k) 0).2 = _ at h0; rw [upd_self] at h0; cases h0
+
+/-- After the `k` joins: `main` owns the counter, which holds 3 (`k` tasks and `3 - k` of its own
+increments); every thread is joined, and the tasks' read shares of `io` are back: `main` owns
+`io` alone (`ReadShared.reclaim`). -/
+theorem inv_final {G : ThreadId → Gh} {m : Mem} {k : Nat}
+    (hi : proto.inv (upd G 0 (gJoins k k)) m) :
     ∃ own : ThreadId → Heap, ∃ rest, Owned own m ∧
       (pts (cPtr.add 20) 4 (BitVec.ofNat 32 3) ∗ fun h => h = rest) (own 0) ∧
-      m.threads.size = 4 ∧ joinedAll 0 m ∧ BlkOk m ∧ Blk1 m ∧
+      m.threads.size = k + 1 ∧ k ≤ 3 ∧ joinedAll 0 m ∧ BlkOk m ∧ Blk1 m ∧
       RegionOwned IoR m (m.clocks[0]!) := by
   obtain ⟨h00, hrec, hnone, hph⟩ := hi.2.shape
-  have hX0 : (upd G 0 (gJoins 3) 0).2 = .joins 3 := by rw [upd_self]; rfl
-  obtain ⟨j, -, h0, -⟩ | ⟨i, -, h0, hsz, -, hjb⟩ := hph
-  · exfalso; change (upd G 0 (gJoins 3) 0).2 = _ at h0; rw [hX0] at h0; cases h0
-  have : i = 3 := by change (upd G 0 (gJoins 3) 0).2 = _ at h0; rw [hX0] at h0; cases h0; rfl
-  subst this
-  have hfinu : ∀ u, 1 ≤ u → u ≤ 3 → (upd G 0 (gJoins 3) u).2 = .fin := by
+  have hX0 : (upd G 0 (gJoins k k) 0).2 = .joins k k := by rw [upd_self]; rfl
+  obtain ⟨j, k', -, -, h0, -⟩ | ⟨i, k', -, hk3, h0, hsz, -, hjb⟩ := hph
+  · exfalso; change (upd G 0 (gJoins k k) 0).2 = _ at h0; rw [hX0] at h0; cases h0
+  obtain ⟨e1, e2⟩ : i = k ∧ k' = k := by
+    change (upd G 0 (gJoins k k) 0).2 = _ at h0; rw [hX0] at h0; cases h0; exact ⟨rfl, rfl⟩
+  subst i k'
+  have hfinu : ∀ u, 1 ≤ u → u ≤ k → (upd G 0 (gJoins k k) u).2 = .fin := by
     intro u h1 h3
-    obtain ⟨jn, hr, hj, -⟩ := hrec u h1 (by rw [hsz]; unfold ThreadId at *; omega)
+    obtain ⟨jn, gt, hr, hj, -⟩ := hrec u h1 (by rw [hsz]; unfold ThreadId at *; omega)
     have hjt := (hjb u).mpr ⟨h1, h3⟩
     unfold joinedB at hjt; rw [hr] at hjt
     have : jn = true := by
@@ -1195,13 +1375,13 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoi
       · simp at hjt
       · rfl
     exact hj this
-  have hF : L.Free (upd G 0 (gJoins 3)) := by
+  have hF : L.Free (upd G 0 (gJoins k k)) := by
     intro u hu
     by_cases h0 : u = 0
     · subst h0; rw [upd_self] at hu; cases hu
-    · by_cases h3 : u ≤ 3
+    · by_cases h3 : u ≤ k
       · have := (hi.2.jle u ((hjb u).mpr ⟨Nat.pos_of_ne_zero h0, h3⟩)).1
-        rw [show L.ph (upd G 0 (gJoins 3) u) = (upd G 0 (gJoins 3) u).1.ph from rfl, this] at hu
+        rw [show L.ph (upd G 0 (gJoins k k) u) = (upd G 0 (gJoins k k) u).1.ph from rfl, this] at hu
         cases hu
       · have := (hi.1.live u (by rw [hu]; decide)).1
         rw [hsz] at this; unfold ThreadId at *; omega
@@ -1211,43 +1391,61 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 (gJoi
     · rw [hsz] at hu
       exact (hi.2.jle u ((hjb u).mpr ⟨Nat.pos_of_ne_zero h0, by unfold ThreadId at *; omega⟩)).2
   obtain ⟨hL, hR, hdLW, hd, ho⟩ :=
-    hi.1.take (t := 0) (by rw [hsz]; decide) hF (by rw [upd_self]; decide) hall
+    hi.1.take (t := 0) (by rw [hsz]; exact Nat.succ_pos _) hF
+      (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall
   have hR3 : pts (cPtr.add 20) 4 (BitVec.ofNat 32 3) hL := by
-    have : R (fun u => (upd G 0 (gJoins 3) u).2) hL := hR
-    have h3 : sum (fun u => (upd G 0 (gJoins 3) u).2) = 3 := by
-      show (upd G 0 (gJoins 3) 1).2.count + (upd G 0 (gJoins 3) 2).2.count +
-        (upd G 0 (gJoins 3) 3).2.count = 3
-      rw [hfinu 1 (by decide) (by decide), hfinu 2 (by decide) (by decide),
-        hfinu 3 (by decide) (by decide)]; rfl
+    have : R (fun u => (upd G 0 (gJoins k k) u).2) hL := hR
+    have hc : ∀ u, 1 ≤ u → u ≤ 3 →
+        (upd G 0 (gJoins k k) u).2.count = if u ≤ k then 1 else 0 := by
+      intro u h1 h3
+      split
+      · rename_i h; rw [hfinu u h1 h]; rfl
+      · rename_i h
+        rw [show (upd G 0 (gJoins k k) u).2 = .none from
+          hnone u (by rw [hsz]; unfold ThreadId at *; omega)]; rfl
+    have h3 : sum (fun u => (upd G 0 (gJoins k k) u).2) = 3 := by
+      show (upd G 0 (gJoins k k) 0).2.count + (upd G 0 (gJoins k k) 1).2.count +
+        (upd G 0 (gJoins k k) 2).2.count + (upd G 0 (gJoins k k) 3).2.count = 3
+      rw [hc 1 (by decide) (by decide), hc 2 (by decide) (by decide),
+        hc 3 (by decide) (by decide), upd_self]
+      show 3 - k + _ + _ + _ = 3
+      rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl <;> rfl
     unfold R at this; rw [h3] at this; exact this
-  let own := L.own (upd G 0 (gJoins 3)) m
+  let own := L.own (upd G 0 (gJoins k k)) m
   have hd' : Heap.Disjoint hL (own 0 ∪ L.wordH m) :=
     Heap.disjoint_union_right.mpr ⟨(Heap.disjoint_union_right.mp hd).1.symm, hdLW⟩
   have heq : own 0 ∪ (hL ∪ L.wordH m) = hL ∪ (own 0 ∪ L.wordH m) :=
     Heap.union_left_comm (Heap.disjoint_union_right.mp hd).1
   refine ⟨_, own 0 ∪ L.wordH m, ho, by rw [upd_self, heq]; exact ⟨hL, _, hd', rfl, hR3, rfl⟩, hsz,
-    fun r hr hsp => ?_, hi.2.blk, hi.2.blk1,
-    (ioOk_iff.mp hi.2.io).reclaim (by rw [hsz]; decide) hall⟩
-  obtain ⟨k, hk, rfl⟩ := Array.mem_iff_getElem.mp hr
-  by_cases hk0 : k = 0
-  · subst hk0
-    rw [Array.getElem?_eq_getElem hk] at h00
+    hk3, fun r hr hsp => ?_, hi.2.blk, hi.2.blk1,
+    (ioOk_iff.mp hi.2.io).reclaim (by rw [hsz]; exact Nat.succ_pos _) hall⟩
+  obtain ⟨u, hu, rfl⟩ := Array.mem_iff_getElem.mp hr
+  by_cases hu0 : u = 0
+  · subst hu0
+    rw [Array.getElem?_eq_getElem hu] at h00
     rw [Option.some.inj h00]
-  · obtain ⟨jn, hr', -, -⟩ := hrec k (Nat.pos_of_ne_zero hk0) hk
-    have hjt := (hjb k).mpr ⟨Nat.pos_of_ne_zero hk0, by rw [hsz] at hk; unfold ThreadId at *; omega⟩
+  · obtain ⟨jn, gt, hr', -, -⟩ := hrec u (Nat.pos_of_ne_zero hu0) hu
+    have hjt := (hjb u).mpr ⟨Nat.pos_of_ne_zero hu0, by rw [hsz] at hu; unfold ThreadId at *; omega⟩
     unfold joinedB at hjt
-    rw [Array.getElem?_eq_getElem hk] at hr' hjt
+    rw [Array.getElem?_eq_getElem hu] at hr' hjt
     simp only [Option.map_some, Option.getD_some, Bool.and_eq_true, bne_iff_ne, ne_eq] at hjt
     exact hjt.2
 
-/-- `Group.await`'s take of the group's tasks: 1, 2, 3; the group is empty after it. -/
-theorem take_run {m : Mem} (hg : m.groups = grp 3) :
-    ((Thread.groupTake gPtr).run m).run = some (.ok (#[1, 2, 3], { m with groups := #[] })) := by
+/-- `Group.await`'s take of the group's `k` tasks: 1 … k; the group is empty after it. -/
+theorem take_run {m : Mem} {k : Nat} (hk : k ≤ 3) (hg : m.groups = grp k) :
+    ((Thread.groupTake gPtr).run m).run =
+      some (.ok (⟨List.range' 1 k⟩, { m with groups := #[] })) := by
   unfold Thread.groupTake
   simp only [StateT.run_bind, StateT.run_get, pure_bind, hg]
-  rw [show (grp 3).filter (·.1 != gPtr) = #[] by decide +kernel,
-    show ((grp 3).filter (·.1 == gPtr)).map (·.2) = #[1, 2, 3] by decide +kernel]
-  rfl
+  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl
+  · rw [show (grp 0).filter (·.1 != gPtr) = #[] by decide +kernel,
+      show ((grp 0).filter (·.1 == gPtr)).map (·.2) = ⟨List.range' 1 0⟩ by decide +kernel]; rfl
+  · rw [show (grp 1).filter (·.1 != gPtr) = #[] by decide +kernel,
+      show ((grp 1).filter (·.1 == gPtr)).map (·.2) = ⟨List.range' 1 1⟩ by decide +kernel]; rfl
+  · rw [show (grp 2).filter (·.1 != gPtr) = #[] by decide +kernel,
+      show ((grp 2).filter (·.1 == gPtr)).map (·.2) = ⟨List.range' 1 2⟩ by decide +kernel]; rfl
+  · rw [show (grp 3).filter (·.1 != gPtr) = #[] by decide +kernel,
+      show ((grp 3).filter (·.1 == gPtr)).map (·.2) = ⟨List.range' 1 3⟩ by decide +kernel]; rfl
 
 theorem main_spec (io : Io) (d : Nat) :
     proto.WP 0 (groupCounter io) QM G0 { mem0 with current := 0 } d := by
@@ -1330,16 +1528,17 @@ theorem main_spec (io : Io) (d : Nat) :
     writeBytes_all (by rw [hsC, enc_u32]), writeBytes_all (by rw [hsG, enc_group])] at F₆
   obtain ⟨hc, hg, dcg, rfl, hp, hgp⟩ := F₆
   have hi₀ := inv_start ho₆ dcg hp hgp hA8 hth₆ hat₆ hq₆ hgr₆
-  -- the spawns
+  -- the asyncs
   simp only [StateT.run_modify, pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ spawnInv (fun _ => 0) spawnPost (loop13_body io)
-    { c := cPtr, g := gPtr, local10 := 0 } G0 m₆ d ⟨hc₆, by decide, by simpa using hi₀⟩))
-  rintro ⟨e, s'⟩ G₁ m₇ d₁ ⟨rfl, hc₇, hi₇⟩
+    { c := cPtr, g := gPtr, local10 := 0 } G0 m₆ d
+    ⟨hc₆, by decide, 0, Nat.le_refl _, by simpa using hi₀⟩))
+  rintro ⟨e, s'⟩ G₁ m₇ d₁ ⟨rfl, hc₇, k, hk3, hi₇⟩
   -- `Group.await`: the take of the tasks, then the joins
   simp only [StateT.run_bind]
   unfold groupAwaitC
   simp only [StateT.run_bind]
-  have hrun := take_run (groups_spawn3 hi₇)
+  have hrun := take_run hk3 (groups_spawn3 hi₇)
   refine WP.bind (WP.bind (WP.callMC (fun e he => by rw [hrun] at he; cases he) fun tids m₈ hr => ?_))
   rw [hrun] at hr
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
@@ -1347,19 +1546,15 @@ theorem main_spec (io : Io) (d : Nat) :
   refine ⟨rfl, ?_⟩
   have hiA := inv_await hi₇
   rw [← Array.forIn_toList]
-  simp only [Array.toList, List.forIn_cons, List.forIn_nil, StateT.run_bind, bind_assoc]
-  refine WP.bind (wp_join (i := 0) 1 rfl (by decide) hiA fun k₁ _ G₂ m₉ hc₉ hi₉ => ?_)
-  simp only [StateT.run_pure, pure_bind, StateT.run_bind, bind_assoc]
-  refine WP.bind (wp_join (i := 1) 2 rfl (by decide) hi₉ fun k₂ _ G₃ m₁₀ hc₁₀ hi₁₀ => ?_)
-  simp only [StateT.run_pure, pure_bind, StateT.run_bind, bind_assoc]
-  refine WP.bind (wp_join (i := 2) 3 rfl (by decide) hi₁₀ fun k₃ _ G₄ m₁₁ hc₁₁ hi₁₁ => ?_)
-  simp only [StateT.run_pure, pure_bind]
+  simp only [StateT.run_bind]
+  refine WP.bind (joins_spec (k := k) (m := { m₇ with groups := #[] }) k 0 (by omega) hc₇ hiA fun G₄ m₁₁ d₄ hc₁₁ hi₁₁ => ?_)
+  simp only [StateT.run_pure]
   refine WP.pure' ?_
   simp only [StateT.run_bind]
   -- the counter holds 3
-  obtain ⟨own, rest, ho, hp, hsz, hja, hbk, hb1, hio⟩ := inv_final hi₁₁
+  obtain ⟨own, rest, ho, hp, hsz, -, hja, hbk, hb1, hio⟩ := inv_final hi₁₁
   refine WP.bind (WP.liftM_owned (TTriple.load (p := cPtr.add 20) (a := 4)
-    (v := BitVec.ofNat 32 3) (by decide)).frame ho hc₁₁ (by rw [hsz]; decide) hp
+    (v := BitVec.ofNat 32 3) (by decide)).frame ho hc₁₁ (by rw [hsz]; exact Nat.succ_pos _) hp
     fun a m₁₂ hQ hr ho' hq hs₁₂ _ _ => ?_)
   obtain ⟨h₁, h₂, -, -, hq₁, -⟩ := hq
   obtain ⟨rfl, -⟩ := sep_lift.mp hq₁
@@ -1387,7 +1582,7 @@ theorem main_spec (io : Io) (d : Nat) :
     exact Array.getElem?_setIfInBounds_self_of_lt (Array.getElem?_eq_some_iff.mp hblk').1
   · show RegionOwned IoR m₁₂ (m₁₂.clocks[0]!)
     rw [hm₁₂]
-    exact hio.recordAt hc₁₁ (by rw [ho.csize, hsz]; decide) b o 4 .read
+    exact hio.recordAt hc₁₁ (by rw [ho.csize, hsz]; exact Nat.succ_pos _) b o 4 .read
 
 /-! ## The results -/
 

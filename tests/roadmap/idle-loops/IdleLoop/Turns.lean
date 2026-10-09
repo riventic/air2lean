@@ -59,7 +59,7 @@ theorem ready_join {s : Sched.State Tgt Unit} {d dw : Nat} {wp : WorkerAt}
     (hm : s.main = .paused (mainP .join d)) (hk : s.kids = #[workerTS wp dw]) (hw : wp ≠ .done)
     (ht : s.mem.threads = thr0) :
     s.ready = #[1] := by
-  cases wp <;> simp_all [Sched.State.ready, mainP, workerTS, Sched.canGo, Thread.joinValid, thr0,
+  cases wp <;> simp_all [Sched.State.ready, mainP, workerTS, Sched.canGo, Thread.joinValid, Mem.isGated, thr0,
     Sched.State.isDone]
 
 theorem ready_done {s : Sched.State Tgt Unit} {d dw : Nat}

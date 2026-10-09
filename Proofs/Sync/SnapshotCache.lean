@@ -741,7 +741,7 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gJoin, hiJ, fun G₄ m₁₁ hg₄ hi₁₁ => ?_⟩)
   obtain ⟨h0₁₁, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, -⟩⟩ := hi₁₁.2.shape
   · exfalso; change (G₄ 0).2 = _ at h0; rw [hg₄] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩,
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩,
     fun _ => ⟨fun _ => join_run (m := { m₁₁ with current := 0 }) hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_

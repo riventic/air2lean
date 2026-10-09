@@ -147,10 +147,13 @@ def racePair (a b : AccessKind) : Option Error :=
   if (a.isWrite || b.isWrite) && !(a.isAtomic && b.isAtomic) then some .illegal else none
 
 /-- Who spawned thread `id` (the parent thread's own `ThreadId` at the time), and whether
-`Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. -/
+`Thread.join` has run on it. Index 0 (main) is unused: nothing ever joins it. `gated`: a deferred
+`Io.Group` task (`Thread.forkGated`); it does not start while its group still records it
+(`Mem.isGated`, `ZigLean/Conc/Sched.lean`). -/
 structure ThreadRec where
   spawner : ThreadId
   joined : Bool
+  gated : Bool := false
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/
@@ -294,6 +297,11 @@ structure Mem where
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
   deriving Repr, Inhabited
+
+/-- Thread `t` is a deferred task (`ThreadRec.gated`) that its group still records: no `await` or
+`cancel` of the group has taken it (`Thread.groupTake`), so it has not started. -/
+def Mem.isGated (m : Mem) (t : ThreadId) : Bool :=
+  (m.threads[t]?.map (·.gated)).getD false && m.groups.any (·.2 == t)
 
 /-- The state of a function that uses memory. -/
 abbrev MemM (α : Type) := StateT Mem Result α
