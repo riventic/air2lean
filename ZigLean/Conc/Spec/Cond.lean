@@ -588,5 +588,436 @@ theorem mtxQ_drop_ep {q : Queue CA} {ws : List Tid} (hq : q.WF) (hws : ∀ u ∈
 
 end
 
+/-! ### The invariant is inductive: helpers -/
+
+namespace CInv
+
+variable {X : Type} {N : Nat} {s s' : CState (ioCond Fx) X}
+
+theorem lt_of_ne_idle (hi : CInv N s) {t : Tid} (h : s.ctl t ≠ .idle) : t < N :=
+  Nat.lt_of_not_le fun hn => h (hi.idle t hn)
+
+theorem lt_of_run (hi : CInv N s) {t : Tid} {op : COp} {l : CL} (h : s.ctl t = .run op l) : t < N :=
+  hi.lt_of_ne_idle (by rw [h]; intro he; cases he)
+
+/-- A thread that is not asleep at the epoch is not in the queue there. -/
+theorem not_ep (hi : CInv N s) {t : Tid} (h : ∀ e, s.ctl t ≠ .run .wait (.sleep e)) :
+    (t, CA.ep) ∉ Fx.queue s.sh.f := fun hm => by
+  obtain ⟨e, he⟩ := hi.qep t hm; exact h e he
+
+/-- A thread whose place is not the mutex's `asleep` is not in its queue. -/
+theorem not_mtx (hi : CInv N s) {t : Tid} (h : projCtl (s.ctl t) ≠ .run .lock .asleep) :
+    (t, CA.mtx) ∉ Fx.queue s.sh.f := fun hm => h (hi.mtx.qloc t () (mem_mtxQ.mpr hm))
+
+/-- A thread that is asleep neither at the mutex nor at the epoch is not in the queue. -/
+theorem not_has (hi : CInv N s) {t : Tid} (h1 : projCtl (s.ctl t) ≠ .run .lock .asleep)
+    (h2 : ∀ e, s.ctl t ≠ .run .wait (.sleep e)) : (Fx.queue s.sh.f).has t = false :=
+  Queue.has_eq_false.mpr fun a ha => by
+    cases a
+    · exact hi.not_mtx h1 ha
+    · exact hi.not_ep h2 ha
+
+/-- The threads asleep at the epoch are among the waiters counted by `aw`. -/
+theorem qi_le_aw (hq : ∀ u, (u, CA.ep) ∈ Fx.queue s.sh.f → ∃ e, s.ctl u = .run .wait (.sleep e))
+    (ep : Nat) : tsum N s.qi ≤ tsum N (fun u => aw ep (s.ctl u)) :=
+  tsum_le fun u _ => by
+    unfold CState.qi
+    split
+    · rename_i hm; obtain ⟨e, he⟩ := hq u hm; rw [he]; exact Nat.le_refl _
+    · exact Nat.zero_le _
+
+/-- Sums over the threads do not see a move between places where the summand is equal. -/
+theorem tsum_same (g : CCtl CL → Nat) {t : Tid} {c : CCtl CL} (h : g c = g (s.ctl t)) :
+    tsum N (fun u => g (tset s.ctl t c u)) = tsum N (fun u => g (s.ctl u)) := by
+  rw [tset_same g s.ctl t c h]
+
+/-- The sum of `qi` when the queue at the epoch has the same members. -/
+theorem qi_same (hqe : ∀ u, (u, CA.ep) ∈ Fx.queue s'.sh.f ↔ (u, CA.ep) ∈ Fx.queue s.sh.f) :
+    tsum N s'.qi = tsum N s.qi := by
+  unfold CState.qi; simp only [hqe]
+
+/-- **The invariant from its clauses**, with the thread clauses checked at `t` only. -/
+theorem next (hi : CInv N s) {t : Tid} (ht : t < N) {c : CCtl CL}
+    (hctl : s'.ctl = tset s.ctl t c) (hmtx : IoInv s'.proj) (hok : CPlace.ok c = true)
+    (hqwf : (Fx.queue s'.sh.f).WF)
+    (hqep : ∀ u, (u, CA.ep) ∈ Fx.queue s'.sh.f → ∃ e, s'.ctl u = .run .wait (.sleep e))
+    (hep : s.sh.ep ≤ s'.sh.ep) (heo : eOf c ≤ s'.sh.ep)
+    (hepc : s'.sh.ep + tsum N (fun u => nb (s'.ctl u)) ≤ s'.calls)
+    (hw : s'.sh.w = tsum N (fun u => reg (s'.ctl u))) (hsgw : s'.sh.sg ≤ s'.sh.w)
+    (hseen : ∀ u, s'.seen u ≤ s'.gen) (hwgen : ∀ u, preRel (s'.ctl u) = true → s'.wgen u = s'.gen)
+    (hoblW : s'.O ≤ s'.sh.w + tsum N (fun u => cwl (s'.ctl u)))
+    (hoblS : (∀ u, bpend (s'.ctl u) = false) →
+      s'.O ≤ s'.sh.sg + tsum N (fun u => spend (s'.ctl u)) + tsum N (fun u => cwl (s'.ctl u)))
+    (hepoch : s'.sh.ep < 2 ^ 32 →
+      s'.sh.sg + tsum N s'.qi ≤ tsum N (fun u => aw s'.sh.ep (s'.ctl u)) +
+        tsum N (fun u => bW (s'.ctl u)) + min (tsum N (fun u => wW (s'.ctl u))) (tsum N s'.qi)) :
+    CInv N s' where
+  mtx := hmtx
+  ok := by rw [hctl]; exact tset_all (Q := fun c => CPlace.ok c = true) hok fun u _ => hi.ok u
+  idle u hu := by rw [hctl, tset_ne _ _ (fun e => by subst e; tomega)]; exact hi.idle u hu
+  qwf := hqwf
+  qep := hqep
+  eload u := by
+    rw [hctl]; by_cases hu : u = t
+    · rw [hu, tset_self]; exact heo
+    · rw [tset_ne _ _ hu]; exact Nat.le_trans (hi.eload u) hep
+  epc := hepc
+  wcnt := hw
+  sgw := hsgw
+  seen := hseen
+  wgen := hwgen
+  oblW := hoblW
+  oblS := hoblS
+  epoch := hepoch
+
+/-- **A step that changes no count**: thread `t` moves between places where every summand is
+the same, and the condition's words, the owed returns and the calls stay. -/
+theorem same (hi : CInv N s) {t : Tid} (ht : t < N) {c : CCtl CL}
+    (hctl : s'.ctl = tset s.ctl t c) (hmtx : IoInv s'.proj) (hok : CPlace.ok c = true)
+    (hqwf : (Fx.queue s'.sh.f).WF)
+    (hqe : ∀ u, (u, CA.ep) ∈ Fx.queue s'.sh.f ↔ (u, CA.ep) ∈ Fx.queue s.sh.f)
+    (htq : (t, CA.ep) ∈ Fx.queue s.sh.f → ∃ e, c = .run .wait (.sleep e))
+    (hw : s'.sh.w = s.sh.w) (hsg : s'.sh.sg = s.sh.sg) (hep : s'.sh.ep = s.sh.ep)
+    (hO : s'.O = s.O) (hcalls : s'.calls = s.calls)
+    (hseen : ∀ u, s'.seen u ≤ s'.gen) (hwgen : ∀ u, preRel (s'.ctl u) = true → s'.wgen u = s'.gen)
+    (hr : reg c = reg (s.ctl t)) (hcw : cwl c = cwl (s.ctl t)) (hsp : spend c = spend (s.ctl t))
+    (hbp : bpend c = bpend (s.ctl t)) (hnb : nb c = nb (s.ctl t)) (hbw : bW c = bW (s.ctl t))
+    (hww : wW c = wW (s.ctl t)) (haw : aw s.sh.ep c = aw s.sh.ep (s.ctl t)) (heo : eOf c ≤ s.sh.ep) :
+    CInv N s' := by
+  have er := tsum_same (N := N) reg hr
+  have ecw := tsum_same (N := N) cwl hcw
+  have esp := tsum_same (N := N) spend hsp
+  have enb := tsum_same (N := N) nb hnb
+  have ebw := tsum_same (N := N) bW hbw
+  have eww := tsum_same (N := N) wW hww
+  have eaw := tsum_same (N := N) (aw s.sh.ep) haw
+  have eq := qi_same (N := N) hqe
+  refine hi.next ht hctl hmtx hok hqwf ?_ (by rw [hep]; exact Nat.le_refl _) (by rw [hep]; exact heo)
+    ?_ ?_ ?_ hseen hwgen ?_ ?_ ?_ <;> (try rw [hctl]) <;> (try rw [hctl] at *)
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self]; rw [hut] at hu; exact htq ((hqe t).mp hu)
+    · rw [tset_ne _ _ hut]; exact hi.qep u ((hqe u).mp hu)
+  · rw [enb, hep, hcalls]; exact hi.epc
+  · rw [er, hw]; exact hi.wcnt
+  · rw [hsg, hw]; exact hi.sgw
+  · rw [ecw, hO, hw]; exact hi.oblW
+  · intro hb
+    have hb' : ∀ u, bpend (s.ctl u) = false := by
+      intro u; by_cases hut : u = t
+      · rw [hut, ← hbp]; have := hb t; rwa [tset_self] at this
+      · have := hb u; rwa [tset_ne _ _ hut] at this
+    rw [ecw, esp, hO, hsg]; exact hi.oblS hb'
+  · intro hlt
+    rw [hep] at hlt ⊢
+    rw [eaw, ebw, eww, eq, hsg]; exact hi.epoch hlt
+
+/-- The seen/wgen clauses when no acquisition happens and `t` keeps its relation to them. -/
+theorem keep_gen (hi : CInv N s) {t : Tid} {c : CCtl CL} (hctl : s'.ctl = tset s.ctl t c)
+    (hgen : s'.gen = s.gen) (hseen : s'.seen = s.seen) (hwg : s'.wgen = s.wgen)
+    (hpre : preRel c = true → s.wgen t = s.gen) :
+    (∀ u, s'.seen u ≤ s'.gen) ∧ (∀ u, preRel (s'.ctl u) = true → s'.wgen u = s'.gen) := by
+  refine ⟨fun u => by rw [hseen, hgen]; exact hi.seen u, fun u hu => ?_⟩
+  rw [hwg, hgen]; rw [hctl] at hu
+  by_cases hut : u = t
+  · rw [hut, tset_self] at hu; rw [hut]; exact hpre hu
+  · rw [tset_ne _ _ hut] at hu; exact hi.wgen u hu
+
+end CInv
+
+/-- An `Io.Mutex` step in the condition's code changes the queue only at the mutex word. -/
+theorem iostep_q (hF : FutexSafe condView Fx) {X : Type} {t : Tid} {l l' : IL} {w : AWord X}
+    {f : Fx.atMtx.F} {v v' : X} {sh' : AWord X × Fx.atMtx.F} (hs : IoStep Fx.atMtx t l w f v l' sh' v')
+    (hwf : (Fx.queue f).WF) (hte : (t, CA.ep) ∉ Fx.queue f)
+    (htn : l ≠ .asleep → (Fx.queue f).has t = false) :
+    (Fx.queue sh'.2).WF ∧ ∀ u, (u, CA.ep) ∈ Fx.queue sh'.2 ↔ (u, CA.ep) ∈ Fx.queue f := by
+  cases hs with
+  | casOk | casWait | casSpin | tryOk | tryFail | xchgOk | xchgWait | relWake | relDone =>
+    exact ⟨hwf, fun _ => Iff.rfl⟩
+  | sleep hw =>
+    obtain ⟨ep, hw⟩ := hw
+    refine ⟨hF.wf_wait hwf (htn (by intro he; cases he)) hw, fun u => ?_⟩
+    rw [hF.mem_wait hw]; simp
+  | back hw =>
+    obtain ⟨ep, hw⟩ := hw
+    refine ⟨hF.wf_wait hwf (htn (by intro he; cases he)) hw, fun u => ?_⟩
+    rw [hF.mem_wait hw]; simp
+  | resume hr =>
+    refine ⟨hF.wf_resume hwf hr, fun u => ?_⟩
+    rw [hF.mem_resume hr]
+    constructor
+    · exact fun h => h.1
+    · intro h; refine ⟨h, fun e => ?_⟩; simp only at e; subst e; exact hte h
+  | wake hk =>
+    obtain ⟨-, hk⟩ := hk
+    refine ⟨hF.wf_wake hwf hk, fun u => ⟨fun h => hF.mem_wake hwf hk h, fun h => ?_⟩⟩
+    exact hF.wake_keeps hwf hk h (by intro he; cases he)
+
+/-! ### Facts about places -/
+
+namespace CPlace
+
+theorem lockL_eq (l : IL) : lockL l = IoPlace.ok (.run .lock l) := by
+  cases l <;> try rfl
+  all_goals (rename_i b; cases b <;> rfl)
+
+theorem tryL_eq (l : IL) : tryL l = IoPlace.ok (.run .tryLock l) := by
+  cases l <;> try rfl
+  all_goals (rename_i b; cases b <;> rfl)
+
+theorem unlL_eq (l : IL) : unlL l = IoPlace.ok (.run .unlock l) := by
+  cases l <;> try rfl
+  all_goals (rename_i b; cases b <;> rfl)
+
+theorem aw_le_reg (ep : Nat) (c : CCtl CL) : aw ep c ≤ reg c := by
+  match c with
+  | .run .wait (.wu e _) | .run .wait (.fw e) => simp only [aw, reg]; split <;> omega
+  | .run .wait (.sleep _) | .run .wait .le | .run .wait (.ls _) | .run .wait (.cx _ _ _) =>
+    exact Nat.le_refl _
+  | .idle | .holds => exact Nat.le_refl _
+  | .run .wait .le0 | .run .wait (.add _) | .run .wait (.m _) | .run .wait (.wl _)
+  | .run .wait (.sld _) | .run .wait (.scx _ _ _) | .run .wait (.bump _) | .run .wait (.swake _)
+  | .run .wait .fin => exact Nat.le_refl _
+  | .run .lock _ | .run .tryLock _ | .run .unlock _ | .run (.signal _) _ | .run (.broadcast _) _ =>
+    simp only [aw, reg]; exact Nat.le_refl _
+
+/-- After an epoch bump, no waiter is about to sleep on the new epoch. -/
+theorem aw_succ {ep : Nat} {c : CCtl CL} (h : eOf c ≤ ep) : aw (ep + 1) c = reg c := by
+  match c with
+  | .run .wait (.wu e _) | .run .wait (.fw e) =>
+    simp only [eOf] at h; simp only [aw, reg]; split <;> omega
+  | .run .wait (.sleep _) | .run .wait .le | .run .wait (.ls _) | .run .wait (.cx _ _ _) => rfl
+  | .idle | .holds => rfl
+  | .run .wait .le0 | .run .wait (.add _) | .run .wait (.m _) | .run .wait (.wl _)
+  | .run .wait (.sld _) | .run .wait (.scx _ _ _) | .run .wait (.bump _) | .run .wait (.swake _)
+  | .run .wait .fin => rfl
+  | .run .lock _ | .run .tryLock _ | .run .unlock _ | .run (.signal _) _ | .run (.broadcast _) _ =>
+    simp only [aw, reg]
+
+theorem preRel_own {c : CCtl CL} (h : preRel c = true) : IoPlace.own (projCtl c) = true := by
+  match c, h with
+  | .run .wait .le0, _ | .run .wait (.add _), _ | .run .wait (.wu _ .rel), _ => rfl
+
+/-- A waiter that is not before its release is counted in `waiters` or re-takes the mutex. -/
+theorem waiting_cnt {c : CCtl CL} (hok : ok c = true) (hw : c.waiting = true) (hp : preRel c = false) :
+    1 ≤ reg c + cwl c := by
+  match c, hok, hw, hp with
+  | .run .wait (.wu _ l), hok, _, hp => simp only [reg, cwl]; omega
+  | .run .wait (.fw _), _, _, _ | .run .wait (.sleep _), _, _, _ | .run .wait .le, _, _, _
+  | .run .wait (.ls _), _, _, _ | .run .wait (.cx _ _ _), _, _, _ | .run .wait (.wl _), _, _, _ =>
+    simp only [reg, cwl]; omega
+
+end CPlace
+
+/-- An `Io.Mutex` step never returns to `unlock`'s `xchg`. -/
+theorem iostep_not_rel {F : Futex Nat Unit} {X : Type} {t : Tid} {l l' : IL} {w : AWord X} {f : F.F}
+    {v v' : X} {sh' : AWord X × F.F} (hs : IoStep F t l w f v l' sh' v') : l' ≠ .rel := by
+  cases hs <;> intro he <;> cases he
+
+namespace CInv
+
+variable {X : Type} {N : Nat} {s s' : CState (ioCond Fx) X}
+
+/-- The eligible waiters are counted in `waiters` or re-take the mutex. -/
+theorem elig_le (hi : CInv N s) (t : Tid) :
+    s.elig N t ≤ s.sh.w + tsum N (fun u => cwl (s.ctl u)) := by
+  rw [hi.wcnt, ← tsum_add]
+  refine tsum_le fun u _ => ?_
+  split
+  · rename_i hc
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hc
+    obtain ⟨hw, hlt⟩ := hc
+    have hp : preRel (s.ctl u) = false := by
+      cases hp : preRel (s.ctl u)
+      · rfl
+      · have := hi.wgen u hp; have := hi.seen t; omega
+    exact waiting_cnt (hi.ok u) hw hp
+  · exact Nat.zero_le _
+
+/-- While a thread owns the mutex, no other waiter is before its release. -/
+theorem no_preRel (hi : CInv N s) {t : Tid} (ho : IoPlace.own (projCtl (s.ctl t)) = true) {u : Tid}
+    (hu : u ≠ t) : preRel (s.ctl u) = false := by
+  cases hp : preRel (s.ctl u)
+  · rfl
+  · exact absurd (hi.mtx.excl u t (preRel_own hp) ho) hu
+
+end CInv
+
+/-! ### The invariant is inductive: the client's steps -/
+
+/-- The mutex's view of a move of thread `t`. -/
+theorem proj_ctl_eq {X : Type} {s s' : CState (ioCond Fx) X} {t : Tid} {c' : Ctl IL}
+    (h1 : ∀ u, u ≠ t → s'.ctl u = s.ctl u) (h2 : projCtl (s'.ctl t) = c') :
+    tset s.proj.ctl t c' = s'.proj.ctl := by
+  funext u
+  show tset (fun u => projCtl (s.ctl u)) t c' u = projCtl (s'.ctl u)
+  by_cases hu : u = t
+  · rw [hu, tset_self, h2]
+  · rw [tset_ne _ _ hu, h1 u hu]
+
+/-- The place where a `signal`/`broadcast` starts. -/
+theorem notify_place {op : COp} {h : Bool} (hop : op = .signal h ∨ op = .broadcast h) (ep : Nat) :
+    projCtl (.run op ((ioCond Fx).start op)) = (if h then .holds else .idle) ∧
+    CPlace.ok (.run op ((ioCond Fx).start op)) = true ∧ reg (.run op ((ioCond Fx).start op)) = 0 ∧
+    cwl (.run op ((ioCond Fx).start op)) = 0 ∧ nb (.run op ((ioCond Fx).start op)) = 1 ∧
+    bW (.run op ((ioCond Fx).start op)) = 0 ∧ wW (.run op ((ioCond Fx).start op)) = 0 ∧
+    aw ep (.run op ((ioCond Fx).start op)) = 0 ∧ preRel (.run op ((ioCond Fx).start op)) = false ∧
+    eOf (.run op ((ioCond Fx).start op)) = 0 ∧
+    ((spend (.run op ((ioCond Fx).start op)) = 1 ∧ bpend (.run op ((ioCond Fx).start op)) = false ∧
+        op = .signal h) ∨
+      (spend (.run op ((ioCond Fx).start op)) = 0 ∧ bpend (.run op ((ioCond Fx).start op)) = true ∧
+        op = .broadcast h)) := by
+  rcases hop with rfl | rfl <;> cases h <;> simp [projCtl, CPlace.ok, reg, cwl, nb, bW, wW, aw, preRel,
+    eOf, spend, bpend]
+
+namespace CInv
+
+variable {X : Type} {N : Nat} {s : CState (ioCond Fx) X}
+
+theorem call (hFs : FutexSafe condView Fx) (hi : CInv N s) {t : Tid} (ht : t < N) {op : COp}
+    (hop : op = .lock ∨ op = .tryLock) (h : s.ctl t = .idle) :
+    CInv N { s with ctl := tset s.ctl t (.run op ((ioCond Fx).start op)) } := by
+  have hp : projCtl (s.ctl t) = .idle := by rw [h]; rfl
+  have hne : ∀ e, s.ctl t ≠ .run .wait (.sleep e) := by rw [h]; intro e he; cases he
+  have hmop : ∃ mop : MOp, mop ≠ .unlock ∧
+      projCtl (.run op ((ioCond Fx).start op)) = .run mop ((ioMutex Fx.atMtx).start mop) := by
+    rcases hop with rfl | rfl
+    · exact ⟨.lock, by decide, rfl⟩
+    · exact ⟨.tryLock, by decide, rfl⟩
+  obtain ⟨mop, hmu, hpm⟩ := hmop
+  have hmtx := proj_sim (s' := { s with ctl := tset s.ctl t (.run op ((ioCond Fx).start op)) })
+    hFs hi.mtx (MStep.call (I := ioMutex Fx.atMtx) mop hmu hp)
+    (mstate_eq rfl (proj_ctl_eq (fun u hu => tset_ne _ _ hu) (by dsimp only; rw [tset_self, hpm])) rfl rfl)
+  obtain ⟨hs1, hs2⟩ := hi.keep_gen (s' := { s with ctl := tset s.ctl t (.run op ((ioCond Fx).start op)) })
+    rfl rfl rfl rfl (fun hp => by rcases hop with rfl | rfl <;> cases hp)
+  have hz : CPlace.ok (.run op ((ioCond Fx).start op)) = true ∧
+      reg (.run op ((ioCond Fx).start op)) = reg (s.ctl t) ∧ cwl (.run op ((ioCond Fx).start op)) = cwl (s.ctl t) ∧
+      spend (.run op ((ioCond Fx).start op)) = spend (s.ctl t) ∧
+      bpend (.run op ((ioCond Fx).start op)) = bpend (s.ctl t) ∧
+      nb (.run op ((ioCond Fx).start op)) = nb (s.ctl t) ∧ bW (.run op ((ioCond Fx).start op)) = bW (s.ctl t) ∧
+      wW (.run op ((ioCond Fx).start op)) = wW (s.ctl t) ∧
+      aw s.sh.ep (.run op ((ioCond Fx).start op)) = aw s.sh.ep (s.ctl t) := by
+    rw [h]; rcases hop with rfl | rfl <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  obtain ⟨z0, z1, z2, z3, z4, z5, z6, z7, z8⟩ := hz
+  exact hi.same ht rfl hmtx z0 hi.qwf (fun _ => Iff.rfl) (fun hm => absurd hm (hi.not_ep hne))
+    rfl rfl rfl rfl rfl hs1 hs2 z1 z2 z3 z4 z5 z6 z7 z8
+    (by rcases hop with rfl | rfl <;> exact Nat.zero_le _)
+
+theorem unlock (hFs : FutexSafe condView Fx) (hi : CInv N s) {t : Tid} (ht : t < N)
+    (h : s.ctl t = .holds) :
+    CInv N { s with ctl := tset s.ctl t (.run .unlock ((ioCond Fx).start .unlock)) } := by
+  have hp : projCtl (s.ctl t) = .holds := by rw [h]; rfl
+  have hne : ∀ e, s.ctl t ≠ .run .wait (.sleep e) := by rw [h]; intro e he; cases he
+  have hmtx := proj_sim (s' := { s with ctl := tset s.ctl t (.run .unlock ((ioCond Fx).start .unlock)) })
+    hFs hi.mtx (MStep.unlock (I := ioMutex Fx.atMtx) hp)
+    (mstate_eq rfl (proj_ctl_eq (fun u hu => tset_ne _ _ hu) (by dsimp only; rw [tset_self]; rfl)) rfl rfl)
+  obtain ⟨hs1, hs2⟩ := hi.keep_gen (s' := { s with ctl := tset s.ctl t (.run .unlock ((ioCond Fx).start .unlock)) })
+    rfl rfl rfl rfl (fun hp => by cases hp)
+  exact hi.same ht rfl hmtx rfl hi.qwf (fun _ => Iff.rfl) (fun hm => absurd hm (hi.not_ep hne))
+    rfl rfl rfl rfl rfl hs1 hs2 (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl)
+    (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl) (Nat.zero_le _)
+
+theorem wait (hi : CInv N s) {t : Tid} (ht : t < N) (h : s.ctl t = .holds) :
+    CInv N { s with
+      ctl := tset s.ctl t (.run .wait ((ioCond Fx).start .wait))
+      wgen := tset s.wgen t s.gen } := by
+  have hne : ∀ e, s.ctl t ≠ .run .wait (.sleep e) := by rw [h]; intro e he; cases he
+  have hmtx : IoInv (CState.proj { s with
+      ctl := tset s.ctl t (.run .wait ((ioCond Fx).start .wait))
+      wgen := tset s.wgen t s.gen }) :=
+    proj_frame hi.mtx (fun u => by
+      by_cases hu : u = t
+      · show projCtl (tset s.ctl t _ u) = _; rw [hu, tset_self, h]; rfl
+      · show projCtl (tset s.ctl t _ u) = _; rw [tset_ne _ _ hu]) rfl rfl rfl (List.Perm.refl _)
+  refine hi.same ht rfl hmtx rfl hi.qwf (fun _ => Iff.rfl) (fun hm => absurd hm (hi.not_ep hne))
+    rfl rfl rfl rfl rfl hi.seen (fun u hu => ?_) (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl)
+    (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl) (by rw [h]; rfl) (Nat.zero_le _)
+  show tset s.wgen t s.gen u = s.gen
+  by_cases hut : u = t
+  · rw [hut, tset_self]
+  · rw [tset_ne _ _ hut]
+    have hu' : preRel (tset s.ctl t (.run .wait ((ioCond Fx).start .wait)) u) = true := hu
+    rw [tset_ne _ _ hut] at hu'
+    exact hi.wgen u hu'
+
+theorem write (hFs : FutexSafe condView Fx) (hi : CInv N s) {t : Tid} (ht : t < N) (x : X)
+    (h : s.ctl t = .holds) : CInv N { s with cur := tset s.cur t x, val := x } := by
+  have hp : projCtl (s.ctl t) = .holds := by rw [h]; rfl
+  have hne : ∀ e, s.ctl t ≠ .run .wait (.sleep e) := by rw [h]; intro e he; cases he
+  have hmtx := proj_sim (s' := { s with cur := tset s.cur t x, val := x })
+    hFs hi.mtx (MStep.write (I := ioMutex Fx.atMtx) x hp) (mstate_eq rfl rfl rfl rfl)
+  have hctl : ({ s with cur := tset s.cur t x, val := x } : CState (ioCond Fx) X).ctl = tset s.ctl t .holds := by
+    show s.ctl = _; rw [← h, tset_id]
+  obtain ⟨hs1, hs2⟩ := hi.keep_gen (s' := { s with cur := tset s.cur t x, val := x }) hctl rfl rfl rfl
+    (fun hp => by cases hp)
+  exact hi.same ht hctl hmtx rfl hi.qwf (fun _ => Iff.rfl) (fun hm => absurd hm (hi.not_ep hne))
+    rfl rfl rfl rfl rfl hs1 hs2 (by rw [h]) (by rw [h]) (by rw [h]) (by rw [h]) (by rw [h]) (by rw [h])
+    (by rw [h]) (by rw [h]) (Nat.zero_le _)
+
+theorem notify (hi : CInv N s) {t : Tid} (ht : t < N) {op : COp} {h : Bool}
+    (hop : op = .signal h ∨ op = .broadcast h) (hc : s.ctl t = if h then .holds else .idle) :
+    CInv N { s with
+      ctl := tset s.ctl t (.run op ((ioCond Fx).start op))
+      O := op.owe s.O (s.elig N t)
+      calls := s.calls + 1 } := by
+  have hne : ∀ e, s.ctl t ≠ .run .wait (.sleep e) := by
+    rw [hc]; intro e he; cases h <;> simp at he
+  have hc0 : reg (s.ctl t) = 0 ∧ cwl (s.ctl t) = 0 ∧ spend (s.ctl t) = 0 ∧ bpend (s.ctl t) = false ∧
+      nb (s.ctl t) = 0 ∧ bW (s.ctl t) = 0 ∧ wW (s.ctl t) = 0 ∧ aw s.sh.ep (s.ctl t) = 0 ∧
+      projCtl (s.ctl t) = (if h then .holds else .idle) := by
+    rw [hc]; cases h <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  obtain ⟨z1, z2, z3, z4, z5, z6, z7, z8, z9⟩ := hc0
+  obtain ⟨p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11⟩ := notify_place (Fx := Fx) hop s.sh.ep
+  have hE := hi.elig_le t
+  generalize CCtl.run op ((ioCond Fx).start op) = c at p1 p2 p3 p4 p5 p6 p7 p8 p9 p10 p11 ⊢
+  have hmtx : IoInv (CState.proj { s with
+      ctl := tset s.ctl t c
+      O := op.owe s.O (s.elig N t)
+      calls := s.calls + 1 }) :=
+    proj_frame hi.mtx (fun u => by
+      by_cases hu : u = t
+      · show projCtl (tset s.ctl t c u) = _; rw [hu, tset_self, p1, z9]
+      · show projCtl (tset s.ctl t c u) = _; rw [tset_ne _ _ hu]) rfl rfl rfl (List.Perm.refl _)
+  have e1 := tsum_tset nb s.ctl ht c
+  have e2 := tsum_tset reg s.ctl ht c
+  have e3 := tsum_tset cwl s.ctl ht c
+  have e4 := tsum_tset spend s.ctl ht c
+  have e5 := tsum_tset (aw s.sh.ep) s.ctl ht c
+  have e6 := tsum_tset bW s.ctl ht c
+  have e7 := tsum_tset wW s.ctl ht c
+  have hepc := hi.epc
+  have hw := hi.wcnt
+  have hoW := hi.oblW
+  refine hi.next ht rfl hmtx p2 hi.qwf (fun u hu => ?_) (Nat.le_refl _) (by rw [p10]; exact Nat.zero_le _)
+    ?_ ?_ hi.sgw hi.seen (fun u hu => ?_) ?_ (fun hb => ?_) (fun hlt => ?_)
+  · have := hi.qep u hu
+    by_cases hut : u = t
+    · rw [hut] at this; obtain ⟨e, he⟩ := this; exact absurd he (hne e)
+    · show ∃ e, tset s.ctl t c u = _; rw [tset_ne _ _ hut]; exact this
+  · show s.sh.ep + tsum N (fun u => nb (tset s.ctl t c u)) ≤ s.calls + 1; omega
+  · show s.sh.w = tsum N (fun u => reg (tset s.ctl t c u)); omega
+  · have hu' : preRel (tset s.ctl t c u) = true := hu
+    by_cases hut : u = t
+    · rw [hut, tset_self, p9] at hu'; cases hu'
+    · rw [tset_ne _ _ hut] at hu'; exact hi.wgen u hu'
+  · show op.owe s.O (s.elig N t) ≤ s.sh.w + tsum N (fun u => cwl (tset s.ctl t c u))
+    rcases p11 with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> simp only [COp.owe] <;> (try split) <;> omega
+  · rcases p11 with ⟨q1, q2, rfl⟩ | ⟨q1, q2, rfl⟩
+    · have hb' : ∀ u, bpend (s.ctl u) = false := fun u => by
+        by_cases hut : u = t
+        · rw [hut, z4]
+        · have := hb u; simp only at this; rwa [tset_ne _ _ hut] at this
+      have := hi.oblS hb'
+      show COp.owe (.signal h) s.O (s.elig N t) ≤ s.sh.sg + tsum N (fun u => spend (tset s.ctl t c u)) +
+        tsum N (fun u => cwl (tset s.ctl t c u))
+      simp only [COp.owe]; split <;> omega
+    · have := hb t; simp only at this; rw [tset_self, q2] at this; cases this
+  · have := hi.epoch hlt
+    show s.sh.sg + tsum N s.qi ≤ tsum N (fun u => aw s.sh.ep (tset s.ctl t c u)) +
+      tsum N (fun u => bW (tset s.ctl t c u)) + min (tsum N (fun u => wW (tset s.ctl t c u))) (tsum N s.qi)
+    omega
+
+end CInv
+
 end Spec
 end Zig
