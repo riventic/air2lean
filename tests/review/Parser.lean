@@ -216,7 +216,11 @@ def main (args : List String) : IO Unit := do
   writeGenerated directory "opvZero" opvZero
     "example : successful ((Review.opv 0 10).map BitVec.toNat) = some 11 := by native_decide"
   require (isRegisterConstraint "=&{edx}" && isRegisterConstraint "=&r") "early-clobber output rejected"
-  let _ ← accept (asmFile "=&{edx}" "r")
+  -- An early-clobber register output passes the operand checks; this empty-template block is
+  -- then rejected only by the reviewed asm allowlist (L13, `Air2Lean/AsmAllowlist.lean`).
+  match process (asmFile "=&{edx}" "r") with
+  | .ok _ => throw (IO.userError "asm off the reviewed allowlist accepted")
+  | .error e => require ((e.splitOn "allowlist").length > 1) s!"early-clobber output rejected: {e}"
   reject (asmFile "=r" "=&r") "output constraint on asm input"
   -- Type-graph validation must precede recursive packed width and memory analysis.
   let cycPacked := obj [("k", .str "struct"), ("name", .str "Cycle"),
