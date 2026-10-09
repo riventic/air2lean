@@ -1,0 +1,121 @@
+{
+ "schema": 12,
+ "zig_version": "0.14.1",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.4.19...6.13.4-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.14.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "aggregate_casts.u56ToU24x2",
+ "src": {
+  "file": "aggregate_casts.zig",
+  "module": "aggregate_casts",
+  "decl_line": 33
+ },
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
+   "tag": "bitcast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 4,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 56,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 2,
+   "child": 4,
+   "sentinel": false,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 24,
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}

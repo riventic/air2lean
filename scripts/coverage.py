@@ -315,12 +315,13 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
+    'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/global-init/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
-    'tests/roadmap/aggregate-casts/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/aggregate-casts/air-handwritten': 'earlier hand-written AIR in the exporter schema (README)',
     'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; compiler export pending)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',

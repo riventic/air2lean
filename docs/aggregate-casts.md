@@ -73,8 +73,12 @@ C/allowzero pointer and an optional slice, stay rejected.
 
 `tests/roadmap/aggregate-casts/` (`check.sh`):
 
-- `air/0.16.0`: hand-written AIR in the exporter's schema for `probe.zig`'s casts.
-  `AggregateCasts/Gen.lean` is its retained translation, compared byte for byte.
+- `air/<version>`: exports of `aggregate_casts.zig` (the probe's casts) by patched 0.16.0, 0.15.2
+  and 0.14.1 compilers (x86_64-linux, ReleaseSafe), pinned by `provenance.json`.
+  `AggregateCasts/Gen.lean` is the 0.16.0 translation, compared byte for byte; the other two
+  translate to the same text apart from the profile header. The compiler also emits the
+  `@ptrFromInt` alignment check and the `?*T` unwrap null check, which the earlier hand-written
+  AIR (`air-handwritten/`) omitted.
 - `AggregateCasts/Proofs.lean`, checked by kernel evaluation and `rfl`:
   - round trips without padding (`[4]u8 ↔ u32`, `extern struct {u32, u32} ↔ u64`, and the
     generic theorem instantiated);
@@ -82,7 +86,8 @@ C/allowzero pointer and an optional slice, stay rejected.
     union built from a narrower field);
   - padding bytes dropped (`[8]u8 → Padded`), and the failed round trips;
   - the `extern` union field reads;
-  - the optional-pointer null and wrap/unwrap rules, for every memory state.
+  - the optional-pointer null rules for every memory state, the misaligned `@ptrFromInt` panic, and
+    wrap/unwrap for a pointer with a nonzero address.
 - `Model.lean`: compares the model's result bytes with `probe.zig`'s output from stock Zig 0.16.0
   on aarch64-macos (`aarch64-macos-ReleaseSafe.txt`; Debug and ReleaseFast print the same; no
   qualified claim for those modes, [build-modes.md](build-modes.md)).
@@ -92,5 +97,5 @@ C/allowzero pointer and an optional slice, stay rejected.
 - `Checker.lean`: every accepted cast is accepted for 0.14.1, 0.15.2 and 0.16.0 and rejected
   for 0.17.0 or no version. It also checks the layout, bit-size and optional-pointer rejections.
 
-No real-compiler AIR export is used: the fixtures are hand-written, and the native probe covers
-only the listed values on one host.
+The native probe covers only the listed values on one host. Casts of auto structs, tuples,
+tagged and packed unions, vectors, sentinel arrays and error storage have no export.
