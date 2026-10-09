@@ -81,7 +81,7 @@ fn buildThenFree(a: Allocator, xs: []const u32) !void {
 | `buildThenFree_no_illegal` | `m.Seq → (buildThenFree a xs).run m ≠ throw e`, for every `e`, including `.illegal` |
 | `buildThenFree_no_leak` | `m.Seq → (buildThenFree a xs).run m = pure (r, m') → m'.heap = m.heap` |
 | `buildThenFree_every_policy` | the same from `{ m with failAt := k, allocPolicy := pol }`, for every `k` and `pol` |
-| `buildThenFree_address_reuse` | the same from `m.withReuse pick pm`: the allocator may give a freed node's address to a later node, for every reuse oracle `pick` and provenance mode `pm` |
+| `buildThenFree_address_reuse` | the same from `m.withPlacement σ pm`: the allocator may give a freed node's address to a later node, for every placement `σ` and provenance mode `pm` |
 
 [`Controls.lean`](Controls.lean) holds the refuted clients; Lean accepts it. `Room m` says that the next 16-byte
 allocation succeeds under `m`'s policy. `SafeNoLeak c` is the property of
@@ -91,7 +91,7 @@ allocation succeeds under `m`'s policy. `SafeNoLeak c` is the property of
 |---|---|
 | `doubleFree`: `freeAll(a, n); a.destroy(n);` | `doubleFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `doubleFree_unsafe`: `¬SafeNoLeak (doubleFree a v)` |
 | `useAfterFree`: `freeAll(a, n); return sum(n);` | `useAfterFree_illegal`: `m.Seq → Room m → run m = throw .illegal`; `useAfterFree_unsafe`: `¬SafeNoLeak (useAfterFree a v)` |
-| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withReuse pick pm) = throw .illegal` for every `pick` and `pm` |
+| the first two under address reuse | `doubleFree_reuse`, `useAfterFree_reuse`: `run (m.withPlacement σ pm) = throw .illegal` for every `σ` and `pm` |
 | `forgetFree`: `_ = try push(a, null, v);` | `forgetFree_leaks`: `m.Seq → Room m → ∃ m', run m = pure (.ok (), m') ∧ m'.heap ≠ m.heap`; `forgetFree_unsafe`: `¬SafeNoLeak (forgetFree a v)` |
 
 ## How each property maps to the model
@@ -126,11 +126,12 @@ failure index, every finite failure trace and every cap. That covers a failure o
 push, of the last push, of any push in between, and no failure.
 `buildThenFree_every_policy` states this explicitly.
 
-**Every address-reuse policy.** A real allocator may give a freed node's address to the next
-node. The model's opt-in reuse policy (`Mem.allocPolicy.reuseAddr`,
-[docs/address-reuse.md](../../docs/address-reuse.md)) does that. The checks above use the
+**Every address placement.** A real allocator may give a freed node's address to the next
+node. The model's placement oracle (`Mem.place`,
+[docs/address-placement.md](../../docs/address-placement.md)) chooses every block's address,
+also a freed block's. The checks above use the
 pointer's block id, which is never reused, not its address. So the properties hold under every
-reuse policy (`buildThenFree_address_reuse`), and a stale node pointer stays dead even when a
+placement (`buildThenFree_address_reuse`), and a stale node pointer stays dead even when a
 live node has its address (`doubleFree_reuse`, `useAfterFree_reuse`).
 
 **Values.** `list hd xs` (`Proofs/Lists/Sep.lean`) owns the chain of 16-byte nodes from

@@ -136,7 +136,7 @@ private def fuel : Nat := 4096
 
 private def runs (main : ConcM Tgt (Except ErrName (BitVec 32))) :
     List (Option (Except Error (Except ErrName (BitVec 32) × Mem))) :=
-  oracles.map fun o => (Sched.run dispatch fuel o main mem0).run
+  oracles.map fun o => (Sched.run dispatch fuel o main (mem0 .fresh)).run
 
 /-- Completed with 3, every task joined and the `Counter` block dead. -/
 private def reclaimedOk : Option (Except Error (Except ErrName (BitVec 32) × Mem)) → Bool
