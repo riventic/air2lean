@@ -289,6 +289,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-macos': 'tests/roadmap/alloc-translated/provenance.json',
+    'tests/roadmap/alloc-fba/air/{version}/client-linux': 'tests/roadmap/alloc-fba/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
