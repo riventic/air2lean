@@ -108,6 +108,19 @@ variable {n : Nat}
 
 end Prim
 
+/-! ## Pointer equality -/
+
+/-- `==` on pointers compares addresses (`ptrEqAddr`, MM-4). For two pointers without a block
+(from `@ptrFromInt`, or null) the addresses are the offsets; nothing is read or owned. -/
+@[vc_contract] theorem ptrEqAddr_raw (p q : Ptr) :
+    Triple ⌜p.block = none ∧ q.block = none⌝ (ptrEqAddr p q)
+      (fun r => ⌜r = decide (p.off = q.off)⌝) :=
+  Triple.of_run fun m _ hF _ hm hp hst => by
+    obtain ⟨⟨hpb, hqb⟩, rfl⟩ := hp
+    refine ⟨decide (p.off = q.off), m, Heap.empty, ?_, (Heap.disjoint_empty hF).symm,
+      by rw [hm, Heap.empty_union], ⟨rfl, rfl⟩, hst⟩
+    simp [ptrEqAddr, ptrAddr, hpb, hqb, zig_unfold]
+
 /-! ## Contract postconditions -/
 
 /-- A memory postcondition in two parts: the functional `result` and the `heap` effect.

@@ -154,7 +154,9 @@ def contractCall? (e α : Expr) (mem : Bool) : MetaM (Option Expr) := do
   for thm in ← labelled `vc_contract do
     let r ← commitWhenSome? do
       let c ← mkConstWithFreshMVarLevels thm
-      let (ms, _, body) ← forallMetaTelescopeReducing (← inferType c)
+      -- A memory contract's conclusion is `Triple …`, a definition over a `∀`: do not unfold it.
+      let (ms, _, body) ← if mem then forallMetaTelescope (← inferType c)
+        else forallMetaTelescopeReducing (← inferType c)
       let body ← instantiateMVars body
       let head := e.getAppFn.constName?.getD .anonymous
       let label := s!"{callKind thm mem}: {head} [{thm}]"
