@@ -306,14 +306,6 @@ structure WgInv {X : Type} (L : Lat X) (N : Nat) (s : WState (threadedWG Fx) X) 
 
 /-! ## Helpers -/
 
-theorem tset_apply {β : Type} (f : Tid → β) (t : Tid) (x : β) (u : Tid) :
-    tset f t x u = if u = t then x else f u := rfl
-
-/-- How a sum over the threads changes when thread `t` moves (additive form, for `omega`). -/
-theorem tsum_move {β : Type} {N : Nat} (g : β → Nat) (f : Tid → β) {t : Tid} (ht : t < N) (c : β) :
-    tsum N (fun u => g (tset f t c u)) + g (f t) = tsum N (fun u => g (f u)) + g c :=
-  tsum_tset g f ht c
-
 /-- The event word of a sleeping wait is `1`. -/
 theorem bv_one {n : Nat} (hn : n ≤ 2) (h : wordView n () = some 1) : n = 1 := by
   have h' := congrArg BitVec.toNat (Option.some.inj h)
@@ -390,7 +382,7 @@ theorem sums (s : WState (threadedWG Fx) X) {t : Tid} (ht : t < N) {c c' : WCtl 
     tsum N (fun u => pF (tset s.ctl t c' u)) + pF c = tsum N (fun u => pF (s.ctl u)) + pF c' ∧
     tsum N (fun u => pW (tset s.ctl t c' u)) + pW c = tsum N (fun u => pW (s.ctl u)) + pW c' := by
   subst h
-  exact ⟨tsum_move pS s.ctl ht c', tsum_move pF s.ctl ht c', tsum_move pW s.ctl ht c'⟩
+  exact ⟨tsum_tset pS s.ctl ht c', tsum_tset pF s.ctl ht c', tsum_tset pW s.ctl ht c'⟩
 
 /-- The waiter's existence when the bit is set. -/
 theorem waited_of_bit (hi : WgInv L N s) (h : 0 < tsum N (fun u => pW (s.ctl u))) :

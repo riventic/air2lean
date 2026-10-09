@@ -4577,7 +4577,7 @@ theorem main_spec (io : Io) (d : Nat) :
       rw [hs2'] at hu
       rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
       · exact .inl hc₁₀.symm
-      · exact .inr ⟨_, hj1, hc₁₀ ▸ rfl, rfl⟩
+      · exact .inr ⟨_, hj1, hc₁₀ ▸ rfl, rfl, rfl⟩
   refine WP.bind (WP.liftMem (fun e he => (free_noErr hblk₀ hl₀ hnr e he).elim) fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rcases h3 with rfl | rfl | rfl <;> simp, fun r hr hsp => ?_⟩⟩

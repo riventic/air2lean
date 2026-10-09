@@ -29,16 +29,6 @@ theorem tset_all {β : Type} {Q : β → Prop} {f : Tid → β} {t : Tid} {c : �
   · rw [hu, tset_self]; exact hc
   · rw [tset_ne _ _ hu]; exact h u hu
 
-theorem tset_all2 {β γ : Type} {Q : β → γ → Prop} {f : Tid → β} {g : Tid → γ} {t : Tid} {c : β}
-    {v : γ} (hc : Q c v) (h : ∀ u, u ≠ t → Q (f u) (g u)) : ∀ u, Q (tset f t c u) (tset g t v u) := by
-  intro u; by_cases hu : u = t
-  · rw [hu, tset_self, tset_self]; exact hc
-  · rw [tset_ne _ _ hu, tset_ne _ _ hu]; exact h u hu
-
-/-- A hypothesis about the new place of a thread other than `t`. -/
-theorem tset_of_ne {β : Type} {f : Tid → β} {t u : Tid} {c : β} (h : u ≠ t) :
-    tset f t c u = f u := tset_ne _ _ h
-
 
 /-! ## Sums over the threads below `N` -/
 

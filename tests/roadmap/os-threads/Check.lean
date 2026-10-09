@@ -198,6 +198,19 @@ def cloneSetup (env : Os.Env) : ConcM Tgt (BitVec 64) := do
 #guard (outcomes cloneKid (do
     let _ ← cloneSetup env
     lift (load (BitVec 64) 8 dataP)) hex64) == ["Zig.Error.illegal"]
+-- An exit is no join: freeing the child's data without the join loop races with the child's write
+-- in every schedule, even when the child already exited (`ThreadRec.released`).
+#guard outcomes cloneKid (do
+    let _ ← cloneSetup env
+    ConcM.sync .yield
+    ConcM.sync .yield
+    ConcM.sync .yield
+    lift (free dataP)) (fun _ => "ok") (fuel := 30) == ["Zig.Error.illegal"]
+-- With the join loop the free is ordered after the child's write.
+#guard outcomes cloneKid (do
+    let _ ← cloneSetup env
+    joinLoop 6
+    lift (free dataP)) (fun _ => "ok") (fuel := 30) == ["Zig.Error.panic", "ok"]
 -- Spawn failure is the run environment's under `fallible`: -EAGAIN, -ENOMEM, or a thread.
 #guard outcomes cloneKid (do
     let r ← cloneSetup env
@@ -242,6 +255,16 @@ def pSetup : ConcM Tgt (Ptr × Ptr) := lift do
     let _ ← Darwin.pthread_create h none 0
     let t ← lift (load ThreadId 8 h)
     lift (Darwin.pthread_detach t)) toString == ["0x0000#16"]
+-- A detach is no join: freeing the data races in the schedules where the detached thread wrote it
+-- first (in the others the run ends before it runs).
+#guard outcomes pKid (do
+    let (d, h) ← pSetup
+    let _ ← Darwin.pthread_create h none 0
+    let t ← lift (load ThreadId 8 h)
+    let _ ← lift (Darwin.pthread_detach t)
+    ConcM.sync .yield
+    ConcM.sync .yield
+    lift (free d)) (fun _ => "ok") == ["Zig.Error.illegal", "ok"]
 -- Spawn failure: EAGAIN under `fallible`.
 #guard (outcomes pKid (do
     let (_, h) ← pSetup

@@ -288,7 +288,7 @@ theorem freeRaces_of_clock {m : Mem} {b n : Nat}
 it joined (and there are as many clocks as threads). -/
 theorem freeRaces_of_joined {m : Mem} {b n : Nat} (hcs : m.clocks.size = m.threads.size)
     (h : ∀ u < m.threads.size, u = m.current ∨
-      ∃ r, m.threads[u]? = some r ∧ r.spawner = m.current ∧ r.joined = true) :
+      ∃ r, m.threads[u]? = some r ∧ r.spawner = m.current ∧ r.joined = true ∧ r.released = false) :
     m.freeRaces b n = false := by
   apply Bool.eq_false_iff.mpr
   intro hany
@@ -296,9 +296,9 @@ theorem freeRaces_of_joined {m : Mem} {b n : Nat} (hcs : m.clocks.size = m.threa
   simp only [Bool.and_eq_true, Bool.not_eq_true', bne_iff_ne, ne_eq] at he
   obtain ⟨⟨⟨⟨-, htc⟩, -⟩, hcl⟩, hj⟩ := he
   by_cases hu : m.footprint[i].tid < m.threads.size
-  · rcases h _ hu with h' | ⟨r, hr, hs, hjr⟩
+  · rcases h _ hu with h' | ⟨r, hr, hs, hjr, hrel⟩
     · exact htc h'
-    · rw [hr] at hj; simp [hs, hjr] at hj
+    · rw [hr] at hj; simp [hs, hjr, hrel] at hj
   · rw [getElem!_neg m.clocks m.footprint[i].tid (by rw [hcs]; exact hu)] at hcl
     rw [VClock.le_default] at hcl; cases hcl
 

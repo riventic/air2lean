@@ -154,6 +154,10 @@ structure ThreadRec where
   spawner : ThreadId
   joined : Bool
   gated : Bool := false
+  /-- The join obligation ended without a happens-before edge to the owner: `pthread_detach`, or
+  a Linux `clone` thread's exit (`Os.markExited`). `Mem.freeRaces` then does not exempt the
+  thread's accesses. -/
+  released : Bool := false
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/
@@ -410,13 +414,14 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
 /-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
 `e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of
 `e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
-of the current thread that it joined (the join is after each access of the child). The end of a
+of the current thread that it joined (the join is after each access of the child; a detached or
+exited child, `ThreadRec.released`, gives no such edge). The end of a
 block is a write of all its bytes for the race check (C11: the bytes are reused). -/
 def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
   let c := VClock.bump (m.clocks[m.current]!) m.current
   m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
     !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
-    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined)
+    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
 
 /-- Free the block that `p` points to the start of. A dead block or an inner pointer throws
 `.illegal`; so does an end of the block that races with an access by another thread

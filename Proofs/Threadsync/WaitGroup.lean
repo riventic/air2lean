@@ -3490,9 +3490,9 @@ theorem main_spec (d : Nat) :
       rcases (by omega : u = 0 ∨ u = 1 ∨ u = 2) with rfl | rfl | rfl
       · exact .inl rfl
       · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, ht1'],
-          rfl, rfl⟩
+          rfl, rfl, rfl⟩
       · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, hs₁₂],
-          rfl, rfl⟩) e he).elim) fun _ m₁₄ hfr => ?_)
+          rfl, rfl, rfl⟩) e he).elim) fun _ m₁₄ hfr => ?_)
   obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hn], fun r hr hsp => ?_⟩⟩
   -- every thread is joined

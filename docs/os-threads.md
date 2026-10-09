@@ -119,7 +119,9 @@ neither.
 **Linux exit and join.** The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`.
 After `entry` returns, `cloneExit` does `CHILD_CLEARTID` in one turn: a release store of `0` to
 `ctid` that carries the thread's final clock, a wake of every waiter at `ctid`, and the end of
-the join obligation (`ThreadRec.joined`). The thread then ends, in the same turn. Std's
+the join obligation (`ThreadRec.joined`). The exit is no join edge (`ThreadRec.released`): the
+end of a block that the child accessed races unless the parent's join loop ordered it
+(`Mem.freeRaces`). The thread then ends, in the same turn. Std's
 translated `LinuxThreadImpl.join` (a `seq_cst` load loop with `futex_4arg` on `child_tid`) gets
 its happens-before edge from that store. A parent that ends before its child exits is `.illegal`
 (`checkJoinedByChild`). A detached thread's `freeAndExit` (inline `munmap` + `exit`) is not

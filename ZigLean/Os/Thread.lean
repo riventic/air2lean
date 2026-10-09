@@ -80,9 +80,10 @@ def interrupt (t : ThreadId) : MemM Unit := modify fun m =>
     waiters := if asleep then m.waiters.filter (·.1 != t) else m.waiters
     woken := if asleep then m.woken.push t else m.woken }
 
-/-- The current thread has exited: its join obligation ends (`checkJoinedByChild`). -/
+/-- The current thread has exited: its join obligation ends (`checkJoinedByChild`). The exit is
+no join: the owner synchronizes only through the `CHILD_CLEARTID` store (`ThreadRec.released`). -/
 def markExited : MemM Unit := modify fun m =>
-  { m with threads := m.threads.modify m.current fun r => { r with joined := true } }
+  { m with threads := m.threads.modify m.current fun r => { r with joined := true, released := true } }
 
 /-! ## Linux (`std.os.linux`, x86_64) -/
 
@@ -226,7 +227,7 @@ def pthread_detach (thread : ThreadId) : MemM (BitVec 16) := do
   let m ← get
   let some rec := m.threads[thread]? | throw .illegal
   if rec.spawner != m.current || rec.joined then throw .illegal
-  set { m with threads := m.threads.set! thread { rec with joined := true },
+  set { m with threads := m.threads.set! thread { rec with joined := true, released := true },
                os := { m.os with detached := m.os.detached.push thread } }
   return 0
 
