@@ -435,6 +435,8 @@ class CompiledTests(unittest.TestCase):
         report["nodes"].append(self.node("other", "Proofs.Asm.Proofs", "theorem", ["Asm.airAsm_17"]))
         found = markers.caller_obligations(report, self.fixture.root)
         self.assertEqual(found, {"wrap_spec": ["ALC-09", "IOM-01"]})
+        named, _ = markers.definitions('namespace Ns\n-- air2lean-premises: {"ALC-09":[0]}\ndef «at» (p0 : X) := 0\n', "Gen.lean")
+        self.assertEqual(named, {"Ns.at": {"ALC-09": [0]}})
         gen.write_text(gen.read_text().replace('{"ALC-09":[0],"IOM-01":[0]}', '{"ALC-09":[]}'))
         with self.assertRaisesRegex(ValueError, "malformed air2lean-premises marker"):
             markers.caller_obligations(report, self.fixture.root)

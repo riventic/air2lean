@@ -51,7 +51,9 @@ def definitions(raw: str, rel: str) -> tuple[dict[str, dict], list[str]]:
         if match is None:
             errors.append(f"{rel}:{number - 1}: air2lean-premises marker does not precede a def")
             continue
-        named[f"{namespace}.{match.group(1)}" if namespace else match.group(1)] = record
+        # A keyword name is escaped (`def «at»`); its kernel name is `at`.
+        name = match.group(1).replace("«", "").replace("»", "")
+        named[f"{namespace}.{name}" if namespace else name] = record
     return named, errors
 
 

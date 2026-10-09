@@ -106,9 +106,8 @@ def io_native(binary: Path, kind: str, out: Path, runs: int, timeout: float) -> 
                 inputs = lines(ROOT / f'tests/diff/{ex}/inputs/{name}.jsonl')
                 if len(inputs) < runs:
                     raise ValueError(f'{ex}.{name}: {runs} runs need as many input lines')
-                for sub, text in [('inputs', inputs[:runs]),
-                                  ('out/zig', [DEADLOCK if s == HANG else s for s in seen])]:
-                    target = out / 'tests/diff' / (f'{ex}/{sub}' if sub == 'inputs' else f'{sub}/{ex}')
+                for target, text in [(out / f'tests/diff/{ex}/inputs', inputs[:runs]),
+                                     (out / f'tests/diff/out/zig/{ex}', [DEADLOCK if s == HANG else s for s in seen])]:
                     target.mkdir(parents=True, exist_ok=True)
                     (target / f'{name}.jsonl').write_text('\n'.join(text) + '\n')
     (out / 'native.json').write_text(json.dumps(raw, indent=2) + '\n')
@@ -143,9 +142,10 @@ def row(row_id: str, native: list[str], included: list[bool | None], note: str =
     counts = collections.Counter(native)
     missed = sorted({n for n, ok in zip(native, included) if ok is False})
     unevaluated = sum(ok is None for ok in included)
+    # Per-input results (lists) are summarized; a few distinct results are kept whole.
+    shown = {'native': dict(sorted(counts.items()))} if len(counts) <= 8 else {'native_distinct': len(counts)}
     return {'id': row_id, 'runs': len(native), 'included': sum(ok is True for ok in included),
-            **({'unevaluated': unevaluated} if unevaluated else {}),
-            'native': dict(sorted(counts.items())), 'outside_model': missed[:3],
+            **({'unevaluated': unevaluated} if unevaluated else {}), **shown, 'outside_model': missed[:3],
             'status': 'fail' if missed else 'pass', **({'note': note} if note else {})}
 
 
