@@ -2,7 +2,7 @@
 # The translated FixedBufferAllocator against the generic allocator specification (P4a):
 # the retained translation is the fresh one; the bridge (generated std.mem.Allocator wrappers =
 # Wrap.*), FBA.allocSpec and the client proof check; the client evaluates to the native results;
-# a mutated alloc fails the proof (mutant.sh). Needs `lake build air2lean` and
+# a mutated alloc fails the proof (mutant.sh). Needs `lake build air2lean ZigLean` and
 # `lake build ZigLean.Sep.AllocSpec.Dispatch`; runs no compiler. With AIR2LEAN_NATIVE_ZIG (a stock
 # Zig 0.16.0), also builds and runs native.zig and compares it with expected.txt.
 set -euo pipefail

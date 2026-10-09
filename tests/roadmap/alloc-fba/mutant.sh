@@ -3,7 +3,7 @@
 # the new end index is deleted from the translated code) must not satisfy `AllocSpec`: the proof
 # in AllocFba/Fba.lean, rechecked against the mutated translation, fails. Two allocations would
 # grant the same bytes.
-# Needs `lake build ZigLean.Sep.AllocSpec.Dispatch`; run from anywhere.
+# Needs `lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch`; run from anywhere.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"

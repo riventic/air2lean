@@ -18,7 +18,7 @@ is modelled by hand.
 | `provenance.json`, `provenance.py` | source, compiler and AIR hashes |
 
 ```sh
-lake build air2lean ZigLean.Sep.AllocSpec.Dispatch
+lake build air2lean ZigLean ZigLean.Sep.AllocSpec.Dispatch
 bash tests/roadmap/alloc-fba/check.sh
 AIR2LEAN_NATIVE_ZIG=/path/to/zig-0.16.0/zig bash tests/roadmap/alloc-fba/check.sh   # also native
 ```
