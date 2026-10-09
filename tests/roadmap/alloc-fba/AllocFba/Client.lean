@@ -295,4 +295,181 @@ theorem exit_free {s1 : Ptr} {A₀ Ac : Nat} {X : Assn} {v : BitVec 8} (h0 : s1.
     obtain ⟨bs, hs, hb⟩ := state_bytes hst
     exact ⟨bs, sep_lift.mpr ⟨hs, h₁, h₂, hd, rfl, hb, trivial⟩⟩
 
+/-! ## Memory steps on granted regions -/
+
+section Granted
+
+variable {J : AllocInv} {p : Ptr} {k : Nat} {bs : Array Byte}
+
+/-- `@memset` of a granted region with a defined byte. -/
+theorem granted_memset (v : BitVec 8) {n : BitVec 64} (hn : n.toNat = bs.size) :
+    TotalTriple (granted J p k bs) (memset (α := BitVec 8) 1 p n (some v))
+      (fun _ => granted J p k (Array.replicate n.toNat (Enc.encode v)).flatten) := by
+  have hs : ((Array.replicate n.toNat (Enc.encode v)).flatten).size = bs.size := by
+    rw [Array.size_flatten_replicate, LawfulEnc.size_encode, show Enc.size (BitVec 8) = 1 from rfl,
+      Nat.mul_one, hn]
+  refine TotalTriple.ex fun A => TotalTriple.ex fun S => TotalTriple.ex fun K => ?_
+  refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K) (memsetIn v hn))
+    (fun _ x => x) (fun _ h x => ⟨A, S, K, by rw [hs]; exact x⟩)
+
+/-- A store of an item into a granted region. -/
+theorem granted_store {T : Type} [Enc T] [LawfulEnc T] {al : Nat} (w : T) (i : BitVec 64)
+    (hpos : 0 < Enc.size T) (ho : i.toNat + Enc.size T ≤ bs.size) (hal : al ∣ 2 ^ k)
+    (halo : al ∣ i.toNat) :
+    TotalTriple (granted J p k bs) (store al (p.elem 1 i) w)
+      (fun _ => granted J p k (writeBytes bs i.toNat (Enc.encode w))) := by
+  have hs : (writeBytes bs i.toNat (Enc.encode w)).size = bs.size :=
+    writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode]; exact ho)
+  rw [Ptr.elem_eq, Nat.one_mul]
+  refine TotalTriple.ex fun A => TotalTriple.ex fun S => TotalTriple.ex fun K => ?_
+  refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K)
+    (Region.storeItemIn (p := p) (A := A) (S := S) (K := K) (o := i.toNat) w hpos ho hal halo))
+    (fun _ x => x) (fun _ h x => ⟨A, S, K, by rw [hs]; exact x⟩)
+
+/-- A load of an item from a granted region. -/
+theorem granted_load {T : Type} [Enc T] {al : Nat} {w : T} (i : BitVec 64)
+    (hpos : 0 < Enc.size T) (ho : i.toNat + Enc.size T ≤ bs.size) (hal : al ∣ 2 ^ k)
+    (halo : al ∣ i.toNat) (hv : Enc.decode (bs.extract i.toNat (i.toNat + Enc.size T)) = pure w) :
+    TotalTriple (granted J p k bs) (load T al (p.elem 1 i)) (fun r => ⌜r = w⌝ ∗ granted J p k bs) := by
+  rw [Ptr.elem_eq, Nat.one_mul]
+  refine TotalTriple.ex fun A => TotalTriple.ex fun S => TotalTriple.ex fun K => ?_
+  refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K)
+    (loadItemIn (p := p) (A := A) (S := S) (K := K) (o := i.toNat) hpos ho hal halo hv))
+    (fun _ x => x) (fun _ h x => ?_)
+  obtain ⟨hr, x⟩ := sep_lift.mp (sep_assoc x)
+  exact sep_lift.mpr ⟨hr, A, S, K, x⟩
+
+theorem granted_load0 {T : Type} [Enc T] {al : Nat} {w : T}
+    (hpos : 0 < Enc.size T) (ho : Enc.size T ≤ bs.size) (hal : al ∣ 2 ^ k)
+    (hv : Enc.decode (bs.extract 0 (Enc.size T)) = pure w) :
+    TotalTriple (granted J p k bs) (load T al p) (fun r => ⌜r = w⌝ ∗ granted J p k bs) := by
+  have t := granted_load (J := J) (p := p) (k := k) (bs := bs) (al := al) (w := w) 0 hpos
+    (by simpa using ho) hal (Nat.dvd_zero _) (by simpa using hv)
+  simpa [Ptr.elem, Ptr.add] using t
+
+end Granted
+
+/-! ## `reset` in the client -/
+
+/-- At `reset`, the allocator's part of the heap has every byte of `buffer[0..12]`: the vtable is
+another block and the client's bytes are `buffer[13..16]`. -/
+theorem reset_step {s1 : Ptr} {A₀ Ac : Nat} {g : Array Byte} (hblk : s1.block ≠ some 0) :
+    TotalTriple (fun h => ((I s1 A₀ Ac).own ∗ guard A₀ g) h ∧ cov h)
+      (heap_FixedBufferAllocator_reset s1) (fun _ => (I s1 A₀ Ac).own ∗ guard A₀ g) := by
+  have hr := TotalTriple.frame (R := vtR vtp fns ∗ guard A₀ g)
+    (reset_spec s1 (buf A₀ Ac) (b := 0) rfl (by simpa [buf] using hblk))
+  refine TotalTriple.conseq hr (fun h ⟨hp, hc⟩ => ?_) (fun _ h x => by
+    show ((own s1 (buf A₀ Ac) ∗ vtR vtp fns) ∗ guard A₀ g) h; sep_from x)
+  have hp' : (own s1 (buf A₀ Ac) ∗ (vtR vtp fns ∗ guard A₀ g)) h := by
+    have : ((own s1 (buf A₀ Ac) ∗ vtR vtp fns) ∗ guard A₀ g) h := hp
+    sep_from this
+  obtain ⟨h₁, h₂, hd, rfl, ho, hrest⟩ := hp'
+  refine ⟨h₁, h₂, hd, rfl, ⟨ho, fun i hlo hhi => ?_⟩, hrest⟩
+  -- the rest has no cell of `buffer[0..12]`
+  have hn : h₂ (0, i) = none := by
+    obtain ⟨g₁, g₂, -, rfl, hv, ⟨-, -, b, hb, -, hl⟩⟩ := hrest
+    cases hb
+    have pn : ∀ {q : Ptr} {T : Type} [Enc T] {a : Nat} {w : T} {h : Heap}, ptsR q a w h →
+        q.block = some 5 → h (0, i) = none := by
+      intro q T _ a w h hq hb
+      obtain ⟨_, _, _, _, _, _, _, b, hb', _, hl⟩ := hq
+      rw [hb] at hb'; cases hb'; rw [hl]; simp
+    have h1 : g₁ (0, i) = none := by
+      unfold vtR at hv
+      obtain ⟨v₁, v₂, -, rfl, p₁, v₃, v₄, -, rfl, p₂, v₅, v₆, -, rfl, p₃, p₄⟩ := hv
+      simp [Heap.union_apply, pn p₁ rfl, pn p₂ rfl, pn p₃ rfl, pn p₄ rfl]
+    have hhi' : i < 12 := by simpa [buf] using hhi
+    have h2 : g₂ (0, i) = none := by rw [hl]; simp; omega
+    simp [h1, h2]
+  have := hc i hlo hhi
+  simp only [Heap.union_apply, hn, Option.or_none] at this
+  exact this
+
+/-! ## Bytes and values -/
+
+theorem extract_writeBytes_lt (a bs : Array Byte) {o x n : Nat} (hn : x + n ≤ o)
+    (h : o + bs.size ≤ a.size) : (writeBytes a o bs).extract x (x + n) = a.extract x (x + n) := by
+  have hs := writeBytes_size a o bs h
+  apply Array.ext
+  · simp [hs]
+  · intro i h1 h2
+    simp only [Array.size_extract] at h1
+    simp only [Array.getElem_extract]
+    rw [writeBytes_getElem a o bs h _ (by omega), if_neg (by omega), getElem!_pos a _ (by omega)]
+
+theorem decode_byte (v : BitVec 8) : Enc.decode (Enc.encode v) = (pure v : Result (BitVec 8)) :=
+  LawfulEnc.decode_encode v
+
+theorem byte_at (v : BitVec 8) (n j : Nat) (hj : j < n) :
+    ((Array.replicate n (Enc.encode v)).flatten).extract j (j + 1) = Enc.encode v := by
+  have := Array.extract_flatten_replicate (Enc.encode v) n j hj
+  rwa [LawfulEnc.size_encode, show Enc.size (BitVec 8) = 1 from rfl, Nat.one_mul] at this
+
+theorem intCast_byte (x : BitVec 8) : Zig.intCast false false 32 x = pure (BitVec.ofNat 32 x.toNat) := by
+  have := x.isLt
+  simp only [Zig.intCast, Zig.val, Bool.false_eq_true, ↓reduceIte]
+  rw [if_pos (by constructor <;> simp <;> omega), BitVec.ofInt_natCast]
+
+theorem add32 {a b : Nat} (ha : a < 512) (hb : b < 256) :
+    Zig.add false (BitVec.ofNat 32 a) (BitVec.ofNat 32 b) = pure (BitVec.ofNat 32 (a + b)) := by
+  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+  congr 1
+  apply BitVec.eq_of_toNat_eq
+  simp [Nat.mod_eq_of_lt (show a < 2 ^ 32 by omega), Nat.mod_eq_of_lt (show b < 2 ^ 32 by omega)]
+
+/-! ## The client -/
+
+abbrev g3 (bs : Array Byte) : Array Byte := (bs.extract 12 16).extract 1 ((bs.extract 12 16).size)
+
+/-- Entry: the allocator is set up on `buffer[0..12]`, the client keeps `buffer[13..16]`, and
+every byte of `buffer[0..12]` is in the heap. -/
+theorem entry {s1 : Ptr} {A₀ Ac : Nat} {bs : Array Byte} {h : Heap} (hs : bs.size = 16)
+    (hA : A₀ + 16 ≤ 2 ^ 64) (hblk : s1.block ≠ some 0)
+    (hh : (state s1 (buf A₀ Ac) 0 ∗ (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns)) h) :
+    ((I s1 A₀ Ac).own ∗ guard A₀ (g3 bs)) h ∧ cov h := by
+  have hsplit := sep_mono (fun _ x => x) (fun _ y => sep_mono (fun _ z => split_buffer hs z)
+    (fun _ z => z) y) hh
+  refine ⟨?_, ?_⟩
+  · have h2 : ((state s1 (buf A₀ Ac) 0 ∗ (regionIn bufp A₀ 16 .global 1 (bs.extract 0 12) ∗
+        regionIn pinp A₀ 16 .global 1 ((bs.extract 12 16).extract 0 1))) ∗
+        (vtR vtp fns ∗ guard A₀ (g3 bs))) h := by sep_from hsplit
+    have h3 := sep_mono (fun _ x => own_init (ctx := s1) (B := buf A₀ Ac) (by simp [hs, buf])
+      (by simp [hs]) (by simp [buf]; omega) (by simp [buf]) rfl (by right; simp [buf])
+      (by simp [buf]) x) (fun _ x => x) h2
+    show ((own s1 (buf A₀ Ac) ∗ vtR vtp fns) ∗ guard A₀ (g3 bs)) h
+    sep_from h3
+  · have h2 : (regionIn bufp A₀ 16 .global 1 (bs.extract 0 12) ∗
+        (state s1 (buf A₀ Ac) 0 ∗ (regionIn pinp A₀ 16 .global 1 ((bs.extract 12 16).extract 0 1) ∗
+          (vtR vtp fns ∗ guard A₀ (g3 bs))))) h := by sep_from hsplit
+    exact cov_of (by simp [hs]) h2
+
+set_option maxHeartbeats 4000000 in
+/-- **The client theorem.** -/
+theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size = 16)
+    (hA : A₀ + 16 ≤ 2 ^ 64) :
+    TotalTriple (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns) (fba_client v)
+      (fun r => ⌜Res v r⌝ ∗ junk) := by
+  simp only [fba_client, heap_FixedBufferAllocator_init, heap_FixedBufferAllocator_allocator,
+    alloc_eq, realloc_eq, free_eq]
+  fba_norm
+  refine TotalTriple.bind (alloc_fresh fun h hp => ?_) fun s1 => ?_
+  · obtain ⟨h₁, -, -, rfl, ⟨-, -, b, hb, -, hl⟩, -⟩ := hp
+    cases hb
+    exact ⟨0, ⟨bs[0]!, A₀, 16, .global⟩, by simp [hl, hs]⟩
+  refine TotalTriple.lift fun ⟨h0, hblk⟩ => ?_
+  refine TotalTriple.conseq (P := Assn.ex fun Ac => ⌜Ac % 8 = 0⌝ ∗
+    (bytesAt s1 Ac 24 .stack (Array.replicate 24 .undef) ∗
+      (regionIn bufp A₀ 16 .global 1 bs ∗ vtR vtp fns))) ?_ (fun h hp => ?_) (fun _ _ x => x)
+  rotate_left
+  · obtain ⟨h₁, h₂, hd, rfl, hp₁, Ac, hp₂⟩ := hp
+    obtain ⟨hAc, hb⟩ := sep_lift.mp hp₂
+    exact ⟨Ac, sep_lift.mpr ⟨hAc, h₂, h₁, hd.symm, Heap.union_comm hd, hb, hp₁⟩⟩
+  refine TotalTriple.ex fun Ac => TotalTriple.lift fun hAc => ?_
+  refine TotalTriple.bind (TotalTriple.frame (store_struct (A₀ := A₀) h0 hAc)) fun _ => ?_
+  refine TotalTriple.conseq (P := fun h => ((I s1 A₀ Ac).own ∗ guard A₀ (g3 bs)) h ∧ cov h) ?_
+    (fun h hp => entry hs hA hblk hp) (fun _ _ x => x)
+  trace_state
+  sorry
+
 end AllocFba.Client
