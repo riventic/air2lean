@@ -66,10 +66,6 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
         # AIR semantics, and goldens that predate them compare equal.
         if key == "src" and (root or value.get("tag") == "dbg_inline_block"):
             continue
-        # The compiler's `unchecked_ib` fact (docs/air-json.md) describes the compiler, not this
-        # function's AIR: the `unreach` checks it announces stay compared.
-        if root and key == "unchecked_ib":
-            continue
         if key == "column" and value.get("tag") == "dbg_stmt":
             continue
         identity = key in ("func", "comptime_fn") or (key == "name" and (root or type_entry))

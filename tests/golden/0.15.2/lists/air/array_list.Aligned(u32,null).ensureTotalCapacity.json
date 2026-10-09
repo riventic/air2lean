@@ -1,6 +1,9 @@
 {
  "schema": 11,
  "zig_version": "0.15.2",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "name": "array_list.Aligned(u32,null).ensureTotalCapacity",
  "params": [
   0,
