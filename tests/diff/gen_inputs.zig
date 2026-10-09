@@ -142,6 +142,8 @@ pub fn main() !void {
     try genSync();
     try genNoArgs("tests/diff/threadsync/inputs", .{ "mutexCounter", "handoff", "waitGroup" });
     try genNoArgs("tests/diff/iogroup/inputs", .{ "groupCounter", "groupConcurrent" });
+    // The fitness generator runs last, so every earlier input stays the same.
+    try genFitness(rng);
 }
 
 fn openOut(comptime name: []const u8) !compat.OutFile {
@@ -829,6 +831,25 @@ fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !voi
             try writeFloatOpLine(writer, T, s, a, b, c);
         }
     }
+    try writeTieRows(writer, T);
+}
+
+/// Exact round-half-even ties, appended after the 7,800 rows (no random draw, so every other
+/// generated file is unchanged): with `p` the format's precision, `1 + 2^-p` lies halfway
+/// between 1 and its successor, so ties-to-even gives 1 (an even quotient) and
+/// ties-away-from-zero (scripts/mutate.sh mutation (d)) the successor. Random operands and the
+/// edge pairs never hit such a tie. The rows cover both operand orders, a negative sum, a
+/// subtraction, and `1 + 3*2^-p` (rounds up to an even successor under both rules).
+fn writeTieRows(writer: anytype, comptime T: type) !void {
+    const p: i32 = std.math.floatFractionalBits(T) + 1;
+    const half_ulp = std.math.ldexp(@as(T, 1), -p);
+    const one: T = 1;
+    const odd = one + 2 * half_ulp;
+    try writeFloatOpLine(writer, T, 0, one, half_ulp, 0); // 1 + 2^-p
+    try writeFloatOpLine(writer, T, 0, half_ulp, one, 0);
+    try writeFloatOpLine(writer, T, 0, -one, -half_ulp, 0);
+    try writeFloatOpLine(writer, T, 1, one, -half_ulp, 0); // 1 - (-2^-p)
+    try writeFloatOpLine(writer, T, 0, odd, half_ulp, 0); // odd quotient: rounds up either way
 }
 
 /// cmp64(a, b) -> u8 bitmask. 150 edge pairs with full lhs/rhs coverage, then 150
@@ -1100,6 +1121,46 @@ fn genDot(rng: std.Random) !void {
         try writeRandomFloatSlice(writer, rng, f64, len2);
         try writer.writeAll(",");
         try writeRandomFloatSlice(writer, rng, f64, len2);
+        try writer.writeAll("]\n");
+    }
+}
+
+/// fitness(xs, ws: []const f64, target, penalty: f64) -> f64. Like genDot: slice lengths cycle
+/// 0..8 with edge-flavored (xs, ws) pairs, target and penalty also from the edges; then
+/// random-length (0-8) random fill.
+fn genFitness(rng: std.Random) !void {
+    var file = try openOutIn("tests/diff/floats/inputs", "fitness");
+    defer file.close();
+    const writer = file.writer();
+
+    const edges = edgesF(f64);
+    var n: usize = 0;
+    var len: usize = 0;
+    while (len <= 8) : (len += 1) {
+        var round: usize = 0;
+        while (round < 4 and n < N) : (round += 1) {
+            try writer.writeAll("[");
+            try writeFloatHexSlice(writer, f64, edges, len, round);
+            try writer.writeAll(",");
+            try writeFloatHexSlice(writer, f64, edges, len, round + 1);
+            try writer.writeAll(",");
+            try floatHexToken(writer, f64, edges[(n * 7) % edges.len]);
+            try writer.writeAll(",");
+            try floatHexToken(writer, f64, edges[(n * 11 + 3) % edges.len]);
+            try writer.writeAll("]\n");
+            n += 1;
+        }
+    }
+    while (n < N) : (n += 1) {
+        const len2 = rng.intRangeAtMost(usize, 0, 8);
+        try writer.writeAll("[");
+        try writeRandomFloatSlice(writer, rng, f64, len2);
+        try writer.writeAll(",");
+        try writeRandomFloatSlice(writer, rng, f64, len2);
+        try writer.writeAll(",");
+        try floatHexToken(writer, f64, randExpValue(rng, f64, rng.boolean()));
+        try writer.writeAll(",");
+        try floatHexToken(writer, f64, randExpValue(rng, f64, false));
         try writer.writeAll("]\n");
     }
 }

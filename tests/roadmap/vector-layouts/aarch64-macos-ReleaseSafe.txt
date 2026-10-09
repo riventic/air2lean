@@ -1,25 +1,45 @@
 vector u9x4 8 8 ff 01 fc 0f 00 -- -- --
 lane u9x4 2 ff 01 a8 0a 00 -- -- --
+load u9x4 3 1
+pad u9x4 a5 a5 a5
 vector i9x2 4 4 ff 03 00 --
 lane i9x2 1 ff fd 03 --
+load i9x2 0 1ff
+pad i9x2 a5
 vector u12x3 8 8 bc 3a 12 ff 0f -- -- --
 lane u12x3 0 55 35 12 ff 0f -- -- --
+load u12x3 1 123
+pad u12x3 a5 a5 a5
 vector u4x4 2 2 21 43
 lane u4x4 3 21 f3
+load u4x4 0 1
+pad u4x4
 vector u1x8 1 1 85
 lane u1x8 6 c5
+load u1x8 7 1
+pad u1x8
 vector u24x2 8 8 ef cd ab 56 34 12 -- --
 lane u24x2 0 01 00 00 56 34 12 -- --
+load u24x2 1 123456
+pad u24x2 a5 a5
 vector u24x3 16 16 ef cd ab 56 34 12 77 77 77 -- -- -- -- -- -- --
 lane u24x3 1 ef cd ab ba dc fe 77 77 77 -- -- -- -- -- -- --
+load u24x3 2 777777
+pad u24x3 a5 a5 a5 a5 a5 a5 a5
 vector u40x2 16 16 ee dd cc bb aa 55 44 33 22 11 -- -- -- -- -- --
 lane u40x2 1 ee dd cc bb aa 05 04 03 02 01 -- -- -- -- -- --
+load u40x2 0 aabbccddee
+pad u40x2 a5 a5 a5 a5 a5 a5
 vector f80x2 32 32 00 00 00 00 00 00 00 80 ff 3f 00 00 00 00 00 00 00 80 00 c0 -- -- -- -- -- -- -- -- -- -- -- --
 lane f80x2 0 00 00 00 00 00 00 00 80 fe 3f 00 00 00 00 00 00 00 80 00 c0 -- -- -- -- -- -- -- -- -- -- -- --
 vector bool5 1 1 0d
 lane bool5 1 0f
+load bool5 2 1
+pad bool5
 vector bool16 2 2 2d 80
 lane bool16 15 2d 00
+load bool16 0 1
+pad bool16
 vector u8x3 4 4 01 02 03 --
 lane u8x3 2 01 02 ff --
 vector u16x3 8 8 01 00 00 80 03 00 -- --

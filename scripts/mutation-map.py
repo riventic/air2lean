@@ -8,15 +8,25 @@ mutants, each mutant with one category. `check` fails when
   * a `complete` register row lacks a negative test, a designated mutant, or a mutant for one
     of the categories it declares;
   * a mutation of scripts/mutate.sh or tests/roadmap/mutation-map/mutants.py is mapped nowhere;
-  * a mutant category has no mutant anywhere in the map.
+  * a mutant category has no mutant anywhere in the map;
+  * a designated scripts/mutate.sh mutant has no recorded kill in assurance/mutation-kills.json
+    (which regression killed it: a differential example or a proof module), the record names a
+    regression that does not exist, was recorded for another version of the mutation's block in
+    scripts/mutate.sh (stale), or the ledger names a mutation that is gone. A mutation that cannot
+    run on the recording host (asm is x86_64 only) may carry `{"unrecorded": reason, block_sha256}`:
+    `check` lists it as a kill gap, and only `kills record` from a host that runs it clears it.
 Gaps of incomplete rows (declared category without a mutant, no negative test, no mutant) are
 reported, not failed: a partial row may still lack evidence.
 
-Reads committed text only; never runs a test, a mutant or a toolchain.
+`check` reads committed text only; it never runs a test, a mutant or a toolchain. The kills come
+from `scripts/mutate.sh` runs with AIR2LEAN_MUTATION_KILL_LOG set:
+  kills record --log LOG   merge the killed mutations of LOG into the ledger (fails on a survivor)
+  kills verify --log LOG   fail unless LOG's mutations were killed by the regression the ledger names
 """
 
 import argparse
 import ast
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -30,6 +40,11 @@ CATEGORIES = ('forwarding', 'layout', 'operand-order', 'failure-cleanup',
 MUTANT_CATEGORIES = CATEGORIES + ('other',)
 MUTATE_SH = 'scripts/mutate.sh'
 SHARDS = 'scripts/mutation-shards.txt'
+KILLS = 'assurance/mutation-kills.json'
+KILLS_SCHEMA = 'air2lean-mutation-kills/1'
+KILL_KINDS = ('diff', 'proof')
+MUTATION_MARK = re.compile(r'^echo "== mutation \(([a-z]+)\)', re.M)
+BLOCK_END = '[ "$mutations_run" -gt 0 ]'
 PY_MUTANTS = 'tests/roadmap/mutation-map/mutants.py'
 REGISTER_ROW = re.compile(r'\| ([A-Z]\d\d) \| [^|]+ \| (\w+) \|')
 
@@ -44,6 +59,51 @@ def register(root):
 
 def mutate_sh_labels(root):
     return set(re.findall(r'^echo "== mutation \(([a-z]+)\)', (root / MUTATE_SH).read_text(), re.M))
+
+
+def mutation_blocks(root):
+    """label -> sha256 of the text of that mutation in scripts/mutate.sh (marker to the next)."""
+    text = (root / MUTATE_SH).read_text()
+    marks = list(MUTATION_MARK.finditer(text))
+    end = text.find(BLOCK_END)
+    blocks = {}
+    for i, mark in enumerate(marks):
+        stop = marks[i + 1].start() if i + 1 < len(marks) else (end if end > mark.start() else len(text))
+        blocks[mark.group(1)] = hashlib.sha256(text[mark.start():stop].encode()).hexdigest()
+    return blocks
+
+
+def kill_target_exists(root, kind, target):
+    if kind == 'diff':
+        return bool(re.fullmatch(r'[a-zA-Z0-9_-]+', target)) and (root / 'examples' / target / f'{target}.zig').is_file()
+    return bool(re.fullmatch(r'\w+(\.\w+)+', target)) and (root / (target.replace('.', '/') + '.lean')).is_file()
+
+
+def check_kills(root, kills, designated, blocks, problems, gaps):
+    """Every designated mutate.sh mutant needs a current recorded kill by an existing regression."""
+    if not isinstance(kills, dict) or kills.get('schema') != KILLS_SCHEMA or not isinstance(kills.get('mutants'), dict):
+        problems.append(f'{KILLS}: expected schema {KILLS_SCHEMA!r} with a mutants object')
+        return
+    entries = kills['mutants']
+    for name in sorted(entries.keys() - blocks.keys()):
+        problems.append(f'{KILLS}: kill recorded for {name}, which {MUTATE_SH} no longer has')
+    for name in sorted(designated):
+        entry, where = entries.get(name), f'{KILLS}: {name}'
+        if entry is None:
+            problems.append(f'{where}: designated mutant has no recorded kill')
+            continue
+        by = entry.get('killed_by') if isinstance(entry, dict) else None
+        if isinstance(entry, dict) and set(entry) == {'unrecorded', 'block_sha256'} and isinstance(entry['unrecorded'], str):
+            if entry['block_sha256'] != blocks.get(name):
+                problems.append(f'{where}: unrecorded entry is for a different version of the mutation')
+            gaps.append(f'{name}: {entry["unrecorded"]}')
+        elif (not isinstance(entry, dict) or set(entry) != {'killed_by', 'block_sha256'} or not isinstance(by, dict) or set(by) != {'kind', 'target'}
+                or by['kind'] not in KILL_KINDS or not isinstance(by['target'], str)):
+            problems.append(f'{where}: needs killed_by {{kind: diff|proof, target}} and block_sha256')
+        elif not kill_target_exists(root, by['kind'], by['target']):
+            problems.append(f'{where}: killing {by["kind"]} regression {by["target"]!r} does not exist')
+        elif entry['block_sha256'] != blocks.get(name):
+            problems.append(f'{where}: kill recorded for a different version of the mutation; rerun it and `kills record`')
 
 
 def shard_labels(root):
@@ -129,11 +189,13 @@ def check_entry(root, rid, entry, problems, labels):
     return declared, tests, valid, found
 
 
-def analyze(root=ROOT, data=None):
+def analyze(root=ROOT, data=None, kills=None):
     """Return the coverage report; report['problems'] is empty iff the map passes."""
     root = Path(root)
     if data is None:
         data = json.loads((root / MAP).read_text())
+    if kills is None and (root / KILLS).is_file():
+        kills = json.loads((root / KILLS).read_text())
     problems = []
     if not isinstance(data, dict) or data.get('schema') != SCHEMA or not isinstance(data.get('requirements'), dict):
         return {'problems': [f'{MAP}: expected schema {SCHEMA!r} with a requirements object']}
@@ -171,11 +233,51 @@ def analyze(root=ROOT, data=None):
     for path, names in ((MUTATE_SH, labels['mutate.sh']), (PY_MUTANTS, labels['python'])):
         for name in sorted(names - mapped[path]):
             problems.append(f'{path}: mutation {name} is mapped to no register ID')
+    kill_gaps = []
+    check_kills(root, kills, mapped[MUTATE_SH], mutation_blocks(root), problems, kill_gaps)
     for category in CATEGORIES:
         if not by_category[category]:
             problems.append(f'category {category}: no designated mutant in the map')
     return {'problems': problems, 'categories': by_category, 'gaps': gaps,
-            'complete': [r for r, s in rows if s == 'complete'], 'requirements': len(rows)}
+            'complete': [r for r, s in rows if s == 'complete'], 'requirements': len(rows), 'kill_gaps': kill_gaps}
+
+
+def read_kill_log(path):
+    """label -> (status, kind, target) from a mutate.sh AIR2LEAN_MUTATION_KILL_LOG."""
+    log = {}
+    for number, line in enumerate(Path(path).read_text().splitlines(), 1):
+        parts = line.split()
+        if len(parts) != 4 or parts[1] not in ('killed', 'survived') or parts[2] not in KILL_KINDS:
+            raise ValueError(f'{path}:{number}: expected "<label> killed|survived diff|proof <target>"')
+        log[parts[0]] = tuple(parts[1:])
+    if not log:
+        raise ValueError(f'{path}: no mutation was run')
+    return log
+
+
+def kills_command(args):
+    log, blocks = read_kill_log(args.log), mutation_blocks(args.root)
+    path = args.root / KILLS
+    ledger = json.loads(path.read_text()) if path.is_file() else {'schema': KILLS_SCHEMA, 'mutants': {}}
+    problems = [f'{name}: survived (ran {kind} {target})' for name, (status, kind, target) in sorted(log.items())
+                if status != 'killed']
+    problems += [f'{name}: not a {MUTATE_SH} mutation' for name in sorted(log.keys() - blocks.keys())]
+    if args.kills_command == 'verify':
+        for name, (status, kind, target) in sorted(log.items()):
+            entry = ledger['mutants'].get(name)
+            if (status == 'killed' and name in blocks and 'unrecorded' not in (entry or {})
+                    and (entry is None or entry['killed_by'] != {'kind': kind, 'target': target})):
+                problems.append(f'{name}: killed by {kind} {target}, ledger records {entry and entry["killed_by"]}')
+    elif not problems:
+        for name, (_, kind, target) in log.items():
+            ledger['mutants'][name] = {'killed_by': {'kind': kind, 'target': target}, 'block_sha256': blocks[name]}
+        ledger['mutants'] = dict(sorted(ledger['mutants'].items()))
+        path.write_text(json.dumps(ledger, indent=2) + '\n')
+    for problem in problems:
+        print(f'error: {problem}', file=sys.stderr)
+    if not problems:
+        print(f'kills {args.kills_command}: {len(log)} mutations killed')
+    return 1 if problems else 0
 
 
 def main(argv=None):
@@ -184,8 +286,14 @@ def main(argv=None):
     check = sub.add_parser('check', help='validate the map and report per-category coverage gaps')
     check.add_argument('--root', type=Path, default=ROOT)
     check.add_argument('--json', action='store_true', help='print the report as JSON')
+    kills = sub.add_parser('kills', help='record or verify which regression kills each mutate.sh mutant')
+    kills.add_argument('kills_command', choices=('record', 'verify'))
+    kills.add_argument('--root', type=Path, default=ROOT)
+    kills.add_argument('--log', type=Path, required=True, help='AIR2LEAN_MUTATION_KILL_LOG of a mutate.sh run')
     args = parser.parse_args(argv)
     try:
+        if args.command == 'kills':
+            return kills_command(args)
         report = analyze(args.root)
     except (OSError, ValueError) as error:
         print(f'error: {error}', file=sys.stderr)
@@ -198,6 +306,8 @@ def main(argv=None):
             print(f'{category}: {len(mutants)} mutants' + (f' ({", ".join(ids)})' if ids else ''))
         for gap in report.get('gaps', []):
             print(f'gap {gap["id"]} ({gap["status"]}): ' + '; '.join(gap['lacks']))
+        for gap in report.get('kill_gaps', []):
+            print(f'kill gap {gap}')
         for problem in report['problems']:
             print(f'error: {problem}', file=sys.stderr)
         if not report['problems']:

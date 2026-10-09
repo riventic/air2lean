@@ -176,7 +176,7 @@ structure Layout where
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
   /-- A pointer to one lane of a vector (`&v[i]`): the lane. Its `hostSize` is then the vector
-  length, not a byte count. -/
+  length, not a byte count, until `normalize` rewrites it (`packedLanes`). -/
   vectorIndex : Option Nat := none
   /-- A lane pointer whose lane is runtime-known (`vector_index: "runtime"`, 0.14.1/0.15.2). -/
   runtimeLane : Bool := false
@@ -185,6 +185,8 @@ structure Layout where
   vectorIndexExported : Bool := false
   /-- A vector type of an AIR file whose schema-12 profile names the LLVM backend
   (`stage2_llvm`): its lanes are bit-packed in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`).
+  A lane pointer of such a file (x86_64 or aarch64 only) whose `hostSize`/`bitOffset`
+  `normalize` rewrote to the bit-pointer into the vector's integer (`lanePtrLayout`).
   Set by `normalize`, never by the exporter; other backends lay out lanes differently. -/
   packedLanes : Bool := false
   /-- The profile's pointer size in bytes (`Zig.PtrWidth.bytes`): the model's size of a pointer,
@@ -197,9 +199,29 @@ structure Layout where
 no type). -/
 def ptrBytesOf (layouts : Array Layout) : Nat := (layouts[0]?.map (·.ptrBytes)).getD 8
 
-/-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
+/-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`). The checker rejects it unless it is a
+`laneBitPtr`. -/
 def Layout.isLanePtr (l : Layout) : Bool :=
   l.vectorIndex.isSome || l.runtimeLane
+
+/-- The versions whose comptime lane pointers into bit-packed vectors are modelled as
+bit-pointers (`lanePtrLayout`); 0.17.0 has no native lane-pointer evidence yet. -/
+def lanePtrVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
+
+/-- A lane pointer that `normalize` made a bit-pointer into the vector's integer
+(`Zig.loadLane`/`Zig.storeLane`). -/
+def Layout.laneBitPtr (l : Layout) : Bool :=
+  l.vectorIndex.isSome && l.packedLanes
+
+/-- The pointer type `ty` is a `Layout.laneBitPtr` (false without a layout). -/
+def laneBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
+  (layouts[ty]?.map (·.laneBitPtr)).getD false
+
+/-- The bit width of a lane that a lane pointer may address: an integer's bits, 1 for `bool`. -/
+def laneBits? : Ty → Option Nat
+  | .int _ bits => some bits
+  | .bool => some 1
+  | _ => none
 
 /-- A bit-pointer whose export has no `vector_index`. It can be a packed field pointer or a lane
 pointer. -/
@@ -313,7 +335,7 @@ def panicErrorFor? (calleeName : String) : Option String :=
   -- A generic handler (`inactiveUnionField`) is an instance: `<name>__anon_<n>`.
   match ((calleeName.splitOn ".").getLast?.map fun m => (m.splitOn "__anon_").headD m) with
   | some "integerOverflow" | some "integerOutOfBounds" | some "integerPartOutOfBounds"
-  | some "shlOverflow" | some "shrOverflow" => some ".overflow"
+  | some "shlOverflow" | some "shrOverflow" | some "shiftRhsTooBig" => some ".overflow"
   | some "outOfBounds" => some ".outOfBounds"
   | some "divideByZero" => some ".divByZero"
   | some "reachedUnreachable" => some ".unreachable"

@@ -173,7 +173,7 @@ class Gen:
         return ["ptr", name, target]
 
     def s_let_union(self, depth, loop, in_defer):
-        name = self.fresh("u")
+        name = self.fresh("un")
         tag = self.rng.choice("ab")
         self.scope["unions"].append(name)
         return ["let_union", name, tag, self.expr("u32" if tag == "a" else "i32", 2)]
@@ -192,7 +192,7 @@ class Gen:
         return ["if", cond, then, other]
 
     def s_while(self, depth, loop, in_defer):
-        name = self.fresh("i")
+        name = self.fresh("lp")
         self.scope["vals"][name] = "u32"
         body = self.block(depth + 1, True, True)
         del self.scope["vals"][name]

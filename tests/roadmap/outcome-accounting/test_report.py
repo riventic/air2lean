@@ -552,9 +552,9 @@ class Outcomes(unittest.TestCase):
                 diff+='python3 - "$AIR2LEAN_DIFF_REPORT" <<\'PYMOCK\'\nimport json,sys\ns=json.load(open(sys.argv[1]));l=s.get("legacy_counts",{});print("TOTAL: mismatch="+str(l.get("mismatch",0)))\nfor p in s.get("pin_violations",[]):print(p["counter"].upper()+" COUNT synthetic")\nPYMOCK\n'
             diff+='exit "$status"\n'
         (scripts/'diff.sh').write_text(diff)
-        source=(ROOT/'scripts/mutate.sh').read_text();start=source.index('run_and_report() {');end=source.index('\nall_detected=',start)
+        source=(ROOT/'scripts/mutate.sh').read_text();start=source.index('kill_log() {');end=source.index('\nall_detected=',start)
         runner=self.root/'mutant.sh'
-        runner.write_text(('AIR2LEAN_MUTATION_REPORT_DIR='+str(self.root/'retained')+'\n' if retain else '')+'set -euo pipefail\ncd "$(dirname "$0")"\nmutations_run=0\nconc_lean=\"$PWD/ZigLean/Conc.lean\"\nconc_backup=\"$PWD/Conc.before.lean\"\n'+source[start:end]+'\nrun_and_report "mutation (x)" basic\necho "RESULT=$detected"\n')
+        runner.write_text(('AIR2LEAN_MUTATION_REPORT_DIR='+str(self.root/'retained')+'\n' if retain else '')+'set -euo pipefail\ncd "$(dirname "$0")"\nmutations_run=0\nconc_lean=\"$PWD/ZigLean/Conc.lean\"\nconc_backup=\"$PWD/Conc.before.lean\"\nrequire_mutated() { :; }\n'+source[start:end]+'\nrun_and_report "mutation (x)" basic\necho "RESULT=$detected"\n')
         result=subprocess.run(['bash',str(runner)],capture_output=True,text=True,timeout=3)
         self.assertEqual(conc.read_bytes(),original,'WeakCas proof import was not restored')
         return result

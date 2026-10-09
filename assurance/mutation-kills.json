@@ -1,0 +1,229 @@
+{
+  "schema": "air2lean-mutation-kills/1",
+  "mutants": {
+    "a": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "basic"
+      },
+      "block_sha256": "1a3352fc12e4ddd1067fd73d216f3e56f70c68b48e01ff55a4b8ee5b6fac6ec7"
+    },
+    "aa": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Threads.Counter"
+      },
+      "block_sha256": "043b5de608bf5184524c57bb49be0fcf8bc6cbaea920bf30c49671aa82a5b403"
+    },
+    "ab": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Threads.Counter"
+      },
+      "block_sha256": "2e57e52c16de7d8fad23e3c582f0392853317ee2850f47293e47c0f6d27add4f"
+    },
+    "ac": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Sync.Mutex"
+      },
+      "block_sha256": "9a97934dc1aff2166420a4f8b3c6db519145698e00c1d01abcc5a41606a5aa81"
+    },
+    "ad": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Atomics.Stack"
+      },
+      "block_sha256": "cf54e0999d77d606b9110de837c81e3196d07fa3139214238505f2c63db111e5"
+    },
+    "ae": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Iogroup.Counter"
+      },
+      "block_sha256": "5f5146b440eb8350cb78e4540aa47b756611a3cf7a0c5d4ea6e480da661c1dfe"
+    },
+    "af": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Threads.Disjoint"
+      },
+      "block_sha256": "412837370e4391f8714bdec8a0060978905936ed094b8b7ec19e76eb9a454fc8"
+    },
+    "b": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "basic"
+      },
+      "block_sha256": "b5f64cc8c82642e4353e3b301ea8c8916451466b2ce9fa56e4f0cf0fd2403129"
+    },
+    "c": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "options"
+      },
+      "block_sha256": "c03617eca64c5586482d76a273ddedde6a9f558d670ecfd82848a8ff714c38b7"
+    },
+    "d": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "floatops"
+      },
+      "block_sha256": "7594f4623a8ee3b077c84a1a9c1d3cfee0d50e9354f5fde3cd93bc2dc10286b4"
+    },
+    "e": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "variants"
+      },
+      "block_sha256": "b81c728a88a2d306896286771ac027aa946e838f1ebbb1b0650a3391b61c1983"
+    },
+    "f": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "pointers"
+      },
+      "block_sha256": "387d7ec3abc5df5a415e7e1d0bccdfc9e3ce6db62ac583695233e96ff4e9ce3d"
+    },
+    "g": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "slices"
+      },
+      "block_sha256": "2b9c3a1640036aa41e02a5171f47aa87917d21644d1a62d9cbd44996d16901f0"
+    },
+    "h": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "lists"
+      },
+      "block_sha256": "d63e563fa443167aa2b01f2aad12c4c2462034cb9e4f3b038f6108a48d498612"
+    },
+    "i": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "asm"
+      },
+      "block_sha256": "6825d5178e7bc9ef5c73deddf012ea33f8fefa24970e68cfbc48aff01bb6b14a"
+    },
+    "j": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "vectors"
+      },
+      "block_sha256": "2a86beba0965fc8ba73ebd6a4c9912ccad81f3b465ca0d58a46ec3df815e397a"
+    },
+    "k": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "threads"
+      },
+      "block_sha256": "f92088faba11ec1c66e14cda31bea5afd0779e9dab927d3b8d09d21988bd1cab"
+    },
+    "l": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "threads"
+      },
+      "block_sha256": "1fef368d535ceaf27a4f58b6b30aea9d6345e06a669b25cd893736a7a78fbb46"
+    },
+    "m": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "layout"
+      },
+      "block_sha256": "d9afc43b3e5aaeff2a34a927e26415e2e27cc86f0a1b647d4ff4252d29a75747"
+    },
+    "n": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "layout"
+      },
+      "block_sha256": "7954cb317d210cf6346ede34828a16337c1e38c86ec8adc6be6939b71b973fd0"
+    },
+    "o": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "layout"
+      },
+      "block_sha256": "cfe8ac979b304a9a148d0d85949eb5a4f7d051913ed51b26c2b8f084e42d653e"
+    },
+    "p": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "layout"
+      },
+      "block_sha256": "f2c42479c07eca61f59f919c6cb5cc3dec2eb81588a62e7b9193aad0cee33f65"
+    },
+    "q": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "vectors"
+      },
+      "block_sha256": "18a7e6e16c30a647f14f438904981e2914ef58f0716230481fdade6353b81e42"
+    },
+    "r": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "slices"
+      },
+      "block_sha256": "7f3ff241cd0927cd7f2cecdcc6d478cd44971477dac0187e07b0a93ff897d994"
+    },
+    "s": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "lists"
+      },
+      "block_sha256": "2b882a617478e511e85957d2d00bb0db1bb19a6374d018d4a011fce5f85f300c"
+    },
+    "t": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "layout"
+      },
+      "block_sha256": "2cedf87bae4be8a55f889b02bca57965adafee56a141ef9e52576db0219714cf"
+    },
+    "u": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "layout"
+      },
+      "block_sha256": "98917f02fed032c27ffd9cdf3d85ac87c63b2276eb83a8f1d85567097628f8d5"
+    },
+    "v": {
+      "killed_by": {
+        "kind": "diff",
+        "target": "threads"
+      },
+      "block_sha256": "67a5b519e0e3f4a8524a6231e808519018476efab41adcd39a286b3462789203"
+    },
+    "w": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Atomics.Proofs"
+      },
+      "block_sha256": "9affccb354fc081a93a6f59e7c5dfc4a12346526374c6ce891d868bebecbdfbc"
+    },
+    "x": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Atomics.Proofs"
+      },
+      "block_sha256": "3829d3b7ee384c5cc49e90afd3818979d252e148c0d61c7f9a1119486042905b"
+    },
+    "y": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Sync.Proofs"
+      },
+      "block_sha256": "eacbd043c5691bca858534874401289b590a369c964ecfbff5c0cb68ecf1b669"
+    },
+    "z": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Sync.Proofs"
+      },
+      "block_sha256": "7b640731941ae5f8a044f65d840d77eae58be823053ce83dd8e12fffa8dbcd1f"
+    }
+  }
+}

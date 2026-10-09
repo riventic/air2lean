@@ -112,16 +112,22 @@ ABI padding (`u24`, `u40`, `f80`) is bit-packed by the LLVM backend: lane `i` is
 alignment `⌈n * w / 8⌉` rounded up to a power of 2 (`packedVecLayout`, `Vec.packedEnc`; observed by
 `tests/roadmap/vector-layouts/probe.zig`). The checker admits such a vector in memory only for an
 AIR file whose schema-12 profile names `stage2_llvm` (other backends, and legacy profiles without
-a backend, are rejected), and never a lane pointer into it. Value-only vectors of every lane type
-still support the lane-wise operations above.
+a backend, are rejected). Value-only vectors of every lane type still support the lane-wise
+operations above.
 
 A `@Vector(n, bool)` is bit-packed: lane `i` is bit `i`, the
 size is `⌈n / 8⌉` bytes rounded up to a power of 2 (`boolVecLayout`), and the bits above `n`
 are padding (`Byte.part`, as a `uN`): a load that meets a set padding bit throws `.unspecified`.
 A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of a byte-strided integer or float
-vector is an item pointer, as for an array. A lane pointer of a `bool` vector or of a bit-packed
-vector is outside the subset: the lane is a bit field, and the AIR file has no lane index (the
-pointer type's `vector_index`).
+vector is an item pointer, as for an array. Zig gives `&v[i]` of a `bool` vector or of a vector
+whose lanes are not a power-of-two number of bytes the type `*align(a:0:n:i) T`: the vector's
+address, with the lane in the type (`vector_index`). For integer and `bool` lanes of an AIR file
+whose schema-12 profile names `stage2_llvm` on x86_64 or aarch64, the translator makes it a
+bit-pointer into the vector's `n * w`-bit integer, as for a packed field: host `⌈n * w / 8⌉` bytes
+(LLVM's store size of the vector), bit offset `i * w`. The `ptr_elem_ptr` is the vector pointer
+itself, and a load or store through it is `Zig.loadLane`/`Zig.storeLane`, which read or write
+only the lane's bits of the host bytes (`docs/vector-proofs.md` §Lane pointers). Float lanes
+(`f80`), runtime lanes (0.14.1/0.15.2), other backends and other targets stay rejected.
 
 ### Places
 
@@ -157,7 +163,7 @@ A 64-bit translation is unchanged: it uses the definitions of `ZigLean/Mem/Basic
 
 `main` refuses a 32-bit output that still names a 64-bit runtime term (`width64Leak`). The checker rejects, for a 32-bit profile, `std.Thread`/`std.Io` values and every thread, futex and `Io.Group` model, vectors in memory, atomic ops, `@tagName`, `@errorName`, inline assembly, allocator models other than `create`/`alloc`/`alignedAlloc`/`destroy`/`free`, and external model registries. Fixtures and proofs: `tests/roadmap/pointer-width/`.
 
-A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
+A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal), an integer-to-pointer `bitcast` (`@ptrFromInt`) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
 | | Pure | Uses memory |
 |---|---|---|
@@ -214,6 +220,8 @@ def Color.tagName (e : Color) : Zig.Result Zig.Slice :=
   | .red => pure ⟨⟨some 2, 0⟩, 3⟩
   ...
 ```
+
+`mem0` holds the globals of every function, also of a pure one, so each global's type has a `Zig.Enc` instance when the program has `mem0`. A comptime-resolved local (`const u: U = .{ .b = 0 }; _ = &u;`) is such a constant global: Sema points its live uses at the global (`⟨some k, 0⟩`) and leaves its dead `alloc` and stores as `bitcast`s of address 0, which the translator drops; a read one is rejected (`tests/roadmap/const-locals`).
 
 `errorNameOf e` throws `.unspecified` for an error whose name no error set of the program has. A `const` global, a string literal, a tag or error name and a function block are read-only (`Zig.BlockKind.constGlobal`): a store, an atomic read-modify-write or a `cmpxchg` to one throws `.illegal` (`Zig.Mem.accessW`), for example a write through `@constCast`. A `threadlocal` global has one instance per thread (§Thread-local storage).
 
@@ -440,11 +448,13 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 | segment | constructor |
 |---|---|
-| `integerOverflow`, `integerOutOfBounds`, `integerPartOutOfBounds`, `shlOverflow`, `shrOverflow` | `.overflow` |
+| `integerOverflow`, `integerOutOfBounds`, `integerPartOutOfBounds`, `shlOverflow`, `shrOverflow`, `shiftRhsTooBig` | `.overflow` |
 | `divideByZero` | `.divByZero` |
 | `reachedUnreachable` | `.unreachable` |
 | `outOfBounds`, `startGreaterThanEnd` | `.outOfBounds` |
 | `exactDivisionRemainder`, `unwrapNull`, `unwrapError`, `forLenMismatch`, `invalidEnumValue`, `inactiveUnionField`, `corruptSwitch`, `sentinelMismatch`, `copyLenMismatch`, `memcpyAlias`, `call` (`@panic`) | `.panic` |
+
+`shiftRhsTooBig` is the shift-count check of `<<`, `>>`, `@shlExact` and `@shrExact` on an integer whose width is not a power of two (its count type can hold counts at or above the width; for a power-of-two width it cannot, and Sema emits no check). 0.14.1, 0.15.2 and 0.16.0 emit it in the same safety block as `shlOverflow`/`shrOverflow`, so it shares their constructor; `@shlWithOverflow` has no count check, and an oversized count there stays `.illegal` (`tests/roadmap/bitops-native`).
 
 The exact noreturn callee `debug.defaultPanic` maps to `.panic` as well. Pinned std sources for 0.14.1, 0.15.2 and 0.16.0 define this standard panic handler as noreturn; fresh 0.16.0 adapter-fixture AIR calls it directly. This is an exact-name compatibility rule: foreign names and suffix variants remain rejected, and a returning call with this name has no external-call model. The existing `FullPanic` table is unchanged.
 

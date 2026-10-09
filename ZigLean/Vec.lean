@@ -93,16 +93,13 @@ instance (priority := high) {fmt : FloatFmt} {n : Nat} : Enc (Vec (Float fmt) n)
 rounded up to a power of 2 (`packedVecLayout n 1`, `Check.lean`'s `modelLayout`). -/
 def boolVecLayout (n : Nat) : Nat := ceilPow2 ((n + 7) / 8)
 
-/-- `@Vector(n, bool)` in memory: lane `i` is bit `i`, as the `uN` of its `n` bits (`intBytes`:
-the bits above `n` in the last byte are padding). -/
-instance (priority := high) {n : Nat} : Enc (Vec Bool n) where
-  size := boolVecLayout n
-  align := boolVecLayout n
-  encode v := padTo (boolVecLayout n) (intBytes ((List.range n).foldl
-    (fun acc i => if v.lanes.toArray[i]! then acc ||| (1#n <<< i) else acc) 0#n))
-  decode bs := do
-    let b ← intOfBytes n (bs.extract 0 ((n + 7) / 8))
-    pure ⟨Vector.ofFn fun i => b.getLsbD i⟩
+/-- The bit of a `bool` lane (`Zig.Packed Bool 1`'s `toBits`). -/
+def boolBit (b : Bool) : BitVec 1 := if b then 1#1 else 0#1
+
+/-- `@Vector(n, bool)` in memory: bit-packed 1-bit lanes, lane `i` is bit `i` of the `uN` of its
+`n` bits (`intBytes`: the bits above `n` in the last byte are padding). -/
+instance (priority := high) {n : Nat} : Enc (Vec Bool n) :=
+  Vec.packedEnc n 1 boolBit (· == 1#1)
 
 /-- A vector with every lane `a` (`splat`). -/
 def Vec.splat {α : Type} {n : Nat} (a : α) : Vec α n := ⟨Vector.replicate n a⟩

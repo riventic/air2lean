@@ -81,24 +81,24 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 | 0.17.0 | 224 | 35 | 135 | 5 | 13 | 16 | 20 | 25 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
 | 0.16.0 | 214 | 28 | 136 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
 | 0.15.2 | 212 | 34 | 130 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
-| 0.14.1 | 207 | 65 | 95 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
+| 0.14.1 | 207 | 64 | 96 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 33 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 88 requirements, 32 complete, 46 partial, 0 open, 10 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 88 requirements, 36 complete, 42 partial, 0 open, 10 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
 | T: Targets and profiles | T01 | T02, T04, T06 | — | T03, T05 |
-| L: Language and representation | L01, L11 | L02, L03, L04, L05, L06, L07, L08, L09, L10, L12, L13, L14 | — | — |
+| L: Language and representation | L01, L02, L11 | L03, L04, L05, L06, L07, L08, L09, L10, L12, L13, L14 | — | — |
 | C: Concurrency | C02, C03, C04, C05, C06, C09, C11 | C01, C07, C08, C14 | — | C10, C12, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
-| F: Floats | F01, F05 | F04, F06 | — | F02, F03 |
+| F: Floats | F01, F05, F06 | F04 | — | F02, F03 |
 | A: Inline assembly | A03 | A01 | — | A02 |
 | E: External boundaries | E01, E04 | E02, E03 | — | — |
 | P: Proof support | P01, P02 | P03, P04, P05, P06, P07, P08 | — | — |
-| I: Integration and tooling | I01, I02, I03, I04, I09 | I05, I06, I07, I08 | — | — |
+| I: Integration and tooling | I01, I02, I03, I04, I05, I09 | I06, I07, I08 | — | — |
 | V: Validation and trust | V04, V05 | V03, V06 | — | V01, V02 |
 | Q: Quality and testing | Q04, Q05, Q08 | Q01, Q02, Q03, Q06, Q07 | — | — |
-| D: Documentation | D01, D02, D03 | D04 | — | — |
+| D: Documentation | D01, D02, D03, D04 | — | — | — |
 <!-- support-matrix:end matrix -->

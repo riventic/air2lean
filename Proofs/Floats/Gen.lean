@@ -120,6 +120,72 @@ def dot (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) : Zig.Result (Zig.F64) := 
   | .ret v => pure v
   | _ => throw .panic
 
+structure fitnessLocals where
+  s : Zig.F64
+  local6 : BitVec 64
+  deriving Inhabited
+
+inductive fitnessExit where
+  | ret (v : Zig.F64)
+  | br11
+  | br19
+  | br16
+  | rep17
+
+def fitness.again17 : fitnessExit → Bool
+  | .rep17 => true
+  | _ => false
+
+def fitness.loop17 (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (p2 : Zig.F64) (p3 : Zig.F64) (i8 : BitVec 64) : Zig.M fitnessLocals fitnessExit := do
+  let i18 ← pure ((← get).local6)
+  match ← ((do
+    let i20 ← pure (i18)
+    let i21 ← pure (i8)
+    let i22 ← pure (Zig.lt false i20 i21)
+    if i22 then (do
+      let i24 ← Zig.call (Zig.index p0 i18)
+      let i25 ← Zig.call (Zig.index p1 i18)
+      let i26 ← pure (Zig.Float.sub i24 p2)
+      let i27 ← pure ((← get).s)
+      let i28 ← pure (Zig.Float.mul i25 i24)
+      let i29 ← pure (Zig.Float.mul i26 i26)
+      let i30 ← pure (Zig.Float.mul p3 i29)
+      let i31 ← pure (Zig.Float.sub i28 i30)
+      let i32 ← pure (Zig.Float.add i27 i31)
+      modify (fun s => { s with s := i32 })
+      pure .br19)
+    else (do
+      pure .br16)) : Zig.M fitnessLocals fitnessExit) with
+  | .br19 => (do
+    let i36 ← Zig.add false i18 (1 : BitVec 64)
+    modify (fun s => { s with local6 := i36 })
+    pure .rep17)
+  | e => pure e
+
+def fitness (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (p2 : Zig.F64) (p3 : Zig.F64) : Zig.Result (Zig.F64) := do
+  let e ← ((do
+    modify (fun s => { s with s := (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) })
+    modify (fun s => { s with local6 := (0 : BitVec 64) })
+    let i8 ← pure (Zig.len p0)
+    let i9 ← pure (Zig.len p1)
+    let i10 ← pure (i8 == i9)
+    match ← ((do
+      if i10 then (do
+        pure .br11)
+      else (do
+        throw .panic)) : Zig.M fitnessLocals fitnessExit) with
+    | .br11 => (do
+      match ← ((do
+        Zig.loop (fitness.loop17 p0 p1 p2 p3 i8) fitness.again17) : Zig.M fitnessLocals fitnessExit) with
+      | .br16 => (do
+        let i39 ← pure ((← get).s)
+        pure (.ret i39))
+      | e => pure e)
+    | e => pure e) : Zig.M fitnessLocals fitnessExit).run' (default : fitnessLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure hypot2Locals where
   deriving Inhabited
 

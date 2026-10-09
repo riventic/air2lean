@@ -61,6 +61,13 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
         # "runtime" stays observable.
         if type_entry and key == "vector_index" and item is None:
             continue
+        # Source provenance (I05): the declaration site (`src`, at the root and on
+        # `dbg_inline_block`) and a `dbg_stmt` column locate diagnostics only. They are not
+        # AIR semantics, and goldens that predate them compare equal.
+        if key == "src" and (root or value.get("tag") == "dbg_inline_block"):
+            continue
+        if key == "column" and value.get("tag") == "dbg_stmt":
+            continue
         identity = key in ("func", "comptime_fn") or (key == "name" and (root or type_entry))
         if identity:
             result[key] = IDENTITY_MARKER.sub(r"__\1_N", item) if isinstance(item, str) else item

@@ -1,9 +1,10 @@
 //! floats's differential-test dispatch (examples/floats/floats.zig: lerp, clamp, isNan, hypot2,
-//! celsius, dot). Shared runner code (fork/panic/render/JSONL plumbing) lives in
+//! celsius, dot, fitness). Shared runner code (fork/panic/render/JSONL plumbing) lives in
 //! tests/diff/common.zig; see its doc comment for the build command and protocol.
 //!
 //! celsius returns `?f32`: common.forkCall/renderPayload write `{"ok":null}` or the float's own
-//! hex rendering. dot's two slice args are JSON arrays of float hex strings (docs/floats.md).
+//! hex rendering. dot's two slice args are JSON arrays of float hex strings (docs/floats.md);
+//! fitness takes the same two arrays, then target and penalty as float hex strings.
 
 const std = @import("std");
 // Named modules, wired up on the command line (see scripts/diff.sh):
@@ -99,6 +100,21 @@ fn runDot(gpa: std.mem.Allocator) !void {
     }.call);
 }
 
+fn runFitness(gpa: std.mem.Allocator) !void {
+    try common.forEachLine(gpa, "floats", "fitness", struct {
+        fn call(a: std.mem.Allocator, items: []std.json.Value, writer: anytype) !void {
+            const xs = try f64SliceFromJson(a, items[0]);
+            defer a.free(xs);
+            const ws = try f64SliceFromJson(a, items[1]);
+            defer a.free(ws);
+            const target = common.parseFloatHex(f64, items[2].string);
+            const penalty = common.parseFloatHex(f64, items[3].string);
+            const outcome = try common.forkCall(std.meta.ArgsTuple(@TypeOf(floats.fitness)), .{ xs, ws, target, penalty }, floats.fitness, false);
+            try common.writeResult(writer, outcome);
+        }
+    }.call);
+}
+
 pub fn main() !void {
     var gpa_state = std.heap.DebugAllocator(.{}){};
     defer _ = gpa_state.deinit();
@@ -112,4 +128,5 @@ pub fn main() !void {
     try runHypot2(gpa);
     try runCelsius(gpa);
     try runDot(gpa);
+    try runFitness(gpa);
 }

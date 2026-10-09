@@ -96,8 +96,30 @@ over the AST with that stage as the oracle (`check.sh --reproduces`), and the mi
 is written to `OUT_DIR/shrunk-<seed>/`. The heavy mode runs compilers and Lean sequentially; wrap it in one
 build guard.
 
-CI runs `--light` on every job and `--air` with 300 seeds against the built translator in
-the full 0.16.0 job. The heavy differential is not in CI.
+CI runs `--light` on every job, `--air` with 300 seeds against the built translator and `--heavy`
+over seeds 0-2 in the full 0.16.0 job. Larger ranges are a manual job (the same command with the
+patched and stock 0.16.0 compilers). Caps: `--heavy` refuses `COUNT` above
+`AIR2LEAN_FUZZ_HEAVY_MAX` (default 50); shrinking spends at most `AIR2LEAN_FUZZ_SHRINK_BUDGET`
+pipeline probes (default 150). A shrink step only counts if the failure keeps the same normalized
+first error (`check.sh --reproduces CASE STAGE SIG`), so shrinking cannot drift to another bug.
+
+## Heavy differential run (seeds 0-39)
+
+Commit 9f39e808 plus this change; macOS aarch64; stock Zig 0.16.0 for native tests, patched
+`zig-air-0.16.0-v1` exporter (zig-unlocked sha256 8b4be884bf62095a...), Lean v4.34.0;
+`check.sh --heavy OUT 0 40` under `build-guard.py` lane C. 40 seeds: 37 pass all three stages
+(native test, translation, and `#guard` of `entry` on four inputs equal to native results).
+A negative control (corrupted expected value) is rejected by Lean. 3 seeds failed at translation
+(Lean did not elaborate Gen.lean); all were one translator bug, since fixed:
+
+| Seeds | Stage | Triage |
+|---|---|---|
+| 18, 19, 39 | translate (Gen.lean elaboration) | FIXED: a comptime-known tagged-union local whose address is taken becomes a constant global. Sema points its live uses at the global and leaves its dead `alloc` and stores as `bitcast`s of address 0; the translator emitted those placeholders as `Zig.ptrFromAddr 0`, an integer-to-pointer `bitcast` did not mark the function as using memory, and the global's type had no `Zig.Enc` instance. It was not a wrong pointer. Canon now drops the dead placeholders (a placeholder that is still read is rejected), `@ptrFromInt` counts as memory use and every function's global types get `Zig.Enc` when `mem0` exists. Regression: `tests/roadmap/const-locals/` (`fuzz_s19.zig`). Seeds 18, 19 and 39 pass `check.sh --heavy` after the fix. |
+
+Harness bugs found and fixed by the run: generated names `u<N>`/`i<N>` shadow Zig primitive
+types (renamed `un<N>`/`lp<N>`); the old `zig-air-0.16.0` exporter predates pointer constants
+(stale tool, not a harness bug: use a current patched build); shrinking accepted any failure at
+the same stage (now matched on the normalized error) and had no cap.
 
 ## Limits
 

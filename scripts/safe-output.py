@@ -10,6 +10,15 @@ leader before exiting. A leader that exits while group members remain has not fi
 its stage: the members are killed and the stage fails. Exit status: the command's own
 status, 124 on timeout, 125 for leftover descendants, 128+N after signal N.
 
+A descendant that leaves the group (setsid, setpgid, daemonizing) is still stopped. While the
+stage runs the runner samples the process table (pid, ppid, start time) and follows the
+parent links from the leader, so a reparented escapee stays owned. It also gives the stage
+the environment marker AIR2LEAN_STAGE_ID=<token> and treats any process whose environment
+shows that token as owned, where `ps` can display other processes' environments (Linux;
+not every macOS configuration). A pid is trusted only while its start time is unchanged.
+A descendant forked and escaped between two samples, with its environment scrubbed, is
+the remaining blind spot.
+
 `publish` copies SOURCE into a temporary file beside DESTINATION, fsyncs it, then
 atomically renames it (--overwrite) or hard-links it (--no-clobber, refusing an existing
 DESTINATION even when it appears concurrently) and fsyncs the directory. A failure or
@@ -24,8 +33,11 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 TIMEOUT, DESCENDANTS = 124, 125
+SAMPLE_INTERVAL = 0.25
+MARKER = 'AIR2LEAN_STAGE_ID'
 MAX_ARTIFACT = 1024 * 1024 * 1024
 
 
@@ -50,6 +62,59 @@ def _signal_group(pgid, signum):
         pass
 
 
+def _processes():
+    """pid -> (ppid, start time, command and, where visible, environment); {} if ps fails."""
+    try:
+        listing = subprocess.run(['ps', '-axeww', '-o', 'pid=,ppid=,lstart=,command='], capture_output=True,
+                                 text=True, timeout=5, check=True, env=dict(os.environ, LC_ALL='C')).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    rows = {}
+    for line in listing.splitlines():
+        fields = line.split(None, 7)  # pid ppid and the five lstart words precede the command
+        if len(fields) >= 7 and fields[0].isdigit() and fields[1].isdigit():
+            rows[int(fields[0])] = (int(fields[1]), ' '.join(fields[2:7]), fields[7] if len(fields) > 7 else '')
+    return rows
+
+
+class Escapees:
+    """Descendants of a stage that may have left its process group (setsid and friends)."""
+
+    def __init__(self, leader, token):
+        self.leader, self.marker = leader, f'{MARKER}={token}'
+        self.owned = {}  # pid -> start time
+
+    def scan(self):
+        """Grow the owned set from the process table; return the owned processes still alive."""
+        rows = _processes()
+        leader = self.leader.pid if self.leader.returncode is None else None  # Reaped: pid is free.
+        grew = True
+        while grew:
+            grew = False
+            for pid, (ppid, started, command) in rows.items():
+                if pid in (os.getpid(), leader) or self.owned.get(pid) == started:
+                    continue
+                parent = rows.get(ppid)
+                if (ppid == leader or (parent and self.owned.get(ppid) == parent[1])
+                        or self.marker in command.split()):
+                    self.owned[pid] = started
+                    grew = True
+        return [pid for pid, started in self.owned.items() if pid in rows and rows[pid][1] == started]
+
+    def stop(self, grace):
+        """TERM, then KILL, every owned process; rescan so late forks of a victim are caught too."""
+        term_until = time.monotonic() + grace
+        give_up = term_until + max(grace, 1.0)
+        while (alive := self.scan()) and time.monotonic() < give_up:
+            killing = time.monotonic() >= term_until
+            for pid in alive:
+                try:
+                    os.kill(pid, signal.SIGKILL if killing else signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            time.sleep(0.05)
+
+
 def _stop_group(child, grace):
     """TERM, then KILL, the whole group; return only once the leader and members are gone."""
     _signal_group(child.pid, signal.SIGTERM)
@@ -68,6 +133,12 @@ def _stop_group(child, grace):
         time.sleep(0.02)
 
 
+def _stop_all(child, escapees, grace):
+    escapees.scan()  # Before the leader dies, while its children still point at it.
+    _stop_group(child, grace)
+    escapees.stop(grace)
+
+
 def run(argv, timeout, grace):
     received = []
 
@@ -75,7 +146,10 @@ def run(argv, timeout, grace):
         received.append(signum)
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, handler)
-    child = subprocess.Popen(argv, start_new_session=True)
+    token = uuid.uuid4().hex
+    child = subprocess.Popen(argv, start_new_session=True, env=dict(os.environ, **{MARKER: token}))
+    escapees = Escapees(child, token)
+    next_sample = time.monotonic()
     deadline = None if timeout <= 0 else time.monotonic() + timeout
     failure = None
     try:
@@ -86,16 +160,19 @@ def run(argv, timeout, grace):
             if deadline is not None and time.monotonic() >= deadline:
                 failure = TIMEOUT
                 break
+            if time.monotonic() >= next_sample:
+                escapees.scan()
+                next_sample = time.monotonic() + SAMPLE_INTERVAL
             time.sleep(0.02)
         if failure is None:
-            if not _group_alive(child.pid):
+            if not _group_alive(child.pid) and not escapees.scan():
                 status = child.returncode
                 return status if status >= 0 else 128 - status
             failure = DESCENDANTS
     except BaseException:
-        _stop_group(child, grace)
+        _stop_all(child, escapees, grace)
         raise
-    _stop_group(child, grace)
+    _stop_all(child, escapees, grace)
     if failure == TIMEOUT:
         print(f'error: stage exceeded its {timeout:g}s timeout; its process group was stopped', file=sys.stderr)
     elif failure == DESCENDANTS:

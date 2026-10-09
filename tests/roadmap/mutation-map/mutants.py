@@ -37,6 +37,8 @@ EXPORT = 'tests/roadmap/project-export/test_project_export.py'
 MODULE_KEYS = 'tests/roadmap/modular-output/test_keys.py'
 PROJECT_CHECK = 'tests/roadmap/project-check/test_check.py'
 ACCOUNTING = 'tests/roadmap/host-accounting/test_accounting.py'
+TUTORIALS = 'tests/roadmap/tutorials/test_tutorials.py'
+DIAGNOSTICS = 'tests/roadmap/project-diagnostics/test_project_diagnostics.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -193,6 +195,14 @@ MUTANTS = {
     'accounting-headline-unchecked': (
         'scripts/accounting.py', "    if headline != totals.get('exact_matches'):\n", '    if False:\n',
         ACCOUNTING, 'ACC', ('Check.test_headline_including_exclusions_fails',)),
+    # D04: a tutorial's negative control must name the error it is expected to fail with.
+    'tutorial-expected-error-unchecked': (
+        'scripts/tutorials.py', '        if not EXPECT.search(negative):\n', '        if False:\n',
+        TUTORIALS, 'tutorials', ('Fixture.test_missing_expected_error',)),
+    # I05: a diagnostic's exporter source span must be well formed and match its status.
+    'diagnostics-source-span-unchecked': (
+        'scripts/project-diagnostics.py', "        demand(valid_span(d), 'invalid source span')\n", '',
+        DIAGNOSTICS, 'adapter', ('AdapterTests.test_invalid_protocol_controls',)),
 }
 
 

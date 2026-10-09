@@ -1,0 +1,28 @@
+{
+  "sources_sha256": {
+    "const_locals.zig": "45cea6b035b2bbafc2a8235fd95eedfbe2d2ecf27c733bdd87617417d514b7d8",
+    "fuzz_s19.zig": "8a8db9ab7743d7efa692e828f66f08a858ee84ca76199447a18be1ff54ff28ec"
+  },
+  "air": {
+    "zig_version": "0.16.0",
+    "schema": 12,
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false
+  },
+  "patched_compiler_sha256": "fe2ff13fca8b6825ae90e97993e229e00798a70ab86cdfc2c344f953f79f0790",
+  "stock_compiler_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
+  "qualification": "Fresh AIR exported by the patched 0.16.0 compiler (zig-patch tree 5715fa4a); `check.sh --export` re-exports and compares, `check.sh --native` runs both sources' tests with the stock compiler. Re-export and refresh this record when a source changes.",
+  "air_sha256": {
+    "air/0.16.0/const_locals.bump.json": "702278b9b96a7e4767dd98e8081cb7e28ac1fefeea2bad6c3deda7a1d1e9e25f",
+    "air/0.16.0/const_locals.dead.json": "370dfa5cd58ecf46e6452032993d39c5624c71c331c99dec1b8c5fd431fab282",
+    "air/0.16.0/const_locals.entry.json": "2bef38b5e701e9e3ce4e74d405ff0fbc787d0d927f51829d6fe080b3427b5e2e",
+    "air/0.16.0/const_locals.live.json": "ba903c6b9ded8f1999ddaca272c790057140b22644988b02a533cedd8ee83f29",
+    "air/0.16.0/const_locals.read.json": "674af64c6a34bc374524c70fd8c61d7c73d3eaec1634a2a3b4f185186d97c8e2",
+    "air/0.16.0/const_locals.roundTrip.json": "0f0333ff9e52676621e02cb371c2e3dcfb07d2205f98dae39fabe2aea98d3991",
+    "air/0.16.0/const_locals.stack.json": "757204f374b2bd41ae841fb983717b8ccc8f2dcb37d920f3169f7cc510eac479",
+    "air-fuzz_s19/0.16.0/fuzz_s19.entry.json": "5500edd1a4189f0161c8812fe43f856193a22da0f6b265999055a79b34f69c29",
+    "air-fuzz_s19/0.16.0/fuzz_s19.work.json": "6d52806dbdde96cb7092a26dab2b044f702156f21b50593d6843a7d93236dec9"
+  }
+}

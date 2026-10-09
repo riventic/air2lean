@@ -38,7 +38,7 @@ Every rounding op computes the exact result as a `Rat` and rounds it once to the
 The reference target uses compiler_rt software routines for f128 arithmetic and for `@mulAdd` on every format. These can differ from the IEEE-correct result described above. The following divergences are opt-in together per translated example:
 
 - **Group A — `f128` division** (`__divtf3`; this paragraph: before Zig 0.16.0; 0.16.0: §Per-version differences): flushes a subnormal quotient to a signed zero instead of rounding it into the subnormal range. Its own source comment states the exact halfway case cannot occur, so every other case — normal range, overflow to infinity, exact zero — is already bit-identical to round-to-nearest-even.
-- **Group B — `@mulAdd` on every format**: x86-64 baseline has no FMA instruction, so every format calls compiler_rt. f32 `fmaf` and f16 `__fmah` (`fmaf` on the f32 extensions): the exact product in f64, plus `z` rounded to f64, then rounded to f32 — two roundings, so the result can be one ulp from a single rounding (e.g. f32 `fma(0x3f800001, 0x3f7fffff, 0x28000001)` = `0x3f800000`, not `0x3f800001`). f64 `fma`, f128 `fmaq`, f80 `__fmax` (`fmaq` then rounded to f80): Dekker's algorithm, which gives NaN or an ulp off for some subnormal inputs.
+- **Group B — `@mulAdd` on every format**: x86-64 baseline has no FMA instruction, so every format calls compiler_rt. f32 `fmaf` and f16 `__fmah` (`fmaf` on the f32 extensions): the exact product in f64, plus `z` rounded to f64, then rounded to f32 — two roundings, so the result can be one ulp from a single rounding (e.g. f32 `fma(0x3f800001, 0x3f7fffff, 0x28000001)` = `0x3f800000`, not `0x3f800001`). f64 `fma`, f128 `fmaq`, f80 `__fmax` (`fmaq` then rounded to f80): Dekker's algorithm, which gives NaN or an ulp off for some finite inputs. It returns NaN when `z`'s exponent exceeds that of `x·y` by more than the exponent range, because the rescaled `z` overflows to infinity: f64 `fma(0.25, 0.25, 2^1023)` (`0x3fd0000000000000`, `0x3fd0000000000000`, `0x7fe0000000000000`) is NaN instead of `2^1023`, and so is f128 `fmaq(0.25, 0.25, 2^16383)`. Zig 0.16.0 binaries give these NaNs natively (x86_64-linux baseline for f64; x86_64-linux, aarch64-linux and aarch64-macos for f128), and `Float.fmaRt` reproduces them.
 - **Group E — f80→f16 `@floatCast`**: `__truncxfhf2` clears the explicit integer bit before its subnormal conversion and uses a wrapping-u64 sticky-bit expression. For example, f80 `2^-15` converts to f16 `+0`, while correctly-rounded conversion gives `0x0200`. `Float.convRt` ports that helper; IEEE mode keeps correctly-rounded conversion. The relevant helper algorithm is the same in 0.14.1, 0.15.2 and 0.16.0.
 - **Group F — f128 multiplication**: `__multf3` uses `wideMultiply(u128)`, whose limb sum omits a carry from the low half into the high half. For example, squaring `0x401dffffffffffffffffffffffffffff` returns `0x403cfffffffffffffffffffffffffffd`; correctly-rounded multiplication returns `0x403cfffffffffffffffffffffffffffe`. `Float.mulRt` ports both helpers; `Float.mul` remains correctly rounded. The f128 multiplications inside `Float.fmaRt` use the same port, including f80 FMA's intermediate f128 computation. These helper algorithms are the same in 0.14.1, 0.15.2 and 0.16.0.
 - **Group G — f80 remainder of a pseudo-denormal**: `__fmodx` first compares the signless raw representations and returns the original numerator when its representation is smaller. This retains a pseudo-denormal's bits, and can also return it when its numerical magnitude is greater than the divisor's. `Float.remRt` follows that early return; `Float.modRt` uses it for both remainder steps. IEEE mode uses numerical remainder.
@@ -147,18 +147,48 @@ The differential test runs the real functions: `tests/diff/libm/` builds a stati
 | Theorem | Statement |
 |---|---|
 | `roundRat_error` | `|q| ≤ A < 2^emax`: rounding `q` gives a finite `r` with `|r − q| ≤ u·A + η` |
-| `add_error`, `mul_error` | finite operands, exact result of magnitude `≤ A < 2^emax`: the result is finite and within `u·A + η` |
+| `add_error`, `sub_error`, `mul_error`, `div_error` | finite operands (divisor `b ≠ 0`), exact result of magnitude `≤ A < 2^emax`: the result is finite and within `u·A + η` |
+| `fma_error` | `@mulAdd` on `f32`/`f64`/`f128` (one rounding): finite operands, `|a·b + c| ≤ A < 2^emax`: finite and within `u·A + η` |
+| `fma_error_f16`, `fma_error_f80` | `@mulAdd` on `f16`/`f80`, rounded through `f32`/`f128`: the two rounding errors add, the second relative to `A' = A + u_mid·A + η_mid`. Generated code calls `Float.fmaChk`, which is `pure (Float.fma …)` except on an `f80` invalid encoding or pseudo-denormal (group C: `.unspecified`) |
+| `sqrt_error` | finite `a ≥ 0`, any `A ≥ 0` with `a ≤ A²`: finite `r ≥ 0` with `s − r ≤ u·A + η` for `s ≥ 0, s² ≤ a` and `r − s ≤ u·A + η` for `s ≥ 0, a ≤ s²` (`|r − √a| ≤ u·A + η` without irrationals); no overflow condition. About `Float.sqrt`: for `f128` before 0.16.0 the generated code calls `Float.sqrtF128ViaF64` instead (§Per-version differences), which this lemma does not cover |
+| `conv_error`, `conv_toRat_of_wider` | `@floatCast` of a value `|a| ≤ A < 2^emax` (target constants) is within `u·A + η`; to a format with at least the precision and range it is exact |
+| `mul_abs_le`, `mul_sub_mul_le` | `|a·b| ≤ A·B`; a perturbed product `|a·b − a'·b'| ≤ A·δb + δa·B'` (propagates an earlier rounding error through `*`) |
 | `sumLeft_error` | the left fold `((init + t 0) + t 1) + …` (`Float.sumLeft`) with caller-supplied per-step magnitude and error bounds: every partial sum is finite and the result is within the error bound of the exact sum |
 | `sumLeft_error_uniform` | closed form for a zero start and terms `|t k| ≤ T`: with `c = T + η`, `ρ = 1 + u`, finite when `n·c·ρⁿ < 2^emax`, magnitude `≤ n·c·ρⁿ`, error `≤ n·(u·n·c·ρⁿ + η)` |
 | `sumLeft_isNaN` | one NaN term makes the fold NaN |
+| `sub_isNaN_*`, `div_isNaN_*`, `fma_isNaN`, `sqrt_isNaN`, `sqrt_isNaN_of_neg` | NaN propagates through `-`, `/`, `@mulAdd` and `@sqrt`; `@sqrt` of a negative nonzero value is NaN |
 | `lt_of_error`, `gt_of_error` | a comparison against a computed value equals the exact comparison when the exact value clears the threshold by more than the error bound |
 
 The rounding-only lemmas (`roundRat_error`, `roundRat_isSome`) are labeled `abstract-spec`, the
-lemmas about `+`, `*` and comparisons `ieee` (`assurance/float-semantics.json`). The overflow
+lemmas about the operations and comparisons `ieee` (`assurance/float-semantics.json`). The `+`,
+`-`, `*`, `/`, `@sqrt` and `@floatCast` lemmas hold for every format, `f80` included: the model
+rounds x87 results once to the 64-bit significand, so `f80` uses `u = 2^-64`, `η = 2^-16446`
+and `2^16383`. The overflow
 bound is conservative: magnitudes below `(2 − 2^-prec)·2^emax` also stay finite. The fold
 lemmas follow the evaluation order step by step and never reassociate a float sum. A
 precondition that fails can give infinity (overflow) or NaN (`inf − inf`); the theorems do not
 hold without it.
+
+### `compiler-rt` mode
+
+With `--float-semantics compiler-rt` (§`--float-semantics`), these operations call the ported
+helpers in `ZigLean/Float/CompilerRt.lean`:
+
+| Operation | Helper | Bound |
+|---|---|---|
+| `@mulAdd` on `f32` (`fmaf`) | `f64` product, `f64` sum, rounded to `f32` | `fmaRt_error_f32` (`compiler-rt@0.14.1,0.15.2,0.16.0`): three roundings, the `f64` errors relative to `|a·b| ≤ B` and `|a·b + c| ≤ A` |
+| `/` on `f128` before 0.16.0 (`__divtf3`, group A) | correctly rounded, a nonzero subnormal quotient flushed to `±0` | `divRt_error_f128` (`compiler-rt@0.14.1,0.15.2`): `div_error`'s bound plus `2^emin` |
+| `@mulAdd` on `f16` (`__fmah`) | `fmaf` on the `f32` extensions, then rounded to `f16` | not stated: it would compose `conv_toRat_of_wider`, `fmaRt_error_f32` and `conv_error` |
+| `@mulAdd` on `f64`, `f80`, `f128` (`fma`, `__fmax`, `fmaq`) | Dekker's algorithm (`fmaCore`) | out of scope: the real helper, and the port, give NaN for some finite inputs (group B: e.g. f64 `fma(0.25, 0.25, 2^1023)`) and can be an ulp off. A bound needs a precondition that excludes these inputs and a proof of the port itself |
+| `*` on `f128` (`__multf3`, group F) | `wideMultiply` without the low-to-high carry | out of scope: the real helper drops the carry, and the port reproduces this. The result can differ from the correctly-rounded product (by one ulp in the example of group F, which Zig 0.16.0 binaries give natively on x86_64-linux, aarch64-linux and aarch64-macos). A bound needs a proof of the port's limb arithmetic |
+| `/` on `f128` in 0.16.0 (`divRt016`) | subnormal quotient from a 113-bit quotient that can be one unit low, and a wrapping shift on deep underflow | out of scope: the subnormal path is bit arithmetic without a value-level characterization; the normal range equals `Float.div`, but the port does not expose that split as a lemma |
+| f80→f16 `@floatCast` (`__truncxfhf2`, group E) | clears the explicit integer bit before the subnormal conversion | out of scope: the documented counterexample (`2^-15` → `+0`) breaks `conv_error`'s bound |
+| `@rem`/`@mod` on `f80` (group G), `@floor`/`@ceil` on `f80` before 0.16.0 (group H) | exact operations with a different pseudo-denormal reading | no rounding error to bound |
+
+In `ieee` mode (the default) all of these operations use the correctly-rounded model and the
+lemmas above apply.
+
+### Applications
 
 `Proofs/Floats/Dot.lean` applies them to the translated `dot` (`examples/floats`): for `n`
 elements of magnitude at most `B` and `n·c·ρⁿ < 2^1023` (`c = B²(1 + u) + 2η`), `dot_error`
@@ -166,3 +196,15 @@ proves that the result is finite, has magnitude at most `n·c·ρⁿ` and is wit
 `n·(u·n·c·ρⁿ + η) + n·(u·B² + η)` of the exact dot product. `dot_isNaN` proves that a NaN
 element gives a NaN result, and `dot_pos_of_gap` proves that the result compares above `+0`
 when the exact value exceeds the error bound.
+
+`Proofs/Floats/Fitness.lean` proves the fitness calculation `fitness` (`examples/floats`): from
+`+0`, in loop order, `s += w * x - penalty * (d * d)` with `d = x - target`. For `n` elements
+with `|xᵢ|, |target| ≤ B`, `|wᵢ| ≤ W`, `|penalty| ≤ P` and the overflow preconditions
+`2B < 2^1023`, `D² < 2^1023` and `n·(T + η)·ρⁿ < 2^1023`, `fitness_error` proves that the result
+is finite, of magnitude at most `n·(T + η)·ρⁿ` and within `n·(u·n·(T + η)·ρⁿ + η) + n·E` of the
+exact `∑ (wᵢ·xᵢ − penalty·(xᵢ − target)²)`. `D`, `T` and `E` are explicit per-term bounds
+(`fitD`, `fitTermBound`, `fitTermErr`) that follow the five roundings of a term, including
+the propagation of `d`'s error through the square. `fitness_isNaN` proves that a NaN element,
+target or penalty gives a NaN result, `fitness_panic` that slices of different lengths panic,
+and `fitness_gt_of_gap` that the result compares above a threshold when the exact fitness
+exceeds it by more than the error bound.

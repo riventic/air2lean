@@ -10,6 +10,8 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -75,7 +77,18 @@ class Scratch(unittest.TestCase):
         write(self.root / 'tests/x/mutations.py', GEN)
         write(self.root / 'tests/x/check.sh', 'worker capture0 capture2 capture1\n')
         write(self.root / 'tests/x/test_neg.py', 'def test_neg(self): pass\n')
+        write(self.root / 'examples/ex/ex.zig', '')
+        write(self.root / 'Proofs/Mod/Thm.lean', '')
         self.data = scratch_map()
+        self.record()
+
+    def record(self, **changes):
+        """Write the kill ledger for the scratch mutate.sh: a is killed by a diff, b by a proof build."""
+        blocks = mm.mutation_blocks(self.root)
+        by = {'a': {'kind': 'diff', 'target': 'ex'}, 'b': {'kind': 'proof', 'target': 'Proofs.Mod.Thm'}}
+        mutants = {n: {'killed_by': by[n], 'block_sha256': blocks[n]} for n in blocks if n in by}
+        mutants.update(changes)
+        write(self.root / mm.KILLS, json.dumps({'schema': mm.KILLS_SCHEMA, 'mutants': mutants}))
 
     def problems(self, data=None):
         return mm.analyze(self.root, self.data if data is None else data)['problems']
@@ -102,6 +115,129 @@ class Committed(unittest.TestCase):
             self.assertEqual(mm.main(['check']), 0)
             self.assertEqual(mm.main(['check', '--root', str(ROOT / 'tests')]), 2)
         self.assertIn('mutation map ok', out.getvalue())
+
+
+class Kills(Scratch):
+    def test_positive_control(self):
+        self.assertEqual(self.problems(), [])
+
+    def test_designated_mutant_without_recorded_kill_fails(self):
+        ledger = json.loads((self.root / mm.KILLS).read_text())
+        del ledger['mutants']['a']
+        write(self.root / mm.KILLS, json.dumps(ledger))
+        self.assertEqual(self.problems(), [f'{mm.KILLS}: a: designated mutant has no recorded kill'])
+        (self.root / mm.KILLS).unlink()
+        self.assertProblem(f'{mm.KILLS}: expected schema')
+
+    def test_killer_must_exist_and_be_well_formed(self):
+        blocks = mm.mutation_blocks(self.root)
+        for by, needle in (({'kind': 'diff', 'target': 'gone'}, "regression 'gone' does not exist"),
+                           ({'kind': 'proof', 'target': 'Proofs.Mod.Gone'}, 'does not exist'),
+                           ({'kind': 'diff', 'target': '../ex'}, 'does not exist'),
+                           ({'kind': 'survived', 'target': 'ex'}, 'needs killed_by'),
+                           ({'kind': 'diff'}, 'needs killed_by')):
+            self.record(a={'killed_by': by, 'block_sha256': blocks['a']})
+            self.assertProblem(needle)
+
+    def test_kill_of_a_changed_mutation_is_stale(self):
+        write(self.root / mm.MUTATE_SH, MUTATE.replace('one', 'one, edited'))
+        self.assertEqual(self.problems(), [f'{mm.KILLS}: a: kill recorded for a different version of the mutation; '
+                                           'rerun it and `kills record`'])
+
+    def test_ledger_entry_for_a_removed_mutation_fails(self):
+        self.record(gone={'killed_by': {'kind': 'diff', 'target': 'ex'}, 'block_sha256': 'x'})
+        self.assertProblem('kill recorded for gone')
+
+    def run_kills(self, command, lines):
+        write(self.root / 'kill.log', lines)
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            code = mm.main(['kills', command, '--root', str(self.root), '--log', str(self.root / 'kill.log')])
+        return code, err.getvalue()
+
+    def test_record_refuses_a_survivor_and_verify_fails_on_it(self):
+        before = (self.root / mm.KILLS).read_text()
+        for command in ('record', 'verify'):
+            code, err = self.run_kills(command, 'a survived diff ex\nb killed proof Proofs.Mod.Thm\n')
+            self.assertEqual(code, 1)
+            self.assertIn('a: survived', err)
+        self.assertEqual((self.root / mm.KILLS).read_text(), before)
+
+    def test_verify_requires_the_recorded_killer(self):
+        self.assertEqual(self.run_kills('verify', 'a killed diff ex\nb killed proof Proofs.Mod.Thm\n'), (0, ''))
+        code, err = self.run_kills('verify', 'a killed proof Proofs.Mod.Thm\n')
+        self.assertEqual(code, 1)
+        self.assertIn('a: killed by proof Proofs.Mod.Thm, ledger records', err)
+        self.assertEqual(self.run_kills('verify', 'zz killed diff ex\n')[0], 1)
+
+    def test_record_merges_kills_and_check_then_passes(self):
+        (self.root / mm.KILLS).unlink()
+        self.assertEqual(self.run_kills('record', 'a killed diff ex\n'), (0, ''))
+        self.assertProblem('b: designated mutant has no recorded kill')
+        self.assertEqual(self.run_kills('record', 'b killed proof Proofs.Mod.Thm\n'), (0, ''))
+        self.assertEqual(self.problems(), [])
+
+    def test_unrecorded_entry_is_a_listed_gap_until_a_kill_is_recorded(self):
+        blocks = mm.mutation_blocks(self.root)
+        self.record(a={'unrecorded': 'x86_64 only', 'block_sha256': blocks['a']})
+        report = mm.analyze(self.root, self.data)
+        self.assertEqual((report['problems'], report['kill_gaps']), ([], ['a: x86_64 only']))
+        self.assertEqual(self.run_kills('verify', 'a killed diff ex\n'), (0, ''))
+        self.assertEqual(self.run_kills('record', 'a killed diff ex\n'), (0, ''))
+        self.assertEqual(mm.analyze(self.root, self.data)['kill_gaps'], [])
+        self.record(a={'unrecorded': 'x86_64 only', 'block_sha256': 'stale'})
+        self.assertProblem('unrecorded entry is for a different version')
+
+    def test_malformed_log_is_an_input_error(self):
+        err = io.StringIO()
+        write(self.root / 'kill.log', 'a maybe diff ex\n')
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(mm.main(['kills', 'verify', '--root', str(self.root), '--log', str(self.root / 'kill.log')]), 2)
+
+
+class NoOpMutation(unittest.TestCase):
+    """mutate.sh aborts, instead of reporting a result, when a mutation changed no source."""
+
+    PAIRS = (('gen_file', 'gen_backup'), ('options_gen', 'options_backup'), ('variants_gen', 'variants_backup'),
+             ('layout_gen', 'layout_backup'), ('slices_gen', 'slices_backup'), ('basic_lean', 'basic_backup'),
+             ('lemmas_lean', 'lemmas_backup'), ('round_lean', 'round_backup'), ('mem_lean', 'mem_backup'),
+             ('enc_lean', 'enc_backup'), ('alloc_lean', 'alloc_backup'), ('asm_zig', 'asm_backup'),
+             ('vec_lean', 'vec_backup'), ('thread_lean', 'thread_backup'), ('sched_lean', 'sched_backup'),
+             ('conc_lean', 'conc_backup'))
+
+    def run_helper(self, changed):
+        text = (ROOT / mm.MUTATE_SH).read_text()
+        body = text[text.index('require_mutated() {'):]
+        body = body[:body.index('\n}\n') + 3]
+        with tempfile.TemporaryDirectory(prefix='air2lean-noop-') as tmp:
+            lines = []
+            for source, backup in self.PAIRS:
+                write(Path(tmp) / source, 'changed\n' if source == changed else 'same\n')
+                write(Path(tmp) / backup, 'same\n')
+                lines += [f'{source}={tmp}/{source}', f'{backup}={tmp}/{backup}']
+            script = '\n'.join(lines) + '\n' + body + '\nrequire_mutated "mutation (z)"\necho reached\n'
+            return subprocess.run(['bash', '-c', script], capture_output=True, text=True)
+
+    def test_unchanged_sources_abort(self):
+        result = self.run_helper(None)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('mutation (z): the mutation changed no source file', result.stderr)
+        self.assertNotIn('reached', result.stdout)
+
+    def test_a_changed_source_continues(self):
+        for source, _ in self.PAIRS:
+            result = self.run_helper(source)
+            self.assertEqual((result.returncode, result.stdout.strip()), (0, 'reached'), source)
+
+    def test_every_reporting_path_requires_a_mutation(self):
+        text = (ROOT / mm.MUTATE_SH).read_text()
+        for function in ('proof_report', 'run_and_report'):
+            body = text[text.index(f'\n{function}() {{'):]
+            self.assertIn('require_mutated "$1"', body[:body.index('\n}\n')], function)
+
+    def test_pairs_match_the_backups_mutate_sh_makes(self):
+        text = (ROOT / mm.MUTATE_SH).read_text()
+        self.assertEqual(set(self.PAIRS), set(re.findall(r'^cp "\$(\w+)" "\$(\w+_backup)"$', text, re.M)))
 
 
 class Map(Scratch):
@@ -161,6 +297,7 @@ class Map(Scratch):
     def test_unmapped_mutation_fails(self):
         write(self.root / mm.MUTATE_SH, MUTATE + 'echo "== mutation (c) three"\n')
         write(self.root / mm.SHARDS, 'a\nb\nc\n')
+        self.record()
         self.assertEqual(self.problems(), [f'{mm.MUTATE_SH}: mutation c is mapped to no register ID'])
         # However the key is written: the unmapped gate reads the dictionary literal.
         write(self.root / mm.PY_MUTANTS, PY_MUTANTS.replace("}\n", '    "qm":\n        (),\n}\n'))

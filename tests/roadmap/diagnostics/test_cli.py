@@ -103,7 +103,7 @@ def assert_policy_rejection(report, marker):
 def decode(result, expected_status=None):
     assert result.stderr == "", result.stderr
     report = json.loads(result.stdout)
-    assert report["schema"] == 1 and report["kind"] == "air2lean-check-diagnostics"
+    assert report["schema"] == 2 and report["kind"] == "air2lean-check-diagnostics"
     assert report["proof_status"] == "not_run" and report["runtime_outcomes"] == "not_observed"
     assert report["source_correspondence"] == "not_attested"
     assert result.returncode == (1 if report["status"] == "rejected" else 0)
@@ -114,12 +114,23 @@ def decode(result, expected_status=None):
         assert report["complete"] is True and report["truncated"] is False
         assert not report["diagnostics"]
         assert all(f["local_check"] == "passed" for f in report["files"])
-    assert len(report["diagnostics"]) <= report["diagnostic_limit"]
+    assert len(report["diagnostics"]) <= report["diagnostic_limit"] == report["caps"]["diagnostics"]
+    dropped = sum(unit["dropped"] for unit in report["capped_units"])
+    assert report["diagnostics_observed"] == len(report["diagnostics"]) + dropped
+    assert bool(report["capped_units"]) == report["truncated"]
     assert report["diagnostic_payload_bytes"] <= 1024 * 1024
     if report["truncated"] or any(d["first_error_in_unit"] for d in report["diagnostics"]):
         assert report["complete"] is False
     for d in report["diagnostics"]:
-        assert d["source_span"] is None and d["source_span_status"] == "unavailable_in_AIR"
+        span = d["source_span"]
+        if span is None:
+            assert d["source_span_status"] == "unavailable_in_AIR"
+        else:
+            assert d["source_span_status"] in ("statement", "declaration")
+            assert span["line"] >= 1 and span["file"] and span["module"]
+            assert span["column"] is None or span["column"] >= 1
+            assert d["source_span_status"] == "statement" or span["column"] is None
+        assert isinstance(d["fatal"], bool)
         assert d["anchor"]["id_space"] in ("canonical", "exported", "unavailable")
         assert isinstance(d["prerequisites"], list) and isinstance(d["dependency_chain"], list)
     return report
@@ -335,10 +346,11 @@ def run(binary, baseline=None):
 
 class HarnessTests(unittest.TestCase):
     def valid(self):
-        return dict(schema=1, kind="air2lean-check-diagnostics", proof_status="not_run",
+        return dict(schema=2, kind="air2lean-check-diagnostics", proof_status="not_run",
                     runtime_outcomes="not_observed", source_correspondence="not_attested",
                     status="checked", diagnostics=[], diagnostic_limit=256, files=[],
-                    diagnostic_payload_bytes=0, complete=True, truncated=False)
+                    diagnostic_payload_bytes=0, complete=True, truncated=False,
+                    diagnostics_observed=0, caps=dict(diagnostics=256), capped_units=[])
 
     def result(self, report, status=0):
         return subprocess.CompletedProcess([], status, json.dumps(report), "")
@@ -361,7 +373,7 @@ class HarnessTests(unittest.TestCase):
 
     def test_oracle_refuses_checked_blockers_and_wrong_expected_status(self):
         blocker = dict(code="EXPORTER_UNSUPPORTED", first_error_in_unit=False,
-                       source_span=None, source_span_status="unavailable_in_AIR",
+                       source_span=None, source_span_status="unavailable_in_AIR", fatal=False,
                        anchor=dict(id_space="exported"), prerequisites=[], dependency_chain=[])
         report = self.valid()
         report.update(diagnostics=[blocker], complete=False, truncated=True)

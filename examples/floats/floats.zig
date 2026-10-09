@@ -1,6 +1,7 @@
 //! Small float functions: plain arithmetic (lerp, hypot2), a branch (clamp), a NaN check
-//! (isNan), an optional result (celsius), and a slice reduction (dot). Bodies are fixed —
-//! Proofs/Floats depends on them exactly; do not reformat.
+//! (isNan), an optional result (celsius), a slice reduction (dot) and a fitness score
+//! (fitness: weighted sum with a squared-deviation penalty, reduced in loop order). Bodies are
+//! fixed — Proofs/Floats depends on them exactly; do not reformat.
 
 const std = @import("std");
 
@@ -10,10 +11,19 @@ export fn isNan(x: f64) bool { return x != x; }
 export fn hypot2(a: f64, b: f64) f64 { return @sqrt(a * a + b * b); }
 pub fn celsius(k: f32) ?f32 { return if (k < 0) null else k - 273.15; }
 pub fn dot(xs: []const f64, ys: []const f64) f64 { var s: f64 = 0; for (xs, ys) |x, y| s += x * y; return s; }
+pub fn fitness(xs: []const f64, ws: []const f64, target: f64, penalty: f64) f64 {
+    var s: f64 = 0;
+    for (xs, ws) |x, w| {
+        const d = x - target;
+        s += w * x - penalty * (d * d);
+    }
+    return s;
+}
 
 comptime {
     _ = &celsius;
     _ = &dot;
+    _ = &fitness;
 }
 
 test "lerp" {
@@ -43,4 +53,10 @@ test "celsius" {
 test "dot" {
     try std.testing.expectEqual(@as(f64, 0.0), dot(&.{}, &.{}));
     try std.testing.expectEqual(@as(f64, 32.0), dot(&.{ 1.0, 2.0, 3.0 }, &.{ 4.0, 5.0, 6.0 }));
+}
+
+test "fitness" {
+    try std.testing.expectEqual(@as(f64, 0.0), fitness(&.{}, &.{}, 1.0, 2.0));
+    // 2*1 - 0.5*(1-2)^2 + 3*4 - 0.5*(4-2)^2 = 1.5 + 10 = 11.5
+    try std.testing.expectEqual(@as(f64, 11.5), fitness(&.{ 1.0, 4.0 }, &.{ 2.0, 3.0 }, 2.0, 0.5));
 }

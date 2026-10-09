@@ -82,15 +82,6 @@ theorem dot_init_toRat : (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64).toRat? = s
   rw [show (Zig.Float.ofBits (0 : BitVec 64) : Zig.F64) = Zig.Float.zero false by decide]
   simp [Zig.Float.toRat?, Zig.classify_zero, Zig.finiteToRat_zero]
 
-/-- `|a·b| ≤ B²` for `|a|, |b| ≤ B`. -/
-private theorem mul_bound {a b B : Rat} (ha : -B ≤ a ∧ a ≤ B) (hb : -B ≤ b ∧ b ≤ B) :
-    -(B * B) ≤ a * b ∧ a * b ≤ B * B := by
-  have h1 := Rat.mul_nonneg (show 0 ≤ B - a by grind) (show 0 ≤ B - b by grind)
-  have h2 := Rat.mul_nonneg (show 0 ≤ B + a by grind) (show 0 ≤ B + b by grind)
-  have h3 := Rat.mul_nonneg (show 0 ≤ B - a by grind) (show 0 ≤ B + b by grind)
-  have h4 := Rat.mul_nonneg (show 0 ≤ B + a by grind) (show 0 ≤ B - b by grind)
-  constructor <;> grind
-
 /-- One rounded product of `dot`: finite, within `u·B² + η` of the exact product, and of
 magnitude at most `B²(1 + u) + η`, when `B² < 2^1023`. -/
 theorem dotTerm_error (xs ys : Array Zig.F64) {i : Nat} (hi : i < xs.size) (hi' : i < ys.size)
@@ -99,7 +90,7 @@ theorem dotTerm_error (xs ys : Array Zig.F64) {i : Nat} (hi : i < xs.size) (hi' 
     ∃ v, (dotTerm xs ys i).toRat? = some v ∧
       v - a * b ≤ u64 * (B * B) + η64 ∧ a * b - v ≤ u64 * (B * B) + η64 ∧
       -(B * B * (1 + u64) + η64) ≤ v ∧ v ≤ B * B * (1 + u64) + η64 := by
-  obtain ⟨hlo, hhi⟩ := mul_bound hx.2 hy.2
+  obtain ⟨hlo, hhi⟩ := Zig.mul_abs_le hx.2 hy.2
   obtain ⟨v, hv, e1, e2⟩ := Zig.mul_error hx.1 hy.1 hlo hhi hov
   refine ⟨v, ?_, e1, e2, ?_, ?_⟩
   · simp only [dotTerm, getElem!_pos xs i hi, getElem!_pos ys i hi']

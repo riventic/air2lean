@@ -95,6 +95,7 @@ class ManifestTests(unittest.TestCase):
         self.git('commit', '-q', '-m', message)
 
     def write(self, name, text, commit=True):
+        (self.repo / name).parent.mkdir(parents=True, exist_ok=True)
         (self.repo / name).write_text(text)
         if commit:
             self.commit('edit ' + name)
@@ -326,6 +327,102 @@ class ManifestTests(unittest.TestCase):
         report = self.check('--verify-receipt')  # A fake attempt is never a current proof receipt.
         self.assertIn('chained proof receipt is not current', report['problems'][0])
         (attempt / 'receipt.json').write_text('{"schema": 1, "edited": true}\n')
+        self.assert_only_stale(self.check(), 'receipt')
+
+    def native(self, binary=b'\x7fELF native build\n', mode='ReleaseSafe', target='x86_64-linux'):
+        (self.base / 'stock').mkdir(exist_ok=True)
+        compiler, built = self.base / 'stock/zig', self.base / 'demo-native'
+        compiler.write_bytes(b'stock zig 0.16.0\n')
+        built.write_bytes(binary)
+        return built, ['--native-binary', str(built), '--native-compiler', str(compiler),
+                       '--native-compiler-version', '0.16.0', '--native-target', target, '--native-mode', mode,
+                       '--native-cpu', 'baseline']
+
+    def test_native_binary_identity(self):
+        built, flags = self.native()
+        self.record(*flags)
+        manifest = json.loads(self.manifest.read_text())
+        self.assertEqual(manifest['chain'][-2]['link'], 'native')
+        value = manifest['links']['native']['value']
+        self.assertEqual(value['binary_sha256'], r.fingerprint(built)['sha256'])
+        self.assertEqual(value['source_link_sha256'], manifest['links']['source']['sha256'])
+        self.assertEqual(value['profile_agreement'], {'target': True, 'mode': True, 'zig_version': True})
+        report = self.check()
+        self.assertEqual((report['status'], report['native']['binary_checked']), ('current', False))
+        self.assertIn('native binary not supplied', self.check('--require-native-binary')['problems'][0])
+        report = self.check('--native-binary', str(built), '--native-compiler', str(self.base / 'stock/zig'),
+                            '--require-native-binary')
+        self.assertEqual((report['status'], report['native']['binary_checked']), ('current', True))
+
+    def test_native_binary_or_compiler_mismatch_is_stale(self):
+        built, flags = self.native()
+        self.record(*flags)
+        other = self.base / 'other-binary'
+        other.write_bytes(b'rebuilt elsewhere\n')
+        report = self.check('--native-binary', str(other))
+        links = self.assert_only_stale(report, 'native')
+        self.assertIn('wrong native binary', links['native']['diagnosis'])
+        self.assertTrue(links['native']['value_changed'])
+        self.assertIn('not the manifest', report['problems'][0])
+        built.write_bytes(b'edited in place\n')
+        self.assert_only_stale(self.check('--native-binary', str(built)), 'native')
+        compiler = self.base / 'stock/zig'
+        compiler.write_bytes(b'another zig\n')
+        self.assert_only_stale(self.check('--native-compiler', str(compiler)), 'native')
+
+    def test_native_build_of_another_source_or_profile_is_stale(self):
+        built, flags = self.native()
+        self.record(*flags)
+        self.write('examples/demo/demo.zig', 'export fn add(a: u32, b: u32) u32 { return a *% b; }\n')
+        self.assert_only_stale(self.check('--native-binary', str(built)), 'source', 'native')
+
+    def test_native_target_mode_disagreement_is_reported(self):
+        _, flags = self.native(mode='ReleaseFast', target='aarch64-macos')
+        self.record(*flags)
+        report = self.check()
+        self.assertEqual((report['status'], report['stale_links']), ('stale', []))
+        self.assertIn("['mode', 'target']", report['problems'][0])
+        self.assertEqual(self.check('--allow-native-mismatch')['status'], 'current')
+
+    def test_native_inputs_are_validated_and_sealed(self):
+        built, flags = self.native()
+        code, _, err = self.tool('manifest', str(self.manifest), '--example', 'demo', '--zig-version', '0.16.0',
+                                 '--native-binary', str(built))
+        self.assertEqual(code, 2)
+        self.assertIn('--native-compiler', err)
+        (self.base / 'stock/zig-unlocked').write_text('air only\n')
+        code, _, err = self.tool('manifest', str(self.manifest), '--example', 'demo', '--zig-version', '0.16.0', *flags)
+        self.assertEqual(code, 2)
+        self.assertIn('not the AIR-only patched compiler', err)
+        (self.base / 'stock/zig-unlocked').unlink()
+        self.record(*flags)
+        report = self.rewrite(lambda m: m['inputs']['native'].update(binary_sha256='0' * 64))
+        self.assertEqual(report['status'], 'invalid')
+        report = self.rewrite(lambda m: m['links'].pop('native'))
+        self.assertIn('missing manifest link', report['problems'][0])
+
+    def test_manifest_without_native_rejects_native_flags(self):
+        self.record()
+        built, _ = self.native()
+        code, _, err = self.tool('check-manifest', str(self.manifest), '--native-binary', str(built))
+        self.assertEqual(code, 2)
+        self.assertIn('no chained native build', err)
+
+    def test_relocatable_receipt_inside_repository(self):
+        for name in ('receipt.json', 'plan.json', 'after.json'):
+            self.write('evidence/receipt/' + name, '{"schema": 2}\n')
+        self.write('evidence/receipt/audit.json', json.dumps({'status': 'pass', 'theorems': [
+            {'name': 'toplevel', 'module': 'Proofs.Demo.Proofs', 'allowed': True}]}))
+        self.record('--receipt', str(self.repo / 'evidence/receipt'))
+        manifest = json.loads(self.manifest.read_text())
+        self.assertEqual(manifest['inputs']['receipt'], 'evidence/receipt')
+        self.assertEqual(manifest['provenance']['status'], 'clean')
+        moved = self.base / 'moved'
+        shutil.copytree(self.repo, moved)
+        result = subprocess.run([sys.executable, str(moved / 'scripts/artifact-manifest.py'), 'check-manifest',
+                                 str(self.manifest)], capture_output=True, text=True, env=ENV)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('evidence/receipt/after.json', '{"schema": 2, "edited": 1}\n')
         self.assert_only_stale(self.check(), 'receipt')
 
     def test_standalone_entry_point(self):

@@ -33,7 +33,8 @@ export or `.lake/check-reports` file). The output path must not exist; it is nev
 | `toolchain` | `lean-toolchain`, `lakefile.toml`, `lake-manifest.json` | changed toolchain/build configuration |
 | `proofs` | `--proof` (default `Proofs/Ex/*.lean` except `Gen.lean`) | changed proof sources |
 | `theorems` | namespace-qualified theorem names scanned from the proof files; with `--audit` or `--receipt`, also the compiled audit's theorem names, statuses and non-allowed names for those modules | changed theorem inventory |
-| `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json`, `after.json` | changed proof receipt |
+| `receipt` | only with `--receipt ATTEMPT`: its `receipt.json`, `plan.json`, `audit.json` and `after.json` when present (`receipt.json` hash-binds the rest, so the multi-MB `after.json` may be omitted from a committed copy). Receipt schema 1 and 2 are both just hashed bytes. A receipt inside the repository is recorded repository-relative | changed proof receipt |
+| `native` | only with `--native-binary`: stock-Zig build of the same source; target, mode, cpu, compiler version, compiler sha256, binary sha256, plus the current `source` and `profile` link digests and whether target/mode/Zig version agree with the proved profile | wrong native binary |
 
 Each link digest is SHA-256 over canonical JSON of its `{files, value}`; each chain entry
 is `sha256(previous || link || digest)` starting from the format name. A last `inputs_provenance`
@@ -53,6 +54,23 @@ under a link's named inputs that differs from `HEAD`, staged or not, including d
 `untracked_link_paths` (hashed link files not in the index) and `external_link_paths` (outside the
 repository). `status` is `dirty` if any link path is modified, deleted or untracked. Content hashes still describe the recorded bytes, but such a manifest is not
 reproducible from `HEAD`, so `check-manifest` rejects it unless `--allow-dirty` is given.
+
+### Native-binary identity
+
+```sh
+... manifest OUT.json --example EX --zig-version V \
+  --native-binary BIN --native-compiler STOCK_ZIG --native-compiler-version V \
+  --native-target x86_64-linux --native-mode ReleaseSafe --native-cpu baseline
+```
+
+The binary itself is not stored, only its sha256. The compiler must be a stock Zig (a sibling
+`zig-unlocked`, the AIR-only patched compiler, is refused). Build with `-fstrip`: otherwise the
+debug info embeds a random cache path and the hash is not reproducible. At check time
+`--native-binary BIN` (and optionally `--native-compiler`) ties a diff-tested binary to the
+manifest: a different binary or compiler, or a source/profile change, makes `native` stale;
+`--require-native-binary` fails when none is supplied; a build whose target, mode or Zig version
+differs from the proved profile is a problem unless `--allow-native-mismatch`. This records which
+binary was built from this source; it does not prove the binary matches the Lean model.
 
 ## Check
 
@@ -94,3 +112,42 @@ Offline fixture regressions (no Zig/Lake/Lean):
 ```sh
 python3 tests/roadmap/artifact-manifest/test_manifest.py
 ```
+
+## Committed receipt-chained fixture
+
+`assurance/provenance/` holds a genuine fresh run for `assurance/provenance/src/provenance.zig`: schema-12 AIR from the
+patched 0.16.0 AIR-only compiler, `Proofs/Provenance/Gen.lean` (with profile header) from
+`scripts/translate.sh`, proofs, a schema-2 proof receipt (`receipt/`, without `after.json`), and
+`manifest.json` chaining every link including the `native` build; `pins.json` holds reviewer pins.
+
+```sh
+python3 scripts/provenance-evidence.py check [--strict] [--native-binary BIN]   # offline, CI
+python3 tests/roadmap/artifact-manifest/test_fixture.py                          # edit-one-link on copies
+AIR2LEAN_BUILD_LOCK=... python3 scripts/provenance-evidence.py regenerate WORKDIR \
+  --zig-air PATCHED_ZIG --stock-zig STOCK_ZIG                                    # heavy, guarded
+```
+
+`check` requires every example-local link to be current; drift of the repository-wide links
+(compiler patch, translator, runtime, toolchain) is reported as `aged` and fails only with `--strict`.
+`regenerate` re-exports, retranslates, rebuilds the native binary and a guarded receipt, requires
+byte-identical AIR, Gen.lean and (for the same stock compiler) binary, then strictly checks a fresh
+manifest. To refresh the fixture after an intentional change: commit the example/Gen/proofs (and new
+AIR), run `regenerate WORKDIR` on the clean, committed tree, then
+
+```sh
+python3 scripts/provenance-evidence.py install WORKDIR        # path-redacted receipt copy
+git commit ...                                                  # the receipt
+python3 scripts/provenance-evidence.py record WORKDIR --stock-zig STOCK_ZIG   # manifest + pins.json
+git commit ...
+```
+
+`install` copies `receipt.json`, `plan.json` and `audit.json` with every host-local absolute path
+replaced: the attempt directory by `<attempt>`, the checkout by `<repo>`, the home directory by `~`
+and any other absolute path by `<host>/<basename>`. The committed copy therefore holds no local
+paths; its `receipt.json` artifact hashes are those of the unredacted files of the run (the copy's
+own bytes are what the manifest chains).
+
+The committed receipt's `plan.json` records the revision it was produced at (a pushed commit of the
+integration branch); that commit may no longer exist after history rewrites or squash merges, so the receipt is evidence of that run
+(its bytes are chained), not something `verify` can replay later. `regenerate` produces and
+verifies a fresh one.

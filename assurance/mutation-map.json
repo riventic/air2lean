@@ -147,6 +147,14 @@
         {
           "path": "tests/roadmap/bitops/Runtime.lean",
           "anchor": "| some (.error .illegal) => true"
+        },
+        {
+          "path": "tests/roadmap/bitops-native/shift-panic/test_cli.py",
+          "anchor": "assert \"is not a known panic-handler function\" in result.stderr, result.stderr"
+        },
+        {
+          "path": "tests/review/Parser.lean",
+          "anchor": "require (panicErrorFor? \"debug.FullPanic((function 'defaultPanic')).shiftRhsTooBig\" == some \".overflow\")"
         }
       ],
       "mutants": [
@@ -411,7 +419,16 @@
       "categories": [
         "layout"
       ],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/diff/vectors/harness.zig",
+          "anchor": "extern fn maxLane"
+        },
+        {
+          "path": "tests/diff/layout/harness.zig",
+          "anchor": "\"maskStore\""
+        }
+      ],
       "mutants": [
         {
           "name": "j",
@@ -506,7 +523,16 @@
     },
     "L12": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/diff/layout/unspecified.txt",
+          "anchor": "writeTable 3"
+        },
+        {
+          "path": "tests/diff/slices/harness.zig",
+          "anchor": "\"sentinelArr\""
+        }
+      ],
       "mutants": [
         {
           "name": "n",
@@ -527,7 +553,16 @@
     },
     "L14": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/diff/options/harness.zig",
+          "anchor": "\"findOr\""
+        },
+        {
+          "path": "tests/diff/variants/harness.zig",
+          "anchor": "\"lightOf\""
+        }
+      ],
       "mutants": [
         {
           "name": "c",
@@ -647,7 +682,7 @@
         },
         {
           "path": "tests/roadmap/deadline-cases/Runtime.lean",
-          "anchor": "#check_failure (TimedBudget.loop countdown (⟨10⟩ : WallTimestamp) 3 0)"
+          "anchor": "#check_failure (TimedBudget.loop countdown (\u27e810\u27e9 : WallTimestamp) 3 0)"
         },
         {
           "path": "tests/roadmap/deadline-cases/Runtime.lean",
@@ -741,7 +776,12 @@
       "categories": [
         "invariant-transfer"
       ],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "Proofs/Threads/Disjoint.lean",
+          "anchor": "theorem disjoint_safe"
+        }
+      ],
       "mutants": [
         {
           "name": "af",
@@ -841,7 +881,24 @@
       "categories": [
         "invariant-transfer"
       ],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "Proofs/Atomics/Proofs.lean",
+          "anchor": "theorem mp_sees_data"
+        },
+        {
+          "path": "Proofs/Atomics/Proofs.lean",
+          "anchor": "theorem twoPlusTwoW_weak"
+        },
+        {
+          "path": "Proofs/Threads/Counter.lean",
+          "anchor": "theorem parallelCounter_spec"
+        },
+        {
+          "path": "tests/diff/threads/unspecified.txt",
+          "anchor": "race 300"
+        }
+      ],
       "mutants": [
         {
           "name": "k",
@@ -883,6 +940,14 @@
         {
           "path": "tests/roadmap/rwlock-contracts/Runtime.lean",
           "anchor": "| some (.error .illegal) => true"
+        },
+        {
+          "path": "Proofs/Sync/Proofs.lean",
+          "anchor": "theorem wait_alone_deadlock"
+        },
+        {
+          "path": "Proofs/Sync/Mutex.lean",
+          "anchor": "theorem mutexCounter_safe"
         }
       ],
       "mutants": [
@@ -1173,7 +1238,16 @@
     },
     "F06": {
       "categories": [],
-      "negative_tests": [],
+      "negative_tests": [
+        {
+          "path": "tests/diff/floats/harness.zig",
+          "anchor": "floats.fitness"
+        },
+        {
+          "path": "tests/roadmap/float-semantics/test_labels.py",
+          "anchor": "def test_unlabeled_numerical_theorem_fails_and_plain_theorem_passes"
+        }
+      ],
       "mutants": [
         {
           "name": "d",
@@ -1386,7 +1460,7 @@
           "name": "frame-atom-dropped",
           "path": "tests/roadmap/proof-tools/Steps.lean",
           "category": "other",
-          "anchor": "Triple (pts p 4 x ∗ R) (load (BitVec 32) 4 p) (fun r => ⌜r = x⌝ ∗ pts p 4 x)"
+          "anchor": "Triple (pts p 4 x \u2217 R) (load (BitVec 32) 4 p) (fun r => \u231cr = x\u231d \u2217 pts p 4 x)"
         }
       ],
       "note": "Mutated specifications of the sep_* step tactics (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (Steps.lean, CI proof-tools step)."
@@ -1607,8 +1681,23 @@
     },
     "I05": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/project-diagnostics/test_project_diagnostics.py",
+          "anchor": "def test_invalid_protocol_controls"
+        },
+        {
+          "path": "tests/roadmap/diagnostics-complete/test_cli.py",
+          "anchor": "def blockers(report):"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "diagnostics-source-span-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     },
     "I06": {
       "categories": [],
@@ -1626,6 +1715,14 @@
         {
           "path": "tests/roadmap/artifact-manifest/test_manifest.py",
           "anchor": "def test_profile_mismatch_between_air_and_generated"
+        },
+        {
+          "path": "tests/roadmap/artifact-manifest/test_manifest.py",
+          "anchor": "def test_native_binary_or_compiler_mismatch_is_stale"
+        },
+        {
+          "path": "tests/roadmap/artifact-manifest/test_fixture.py",
+          "anchor": "def test_theorems"
         }
       ],
       "mutants": []
@@ -2044,7 +2141,13 @@
           "anchor": "def test_negative_controls_are_excluded_from_premises"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "tutorial-expected-error-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ]
     }
   }
 }

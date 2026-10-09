@@ -37,7 +37,9 @@ supported version, so one translation (and the proofs over it) serves all versio
 2. `itemReads`. A read of one item through a pointer is `ptr_elem_val` in 0.15.2, and
    `ptr_elem_ptr` then `load` in 0.16.0. A read of one item of a local array is a `load` of the
    whole array then `array_elem_val` in 0.15.2, and the same `ptr_elem_ptr` and `load` in 0.16.0.
-   The pass changes both pairs to one `ptr_elem_val`, if the first instruction has no other use.
+   The pass changes both pairs to one `ptr_elem_val`, if the first instruction has no other use
+   and is not a lane pointer (`vector_index`), which stays a bit-pointer; a load of a vector whose
+   lanes are not power-of-two bytes (`bool`, `u3`, `u24`, `f80`) is not folded either.
    A `slice_elem_ptr`/`load` pair similarly becomes `slice_elem_val` at the load's position.
    For the second pair, the `array_elem_val` must come directly after the `load` in its body, so
    no write comes between them.
@@ -51,7 +53,14 @@ supported version, so one translation (and the proofs over it) serves all versio
    `comptime` parameters of a generic instance (`dupeSentinel(allocator, comptime T, m)` reads
    `m` as `param 2`). The pass ranks these indices against runtime parameter slots that have
    AIR args, preserving slots for one-possible-value parameters (such as `void` and `u0`).
-5. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
+5. `dropDeadAllocPlaceholders`. When Sema resolves a local's value at compile time (a
+   `const` whose address is taken, `const u: U = .{ .b = 0 }; _ = &u;`), it puts the value in
+   a constant global, points every live use at it, and rewrites the local's now-dead `alloc` and
+   stores to `bitcast` of the integer 0 to the `alloc`'s pointer type (0.15.2, 0.16.0;
+   0.14.1 uses `bitcast` of a `u8` 0). Liveness marks these and their field/element pointers
+   unused, so no code is generated for them. The pass drops them when nothing but other such
+   pointers and debug instructions reads them; a read one is rejected by `Check.lean`.
+6. `renumber`. Instruction IDs name generated definitions (`<fn>.loop<id>`, `.br<id>`), and the
    debug instructions that a version adds shift them. The pass gives the non-debug instructions
    the IDs `0, 1, …` in body order, then the debug instructions the IDs after them.
 -/
@@ -184,22 +193,60 @@ def RawInst.uses (i : RawInst) : Array InstId :=
     i.cases.flatMap (fun c => c.items.flatMap ids ++ c.ranges.flatMap fun (a, b) => ids a ++ ids b) ++
     (i.asm.map fun a => (a.outputs ++ a.inputs).flatMap fun o => (o.ref.map ids).getD #[]).getD #[]
 
-/-- Reject invalid references before renumbering can turn an absent old ID into a fresh ID.
-Branch targets must be enclosing blocks; repeats must name an enclosing loop; dispatches
+/-- Instruction references inside a value, constants included. -/
+partial def valRefs (v : Val) : Array InstId :=
+  match v with
+  | .inst id => #[id]
+  | .agg _ vs => vs.flatMap valRefs
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => valRefs v
+  | .sliceConst _ p n => valRefs p ++ valRefs n
+  | _ => #[]
+
+/-- One malformed-input finding, anchored at an exported instruction when it has one. -/
+structure Violation where
+  inst : Option InstId
+  message : String
+
+/-- Branch targets must be enclosing blocks; repeats must name an enclosing loop; dispatches
 must name an enclosing loop-switch (including an outer one across nested control flow). -/
-partial def validateRefs (f : RawFunc) : Except String Unit := do
+private partial def targetViolations (fnName : String) (ids : Std.HashSet InstId) (body : Array RawInst)
+    (blocks loops dispatches : Array InstId) (available : Std.HashSet InstId)
+    (acc : Array Violation) : Array Violation := Id.run do
+  let mut acc := acc
+  let mut available := available
+  for i in body do
+    -- An unknown reference was already reported; only a known one can be out of scope.
+    for r in i.uses do
+      unless available.contains r || !ids.contains r do
+        acc := acc.push ⟨some i.id, s!"{fnName}: inst {i.id}: instruction ref {r} is not available in this scope"⟩
+    if i.tag == "br" || i.tag == "repeat" || i.tag == "switch_dispatch" then
+      let (targetKind, allowed) := match i.tag with
+        | "repeat" => ("loop", loops)
+        | "switch_dispatch" => ("loop-switch", dispatches)
+        | _ => ("block", blocks)
+      match i.target with
+      | none => acc := acc.push ⟨some i.id, s!"{fnName}: inst {i.id}: missing target"⟩
+      | some t =>
+        unless allowed.contains t do
+          acc := acc.push ⟨some i.id, s!"{fnName}: inst {i.id}: target {t} is not an enclosing {targetKind}"⟩
+    let nestedBlocks := if i.tag == "block" || i.tag == "dbg_inline_block" || i.tag == "loop"
+      then blocks.push i.id else blocks
+    let nestedLoops := if i.tag == "loop" then loops.push i.id else loops
+    let nestedDispatches := if i.tag == "loop_switch_br" then dispatches.push i.id else dispatches
+    for b in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
+      acc := targetViolations fnName ids b nestedBlocks nestedLoops nestedDispatches available acc
+    available := available.insert i.id
+  return acc
+
+/-- Every invalid reference, in the order `validateRefs` meets them. A check that depends on
+an already reported finding of the same operand is skipped; independent findings are not. -/
+def refViolations (f : RawFunc) : Array Violation := Id.run do
   let all := flatten f.body
+  let mut acc : Array Violation := #[]
   let mut ids : Std.HashSet InstId := {}
   for i in all do
-    if ids.contains i.id then throw s!"{f.name}: duplicate instruction id {i.id}"
+    if ids.contains i.id then acc := acc.push ⟨some i.id, s!"{f.name}: duplicate instruction id {i.id}"⟩
     ids := ids.insert i.id
-  let rec valRefs (v : Val) : Array InstId :=
-    match v with
-    | .inst id => #[id]
-    | .agg _ vs => vs.flatMap valRefs
-    | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => valRefs v
-    | .sliceConst _ p n => valRefs p ++ valRefs n
-    | _ => #[]
   for i in all do
     let values := i.args ++ i.callee.toArray ++
       i.cases.flatMap (fun c => c.items ++ c.ranges.flatMap fun (a, b) => #[a, b]) ++
@@ -210,46 +257,29 @@ partial def validateRefs (f : RawFunc) : Except String Unit := do
       -- Exported constants contain constants, never SSA references. Renumbering and use
       -- analysis operate on instruction operands; reject a hidden dynamic operand before
       -- those passes can lose its use or leave its original ID embedded in a constant.
-      match v with
-      | .inst _ => pure ()
-      | _ => do
-        if let some r := refs[0]? then
-          throw s!"{f.name}: inst {i.id}: nested instruction ref {r} inside a constant is outside the subset"
-      for r in refs do
-        unless ids.contains r do throw s!"{f.name}: inst {i.id}: unknown instruction ref {r}"
+      if let .inst _ := v then
+        for r in refs do
+          unless ids.contains r do acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: unknown instruction ref {r}"⟩
+      else if let some r := refs[0]? then
+        acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: nested instruction ref {r} inside a constant is outside the subset"⟩
     -- Shuffle masks are comptime values; an SSA lane would need use tracking and ID
     -- rewriting, and cannot occur in an ordinary compiler export.
     for lane in i.mask do
       if let .value v := lane then
         if let some r := (valRefs v)[0]? then
-          throw s!"{f.name}: inst {i.id}: instruction ref {r} inside a shuffle mask is outside the subset"
+          acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: instruction ref {r} inside a shuffle mask is outside the subset"⟩
   for g in f.globals do
     if let some v := g.init then
       if let some r := (valRefs v)[0]? then
-        throw s!"{f.name}: instruction ref {r} inside a global initializer is outside the subset"
-  let rec targets (body : Array RawInst) (blocks loops dispatches : Array InstId)
-      (available : Std.HashSet InstId) : Except String Unit := do
-    let mut available := available
-    for i in body do
-      for r in i.uses do
-        unless available.contains r do
-          throw s!"{f.name}: inst {i.id}: instruction ref {r} is not available in this scope"
-      if i.tag == "br" || i.tag == "repeat" || i.tag == "switch_dispatch" then
-        let some t := i.target | throw s!"{f.name}: inst {i.id}: missing target"
-        let (targetKind, allowed) := match i.tag with
-          | "repeat" => ("loop", loops)
-          | "switch_dispatch" => ("loop-switch", dispatches)
-          | _ => ("block", blocks)
-        unless allowed.contains t do
-          throw s!"{f.name}: inst {i.id}: target {t} is not an enclosing {targetKind}"
-      let nestedBlocks := if i.tag == "block" || i.tag == "dbg_inline_block" || i.tag == "loop"
-        then blocks.push i.id else blocks
-      let nestedLoops := if i.tag == "loop" then loops.push i.id else loops
-      let nestedDispatches := if i.tag == "loop_switch_br" then dispatches.push i.id else dispatches
-      for b in #[i.body, i.thenBody, i.elseBody] ++ i.cases.map (·.body) do
-        targets b nestedBlocks nestedLoops nestedDispatches available
-      available := available.insert i.id
-  targets f.body #[] #[] #[] {}
+        acc := acc.push ⟨none, s!"{f.name}: instruction ref {r} inside a global initializer is outside the subset"⟩
+  return targetViolations f.name ids f.body #[] #[] #[] {} acc
+
+/-- Reject invalid references before renumbering can turn an absent old ID into a fresh ID:
+the first of `refViolations`. -/
+def validateRefs (f : RawFunc) : Except String Unit :=
+  match (refViolations f)[0]? with
+  | some v => throw v.message
+  | none => pure ()
 
 def isDbgTag (tag : String) : Bool :=
   tag == "dbg_stmt" || tag == "dbg_empty_stmt" || tag == "dbg_var_ptr" || tag == "dbg_var_val" ||
@@ -485,10 +515,20 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
       if u.tag == "load" && u.args[0]? == some (.inst x.id) then
         repl := repl.insert u.id ("slice_elem_val", s, idx); gone := gone.insert x.id
     | "ptr_elem_ptr", some p, some i, some u =>
-      if u.tag == "load" && u.args[0]? == some (.inst x.id) then
+      -- A lane pointer (`&v[i]` of a bit-packed vector) is a bit-pointer, not an item.
+      let lane := ((x.ty.bind (f.layouts[·]?)).map (·.isLanePtr)).getD false
+      if !lane && u.tag == "load" && u.args[0]? == some (.inst x.id) then
         repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | "load", some p, _, some u =>
-      if u.tag == "array_elem_val" && u.args[0]? == some (.inst x.id) && next[x.id]? == some u.id then
+      -- A lane of a bit-packed vector (`bool`, `u3`, `u24`, `f80`) is not an item at a byte
+      -- stride: the whole-vector load and `array_elem_val` stay.
+      let packed := match x.ty.bind (f.types[·]?) with
+        | some (.vector _ c) => match f.types[c]? with
+          | some (.int _ bits) | some (.float bits) => bits < 8 || bits &&& (bits - 1) != 0
+          | _ => true
+        | _ => false
+      if !packed && u.tag == "array_elem_val" && u.args[0]? == some (.inst x.id) &&
+          next[x.id]? == some u.id then
         if let some i := u.args[1]? then
           repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | _, _, _, _ => pure ()
@@ -497,6 +537,49 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
     else match repl[i.id]? with
       | some (tag, p, idx) => some { i with tag, args := #[p, idx] }
       | none => some i
+  return { f with body }
+
+/-- The side-effect-free pointer projections that Sema maps from a comptime-known `alloc` to its
+constant (`resolveComptimeKnownAllocPtr`); operand 0 is the parent pointer. Sema rewrites the
+writing ones (`optional_payload_ptr_set`, `errunion_payload_ptr_set`) to placeholders itself, so
+one that reads a placeholder is not dropped. -/
+def allocProjectionTags : List String :=
+  ["struct_field_ptr", "struct_field_ptr_index_0", "struct_field_ptr_index_1",
+   "struct_field_ptr_index_2", "struct_field_ptr_index_3", "ptr_slice_ptr_ptr",
+   "ptr_slice_len_ptr", "ptr_elem_ptr", "bitcast"]
+
+/-- `dropDeadAllocPlaceholders` (module doc). A placeholder is a `bitcast` of the integer 0 to a
+non-`allowzero`, non-C pointer: Sema's rewrite of the `alloc` and the stores of a comptime-known
+local (`finishResolveComptimeKnownAllocPtr`, 0.15.2 and 0.16.0), whose live uses it redirects to
+a constant pointer into a global. Source code cannot make it: `@ptrFromInt(0)` to such a pointer
+is a compile error. The placeholders and their projections go, with their debug uses, only if
+nothing else reads them; otherwise they stay and `Check.lean` rejects the placeholder. -/
+def dropDeadAllocPlaceholders (f : RawFunc) : RawFunc := Id.run do
+  let all := flatten f.body
+  let placeholder (i : RawInst) : Bool :=
+    i.tag == "bitcast" && i.args.size == 1 &&
+      (match (i.args[0]? : Option Val) with | some (.int _ 0) => true | _ => false) &&
+      match i.ty with
+      | some t => (match f.types[t]? with | some (.ptr size _ _) => size != "slice" | _ => false) &&
+          !nullablePtrTy f.types f.layouts t
+      | none => false
+  if !all.any placeholder then return f
+  -- The placeholders and, to a fixpoint, the projections of one.
+  let mut dead : Std.HashSet InstId := {}
+  for i in all do
+    if placeholder i then dead := dead.insert i.id
+  let mut changed := true
+  while changed do
+    changed := false
+    for i in all do
+      if !dead.contains i.id && allocProjectionTags.contains i.tag then
+        if let some (.inst p) := (i.args[0]? : Option Val) then
+          if dead.contains p then dead := dead.insert i.id; changed := true
+  -- Every non-debug reader must itself go.
+  let read := all.any fun i => !isDbgTag i.tag && !dead.contains i.id && i.uses.any dead.contains
+  if read then return f
+  let body := rewriteBody (body := f.body) fun i =>
+    if dead.contains i.id || (isDbgTag i.tag && i.uses.any dead.contains) then none else some i
   return { f with body }
 
 /-- `renumber` (module doc). -/
@@ -532,19 +615,34 @@ partial def onePossibleValue (types : Array Ty) (id : TyId) (seen : Array TyId :
     | _ => false
   | _ => false
 
-/-- Rank source indexes against non-OPV runtime slots, preserving omitted OPV parameters. -/
-def argRanks (f : RawFunc) : Except String RawFunc := do
+private def argRanking (f : RawFunc) : Array Nat × Array Nat :=
   let ps := ((flatten f.body).filterMap fun i => if i.tag == "arg" then i.param else none)
   let ranks := (ps.qsort (· < ·)).toList.eraseDups.toArray
   let slots := (Array.range f.params.size).filter fun k => !onePossibleValue f.types f.params[k]!
+  (ranks, slots)
+
+/-- Every `arg` that cannot be ranked. A count mismatch makes every rank meaningless, so it
+is reported alone; otherwise each malformed `arg` is reported. -/
+def argViolations (f : RawFunc) : Array Violation := Id.run do
+  let (ranks, slots) := argRanking f
   unless ranks.size == slots.size do
-    throw s!"{f.name}: AIR args do not match non-OPV runtime parameters ({ranks.size} args, {slots.size} slots)"
+    return #[⟨none, s!"{f.name}: AIR args do not match non-OPV runtime parameters ({ranks.size} args, {slots.size} slots)"⟩]
   let rank (p : Nat) : Nat := slots[(ranks.idxOf? p).getD slots.size]!
+  let mut acc := #[]
   for i in flatten f.body do
     if i.tag == "arg" then
-      let some p := i.param | throw s!"{f.name}: inst {i.id}: 'arg' needs 'param'"
-      unless i.ty == some f.params[rank p]! do
-        throw s!"{f.name}: inst {i.id}: arg type does not match its runtime parameter"
+      match i.param with
+      | none => acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: 'arg' needs 'param'"⟩
+      | some p =>
+        unless i.ty == some f.params[rank p]! do
+          acc := acc.push ⟨some i.id, s!"{f.name}: inst {i.id}: arg type does not match its runtime parameter"⟩
+  return acc
+
+/-- Rank source indexes against non-OPV runtime slots, preserving omitted OPV parameters. -/
+def argRanks (f : RawFunc) : Except String RawFunc := do
+  if let some v := (argViolations f)[0]? then throw v.message
+  let (ranks, slots) := argRanking f
+  let rank (p : Nat) : Nat := slots[(ranks.idxOf? p).getD slots.size]!
   let body := rewriteBody (body := f.body) fun i =>
     some (if i.tag == "arg" then { i with param := i.param.map rank } else i)
   pure { f with body }
@@ -554,7 +652,7 @@ def canonicalize (f : RawFunc) : Except String RawFunc := do
   let f ← versionTags f
   validateRefs f
   let f ← argRanks f
-  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies f))
+  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies (dropDeadAllocPlaceholders f)))
   validateRefs f
   pure (renumber f)
 

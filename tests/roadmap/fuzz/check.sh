@@ -33,6 +33,20 @@ first_failure() {
   fi
 }
 
+# A failure's normalized first error (paths, function names and numbers removed), so shrinking
+# keeps the same failure rather than any failure at the same stage.
+signature() {
+  local dir=$1 stage=$2
+  # translate.sh ends with its own "error: ..." line; the cause is the line before it.
+  { case "$stage" in
+      native) grep -E -m1 'error:' "$dir/native.log" ;;
+      translate) grep -E -m1 'Gen\.lean:[0-9]+:[0-9]+: error' "$dir/translate.log" \
+                   || grep -E -B1 -m1 '^error: ' "$dir/translate.log" | head -1 ;;
+      *) grep -E -m1 'error' "$dir/lean.log" ;;
+    esac || true; } \
+    | sed -E 's#^.*\.(json|zig|lean)(:[0-9]+)*: ##; s#fuzz_s[0-9]+\.[A-Za-z0-9_]+: ##; s#fuzz_s[0-9]+#S#g; s#[0-9]+#N#g'
+}
+
 case "${1:-}" in
   --light)
     python3 -m unittest discover -s "$here" -p 'test_*.py' -v
@@ -46,15 +60,20 @@ case "${1:-}" in
     python3 "$here/air_fuzz.py" run "$2" --seeds "${3:-200}" ${save[@]+"${save[@]}"}
     ;;
   --reproduces)
-    [ "$#" -eq 3 ] || { echo 'usage: check.sh --reproduces CASE_DIR STAGE' >&2; exit 2; }
+    [ "$#" -ge 3 ] || { echo 'usage: check.sh --reproduces CASE_DIR STAGE [SIG]' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}" "${AIR2LEAN_ZIG_AIR:?set the patched Zig}"
-    [ "$(first_failure "$2")" = "$3" ] && exit 1
-    exit 0
+    [ "$(first_failure "$2")" = "$3" ] || exit 0
+    [ -z "${4:-}" ] || [ "$(signature "$2" "$3")" = "$4" ] || exit 0
+    exit 1
     ;;
   --heavy)
     [ "$#" -ge 2 ] || { echo 'usage: check.sh --heavy OUT_DIR [START] [COUNT]' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}" "${AIR2LEAN_ZIG_AIR:?set the patched Zig}"
     out=$2 start=${3:-0} count=${4:-5} failed=0
+    # Each seed costs minutes (AIR export, translation, Lean); a range is capped unless overridden.
+    max=${AIR2LEAN_FUZZ_HEAVY_MAX:-50}
+    case "$start$count" in *[!0-9]*) echo 'START and COUNT must be whole numbers' >&2; exit 2 ;; esac
+    [ "$count" -le "$max" ] || { echo "COUNT $count exceeds the cap $max (AIR2LEAN_FUZZ_HEAVY_MAX)" >&2; exit 2; }
     mkdir -p "$out"
     out=$(cd -- "$out" && pwd)
     for ((seed = start; seed < start + count; seed++)); do
@@ -64,10 +83,12 @@ case "${1:-}" in
       stage=$(first_failure "$case_dir")
       if [ -z "$stage" ]; then echo "seed $seed: ok"; continue; fi
       failed=1
-      echo "seed $seed: $stage failed; shrinking (logs in $case_dir)"
+      sig=$(signature "$case_dir" "$stage")
+      echo "seed $seed: $stage failed [$sig]; shrinking (logs in $case_dir)"
       # A failure that does not reproduce (flaky) is reported, not fatal to the remaining seeds.
-      if python3 "$here/zig_gen.py" shrink "$case_dir/program.json" \
-          --command "bash $here/check.sh --reproduces {dir} $stage" "$out/shrunk-$seed"; then
+      # Every probe is a full pipeline run, so shrinking is capped (probes, not seconds).
+      if python3 "$here/zig_gen.py" shrink "$case_dir/program.json" --budget "${AIR2LEAN_FUZZ_SHRINK_BUDGET:-150}" \
+          --command "bash $here/check.sh --reproduces {dir} $stage ${sig:+$(printf '%q' "$sig")}" "$out/shrunk-$seed"; then
         first_failure "$out/shrunk-$seed" >/dev/null || true
       else
         echo "seed $seed: $stage failure did not reproduce for shrinking"

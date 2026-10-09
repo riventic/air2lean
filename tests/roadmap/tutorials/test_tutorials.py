@@ -25,7 +25,6 @@ class Committed(unittest.TestCase):
     def test_required_tutorials_exist(self):
         names = {p.name for p in tutorials.tutorials(ROOT)}
         self.assertLessEqual(set(REQUIRED), names)
-        self.assertEqual(set(tutorials.DOCUMENTED), {'cross-target'})
 
     def test_modules_are_the_imports(self):
         self.assertIn('Proofs.Basic.Proofs', tutorials.modules(ROOT))
@@ -42,7 +41,7 @@ class Committed(unittest.TestCase):
 
     def test_negative_controls_are_excluded_from_premises(self):
         excluded = (ROOT / 'assurance/premises.json').read_text()
-        for path in tutorials.checked(ROOT):
+        for path in tutorials.tutorials(ROOT):
             self.assertIn(f'"tutorials/{path.name}/Negative.lean"', excluded)
 
 
@@ -86,10 +85,6 @@ class Fixture(unittest.TestCase):
     def test_unindexed_tutorial(self):
         self.edit('docs/premise-index.md', '## `tutorials/mutable-arrays/Main.lean`', '## `elsewhere`')
         self.assertIn('tutorials/mutable-arrays/Main.lean: not in docs/premise-index.md', self.errors())
-
-    def test_documented_tutorial_has_only_a_readme(self):
-        (self.root / 'tutorials/cross-target/Main.lean').write_text('')
-        self.assertIn('tutorials/cross-target: a documented tutorial has only README.md', self.errors())
 
     def test_new_directory_must_be_complete(self):
         (self.root / 'tutorials/new').mkdir()

@@ -62,7 +62,8 @@ def profile_for_air(doc):
         raise ValueError("profile string fields must not be empty or malformed")
     if (p["name"] != "abi64-le-v1" or p["zig_version"] != version or
             type(p["pointer_bits"]) is not int or p["pointer_bits"] not in (32, 64) or
-            p["endian"] != "little" or type(p["error_set_bits"]) is not int or p["error_set_bits"] != 16):
+            p["endian"] != "little" or type(p["error_set_bits"]) is not int or
+            not 0 < p["error_set_bits"] <= 32):
         raise ValueError("incompatible target profile")
     triple = p["target_triple"].split("-")
     if len(triple) != 3 or triple[2].split(".")[0] != p["abi"]:

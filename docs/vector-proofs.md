@@ -88,9 +88,73 @@ ABI-padded lanes in memory only when the AIR file's schema-12 profile names `sta
 (`Layout.packedLanes`, set by `normalize`). The self-hosted x86_64 and C backends give such
 lanes byte strides. Legacy schema-11 files carry no backend and stay rejected. The checker
 still compares the model's size and alignment with the exporter's. A lane pointer into a
-bit-packed vector, like one into a `bool` vector, stays rejected (`CheckCtx.itemAccess`): the
-exporter does not write the pointer type's `vector_index`, so the lane is not known.
-`Vec.storeLane` models such a store for the frame theorems only. `tests/roadmap/vector-layouts/Checker.lean` checks these
-gates. Retranslating every committed golden and roadmap AIR set (54 inputs) gave byte-identical
+bit-packed vector is a bit-pointer (§Lane pointers). `Vec.storeLane` (a whole-vector load and
+store) models a lane write for the frame theorems above. `tests/roadmap/vector-layouts/Checker.lean`
+checks these gates. Retranslating every committed golden and roadmap AIR set (54 inputs) gave byte-identical
 output and diagnostics before and after this change. None of them has a schema-12 LLVM profile
 with a non-byte vector in memory.
+
+## Lane pointers
+
+Zig gives `&v[i]` of `@Vector(n, T)`, where `T` is `bool` or an integer whose bit size `w` is not
+a power-of-two number of bytes (`u3`, `u9`, `u24`), the type `*align(a:0:n:i) T`: a pointer to the
+vector itself, whose type carries the lane count as `host_size` and the comptime lane as
+`vector_index` (Sema's `elemPtrVector`). The LLVM backend loads the whole `<n x iw>` vector,
+extracts or inserts lane `i` and stores the vector back. The translator reuses the bit-pointer
+encoding of a packed field pointer (host size, bit offset): `normalize` (`lanePtrLayout`) gives
+such a pointer the host `⌈n * w / 8⌉` bytes, the vector's integer and LLVM's store size, and the
+bit offset `i * w`. `ptr_elem_ptr` returns the vector pointer, and a load or store through the
+pointer, also as a parameter or a call argument, is `Zig.loadLane`/`Zig.storeLane`
+(`ZigLean/Packed.lean`). They work on the bits of the host bytes: a load needs only the lane's
+bits defined, and a store replaces only the lane's bits, so a vector filled lane by lane from
+`undefined` (as Zig initializes `var v: V = .{…}`) is defined. A `Byte` has a defined low prefix
+only: a lane store whose bits start above the defined bits of a byte leaves that byte as it was,
+and the lane then reads as `.unspecified`, never as a wrong value.
+
+| Theorem (`ZigLean/VecMem.lean`) | Statement |
+|---|---|
+| `testBit_setBits`, `packLanes_set`, `Vec.packBits_set` | A lane write is `setBits` of the lane's bits in the vector's integer: bits outside `[i * w, (i + 1) * w)` keep their value. |
+| `intBytes_setLane` | The byte-wise lane write of `Zig.storeLane` on the bytes of an integer gives the bytes of the integer with the lane's bits replaced. |
+| `hostVal_intBytes`, `laneDefined_intBytes` | The host bytes of an integer read back as the integer, with every lane bit defined. |
+| `Vec.host_of_encode` | The host bytes of a vector in memory are the first `⌈n * w / 8⌉` bytes of its image. |
+| `Vec.loadLane_vec` | A load through `&v[i]` from a vector's bytes reads `v[i]` and only the host bytes. |
+| `Vec.storeLane_vec` | A store of `x` through `&v[i]` writes exactly the host bytes of `v.set i x`; no other byte changes. |
+| `Vec.load_storeLane_vec` | The whole vector loaded after the store is `v.set i x`: lane `i` is `x`, every other lane keeps its value (`Vec.set_lane_ne`). |
+
+These are universal over lane width, lane count, lane index and values, for every lane type
+with a `Zig.Packed` instance (`BitVec w`, `Bool`). They introduce no axioms.
+
+Compiler evidence. `tests/roadmap/vector-layouts/lanes.zig` exercises `u9`, `u3`, `u24` and `bool`
+lane pointers, as locals and as parameters of non-inlined functions; its `zig test` checks every
+result natively (stock Zig 0.16.0, `-fllvm`, ReleaseSafe, aarch64-macos; CI on x86_64-linux).
+`air/0.16.0` and `air/0.15.2` are the AIR that the patched compilers exported from it
+(`-target x86_64-linux -mcpu=baseline`, LLVM backend): both versions give the same lane-pointer
+shape (`ptr_elem_ptr` with `vector_index`, the lane count as `host_size`), and only the lane
+pointer's alignment differs. `Lanes/Gen.lean` is the 0.16.0 translation; `Lanes/Proofs.lean`
+proves on it that `getU3(&v[5])` reads lane 5, that `putU3(&v[5], x)` leaves `v.set 5 x` and
+that `flipBool(&v[3])` negates lane 3 of a `bool` vector, for every vector in memory;
+`Lanes/Checks.lean` kernel-checks every input of the native test against the translation of
+each version. `probe.zig` adds, for each integer or `bool` lane-pointer case, a load through
+another lane's pointer and the bytes after the host after a lane store (set to `a5` before):
+the store writes only the host bytes. `Model.lean` computes those lines with
+`Zig.loadLane`/`Zig.storeLane` and checks that each lane store leaves the image of `Vec.set`.
+Stock Zig 0.16.0 (ReleaseSafe, Debug, ReleaseFast) and 0.15.2 printed the same lines on
+aarch64-macos (layout evidence only; ReleaseFast stays unqualified, [build-modes.md](build-modes.md)).
+Under emulated x86_64-linux (Docker `linux/amd64`, stock Zig 0.16.0 `x86_64-linux` release),
+`lanes.zig`'s test passed and the probe printed the same lines; CI runs both natively.
+
+Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
+bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
+only where the probe and `lanes.zig` run natively: an LLVM-backend profile on x86_64 or aarch64.
+Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, float lanes (`f80`), 0.14.1/0.15.2 runtime lanes
+and Zig 0.17.0 lane pointers (no native lane-pointer evidence yet) stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
+
+Lane reads. `v.*[i]` through a pointer to a bit-packed vector is a lane pointer and a `load` in
+0.16.0 (`Zig.loadLane`), and a whole-vector `load` then `array_elem_val` in 0.15.2; canonicalization
+(`itemReads`) folds neither into a byte-strided `ptr_elem_val` when the lanes are `bool` or not a
+power-of-two number of bytes, so 0.15.2 reads the vector with its bit-packed encoding and picks the
+lane. `lane_reads.zig` checks both translations against its native values
+(`test_lane_reads.py`). A `ptr_elem_val` through such a vector pointer, with a comptime or runtime
+index, is rejected (`CheckCtx.itemAccess`), as is a `ptr_elem_ptr` with a runtime index (as a lane
+pointer, a 0.14.1/0.15.2 `"runtime"` lane pointer or a plain item pointer), for every supported
+version; Zig 0.16.0 itself rejects a runtime lane index of a vector.

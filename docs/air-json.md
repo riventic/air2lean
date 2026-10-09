@@ -27,6 +27,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
     "export_stage": "analyzed-air"
   },
   "name": "basic.scale",
+  "src": { "file": "basic.zig", "module": "root", "decl_line": 14 },
   "params": [0, 1],
   "ret": 3,
   "body": [ Inst, ... ],
@@ -40,6 +41,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata; schema 1–11 select the named `legacy-abi64-le` assumptions. Unsupported/future schemas fail closed. |
 | `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
 | `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
+| `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name, e.g. `root` or `std`) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
@@ -62,7 +64,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `int` | `signed: bool`, `bits: int` |
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
-| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, optional `sentinel_byte: decimal string` (0.16.0 and later exports only: exact comptime sentinel for a u8 pointer; required by the byte allocSentinel model), `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11), `vector_index: null\|int\|"runtime"` (present when `host_size` is nonzero or the pointer is a vector lane pointer: `null` for a packed field pointer, else the lane index of `&v[i]` into a vector, whose `host_size` is the lane count, not bytes (0.17.0 for every lane, earlier versions only for a lane that is not a power-of-two number of whole bytes; `Canon.lean` turns 0.17.0's whole-byte lanes back into 0.16.0's element pointers); `"runtime"` on 0.14.1/0.15.2 only. The translator rejects lane pointers. An export without the field cannot tell the two apart, so the translator accepts a bit-pointer without it only as the result of a `struct_field_ptr` of a packed struct or union, never as a parameter, constant, load result or other value) |
+| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, optional `sentinel_byte: decimal string` (0.16.0 and later exports only: exact comptime sentinel for a u8 pointer; required by the byte allocSentinel model), `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11), `vector_index: null\|int\|"runtime"` (present when `host_size` is nonzero or the pointer is a vector lane pointer: `null` for a packed field pointer, else the lane index of `&v[i]` into a vector, whose `host_size` is the lane count, not bytes (0.17.0 for every lane, earlier versions only for a lane that is not a power-of-two number of whole bytes; `Canon.lean` turns 0.17.0's whole-byte lanes back into 0.16.0's element pointers); `"runtime"` on 0.14.1/0.15.2 only. The translator models a comptime lane pointer into an integer or `bool` vector of an LLVM-backend x86_64/aarch64 profile as a bit-pointer into the vector's integer (`host_size` becomes `⌈n * w / 8⌉` bytes, `bit_offset` `i * w`, `docs/vector-proofs.md` §Lane pointers) and rejects every other lane pointer. An export without the field cannot tell the two apart, so the translator accepts a bit-pointer without it only as the result of a `struct_field_ptr` of a packed struct or union, never as a parameter, constant, load result or other value) |
 | `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
 | `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9). The checked subset permits integer, float and bool lanes. Pointer vectors and nonidentity vector bitcasts are rejected. |
 | `optional` | `child: id` |
@@ -101,7 +103,9 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | `callee` | `call*`: a Ref |
 | `index` | `struct_field_val`, `struct_field_ptr`, `union_init`: field index |
 | `name` | `dbg_var_ptr`, `dbg_var_val`, `dbg_arg_inline`: variable name |
-| `line` | `dbg_stmt`: 1-based source line |
+| `line` | `dbg_stmt`: 1-based line relative to the enclosing function's declaration (`1` is the declaration line), so the absolute line is `src.decl_line + line - 1`. Inside a `dbg_inline_block` it is relative to the inlined callee's declaration. |
+| `column` | `dbg_stmt`: 1-based source column (additive provenance; older exports omit it) |
+| `src` | `dbg_inline_block`: the inlined callee's declaration site, shaped like the function-level `src` (additive provenance) |
 | `op` | `atomic_rmw`: `std.builtin.AtomicRmwOp` field name (schema 10); `reduce`, `reduce_optimized`: `std.builtin.ReduceOp` tag name (`And`, `Or`, `Xor`, `Min`, `Max`, `Add`, `Mul`); `cmp_vector`, `cmp_vector_optimized`: `std.math.CompareOperator` tag name (`lt`, `lte`, `eq`, `gte`, `gt`, `neq`) (schema 9) |
 | `mask` | `shuffle`, `shuffle_one`, `shuffle_two`: the shuffle mask, one entry per output lane (schema 9) |
 | `order` | `atomic_load`, `atomic_rmw`: `std.builtin.AtomicOrder` field name (schema 10) |
