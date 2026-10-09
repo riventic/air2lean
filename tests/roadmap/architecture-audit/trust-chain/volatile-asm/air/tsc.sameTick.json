@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "tsc.sameTick",
+ "module": "root",
  "params": [],
  "ret": 0,
  "body": [
@@ -51,6 +52,7 @@
    "callee": {
     "ty": 3,
     "func": "tsc.rdtscLow",
+    "module": "root",
     "noreturn": false
    },
    "args": []
@@ -79,6 +81,7 @@
    "callee": {
     "ty": 3,
     "func": "tsc.rdtscLow",
+    "module": "root",
     "noreturn": false
    },
    "args": []

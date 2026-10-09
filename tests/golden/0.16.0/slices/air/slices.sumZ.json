@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "slices.sumZ",
+ "module": "root",
  "params": [
   0
  ],

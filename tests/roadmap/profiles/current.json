@@ -23,6 +23,7 @@
     "export_stage": "analyzed-air"
   },
   "name": "profileFixture",
+  "module": "root",
   "params": [],
   "ret": 0,
   "types": [

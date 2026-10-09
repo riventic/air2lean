@@ -20,6 +20,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "big_endian.externToBytes",
+ "module": "root",
  "params": [
   0,
   0,
@@ -225,6 +226,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -238,6 +240,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -251,6 +254,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -264,6 +268,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -277,6 +282,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -285,6 +291,7 @@
   {
    "k": "struct",
    "name": "big_endian.S",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

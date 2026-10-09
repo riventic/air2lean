@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "slices.subZ",
+ "module": "root",
  "params": [
   0,
   1,
@@ -176,6 +177,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -282,6 +284,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -378,6 +381,7 @@
        "callee": {
         "ty": 11,
         "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_8737",
+        "module": "std",
         "noreturn": true
        },
        "args": [

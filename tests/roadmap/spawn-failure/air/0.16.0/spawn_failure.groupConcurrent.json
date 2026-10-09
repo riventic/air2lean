@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "spawn_failure.groupConcurrent",
+ "module": "root",
  "params": [
   0,
   1
@@ -171,8 +172,10 @@
    "callee": {
     "ty": 12,
     "func": "Io.Group.concurrent__anon_794",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "spawn_failure.writeWorker"
+    "comptime_fn": "spawn_failure.writeWorker",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -219,6 +222,7 @@
      "callee": {
       "ty": 14,
       "func": "Io.Group.cancel",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -281,6 +285,7 @@
    "callee": {
     "ty": 18,
     "func": "Io.Group.await",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -325,6 +330,7 @@
      "callee": {
       "ty": 14,
       "func": "Io.Group.cancel",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -403,6 +409,7 @@
    "callee": {
     "ty": 14,
     "func": "Io.Group.cancel",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -445,6 +452,7 @@
   {
    "k": "struct",
    "name": "Io",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -511,6 +519,7 @@
   {
    "k": "struct",
    "name": "Io.Group",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -530,6 +539,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(?*anyopaque)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -653,6 +663,7 @@
   {
    "k": "struct",
    "name": "Io.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },

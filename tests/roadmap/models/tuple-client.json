@@ -23,6 +23,7 @@
     "export_stage": "analyzed-air"
   },
   "name": "tupleClient",
+  "module": "root",
   "params": [
     2,
     0
@@ -79,6 +80,7 @@
       "callee": {
         "ty": 3,
         "func": "project.tupleSelect",
+        "module": "root",
         "noreturn": false
       },
       "args": [

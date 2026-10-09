@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "addr.readGen",
+ "module": "root",
  "params": [
   0
  ],

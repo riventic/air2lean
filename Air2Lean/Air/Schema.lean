@@ -64,12 +64,11 @@ structure Key where
 private def req (name : String) (shape : Shape) : Key := { name, shape }
 private def opt (name : String) (shape : Shape) : Key := { name, shape, required := false }
 
-/-- Module identity keys (B1, branch `codex/fix-module-identity`): the `module` of the file's
+/-- Module identity keys (B1, `docs/air-json.md` §Identity): the `module` of the file's
 function, of a `func` ref (and `comptime_fn_module` with `comptime_fn`), of a named global and
-of a struct, enum or union type. Optional until that exporter change is integrated; the
-integration sets this to `true`, so that a schema-12 file without its module identities is
-rejected and only legacy schemas (behind `--profile legacy-abi64-le`) lack them. -/
-def moduleRequired : Bool := false
+of a struct, enum or union type. Required: a schema-12 file without its module identities is
+rejected, and only legacy schemas (behind `--profile legacy-abi64-le`) lack them. -/
+def moduleRequired : Bool := true
 
 private def moduleKey : Key :=
   { name := "module", shape := .str, required := moduleRequired }
@@ -160,8 +159,12 @@ def laneForms : List (String × List Key) :=
 
 def topKeys : List Key :=
   [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, req "profile" .obj,
-   req "name" .str, moduleKey, req "params" .arr, req "ret" .nat, req "body" .arr, opt "globals" .arr,
-   req "types" .arr]
+   req "name" .str, moduleKey, opt "src" .obj, req "params" .arr, req "ret" .nat, req "body" .arr,
+   opt "globals" .arr, req "types" .arr]
+
+/-- A declaration site (`src`, I05): of the file's function and of a `dbg_inline_block`'s
+inlined function. Diagnostics read it; translation does not. -/
+def srcKeys : List Key := [req "file" .str, req "module" .str, req "decl_line" .nat]
 
 /-- A named global (a `nav`: container-level `var` or `const`; `init` is absent for an extern
 or unresolved one) or an unnamed constant (a `uav`, always initialized). -/
@@ -193,7 +196,8 @@ def instPayload (tag : String) : Option (List Key) :=
   | "union_init" | "struct_field_ptr" | "struct_field_val" | "field_parent_ptr" =>
     some [args, req "index" .nat]
   | "arg" => some [req "param" .nat]
-  | "block" | "loop" | "dbg_inline_block" => some [req "body" .arr]
+  | "block" | "loop" => some [req "body" .arr]
+  | "dbg_inline_block" => some [opt "src" .obj, req "body" .arr]
   | "call" | "call_always_tail" | "call_never_tail" | "call_never_inline" =>
     some [req "callee" .obj, args]
   | "dbg_var_ptr" | "dbg_var_val" | "dbg_arg_inline" => some [args, req "name" .str]
@@ -202,7 +206,9 @@ def instPayload (tag : String) : Option (List Key) :=
   | "cond_br" => some [args, req "then" .arr, req "else" .arr]
   | "try" | "try_cold" | "try_ptr" | "try_ptr_cold" => some [args, req "body" .arr]
   | "switch_br" | "loop_switch_br" => some [args, req "cases" .arr, req "else" .arr]
-  | "dbg_stmt" => some [req "line" .nat]
+  | "dbg_stmt" => some [req "line" .nat, opt "column" .nat]
+  -- 0.15.2+: the global's entry in `globals` (an older exporter marks the tag unsupported).
+  | "runtime_nav_ptr" => some [req "global" .nat]
   | "assembly" => some [req "source" .str, req "volatile" .bool, req "clobbers" .arr,
       req "outputs" .arr, req "inputs" .arr]
   | "shuffle" | "shuffle_one" | "shuffle_two" => some [args, req "mask" .arr]
@@ -290,6 +296,7 @@ partial def checkInst (path : String) (j : Json) : Except String Unit := do
     | throw s!"{path}: tag '{tag}' has no schema entry and is not marked unsupported"
   checkKeys path (base ++ ty :: payload) j
   for (a, i) in (← items path j "args").zipIdx do checkRef s!"{path} args[{i}]" a
+  if let some src := child? j "src" then checkKeys s!"{path} src" srcKeys src
   if let some c := child? j "callee" then checkRef s!"{path} callee" c
   for k in ["body", "then", "else"] do
     for i in (← items path j k) do checkInst s!"{path} {k}:" i
@@ -324,6 +331,7 @@ def checkType (path : String) (j : Json) : Except String Unit := do
 /-- Validate a whole schema-12 AIR document against the table. -/
 def validate (j : Json) : Except String Unit := do
   checkKeys "AIR file" topKeys j
+  if let some src := child? j "src" then checkKeys "AIR file src" srcKeys src
   let types ← items "AIR file" j "types"
   for (t, i) in types.zipIdx do checkType s!"types[{i}]" t
   for p in (← items "AIR file" j "params") do

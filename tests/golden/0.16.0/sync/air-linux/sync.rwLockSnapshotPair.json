@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "sync.rwLockSnapshotPair",
+ "module": "root",
  "params": [
   0
  ],
@@ -233,8 +234,10 @@
    "callee": {
     "ty": 20,
     "func": "Thread.spawn__anon_483",
+    "module": "std",
     "noreturn": false,
-    "comptime_fn": "sync.writer"
+    "comptime_fn": "sync.writer",
+    "comptime_fn_module": "root"
    },
    "args": [
     {
@@ -381,6 +384,7 @@
    "callee": {
     "ty": 29,
     "func": "Io.RwLock.lockSharedUncancelable",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -495,6 +499,7 @@
    "callee": {
     "ty": 29,
     "func": "Io.RwLock.unlockShared",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -535,6 +540,7 @@
    "callee": {
     "ty": 30,
     "func": "Thread.join",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -613,6 +619,7 @@
   {
    "k": "struct",
    "name": "Io",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -686,6 +693,7 @@
   {
    "k": "struct",
    "name": "Io.RwLock",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -717,6 +725,7 @@
   {
    "k": "struct",
    "name": "Io.Mutex",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -731,6 +740,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(Io.Mutex.State)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -745,6 +755,7 @@
   {
    "k": "enum",
    "name": "Io.Mutex.State",
+   "module": "std",
    "tag": 16,
    "exhaustive": true,
    "fields": [
@@ -767,6 +778,7 @@
   {
    "k": "struct",
    "name": "Io.Semaphore",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -791,6 +803,7 @@
   {
    "k": "struct",
    "name": "Io.Condition",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -810,6 +823,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(Io.Condition.State)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -824,6 +838,7 @@
   {
    "k": "struct",
    "name": "Io.Condition.State",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -841,6 +856,7 @@
   {
    "k": "struct",
    "name": "atomic.Value(u32)",
+   "module": "std",
    "layout": "extern",
    "fields": [
     {
@@ -898,6 +914,7 @@
   {
    "k": "struct",
    "name": "Thread.SpawnConfig",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -923,6 +940,7 @@
   {
    "k": "struct",
    "name": "Thread",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1019,6 +1037,7 @@
   {
    "k": "struct",
    "name": "sync.Shared",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -1050,6 +1069,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1069,6 +1089,7 @@
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1097,6 +1118,7 @@
   {
    "k": "struct",
    "name": "Io.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },
@@ -1133,12 +1155,14 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   },
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
+   "module": "std",
    "layout": "auto",
    "no_fields": true
   }

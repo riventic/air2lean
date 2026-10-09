@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "lists.dupeZLen",
+ "module": "root",
  "params": [
   0,
   1
@@ -110,6 +111,7 @@
    "callee": {
     "ty": 7,
     "func": "mem.Allocator.dupeZ__anon_11266",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -360,6 +362,7 @@
              "callee": {
               "ty": 17,
               "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+              "module": "std",
               "noreturn": true
              },
              "args": [
@@ -572,6 +575,7 @@
    "callee": {
     "ty": 20,
     "func": "mem.Allocator.free__anon_11139",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -614,6 +618,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -847,6 +852,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {

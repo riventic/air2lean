@@ -23,6 +23,7 @@
     "export_stage": "analyzed-air"
   },
   "name": "client",
+  "module": "root",
   "params": [
     0
   ],
@@ -57,6 +58,7 @@
       "callee": {
         "ty": 2,
         "func": "project.identity",
+        "module": "root",
         "noreturn": false
       },
       "args": [

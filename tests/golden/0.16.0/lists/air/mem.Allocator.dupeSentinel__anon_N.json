@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.Allocator.dupeSentinel__anon_11280",
+ "module": "std",
  "params": [
   0,
   1
@@ -184,6 +185,7 @@
    "callee": {
     "ty": 11,
     "func": "mem.Allocator.alloc__anon_8758",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -421,6 +423,7 @@
        "callee": {
         "ty": 19,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -523,6 +526,7 @@
        "callee": {
         "ty": 20,
         "func": "debug.FullPanic((function 'defaultPanic')).copyLenMismatch",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -657,6 +661,7 @@
        "callee": {
         "ty": 20,
         "func": "debug.FullPanic((function 'defaultPanic')).memcpyAlias",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -784,6 +789,7 @@
        "callee": {
         "ty": 19,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -984,6 +990,7 @@
        "callee": {
         "ty": 19,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -1080,6 +1087,7 @@
        "callee": {
         "ty": 25,
         "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_9229",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -1132,6 +1140,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1431,6 +1440,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {

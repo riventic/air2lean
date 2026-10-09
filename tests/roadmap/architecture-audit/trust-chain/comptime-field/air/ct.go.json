@@ -86,6 +86,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "ct.go",
+ "module": "root",
  "params": [
   0
  ],
@@ -121,6 +122,7 @@
    "callee": {
     "ty": 4,
     "func": "ct.mk",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -235,6 +237,7 @@
    "callee": {
     "ty": 6,
     "func": "ct.sum",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -290,6 +293,7 @@
   {
    "k": "struct",
    "name": "ct.S",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

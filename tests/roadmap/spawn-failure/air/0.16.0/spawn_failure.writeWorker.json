@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "spawn_failure.writeWorker",
+ "module": "root",
  "params": [
   0,
   1

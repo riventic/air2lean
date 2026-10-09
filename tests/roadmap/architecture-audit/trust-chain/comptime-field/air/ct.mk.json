@@ -86,6 +86,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "ct.mk",
+ "module": "root",
  "params": [
   0
  ],
@@ -159,6 +160,7 @@
   {
    "k": "struct",
    "name": "ct.S",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

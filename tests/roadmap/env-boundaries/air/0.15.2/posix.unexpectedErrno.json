@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "posix.unexpectedErrno",
+ "module": "std",
  "params": [
   0
  ],
@@ -68,6 +69,7 @@
   {
    "k": "enum",
    "name": "os.linux.E__enum_1366",
+   "module": "std",
    "tag": 4,
    "exhaustive": false,
    "fields": [
