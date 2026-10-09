@@ -2401,10 +2401,16 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       checkFutex 0 1
       require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
 
-/-- A relaxed (`.unordered`/`.monotonic`) atomic order: no happens-before edge. -/
-private def weakOrder : AtomicOrder → Bool
-  | .unordered | .monotonic => true
-  | _ => false
+/-- The read of an atomic op with this order stays unordered with later accesses (no acquire). -/
+private def readUnordered : AtomicOrder → Bool
+  | .acquire | .acqRel | .seqCst => false
+  | _ => true
+
+/-- The write of an atomic op with this order stays unordered with earlier accesses (no
+release). -/
+private def writeUnordered : AtomicOrder → Bool
+  | .release | .acqRel | .seqCst => false
+  | _ => true
 
 /-- The address of a pointer operand, as a key: a field or element pointer (`fieldPtr`,
 `elemPtr`) of an address is that address and the field or index, so two computations of the
@@ -2418,17 +2424,19 @@ partial def ptrKey (defs : Std.HashMap InstId Op) (v : Val) (fuel : Nat := 64) :
     | _ => reprStr v
   | _, _ => reprStr v
 
-/-- An order that orders a relaxed load before a later write in program order (C11: an
-acquire-release or sequentially consistent op; an acquire or a release alone does not). -/
+/-- An RMW order that orders every earlier read before every later write in program order (C11:
+an acquire-release or sequentially consistent RMW, both an acquire and a release). A load (only an
+acquire, even `seq_cst`) or a store (only a release) does not. -/
 private def fullOrder : AtomicOrder → Bool
   | .acqRel | .seqCst => true
   | _ => false
 
 /-- The load-buffering shape (audit #4, premise ORD-02) on a straight-line path: a relaxed atomic
-read (a load, an RMW, a `cmpxchg`), then a relaxed atomic store, RMW or `cmpxchg` to another
-address (`ptrKey`), with no acquire-release or sequentially consistent op, call or branch between.
-A `block` that its own `br` leaves at its end (an inlined call) is straight-line code. RC11
-allows the read to see a write that comes after the write in another thread; the model has no
+read (a load, an RMW, a `cmpxchg` without acquire), then an atomic store, RMW or `cmpxchg`
+without release to another address (`ptrKey`), with no acquire-release or sequentially consistent
+RMW (`fullOrder`), call or branch between.
+A `block` that its own `br` leaves at its end (an inlined call) is straight-line code. C11
+(unlike RC11) and Arm allow the read to see a write that comes after the write in another thread; the model has no
 promises, so it never produces that outcome. `loads` are the addresses of the relaxed reads since
 the last reset; the result is the write instruction of a shape, or the reads at the end of
 `insts` (`target`: the enclosing block). -/
@@ -2438,14 +2446,16 @@ partial def loadBufferingScan (key : Val → String) (insts : Array Inst) (loads
   for i in insts do
     match i.op with
     | .block b => loads ← loadBufferingScan key b loads (some i.id)
-    | .atomicLoad p o =>
-      if weakOrder o then loads := loads.push (key p)
-      else if fullOrder o then loads := #[]
-    | .atomicStore p _ o | .atomicRmw _ o p _ | .cmpxchg _ p _ _ o _ =>
-      if weakOrder o then
-        if loads.any (· != key p) then throw i.id
-        if !(i.op matches .atomicStore ..) then loads := loads.push (key p)
-      else if fullOrder o then loads := #[]
+    | .atomicLoad p o => if readUnordered o then loads := loads.push (key p)
+    | .atomicStore p _ o => if writeUnordered o && loads.any (· != key p) then throw i.id
+    | .atomicRmw _ o p _ =>
+      if writeUnordered o && loads.any (· != key p) then throw i.id
+      if fullOrder o then loads := #[]
+      else if readUnordered o then loads := loads.push (key p)
+    | .cmpxchg _ p _ _ s f =>
+      if writeUnordered s && loads.any (· != key p) then throw i.id
+      -- the failure path is a read with order `f` alone: it orders no earlier read
+      if readUnordered s || readUnordered f then loads := loads.push (key p)
     | .br t _ => if some t != target then loads := #[]
     | .loop b =>
       let _ ← loadBufferingScan key b #[] none; loads := #[]

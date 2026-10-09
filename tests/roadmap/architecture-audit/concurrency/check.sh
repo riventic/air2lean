@@ -42,9 +42,9 @@ fi
 
 # Expected model observations (fuel 20 / 14); `fixed` lines flip an audit finding:
 grep -q 'lbRelaxed: .*exhaustive=true' "$work/model.txt"
-! grep -q 'lbRelaxed: .*ok(3)' "$work/model.txt"           # no load buffering (ORD-02, assumed)
+if grep -q 'lbRelaxed: .*ok(3)' "$work/model.txt"; then exit 1; fi  # no load buffering (ORD-02, assumed)
 grep -q 'mpAllRelaxed: .*ok(100)' "$work/model.txt"         # stale MP allowed (sound)
-! grep -q 'futexEarly: .*ok(1)' "$work/model.txt"           # no spurious wakeup (S2)
+if grep -q 'futexEarly: .*ok(1)' "$work/model.txt"; then exit 1; fi  # no spurious wakeup (S2)
 grep -q 'groupGate: .*deadlock' "$work/model.txt"           # S1 fixed: async may run eagerly
 grep -q 'stackLifetime: .*illegal' "$work/model.txt"        # S3 fixed: frame end is a write
 echo "audit observations reproduced"

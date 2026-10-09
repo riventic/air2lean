@@ -367,11 +367,12 @@ def main (args : List String) : IO Unit := do
     match checkLoadBuffering #[← accept (lbFile lo st same)] with
     | .ok _ => pure ()
     | .error e => throw (IO.userError s!"rejected a non-LB shape ({lo}, {st}, {same}): {e}")
-  -- the same field through two field pointers is one address; an RMW reads; an acquire load of
-  -- another location between does not order the read before the write
+  -- the same field through two field pointers is one address; an RMW reads; an acquire or
+  -- `seq_cst` load of another location between does not order the read before the write (a
+  -- load is only an acquire)
   for (first, mid, same, bad) in [("atomic_load", (none : Option String), true, false),
       ("atomic_load", none, false, true), ("atomic_rmw", none, false, true),
-      ("atomic_load", some "acquire", false, true), ("atomic_load", some "seq_cst", false, false)] do
+      ("atomic_load", some "acquire", false, true), ("atomic_load", some "seq_cst", false, true)] do
     let r := checkLoadBuffering #[← accept (lbFieldFile first mid same)]
     require (r.toOption.isNone == bad) s!"load buffering ({first}, {mid}, same field {same}): {reprStr (r.toOption.isNone)}"
   IO.println "parser regressions passed"
