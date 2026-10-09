@@ -251,10 +251,11 @@ MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH, St
 # only if every differing float leaf satisfies one of the kinds listed for the function:
 #   nan_payload    both NaN of one format (sign and payload bits differ)
 #   zero_sign      both zero of one format, opposite signs
-#   f80_precision  both finite f80, at most one f80 ulp apart (x87 vs soft-float rounding)
 #   libm_ulp       both finite of one format, at most LIBM_ULPS ulps apart
 # Anything else, including a model panic, error or exclusion against a native value, is a mismatch.
-HOST_KINDS = ('nan_payload', 'zero_sign', 'f80_precision', 'libm_ulp')
+# An f80 rounding difference is no host kind: an aarch64-macos translation models the soft-float
+# routines bit for bit (docs/floats.md §Targets).
+HOST_KINDS = ('nan_payload', 'zero_sign', 'libm_ulp')
 LIBM_ULPS = 1
 # Hex digits of a "0x<bits>" float leaf -> (exponent bits, mantissa bits, explicit integer bit).
 FLOAT_FORMATS = {4: (5, 10, False), 8: (8, 23, False), 16: (11, 52, False), 20: (15, 64, True), 32: (15, 112, False)}
@@ -299,8 +300,7 @@ def leaf_host_kinds(native, model):
         return frozenset({'zero_sign'})
     if {n[1], m[1]} <= {'finite', 'zero'}:
         ulps = abs(n[2] - m[2])
-        return frozenset(({'f80_precision'} if n[0] == 20 and ulps <= 1 else set()) |
-                         ({'libm_ulp'} if ulps <= LIBM_ULPS else set()))
+        return frozenset({'libm_ulp'} if ulps <= LIBM_ULPS else set())
     return frozenset()
 
 def differing_leaves(native, model):

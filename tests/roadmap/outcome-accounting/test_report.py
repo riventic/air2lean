@@ -405,7 +405,7 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(kinds('0x3f800000','0x3f800002'),frozenset())
         self.assertEqual(kinds('0x7f800000','0x7f7fffff'),frozenset())
         self.assertEqual(kinds('0x7f800000','0x7fc00000'),frozenset())
-        self.assertEqual(kinds('0x3fff8000000000000000','0x3fff8000000000000001'),{'f80_precision','libm_ulp'})
+        self.assertEqual(kinds('0x3fff8000000000000000','0x3fff8000000000000001'),{'libm_ulp'})
         self.assertEqual(kinds('0x3fff7fffffffffffffff','0x3ffeffffffffffffffff'),frozenset())
         self.assertEqual(kinds('0x7fffc000000000000000','0xffffc000000000000001'),{'nan_payload'})
         self.assertEqual(kinds('0x3f800000','0x000000003f800000'),frozenset())
@@ -435,6 +435,20 @@ class Outcomes(unittest.TestCase):
         (self.root/'tests/diff/basic/unspecified.txt').write_text(f'foo {INPUT_SHA} 0-3 racy\n')
         self.assertEqual(self.compare()[0],0)
         self.seed({'ok':7},{'ok':7})
+        self.assertEqual(self.compare()[0],0)
+
+    def test_host_pin_file_replaces_the_shared_one(self):
+        # docs/floats.md §Targets: on aarch64-macos the diff test runs that host's translation,
+        # so `unspecified.<host>.txt` replaces `unspecified.txt` there, and only there.
+        self.seed({'ok':7},{'fail':'Zig.Error.illegal'},K.VALUE,K.ILLEGAL)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text('')
+        (self.root/'tests/diff/basic/unspecified.Darwin-arm64.txt').write_text(PIN)
+        darwin=lambda: REPORT.compare(self.root,['basic'],'0.16.0','Darwin-arm64',self.summary)
+        self.assertEqual(darwin(),0)
+        self.assertEqual(self.compare()[0],1)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
+        (self.root/'tests/diff/basic/unspecified.Darwin-arm64.txt').write_text('')
+        self.assertEqual(darwin(),1)
         self.assertEqual(self.compare()[0],0)
 
     def test_native_fault_signal_matches_model_trap(self):

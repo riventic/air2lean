@@ -33,7 +33,7 @@
 # The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
 # other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
 # lists the functions whose results depend on the target, each with the kinds of difference it
-# may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, f80_precision, libm_ulp). Only on a
+# may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, libm_ulp). Only on a
 # host that is not x86_64-linux, and only when both sides returned a value, a disagreement of such
 # a function counts as "host" here; scripts/diff-report.py then checks each differing float
 # against the listed kinds and fails the run on any other difference (F3). A panic, error or
