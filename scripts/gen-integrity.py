@@ -89,6 +89,8 @@ FIXTURES = [
      ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
      ["--namespace", "Provenance", "--prefix", "provenance."], "exact"),
+    ("Proofs/ProvenanceGap/Gen.lean", "assurance/provenance-gap/air",
+     ["--namespace", "ProvenanceGap", "--prefix", "gap."], "exact"),
     ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
