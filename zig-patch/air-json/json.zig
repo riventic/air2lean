@@ -552,6 +552,85 @@ fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []
     };
 }
 
+/// The symbols a function defines (0.16.0 and later). Both `export fn` and `@export` add an
+/// entry to the compilation's export tables (`Zcu.single_exports`, `Zcu.multi_exports`). An
+/// `@export` is registered when the `comptime` block that makes it is analysed, which is
+/// normally, but not provably, before the exported function's body is analysed and dumped. So
+/// every dump records how many symbols it reported, and `checkExports` (called once analysis
+/// is complete) fails the compilation if a dumped function has gained an export since: its
+/// file would miss a definition, and a call could bind to another one (docs/air-json.md
+/// §Extern calls).
+const Exports = struct {
+    const Key = struct { zcu: usize, nav: u32 };
+
+    var lock: std.atomic.Mutex = .unlocked;
+    var dumped: std.AutoHashMapUnmanaged(Key, usize) = .empty;
+
+    fn acquire() void {
+        while (!lock.tryLock()) std.atomic.spinLoopHint();
+    }
+
+    /// Every export of `nav`, one per symbol name, sorted by name.
+    fn ofNav(zcu: *Zcu, gpa: Allocator, nav: InternPool.Nav.Index) Allocator.Error![]Zcu.Export.Options {
+        const ip = &zcu.intern_pool;
+        var list: std.ArrayListUnmanaged(Zcu.Export.Options) = .empty;
+        for (zcu.single_exports.values()) |index| try add(&list, gpa, ip, nav, index.ptr(zcu));
+        for (zcu.multi_exports.values()) |info| {
+            for (zcu.all_exports.items[info.index..][0..info.len]) |*e| try add(&list, gpa, ip, nav, e);
+        }
+        return list.items;
+    }
+
+    /// Insert `e`'s options into the sorted `list` if it exports `nav` under a new name.
+    fn add(list: *std.ArrayListUnmanaged(Zcu.Export.Options), gpa: Allocator, ip: *const InternPool, nav: InternPool.Nav.Index, e: *const Zcu.Export) Allocator.Error!void {
+        if (e.exported != .nav or e.exported.nav != nav) return;
+        const name = e.opts.name.toSlice(ip);
+        var at: usize = 0;
+        while (at < list.items.len) : (at += 1) {
+            switch (std.mem.order(u8, list.items[at].name.toSlice(ip), name)) {
+                .lt => {},
+                .eq => return,
+                .gt => break,
+            }
+        }
+        try list.insert(gpa, at, e.opts);
+    }
+
+    fn recordDumped(zcu: *Zcu, nav: InternPool.Nav.Index, count: usize) void {
+        acquire();
+        defer lock.unlock();
+        dumped.put(std.heap.page_allocator, .{ .zcu = @intFromPtr(zcu), .nav = @intFromEnum(nav) }, count) catch {
+            std.log.err("air2lean: out of memory while recording an exported function", .{});
+            std.process.exit(1);
+        };
+    }
+};
+
+/// Called once a compilation's analysis is complete (after `processExports`): every function
+/// dumped by this compilation must have been dumped with all of its exports.
+pub fn checkExports(pt: Zcu.PerThread) void {
+    if (Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") == null) return;
+    const zcu = pt.zcu;
+    const ip = &zcu.intern_pool;
+    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
+    defer arena.deinit();
+    Exports.acquire();
+    defer Exports.lock.unlock();
+    var it = Exports.dumped.iterator();
+    while (it.next()) |entry| {
+        if (entry.key_ptr.zcu != @intFromPtr(zcu)) continue;
+        const nav: InternPool.Nav.Index = @enumFromInt(entry.key_ptr.nav);
+        const now = Exports.ofNav(zcu, arena.allocator(), nav) catch {
+            std.log.err("air2lean: out of memory while checking exported functions", .{});
+            std.process.exit(1);
+        };
+        if (now.len == entry.value_ptr.*) continue;
+        std.log.err("air2lean: '{s}' was exported with {d} symbol(s), but the compilation exports it as {d} " ++
+            "(an @export analysed after the function; docs/air-json.md §Extern calls)", .{ ip.getNav(nav).fqn.toSlice(ip), entry.value_ptr.*, now.len });
+        std.process.exit(1);
+    }
+}
+
 pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Index) void {
     const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
     const zcu = pt.zcu;
@@ -711,9 +790,30 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
-        // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
-        // program can resolve to (docs/air-json.md §Extern calls).
-        if (w.exportedName(owner_nav)) |symbol| {
+        // The linker symbols the function defines (`export fn`, and from 0.16.0 `@export`), which
+        // an extern call elsewhere in the program can resolve to (docs/air-json.md §Extern calls).
+        if (Compat.v16) {
+            const symbols = try Exports.ofNav(zcu, w.gpa, owner_nav);
+            Exports.recordDumped(zcu, owner_nav, symbols.len);
+            if (symbols.len > 0) {
+                try w.field("export");
+                try w.j.beginObject();
+                try w.writeExportSymbol(symbols[0]);
+                try w.field("cc");
+                try w.j.write(@tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc));
+                if (symbols.len > 1) {
+                    try w.field("aliases");
+                    try w.j.beginArray();
+                    for (symbols[1..]) |s| {
+                        try w.j.beginObject();
+                        try w.writeExportSymbol(s);
+                        try w.j.endObject();
+                    }
+                    try w.j.endArray();
+                }
+                try w.j.endObject();
+            }
+        } else if (w.exportedName(owner_nav)) |symbol| {
             try w.field("export");
             try w.j.beginObject();
             try w.field("name");
@@ -749,9 +849,20 @@ const W = struct {
         try w.j.endObject();
     }
 
-    /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
-    /// symbol `f`), else null. `@export` aliases are not reported: an extern call to one stays
-    /// unbound, which the translator rejects.
+    /// One exported symbol's `name`, `linkage` and `visibility` fields.
+    fn writeExportSymbol(w: *W, s: Zcu.Export.Options) Error!void {
+        const ip = &w.pt.zcu.intern_pool;
+        try w.field("name");
+        try w.j.write(s.name.toSlice(ip));
+        try w.field("linkage");
+        try w.j.write(@tagName(s.linkage));
+        try w.field("visibility");
+        try w.j.write(@tagName(s.visibility));
+    }
+
+    /// 0.14.1 and 0.15.2: the symbol of a function declared with the `export` keyword (`export
+    /// fn f` defines the symbol `f`), else null. Their `@export` aliases are not reported: an
+    /// extern call to one stays unbound, which the translator rejects.
     fn exportedName(w: *W, nav_index: InternPool.Nav.Index) ?[]const u8 {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;

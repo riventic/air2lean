@@ -3302,16 +3302,243 @@ def externUnbound (caller : String) (e : ExternDecl) (why : String) : String :=
   s!"{caller}: CALLEE_EXTERN_UNBOUND: extern function '{e.name}'\
     {(e.library.map (s!" (library '{·}')")).getD ""} {why} (docs/air-json.md §Extern calls)"
 
+/-- The first difference between an extern declaration (types of the calling function `f`)
+and the definition `target`, if any (exact agreement; `abiThunk` admits conversions). -/
+def externSignatureMismatch (f target : Func) (e : ExternDecl) : Option String := Id.run do
+  unless e.params.size == target.params.size do
+    return some s!"{e.params.size} parameters declared, {target.params.size} defined"
+  for (p, k) in e.params.zipIdx do
+    unless compatibleType f target p target.params[k]! do
+      return some s!"parameter {k} has another type"
+  unless compatibleType f target e.ret target.ret do
+    return some "the result has another type"
+  return none
+
+/-! ### C ABI conversion at an extern binding
+
+A program's extern declaration and the definition the linker resolves it to are two C
+declarations of one symbol, which may name different Zig types: translate-c declares
+`memset(?*anyopaque, c_int, usize) ?*anyopaque` from the musl header, Zig's compiler_rt defines
+`memset(?[*]u8, u8, usize) ?[*]u8`. The call passes machine words, so the binding converts each
+argument from the declared to the defined type, and the result back (`abiThunk`): a generated
+function `abi:<symbol>:<caller>` with the declared signature that converts, calls the definition
+and converts the result. Only conversions that keep the value are admitted:
+
+* a pointer (`*T`, `[*]T`, `[*c]T`) or optional pointer (`?*T`, `?[*]T`) to another such type:
+  the same address; `null` reaching a pointer that cannot be `null` is `unreachable` (the
+  definition may assume it is not null, so the call has no defined behaviour). A pointer whose
+  defined alignment exceeds the declared one, a slice, a volatile or bit-pointer, and a
+  function pointer are rejected;
+* an integer to an integer: the same value; a value outside the receiving type's range is
+  `unreachable` (the C calling convention extends a narrow argument by its declared
+  signedness, which the definition may rely on);
+* every other parameter or result type must be the definition's exactly. -/
+
+/-- The prefix of generated C ABI conversion functions (`abiThunk`); no input function may
+have it. -/
+def abiThunkPrefix : String := "abi:"
+
+private inductive AbiClass where
+  /-- `*T`, `[*]T` or `[*c]T` (a `Zig.Ptr`); `nullable` for a C or `allowzero` pointer. -/
+  | ptr (nullable : Bool) (align : Nat)
+  /-- `?*T` or `?[*]T` (an `Option Zig.Ptr`). -/
+  | optPtr (align : Nat)
+  | int (signed : Bool) (bits : Nat)
+
+private def abiPtrChildOk (types : Array Ty) (c : TyId) : Bool :=
+  match types[c]? with
+  | some (.other n) => !(n.startsWith "fn ") && !(n.startsWith "fn(")
+  | some _ => true
+  | none => false
+
+/-- A pointer type's size and alignment, if the ABI conversion admits it. -/
+private def abiPlainPtr (types : Array Ty) (layouts : Array Layout) (id : TyId) :
+    Option (String × Nat) := do
+  let .ptr size _ c := (← types[id]?) | none
+  let l ← layouts[id]?
+  unless size != "slice" && !l.isVolatile && l.hostSize == 0 && abiPtrChildOk types c do none
+  pure (size, l.ptrAlign.getD 1)
+
+private def abiClass (types : Array Ty) (layouts : Array Layout) (t : TyId) : Option AbiClass :=
+  match types[t]? with
+  | some (.ptr ..) => do
+    let (size, align) ← abiPlainPtr types layouts t
+    pure (.ptr (size == "c" || (layouts[t]?.map (·.allowzero)).getD false) align)
+  | some (.optional c) => do
+    let (size, align) ← abiPlainPtr types layouts c
+    if size == "c" || (layouts[c]?.map (·.allowzero)).getD false then none
+    pure (.optPtr align)
+  | some (.int signed bits) => pure (.int signed bits)
+  | _ => none
+
+private def abiIntRange (signed : Bool) (bits : Nat) : Int × Int :=
+  if signed then (-(2 ^ (bits - 1) : Int), 2 ^ (bits - 1) - 1) else (0, 2 ^ bits - 1)
+
+private def mapChildTys (f : TyId → TyId) : Ty → Ty
+  | .ptr s c x => .ptr s c (f x)
+  | .array n x s => .array n (f x) s
+  | .vector n x => .vector n (f x)
+  | .optional x => .optional (f x)
+  | .future x => .future (f x)
+  | .errorUnion a b => .errorUnion (f a) (f b)
+  | .struct n l fs => .struct n l (fs.map fun (k, x) => (k, f x))
+  | .enum n t e fs => .enum n (f t) e fs
+  | .union n l t fs => .union n l (t.map f) (fs.map fun (k, x) => (k, f x))
+  | .tuple fs => .tuple (fs.map f)
+  | t => t
+
+private structure ThunkState where
+  types : Array Ty
+  layouts : Array Layout
+  imported : Std.HashMap TyId TyId := {}
+  added : Std.HashMap String TyId := {}
+  next : Nat := 0
+
+private abbrev ThunkM := StateT ThunkState (Except String)
+
+/-- Copy `src`'s type `t` (and every type it names) into the thunk's table. -/
+private partial def importTy (src : Func) (t : TyId) : ThunkM TyId := do
+  if let some id := (← get).imported[t]? then return id
+  let some ty := src.types[t]? | throw s!"type {t} of '{src.name}' does not exist"
+  let id := (← get).types.size
+  modify fun s => { s with types := s.types.push .void, layouts := s.layouts.push {},
+                           imported := s.imported.insert t id }
+  let mut map : Std.HashMap TyId TyId := {}
+  for k in childTys ty do map := map.insert k (← importTy src k)
+  let ty' := mapChildTys (fun c => map.getD c c) ty
+  modify fun s => { s with types := s.types.set! id ty', layouts := s.layouts.set! id (src.layouts[t]?.getD {}) }
+  return id
+
+/-- A type the thunk's own instructions need (`bool`, `usize`, `noreturn`). -/
+private def thunkTy (key : String) (ty : Ty) (layout : Layout) : ThunkM TyId := do
+  if let some id := (← get).added[key]? then return id
+  let id := (← get).types.size
+  modify fun s => { s with types := s.types.push ty, layouts := s.layouts.push layout,
+                           added := s.added.insert key id }
+  return id
+
+private def freshInst (ty : TyId) (op : Op) : ThunkM Inst := do
+  let id := (← get).next
+  modify fun s => { s with next := s.next + 1 }
+  return { id, ty, op }
+
+/-- Convert `v` from the type `src` (class `a`) to `dst` (class `b`, both thunk-table IDs),
+then continue with `k`. A check wraps the continuation in a `cond_br` whose other branch is
+`unreach`. -/
+private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiClass)
+    (k : Val → ThunkM (Array Inst)) : ThunkM (Array Inst) := do
+  let noret ← thunkTy "noreturn" .noreturn {}
+  let boolTy ← thunkTy "bool" .bool { size := some 1, align := some 1 }
+  let guarded (pre : Array Inst) (c : Val) (rest : Array Inst) : ThunkM (Array Inst) := do
+    let br ← freshInst noret (.condBr c rest #[← freshInst noret .unreach])
+    return pre.push br
+  let cast (x : Val) (ty : TyId) (op : Val → Op) (more : Val → ThunkM (Array Inst)) :
+      ThunkM (Array Inst) := do
+    let i ← freshInst ty (op x)
+    return #[i] ++ (← more (.inst i.id))
+  match a, b with
+  | .int sa wa, .int sb wb =>
+    let (lo, hi) := abiIntRange sb wb
+    let (slo, shi) := abiIntRange sa wa
+    let op : Val → Op := if wa == wb then .bitcast else .intCast
+    if lo ≤ slo && shi ≤ hi then cast v dst op k
+    else
+      let ge ← freshInst boolTy (.cmp .ge v (.int src (max lo slo)))
+      let le ← freshInst boolTy (.cmp .le v (.int src (min hi shi)))
+      let both ← freshInst boolTy (.boolAnd (.inst ge.id) (.inst le.id))
+      guarded #[ge, le, both] (.inst both.id) (← cast v dst op k)
+  | .optPtr _, .optPtr _ | .optPtr _, .ptr true _ | .ptr true _, .ptr true _
+  | .ptr true _, .optPtr _ | .ptr false _, .ptr _ _ => cast v dst .bitcast k
+  | .ptr false _, .optPtr _ =>
+    let some (.optional child) := types[dst]? | throw "optional pointer without a payload type"
+    cast v child .bitcast fun p => cast p dst .wrapOptional k
+  | .optPtr _, .ptr false _ =>
+    let some (.optional child) := types[src]? | throw "optional pointer without a payload type"
+    let c ← freshInst boolTy (.isNonNull v)
+    guarded #[c] (.inst c.id) (← cast v child .optPayload fun p => cast p dst .bitcast k)
+  | .ptr true _, .ptr false _ =>
+    let usize ← thunkTy "usize" (.int false 64) { size := some 8, align := some 8 }
+    let addr ← freshInst usize (.bitcast v)
+    let c ← freshInst boolTy (.cmp .ne (.inst addr.id) (.int usize 0))
+    guarded #[addr, c] (.inst c.id) (← cast v dst .bitcast k)
+  | _, _ => throw "no C ABI conversion"
+
+/-- Why the type `d` of `f` cannot be converted to the type `u` of `target` (`toDef`: from the
+declaration to the definition, else back) at the C ABI boundary, if it cannot. -/
+private def abiMismatch (f target : Func) (d u : TyId) (what : String) (toDef : Bool) :
+    Option String := Id.run do
+  if compatibleType f target d u then return none
+  let (srcF, srcT, dstF, dstT) := if toDef then (f, d, target, u) else (target, u, f, d)
+  match abiClass srcF.types srcF.layouts srcT, abiClass dstF.types dstF.layouts dstT with
+  | some (.int ..), some (.int ..) => return none
+  | some (.ptr _ a), some (.ptr _ b) | some (.ptr _ a), some (.optPtr b)
+  | some (.optPtr a), some (.ptr _ b) | some (.optPtr a), some (.optPtr b) =>
+    if b > a then return some s!"{what} needs alignment {b}, more than the declared {a}"
+    return none
+  | _, _ => return some s!"{what} has another type, with no value-preserving C ABI conversion"
+
+/-- The function that binds `f`'s extern declaration `e` to `target`: `none` if every type
+agrees (the call binds to `target` directly), else a C ABI conversion thunk, or why there is
+none. Pointer conversions assume 64-bit addresses (x86_64, aarch64). -/
+def abiThunk (f target : Func) (e : ExternDecl) : Except String (Option Func) := do
+  let some _ := externSignatureMismatch f target e | return none
+  unless f.targetArch == "x86_64" || f.targetArch == "aarch64" do
+    throw ((externSignatureMismatch f target e).getD "")
+  unless e.params.size == target.params.size do
+    throw s!"{e.params.size} parameters declared, {target.params.size} defined"
+  for (p, k) in e.params.zipIdx do
+    if let some why := abiMismatch f target p target.params[k]! s!"parameter {k}" true then throw why
+  if let some why := abiMismatch f target e.ret target.ret "the result" false then throw why
+  let build : ThunkM (Array Inst) := do
+    let args ← e.params.zipIdx.mapM fun (p, k) => freshInst p (.arg k)
+    let defParams ← target.params.mapM (importTy target)
+    let defRet ← importTy target target.ret
+    let noret ← thunkTy "noreturn" .noreturn {}
+    let ret (v : Val) : ThunkM (Array Inst) := return #[← freshInst noret (.ret v)]
+    let classes (src dst : TyId) : ThunkM (AbiClass × AbiClass) := do
+      let st ← get
+      let some a := abiClass st.types st.layouts src | throw "no C ABI class"
+      let some b := abiClass st.types st.layouts dst | throw "no C ABI class"
+      return (a, b)
+    let finish (converted : Array Val) : ThunkM (Array Inst) := do
+      let call ← freshInst defRet (.call (.func target.name false) converted)
+      let rest ← if compatibleType target f target.ret e.ret then ret (.inst call.id) else do
+        let (a, b) ← classes defRet e.ret
+        abiConvert (← get).types (.inst call.id) defRet e.ret a b ret
+      return #[call] ++ rest
+    -- Convert the arguments in order; each conversion continues with the next one.
+    let rec go (fuel k : Nat) (acc : Array Val) : ThunkM (Array Inst) := do
+      match fuel with
+      | 0 => finish acc
+      | fuel + 1 =>
+        let some arg := args[k]? | finish acc
+        let v : Val := .inst arg.id
+        if compatibleType f target e.params[k]! target.params[k]! then go fuel (k + 1) (acc.push v)
+        else
+          let (a, b) ← classes e.params[k]! defParams[k]!
+          abiConvert (← get).types v e.params[k]! defParams[k]! a b fun x => go fuel (k + 1) (acc.push x)
+    return args ++ (← go args.size 0 #[])
+  let (body, st) ← build.run { types := f.types, layouts := f.layouts }
+  let thunk : Func := { f with name := s!"{abiThunkPrefix}{e.name}:{f.name}", params := e.params,
+                               ret := e.ret, body, types := st.types, layouts := st.layouts,
+                               globals := #[], externs := #[], exportDecl := none }
+  check thunk |>.mapError fun err => s!"the generated C ABI conversion is rejected: {err}"
+  return some thunk
+
 /-- Bind each extern call (`externCallee`, `docs/air-json.md` §Extern calls) at its linker
 symbol, never at a Zig declaration name:
 (a) to a registry model whose `symbol` is the extern callee and whose `extern.library` is the
     declared library, if the program does not define the symbol; the call stays an extern
     callee, which the model implements;
-(b) else to the one `export fn` of the program that defines the symbol, with the declared
+(b) else to the one function of the program that exports the symbol (`export fn` or
+    `@export`, under any of its names, with any linkage but `internal`), with the declared
     calling convention; the call becomes a direct call of that function, whose signature
-    `checkProgram` then checks like any direct call's.
-A variadic extern is outside the subset. The result is the rewritten functions and one
-rejection per (caller, symbol) that neither binds; callers that need all-or-nothing use
+    `checkProgram` then checks like any direct call's. Two definitions are ambiguous whatever
+    their linkage: a strong definition is never taken to override a weak one.
+    A declaration whose types differ from the definition's binds through a generated C ABI
+    conversion (`abiThunk`) if every difference keeps the value.
+A variadic extern is outside the subset. The result is the rewritten functions (in input order),
+then the C ABI conversions, and one rejection per (caller, symbol) that neither binds; callers that need all-or-nothing use
 `resolveExterns`. -/
 def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #[]) :
     Except String (Array Func × Array (String × String)) := do
@@ -3320,10 +3547,14 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
   for f in funcs do
     if (externSymbol? f.name).isSome then
       throw s!"{f.name}: a function name cannot have the extern callee form 'extern:<symbol>'"
+    if f.name.startsWith abiThunkPrefix then
+      throw s!"{f.name}: a function name cannot start with '{abiThunkPrefix}', the prefix of C ABI conversions"
     if let some e := f.exportDecl then
-      exports := exports.insert e.name ((exports.getD e.name #[]).push f)
+      for s in e.linkable do
+        exports := exports.insert s.name ((exports.getD s.name #[]).push f)
   let mut unbound : Array (String × String) := #[]
   let mut out : Array Func := #[]
+  let mut thunks : Array Func := #[]
   for f in funcs do
     -- Without an `externs` table a function has no extern call (`checkProgram` rejects one).
     if f.externs.isEmpty then
@@ -3358,15 +3589,23 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
           unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
       else if let some target := definitions[0]? then
         let cc := (target.exportDecl.map (·.cc)).getD ""
-        if cc == e.cc then renames := renames.insert callee target.name
-        else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
-          definition '{target.name}' has '{cc}'")
+        if cc != e.cc then
+          unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
+            definition '{target.name}' has '{cc}'")
+        else match abiThunk f target e with
+          | .error why => unbound := reject s!"is declared with another signature than its \
+              definition '{target.name}': {why} (C ABI conversion, docs/air-json.md §Extern calls)"
+          | .ok none => renames := renames.insert callee target.name
+          | .ok (some thunk) =>
+            renames := renames.insert callee thunk.name
+            thunks := thunks.push thunk
       else
-        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
-          registry model '{callee}' (--model-registry, docs/external-models.md)"
+        unbound := reject s!"has no definition in the program (a function of the AIR set that exports \
+          '{symbol}' with `export fn` or `@export`) and no registry model '{callee}' (--model-registry, \
+          docs/external-models.md)"
     out := out.push (if renames.isEmpty then f
       else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
-  return (out, unbound)
+  return (out ++ thunks, unbound)
 
 /-- `resolveExternsCollect`, rejecting the program at the first unbound extern call. -/
 def resolveExterns (funcs : Array Func) (models : Array ModelBinding := #[]) :

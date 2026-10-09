@@ -342,7 +342,10 @@ private def run (args : List String) : IO UInt32 := do
           else
             -- Reads and every validation guard retain their original path order.
             -- Only successful emission depends on identity rather than storage keys.
-            let emissionFuncs := ((emissionKeys.zip funcs).qsort
+            -- The generated C ABI conversions follow the inputs (`resolveExterns`).
+            let keys := emissionKeys ++
+              (funcs.extract emissionKeys.size funcs.size).map (·.name ++ ".json")
+            let emissionFuncs := ((keys.zip funcs).qsort
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             let metadata := Lean.Json.mkObj [("profile", profile.toJson),

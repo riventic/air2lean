@@ -8,3 +8,13 @@
      var air_owned = true;
      defer if (air_owned) air.deinit(gpa);
  
+--- zig-0.16.0-pristine/src/Compilation.zig
++++ zig-0.16.0/src/Compilation.zig
+@@ -3107,6 +3107,7 @@
+             link.updateErrorData(pt);
+ 
+             try pt.processExports();
++            @import("Air/json.zig").checkExports(pt);
+         }
+ 
+         if (build_options.enable_debug_extensions and comp.verbose_intern_pool) {

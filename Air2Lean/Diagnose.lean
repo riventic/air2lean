@@ -313,7 +313,8 @@ def collectProgram (units : Array FileResult) (initial : Log)
     log := log.add { code := .programFailure, phase := .program, category := .validationFailure,
                      message, prerequisites := #["structurally_valid_selected_functions"] }
   | .ok (resolved, unbound) =>
-    -- `resolved` is `normalized` rewritten, in the same order.
+    -- `resolved` is `normalized` rewritten, in the same order, then the generated C ABI
+    -- conversions, each a unit of its own.
     let mut next := 0
     let mut updated := #[]
     for u in units do
@@ -321,6 +322,9 @@ def collectProgram (units : Array FileResult) (initial : Log)
         updated := updated.push { u with normalized := resolved[next]? }
         next := next + 1
       else updated := updated.push u
+    for thunk in resolved.extract next resolved.size do
+      updated := updated.push { file := "", function := some thunk.name, normalized := some thunk,
+                                structureValid := true, localPassed := true }
     units := updated
     for (caller, message) in unbound do
       let file := ((units.find? (·.function == some caller)).map (·.file)).getD ""

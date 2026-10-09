@@ -664,11 +664,33 @@ structure ExternDecl where
   varargs : Bool
   deriving Repr, Inhabited, BEq
 
-/-- The linker symbol an `export fn` defines, and its calling convention. -/
+/-- One linker symbol a function defines: its name, `std.builtin.GlobalLinkage` tag (`strong`,
+`weak`, `internal`, `link_once`) and `std.builtin.SymbolVisibility` tag. Exports without the
+fields (`export fn` before Zig 0.16.0 exports reported `@export`) are strong and default. -/
+structure ExportSymbol where
+  name : String
+  linkage : String := "strong"
+  visibility : String := "default"
+  deriving Repr, Inhabited, BEq
+
+/-- The linker symbols a function defines (`export fn`, `@export`) and its calling convention:
+the primary symbol and any further `aliases` (`docs/air-json.md` §Extern calls). -/
 structure ExportDecl where
   name : String
   cc : String
+  linkage : String := "strong"
+  visibility : String := "default"
+  aliases : Array ExportSymbol := #[]
   deriving Repr, Inhabited, BEq
+
+/-- Every symbol the function defines, the primary one first. -/
+def ExportDecl.symbols (e : ExportDecl) : Array ExportSymbol :=
+  #[{ name := e.name, linkage := e.linkage, visibility := e.visibility }] ++ e.aliases
+
+/-- The symbols another object of the program can link to: an `internal` symbol is local to
+its own object, so it defines nothing an extern call can reach. -/
+def ExportDecl.linkable (e : ExportDecl) : Array ExportSymbol :=
+  e.symbols.filter (·.linkage != "internal")
 
 /-- The callee name of a call to the extern function `symbol`. No function's fully qualified
 name has this form (`Check.resolveExterns` rejects one that does), so an extern call can never
