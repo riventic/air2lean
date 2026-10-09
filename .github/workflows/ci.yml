@@ -1243,8 +1243,9 @@ jobs:
       # and every row is compared with stock Zig executables in four optimization modes:
       # x86_64-linux natively and aarch64-linux under qemu-user. The committed evidence
       # (aarch64-macos and native aarch64-linux come from their own jobs) must be reproduced.
+      # 0.17.0 has no wide bit-operation evidence yet (qualify.py VERSIONS).
       - name: Wide integer bit operations native differential (x86_64-linux, aarch64-linux)
-        if: ${{ !matrix.mutate }}
+        if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           sudo apt-get update
