@@ -61,7 +61,7 @@ theorem Inv.repart {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi :
     ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => ?_, hi.wfpW (fun u h => by rw [← hphu]; exact h),
     fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
     hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_,
-    fun hc1 u hu => hi.owner hc1 u (by rw [← hphu]; exact hu)⟩
+    fun u hu => hi.owner u (by rw [← hphu]; exact hu)⟩
   · unfold upd; split
     · exact hpd
     · exact hi.pdisj u
@@ -456,6 +456,20 @@ def mVals : List (BitVec 32) := [0, 1, 2]
 /-- `n` holds `k`. -/
 def NPts (k : Nat) : Assn := pts nPtr 4 (BitVec.ofNat 32 k)
 
+/-- The mutex word's writes `h` with the places `G` (module doc): the newest is `0` exactly when
+no thread holds the mutex, and a thread that holds it made the most recent successful acquire
+(`Word.holder`: the owner check of `unlock`). -/
+def MLast (G : ThreadId → Gh S) (h : Array Word.Entry) : Prop :=
+  (∃ v ∈ mVals, (last h).Val v ∧ (v = 0 ↔ ∀ u, (G u).2.2.mp ≠ some .holds)) ∧
+    ∀ u, (G u).2.2.mp = some .holds → Word.holder h = some u
+
+/-- The same writes, with the same threads that hold the mutex. -/
+theorem MLast.congr {G G' : ThreadId → Gh S} {h : Array Word.Entry} (hm : MLast G h)
+    (hH : ∀ u, (G' u).2.2.mp = some .holds ↔ (G u).2.2.mp = some .holds) : MLast G' h := by
+  obtain ⟨⟨v, hv, hl, hz⟩, ho⟩ := hm
+  exact ⟨⟨v, hv, hl, hz.trans (forall_congr' fun u => not_congr (hH u).symm)⟩,
+    fun u hu => ho u ((hH u).mp hu)⟩
+
 /-- `main` at `a`, the writer at `b` (module doc). -/
 structure Flags (a b : Ph) : Prop where
   /-- The writer waits at the semaphore only while `main` holds the shared lock, or after. -/
@@ -641,8 +655,9 @@ structure U (G : ThreadId → Gh S) (m : Mem) : Prop where
   slast : (last (WS.hist m)).Val (sv (G 0).2.2 (G 1).2.2)
   /-- Each write of the mutex word is `0`, `1` or `2`. -/
   mhist : ∀ j < (WM.hist m).size, ∃ v ∈ mVals, (WM.hist m)[j]!.Val v
-  /-- The newest write is `0` if no thread holds the mutex. -/
-  mlast : ∃ v ∈ mVals, (last (WM.hist m)).Val v ∧ (v = 0 ↔ ∀ u, (G u).2.2.mp ≠ some .holds)
+  /-- The newest write is `0` if no thread holds the mutex; the holder made the most recent
+  acquire (`MLast`). -/
+  mlast : MLast G (WM.hist m)
   /-- A thread asleep at the mutex. -/
   mq : ∀ w ∈ m.waiters, w.2 = WM.ptr →
     (w.1 = 0 ∧ MQ m (G 0).2.2 (G 1).2.2) ∨ (w.1 = 1 ∧ MQ m (G 1).2.2 (G 0).2.2)
@@ -859,8 +874,7 @@ theorem U_ghost {G G' : ThreadId → Gh S} {m : Mem} (hu : U G m)
     U G' m := by
   refine ⟨hsh, hfl, hu.io, hu.blk, hu.ws, hu.wm, hu.shist, by rw [hsv]; exact hu.slast,
     hu.mhist, ?_, fun w hw hp => ?_, hlph, hparts, hcar⟩
-  · obtain ⟨v, hv, hl, hz⟩ := hu.mlast
-    exact ⟨v, hv, hl, hz.trans (forall_congr' fun u => by rw [hmp])⟩
+  · exact hu.mlast.congr fun u => by rw [hmp]
   · unfold MQ; rw [hmp, hmp]; exact hu.mq w hw hp
 
 /-! ## The heap of the parts and of the resource -/
@@ -1078,8 +1092,7 @@ theorem U_mx {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {y : Ph} {g' : 
     (hcells : ∀ x, 56 ≤ x → x < 60 → m'.heap (0, x) = m.heap (0, x))
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hw' : WM.Ok m') (hmh : ∀ j < (WM.hist m').size, ∃ v ∈ mVals, (WM.hist m')[j]!.Val v)
-    (hml : ∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds))
+    (hml : MLast (upd G t g') (WM.hist m'))
     (hmq : ∀ w ∈ m'.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m' (upd G t g' 0).2.2 (upd G t g' 1).2.2) ∨
       (w.1 = 1 ∧ MQ m' (upd G t g' 1).2.2 (upd G t g' 0).2.2))
@@ -1192,8 +1205,7 @@ theorem inv_mop (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId
     {g' : Gh S} (hi : (proto E).inv G m) (hg : MSet G t y g') (hg1 : g'.1.ph = (G t).1.ph)
     (hop : WM.Op t m m') (hw' : WM.Ok m')
     (hmh : ∀ j < (WM.hist m').size, ∃ v ∈ mVals, (WM.hist m')[j]!.Val v)
-    (hml : ∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds))
+    (hml : MLast (upd G t g') (WM.hist m'))
     (hmq : ∀ w ∈ m'.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m' (upd G t g' 0).2.2 (upd G t g' 1).2.2) ∨
       (w.1 = 1 ∧ MQ m' (upd G t g' 1).2.2 (upd G t g' 0).2.2))
@@ -1232,8 +1244,7 @@ theorem calm {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {g' : Gh S} (hu
     (hmpt : (G t).2.2.mp ≠ some .holds ∧ (G t).2.2.mp ≠ some .wake)
     (hmp' : g'.2.2.mp ≠ some .holds ∧ g'.2.2.mp ≠ some .wake) (hh : WM.hist m' = WM.hist m)
     (hq : ∀ w ∈ m'.waiters, w.2 = WM.ptr → w ∈ m.waiters ∧ w.1 ≠ t) :
-    (∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds)) ∧
+    (MLast (upd G t g') (WM.hist m')) ∧
     (∀ w ∈ m'.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m' (upd G t g' 0).2.2 (upd G t g' 1).2.2) ∨
       (w.1 = 1 ∧ MQ m' (upd G t g' 1).2.2 (upd G t g' 0).2.2)) ∧
@@ -1245,8 +1256,7 @@ theorem calm {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {g' : Gh S} (hu
   have hO : ∀ u, ((G u).2.2.mp = some .holds ∨ (G u).2.2.mp = some .wake) → upd G t g' u = G u :=
     fun u h => upd_ne _ _ fun e => by subst e; rcases h with h | h; exact hmpt.1 h; exact hmpt.2 h
   refine ⟨?_, fun w hw hp => ?_, fun ⟨h0, h1⟩ => hu.flags.one ⟨(hH 0).mp h0, (hH 1).mp h1⟩⟩
-  · obtain ⟨v, hv, hl, hz⟩ := hu.mlast
-    exact ⟨v, hv, by rw [hh]; exact hl, hz.trans (forall_congr' fun u => not_congr (hH u).symm)⟩
+  · rw [hh]; exact hu.mlast.congr hH
   · obtain ⟨hw', hwt⟩ := hq w hw hp
     have hMQ : ∀ {a b : ThreadId}, a ≠ t → MQ m (G a).2.2 (G b).2.2 →
         MQ m' (upd G t g' a).2.2 (upd G t g' b).2.2 := fun ha ⟨h1, h2⟩ => by
@@ -1306,8 +1316,7 @@ theorem U_lph {G G' : ThreadId → Gh S} {m : Mem} (hu : U G m) (h2 : ∀ u, (G'
   refine ⟨by rw [e']; exact hsh, by rw [h2, h2]; exact hfl, hio, hblk, hws, hwm, hsh',
     by rw [h2, h2]; exact hsl, hmh, ?_, fun w hw hq => by rw [h2, h2]; exact hmq w hw hq, hlph,
     fun u => by rw [hp, h2, h2]; exact hpa u, fun hc => by rw [h2, h2] at hc; rw [h2]; exact hcar hc⟩
-  obtain ⟨v, hv, hl, hz⟩ := hml
-  exact ⟨v, hv, hl, hz.trans (forall_congr' fun u => by rw [h2])⟩
+  exact hml.congr fun u => by rw [h2]
 
 /-! ## No deadlock -/
 
@@ -1529,7 +1538,7 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
     have hiM := hrd M hok (op_cur hop) hh
     have h2 : (last (WM.hist m₁)).Val (2 : BitVec 32) := by
       rw [← hw.holds_last, ← bits_contended]; exact hH
-    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast
+    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast.1
     have hv₀ : v₀ = 2 := val_eq hl₀ h2
     obtain ⟨u, hu⟩ : ∃ u, (G₁ u).2.2.mp = some .holds := Classical.byContradiction fun hc =>
       absurd (hz.mpr fun u hu => hc ⟨u, hu⟩) (by rw [hv₀]; decide)
@@ -1591,18 +1600,34 @@ theorem mdec {G₀ : ThreadId → Gh S} {m : Mem} (hu : U G₀ m) {j : Nat} (hj 
 
 theorem setM_setM (x : Ph) (p q : MP) : (x.setM p).setM q = x.setM q := by cases x <;> rfl
 
-/-- After an RMW of the mutex word with `w` by thread `t` (new place `g'`): its writes. -/
+/-- After an RMW of the mutex word with `w` by thread `t` (new place `g'`): its writes. A
+thread that holds the mutex after it made this acquire over a free mutex (`e.writer`), or held
+it before (`ho`). -/
 theorem mpush {G : ThreadId → Gh S} {m₁ m' : Mem} {t : ThreadId} {g' : Gh S} {w : BitVec 32}
     {e : Word.Entry} (hu : U G m₁) (hh : WM.hist m' = (WM.hist m₁).push e) (he : e.Val w)
-    (hw : w ∈ mVals) (hz : w = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds) :
+    (hw : w ∈ mVals) (hz : w = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds)
+    (ho : ∀ u, (upd G t g' u).2.2.mp = some .holds →
+      ((∀ u', (G u').2.2.mp ≠ some .holds) ∧ e.writer = some u) ∨ (G u).2.2.mp = some .holds) :
     (∀ j < (WM.hist m').size, ∃ v ∈ mVals, (WM.hist m')[j]!.Val v) ∧
-    ∃ v ∈ mVals, (last (WM.hist m')).Val v ∧ (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds) :=
-  ⟨by rw [hh]; exact vals_push hu.mhist hw he, w, hw, by rw [hh, last_push]; exact he, hz⟩
+    MLast (upd G t g') (WM.hist m') := by
+  refine ⟨by rw [hh]; exact vals_push hu.mhist hw he, ⟨w, hw, by rw [hh, last_push]; exact he, hz⟩,
+    fun u hu' => ?_⟩
+  have hx : word0 e.bytes = false := by
+    rw [Word.word0_of_val he]; simpa using fun e0 => (hz.mp e0) u hu'
+  have hpos : 0 < (WM.hist m₁).size := by have := hist_pos hu.wm; omega
+  obtain ⟨⟨v, -, hl, hz₀⟩, hown⟩ := hu.mlast
+  rw [hh]
+  rcases ho u hu' with ⟨hno, hwr⟩ | hh'
+  · rw [Word.holder_push_acq hpos hx (by rw [Word.word0_of_val hl, hz₀.mpr hno]; rfl)]
+    exact hwr
+  · rw [Word.holder_push_keep hpos hx
+      (by rw [Word.word0_of_val hl]; simpa using fun e0 => (hz₀.mp e0) u hh')]
+    exact hown u hh'
 
 /-- The newest write of the mutex word is not `0`: a thread holds it. -/
 theorem holder_of {G : ThreadId → Gh S} {m : Mem} (hu : U G m) {v : BitVec 32}
     (hv : (last (WM.hist m)).Val v) (h0 : v ≠ 0) : ∃ u, (G u).2.2.mp = some .holds := by
-  obtain ⟨v₀, -, hl₀, hz⟩ := hu.mlast
+  obtain ⟨v₀, -, hl₀, hz⟩ := hu.mlast.1
   rw [val_eq hv hl₀] at h0
   exact Classical.byContradiction fun hc => h0 (hz.mpr fun u hu => hc ⟨u, hu⟩)
 
@@ -1612,8 +1637,7 @@ theorem inv_mstep (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : Thread
     (hnw : y.mp = some .cas ∨ y.mp = some .spin ∨ y.mp = some .wait ∨ p = .wake)
     (hop : WM.Op t m m') (hw' : WM.Ok m')
     (hmh : ∀ j < (WM.hist m').size, ∃ v ∈ mVals, (WM.hist m')[j]!.Val v)
-    (hml : ∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t (gA (y.setM p) h sx) u).2.2.mp ≠ some .holds))
+    (hml : MLast (upd G t (gA (y.setM p) h sx)) (WM.hist m'))
     (hmq : ∀ w ∈ m'.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m' (upd G t (gA (y.setM p) h sx) 0).2.2
         (upd G t (gA (y.setM p) h sx) 1).2.2) ∨
@@ -1694,7 +1718,7 @@ theorem mloop_body (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) {sx : S} 
   cases r
   · -- `unlocked`: `t` holds the mutex
     rw [bits_unlocked] at hrb; subst hrb
-    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast
+    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast.1
     have hno := hz.mp (val_eq hv hl₀).symm
     simp only [show (Io_Mutex_State.unlocked != Io_Mutex_State.unlocked) = false from rfl,
       Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
@@ -1707,6 +1731,7 @@ theorem mloop_body (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) {sx : S} 
       · rename_i e; simp only [e, iff_false]; exact hno u
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA ((x.setM .spin).setM .holds) Heap.empty sx) hu₁ hh
       hval (by decide) (iff_of_false (by decide) fun h => h t ((hth t).mpr rfl))
+      fun u h => .inl ⟨hno, by rw [(hth u).mp h]; rfl⟩
     have := inv_mstep hE hi₁ hg₁ hxs (.inr (.inl (Ph.mp_setM hx _))) hop hw' hmh hml (fun w hw hp => hmq _ w hw hp) (fun ⟨h0, h1⟩ => by
       rcases ht01 with rfl | rfl
       · exact absurd ((hth 1).mp h1) (by decide)
@@ -1726,6 +1751,7 @@ theorem mloop_body (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) {sx : S} 
       subst e; simp [gA, Ph.mp_setM hxs] at h
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA ((x.setM .spin).setM .wait) Heap.empty sx) hu₁ hh
       hval (by decide) (iff_of_false (by decide) fun h => h u (by rw [upd_ne _ _ hut]; exact hu))
+      fun u' h => .inr (by rw [upd_ne _ _ (hw2 u' h)] at h; exact h)
     have hiw := inv_mstep hE hi₁ hg₁ hxs (.inr (.inl (Ph.mp_setM hx _))) hop hw' hmh hml (fun w hw hp => hmq _ w hw hp) (fun ⟨h0, h1⟩ => by
       rcases ht01 with rfl | rfl
       · exact hw2 0 h0 rfl
@@ -1784,7 +1810,7 @@ theorem mlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) (hxc : x.
     have hnw := noWM hu₁ ht01 (by rw [hgt]; exact hxn)
   · -- `unlocked` → `locked_once`: `t` holds the mutex
     rw [bits_unlocked] at hv
-    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast
+    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast.1
     have hno := hz.mp (val_eq hv hl₀).symm
     have hth : ∀ u, (upd G₁ t (gA (x.setM .holds) Heap.empty sx) u).2.2.mp =
         some .holds ↔ u = t := fun u => by
@@ -1793,6 +1819,7 @@ theorem mlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) (hxc : x.
       · rename_i e; simp only [e, iff_false]; exact hno u
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA (x.setM .holds) Heap.empty sx) hu₁ hh
       (rmwEnt_val WM) (by decide) (iff_of_false (by decide) fun h => h t ((hth t).mpr rfl))
+      fun u h => .inl ⟨hno, by rw [(hth u).mp h]; rfl⟩
     have := inv_mstep hE hi₁ hg₁ hx (.inl hxc) hop hw' hmh hml
       (fun w hw hp => absurd hp (hnw w (hop.waiters ▸ hw))) (fun ⟨h0, h1⟩ => by
       rcases ht01 with rfl | rfl
@@ -1866,8 +1893,7 @@ theorem flags_unl {G : ThreadId → Gh S} {t : ThreadId} {g' : Gh S} (hf : Flags
 in the semaphore's mutex. -/
 theorem inv_mghost (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {y : Ph}
     {g' : Gh S} (hi : (proto E).inv G m) (hg : MSet G t y g') (hg1 : g'.1.ph = (G t).1.ph)
-    (hml : ∃ v ∈ mVals, (last (WM.hist m)).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds))
+    (hml : MLast (upd G t g') (WM.hist m))
     (hmq : ∀ w ∈ m.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m (upd G t g' 0).2.2 (upd G t g' 1).2.2) ∨
       (w.1 = 1 ∧ MQ m (upd G t g' 1).2.2 (upd G t g' 0).2.2))
@@ -1971,25 +1997,26 @@ theorem wp_mwake (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
     · exact hxk.1
     · exact hxk.2.1
     · exact hxk.2.2.1
-  have hml : ∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G₁ t (gA x.unl h sx) u).2.2.mp ≠ some .holds) := by
-    obtain ⟨v, hv, hl', hz⟩ := hU.mlast
-    refine ⟨v, hv, hl', hz.trans (forall_congr' fun u => ?_)⟩
+  have hml : MLast (upd G₁ t (gA x.unl h sx)) (WM.hist m') := hU.mlast.congr fun u => by
     unfold upd; split
-    · rename_i e; subst e; rw [hgt, hxw]; show _ ↔ x.unl.mp ≠ _; rw [hxk.2.2.2]; simp
+    · rename_i e; subst e; rw [hgt, hxw]; show x.unl.mp = _ ↔ _; rw [hxk.2.2.2]; simp
     · exact Iff.rfl
   exact hq k hk G₁ m' (by rw [hm']) (inv_mghost hE ⟨hl, hU, hEi⟩ hMS (by rw [hg₁]; rfl) hml
     (fun w hw' hp => absurd hp (hno w hw'))
     (flags_unl hU.flags hux (by rw [hgt]; rfl)))
 
-/-- `unlock` of the mutex by its holder `t` at `x` (`main` at `sr`, the writer at `wr`): it goes
+/-- `unlock` of the mutex by its holder `t` at `x` (`main` at `sr`, the writer at `wr`), the
+current thread: the owner check passes (`MLast`: `t` made the most recent acquire), and it goes
 to the place after `unlock`. -/
 theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {io : Io}
     {G : ThreadId → Gh S} {m : Mem} {d : Nat} (hx : UnlAt (upd G t (gA x h sx)) t)
-    (hxh : x.mp = some .holds) (hi : (proto E).inv (upd G t (gA x h sx)) m) :
+    (hxh : x.mp = some .holds) (hi : (proto E).inv (upd G t (gA x h sx)) m)
+    (hcur : m.current = t := by first | assumption | rfl) :
     (proto E).WP t (Io_Mutex_unlock WM.ptr io) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ (proto E).inv (upd G' t (gA x.unl h sx)) m') G m d := by
   unfold Io_Mutex_unlock
+  refine WP.ownerCheck (hi.2.1.wm.ownerCheck (by
+    rw [hcur]; exact hi.2.1.mlast.2 t (by rw [upd_self]; exact hxh))) ?_
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -2027,7 +2054,7 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
   · -- `unlocked`: the holder reads a word that is not `0`
     exfalso
     rw [bits_unlocked] at hrb; subst hrb
-    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast
+    obtain ⟨v₀, -, hl₀, hz⟩ := hu₁.mlast.1
     exact (hz.mp (val_eq hv hl₀).symm) t (by rw [hgt, hxh])
   · -- `locked_once`: no thread waits
     rw [bits_once] at hrb; subst hrb
@@ -2051,6 +2078,7 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
         simp [Ph.isUnl, Ph.live, Ph.inSem]
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA x.unl h sx) hu₁ hh hval (by decide)
       (iff_of_true rfl (hfree _ (by rw [hxk.1]; simp)))
+      fun u hu => absurd hu (hfree _ (by rw [hxk.1]; simp) u)
     have := inv_mop hE hi₁ hMS (by rw [hg₁]; rfl) hop hw' hmh hml
       (fun w hw hp => absurd hp (hnw w (hop.waiters ▸ hw))) (flags_unl hu₁.flags hux (by rw [hgt]; rfl))
     simp only [StateT.run_pure, pure_bind]
@@ -2060,6 +2088,7 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
     rw [bits_cont] at hrb; subst hrb
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA (x.setM .wake) h sx) hu₁ hh hval (by decide)
       (iff_of_true rfl (hfree _ (by rw [Ph.mp_setM hx']; simp)))
+      fun u hu => absurd hu (hfree _ (by rw [Ph.mp_setM hx']; simp) u)
     have hiw := inv_mstep (p := .wake) hE hi₁ hg₁ hx' (.inr (.inr (.inr rfl))) hop hw' hmh hml (fun w hw hp => by
         rw [hop.waiters] at hw
         have hw1 := mq_wait hu₁ hw hp
@@ -2165,8 +2194,7 @@ theorem mfacts {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {g' : Gh S} (
     (hk : WM.Keep m m') (hq : m'.waiters = m.waiters)
     (hmp : g'.2.2.mp = (G t).2.2.mp ∨ ((G t).2.2.mp ≠ some .holds ∧ (G t).2.2.mp ≠ some .wake ∧
       (G t).2.2.mp ≠ some .wait ∧ g'.2.2.mp ≠ some .holds ∧ g'.2.2.mp ≠ some .wake)) :
-    (∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds)) ∧
+    (MLast (upd G t g') (WM.hist m')) ∧
     (∀ w ∈ m'.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m' (upd G t g' 0).2.2 (upd G t g' 1).2.2) ∨
       (w.1 = 1 ∧ MQ m' (upd G t g' 1).2.2 (upd G t g' 0).2.2)) := by
@@ -2176,9 +2204,7 @@ theorem mfacts {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {g' : Gh S} (
       unfold upd; split
       · rename_i e; subst e; exact hmp
       · rfl
-    obtain ⟨v, hv, hl, hz⟩ := hu.mlast
-    refine ⟨⟨v, hv, by rw [hh]; exact hl, hz.trans (forall_congr' fun u => by rw [hm])⟩,
-      fun w hw hp => ?_⟩
+    refine ⟨by rw [hh]; exact hu.mlast.congr fun u => by rw [hm], fun w hw hp => ?_⟩
     unfold MQ; rw [hh, hm, hm]; exact hu.mq w (hq ▸ hw) hp
   · obtain ⟨a, b, -⟩ := calm (g' := g') hu ⟨h1, h2⟩ ⟨h4, h5⟩ hh (fun w hw hp => by
       rw [hq] at hw
@@ -2192,8 +2218,7 @@ theorem U_sop {G : ThreadId → Gh S} {m m' : Mem} {t : ThreadId} {g' : Gh S} {e
     (hh : WS.hist m' = (WS.hist m).push e)
     (he : e.Val (sv (upd G t g' 0).2.2 (upd G t g' 1).2.2)) (hs : g'.2.1 = (G t).2.1)
     (hl : g'.1.ph = (G t).1.ph) (hlv : (G t).2.2.live) (hns : (G t).2.2.inSem = false)
-    (hml : ∃ v ∈ mVals, (last (WM.hist m')).Val v ∧
-      (v = 0 ↔ ∀ u, (upd G t g' u).2.2.mp ≠ some .holds))
+    (hml : MLast (upd G t g') (WM.hist m'))
     (hmq : ∀ w ∈ m'.waiters, w.2 = WM.ptr →
       (w.1 = 0 ∧ MQ m' (upd G t g' 0).2.2 (upd G t g' 1).2.2) ∨
       (w.1 = 1 ∧ MQ m' (upd G t g' 1).2.2 (upd G t g' 0).2.2))
@@ -2562,7 +2587,7 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
       (lws_lose hi₁ hop hg₁ (by simp [hasP, upd_self, gA, Ph.isWs]) (by simp [hasP, hg1, Ph.isWs]))
   simp only [StateT.run_pure]
   refine WP.bind (WP.callC (WP.mono ?_ (munlock_spec hE (t := 1) (x := .wr k .holds)
-    (.inr ⟨rfl, k, .holds, by rw [upd_self]; rfl⟩) rfl hi₂)))
+    (.inr ⟨rfl, k, .holds, by rw [upd_self]; rfl⟩) rfl hi₂ hop.current)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
   exact WP.pure' (WP.pure' ⟨by omega, hc₂, hi₃⟩)
 
@@ -3201,7 +3226,7 @@ theorem lockS_spec (hE : E.Spec) {j : Bool} {io : Io} {G : ThreadId → Gh S} {m
         (fun hc' => absurd hc'.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
         (lws_gain hi₆ hop hg₄ hc hpn hsn' ho (by simp [hasP, upd_self, upd0_1, gA, Ph.gave]))
     refine WP.bind (WP.callC (WP.mono ?_ (munlock_spec hE (t := 0) (x := .sr j .holds)
-      (.inl ⟨rfl, j, .holds, by rw [upd_self]; rfl⟩) rfl hi₇)))
+      (.inl ⟨rfl, j, .holds, by rw [upd_self]; rfl⟩) rfl hi₇ hop.current)))
     rintro _ G₅ m₆ d₅ ⟨hd₅, hc₆, hi₈⟩
     simp only [StateT.run_pure]
     refine WP.pure' ?_
@@ -3497,8 +3522,7 @@ theorem stableU (G : ThreadId → Gh SPh) (m m' : Mem) (t : ThreadId) (g : Gh SP
       · exact .inl h'
       · exact .inr (hall _ h')
     · simp only [Sm] at h1; omega
-  · obtain ⟨v, hv, hl, hz⟩ := hu.mlast
-    exact ⟨v, hv, by rw [hhM]; exact hl, hz.trans (forall_congr' fun u => by rw [hP])⟩
+  · rw [hhM]; exact hu.mlast.congr fun u => by rw [hP]
   · have hw' := hs.waiters w hw (by rw [hp']; exact wmL) (by rw [hp']; simp [WM, Sm, Sync.Sem.WE, Word.ptr])
     unfold MQ; rw [hhM, hP, hP]; exact hu.mq w hw' hp'
   · by_cases e : u = t
@@ -3568,8 +3592,7 @@ theorem ownU (G : ThreadId → Gh SPh) (m m' : Mem) (t : ThreadId) (g : Gh SPh) 
         rw [hb]; exact hF _ (.inl (by omega)) (by omega)⟩ hnt
   · exact blk_keep hu.blk (by rw [hcell 0 (hF 0 (.inl (by decide)) (by decide)),
       hrest 0 (.inl (by decide))])
-  · obtain ⟨v, hv, hl', hz⟩ := hu.mlast
-    exact ⟨v, hv, by rw [hhM]; exact hl', hz.trans (forall_congr' fun u => by rw [hP2])⟩
+  · rw [hhM]; exact hu.mlast.congr fun u => by rw [hP2]
   · rw [hs.waiters] at hw; unfold MQ; rw [hhM, hP2, hP2]; exact hu.mq w hw hp'
   · by_cases e : u = t
     · subst e; rw [upd_self] at hu' ⊢; rw [h2] at hu'
@@ -4210,8 +4233,9 @@ theorem inv_pre {m : Mem} {io : Io} {A : Nat} {pb : Array Byte} {h : Heap}
         rw [hwsz] at hj; rw [show j = 0 by omega]; exact hwsv⟩,
       by simp only [last, hwsz]; exact hwsv, fun j hj => ⟨0, by simp [mVals], by
         rw [hwmz] at hj; rw [show j = 0 by omega]; exact hwmv⟩,
-      ⟨0, by simp [mVals], by simp only [last, hwmz]; exact hwmv, iff_of_true rfl fun u => by
-        unfold upd; split <;> simp [gPre, G0, gA, Ph.mp]⟩,
+      ⟨⟨0, by simp [mVals], by simp only [last, hwmz]; exact hwmv, iff_of_true rfl fun u => by
+        unfold upd; split <;> simp [gPre, G0, gA, Ph.mp]⟩, fun u hu => absurd hu (by
+        unfold upd; split <;> simp [gPre, G0, gA, Ph.mp])⟩,
       fun w hw => by rw [hq] at hw; simp at hw, fun u _ => ?_, fun u => ?_, fun _ => ⟨hN, ?_, sN.trans hsub,
         fun e he ht => .inr (hown e he (ht.imp (fun ⟨x, a, b, c⟩ => ⟨x, a, b, sN.ne c⟩) id))⟩⟩
     · rw [upd_self, upd0_1]
@@ -4319,8 +4343,7 @@ theorem inv_spawn {G₁ : ThreadId → Gh SPh} {m₅ m₆ : Mem} {c : ThreadId}
     rw [show (1 : Nat) = m₅.threads.size from hs1.symm, Array.getElem?_push_size]
   · show (G' u).2.2 = _; rw [hGo u hu]; exact hnone u (by unfold ThreadId at *; omega)
   · have := hu.slast; rw [hg₁, hG1] at this; rw [hhS, hG'0, hG'1]; exact this
-  · obtain ⟨v, hv, hl', hz⟩ := hu.mlast
-    exact ⟨v, hv, by rw [hhM]; exact hl', hz.trans (forall_congr' fun u => by rw [hmp])⟩
+  · rw [hhM]; exact hu.mlast.congr fun u => by rw [hmp]
   · have := mq_wait hu hw hp
     rcases mp_lt hu (u := w.1) (by rw [this]; simp) with e | e <;> rw [e] at this
     · rw [hg₁] at this; cases this
@@ -4440,8 +4463,7 @@ theorem inv_join {G₃ : ThreadId → Gh SPh} {m₈ m₉ : Mem} (hi : (proto E�
     · unfold BlkOk; rw [show m₉.blocks = m₈.blocks by rw [hm₉]]; exact hu.blk
     · have := hu.slast; rw [hg₃, hg1] at this
       rw [hhS, upd_self, hGu 1 (by decide), hg1]; exact this
-    · obtain ⟨v, hv, hl', hz⟩ := hu.mlast
-      exact ⟨v, hv, by rw [hhM]; exact hl', hz.trans (forall_congr' fun u => by rw [hmp])⟩
+    · rw [hhM]; exact hu.mlast.congr fun u => by rw [hmp]
     · have hw' : w ∈ m₈.waiters := by rw [hm₉] at hw; exact hw
       have := mq_wait hu hw' hp
       rcases mp_lt hu (u := w.1) (by rw [this]; simp) with e | e <;> rw [e] at this

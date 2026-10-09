@@ -317,12 +317,14 @@ theorem lock_spec (t : ThreadId) (g : Gh) (hg : g.1.ph = .out) (io : Io) (G : Th
 
 /-! ## `unlock` -/
 
-/-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
+/-- `unlock` by the holder `t` (`g`), the current thread: the owner check passes
+(`Inv.ownerCheck`), and it goes to `out`. -/
 theorem unlock_spec (t : ThreadId) (g : Gh) (hg : g.1.ph = .holds) (io : Io) (G : ThreadId → Gh)
-    (m : Mem) (d : Nat) (hi : proto.inv (upd G t g) m) :
+    (m : Mem) (d : Nat) (hi : proto.inv (upd G t g) m) (hcur : m.current = t) :
     proto.WP t (Io_Mutex_unlock (cPtr.add 16) io) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ proto.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   unfold Io_Mutex_unlock
+  refine WP.ownerCheck (((fits.inv _ _).mp hi).1.ownerCheck (by rw [upd_self]; exact hg) hcur) ?_
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -770,7 +772,7 @@ theorem add_spec (t : ThreadId) (p₀ p₁ : Ph) (hinc : IncStep t p₀ p₁) (G
   have hl₄ := hi₄.1.live t (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))
   refine WP.bind (wp_io hi₄ hc₄ hl₄.1 hl₄.2 fun m₅ hc₅ ht₅ hi₅ => ?_)
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t (gHold p₁ hQ') rfl _ G₂ m₅ d₂ hi₅)))
+  refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t (gHold p₁ hQ') rfl _ G₂ m₅ d₂ hi₅ hc₅)))
   rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_

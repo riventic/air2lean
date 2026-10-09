@@ -46,6 +46,14 @@ theorem WP.callMC {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) →
     P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
   WP.liftM (x := x) herr h
 
+/-- The owner check of a mutex unlock (`Zig.mutexOwnerCheck`, at the start of a translated
+unlock) that passes and changes nothing (`Lock.Inv.ownerCheck`, `Word.Ok.ownerCheck`). -/
+theorem WP.ownerCheck {p : Ptr} {f : Unit → ConcM Tgt β} {Q : β → (ThreadId → γ) → Mem → Nat → Prop}
+    (hrun : ((Thread.mutexOwnerCheck p).run m).run = some (.ok ((), m)))
+    (h : P.WP t (f ()) Q G m n) : P.WP t (mutexOwnerCheck p >>= f) Q G m n :=
+  WP.bind (WP.liftMem (fun e he => by rw [hrun] at he; cases he) fun a m' hr => by
+    rw [hrun] at hr; cases hr; exact ⟨rfl, h⟩)
+
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, x.run = some (.error e) → P.strict = false)

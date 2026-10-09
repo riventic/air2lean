@@ -236,14 +236,18 @@ theorem lockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) 
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
     (futexLock_spec hP hc3 (by rw [add0]; exact hp) t g hg G m d hi))
 
-/-- `FutexImpl.unlock` by the holder `t` (`g`): it goes to `out`. -/
+/-- `FutexImpl.unlock` by the holder `t` (`g`), the current thread: the owner check passes
+(`Inv.ownerCheck`), and it goes to `out`. -/
 theorem futexUnlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
     P.WP t (Thread_Mutex_FutexImpl_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   have hS : threadMutexS.c = L.c := hc3.symm
   unfold Thread_Mutex_FutexImpl_unlock
+  have hrun := ((hP.inv _ _).mp hi).1.ownerCheck (by rw [upd_self]; exact hg) hcur
+  rw [← hp] at hrun
+  refine WP.ownerCheck hrun ?_
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -275,15 +279,15 @@ theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
     bind_assoc, map_bind, map_pure]
 
-/-- `unlock` (Linux) by the holder `t` (`g`): it goes to `out`. -/
+/-- `unlock` (Linux) by the holder `t` (`g`), the current thread: it goes to `out`. -/
 theorem unlockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   rw [unlock_eq]
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
-    (futexUnlock_spec hP hc3 (by rw [add0]; exact hp) t g hg G m d hi))
+    (futexUnlock_spec hP hc3 (by rw [add0]; exact hp) t g hg G m d hi hcur))
 
 end_if
 
@@ -372,8 +376,8 @@ theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr
   unfold osUnfairUnlockC
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [add0, hp]
-  -- the owner check: `t` holds the lock, so the newest message of the word is `t`'s
-  have hrun := ((hP.inv _ _).mp hi).1.ownerCheck hc1 (by rw [upd_self]; exact hg) hc
+  -- the owner check: `t` holds the lock, so it made the most recent acquire of the word
+  have hrun := ((hP.inv _ _).mp hi).1.ownerCheck (by rw [upd_self]; exact hg) hc
   refine WP.bind (WP.callMC (fun e he => by rw [hrun] at he; cases he) fun _ m₀ hr => ?_)
   rw [hrun] at hr
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
@@ -411,7 +415,7 @@ theorem unlock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   first
-  | (have hc3 : L.c = 3 := (by unfold mutexC at hc; exact hc); exact unlockL_spec hP hc3 hp t g hg G m d hi)
+  | (have hc3 : L.c = 3 := (by unfold mutexC at hc; exact hc); exact unlockL_spec hP hc3 hp t g hg G m d hi hcur)
   | exact unlockD_spec hP hc hp t g hg G m d hi hcur
 end ThreadMutexOps
 end Threadsync

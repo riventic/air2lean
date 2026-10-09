@@ -193,7 +193,7 @@ structure Msg where
   /-- For an RMW: the id of the message it read. It stays right after that message. -/
   rmwOf : Option Nat := none
   /-- The thread of an atomic store or RMW (`none` for a plain write). Ghost: it only decides
-  the owner check of `os_unfair_lock_unlock` (`Thread.unfairOwnerCheck`). -/
+  the owner check of a mutex unlock (`Thread.mutexOwnerCheck`, `ALoc.holder`). -/
   writer : Option ThreadId := none
   deriving Repr, Inhabited
 

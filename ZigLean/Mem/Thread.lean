@@ -457,30 +457,48 @@ def join (tid : ThreadId) : MemM Unit := do
     clocks := m.clocks.set! m.current merged
     threads := m.threads.set! tid { rec with joined := true } }
 
-/-- The newest message of the atomic location at `(b, o)` is the current thread's and is not `0`
-(`unfairOwnerCheck`). -/
-def _root_.Zig.Mem.unfairHeld (m : Mem) (b o : Nat) : Bool :=
+/-- The 32-bit value of the bytes `bs` is `0` (`false` if they hold no value). -/
+def _root_.Zig.word0 (bs : Array Byte) : Bool :=
+  match (intOfBytes 32 bs).run with
+  | some (.ok v) => v == 0
+  | _ => false
+
+/-- The holder of a mutex word, from its writes newest first (bytes and `Msg.writer`): the writer
+of the oldest write of the newest run of writes that are not `0`, that is, of the most recent
+successful acquire (a write that is not `0` over a `0`). A write that is not `0` over a value
+that is not `0` (a waiter's `xchg` of the contended value, an `or 1` on a held lock) keeps the
+holder; a write of `0` (an unlock) clears it. A first write that is not `0` names its writer (a
+plain write: `none`). -/
+def _root_.Zig.holderRev : List (Array Byte × Option ThreadId) → Option ThreadId
+  | [] => none
+  | x :: rest =>
+    if word0 x.1 then none else
+    match rest with
+    | [] => x.2
+    | y :: _ => if word0 y.1 then x.2 else holderRev rest
+
+/-- The holder of the mutex word whose atomic location is `l` (`holderRev`). -/
+def _root_.Zig.ALoc.holder (l : ALoc) : Option ThreadId :=
+  holderRev (l.msgs.toList.reverse.map fun x => (x.bytes, x.writer))
+
+/-- The current thread holds the mutex word at `(b, o)` (`ALoc.holder`). -/
+def _root_.Zig.Mem.mutexHeld (m : Mem) (b o : Nat) : Bool :=
   match m.atomics.findIdx? (fun l => l.block == b && l.off == o) with
   | none => false
-  | some i =>
-    match m.atomics[i]?.bind (·.msgs.back?) with
-    | none => false
-    | some msg =>
-      msg.writer == some m.current &&
-        match (intOfBytes 32 msg.bytes).run with
-        | some (.ok v) => v != 0
-        | _ => false
+  | some i => (m.atomics[i]?.bind ALoc.holder) == some m.current
 
-/-- The owner check of `os_unfair_lock_unlock` at the lock word `p` (macOS terminates the process
-on an unlock by a thread that does not hold the lock): the word's newest message is the current
-thread's (`Msg.writer`) and is not `0`. While a thread holds an `os_unfair_lock`, the newest
-message is its successful acquire (`cmpxchg 0 → 1`): the other threads only read the word, so a
-waiter never makes the holder's unlock fail. Else `.illegal`: an unlock by another thread, a
-double unlock, an unlock of a lock that was never locked. It changes nothing. -/
-def unfairOwnerCheck (p : Ptr) : MemM Unit := do
+/-- The owner check of a mutex unlock at the 4-byte word `p`: the current thread made the most
+recent successful acquire of the word (`Mem.mutexHeld`), else `.illegal`: an unlock by another
+thread, a double unlock, an unlock of a lock that was never locked. It changes nothing. It runs
+before `os_unfair_lock_unlock` (macOS terminates the process on a foreign unlock) and before
+the translated `Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2: a foreign unlock is undefined
+behavior) and `Io.Mutex.unlock` (0.16.0, 0.17.0: a model restriction; `docs/std-models.md`).
+It keys on the acquire, not on the newest write: a waiter's write to the word does not make the
+holder's unlock fail. -/
+def mutexOwnerCheck (p : Ptr) : MemM Unit := do
   let m ← get
   let (b, _, o) ← m.access p 4 4
-  if m.unfairHeld b o then pure () else throw .illegal
+  if m.mutexHeld b o then pure () else throw .illegal
 
 /-- `Io.Group`: the task `tid` belongs to the group at `g`. -/
 def groupAdd (g : Ptr) (tid : ThreadId) : MemM Unit := modify fun m =>

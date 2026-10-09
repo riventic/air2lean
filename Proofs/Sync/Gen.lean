@@ -339,6 +339,7 @@ inductive Io_Mutex_unlockExit where
   | br7
 
 def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  Zig.mutexOwnerCheck p0
   let e ← ((do
     let i2 ← pure (p0.add 0)
     match ← ((do

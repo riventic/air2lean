@@ -402,7 +402,7 @@ theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : 
     fun m₅ h₅ hc₅ _ hi₅ => ?_)
   -- `unlock`
   exact WP.callC (WP.mono (fun _ G' m' _ ⟨_, hc', hi'⟩ => ⟨hc', hi'⟩)
-    (C.unlock fits rfl 1 (gH (.wk (k + 1) false) h₅) rfl rfl ⟨⟩ G₁ m₅ d₁ hi₅))
+    (C.unlock fits rfl 1 (gH (.wk (k + 1) false) h₅) rfl rfl ⟨⟩ G₁ m₅ d₁ hi₅ hc₅))
 
 include C in
 theorem writer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
@@ -734,7 +734,7 @@ theorem main_spec (io : Io) (d : Nat) :
   have hsum : BitVec.ofNat 32 (aVal (G₂ 1).2) + BitVec.ofNat 32 (10 - (G₂ 1).2.cnt) = 10 := by
     unfold aVal; rw [hmid]; exact sum_val hcnt
   -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (C.unlock fits rfl 0 (gH .run h₉) rfl rfl io G₂ m₉ d₂ hi₉)))
+  refine WP.bind (WP.callC (WP.mono ?_ (C.unlock fits rfl 0 (gH .run h₉) rfl rfl io G₂ m₉ d₂ hi₉ hc₉)))
   rintro _ G₃ m₁₀ d₃ ⟨hd₃, hc₁₀, hi₁₀⟩
   have hiJ := main_join (G := G₃) hi₁₀
   -- the join of the writer

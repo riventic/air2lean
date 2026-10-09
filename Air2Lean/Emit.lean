@@ -2724,7 +2724,7 @@ def FCtx.stackBlocks (fc : FCtx) : Array (InstId × String × Nat × Nat) :=
 
 /-- Shared body text for a definition and its opt-in unfolding theorem. -/
 def emitFunctionBody (fc : FCtx) (localsName exitName : String)
-    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) : String :=
+    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) (ownerCheck : Bool := false) : String :=
   let bodyStr := emitStmts fc #[] body.toList
   -- The `M`-do-block's `σ`/`ε` never appear as a literal type anywhere inside it (`(← get)`,
   -- `.br<k>`, …), so without this ascription nothing pins them down for the elaborator.
@@ -2751,8 +2751,10 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   -- rejects as a "Redundant alternative" error rather than a warning, so it must be omitted.
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
+  -- The owner check of a mutex unlock (`ownerCheckedUnlocks`): before any other step.
+  let checkLines := if ownerCheck then ["  Zig.mutexOwnerCheck p0"] else []
   String.intercalate "\n"
-    (["do"] ++ allocLines ++
+    (["do"] ++ checkLines ++ allocLines ++
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
      ["  match e with"] ++ matchLines)
 
@@ -2845,6 +2847,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let loops := (allInsts.filter fun i => match i.op with | .loop _ | .loopSwitchBr .. => true | _ => false).reverse
   let hasNonRetExit := !brT.isEmpty || !repT.isEmpty || !fc.dispatchTys.isEmpty
   let functionBody := emitFunctionBody fc localsName exitName f.ret f.body hasNonRetExit
+    (fc.conc && ownerCheckedUnlocks.contains f.name)
   { types := [localsStr, exitStr]
     agains := (loops.map (emitAgainDef fc)).toList
     loops := (loops.map (emitLoopDef fc)).toList

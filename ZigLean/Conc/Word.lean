@@ -84,21 +84,22 @@ def Hits (e : FootprintEntry) : Prop :=
 /-- `h` has no byte of the word. -/
 def Off (h : Heap) : Prop := ∀ x, W.o ≤ x → x < W.o + nb → h (W.b, x) = none
 
-/-- A write of the word: its bytes, its clock and its release clock. -/
+/-- A write of the word: its bytes, its clock, its release clock and its writer (`Msg.writer`). -/
 structure Entry where
   bytes : Array Byte
   clock : VClock
   relClock : VClock
+  writer : Option ThreadId
   deriving Inhabited
 
 /-- Message `j` without its id; the first one without its clock. -/
-def ent (j : Nat) (x : Msg) : Entry := ⟨x.bytes, if j = 0 then #[] else x.clock, x.relClock⟩
+def ent (j : Nat) (x : Msg) : Entry := ⟨x.bytes, if j = 0 then #[] else x.clock, x.relClock, x.writer⟩
 
 /-- The writes of the word, oldest first (module doc). -/
 def hist (m : Mem) : Array Entry :=
   match m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | some i => (m.atomics[i]!).msgs.mapIdx ent
-  | none => #[⟨curBytes m W.b W.o nb, #[], #[]⟩]
+  | none => #[⟨curBytes m W.b W.o nb, #[], #[], none⟩]
 
 /-- The value of a write. -/
 def Entry.Val {n : Nat} (x : Entry) (v : BitVec n) : Prop := (intOfBytes n x.bytes).run = some (.ok v)
@@ -203,7 +204,7 @@ theorem hist_congr {m m' : Mem} (ha : m'.atomics = m.atomics) (hb : m'.blocks = 
 
 /-- The writes, before the first atomic op. -/
 theorem hist_none {m : Mem} (h : ∀ i l, ¬ W.Loc m i l) :
-    W.hist m = #[⟨curBytes m W.b W.o nb, #[], #[]⟩] := by
+    W.hist m = #[⟨curBytes m W.b W.o nb, #[], #[], none⟩] := by
   unfold hist
   cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | none => rfl
@@ -654,7 +655,7 @@ theorem floor_le {m : Mem} {li c pos : Nat} {rmw : Bool} (h : (readOpts m li rmw
 the memory after it. -/
 def rmwEnt (M : Mem) (t : ThreadId) (ord : AtomicOrder) (last : Entry) (new : BitVec n) : Entry :=
   ⟨padTo (intSize n) (intBytes new), M.clocks[t]!,
-    if ord.isRel then VClock.merge last.relClock (M.clocks[t]!) else last.relClock⟩
+    if ord.isRel then VClock.merge last.relClock (M.clocks[t]!) else last.relClock, some t⟩
 
 /-- An RMW at the word by thread `t` that read the newest message of `l` and wrote `new`. -/
 theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new : BitVec n}
@@ -807,6 +808,57 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
 /-- Write `j` of the word, from the location. -/
 theorem hist_size {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) : (W.hist m).size = l.msgs.size := by
   rw [hist_loc hl]; simp
+
+/-- The holder of a mutex word from its writes (`ALoc.holder`). -/
+def holder (h : Array Entry) : Option ThreadId :=
+  holderRev (h.toList.reverse.map fun x => (x.bytes, x.writer))
+
+/-- The holder from the writes is the holder of the location. -/
+theorem holder_hist {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) :
+    holder (W.hist m) = l.holder := by
+  rw [hist_loc hl]
+  unfold holder ALoc.holder
+  have h : (l.msgs.mapIdx ent).map (fun x => (x.bytes, x.writer)) =
+      l.msgs.map (fun x => (x.bytes, x.writer)) := by
+    apply Array.ext
+    · simp
+    · intro j h1 h2; simp [ent]
+  have h' := congrArg (fun a => a.toList.reverse) h
+  simp only [Array.toList_map, ← List.map_reverse] at h'
+  rw [h']
+
+/-- A write that is not `0` over a newest write `0` (a successful acquire): its writer holds the
+word. -/
+theorem holder_push_acq {h : Array Entry} {e : Entry} (h0 : 0 < h.size)
+    (he : word0 e.bytes = false) (hl : word0 h[h.size - 1]!.bytes = true) :
+    holder (h.push e) = e.writer :=
+  Lock.holderRev_push_acq _ h0 he hl
+
+/-- A write that is not `0` over a newest write that is not `0`: the holder stays. -/
+theorem holder_push_keep {h : Array Entry} {e : Entry} (h0 : 0 < h.size)
+    (he : word0 e.bytes = false) (hl : word0 h[h.size - 1]!.bytes = false) :
+    holder (h.push e) = holder h :=
+  Lock.holderRev_push_keep _ h0 he hl
+
+/-- `word0` of a write with a 32-bit value. -/
+theorem word0_of_val {x : Entry} {v : BitVec 32} (h : x.Val v) : word0 x.bytes = (v == 0) := by
+  unfold word0; unfold Entry.Val at h; rw [h]
+
+/-- Before the first atomic op the word has no holder. -/
+theorem holder_none {m : Mem} (h : ∀ i l, ¬ W.Loc m i l) : holder (W.hist m) = none := by
+  rw [hist_none h]; simp [holder, holderRev]
+
+/-- The owner check of an unlock (`Thread.mutexOwnerCheck`) at a 4-byte word that the current
+thread holds: it passes and changes nothing. -/
+theorem Ok.ownerCheck {W : Word 32 4} {m : Mem} (hw : W.Ok m)
+    (hh : holder (W.hist m) = some m.current) :
+    ((Thread.mutexOwnerCheck W.ptr).run m).run = some (.ok ((), m)) := by
+  obtain ⟨blk, -, -, -, ha, -⟩ := hw.access
+  cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
+  | none => rw [holder_none fun i l hl => by rw [hl.1] at hf; cases hf] at hh; cases hh
+  | some i =>
+    have hl := loc_of_find hf
+    exact Lock.mutexOwnerCheck_ok ha hl (by rw [← holder_hist hl]; exact hh)
 
 /-- The value of message `j`, as the value of write `j`. -/
 theorem val_of {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) {j : Nat} (hj : j < l.msgs.size)
@@ -1121,8 +1173,8 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
         (hop.fp e he).imp id fun h => plainHit_atomic h.2.2.2.1⟩, fun u => hown ▸ hi.off u,
     fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hop.waiters]; exact hi.fq,
-    fun hp => ?_, fun hc1 u hu =>
-      let ⟨i, l, hl, hw⟩ := hi.owner hc1 u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
+    fun hp => ?_, fun u hu =>
+      let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [hown]
     refine hi.own.keep (by rw [hop.threads]) hop.csize (fun u => hsub (hoff u) (hi.own.sub u))
       (Nat.le_of_eq hop.bsize.symm) (fun u _ => hop.clocks u) (fun e he => ?_)
