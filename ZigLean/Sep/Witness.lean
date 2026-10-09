@@ -40,9 +40,7 @@ theorem mem1_heap (bs : Array Byte) (kind : BlockKind) (l : Loc) :
       if l.1 = 0 ∧ l.2 < bs.size then some ⟨bs[l.2]!, 4096, bs.size, kind⟩ else none := by
   obtain ⟨b, o⟩ := l
   rcases b with _ | b
-  · by_cases h : o < bs.size
-    · simp [Mem.heap, mem1, blk, h]
-    · simp [Mem.heap, mem1, blk, h]
+  · by_cases h : o < bs.size <;> simp [Mem.heap, mem1, blk, h]
   · simp [Mem.heap, mem1]
 
 theorem mem1_seq (bs : Array Byte) (kind : BlockKind) : (mem1 bs kind).Seq := by
@@ -84,6 +82,16 @@ theorem mem1_arr1 {T : Type} [Enc T] [LawfulEnc T] (v : T) (ha : 4096 % Enc.alig
   have : i = 0 := by simp at hi; omega
   subst this
   simpa [← hs] using LawfulEnc.decode_encode v
+
+/-- `p0` of `mem1` holds the `u32` `0`, the one-item array `[0]`, or one undefined byte. -/
+theorem pts32 : pts p0 4 (0 : BitVec 32) (mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  mem1_pts' 0 (by decide)
+
+theorem arr32 : arr p0 [(0 : BitVec 32)] (mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  mem1_arr1 0 (by decide +kernel)
+
+theorem byte1 (kind : BlockKind) : bytesAt p0 4096 1 kind #[.undef] (mem1 #[.undef] kind).heap :=
+  mem1_bytesAt _ _
 
 /-- Two values one after the other: `p0` points to `v` and `p0.add (Enc.size T)` to `w`. -/
 theorem mem1_pts₂ {T U : Type} [Enc T] [LawfulEnc T] [Enc U] [LawfulEnc U] (v : T) (w : U)

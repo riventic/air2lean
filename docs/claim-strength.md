@@ -60,6 +60,19 @@ to be an allowed theorem of the same audit. A telescope without hypotheses whose
 all have `Nonempty` instances is `trivial` (no companion needed). `ZigLean/Sep/Witness.lean`
 provides an admissible memory (`{}` with `Mem.seq_default`, `Mem.heap_default_split`).
 
+The companions of the shipped theorems are concrete: arguments, a memory that satisfies the
+precondition (`Witness.mem1 bs`, one block holding `bs`, and `Witness.mem2`, in
+`ZigLean/Mem/Witness.lean`; `Witness.Admit`/`Witness.Live` and their thread-triple versions
+`TAdmit`/`TLive` in `ZigLean/Sep/Witness.lean` and `ZigLean/Conc/Witness.lean`), and for a
+partial triple a run that the kernel evaluates (`ok_of_okb (by decide +kernel)`) or that a
+total triple of the same program gives (`Live.of_total`). `Zig.loop` is a `partial_fixpoint`,
+which the kernel does not unfold, so a loop's run comes from a total triple or an input that
+skips the loop. A `Proofs/` theorem has its companions next to it; the library lemmas of
+`ZigLean/` have theirs in `ZigLean/Witnesses/*.lean`, since modules that generated code imports
+must not import the witness commands. A premise about an `opaque` function (the assembly
+theorems of `Proofs/Asm/Proofs.lean`) has no companion: the kernel cannot evaluate it, so those
+theorems stay at `safety`.
+
 The strength after caps (`derived_strength`) is the type-derived strength, reduced to `safety`
 when a partial or total claim has no non-vacuity witness, or a partial claim has no liveness
 witness; `caps` lists why.

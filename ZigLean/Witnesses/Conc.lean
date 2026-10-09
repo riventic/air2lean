@@ -16,10 +16,6 @@ namespace Zig.Witness
 
 open Assn Conc
 
-/-- `p0` of `mem1 w32` holds the `u32` `0`. -/
-theorem tpts32 : pts p0 4 (0 : BitVec 32) (mem1 (Enc.encode (0 : BitVec 32))).heap :=
-  mem1_pts' 0 (by decide)
-
 /-- The four owned bytes of `mem1 w32`. -/
 theorem tbytes32 : bytesAt p0 4096 4 .heap (Enc.encode (0 : BitVec 32))
     (mem1 (Enc.encode (0 : BitVec 32))).heap :=
@@ -41,16 +37,16 @@ liveness_witness TTriple.of_run :=
   ⟨Unit, emp, fun _ => emp, pure (), ret_run, TLive.of_empty rfl ⟨_, rfl⟩⟩
 
 nonvacuity_witness TTriple.load :=
-  ⟨BitVec 32, inferInstance, p0, 4, 0, by decide +kernel, TAdmit.mem1 tpts32⟩
+  ⟨BitVec 32, inferInstance, p0, 4, 0, by decide +kernel, TAdmit.mem1 pts32⟩
 liveness_witness TTriple.load :=
   ⟨BitVec 32, inferInstance, p0, 4, 0, by decide +kernel,
-    TLive.mem1 tpts32 (ok_of_okb (by decide +kernel))⟩
+    TLive.mem1 pts32 (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness TTriple.store :=
-  ⟨BitVec 32, inferInstance, inferInstance, p0, 4, 0, by decide +kernel, 1, TAdmit.mem1 tpts32⟩
+  ⟨BitVec 32, inferInstance, inferInstance, p0, 4, 0, by decide +kernel, 1, TAdmit.mem1 pts32⟩
 liveness_witness TTriple.store :=
   ⟨BitVec 32, inferInstance, inferInstance, p0, 4, 0, by decide +kernel, 1,
-    TLive.mem1 tpts32 (ok_of_okb (by decide +kernel))⟩
+    TLive.mem1 pts32 (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness TTriple.loadAt :=
   ⟨BitVec 32, inferInstance, p0, p0.add 0, 4096, 4, .heap, Enc.encode (0 : BitVec 32), 0, 4, 0, rfl,
@@ -92,13 +88,10 @@ liveness_witness TTriple.alloc :=
 nonvacuity_witness alloc_next := ⟨emp, 1, 1, by decide, TAdmit.of_empty rfl⟩
 liveness_witness alloc_next := ⟨emp, 1, 1, by decide, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
-/-- One owned byte at `p0`. -/
-theorem tbyte1 : bytesAt p0 4096 1 .heap #[.undef] (mem1 #[.undef]).heap := mem1_bytesAt _ _
-
-nonvacuity_witness TTriple.free := ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, TAdmit.mem1 tbyte1⟩
+nonvacuity_witness TTriple.free := ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide, TAdmit.mem1 (byte1 .heap)⟩
 liveness_witness TTriple.free :=
   ⟨p0, 4096, 1, .heap, #[.undef], rfl, rfl, by decide,
-    TLive.mem1 tbyte1 (ok_of_okb (by decide +kernel))⟩
+    TLive.mem1 (byte1 .heap) (ok_of_okb (by decide +kernel))⟩
 
 /-! ## Protocol lemmas (`ZigLean/Conc/Lemmas.lean`, `ZigLean/Conc/Logic.lean`, …) -/
 

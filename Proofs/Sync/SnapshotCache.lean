@@ -1,4 +1,5 @@
 import Proofs.Sync.Contracts
+import ZigLean.Conc.Witness
 
 /-!
 # A snapshot cache against the `Io.Mutex` contract (C14 client)
@@ -785,16 +786,10 @@ theorem cache_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec mutex io) h
   exact hv
 
-/-- The `u32` of a run of a function `!u32`, for a statement about it. -/
-def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
-  match r.run with
-  | some (.ok (.ok v, _)) => some v.toNat
-  | _ => none
-
 /-- One schedule completes: under the oracle that always picks option 0, the cache client
 returns 10 within fuel 1000. The kernel computes the run. -/
 theorem cache_completes :
-    okVal (Sched.run stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) mem0) = some 10 := by
+    Witness.okVal (Sched.run stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) mem0) = some 10 := by
   decide +kernel
 
 /-- **No run of the cache client gives an error**: no data race on `a` or `b`, no deadlock at

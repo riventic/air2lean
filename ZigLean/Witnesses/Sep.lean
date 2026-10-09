@@ -18,17 +18,6 @@ namespace Zig.Witness
 
 open Assn
 
-/-- `p0` of `mem1 w32` holds the `u32` `0`. -/
-theorem pts32 : pts p0 4 (0 : BitVec 32) (mem1 (Enc.encode (0 : BitVec 32))).heap :=
-  mem1_pts' 0 (by decide)
-
-theorem arr32 : arr p0 [(0 : BitVec 32)] (mem1 (Enc.encode (0 : BitVec 32))).heap :=
-  mem1_arr1 0 (by decide +kernel)
-
-/-- One owned byte at `p0`. -/
-theorem byte1 (kind : BlockKind) : bytesAt p0 4096 1 kind #[.undef] (mem1 #[.undef] kind).heap :=
-  mem1_bytesAt _ _
-
 /-! ## `Triple` and `TotalTriple` (`ZigLean/Sep/Triple.lean`, `ZigLean/Sep/Total.lean`) -/
 
 nonvacuity_witness TotalTriple.ret := ⟨Unit, fun _ => emp, (), Admit.emp⟩

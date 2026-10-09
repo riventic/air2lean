@@ -66,11 +66,8 @@ liveness_witness swap_sep :=
   ⟨Witness.p0, Witness.p0.add 4, 0, 1,
     Witness.Live.of_heap swap_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
 
-theorem swap_self_pre : pts Witness.p0 4 (0 : BitVec 32) (Witness.mem1 (Enc.encode (0 : BitVec 32))).heap :=
-  Witness.mem1_pts' 0 (by decide)
-
 nonvacuity_witness swap_self_sep :=
-  ⟨Witness.p0, 0, Witness.Admit.of_heap swap_self_pre (Witness.mem1_seq _ _)⟩
+  ⟨Witness.p0, 0, Witness.Admit.of_heap Witness.pts32 (Witness.mem1_seq _ _)⟩
 liveness_witness swap_self_sep :=
   ⟨Witness.p0, 0,
-    Witness.Live.of_heap swap_self_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+    Witness.Live.of_heap Witness.pts32 (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
