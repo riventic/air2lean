@@ -816,6 +816,166 @@ theorem post_free_leak {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s
     (inv ctx B).own h :=
   own_intro hok (body_absorb (during_body hh))
 
+theorem toNat_sub_le {a b : BitVec 64} (h : b.toNat ≤ a.toNat) : (a - b).toNat = a.toNat - b.toNat :=
+  BitVec.toNat_sub_of_le (by rw [BitVec.le_def]; exact h)
+
+theorem ofNat_eq_of_toNat {x : BitVec 64} {n : Nat} (h : x.toNat = n) : x = BitVec.ofNat 64 n := by
+  apply BitVec.eq_of_toNat_eq; rw [h, toNat_ofNat_lt (by rw [← h]; exact x.isLt)]
+
+/-- The common start of `resize` and `free`: the `@alignCast` of the context, `ownsSlice` and its
+`assert`, `isLastAllocation`. -/
+theorem prologue {α : Type} {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Slice}
+    {k : Nat} {bs : Array Byte} {Q : α → Assn} {c : Bool → MemM α}
+    (hok : Ok B e tail pb) (hin : InBuf B s.ptr bs.size) (hlen : s.len.toNat = bs.size)
+    (ht : TotalTriple (during ctx B e e tail pb s.ptr k bs)
+      (c (decide (s.ptr.off + bs.size = B.ptr.off + e))) Q) :
+    TotalTriple (during ctx B e e tail pb s.ptr k bs)
+      (ptrAddr ctx >>= fun x => if (BitVec.ofInt 64 x &&& 7) = 0 then
+        heap_FixedBufferAllocator_ownsSlice ctx s >>= fun y =>
+        (StateT.lift (debug_assert y) : MemM Unit) >>= fun _ =>
+        heap_FixedBufferAllocator_isLastAllocation ctx s >>= c
+      else throw .panic) Q := by
+  have hok' := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨hib, hlo, hhi⟩ := hin
+  refine TotalTriple.of_pure (fun h hp => pin_block (R := regionIn s.ptr B.A B.S B.K (2 ^ k) bs)
+    hok' (during_body hp)) fun ⟨b, hb⟩ => ?_
+  unfold during
+  refine TotalTriple.bind ptrAddr_ctx fun x => TotalTriple.lift fun hx => ?_
+  rw [if_pos hx]
+  refine TotalTriple.bind (ownsSlice_spec hb (fun h hp => during_ownsIn hb hok' h hp) hib h0 hlo
+    (by rw [hlen]; exact hhi) hA) fun y => TotalTriple.lift fun hy => ?_
+  subst hy
+  rw [debug_assert_true, Norm.lift_pure, pure_bind]
+  refine TotalTriple.bind (isLast_spec hib (by omega)) fun z => TotalTriple.lift fun hz => ?_
+  subst hz
+  rw [hlen]
+  exact ht
+
+theorem resize_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (n ra : BitVec 64)
+    (bs : Array Byte) (hn : 0 < n.toNat) (hfit : fits B n.toNat k) (hlen : s.len.toNat = bs.size) :
+    TotalTriple ((inv ctx B).own ∗ granted (inv ctx B) s.ptr k bs) (impl.resize ctx s k n ra)
+      (resizePost (inv ctx B) s.ptr k bs n.toNat) := by
+  refine open_grant fun e tail pb hok hin => ?_
+  have hok' := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  have hin' := hin
+  obtain ⟨hib, hlo, hhi⟩ := hin'
+  have hcap : B.cap < 2 ^ 64 := by omega
+  have heN : (BitVec.ofNat 64 e).toNat = e := toNat_ofNat_lt (by omega)
+  have hnc : n.toNat + B.cap < 2 ^ 64 := by unfold fits at hfit; have := Nat.two_pow_pos k; omega
+  unfold impl
+  simp only [heap_FixedBufferAllocator_resize]
+  fba_norm
+  refine prologue hok' hin hlen ?_
+  by_cases hl : s.ptr.off + bs.size = B.ptr.off + e
+  · -- the last allocation
+    simp only [hl, decide_true, Bool.not_true, Bool.false_eq_true, ↓reduceIte, le_eq, hlen]
+    by_cases hle : n.toNat ≤ bs.size
+    · rw [if_pos (by simpa using hle), sub_ok (by rw [hlen]; exact hle), Norm.lift_pure, pure_bind]
+      unfold during
+      refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
+      subst hx
+      have hsub : (s.len - n).toNat = bs.size - n.toNat := by rw [toNat_sub_le (by omega), hlen]
+      rw [sub_ok (by rw [heN, hsub]; omega), Norm.lift_pure, pure_bind]
+      have hv : BitVec.ofNat 64 e - (s.len - n) = BitVec.ofNat 64 (e - (bs.size - n.toNat)) :=
+        ofNat_eq_of_toNat (by rw [toNat_sub_le (by rw [heN, hsub]; omega), heN, hsub])
+      rw [hv]
+      refine TotalTriple.bind (store_end _) fun _ => ?_
+      exact TotalTriple.conseq (TotalTriple.ret (Q := resizePost (inv ctx B) s.ptr k bs n.toNat) true)
+        (fun h hp => post_last_shrink hok' hin hl hle hp) (fun _ _ h => h)
+    · rw [if_neg (by simpa using hle), sub_ok (by rw [hlen]; omega), Norm.lift_pure, pure_bind]
+      unfold during
+      refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
+      subst hx
+      have hsub : (n - s.len).toNat = n.toNat - bs.size := by rw [toNat_sub_le (by omega), hlen]
+      have hadd : (n - s.len).toNat + (BitVec.ofNat 64 e).toNat < 2 ^ 64 := by
+        rw [hsub, heN]; omega
+      rw [add_ok hadd, Norm.lift_pure, pure_bind]
+      refine TotalTriple.bind load_len fun x => TotalTriple.lift fun hx => ?_
+      subst hx
+      rw [gt_eq, toNat_add_ok hadd, hsub, heN, toNat_ofNat_lt hcap]
+      by_cases hroom : B.cap < n.toNat - bs.size + e
+      · rw [if_pos (by simpa using hroom)]
+        exact TotalTriple.conseq (TotalTriple.ret (Q := resizePost (inv ctx B) s.ptr k bs n.toNat) false)
+          (fun h hp => post_same hok' hin hp) (fun _ _ h => h)
+      rw [if_neg (by simpa using hroom)]
+      refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
+      subst hx
+      have hadd2 : (BitVec.ofNat 64 e).toNat + (n - s.len).toNat < 2 ^ 64 := by rw [hsub, heN]; omega
+      rw [add_ok hadd2, Norm.lift_pure, pure_bind]
+      have hv : BitVec.ofNat 64 e + (n - s.len) = BitVec.ofNat 64 (e + (n.toNat - bs.size)) :=
+        ofNat_eq_of_toNat (by rw [toNat_add_ok hadd2, heN, hsub])
+      rw [hv]
+      refine TotalTriple.bind (store_end _) fun _ => ?_
+      exact TotalTriple.conseq (TotalTriple.ret (Q := resizePost (inv ctx B) s.ptr k bs n.toNat) true)
+        (fun h hp => post_last_grow hok' hin hl (by omega) (by omega) hp) (fun _ _ h => h)
+  · -- not the last allocation
+    simp only [hl, decide_false, Bool.not_false, ↓reduceIte, gt_eq, hlen]
+    by_cases hgt : bs.size < n.toNat
+    · rw [if_pos (by simpa using hgt)]
+      exact TotalTriple.conseq (TotalTriple.ret (Q := resizePost (inv ctx B) s.ptr k bs n.toNat) false)
+        (fun h hp => post_same hok' hin hp) (fun _ _ h => h)
+    · rw [if_neg (by simpa using hgt)]
+      exact TotalTriple.conseq (TotalTriple.ret (Q := resizePost (inv ctx B) s.ptr k bs n.toNat) true)
+        (fun h hp => post_shrink hok' hin (by omega) hp) (fun _ _ h => h)
+
+theorem remap_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (n ra : BitVec 64)
+    (bs : Array Byte) (hn : 0 < n.toNat) (hfit : fits B n.toNat k) (hlen : s.len.toNat = bs.size) :
+    TotalTriple ((inv ctx B).own ∗ granted (inv ctx B) s.ptr k bs) (impl.remap ctx s k n ra)
+      (remapPost (inv ctx B) s.ptr k bs n.toNat) := by
+  have hr := resize_spec ctx B s k n ra bs hn hfit hlen
+  unfold impl at hr ⊢
+  simp only [heap_FixedBufferAllocator_remap]
+  fba_norm
+  refine TotalTriple.bind hr fun r => ?_
+  cases r with
+  | true =>
+    simp only [↓reduceIte]
+    exact TotalTriple.conseq (TotalTriple.ret (Q := remapPost (inv ctx B) s.ptr k bs n.toNat)
+      (some s.ptr)) (fun h hp => hp) (fun _ _ h => h)
+  | false =>
+    simp only [Bool.false_eq_true, ↓reduceIte]
+    exact TotalTriple.conseq (TotalTriple.ret (Q := remapPost (inv ctx B) s.ptr k bs n.toNat)
+      none) (fun h hp => hp) (fun _ _ h => h)
+
+theorem free_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
+    (hlen : s.len.toNat = bs.size) :
+    TotalTriple ((inv ctx B).own ∗ granted (inv ctx B) s.ptr k bs) (impl.free ctx s k ra)
+      (fun _ => (inv ctx B).own) := by
+  refine open_grant fun e tail pb hok hin => ?_
+  have hok' := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  have hin' := hin
+  obtain ⟨hib, hlo, hhi⟩ := hin'
+  have heN : (BitVec.ofNat 64 e).toNat = e := toNat_ofNat_lt (by omega)
+  unfold impl
+  simp only [heap_FixedBufferAllocator_free]
+  fba_norm
+  refine prologue hok' hin hlen ?_
+  by_cases hl : s.ptr.off + bs.size = B.ptr.off + e
+  · simp only [hl, decide_true, ↓reduceIte]
+    unfold during
+    refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
+    subst hx
+    rw [sub_ok (by rw [heN, hlen]; omega), Norm.lift_pure, pure_bind]
+    have hv : BitVec.ofNat 64 e - s.len = BitVec.ofNat 64 (e - bs.size) :=
+      ofNat_eq_of_toNat (by rw [toNat_sub_le (by rw [heN, hlen]; omega), heN, hlen])
+    rw [hv]
+    exact TotalTriple.conseq (store_end _) (fun h hp => hp)
+      (fun _ h hp => post_free_last hok' hin hl hp)
+  · simp only [hl, decide_false, Bool.false_eq_true, ↓reduceIte]
+    exact TotalTriple.conseq (TotalTriple.ret (Q := fun _ => (inv ctx B).own) ())
+      (fun h hp => post_free_leak hok' hp) (fun _ _ h => h)
+
+/-- **The translated `FixedBufferAllocator` satisfies the generic allocator specification**, in
+the total logic, for every allocator struct `ctx` and every buffer `B`. -/
+theorem allocSpec (ctx : Ptr) (B : Buf) : AllocSpec Logic.total impl ctx (inv ctx B) where
+  alloc len k ra hl hk hfit := alloc_spec ctx B len k ra hl hk hfit
+  resize s k n ra bs _ hn hfit hlen _ := resize_spec ctx B s k n ra bs hn hfit hlen
+  remap s k n ra bs _ hn hfit hlen _ := remap_spec ctx B s k n ra bs hn hfit hlen
+  free s k ra bs _ hlen _ := free_spec ctx B s k ra bs hlen
+
 end FBA
 
 end AllocFba
