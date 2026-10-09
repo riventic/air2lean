@@ -75,11 +75,6 @@ lake env lean tutorials/allocation-failure/Negative.lean   # must fail
   correctness.
 - [SEM-04](../../docs/premises.md#sem-04): `push_spec` is the partial form of the total
   `push_total` (`Proofs/Lists/Sep.lean`); the theorem itself states partial correctness.
-- [THR-01](../../docs/premises.md#thr-01), [ORD-01](../../docs/premises.md#ord-01),
-  [ORD-02](../../docs/premises.md#ord-02): derived from the checked pointer formation
-  `ptrProject p (·.add k)` (MM-3) in the list proofs: the source derivation resolves `·.add` by
-  name and also reaches `Zig.RmwOp.add`. These proofs run on sequential memory and use no
-  thread or atomic operation.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
 
