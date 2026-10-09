@@ -1694,8 +1694,10 @@ def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : S
   let name := if fc.isReferenced id then s!"i{id}" else s!"_i{id}"
   (env.push (id, name), s!"let {name} ← {expr}")
 
-/-- `emitScalar` without the aarch64 soft-float `f80` guard. -/
-def emitScalarOp (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+/-- A straight-line (non-terminator, non-`block`/`loop`) instruction on scalars: at most one
+output line. `emitSimple` lifts it to vectors; `emitScalarGuarded` adds the aarch64 `f80`
+guard. -/
+def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   let rv := fc.resolveVal env
   match inst.op with
@@ -2454,12 +2456,11 @@ def emitScalarOp (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
 
 
-/-- A straight-line (non-terminator, non-`block`/`loop`) instruction on scalars: at most one
-output line. `emitSimple` lifts it to vectors. On aarch64 an op that reads `f80` operands
-(`FCtx.softF80Reads`) is wrapped in `Zig.Float.softF80Chk`, over every lane of a vector. -/
-def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+/-- `emitScalar`; on aarch64 an op that reads `f80` operands (`FCtx.softF80Reads`) is wrapped
+in `Zig.Float.softF80Chk`, over every lane of a vector. -/
+def emitScalarGuarded (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
-  let (env', line?) := emitScalarOp fc env inst
+  let (env', line?) := emitScalar fc env inst
   let reads := fc.softF80Reads inst.op
   match line?, (line?.getD "").splitOn " ← " with
   | some _, binder :: rest@(_ :: _) =>
@@ -2528,7 +2529,7 @@ def emitLaneWise (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   -- signedness and width lookups, which read the operands.
   let scalarTy := match tupleTys with | some cs => cs[0]! | none => resTy
   let scalar : Inst := { id := inst.id, ty := scalarTy, op := rebuild (fakes.map (.inst ·.id)) }
-  let (_, line?) := emitScalar fc' env' scalar
+  let (_, line?) := emitScalarGuarded fc' env' scalar
   let line ← line?
   let expr := (line.splitOn " ← ").drop 1 |> " ← ".intercalate
   let params := String.intercalate " " ((List.range vals.size).map (s!"x{·}"))
@@ -2541,7 +2542,7 @@ def emitLaneWise (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
 /-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
 def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
-  (emitLaneWise fc env inst).getD (emitScalar fc env inst)
+  (emitLaneWise fc env inst).getD (emitScalarGuarded fc env inst)
 
 mutual
 
