@@ -524,7 +524,14 @@ def seal(attempt):
               'artifacts': inventory([attempt / n for n in ('plan.json', *OUTPUTS, 'guard.json', 'guard.log')])})
 
 
-def verify(attempt):
+def release_ready(receipt):
+    """A release consumes only receipts sealed over a clean tree, never under --allow-dirty."""
+    tree = mapping(receipt.get('tree'), 'receipt tree state')
+    demand(tree.get('dirty_allowed') is False and tree.get('tracked_dirty') is False,
+           'receipt was sealed over a dirty tree (tree.dirty_allowed); a release needs a clean-tree receipt')
+
+
+def verify(attempt, release=False):
     attempt = physical(attempt)
     receipt = load(attempt / 'receipt.json')
     demand(set(receipt) == {'schema', 'status', 'authentication', 'proof_scope', 'source_correspondence',
@@ -547,7 +554,10 @@ def verify(attempt):
     demand(after['context'] == context(plan) and after['compiled'] == compiled(plan)
            and after['profiles'] == profiles(), 'receipt stale')
     audit_ok(plan, audit)
-    return {'status': 'current', 'checking': 'not_rerun', 'authentication': 'not_attested'}
+    if release:
+        release_ready(receipt)
+    return {'status': 'current', 'checking': 'not_rerun', 'authentication': 'not_attested',
+            'tree': 'dirty-allowed' if receipt['tree']['dirty_allowed'] else 'clean'}
 
 
 def main():
@@ -563,6 +573,8 @@ def main():
     parser.add_argument('--module', action='append', default=[])
     parser.add_argument('--allow-dirty', action='store_true',
                         help='audit a tree with uncommitted tracked changes; recorded in the receipt')
+    parser.add_argument('--release', action='store_true',
+                        help='verify: also refuse a receipt sealed over a dirty tree (release use)')
     parser.add_argument('--lock', type=Path, default=Path(os.environ.get('AIR2LEAN_BUILD_LOCK',
                                                               str(Path.home() / '.cache/air2lean/build.lock'))))
     a = parser.parse_args()
@@ -595,7 +607,7 @@ def main():
         elif a.action == 'seal':
             seal(attempt)
         else:
-            print(json.dumps(verify(attempt)))
+            print(json.dumps(verify(attempt, a.release)))
         return 0
     except (OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
         print('proof receipt unavailable/stale: ' + str(error), file=sys.stderr)

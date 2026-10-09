@@ -10,8 +10,9 @@
 The profile is the CI matrix of .github/workflows/ci.yml at the recorded revision; every matrix
 row is one job and every `run:` step whose condition holds for that row is a gate (actions and the
 tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`
-job is one more job that only GitHub evidence covers. `record` requires a clean
-checkout and binds to HEAD. A gate is passed only with evidence for that exact commit: GitHub
+job is one more job that only GitHub evidence covers. A workflow whose gate lets a proof
+receipt bind a dirty tree (`AIR2LEAN_RECEIPT_ALLOW_DIRTY`, `proof-receipt.py ... --allow-dirty`)
+is refused. `record` requires a clean checkout and binds to HEAD. A gate is passed only with evidence for that exact commit: GitHub
 Actions run JSON (`gh run view ID --json databaseId,headSha,headBranch,conclusion,status,event,
 workflowName,url,jobs`) or a scripts/local-ci.sh results directory. Gates without evidence are
 missing unless declared unavailable with a reason; a failure can never be declared unavailable.
@@ -35,6 +36,8 @@ LEDGER_HEADER = ['path', 'reviewer', 'method', 'baseline_sha256', 'reviewed_revi
 SHA1 = re.compile(r'[0-9a-f]{40}')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 GATE_STATUSES = ('passed', 'failed', 'missing', 'unavailable')
+# A gate that seals a proof receipt over uncommitted changes (scripts/proof-receipt.py).
+DIRTY_RECEIPT = re.compile(r'AIR2LEAN_RECEIPT_ALLOW_DIRTY|proof-receipt\.py[^"]*--allow-dirty')
 
 
 class ReleaseError(Exception):
@@ -269,7 +272,11 @@ def build_plan(root, revision):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     if 'macos' in jobs:
         plan_jobs.append(macos_plan(jobs['macos'], commands))
-    blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
+    for name, command in commands.items():
+        if DIRTY_RECEIPT.search(json.dumps(command)):
+            raise ReleaseError('%s: step %r lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
+                               'a release binds only clean-tree receipts' % (WORKFLOW, name))
+    blob =lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
     return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),
             'local_ci_steps_blob': blob(STEPS_SCRIPT), 'compatibility_blob': blob('compatibility.json'),

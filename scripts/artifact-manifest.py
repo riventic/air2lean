@@ -392,6 +392,11 @@ def check_manifest(root, path, expect=(), allow_dirty=False, verify_receipt=Fals
             'dirty-tree provenance: recorded at %s with modified %s and untracked %s link files; '
             'not reproducible from that revision (pass --allow-dirty to accept)'
             % (recorded.get('head'), recorded.get('modified_link_paths'), recorded.get('untracked_link_paths')))
+    if 'receipt' in links and not allow_dirty:
+        try:
+            receipt.release_ready(load(Path(manifest['inputs']['receipt']) / 'receipt.json'))
+        except (OSError, ValueError) as error:
+            report['problems'].append('chained proof receipt: %s (pass --allow-dirty to accept)' % error)
     if verify_receipt:
         demand('receipt' in links, 'manifest has no chained proof receipt')
         try:
