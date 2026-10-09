@@ -80,7 +80,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
@@ -208,6 +208,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Mem.Owned`, `ZigLean.Sep.Owned`, `ZigLean.Sep.ArenaClient`; tokens
   `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
 - Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
+
+<a id="alc-08"></a>
+### ALC-08 — Thread-safe allocator in concurrent code
+
+- Kind: environment.
+- Statement: In a concurrent run (`Zig.Sched.run`), the program's `std.mem.Allocator` is
+  thread-safe: allocations and frees by threads that are not ordered by happens-before give
+  disjoint blocks, as the model's allocator does. The model's allocator state (`nextAddr`,
+  `allocs`, the policy) has no race footprint, so a non-thread-safe allocator used from two
+  threads (`FixedBufferAllocator.allocator()`, a `DebugAllocator` with `thread_safe = false`)
+  is outside the model. Every concurrent theorem carries this premise; it holds vacuously for
+  a program that allocates from one thread only.
+- Derived from: `ZigLean.Conc.Sched`.
+- Sources: [std-models.md](std-models.md#allocator-model), `ZigLean/Mem/Alloc.lean`.
 
 ## Thread creation and scheduling
 

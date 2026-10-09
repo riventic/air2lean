@@ -16,7 +16,7 @@ One name prefix per line. `scripts/check.sh` writes the AIR of every function wh
 
 ## Allocator model
 
-`std.mem.Allocator` is `Zig.Allocator` (a structure without fields; 16 bytes in memory). The model is one allocator, with its state in `Zig.Mem`:
+`std.mem.Allocator` is `Zig.Allocator` (a structure without fields; 16 bytes in memory). The model is one allocator, with its state in `Zig.Mem`. Its state has no race footprint: in concurrent code the allocator is assumed thread-safe (premise [ALC-08](premises.md#alc-08), carried by every concurrent theorem); a non-thread-safe allocator shared by unordered threads is outside the model.
 
 | Rule | |
 |---|---|

@@ -25,6 +25,11 @@ The model is one allocator, with its state in `Mem`:
   the length of the block, throws `.illegal` (a double free, a use after free).
 
 `tests/diff/common.zig`'s `TestAllocator` has the same rules.
+
+The allocator's state (`nextAddr`, `allocs`, the policy) has no race footprint: in concurrent
+code (`Zig.Sched.run`) the program's allocator is assumed thread-safe (premise ALC-08,
+`docs/premises.md`), so a non-thread-safe allocator shared by unordered threads is outside the
+model.
 -/
 
 namespace Zig

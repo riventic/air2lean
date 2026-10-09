@@ -70,7 +70,7 @@
     "ZigLean.Mem.Thread": ["ORD-01", "THR-01"],
     "ZigLean.Conc.Basic": ["THR-01"],
     "ZigLean.Conc.Call": ["THR-01"],
-    "ZigLean.Conc.Sched": ["THR-01", "THR-02"],
+    "ZigLean.Conc.Sched": ["THR-01", "THR-02", "ALC-08"],
     "ZigLean.Conc.Spawn": ["THR-03"],
     "ZigLean.Conc.SpawnLemmas": ["THR-03", "THR-08"],
     "ZigLean.Conc.Logic": ["THR-08"],
