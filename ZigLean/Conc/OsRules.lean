@@ -115,10 +115,13 @@ theorem waitCount_eq {p : Ptr} {e : BitVec 32} {timed : Bool} {m m' : Mem}
 
 namespace OsRulesExamples
 
+/-- The run's environment of these schedules: any `Io`, spawn always succeeds. -/
+def runEnv : Zig.Env := { io := .any, spawn := .available }
+
 /-- A run's result, without the memory. -/
 def result {α : Type} (dispatch : Nat → ConcM Nat Unit) (fuel : Nat) (o : List Nat)
     (main : ConcM Nat α) : Option (Except Error α) :=
-  ((Sched.run dispatch fuel (o.getD · 0) main {}).run).map (·.map (·.1))
+  ((Sched.run runEnv dispatch fuel (o.getD · 0) main {}).run).map (·.map (·.1))
 
 def noKids : Nat → ConcM Nat Unit := fun _ => pure ()
 
@@ -157,7 +160,7 @@ def readerKid : Nat → ConcM Nat Unit := fun _ => do
 def wakerMain : ConcM Nat Unit := do
   let _ ← word 0
   let _ ← ConcM.liftMem (do let d ← alloc .heap 8 8; store 8 d (0 : BitVec 64))
-  let t : ThreadId ← ConcM.sync (.spawn 0)
+  let .ok t ← ConcM.sync (.spawn 0) | throw .unspecified
   ConcM.liftMem (store 8 d1 (5 : BitVec 64))
   let _ ← Linux.futex_3arg p0 0x81 1
   ConcM.sync (.join t)

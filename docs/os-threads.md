@@ -43,7 +43,7 @@ for `std.Thread.spawn` today. `env : Os.Env` is the explicit environment (below)
 | `os.linux.sched_yield() usize` | `Linux.sched_yield : ConcM Tgt (BitVec 64)` | OSY-01 |
 | `os.linux.clock_gettime(clk_id, tp) usize` | `Linux.clock_gettime (env : Env) (clk_id : BitVec 32) (tp : Ptr) : ConcM Tgt (BitVec 64)` | OSK-01 |
 | `os.linux.clock_nanosleep(clockid, flags: TIMER, request, remain) usize` | `Linux.clock_nanosleep (clockid flags : BitVec 32) (request : Ptr) (remain : Option Ptr) : ConcM Tgt (BitVec 64)` | OSK-02 |
-| `pthread_create(newthread, attr, start_routine, arg) E` | `Darwin.pthread_create (env : Env) (newthread : Ptr) (attr : Option Ptr) (t : Tgt) : ConcM Tgt (BitVec 16)` | OST-01 |
+| `pthread_create(newthread, attr, start_routine, arg) E` | `Darwin.pthread_create (newthread : Ptr) (attr : Option Ptr) (t : Tgt) : ConcM Tgt (BitVec 16)` | OST-01 |
 | `pthread_attr_init/destroy(attr) E`, `pthread_attr_setstacksize/setguardsize(attr, usize) E` | `Darwin.pthread_attr_init (attr : Ptr) : MemM (BitVec 16)`, … | OST-01 |
 | `pthread_join(thread, arg_return) E` | `Darwin.pthread_join (thread : ThreadId) (arg_return : Option Ptr) : ConcM Tgt (BitVec 16)` | OST-02 |
 | `pthread_detach(thread) E` | `Darwin.pthread_detach (thread : ThreadId) : MemM (BitVec 16)` | OST-02 |
@@ -72,10 +72,14 @@ spawn policy and the allocator's thread safety are explicit, never constants):
 | Field | Meaning | Used by |
 |---|---|---|
 | `cpuMask` | affinity mask (bits below 1024); `Env.cpus` counts it | `sched_getaffinity`, `sysctlbyname("hw.logicalcpu")`; `Io.Threaded.async_limit = cpus - 1` |
-| `spawn` | `available` or `fallible` (`ZigLean/Conc/Spawn.lean`, with `Mem.spawnLimit`) | `clone`, `pthread_create` |
 | `tid`, `pid` | kernel ids of model threads, process id | `gettid`, `pthread_threadid_np`, `getpid`, `clone`'s `ptid`, `tgkill` |
 | `clock k i` | nanoseconds of the `i`-th clock read of the run, per clock | `clock_gettime` |
 | `mallocSlack i n` | usable bytes beyond `n` at allocation attempt `i` | `malloc`, `malloc_size` |
+
+The spawn policy is the run's (`Zig.Env.spawn`, `ZigLean/Conc/Basic.lean`; `available` or
+`fallible` with `Mem.spawnLimit`): `clone` and `pthread_create` are the scheduler's `spawn`, so a
+run has one spawn oracle. `Env.Matches env run` states that the run's `Io.Threaded` has
+`env.cpus` CPUs.
 
 `Env.Valid` is the premise a theorem states: `cpus ≥ 1`; ids distinct and positive; the
 `awake`/`boot` clocks monotone; values fit a `timespec`. Libc's `malloc` is thread-safe (OSM-02).
@@ -104,7 +108,8 @@ macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std re
 ## Threads
 
 **Create.** Linux `clone` with std's exact flags and macOS `pthread_create` are the scheduler's
-`spawn t` (the fork edge), or under `fallible` an oracle failure (`-EAGAIN`/`-ENOMEM`, `EAGAIN`).
+`spawn t` (the fork edge), or under `Zig.Env.spawn = fallible` its declared failure, returned as
+`-ENOMEM` for `OutOfMemory` and `-EAGAIN` for the others (macOS `EAGAIN`; `Linux.spawnErrno`).
 The new thread's thread-local instances are batch7 C02's (`tlsEnter` in the dispatcher), and
 `clone`'s `stack`/`tp` and `tls.prepareArea` belong to the row. Linux `PARENT_SETTID` writes
 `Env.tid child` to `ptid` after the fork. A child that reads `ptid` unsynchronized races, which is

@@ -612,8 +612,9 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Statement: Linux `clone` with exactly std's flag set (`THREAD|DETACHED|VM|FS|FILES|
   PARENT_SETTID|CHILD_CLEARTID|SIGHAND|SYSVSEM|SETTLS`) and macOS `pthread_create` start a new
   thread that runs the call site's entry function with its argument (the translator's spawn
-  target), with a happens-before edge from the parent. Under `Env.spawn = fallible` (and
-  `Mem.spawnLimit`) an oracle choice may fail them instead: `-EAGAIN` or `-ENOMEM` on Linux,
+  target), with a happens-before edge from the parent: the scheduler's `spawn`. Under the
+  run's `Zig.Env.spawn = fallible` (and `Mem.spawnLimit`) the scheduler may fail it instead with
+  a declared error, which the row returns as `-ENOMEM` (`OutOfMemory`) or `-EAGAIN` on Linux,
   `EAGAIN` on macOS. The child gets fresh thread-local instances (batch7 C02); the stack and TLS
   arguments are not used. Linux writes the child's id (`Env.tid`) to `ptid` after the fork, and
   `pthread_create` writes the handle. The `pthread_attr_*` calls touch only the attribute bytes,

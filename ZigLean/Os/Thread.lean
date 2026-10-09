@@ -11,11 +11,12 @@ and a call that can reach another thread is a `ConcM` function over the existing
 
 **Create** (OST-01). The entry point of a new thread is a function pointer constant at each call
 site (`Instance.entryFn`), so the translator builds the spawn target `t : Tgt` from it and its
-argument, as for `std.Thread.spawn` today; `clone`/`pthread_create` take that target. Under the
-environment's spawn policy (`Env.spawn`; `fallible` with `Mem.spawnLimit`,
-`ZigLean/Conc/Spawn.lean`) the oracle may fail the call: Linux `-EAGAIN`/`-ENOMEM`, macOS
-`EAGAIN`. Otherwise it is the scheduler's `spawn t`: a new thread with a happens-before edge from
-the parent (`Thread.fork`). Its thread-local variables are new instances (batch7 C02: the
+argument, as for `std.Thread.spawn` today; `clone`/`pthread_create` take that target. The call
+is the scheduler's `spawn t`: a new thread with a happens-before edge from the parent
+(`Thread.fork`), or, under the run's spawn policy (`Zig.Env.spawn = fallible`, with
+`Mem.spawnLimit`; `ZigLean/Conc/Sched.lean`), one of the declared failures, which the row returns
+as Linux `-ENOMEM` (`OutOfMemory`) or `-EAGAIN` (the others), macOS `EAGAIN` (`Linux.spawnErrno`).
+Its thread-local variables are new instances (batch7 C02: the
 generated dispatcher's `tlsEnter`; the `tls` argument of `clone` and `tls.prepareArea` are part
 of this row and not translated). Linux `PARENT_SETTID` writes the child's id to `ptid`; the
 parent makes that write after the fork, so a child that reads `ptid` without synchronizing races
@@ -55,12 +56,10 @@ namespace Os
 
 variable {Tgt : Type}
 
-/-- A choice of the spawn oracle among `total` outcomes: always `0` (assigned) under `available`,
-any outcome under `fallible` (none assigned while the caller is at `Mem.spawnLimit`). -/
-def spawnChoice (env : Env) (total : Nat) : ConcM Tgt Nat :=
-  match env.spawn with
-  | .available => pure 0
-  | .fallible => (assignmentChoiceC (Tgt := Tgt) (σ := Unit) total).run' ()
+/-- The Linux errno of a `clone` that the run's environment failed (`SyncOp.spawn` returned the
+declared error `e`): `ENOMEM` for `OutOfMemory`, else `EAGAIN`. Both are reachable under
+`fallible`. -/
+def Linux.spawnErrno (e : ErrName) : Nat := if e = "OutOfMemory" then Linux.E.NOMEM else Linux.E.AGAIN
 
 /-- Thread `t` can be signaled: it exists, and it has not exited (Linux `cloneExit`) or been
 joined (macOS); a detached macOS thread stays signalable (the model does not see its end, so a
@@ -101,13 +100,11 @@ def clone (env : Env) (t : Tgt) (_stack : BitVec 64) (flags : BitVec 32) (ptid :
     (_tp : BitVec 64) (ctid : Option Ptr) : ConcM Tgt (BitVec 64) := do
   if flags ≠ stdCloneFlags ∨ ctid = none then throw .unspecified
   let some ptid := ptid | throw .unspecified
-  match ← spawnChoice env 3 with
-  | 0 =>
-    let child : ThreadId ← ConcM.sync (.spawn t)
+  match ← ConcM.sync (.spawn t) with
+  | .ok child =>
     ConcM.liftMem (store 4 ptid (env.tid child))
     return (env.tid child).setWidth 64
-  | 1 => return negErrno E.AGAIN
-  | _ => return negErrno E.NOMEM
+  | .error e => return negErrno (spawnErrno e)
 
 /-- The kernel's `CHILD_CLEARTID` when a `clone` thread exits (module doc): one turn. -/
 def cloneExit (ctid : Ptr) : ConcM Tgt Unit := do
@@ -206,16 +203,15 @@ def pthread_attr_setguardsize (attr : Ptr) (_guardsize : BitVec 64) : MemM (BitV
 
 /-- `pthread_create(newthread: *pthread_t, attr: ?*const pthread_attr_t, start_routine, arg) E`
 (module doc): `t` is the spawn target of `(start_routine, arg)`. Writes the handle; returns `0`,
-or `EAGAIN` from the spawn oracle. -/
-def pthread_create (env : Env) (newthread : Ptr) (attr : Option Ptr) (t : Tgt) :
+or `EAGAIN` when the run's environment fails the spawn (`Zig.Env.spawn`). -/
+def pthread_create (newthread : Ptr) (attr : Option Ptr) (t : Tgt) :
     ConcM Tgt (BitVec 16) := do
   if let some a := attr then let _ ← ConcM.liftMem (loadBytes a pthreadAttrSize 8)
-  match ← spawnChoice env 2 with
-  | 0 =>
-    let child : ThreadId ← ConcM.sync (.spawn t)
+  match ← ConcM.sync (.spawn t) with
+  | .ok child =>
     ConcM.liftMem (store 8 newthread child)
     return 0
-  | _ => return BitVec.ofNat 16 E.AGAIN
+  | .error _ => return BitVec.ofNat 16 E.AGAIN
 
 /-- `pthread_join(thread: pthread_t, arg_return: ?*?*anyopaque) E` with `arg_return = null`:
 the scheduler's `join` (the edge from the end of `thread`); `0`. -/

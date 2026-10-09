@@ -34,13 +34,17 @@ def showOut {α : Type} (sh : α → String) : Sched.Out α → String
   | some (.error e) => s!"{repr e}"
   | some (.ok (v, _)) => sh v
 
+/-- The run's environment: any `Io`; spawn succeeds unless a check passes `fallible`. -/
+def runEnv : Zig.Env := { io := .any, spawn := .available }
+
 /-- The distinct results of every schedule of `main` (at most `cap` runs), sorted. -/
 def outcomes {α : Type} (dispatch : Tgt → ConcM Tgt Unit) (main : ConcM Tgt α) (sh : α → String)
-    (fuel : Nat := 40) (cap : Nat := 4000) (m0 : Mem := {}) : List String :=
+    (fuel : Nat := 40) (cap : Nat := 4000) (m0 : Mem := {}) (renv : Zig.Env := runEnv) :
+    List String :=
   let rec go : Nat → Array Nat → List String → List String
     | 0, _, acc => acc
     | k + 1, pre, acc =>
-      let (out, opts) := Sched.runTrace dispatch fuel (pre.getD · 0) main m0
+      let (out, opts) := Sched.runTrace renv dispatch fuel (pre.getD · 0) main m0
       let s := showOut sh out
       let acc := if acc.contains s then acc else s :: acc
       match nextSchedule pre opts with
@@ -51,6 +55,12 @@ def outcomes {α : Type} (dispatch : Tgt → ConcM Tgt Unit) (main : ConcM Tgt �
 def noKids : Tgt → ConcM Tgt Unit := fun _ => pure ()
 
 def lift {α : Type} (x : MemM α) : ConcM Tgt α := ConcM.liftMem x
+
+/-- The scheduler's spawn; its failure (only under `fallible`) is `.unspecified` here. -/
+def spawnKid (t : Tgt) : ConcM Tgt ThreadId := do
+  match ← ConcM.sync (.spawn t) with
+  | .ok c => pure c
+  | .error _ => throw .unspecified
 
 /-- A `u32` word, initialized to `v`: block 0 of a fresh memory. -/
 def word (v : BitVec 32) : ConcM Tgt Ptr := lift do
@@ -70,7 +80,7 @@ def seqStore (p : Ptr) (v : BitVec 32) : ConcM Tgt Unit := do
 
 def hex64 (v : BitVec 64) : String := s!"{v.toInt}"
 def hex32 (v : BitVec 32) : String := s!"{v.toInt}"
-def env := Env.example
+def env := Os.Env.example
 
 /-! ## OSF-01: futex wait -/
 
@@ -98,7 +108,7 @@ def timed (nsec : BitVec 64) : ConcM Tgt (BitVec 64) := do
 def racyKid : Tgt → ConcM Tgt Unit := fun _ => lift (store 4 p0 (1 : BitVec 32))
 #guard (outcomes racyKid (do
     let p ← word 0
-    let t : ThreadId ← ConcM.sync (.spawn 0)
+    let t ← spawnKid 0
     let r ← Linux.futex_4arg p 0x80 7 none
     ConcM.sync (.join t)
     pure r) hex64).contains "Zig.Error.illegal"
@@ -139,7 +149,7 @@ def wakeKid : Tgt → ConcM Tgt Unit := fun _ => do
 def wakeMain : ConcM Tgt (BitVec 64) := do
   let _ ← word 0
   let slot ← lift (alloc .heap 8 8)
-  let t : ThreadId ← ConcM.sync (.spawn 0)
+  let t ← spawnKid 0
   seqStore p0 1
   let _ ← Linux.futex_3arg p0 0x81 1
   ConcM.sync (.join t)
@@ -165,7 +175,7 @@ def joinLoop : Nat → ConcM Tgt Unit
     let _ ← Linux.futex_4arg ctid 0 tid none
     joinLoop k
 
-def cloneSetup (env : Env) : ConcM Tgt (BitVec 64) := do
+def cloneSetup (env : Os.Env) : ConcM Tgt (BitVec 64) := do
   let _ ← word 1
   let _ ← lift (do let d ← alloc .heap 8 8; store 8 d (0 : BitVec 64))
   let _ ← lift (alloc .heap 4 4)
@@ -188,12 +198,12 @@ def cloneSetup (env : Env) : ConcM Tgt (BitVec 64) := do
 #guard (outcomes cloneKid (do
     let _ ← cloneSetup env
     lift (load (BitVec 64) 8 dataP)) hex64) == ["Zig.Error.illegal"]
--- Spawn failure is the oracle's under `fallible`: -EAGAIN, -ENOMEM, or a thread.
+-- Spawn failure is the run environment's under `fallible`: -EAGAIN, -ENOMEM, or a thread.
 #guard outcomes cloneKid (do
-    let r ← cloneSetup { env with spawn := .fallible }
+    let r ← cloneSetup env
     if r.toInt < 0 then return r
     joinLoop 6
-    pure r) hex64 (fuel := 30) == ["-11", "-12", "1001", "Zig.Error.panic"]
+    pure r) hex64 (fuel := 30) (renv := { runEnv with spawn := .fallible }) == ["-11", "-12", "1001", "Zig.Error.panic"]
 -- Other clone flags: outside the model.
 #guard outcomes cloneKid (Linux.clone env 0 0 0x100 (some ptidP) 0 (some ctid)) hex64 ==
   ["Zig.Error.unspecified"]
@@ -209,37 +219,37 @@ def pSetup : ConcM Tgt (Ptr × Ptr) := lift do
 -- pthread_join gives the edge from the end of the thread.
 #guard outcomes pKid (do
     let (d, h) ← pSetup
-    let _ ← Darwin.pthread_create env h none 0
+    let _ ← Darwin.pthread_create h none 0
     let t ← lift (load ThreadId 8 h)
     let _ ← Darwin.pthread_join t none
     lift (load (BitVec 64) 8 d)) hex64 == ["7"]
 -- Join twice, join after detach, detach twice: illegal.
 #guard outcomes pKid (do
     let (_, h) ← pSetup
-    let _ ← Darwin.pthread_create env h none 0
+    let _ ← Darwin.pthread_create h none 0
     let t ← lift (load ThreadId 8 h)
     let _ ← Darwin.pthread_join t none
     Darwin.pthread_join t none) toString |>.all (· ∈ ["Zig.Error.illegal"])
 #guard outcomes pKid (do
     let (_, h) ← pSetup
-    let _ ← Darwin.pthread_create env h none 0
+    let _ ← Darwin.pthread_create h none 0
     let t ← lift (load ThreadId 8 h)
     let _ ← lift (Darwin.pthread_detach t)
     Darwin.pthread_join t none) toString == ["Zig.Error.illegal"]
 -- A detached thread needs no join.
 #guard outcomes pKid (do
     let (_, h) ← pSetup
-    let _ ← Darwin.pthread_create env h none 0
+    let _ ← Darwin.pthread_create h none 0
     let t ← lift (load ThreadId 8 h)
     lift (Darwin.pthread_detach t)) toString == ["0x0000#16"]
 -- Spawn failure: EAGAIN under `fallible`.
 #guard (outcomes pKid (do
     let (_, h) ← pSetup
-    let r ← Darwin.pthread_create { env with spawn := .fallible } h none 0
+    let r ← Darwin.pthread_create h none 0
     if r ≠ 0 then return r
     let t ← lift (load ThreadId 8 h)
     let _ ← Darwin.pthread_join t none
-    pure r) toString) == ["0x0000#16", "0x0023#16"]
+    pure r) toString (renv := { runEnv with spawn := .fallible })) == ["0x0000#16", "0x0023#16"]
 -- Attributes: init/setstacksize/setguardsize/destroy; a stack below PTHREAD_STACK_MIN is EINVAL.
 #guard outcomes noKids (lift do
     let a ← alloc .heap 64 8
@@ -263,7 +273,7 @@ def pSetup : ConcM Tgt (Ptr × Ptr) := lift do
 #guard outcomes noKids (lift do
     let s ← alloc .heap 64 8
     Linux.sched_getaffinity env 0 64 s) hex64 == ["Zig.Error.unspecified"]
-#guard env.cpus == 4 && ({ env with cpuMask := 0x101 } : Env).cpus == 2
+#guard env.cpus == 4 && ({ env with cpuMask := 0x101 } : Os.Env).cpus == 2
 -- sysctlbyname("hw.logicalcpu") writes the CPU count; other names are outside the model.
 def cstr (s : String) : MemM Ptr := do
   let bs := s.toList.map (fun c => Byte.int (BitVec.ofNat 8 c.toNat)) ++ [Byte.int 0]
@@ -324,7 +334,7 @@ def intrKid : Tgt → ConcM Tgt Unit := fun _ => do
 #guard outcomes intrKid (do
     let _ ← word 0
     let slot ← lift (alloc .heap 8 8)
-    let t : ThreadId ← ConcM.sync (.spawn 0)
+    let t ← spawnKid 0
     ConcM.sync .yield
     let _ ← lift (Linux.tgkill env 1000 1001 29)
     ConcM.sync (.join t)
@@ -349,7 +359,7 @@ def readTwo (clk : BitVec 32) : ConcM Tgt (List (BitVec 64)) := do
 #guard outcomes noKids (do let ts ← lift (alloc .heap 16 8); Darwin.clock_gettime env 1 ts) hex32 ==
   ["Zig.Error.unspecified"]
 -- Clock reads of two threads are ordered by the run; each read is a scheduling point.
-#guard ({ env with clock := fun _ i => i } : Env).clock .awake 3 == 3
+#guard ({ env with clock := fun _ i => i } : Os.Env).clock .awake 3 == 3
 def req (nsec : BitVec 64) : MemM Ptr := do
   let t ← alloc .heap 16 8
   store 8 t (1 : BitVec 64)
@@ -379,7 +389,7 @@ def mtag {α : Type} (x : MemM α) (m : Mem := {}) : String :=
   | none => "none"
   | some (.error e) => s!"{repr e}"
   | some (.ok _) => "ok"
-def mallocOk (n : BitVec 64) (e : Env := env) : MemM Ptr := do
+def mallocOk (n : BitVec 64) (e : Os.Env := env) : MemM Ptr := do
   match ← Darwin.malloc e n with
   | some p => pure p
   | none => throw .panic
@@ -411,7 +421,7 @@ def mallocOk (n : BitVec 64) (e : Env := env) : MemM Ptr := do
 def freeKid : Tgt → ConcM Tgt Unit := fun _ => lift (Darwin.free (some ⟨some 0, 0⟩))
 #guard (outcomes freeKid (do
     let p ← lift (mallocOk 8)
-    let t : ThreadId ← ConcM.sync (.spawn 0)
+    let t ← spawnKid 0
     lift (store 1 p (1 : BitVec 8))
     ConcM.sync (.join t)) toString).all (· ∈ ["Zig.Error.illegal", "none"])
 

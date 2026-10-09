@@ -10,8 +10,10 @@ parameters or premises of every concurrent theorem, never constants of the model
 
 * `cpuMask`: the CPUs the process may run on (`sched_getaffinity`), so `cpus` is
   `std.Thread.getCpuCount()` and `Io.Threaded`'s `async_limit` is `cpus - 1`.
-* `spawn`: whether thread creation (`clone`, `pthread_create`) may fail
-  (`ZigLean/Conc/Spawn.lean`: `available` or `fallible`, with `Mem.spawnLimit`).
+* The spawn policy is not here: whether thread creation (`clone`, `pthread_create`) may fail
+  is the run's `Zig.Env.spawn` (`ZigLean/Conc/Basic.lean`), which the scheduler's `spawn`
+  applies (`available`, or `fallible` with `Mem.spawnLimit`). A theorem over `Io.Threaded` on
+  this environment states `Zig.Env.io = .threaded env.cpus` (`Env.Matches`).
 * `tid`, `pid`: the kernel's thread ids and process id. A model thread's id never changes.
 * `clock`: the value of the `i`-th clock read of a run, per clock (`clock_gettime`).
 * `mallocSlack`: the bytes `malloc` adds to request `n` at allocation attempt `i`
@@ -50,8 +52,6 @@ structure Env where
   /-- Bit `i` set: CPU `i` is in the process's affinity mask. Bits from `cpuSetBits` on are
   ignored. -/
   cpuMask : Nat
-  /-- Whether `clone`/`pthread_create` may fail. -/
-  spawn : SpawnPolicy
   /-- The kernel thread id of model thread `t` (Linux `gettid`; macOS `pthread_threadid_np`,
   zero-extended). -/
   tid : ThreadId → BitVec 32
@@ -80,12 +80,14 @@ structure Env.Valid (env : Env) : Prop where
   clock_mono : ∀ k, k.monotone = true → ∀ i j, i ≤ j → env.clock k i ≤ env.clock k j
   clock_lt : ∀ k i, env.clock k i < timespecLimit
 
-/-- The environment of the runtime regressions and examples: CPUs 0–3, assignment always
-succeeds, thread `t` has id `1000 + t`, a clock that ticks once per read, and no malloc slack. It
+/-- The run's environment (`Zig.Env`) agrees with the OS: `Io.Threaded`'s `async_limit` is
+`cpus - 1` for the CPU count of the affinity mask. -/
+def Env.Matches (env : Env) (run : Zig.Env) : Prop := ∀ c, run.io = .threaded c → c = env.cpus
+
+/-- The environment of the runtime regressions and examples: CPUs 0–3, thread `t` has id `1000 + t`, a clock that ticks once per read, and no malloc slack. It
 is not `Valid` (the ids wrap at `2^32`); theorems quantify over environments instead. -/
 def Env.example : Env where
   cpuMask := 0xf
-  spawn := .available
   tid t := BitVec.ofNat 32 (1000 + t)
   pid := 1000
   clock _ i := i

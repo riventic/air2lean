@@ -24,11 +24,11 @@ def mallocPost (n : Nat) : Option Ptr → Assn
   | some p => fun h => p.off = 0 ∧ ∃ S A, n ≤ S ∧ A % Darwin.mallocAlign = 0 ∧
       bytesAt p A S .heap (Array.replicate S .undef) h
 
-theorem Os.Darwin.malloc_eq (env : Env) (n : BitVec 64) (m : Mem) :
+theorem Os.Darwin.malloc_eq (env : Os.Env) (n : BitVec 64) (m : Mem) :
     (Darwin.malloc env n).run m =
       (rawAlloc (n.toNat + env.mallocSlack m.allocs n.toNat) Darwin.mallocAlign).run m := rfl
 
-theorem Triple.malloc (env : Env) (n : BitVec 64) :
+theorem Triple.malloc (env : Os.Env) (n : BitVec 64) :
     Triple emp (Darwin.malloc env n) (mallocPost n.toNat) :=
   Triple.of_run fun m hP hF hd hm hp hst => by
     have hP0 : hP = Heap.empty := hp
@@ -97,7 +97,7 @@ def returns {α : Type} (c : MemM α) : Bool :=
   | _ => false
 
 def malloc8 : MemM Ptr := do
-  match ← Darwin.malloc Env.example 8 with
+  match ← Darwin.malloc Os.Env.example 8 with
   | some p => pure p
   | none => throw .panic
 
