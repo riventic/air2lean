@@ -138,15 +138,20 @@ def printGlobal (g : Global) : String :=
   s!"\{ name := {opt str g.name}, ty := {g.ty}, isConst := {bool g.isConst}, " ++
   s!"threadlocal := {bool g.threadlocal}, isExtern := {bool g.isExtern}, init := {opt printVal g.init} }"
 
+/-- Every field of the dialect, its enumerations by their full constructor names. -/
+def printDialect (d : Dialect) : String :=
+  s!"\{ version := {repr d.version}, arch := {str d.arch}, ptrBytes := {d.ptrBytes}, " ++
+  s!"endian := {repr d.endian}, errorSetBits := {d.errorSetBits}, backend := {str d.backend}, " ++
+  s!"buildMode := {str d.buildMode} }"
+
 /-- The whole decoded `Func` as a Lean term, or `none` outside the printable fragment. -/
 def printFunc (f : Func) : Option String := do
   let body ← printBody f.body
-  pure <| "{ zigVersion := " ++ str f.zigVersion ++ ", name := " ++ str f.name ++
+  pure <| "{ dialect := " ++ printDialect f.dialect ++ ", name := " ++ str f.name ++
     ",\n  params := " ++ arr toString f.params ++ ", ret := " ++ toString f.ret ++
     ",\n  types := " ++ arr printTy f.types ++
     ",\n  layouts := " ++ arr printLayout f.layouts ++
     ",\n  globals := " ++ arr printGlobal f.globals ++
-    ",\n  errorSetBits := " ++ toString f.errorSetBits ++
     ",\n  body := " ++ body ++ " }"
 
 

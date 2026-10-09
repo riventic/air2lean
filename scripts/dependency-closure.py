@@ -90,7 +90,8 @@ def std_models(text=None):
     table = text[start:] if end < 0 else text[start:end]
     models = {}
     for _, symbol, versions in MODEL_ROW.findall(table):
-        listed = THROUGH_017 if versions == 'through017' else tuple(re.findall(r'"([^"]+)"', versions or ''))
+        listed = THROUGH_017 if versions == 'through017' else tuple(
+            '.'.join(v) for v in re.findall(r'\.v(\d+)_(\d+)_(\d+)', versions or ''))
         models[symbol] = ('modelled', listed or BASE_ZIG_VERSIONS, None)
     for symbol, reason in REJECTED_ROW.findall(table):
         models[symbol] = ('rejected', (), reason)

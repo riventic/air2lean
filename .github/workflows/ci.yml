@@ -142,6 +142,17 @@ jobs:
           python3 scripts/support-matrix.py check
           python3 -m unittest discover -s tests/roadmap/support-matrix -v
 
+      # B3 (docs/architecture-audit/structure.md): only the dialect registry
+      # (Air2Lean/Air/Dialect.lean) spells a Zig version in translator code; it lists exactly
+      # compatibility.json's versions.
+      - name: No Zig version literals outside the dialect registry
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 scripts/version-literals.py
+          python3 -m unittest discover -s tests/roadmap/version-literals -v
+
       # Offline (Q05): each version x host x target x profile path that compatibility.json
       # declares maps to native execution, target probe and proof steps of a CI job on that
       # host; foreign-golden compilation does not count (docs/target-matrix.md).

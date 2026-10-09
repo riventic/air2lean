@@ -48,7 +48,8 @@ MUTANTS = {
         PROFILES, 'HELPER', ('ReceiptTests.test_legacy_schema_selects_legacy_profile',)),
     # T01: an unknown profile name must not be selected as abi64-le-v1.
     'profile-name-unchecked': (
-        'scripts/normalize-generated.py', '    if (p["name"] != "abi64-le-v1" or p["zig_version"]',
+        'scripts/normalize-generated.py',
+        '    if (p["name"] != ("abi64-be-v1" if big else "abi64-le-v1") or p["zig_version"]',
         '    if (p["zig_version"]', PROFILES, 'HELPER',
         ('ReceiptTests.test_unknown_profile_name_is_rejected',)),
     # V05: a future AIR schema must fail closed.

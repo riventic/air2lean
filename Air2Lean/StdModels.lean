@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Air2Lean.Air.Dialect
 
 /-! # Built-in std model registry
 
@@ -56,37 +57,37 @@ inductive StdModelKind where
 /-- The Zig versions that a row without an explicit `zigVersions` is qualified for. A later
 version is fail-closed: a row qualifies for it only by listing it, after its std source was
 re-audited for that version (`docs/std-models.md` §Zig 0.17.0 audit). -/
-def baseZigVersions : Array String := #["0.14.1", "0.15.2", "0.16.0"]
+def baseZigVersions : Array ZigVersion := #[.v0_14_1, .v0_15_2, .v0_16_0]
 
 /-- `baseZigVersions` and 0.17.0: a row whose std source (name, signature and semantics) did not
 change from 0.16.0 to 0.17.0. -/
-private def through017 : Array String := baseZigVersions.push "0.17.0"
+private def through017 : Array ZigVersion := baseZigVersions.push .v0_17_0
 
 structure StdModel where
   /-- The qualified std name; an instance `<symbol>__anon_<n>` selects the same model. -/
   symbol : String
   kind : StdModelKind
   /-- Zig versions this model is qualified for; empty means `baseZigVersions`. -/
-  zigVersions : Array String := #[]
+  zigVersions : Array ZigVersion := #[]
   /-- `ZigLean` declarations the emitted term may reference (the semantic dependencies). -/
   dependencies : Array String := #[]
   deriving Repr
 
 /-- The Zig versions `m` is qualified for. -/
-def StdModel.qualifiedVersions (m : StdModel) : Array String :=
+def StdModel.qualifiedVersions (m : StdModel) : Array ZigVersion :=
   if m.zigVersions.isEmpty then baseZigVersions else m.zigVersions
 
 /-- A rejection holds in every version; a model only in its qualified versions. -/
-def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
+def StdModel.qualifies (m : StdModel) (zigVersion : ZigVersion) : Bool :=
   match m.kind with
   | .rejected _ => true
   | _ => m.qualifiedVersions.contains zigVersion
 
 private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
-    (zigVersions : Array String := #[]) : StdModel :=
+    (zigVersions : Array ZigVersion := #[]) : StdModel :=
   { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·) }
 private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
-    (zigVersions : Array String := #[]) : StdModel :=
+    (zigVersions : Array ZigVersion := #[]) : StdModel :=
   { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
 
 /-- The reason of an async API outside the qualified future subset (`docs/futures.md`). -/
@@ -102,7 +103,7 @@ def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.destroy" .destroy #["destroy"] through017,
   allocModel "mem.Allocator.alloc" .alloc #["alloc"] through017,
   allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"] through017,
-  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #["0.16.0", "0.17.0"],
+  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #[.v0_16_0, .v0_17_0],
   allocModel "mem.Allocator.free" .free #["free", "freeSentinel"] through017,
   allocModel "mem.Allocator.dupe" .dupe #["dupe"] through017,
   allocModel "mem.Allocator.remap" .remap #["remap"] through017,
@@ -110,8 +111,8 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.join" .join #["joinC"] through017,
   threadModel "Thread.yield" .yield #["threadYieldC"] through017,
   threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] through017,
-  allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
-  threadModel "Thread.detach" .detach #["detachC"] #["0.16.0"],
+  allocModel "mem.Allocator.realloc" .realloc #["realloc"] #[.v0_16_0],
+  threadModel "Thread.detach" .detach #["detachC"] #[.v0_16_0],
   threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
   threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] through017,
   threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] through017,
@@ -128,10 +129,10 @@ def stdModels : Array StdModel := #[
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] through017,
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] through017,
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] through017,
-  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] #["0.16.0"],
-  threadModel "Io.Future.await" .futureAwait #["awaitC"] #["0.16.0"],
-  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] #["0.16.0"],
-  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] #["0.16.0"],
+  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] #[.v0_16_0],
+  threadModel "Io.Future.await" .futureAwait #["awaitC"] #[.v0_16_0],
+  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] #[.v0_16_0],
+  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] #[.v0_16_0],
   { symbol := "Io.concurrent",
     kind := .rejected (asyncReason "Io.concurrent" "its guaranteed unit of concurrency and ConcurrencyUnavailable outcome are not modelled for futures") },
   { symbol := "Io.recancel",

@@ -3,7 +3,7 @@ import Air2Lean.Check
 open Air2Lean
 
 /-! L07 checker controls for `@bitCast` (`Air2Lean/Check.lean`): the representation cast and
-the optional-pointer rules hold for Zig 0.14.1, 0.15.2 and 0.16.0 only (`memoryBitCastVersion`);
+the optional-pointer rules hold for Zig 0.14.1, 0.15.2 and 0.16.0 only (`ZigVersion.BitCast.memory`);
 a context without a version rejects them; 0.17.0 redefined `@bitCast` (logical bit order,
 `docs/bitcast-semantics.md`), which admits only the equal-width integer-array casts here. Types without a guaranteed
 in-memory layout, pointers
@@ -45,7 +45,7 @@ private def layouts : Array Layout := #[
 
 private def cx (version : String) (src : TyId) : CheckCtx :=
   { fnName := "probe.f", types, layouts, instTys := #[(0, src)], places := #[],
-    zigVersion := version }
+    bitCast := (ZigVersion.ofString? version).map (·.bitCast) }
 
 private def result (version : String) (src dst : TyId) : Except String Nat :=
   checkOp (cx version src) 0 dst (.bitcast (.inst 0))

@@ -19,7 +19,7 @@ private def exactError (r : Except String Unit) (expected : String) : Bool :=
 
 private def mkFunc (name : String) (types : Array Ty) (params : Array TyId) (ret : TyId)
     (body : Array Inst := #[]) (globals : Array Global := #[]) : Func := {
-  zigVersion := "0.16.0"
+  dialect := .ofVersion .v0_16_0
   name
   types
   params
