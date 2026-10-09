@@ -158,13 +158,14 @@ SHA-256 hash. Only that receipt permits the known schema-12/profile to schema-11
 comparison transition; older schemas, malformed metadata and observable nested
 AIR data remain checked.
 
-Generated comparisons omit only a valid first-line JSON profile marker. The real
-header stays in the generated file that the Lean proof gate builds. In CI, the
-script checks committed, staged and working-tree sources before replacement;
-only a header matching the checked profile may differ while the committed body
-stays identical. Untracked and unrelated proof changes fail. Version/OS generated
-goldens still require the exact generated body to match their selected snapshot.
-The proof build and optional differential gate keep their existing behavior.
+Generated comparisons omit only a valid first-line JSON profile marker: committed
+translations are canonical bodies, since the record names host kernel and libc
+versions. The real header stays in the retained `<example>.Gen.lean` below, and in
+the check tree that builds a translation differing from the committed module
+([generated-code.md](generated-code.md#check-trees)); the script never writes a
+tracked file. In CI, any staged, working-tree or untracked change under `Proofs/` or
+`tests/golden/` fails before the export. Version/OS generated goldens still require
+the exact generated body to match their selected snapshot.
 
 Each example records its profile, selected float semantics, input hashes, full
 generated-source hash and body hash in

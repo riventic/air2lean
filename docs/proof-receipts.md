@@ -57,6 +57,15 @@ and stops if a tracked generated module is not a fresh translation of its commit
 ([generated-code.md](generated-code.md#generated-module-integrity)); the guarded worker
 binds that script's identity as an input.
 
+A tree with uncommitted tracked changes is refused unless `--allow-dirty`
+(`AIR2LEAN_RECEIPT_ALLOW_DIRTY=1` for `check.sh`) is given; the receipt then records
+`tree.dirty_allowed: true`. Release consumers refuse such a receipt:
+`proof-receipt.py verify --release`, `artifact-manifest.py check-manifest` for a chained receipt
+(unless its own `--allow-dirty`), and `scripts/release-record.py`, which rejects a workflow whose
+gate permits a dirty-tree receipt. CI never needs the permission: no verification step writes a
+tracked file ([generated-code.md](generated-code.md#check-trees)), and its last step fails if
+`git status --porcelain` is not empty.
+
 Tool, artifact, lock, attempt and receipt paths must be absolute and physical, with no
 symlink components. Every tracked source file is fingerprinted, including dirty/staged
 contents. A tracked source alias records its literal relative link and the content identity
@@ -116,8 +125,9 @@ immediately rather than being checked after the whole inventory is consumed.
 python3 scripts/proof-receipt.py verify "$FRESH_ATTEMPT"
 ```
 
-Exit 0 reports `status: current`, `checking: not_rerun`, and
-`authentication: not_attested`. Exit 2 means evidence is unavailable, invalid or stale;
+Exit 0 reports `status: current`, `checking: not_rerun`,
+`authentication: not_attested` and `tree` (`clean` or `dirty-allowed`); with `--release` a
+`dirty-allowed` receipt exits 2. Exit 2 means evidence is unavailable, invalid or stale;
 read stderr. Verification rereads the source, tool/library, compiled/profile and receipt
 artifact inventories and reapplies the policy. It does not run Lake or Lean, rebuild
 proofs, assert a digital signature, or turn an incomplete attempt into success.
