@@ -345,5 +345,26 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
           funext l; simp only [hQ', Option.map_map]; cases hQ l <;> rfl
         rw [this]; exact hq
 
+/-! ## Address disjointness of live blocks (input for `@memcpy` overlap checks) -/
+
+/-- Live blocks occupy disjoint address ranges. The placement oracle of
+`codex/fix-address-placement` (`Mem.placeOk`, `addrFree`) maintains it; on `main` it holds of
+reachable memories (`nextAddr` ordering) but is not part of `Mem.Seq`. The migration adds it to the
+memory invariant (`docs/sep-full-state.md`). -/
+def _root_.Zig.Mem.LiveDisjoint (m : Mem) : Prop :=
+  ∀ (b b' : BlockId) (blk blk' : Block), b ≠ b' → m.blocks[b]? = some blk →
+    m.blocks[b']? = some blk' → blk.live → blk'.live → blk.addr + blk.bytes.size ≤ blk'.addr ∨ blk'.addr + blk'.bytes.size ≤ blk.addr
+
+/-- Two owned bytes of different blocks lie in disjoint address ranges: a Sep-level fact from
+ownership alone (no pinned byte, no premise per client). -/
+theorem Holds.apart {m : Mem} {r rF : Res} (hh : Holds m r rF) (hd : m.LiveDisjoint)
+    {b b' : BlockId} {x x' : Nat} {fc fc' : FCell} (hbb : b ≠ b') (h1 : r.heap (b, x) = some fc)
+    (h2 : r.heap (b', x') = some fc') :
+    fc.cell.addr + fc.cell.size ≤ fc'.cell.addr ∨ fc'.cell.addr + fc'.cell.size ≤ fc.cell.addr := by
+  obtain ⟨blk, hb, hl, _, he⟩ := Mem.heap_some (hh.cell h1)
+  obtain ⟨blk', hb', hl', _, he'⟩ := Mem.heap_some (hh.cell h2)
+  rw [he, he']
+  exact hd b b' blk blk' hbb hb hb' hl hl'
+
 end Full
 end Zig
