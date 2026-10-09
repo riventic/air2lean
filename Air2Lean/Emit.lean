@@ -3746,7 +3746,9 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     preamble := structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr
     groups
     dispatch := dispatchStr
-    dispatchTargets := if dispatchStr.isEmpty then #[] else targets.map (·.1)
+    -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
+    dispatchTargets := if dispatchStr.isEmpty then #[] else
+      targets.map (·.1) ++ futures.map (·.1)
     declNames := ownFuncNames }
 
 /-- The single-file output: every part in order under one `namespace`. -/

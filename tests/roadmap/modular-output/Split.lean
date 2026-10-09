@@ -70,3 +70,14 @@ private def checkExample (ex ns : String) (dispatch : Bool) : IO Unit := do
   checkExample "pointers" "Pointers" false
   checkExample "layout" "Layout" false
   checkExample "threads" "Threads" true
+
+-- C08: `dispatch` runs every `Io.async` task by name, so the dispatch module imports its group.
+#eval do
+  let funcs ← load "tests/roadmap/futures/air/0.16.0"
+  let mods := ModuleSplit.modules (emitParts funcs "futures.") "Futures" "Demo.Gen" "Gen" "-- header\n"
+  let some d := mods.find? (fun (m : ModuleSplit.Module) => m.kind == "dispatch")
+    | throw (IO.userError "futures: no dispatch module")
+  for task in #["futures.square", "futures.checked", "futures.fill", "futures.cancellable"] do
+    let some m := mods.find? (fun (m : ModuleSplit.Module) => m.functions.contains task)
+      | throw (IO.userError s!"futures: no module for {task}")
+    require (d.imports.contains m.name) s!"futures: dispatch does not import {m.name} ({task})"

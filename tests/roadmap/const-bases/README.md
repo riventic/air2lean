@@ -54,7 +54,7 @@ carries a `--diagnostics-json` code:
 | `comptime_alloc`, `comptime_field`, `arr_elem`, `payload_unbacked` | the same message with that reason |
 | unknown global id | `pointer has unknown global id N` (`STRUCTURE_FAILURE`) |
 | offset past the global's end | `a pointer constant at offset N is outside global G (S bytes)` (`STRUCTURE_FAILURE`) |
-| `stage2_llvm`: a constant at or one past an alignment-1 error-union payload (offsets 22..25) | `… may address an alignment-1 error-union payload … outside the stage2_llvm profile` (`CONSTANT_FAILURE`) |
+| `stage2_llvm` (also `stage2_wasm`, whose `lowerPtr` has the same `eu_payload` measure): a constant at or one past an alignment-1 error-union payload (offsets 22..25) | `… may address an alignment-1 error-union payload … outside the stage2_llvm profile` (`CONSTANT_FAILURE`) |
 
 On `stage2_llvm`, the error code bytes (20, 21), the optional-payload element and slice (15),
 and other fields (8, 26) stay accepted. With a `Failure!u16` payload, offsets 20 and 22 are

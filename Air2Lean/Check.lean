@@ -280,7 +280,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | some (.future r) =>
     if pb != 8 then throw "an Io.Future is outside the 32-bit pointer model"
     -- `Zig.Future`: `any_future` at 0, the result at `Zig.Future.resultOff`.
-    let (s, a) ← modelLayout types layouts r
+    let (s, a) ← modelLayout types layouts r errBits
     let off := Zig.alignUp 8 a
     unless (layouts[id]?.map (·.offsets)).getD #[] == #[0, off] do
       throw s!"Io.Future field offsets differ from any_future at 0 and result at {off}"
@@ -1558,17 +1558,19 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
   | _ => false
 
 /-- Whether a value of type `id` holds, by value, an error union whose payload has nonzero size
-and alignment below 2. Zig 0.14.1–0.17.0's LLVM backend (`codegen/llvm.zig` `lowerPtr`)
-measures an `eu_payload` constant base with the error union type instead of its payload, so it
-addresses such a payload at the error code (`Zig.ConstPtr.llvmPayloadOffset_ne_iff`,
-`tests/roadmap/const-bases`). A shared budget bounds the scan; `none` means unknown. -/
+and alignment below the error code's (2 for the default 16-bit error integer, `Zig.errCodeAlign`
+of the profile's `error_set_bits` in general). Zig 0.14.1–0.17.0's LLVM backend
+(`codegen/llvm.zig` `lowerPtr`) measures an `eu_payload` constant base with the error union type
+instead of its payload, so it addresses such a payload at the error code
+(`Zig.ConstPtr.llvmPayloadOffset_ne_iff`, `tests/roadmap/const-bases`). A shared budget bounds the
+scan; `none` means unknown. -/
 private partial def llvmPayloadTypeScan (f : Func) (id fuel : Nat) : Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
   match ← f.types[id]? with
   | .errorUnion _ payload =>
-    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-    if size != 0 && align < 2 then return (remaining, true)
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    if size != 0 && align < Zig.errCodeAlign f.errorSetBits then return (remaining, true)
     llvmPayloadTypeScan f payload remaining
   | ty =>
     for child in valueChildTys ty do
@@ -1584,12 +1586,12 @@ members are not reconstructed from an address: a union with an affected member c
 private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
-  let (size, _) ← (modelLayout f.types f.layouts id).toOption
+  let (size, _) ← (modelLayout f.types f.layouts id f.errorSetBits).toOption
   if off > size then return (remaining, false)
   let within (members : Array (TyId × Nat)) : Option (Nat × Bool) := do
     let mut remaining := remaining
     for (child, base) in members do
-      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       if base ≤ off && off ≤ base + childSize then
         let (next, hit) ← llvmPayloadOffsetScan f child (off - base) remaining
         remaining := next
@@ -1597,9 +1599,10 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
     return (remaining, false)
   match ← f.types[id]? with
   | .errorUnion _ payload =>
-    let (payloadSize, payloadAlign) ← (modelLayout f.types f.layouts payload).toOption
-    let (_, po) := Zig.errUnionOffsets payloadSize payloadAlign
-    if po ≤ off && off ≤ po + payloadSize && payloadSize != 0 && payloadAlign < 2 then
+    let (payloadSize, payloadAlign) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (_, po) := Zig.errUnionOffsetsW f.errorSetBits payloadSize payloadAlign
+    if po ≤ off && off ≤ po + payloadSize && payloadSize != 0 &&
+        payloadAlign < Zig.errCodeAlign f.errorSetBits then
       return (remaining, true)
     within #[(payload, po)]
   | .optional child =>
@@ -1607,7 +1610,7 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
     | some (.ptr ..) | some (.errorSet _) => return (remaining, false)
     | _ => within #[(child, 0)]
   | .array len child sentinel =>
-    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 then return (remaining, false)
     let count := len + (if sentinel then 1 else 0)
     let k := off / stride
@@ -1627,24 +1630,31 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
   | .union .. => llvmPayloadTypeScan f id remaining
   | _ => return (remaining, false)
 
-/-- Fail closed for the LLVM backend's misplaced `eu_payload` constants: a pointer constant on
-the `stage2_llvm` profile cannot address (or end) an affected payload of its global. Other
-backends lower these constants with the payload offset that the model uses. -/
+/-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
+instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`
+(observed in 0.16.0). -/
+def euPayloadMisplacedBackends : List String := ["stage2_llvm", "stage2_wasm"]
+
+/-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
+(`euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
+affected payload of its global. Other backends lower these constants with the payload offset
+that the model uses. -/
 private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
     Except String Unit := do
-  unless f.backend == "stage2_llvm" do return
+  unless euPayloadMisplacedBackends.contains f.backend do return
   let affected : Bool := match llvmPayloadTypeScan f global.ty 1024 with
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
   if affected then
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
-      alignment-1 error-union payload, which Zig's LLVM backend lowers at the error code \
-      (codegen/llvm.zig lowerPtr eu_payload); such constants are outside the stage2_llvm profile"
+      alignment-1 error-union payload, which this backend lowers at the error code \
+      (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
+      outside the {f.backend} profile"
 
 /-- A constant pointer stays within its global or one past its end. -/
 private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do
   if let some (.func ..) := global.init then return
-  if let .ok (size, _) := modelLayout f.types f.layouts global.ty then
+  if let .ok (size, _) := modelLayout f.types f.layouts global.ty f.errorSetBits then
     if off > size then
       throw s!"{f.name}: a pointer constant at offset {off} is outside global {g} ({size} \
         bytes); constant provenance ends one past its object"
@@ -1705,7 +1715,7 @@ private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat :
 included. A profile limit, so it runs with the constant checks, not structural validation. -/
 private partial def checkLlvmPayloadConstants (f : Func) (v : Val) (fuel : Nat := 256) :
     Except String Unit := do
-  unless f.backend == "stage2_llvm" do return
+  unless euPayloadMisplacedBackends.contains f.backend do return
   if fuel == 0 then throw s!"{f.name}: pointer constant traversal exceeds 256 levels"
   match v with
   | .ptrConst _ g off =>
