@@ -137,7 +137,10 @@ are conservative byte identities, not semantic fingerprints or dependency-aware 
 `after.json` names each tracked generated `Gen.lean` and its raw byte identity. A valid
 first-line profile record remains attached to that particular generated module/file.
 No header means `legacy-or-unannotated`; a run label cannot relabel it as a qualified
-schema12 export. Different historical translations remain separately identified.
+schema12 export. Most committed translations carry no header (it is host-specific, and
+verification no longer writes it into the checkout), so a receipt records them as
+`legacy-or-unannotated`; the profile validated for the run is in `scripts/check.sh`'s
+`.lake/check-reports/<version>/<example>.json`, which the receipt does not yet bind. Different historical translations remain separately identified.
 The existing audit names theorem modules and contains their dependency graph; the
 receipt does not infer theorem domains or all-schedules properties from their names.
 
