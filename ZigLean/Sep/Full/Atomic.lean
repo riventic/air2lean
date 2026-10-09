@@ -427,5 +427,99 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
         ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _,
           hAB⟩, by rw [hshapes]; exact hwf⟩⟩
 
+theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
+    (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hli : li < m.atomics.size) :
+    shapes (insertM m li (m.atomics[li]!).msgs.size msg) = shapes m := by
+  rw [insertM_last hb]
+  exact shapes_set hli (by rw [getElem!_pos m.atomics li hli]; rfl)
+
+/-- **Atomic store** to an owned word (sequential: the write goes at the end). -/
+theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
+    FTriple (apts p v) (Zig.atomicStoreAt 0 ord 8 p w) (fun _ => apts p w) := by
+  intro m r rF hh hp hs
+  obtain ⟨A, S, K, bs, tg, hal, hK, hsz, -, htg, hab⟩ := hp
+  have hm : m.heap = r.heap.erase ∪ rF.heap.erase := by
+    rw [← fheap_erase, hh.heap, FHeap.erase_union]
+  obtain ⟨b, blk, hacc, hblk, hA, hS, -⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
+    (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
+  obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
+  have hcast : (p.off.toNat : Int) = p.off := Int.toNat_of_nonneg h0
+  have hKb : blk.kind = K := by
+    obtain ⟨-, b0, hb0, -, hl0⟩ := id hab
+    rw [hpb] at hb0; cases hb0
+    have hr := hl0 (b, p.off.toNat)
+    rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at hr
+    obtain ⟨blk', hblk', _, _, hc⟩ := Mem.heap_some (fheap_tag (hh.own hr)).2
+    rw [hblk] at hblk'; cases hblk'
+    simp only [Cell.mk.injEq] at hc
+    exact hc.2.2.2.symm
+  have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
+    rw [intSize_64]; unfold Mem.accessW; rw [hacc]
+    simp [hKb, hK, pure_bind]
+  have htok := tagOk_of_own hh hab hsz htg hpb
+  have hcur : (curBytes (m.recordAt b p.off.toNat 8 .atomicWrite) b p.off.toNat 8).size = 8 := by
+    simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some, Array.size_extract]
+    omega
+  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2
+    (by decide) htok e
+  have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
+      (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
+      (writeSlots m₁ li)[0]? = some (m₁.atomics[li]!).msgs.size ∧
+      li < m₁.atomics.size ∧ (m₁.atomics[li]!).block = b ∧ (m₁.atomics[li]!).off = p.off.toNat ∧
+      (∃ a next, m₁ = { m.recordAt b p.off.toNat 8 .atomicWrite with atomics := a, nextMsg := next }) ∧
+      ShapesWF (shapes m₁) ∧
+      ∀ b' x, tagOf (shapes m₁) b' x =
+        if Covers b' x (b, p.off.toNat, 8) then some (p.off.toNat, 8) else tagOf (shapes m) b' x := by
+    intro li m₁ hl
+    rw [intSize_64] at hl
+    obtain ⟨hupd, hli, hb, ho, hpos, -, hwf, htag⟩ :=
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2 (by decide) htok hcur hl
+    exact ⟨writeSlots_zero hpos, hli, hb, ho, hupd, hwf, htag⟩
+  cases hrun : ((Zig.atomicStoreAt 0 ord 8 p w).run m).run with
+  | none => trivial
+  | some x =>
+    cases x with
+    | error e =>
+      refine (atomicStoreAt_noErr (fun e' => ?_) (fun li slots m₁ hp => ?_) e hrun).elim
+      · exact storePrep_noErr haccW8 (noRace_of_singleThread hs.1.single _ _ _ _)
+          (fun e'' => by rw [intSize_64]; exact hlocok e'') e'
+      · obtain ⟨b', blk', o', ha', -, hl, rfl⟩ := storePrep_ok hp
+        obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
+        obtain ⟨hz, -⟩ := hpost li m₁ hl
+        exact (Array.getElem?_eq_some_iff.mp hz).1
+    | ok x =>
+      obtain ⟨u, m'⟩ := x
+      obtain ⟨b', blk', o', li, m₁, slot, ha', -, hl, hslot, hm'⟩ := atomicStoreAt_ok hrun
+      obtain ⟨rfl, rfl, rfl⟩ := access_inj (haccW8.symm.trans ha')
+      obtain ⟨hz, hli, hb, ho, ⟨a, next, hm₁⟩, hwf, htag⟩ := hpost li m₁ hl
+      rw [hz] at hslot; cases hslot
+      have hb₁ : m₁.blocks[(m₁.atomics[li]!).block]? = some blk := by
+        rw [hb, hm₁]; exact hblk
+      subst hm'
+      have hins := insertM_last (li := li) (msg := storeMsg m₁ ord w) hb₁
+      have hblocks : (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w).blocks =
+          m.blocks.set! b { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode w) } := by
+        unfold storeM observeM
+        rw [hins, hb, ho, hm₁]; rfl
+      have hshapes : shapes (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w) = shapes m₁ := by
+        unfold storeM observeM
+        exact shapes_insertM_last hb₁ hli
+      have hnext : (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w).nextAddr = m.nextAddr := by
+        unfold storeM observeM
+        rw [hins, hm₁]; rfl
+      have henc : (Enc.encode w).size = 8 := LawfulEnc.size_encode w
+      have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive (bs := Enc.encode w) (by rw [henc]; omega)
+      obtain ⟨hAB, r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode w) (by rw [henc, hsz]) hpb
+        (fun l => by
+          rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode w)) hblocks, hwr, henc,
+            hsz, hA, hS, hKb])
+        (fun b' x => by rw [hshapes, htag, hsz])
+        (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode w) })
+          hblk rfl hblocks) hs.1.addr hnext
+      refine ⟨r', hh', ⟨A, S, K, Enc.encode w, _, hal, hK, henc, LawfulEnc.decode_encode w,
+        .inr (by rw [hsz]), hab'⟩, ⟨⟨?_, hAB⟩, by rw [hshapes]; exact hwf⟩⟩
+      unfold storeM observeM
+      exact singleThread_insertM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _
+
 end Full
 end Zig
