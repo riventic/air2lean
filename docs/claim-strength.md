@@ -79,7 +79,8 @@ precondition (`Witness.mem1 bs`, one block holding `bs`, and `Witness.mem2`, in
 partial triple a run that the kernel evaluates (`ok_of_okb (by decide +kernel)`) or that a
 total triple of the same program gives (`Live.of_total`). `Zig.loop` is a `partial_fixpoint`,
 which the kernel does not unfold, so a loop's run comes from a total triple or an input that
-skips the loop. A `Proofs/` theorem has its companions next to it; the library lemmas of
+skips the loop (a run of the scheduler can cut each loop instead: `unroll_sched`,
+[proof-tools.md](proof-tools.md#concrete-runs-of-programs-with-loops-unroll_sched)). A `Proofs/` theorem has its companions next to it; the library lemmas of
 `ZigLean/` have theirs in `ZigLean/Witnesses/*.lean`, since modules that generated code imports
 must not import the witness commands. A premise about an `opaque` function (the assembly
 theorems of `Proofs/Asm/Proofs.lean`) has no companion: the kernel cannot evaluate it, so those

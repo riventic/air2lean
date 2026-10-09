@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import Proofs.Iogroup.Gen
 import ZigLean.Conc.LockRules
 import ZigLean.Conc.Share
@@ -1413,6 +1414,13 @@ futex or at `Group.await`, no panic, under every schedule. -/
 theorem groupCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     (Sched.run dispatch fuel o (groupCounter io) mem0).run ≠ some (.error e) :=
   proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec io)
+
+/-- One schedule completes: under the oracle that always picks option 0, the `Io.Group` counter returns 3 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem groupCounter_completes :
+    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) mem0) = some 3 := by
+  unroll_sched 10
 
 /-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block
 0, `ZigLean/Conc/Share.lean`'s `ReadShared`); `main` frees the block only with every task joined

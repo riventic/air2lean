@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import ZigLean.Conc.WeakCasLemmas
 import Proofs.Atomics.MessagePassing
 import ZigLean.Mem.Witness
@@ -2022,6 +2023,13 @@ overflow, under every schedule. -/
 theorem stackPush_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o stackPush mem0).run ≠ some (.error e) :=
   proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
+/-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem stackPush_completes :
+    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) stackPush mem0) = some 210 := by
+  unroll_sched 10
 
 /-! ## Non-vacuity witnesses
 

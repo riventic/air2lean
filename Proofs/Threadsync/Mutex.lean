@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import Proofs.Threadsync.Lock
 import ZigLean.Witness
 
@@ -860,6 +861,13 @@ at the futex, no panic, under every schedule. -/
 theorem mutexCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o mutexCounter mem0).run ≠ some (.error e) :=
   proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
+/-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Mutex` counter returns 4 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem mutexCounter_completes :
+    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) mutexCounter mem0) = some 4 := by
+  unroll_sched 10
 
 nonvacuity_witness cnt_decode :=
   ⟨Enc.encode (0 : BitVec 32) ++ Enc.encode (4 : BitVec 32), 0, by decide +kernel,

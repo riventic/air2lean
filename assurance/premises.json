@@ -163,6 +163,7 @@
     "ZigLean.Witness": ["SEM-03", "SEM-04"],
     "ZigLean.Mem.Witness": ["SEM-02"],
     "ZigLean.Conc.Witness": ["THR-08", "SEM-02"],
+    "ZigLean.Conc.Unroll": ["THR-01", "SEM-03"],
     "ZigLean.Witnesses.Mem": ["SEM-01", "SEM-02"],
     "ZigLean.Witnesses.Sep": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Witnesses.Conc": ["THR-08", "SEM-02"],

@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import ZigLean.Conc.WeakWord
 import Proofs.Sync.Semaphore
 import ZigLean.Conc.Word
@@ -4598,5 +4599,12 @@ every schedule. -/
 theorem rwLockRead_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     (Sched.run dispatch fuel o (rwLockRead io) mem0).run ≠ some (.error e) :=
   (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀) (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+
+/-- One schedule completes: under the oracle that always picks option 0, the `Io.RwLock` reader returns 2 (it reads before the writer) within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem rwLockRead_completes :
+    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (rwLockRead ⟨⟩) mem0) = some 2 := by
+  unroll_sched 10
 
 end Sync.RwLockRead

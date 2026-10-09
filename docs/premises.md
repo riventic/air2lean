@@ -692,9 +692,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: meaning.
 - Statement: `Zig.loop` is a `partial_fixpoint`. Divergence is `none`. `Triple` and loop
   rules constrain only completed results, so a diverging program satisfies them. Finite
-  loops do not reduce in the kernel, so loop clients use runtime assertions or
-  invariant-based proofs.
-- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`; tokens `loop*`.
+  loops do not reduce in the kernel, so loop clients use runtime assertions,
+  invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
+  iterations (`unroll_sched`), whose result is the loop's result.
+- Derived from: `ZigLean.Loop`, `ZigLean.RecTemplate`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
