@@ -193,15 +193,17 @@ manifest-relative `source_closure` names against the runner's repository-relativ
 Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`, with
 one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
 contract file), `policy_violation` (audit `allowed` false or violations),
-`wrapper_or_unrelated`, `source_hash_mismatch`, `stale_receipt`, `unbound` or `no_receipt`.
+`wrapper_or_unrelated`, `trivial_conclusion`, `source_hash_mismatch`, `stale_receipt`, `unbound` or `no_receipt`.
 `direct` requires the conclusion of the theorem's statement (its kernel type after binders
 and hypotheses, the audit's `conclusion_dependencies`) to reference the generated root
 definition `namespace.(function without prefix)`, which must live in the hash-bound
 generated module. Proof terms are not consulted: a theorem stated about a wrapper, a
 hand-written model, `True`, or with the root only in a hypothesis is `wrapper_or_unrelated`
 even when its proof mentions the generated code. An audit without statement dependencies
-(an older extractor) leaves goals `unbound`. A weak conclusion that mentions the root (for
-example `root x = root x`) still binds, but each direct goal also records the
+(an older extractor) leaves goals `unbound`. A conclusion that mentions the root but only equates it with itself (`root x = root x`: the
+audited equation's right-hand side is the generated root) is `trivial_conclusion`: it fixes no
+result, so it is not direct, does not reach `proved_scoped` and blocks the root (the real audited
+`double_refl` of `assurance/provenance` is the committed example). Each direct goal also records the
 `derived_strength` and `claim_class` that `scripts/claims.py` derives from the audited
 conclusion shape, and a declared `safety`/`partial_correctness`/`total_correctness` counts
 toward levels and absence claims only up to that derived strength (an unclassified
@@ -209,7 +211,10 @@ conclusion, or an audit without conclusion shapes, derives none). Domains and pr
 remain review obligations. `tests/roadmap/assurance/StatementBinding.lean` holds a
 wrapper-statement, a `True`, a hypothesis-only and a genuine theorem; only the last binds
 (`tests/roadmap/coverage-report/test_coverage.py`), and its plain `Nat` equation derives no
-strength.
+strength. `tests/roadmap/coverage-report/real_run.py` covers the I07 provenance fixture's root
+(`provenance-project.json`) with a schema-12 export manifest chained to the same real receipt:
+`analyzed`, `exported`, `translated`, `compiled` and `proved` pass and `double_eq` reaches total
+correctness, while editing the AIR fails `analyzed`/`exported`.
 
 Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
 `functionally_verified_partial`, `functionally_verified_total`.

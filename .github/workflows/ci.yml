@@ -158,13 +158,15 @@ jobs:
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
-      # Committed receipt-chained fixture (fresh schema-12 export, schema-2 receipt, native identity):
-      # edit-one-link tests on copies plus the offline recheck. No Zig, Lake or Lean.
-      # Heavy counterpart (local, guarded): scripts/provenance-evidence.py regenerate WORKDIR.
-      - name: Provenance fixture edit-one-link tests and recheck
+      # Two committed receipt-chained fixtures (fresh schema-12 exports, schema-2 receipts, native identity):
+      # edit-one-link and receipt-replay tests on copies, the offline recheck and the offline replay of
+      # each committed receipt against the tree (no revision needed). No Zig, Lake or Lean.
+      # Heavy counterpart (local, guarded): scripts/provenance-evidence.py --fixture NAME regenerate WORKDIR.
+      - name: Provenance fixtures edit-one-link tests, recheck and receipt replay
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_fixture.py
-          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py check
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py --fixture all check
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/provenance-evidence.py --fixture all replay
 
       # Rebinding, mutant shapes and proof separation of the A03 asm-wrapper harness (no Lean).
       - name: Asm wrapper harness offline regressions
@@ -1606,7 +1608,8 @@ jobs:
           bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
-          # I06 end to end: coverage over this genuine receipt, the real translator and a real I07 manifest.
+          # I06 end to end: coverage over this genuine receipt, the real translator and a real I07 manifest,
+          # including the I07 provenance fixture's root (analyzed AIR + this receipt on one root).
           python3 tests/roadmap/coverage-report/real_run.py "$receipt_parent/attempt" .lake/build/bin/air2lean
 
   # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
