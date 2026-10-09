@@ -1155,8 +1155,10 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build-modes"
+          failed=0
           for mode in Debug ReleaseFast ReleaseSmall; do
-            summary="$RUNNER_TEMP/build-mode-$mode.json"
+            summary="$RUNNER_TEMP/build-modes/$mode.json"
             # ReleaseFast/ReleaseSmall have triaged mismatches (float @divExact), so diff.sh exits 1
             # there; `record --verify` then requires exactly the committed counts and triage.
             status=0
@@ -1166,8 +1168,21 @@ jobs:
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
               --mode "$mode" --backend llvm --explicit-backend \
-              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json)
+              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json) \
+              || failed=1
           done
+          [ "$failed" -eq 0 ]
+
+      # The summaries behind the build-mode check, so that a changed example set can be
+      # re-recorded (`build-modes.py record --summary ... --zig-sha256 ...`, docs/build-modes.md).
+      - name: Upload the build-mode differential summaries
+        if: ${{ !cancelled() && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/build-modes/
+          if-no-files-found: warn
+          retention-days: 30
 
       # A failed check hands out the AIR that this host dumped: the golden files of this OS
       # (tests/golden/<version>/<ex>/air-linux/) come from here (docs/generated-code.md).
