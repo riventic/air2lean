@@ -38,6 +38,18 @@ theorem tset_ne {β : Type} (f : Tid → β) {t u : Tid} (x : β) (h : u ≠ t) 
 theorem tset_apply {β : Type} (f : Tid → β) (t : Tid) (x : β) (u : Tid) :
     tset f t x u = if u = t then x else f u := rfl
 
+/-- `p` of the threads after thread `t` changed to `c` with `p c = p (f t)`. -/
+theorem tset_same {β γ : Type} (p : β → γ) (f : Tid → β) (t : Tid) (c : β) (h : p c = p (f t)) :
+    (fun u => p (tset f t c u)) = fun u => p (f u) := by
+  funext u; by_cases hu : u = t
+  · rw [hu, tset_self, h]
+  · rw [tset_ne _ _ hu]
+
+theorem tset_id {β : Type} (f : Tid → β) (t : Tid) : tset f t (f t) = f := by
+  funext u; by_cases hu : u = t
+  · rw [hu, tset_self]
+  · rw [tset_ne _ _ hu]
+
 /-- A concurrent system: states, initial states and the atomic steps of each thread. -/
 structure Sys where
   St : Type

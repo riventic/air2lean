@@ -76,18 +76,6 @@ structure SpinInv {rel : Bool} {X : Type} (s : MState (spin rel) X) : Prop where
   view : ∀ t, own (s.ctl t) = true → s.cur t = s.val
   msg : (∀ t, own (s.ctl t) = false) → s.sh.msg = s.val
 
-/-- `p` of the threads after thread `t` changed to `c` with `p c = p (f t)`. -/
-theorem tset_same {β γ : Type} (p : β → γ) (f : Tid → β) (t : Tid) (c : β) (h : p c = p (f t)) :
-    (fun u => p (tset f t c u)) = fun u => p (f u) := by
-  funext u; by_cases hu : u = t
-  · rw [hu, tset_self, h]
-  · rw [tset_ne _ _ hu]
-
-theorem tset_id {β : Type} (f : Tid → β) (t : Tid) : tset f t (f t) = f := by
-  funext u; by_cases hu : u = t
-  · rw [hu, tset_self]
-  · rw [tset_ne _ _ hu]
-
 /-- A step that changes only thread `t`'s place, to one with the same ownership, and keeps the
 shared state and the views. -/
 theorem SpinInv.place {rel : Bool} {X : Type} {s : MState (spin rel) X} (hi : SpinInv s)
