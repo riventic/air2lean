@@ -277,10 +277,17 @@ def label_theorems(nodes, theorems, modules, registry):
         if semantics == 'compiler-rt':
             record['zig_versions'] = entry['zig_versions']
         records[name] = dict(record, correspondence=CORRESPONDENCE, binary_correspondence=NOT_CLAIMED)
+    # Test modules may share a short name (`Model`); a key is stale only if the audited module
+    # with that name declares something in the key's top-level namespace.
+    namespaces = {}
+    for key in present:
+        module, _, user = key.partition('::')
+        namespaces.setdefault(module, set()).add(user.split('.')[0])
     for kind in ('theorems', 'non_numerical'):
         for key in registry[kind]:
-            module, _ = split_key(key)
-            if module in modules and key not in present:
+            module, user = split_key(key)
+            if (module in modules and key not in present
+                    and (module.startswith(('ZigLean', 'Proofs')) or user.split('.')[0] in namespaces.get(module, ()))):
                 issue(key, module, 'stale-float-semantics-label', 'registry names no checked theorem')
     summary = {'schema_version': 1, 'registry_sha256': registry['sha256'],
                'numerical_theorems': sum(labels.values()), 'compiler_generated': generated,
