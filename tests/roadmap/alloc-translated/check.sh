@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # `--allocator-model translated` (P1): std.heap.page_allocator and FixedBufferAllocator clients
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
-# Needs a built translator and `lake build ZigLean ZigLean.Sep.AllocSpec`; runs no compiler. With
+# P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean), the alloc
+# obstructions (PageObstruction.lean), a mutant (mutant.sh). Needs a built translator and
+# `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops
+# ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
 # recorded on x86_64-linux): the output depends on the page size only, not on the OS.
@@ -42,6 +45,20 @@ done
 "${lean_cmd[@]}" "$here/Eval.lean"
 # P4b: the translated PageAllocator cannot satisfy AllocSpec (docs/alloc-page.md).
 "${lean_cmd[@]}" "$here/PageObstruction.lean"
+# P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean), its axioms, and a
+# mutant that frees one page too few (mutant.sh).
+"${lean_cmd[@]}" -R "$here" -o "$work/PageSpec.olean" "$here/PageSpec.lean"
+cat > "$work/Axioms.lean" <<'AX'
+import PageSpec
+#print axioms AllocTranslated.PageSpec.free_spec
+#print axioms AllocTranslated.PageSpec.resize_spec
+#print axioms AllocTranslated.PageSpec.remap_spec
+AX
+"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
+if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep -q .; then
+  cat "$work/axioms.txt" >&2; echo 'alloc-translated: unexpected axioms' >&2; exit 1
+fi
+bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
