@@ -33,6 +33,7 @@ open Zig Gen Assn
 namespace FBA
 
 open Zig.Wrap (toNat_ofNat_lt)
+open Zig.Ops (two_pow_lt toNat_two_pow add_ok gt_eq)
 
 /-! ## The invariant -/
 
@@ -99,12 +100,6 @@ theorem body_absorb {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {G : 
     (fun _ z => sep_mono (fun _ w => w) (fun _ _ => trivial) z) y) h2
 
 /-! ## Arithmetic of the helpers -/
-
-theorem two_pow_lt {k : Nat} (hk : k < 64) : 2 ^ k < 2 ^ 64 :=
-  Nat.pow_lt_pow_right (by decide) hk
-
-theorem toNat_two_pow {k : Nat} (hk : k < 64) : (BitVec.ofNat 64 (2 ^ k)).toNat = 2 ^ k := by
-  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (two_pow_lt hk)]
 
 theorem toNat_mask {k : Nat} (hk : k < 64) : (BitVec.ofNat 64 (2 ^ k - 1)).toNat = 2 ^ k - 1 := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by have := two_pow_lt hk; omega)]
@@ -313,11 +308,6 @@ end State
 
 /-! ## Overflow-checked arithmetic -/
 
-theorem add_ok {a b : BitVec 64} (h : a.toNat + b.toNat < 2 ^ 64) :
-    Zig.add false a b = pure (a + b) := by
-  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp; omega)]
-
 theorem toNat_add_ok {a b : BitVec 64} (h : a.toNat + b.toNat < 2 ^ 64) :
     (a + b).toNat = a.toNat + b.toNat := by
   rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt h
@@ -325,9 +315,6 @@ theorem toNat_add_ok {a b : BitVec 64} (h : a.toNat + b.toNat < 2 ^ 64) :
 theorem sub_ok {a b : BitVec 64} (h : b.toNat ≤ a.toNat) : Zig.sub false a b = pure (a - b) := by
   simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
   rw [if_neg (by simp; omega)]
-
-theorem gt_eq (a b : BitVec 64) : Zig.gt false a b = decide (b.toNat < a.toNat) := by
-  simp [Zig.gt, Zig.lt, BitVec.ult]
 
 theorem le_eq (a b : BitVec 64) : Zig.le false a b = decide (a.toNat ≤ b.toNat) := by
   simp [Zig.le, BitVec.ule]

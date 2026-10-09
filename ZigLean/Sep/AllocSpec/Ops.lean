@@ -189,6 +189,24 @@ theorem toNat_mul_ofNat {size : Nat} (hs : size < 2 ^ 64) {n : BitVec 64}
     (h : size * n.toNat < 2 ^ 64) : (BitVec.ofNat 64 size * n).toNat = size * n.toNat := by
   simp [BitVec.toNat_mul, Nat.mod_eq_of_lt hs, Nat.mod_eq_of_lt h]
 
+theorem two_pow_lt {k : Nat} (hk : k < 64) : 2 ^ k < 2 ^ 64 :=
+  Nat.pow_lt_pow_right (by decide) hk
+
+theorem toNat_two_pow {k : Nat} (hk : k < 64) : (BitVec.ofNat 64 (2 ^ k)).toNat = 2 ^ k := by
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (two_pow_lt hk)]
+
+/-- A checked `+` that does not overflow. -/
+theorem add_ok {a b : BitVec 64} (h : a.toNat + b.toNat < 2 ^ 64) :
+    Zig.add false a b = pure (a + b) := by
+  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+theorem gt_eq (a b : BitVec 64) : Zig.gt false a b = decide (b.toNat < a.toNat) := by
+  simp [Zig.gt, Zig.lt, BitVec.ult]
+
+theorem lt_eq (a b : BitVec 64) : Zig.lt false a b = decide (a.toNat < b.toNat) := by
+  simp [Zig.lt, BitVec.ult]
+
 end Ops
 
 

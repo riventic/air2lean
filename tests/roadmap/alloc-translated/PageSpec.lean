@@ -36,6 +36,7 @@ the entries are `Tame` (`ZigLean/Sep/Full/Tame.lean`), and the allocator state i
 namespace AllocTranslated.PageSpec
 
 open Zig Zig.Region AllocTranslated.PageLinux Assn
+open Zig.Ops (two_pow_lt toNat_two_pow add_ok gt_eq lt_eq)
 
 abbrev P : Nat := 4096
 
@@ -78,11 +79,6 @@ theorem grant_mapping {p : Ptr} {k n A S : Nat} {K : BlockKind} {bs tail : Array
 
 
 /-! ## Page arithmetic of the generated helpers -/
-
-theorem add_ok {a b : BitVec 64} (h : a.toNat + b.toNat < 2 ^ 64) :
-    Zig.add false a b = pure (a + b) := by
-  simp only [Zig.add, BitVec.uaddOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp; omega)]
 
 theorem alignUp_eq (n : Nat) : alignUp n P = (n + 4095) - (n + 4095) % 4096 := by
   unfold alignUp; rw [if_neg (by decide)]
@@ -265,12 +261,6 @@ theorem post_some {p q : Ptr} {k n : Nat} {mm : Bool} {bs all : Array Byte} {A :
 
 /-! ## `realloc` -/
 
-theorem two_pow_lt {k : Nat} (hk : k < 64) : 2 ^ k < 2 ^ 64 :=
-  Nat.pow_lt_pow_right (by decide) hk
-
-theorem toNat_two_pow {k : Nat} (hk : k < 64) : (BitVec.ofNat 64 (2 ^ k)).toNat = 2 ^ k := by
-  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (two_pow_lt hk)]
-
 theorem toByteUnits_eq {k : Nat} (hk : k < 64) :
     mem_Alignment_toByteUnits ⟨BitVec.ofNat 6 k⟩ = pure (BitVec.ofNat 64 (2 ^ k)) := by
   have hk6 : (BitVec.ofNat 6 k).toNat = k := by simp [BitVec.toNat_ofNat]; omega
@@ -282,12 +272,6 @@ theorem toByteUnits_eq {k : Nat} (hk : k < 64) :
   unfold mem_Alignment_toByteUnits
   simp only [StateT.run'_eq, StateT.run_pure, pure_bind, map_pure]
   simp only [mem_Alignment.toBits, e]
-
-theorem gt_eq (a b : BitVec 64) : Zig.gt false a b = decide (b.toNat < a.toNat) := by
-  simp [Zig.gt, Zig.lt, BitVec.ult]
-
-theorem lt_eq (a b : BitVec 64) : Zig.lt false a b = decide (a.toNat < b.toNat) := by
-  simp [Zig.lt, BitVec.ult]
 
 theorem realloc_total (s : Slice) (k : Nat) (n : BitVec 64) (mm : Bool) (bs : Array Byte)
     (hk : k < 64) (hn : 0 < n.toNat) (hfit : n.toNat + 2 ^ k + P ≤ 2 ^ 64)

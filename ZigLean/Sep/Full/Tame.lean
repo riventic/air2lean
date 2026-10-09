@@ -49,17 +49,17 @@ theorem ptrFromAddr (n : Nat) : Tame (Zig.ptrFromAddr n) := fun m v m' h => by
     exact ⟨rfl, KMono.refl _⟩
   · exact (Proto.MemM.throw_ok (m := m) (e := Error.unspecified) (a := v) (by exact h)).elim
 
-/-- A step that only replaces block `b` by one at the same address (and may push blocks). -/
-theorem of_blocks {c : MemM α}
-    (h : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m'.atomics = m.atomics ∧ KMono m m') :
-    Tame c := of_eq h
-
 theorem recordAccess (b o n : Nat) (k : AccessKind) : Tame (Zig.recordAccess b o n k) :=
   of_eq fun m v m' h => by
     obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h
     exact ⟨rfl, KMono.of_blocks rfl⟩
 
 /-! ## OS page mappings (premise OSM-01) -/
+
+theorem throw_bind_ok {β γ : Type} {e : Error} {f : β → MemM γ} {m₀ m₁ : Mem} {x : γ}
+    (h : (((MonadExcept.throw e : MemM β) >>= f).run m₀).run = some (.ok (x, m₁))) : False := by
+  obtain ⟨_, _, h3, -⟩ := Proto.MemM.bind_ok h
+  exact Proto.MemM.throw_ok h3
 
 theorem mappingAt_ok {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
     (h : ((Os.mappingAt p).run m).run = some (.ok (r, m'))) :
@@ -104,8 +104,7 @@ theorem munmap (os : Os.Target) (s : Slice) : Tame (Os.munmap os s) := of_eq fun
       subst this
       exact ⟨rfl, KMono.set (blk' := Os.Unmap.apply blk u) hb0 (by cases u <;> rfl) rfl⟩
   split at h2
-  · obtain ⟨_, _, h3, -⟩ := Proto.MemM.bind_ok h2
-    exact (Proto.MemM.throw_ok h3).elim
+  · exact (throw_bind_ok h2).elim
   · exact tail _ _ _ h2 hb
 
 theorem _root_.Zig.Full.KMono.set_push {m m' : Mem} {b : BlockId} {blk nb x : Block}
@@ -123,8 +122,7 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
   have hset : ∀ {m₁ : Mem} {nb : Block}, m₁.blocks = m.blocks.set! b nb →
       nb.addr = blk.addr → KMono m m₁ := fun h3 h2 => KMono.set hb h2 h3
   split at h
-  · obtain ⟨_, _, h3, -⟩ := Proto.MemM.bind_ok h
-    exact (Proto.MemM.throw_ok h3).elim
+  · exact (throw_bind_ok h).elim
   split at h
   · obtain ⟨_, m₂, h3, h4⟩ := Proto.MemM.bind_ok h
     obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h3
@@ -162,37 +160,27 @@ theorem mremap (os : Os.Target) (o : Option Ptr) (oldLen newLen : BitVec 64) (fl
     (n : Option Ptr) : Tame (Os.mremap os o oldLen newLen flags n) := of_eq fun m v m' h => by
   unfold Os.mremap at h
   simp only at h
-  have throwBind : ∀ {β γ : Type} {e : Error} {f : β → MemM γ} {m₀ m₁ : Mem} {x : γ},
-      (((MonadExcept.throw e : MemM β) >>= f).run m₀).run = some (.ok (x, m₁)) → False :=
-    fun h => by
-      obtain ⟨_, _, h3, -⟩ := Proto.MemM.bind_ok h
-      exact Proto.MemM.throw_ok h3
   split at h
-  · exact (throwBind h).elim
+  · exact (throw_bind_ok h).elim
   split at h
-  · exact (throwBind h).elim
+  · exact (throw_bind_ok h).elim
   · rename_i p
     obtain ⟨_, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
     obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h1
     obtain ⟨⟨b, blk, lo⟩, m₂, h3, h4⟩ := Proto.MemM.bind_ok h2
     obtain ⟨rfl, hb⟩ := mappingAt_ok h3
     split at h4
-    · exact (throwBind h4).elim
+    · exact (throw_bind_ok h4).elim
     · exact mremapLive_ok hb h4
 
 theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags fd : BitVec 32)
     (off : BitVec 64) : Tame (Os.mmap os hint len prot flags fd off) := of_eq fun m v m' h => by
   unfold Os.mmap at h
   simp only at h
-  have throwBind : ∀ {β γ : Type} {e : Error} {f : β → MemM γ} {m₀ m₁ : Mem} {x : γ},
-      (((MonadExcept.throw e : MemM β) >>= f).run m₀).run = some (.ok (x, m₁)) → False :=
-    fun h => by
-      obtain ⟨_, _, h3, -⟩ := Proto.MemM.bind_ok h
-      exact Proto.MemM.throw_ok h3
   split at h
-  · exact (throwBind h).elim
+  · exact (throw_bind_ok h).elim
   split at h
-  · exact (throwBind h).elim
+  · exact (throw_bind_ok h).elim
   obtain ⟨_, m₂, h3, h4⟩ := Proto.MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h3
   obtain ⟨_, m₃, h5, h6⟩ := Proto.MemM.bind_ok h4
