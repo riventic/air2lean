@@ -131,8 +131,12 @@ class TaxonomyTests(unittest.TestCase):
         native = {'ok': 1}
         self.assertEqual(report.classify(native, timer, report.Kind.VALUE, kind, None), report.Status.UNSPECIFIED_TIMER)
         unspecified = {'fail': 'Zig.Error.unspecified'}
+        # An unspecified result is an exclusion only on an input pinned for it (F3); the timer
+        # constructor is typed apart and never needs a pin.
+        self.assertEqual(report.classify(native, unspecified, report.Kind.VALUE, report.Kind.UNSPECIFIED, None,
+                                         pinned=True), report.Status.UNSPECIFIED)
         self.assertEqual(report.classify(native, unspecified, report.Kind.VALUE, report.Kind.UNSPECIFIED, None),
-                         report.Status.UNSPECIFIED)
+                         report.Status.MISMATCH)
         # The legacy compatibility projection still counts both in its `unspecified` bucket.
         self.assertEqual(report.legacy_bucket(native, timer, False), 'unspecified')
 
@@ -144,6 +148,17 @@ class ClaimsEvidenceTests(unittest.TestCase):
         self.base = Path(temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.diff = self.base / 'diff.json'
+        # A claims report must be bound to this checkout (H1): revision and one artifact digest.
+        spec = importlib.util.spec_from_file_location('assumptions', ROOT / 'scripts' / 'assumptions.py')
+        assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(assumptions)
+        olean = self.base / 'Fixture.olean'
+        olean.write_bytes(b'compiled fixture')
+        self.report = self.base / 'assurance.json'
+        self.report.write_text(json.dumps(dict(json.loads(FIXTURE.read_text()), freshness={
+            'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+            'artifacts': [{'module': 'Fixture', 'olean': str(olean), 'olean_sha256': assumptions.file_sha256(olean),
+                           'source': None, 'source_sha256': None}]})))
 
     def run_check(self, rows, strength='total_correctness', function='example.ret', complete=True, diff=True,
                   tamper=None):
@@ -162,7 +177,9 @@ class ClaimsEvidenceTests(unittest.TestCase):
                    'cases_sha256': hashlib.sha256(cases).hexdigest()}
         self.diff.write_text(json.dumps(tamper(summary) if tamper else summary))
         extra = ['--diff', str(self.diff)] if diff else []
-        result = subprocess.run([sys.executable, str(CLAIMS), 'check', str(path), '--assurance', str(FIXTURE), *extra],
+        # The checkout under test may have uncommitted changes (the evidence binding is tested here).
+        result = subprocess.run([sys.executable, str(CLAIMS), 'check', str(path), '--assurance', str(self.report),
+                                 '--allow-dirty', *extra],
                                 capture_output=True, text=True, timeout=30)
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 

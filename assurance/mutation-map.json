@@ -599,7 +599,7 @@
       "negative_tests": [
         {
           "path": "tests/diff/layout/unspecified.txt",
-          "anchor": "writeTable 3"
+          "anchor": "write through @constCast to a constant: illegal behaviour"
         },
         {
           "path": "tests/diff/slices/harness.zig",
@@ -982,7 +982,7 @@
         },
         {
           "path": "tests/diff/threads/unspecified.txt",
-          "anchor": "race 300"
+          "anchor": "data race on a plain variable: illegal behaviour"
         }
       ],
       "mutants": [
