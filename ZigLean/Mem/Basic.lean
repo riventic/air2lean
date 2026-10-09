@@ -402,12 +402,16 @@ def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .
   let m ← get
   set { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }
 
-/-- No live block's address range `[blk.addr, blk.addr + size)` meets `[A, A + n)`. Dead blocks
-do not count, and neither does an empty range: Zig guarantees disjoint storage for live objects,
-nothing else (no gap, no order, no separation for a zero-size object). -/
-def Mem.addrFree (m : Mem) (A n : Nat) : Bool :=
-  m.blocks.all fun blk => !blk.live || n == 0 || blk.bytes.size == 0 ||
+/-- `blk` does not constrain a range `[A, A + n)`: it is dead, one of the two ranges is empty, or
+they are disjoint. Zig guarantees disjoint storage for live objects, nothing else (no gap, no
+order, no separation for a zero-size object). -/
+def Block.clearOf (blk : Block) (A n : Nat) : Bool :=
+  !blk.live || n == 0 || blk.bytes.size == 0 ||
     decide (A + n ≤ blk.addr) || decide (blk.addr + blk.bytes.size ≤ A)
+
+/-- No live block's address range meets `[A, A + n)` (`Block.clearOf`). -/
+def Mem.addrFree (m : Mem) (A n : Nat) : Bool :=
+  m.blocks.all (·.clearOf A n)
 
 /-- `A` is a valid address for a new block of `size` bytes with alignment `align`: exactly what
 Zig guarantees about the address of an object. Not 0, a multiple of the alignment, the block

@@ -708,7 +708,7 @@ theorem Mem.placed?_ok {m : Mem} {size align A : Nat} (h : m.placed? size align 
     · cases h
   · cases h
 
-theorem foldl_top (l : List Block) (t : Nat) :
+private theorem foldl_top (l : List Block) (t : Nat) :
     t ≤ l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t ∧
       ∀ blk ∈ l, blk.addr + blk.bytes.size < l.foldl (fun t blk => Nat.max t (blk.addr + blk.bytes.size + 1)) t := by
   induction l generalizing t with
@@ -867,11 +867,6 @@ theorem Mem.ofGlobals_getElem? (σ : Placement) (gs : List (Array Byte × Nat ×
     simp [Mem.globalAddr, h, List.getElem?_eq_getElem hj]
   · have : (Mem.ofGlobals σ gs).blocks.size ≤ j := by rw [Mem.ofGlobals_size]; omega
     simp [Array.getElem?_eq_none this, List.getElem?_eq_none (Nat.le_of_not_lt hj)]
-
-theorem Mem.globalAddr_mod (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) (j : Nat)
-    (hj : j < gs.length) (ha : 0 < gs[j].2.1) : Mem.globalAddr σ gs j % gs[j].2.1 = 0 := by
-  obtain ⟨A, hA, h⟩ := Mem.ofGlobals_block σ gs j hj
-  simp [Mem.globalAddr, h, hA ha]
 
 /-- A block at program start is aligned: its address is a multiple of its alignment, under every
 placement. -/

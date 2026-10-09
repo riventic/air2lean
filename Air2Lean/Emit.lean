@@ -1802,15 +1802,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- `==` on pointers of every kind compares the addresses (`Zig.ptrEqAddr`, MM-4), also for
     -- optional pointers (`Zig.optPtrEqAddr`): two pointers with different provenance can have
     -- the same address.
-    let isPtrVal (v : Val) := match fc.valTy v with
+    let addrPtr (t : Ty) := match t with
       | .ptr "slice" .. => false
       | .ptr .. => true
       | _ => false
-    let isOptPtrVal (v : Val) := match fc.valTy v with
-      | .optional c => match fc.tyOfId c with | .ptr "slice" .. => false | .ptr .. => true | _ => false
-      | _ => false
-    let eqFn := if isPtrVal a || isPtrVal b then some "Zig.ptrEqAddr"
-      else if isOptPtrVal a || isOptPtrVal b then some "Zig.optPtrEqAddr" else none
+    let optAddrPtr (t : Ty) := match t with | .optional c => addrPtr (fc.tyOfId c) | _ => false
+    let eqFn := if addrPtr (fc.valTy a) || addrPtr (fc.valTy b) then some "Zig.ptrEqAddr"
+      else if optAddrPtr (fc.valTy a) || optAddrPtr (fc.valTy b) then some "Zig.optPtrEqAddr"
+      else none
     let expr := match ptrOrder, op, eqFn with
       | some e, _, _ => s!"{fc.callMName} ({e})"
       | none, .eq, some f => s!"{fc.callMName} ({f} {rv a} {rv b})"

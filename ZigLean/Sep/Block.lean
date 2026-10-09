@@ -61,7 +61,8 @@ theorem Mem.addrFree_cell {m : Mem} {A n : Nat} (hf : m.addrFree A n = true) {l 
   rw [Array.all_eq_true] at hf
   obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp hblk
   have := hf b hi
-  simp only [hl, Bool.not_true, Bool.false_or, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq] at this
+  simp only [Block.clearOf, hl, Bool.not_true, Bool.false_or, Bool.or_eq_true, decide_eq_true_eq,
+    beq_iff_eq] at this
   simp only
   omega
 

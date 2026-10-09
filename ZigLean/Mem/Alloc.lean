@@ -145,10 +145,8 @@ stays below 2^64 and is disjoint from every other live block (`docs/address-plac
 only constraint is disjointness, as for a new block (`Mem.addrFree`): whether the space is free
 follows from the placement of the other blocks, not from an allocation order. -/
 def Mem.growFree (m : Mem) (b : BlockId) (blk : Block) (n : Nat) : Bool :=
-  decide (blk.addr + n ≤ 2 ^ 64) && Nat.allTR m.blocks.size (fun j _ =>
-    let o := m.blocks[j]
-    j == b || !o.live || o.bytes.size == 0 || decide (blk.addr + n ≤ o.addr) ||
-      decide (o.addr + o.bytes.size ≤ blk.addr))
+  decide (blk.addr + n ≤ 2 ^ 64) &&
+    Nat.allTR m.blocks.size (fun j _ => j == b || m.blocks[j].clearOf blk.addr n)
 
 /-- The in-place byte resize transition; its caller validates whole-block ownership and
 that the grown range is free (`Mem.growFree`) before applying it. Thread bookkeeping is retained verbatim. -/
