@@ -323,6 +323,28 @@ structure DevState where
 instance : Repr DevState where
   reprPrec d _ := f!"\{ oracle := <oracle>, asmOracle := <oracle>, trace := {repr d.trace} }"
 
+/-! ## `noalias` scopes (`ZigLean/Mem/Noalias.lean`, `docs/illegal-behavior.md`) -/
+
+/-- One access in the log of a `noalias` scope: its bytes, whether it writes, and its root, the
+`noalias` parameter that the pointer of the access is based on (`none`: none of them). -/
+structure NaEntry where
+  block : BlockId
+  off : Nat
+  len : Nat
+  write : Bool
+  root : Option Nat
+  deriving Repr, Inhabited
+
+/-- One running call of a function with `noalias` parameters, on thread `tid`. `seen`: the
+footprint entries before it are in `log` (or before the call); the ones after it are made
+under the roots `cur`, the last `Zig.naMark`. -/
+structure NaScope where
+  tid : ThreadId
+  seen : Nat
+  cur : Option Nat × Option Nat := (none, none)
+  log : Array NaEntry := #[]
+  deriving Repr, Inhabited
+
 /-- Address placement (MM-1, `docs/address-placement.md`): the environment's choice of the
 address of each block, of every kind (global, stack, heap, allocator). `propose b` is the address
 of block `b`; the model takes it if it is valid (`Mem.placeOk`), else the block gets the next
@@ -396,6 +418,9 @@ structure Mem where
   stackLimit : Option Nat := none
   /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
   stackUsed : Nat := 0
+  /-- The running calls of functions with `noalias` parameters, innermost last
+  (`ZigLean/Mem/Noalias.lean`). Empty in every program without one. -/
+  noalias : Array NaScope := #[]
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
