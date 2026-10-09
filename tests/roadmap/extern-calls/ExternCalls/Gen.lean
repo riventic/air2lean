@@ -33,7 +33,7 @@ def libc_ref_memset.loop8 (p0 : Zig.Ptr) (p2 : BitVec 64) (i4 : BitVec 8) : Zig.
     let i13 ← pure (Zig.lt false i11 i12)
     if i13 then (do
       let i15 ← pure ((← get).i)
-      let i16 ← pure (p0.elem 1 i15)
+      let i16 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 i15))
       Zig.store (α := BitVec 8) 1 i16 i4
       let i18 ← pure ((← get).i)
       let i19 ← Zig.add false i18 (1 : BitVec 64)

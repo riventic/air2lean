@@ -872,9 +872,9 @@ theorem append_cost_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} 
   obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
   obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
   have hs := hdrBytes_size ptr len cap
+  have h24 := hdr_size_ge
   have f₁ : ptrProject p (·.add 8) m = pure (p.add 8, m) := by
     simpa [StateT.run] using bytesAt_ptrProject_run hb hmH (k := 8) (by omega) (by omega)
-  have h24 := hdr_size_ge
   have e8 : Enc.size (BitVec 64) = 8 := rfl
   have q8 : p.add 8 = p.add ((8 : Nat) : Int) := rfl
   have dlen : Enc.decode ((hdrBytes ptr len cap).extract 8 (8 + Enc.size (BitVec 64))) =

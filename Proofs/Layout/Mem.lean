@@ -278,7 +278,7 @@ theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h :
         alignUp]; omega)
       (by simp [Ptr.elem, Ptr.add]; omega)
   have hst := store_constGlobal v hacc rfl
-  have hpr := ptrProject_run (m := mem0) (·.elem 4 i) (p := ⟨some 3, 0⟩) rfl
+  have hpr := ptrProject_run (m := mem0 σ) (·.elem 4 i) (p := ⟨some 3, 0⟩) rfl
     (inBounds_of rfl hb (by decide) (by simp [Enc.encode, padTo, intBytes, intSize,
       intAlign, alignUp]))
     (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by

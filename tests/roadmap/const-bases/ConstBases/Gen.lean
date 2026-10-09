@@ -77,10 +77,10 @@ inductive projectMaybeExit where
 
 def projectMaybe (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add 12)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 12))
     let i2 ← pure i1
-    let i3 ← pure (i2.add 2)
-    let i4 ← pure (i3.elem 1 (1 : BitVec 64))
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 2))
+    let i4 ← Zig.callM (Zig.ptrProject i3 (·.elem 1 (1 : BitVec 64)))
     pure (.ret i4)) : Zig.MM projectMaybeLocals projectMaybeExit).run' (default : projectMaybeLocals)
   match e with
   | .ret v => pure v
@@ -93,9 +93,9 @@ inductive projectResExit where
 
 def projectRes (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add 20)
-    let i2 ← pure (Zig.errPayloadPtr (Vector (BitVec 8) 3) i1)
-    let i3 ← pure (i2.elem 1 (2 : BitVec 64))
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 20))
+    let i2 ← Zig.callM (Zig.ptrProject i1 (Zig.errPayloadPtr (Vector (BitVec 8) 3)))
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (2 : BitVec 64)))
     pure (.ret i3)) : Zig.MM projectResLocals projectResExit).run' (default : projectResLocals)
   match e with
   | .ret v => pure v

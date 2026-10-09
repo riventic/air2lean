@@ -43,10 +43,10 @@ inductive copyOverlapUnsafeExit where
 def copyOverlapUnsafe (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Unit) := do
   let e ← ((do
     let i2 ← Zig.add false p1 (1 : BitVec 64)
-    let i3 ← pure (p0.elem 1 (1 : BitVec 64))
+    let i3 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 (1 : BitVec 64)))
     let i4 ← Zig.sub false i2 (1 : BitVec 64)
     let i5 ← pure (⟨i3, i4⟩ : Zig.Slice)
-    let i6 ← pure (p0.elem 1 (0 : BitVec 64))
+    let i6 ← pure p0
     let i7 ← Zig.sub false p1 (0 : BitVec 64)
     let i8 ← pure (⟨i6, i7⟩ : Zig.Slice)
     let _i9 ← pure i5.len
@@ -314,7 +314,7 @@ inductive parentOfExit where
 
 def parentOf (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← Zig.callM (Zig.checkParent 8 4 (p0.add (-(4 : Int))) >>= fun _ => pure (p0.add (-(4 : Int))))
+    let i1 ← (do let q ← Zig.callM (Zig.ptrProject p0 (·.add (-(4 : Int)))); Zig.callM (Zig.checkParent 8 4 q >>= fun _ => pure q))
     let i2 ← pure (i1)
     pure (.ret i2)) : Zig.MM parentOfLocals parentOfExit).run' (default : parentOfLocals)
   match e with
@@ -329,7 +329,7 @@ inductive sentinelBytesExit where
 def sentinelBytes (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Slice) := do
   let e ← ((do
     let i2 ← pure p0.ptr
-    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i3 ← pure i2
     let i4 ← Zig.sub false p1 (0 : BitVec 64)
     let i5 ← Zig.callM (Zig.checkSliceEnd p0.len (0 : BitVec 64) i4 1 >>= fun _ => Zig.checkSentinelByte i3 i4 (0 : BitVec 8) >>= fun _ => pure (⟨i3, i4⟩ : Zig.Slice))
     pure (.ret i5)) : Zig.MM sentinelBytesLocals sentinelBytesExit).run' (default : sentinelBytesLocals)
@@ -384,7 +384,7 @@ inductive sliceArrayExit where
 def sliceArray (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slice) := do
   let e ← ((do
     let i3 ← pure (p0)
-    let i4 ← pure (i3.elem 4 p1)
+    let i4 ← Zig.callM (Zig.ptrProject i3 (·.elem 4 p1))
     let i5 ← Zig.sub false p2 p1
     let i6 ← Zig.callM (Zig.checkSliceEnd (4 : BitVec 64) p1 i5 0 >>= fun _ => pure (⟨i4, i5⟩ : Zig.Slice))
     pure (.ret i6)) : Zig.MM sliceArrayLocals sliceArrayExit).run' (default : sliceArrayLocals)
@@ -401,7 +401,7 @@ def sliceEnd (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Sl
   let e ← ((do
     let i3 ← Zig.load (Zig.Slice) 8 p0
     let i4 ← pure i3.ptr
-    let i5 ← pure (i4.elem 4 p1)
+    let i5 ← Zig.callM (Zig.ptrProject i4 (·.elem 4 p1))
     let i6 ← Zig.sub false p2 p1
     let i7 ← Zig.callM (Zig.checkSliceEnd i3.len p1 i6 0 >>= fun _ => pure (⟨i5, i6⟩ : Zig.Slice))
     pure (.ret i7)) : Zig.MM sliceEndLocals sliceEndExit).run' (default : sliceEndLocals)

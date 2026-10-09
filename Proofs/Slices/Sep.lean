@@ -103,11 +103,13 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
     have hjo : Zig.sub false s.j 1 = pure (s.j - 1) := by simp [Zig.sub, BitVec.usubOverflow]; omega
     sep_unfold [reverse.loop15, hlt, Zig.checkIndex,
       show s.i.toNat < sl.len.toNat by omega, show s.j.toNat < sl.len.toNat by omega]
-    sep_steps [hio, hjo]
-    sep_ret
-    intro _ hw₂
     have hjn : s.j.toNat < ws.length := by omega
     have hin : s.i.toNat < ws.length := by omega
+    sep_steps [hio, hjo] using TotalTriple.arr_ptrProject (p := sl.ptr) (xs := ws) (i := s.i) (by omega),
+      TotalTriple.arr_ptrProject (p := sl.ptr) (xs := ws.set s.i.toNat ws[s.j.toNat]) (i := s.j)
+        (by simp; omega)
+    sep_ret
+    intro _ hw₂
     have hi1 : (s.i + 1).toNat = s.i.toNat + 1 := by
       rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
     have hj1 : (s.j - 1).toNat = s.j.toNat - 1 := by

@@ -117,8 +117,8 @@ example (σ : Placement) :
       some ⟨Enc.encode 1#32 ++ Enc.encode 2#32, 4, .global, true, A⟩ :=
     ⟨_, by simp [Mem.ofGlobals_getElem?]; rfl⟩
   have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
-  apply second_spec _ _ 2
   have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
+  apply second_spec _ _ 2
   all_goals simp [Mem.inBounds, load, loadBytes, recordAccess, hb, Mem.access,
     Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
     Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set,
@@ -130,6 +130,6 @@ nonvacuity_witness factorial_spec := ⟨0, by decide, trivial⟩
 nonvacuity_witness failName_other := ⟨1, by decide, {}, trivial⟩
 nonvacuity_witness second_spec :=
   ⟨_, Witness.p0, Witness.mem1 (Enc.encode (0 : BitVec 32) ++ Enc.encode (1 : BitVec 32)), 1,
-    by with_unfolding_all rfl, trivial⟩
+    by with_unfolding_all rfl, by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
 nonvacuity_witness fill_spec :=
   ⟨⟨Witness.p0, 1⟩, 7, Witness.mem1 #[.int 0], _, by with_unfolding_all rfl, trivial⟩

@@ -436,7 +436,7 @@ def fs_File_readAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_readA
       match ← ((do
         let i14 ← pure ((← get).index)
         let i15 ← pure p1.ptr
-        let i16 ← pure (i15.elem 1 i14)
+        let i16 ← Zig.callM (Zig.ptrProject i15 (·.elem 1 i14))
         let i17 ← pure p1.len
         let i18 ← pure (Zig.le false i14 i17)
         match ← ((do
@@ -648,7 +648,7 @@ def fs_File_writeAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_writ
       let i13 ← pure ((← get).index)
       let i14 ← pure ((← get).index)
       let i15 ← pure p1.ptr
-      let i16 ← pure (i15.elem 1 i14)
+      let i16 ← Zig.callM (Zig.ptrProject i15 (·.elem 1 i14))
       let i17 ← pure p1.len
       let i18 ← pure (Zig.le false i14 i17)
       match ← ((do

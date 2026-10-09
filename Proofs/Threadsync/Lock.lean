@@ -222,7 +222,7 @@ theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
     (Thread_Mutex_FutexImpl_lock p >>= fun _ => pure ()) := by
   unfold Thread_Mutex_lock
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
-    bind_assoc, map_bind, map_pure]
+    bind_assoc, map_bind, map_pure, Ptr.add_zero]
 
 /-- `lock` (Linux) by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
 theorem lockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
@@ -271,7 +271,7 @@ theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
     (Thread_Mutex_FutexImpl_unlock p >>= fun _ => pure ()) := by
   unfold Thread_Mutex_unlock
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
-    bind_assoc, map_bind, map_pure]
+    bind_assoc, map_bind, map_pure, Ptr.add_zero]
 
 /-- `unlock` (Linux) by the holder `t` (`g`): it goes to `out`. -/
 theorem unlockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
