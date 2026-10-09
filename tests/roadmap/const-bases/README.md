@@ -67,27 +67,33 @@ bash tests/roadmap/const-bases/check.sh
 AIR2LEAN_ZIG_NATIVE=/path/to/zig bash tests/roadmap/const-bases/check.sh --native
 ```
 
-## Fresh export
+## Fresh exports
 
-`air-fresh/0.16.0` is the unmodified export of `const_bases.zig` from a patched 0.16.0
-compiler built from this exporter recipe (`json.zig` and `pointer-offset.zig` hashes as in
-`zig-patch/air-json`). The command was `ZIG_AIR_JSON_FILTER=const_bases. zig build-obj
+`air-fresh/<version>` (0.16.0, 0.15.2, 0.14.1) is the unmodified export of `const_bases.zig`
+from a patched compiler of that version (stage2_x86_64, x86_64-linux-musl, baseline,
+ReleaseSafe). `provenance.json` records the source, exporter (`json.zig`, `pointer-offset.zig`),
+compiler and per-file hashes. The command was `ZIG_AIR_JSON_FILTER=const_bases. zig build-obj
 -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl
--mcpu=baseline`. `test_cli.py` checks it against the hand-written fixtures:
+-mcpu=baseline`. The 0.15.2 and 0.14.1 compilers were built by `zig-patch/build.sh` from the
+exporter of this tree. The 0.16.0 export is the earlier one, from an older exporter tree, so it
+lacks the additive `src` and `column` fields. `test_cli.py` checks every version against the
+hand-written fixtures:
 
 * Every returned constant pointer has the same global (`const_bases.table`), offset
-  (24, 15, 15, slice 15, 20) and `payload_base` marker. The generated definitions of
-  `resElemPtr`, `maybeElemPtr`, `maybeBytePtr`, `maybeSlice` and `resCodePtr` are identical
-  to the retained `Gen.lean`, and the profile is identical.
+  (24, 15, 15, slice 15, 20) and `payload_base` marker in all three versions. The generated
+  definitions of `resElemPtr`, `maybeElemPtr`, `maybeBytePtr`, `maybeSlice` and `resCodePtr`
+  are identical to the retained `Gen.lean`, and the profile is identical but for the version
+  and target triple. The three fresh translations are equal after the profile header line.
 * Recorded differences: Sema's ReleaseSafe `projectRes`/`projectMaybe` include the
   `catch unreachable` error check and the `.?` null check that the hand-written fixtures
   omit. Sema also folds `readResElem` to `22`, so the hand-written fixture keeps the load
   through the constant that the proofs use.
-* The fresh program is rejected on `stage2_llvm` at offset 24, like the hand-written one.
+* Every fresh program is rejected on `stage2_llvm` at offset 24, like the hand-written one,
+  and also when downgraded to schema 11 (below).
 
-0.15.2 and 0.14.1 are not exported. The only patched 0.15.2 builds available predate the
-payload-resolution exporter (no `payload_base`), and no patched 0.14.1 build exists here.
-Their export qualification needs a patched-compiler rebuild from the current recipe.
+This is export and translation evidence only. The native offsets are checked with a stock
+0.16.0 compiler (`check.sh --native`); `zig test const_bases.zig -fno-llvm` was not run with
+0.15.2 or 0.14.1 here.
 
 ## The LLVM constant `eu_payload` offset
 
@@ -128,5 +134,12 @@ structural and over-approximating: it visits every struct/tuple field, array ite
 optional payload that contains the offset, and it rejects through unions and unknown layouts.
 Other backends are unaffected, and the generated model keeps the correct, Sema-given offset.
 The check reads the schema-12 `profile.backend`. Legacy schema 1–11 inputs carry no backend
-(`unverified`, the named legacy reference model), so the check cannot apply to them. Their
-LLVM correspondence for this shape is unqualified.
+(`unverified`, the named legacy reference model), so the backend that compiled them is unknown
+and the LLVM backend cannot be excluded. The translator therefore treats `unverified` like
+`stage2_llvm` here (`Air2Lean.mayMisplaceEuPayload`): the same constants are rejected with a
+message that names the missing backend, and the same controls (the error code, the optional
+payload, other fields, an aligned payload) are accepted. `test_cli.py` runs the hand-written
+fixtures and all three fresh exports downgraded to schema 11 (no `profile`). A one-off sweep of
+the 54 committed directories of legacy AIR (tests, examples, case studies) found no
+newly rejected input. A legacy file whose constants touch such a payload now needs a re-export
+with a schema-12 exporter that names a backend other than LLVM or wasm.
