@@ -978,7 +978,8 @@ theorem enc_av4 : (Enc.encode ({ raw := 0 } : atomic_Value_u32)).size = 4 := by
 
 /-- `main`: three blocks, four stores, the spawn, the acquire load of the flag (a stop), the read
 of `data` if the flag is 1, the join (a stop), three frees. -/
-theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 mpRelAcq QM G0 { mem0 σ with current := 0 } d := by
   unfold mpRelAcq
   -- the blocks: `data`, `flag`, the `MpCtx`
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
@@ -995,13 +996,13 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e5 : s5 = cPtr := by rw [hq₃]; rfl
   subst e5
-  refine ⟨by rw [hm₃], ?_⟩
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
-            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
+            b0 := by blkat_alloc
+            b1 := by blkat_alloc
+            b2 := by blkat_alloc }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -1122,17 +1123,17 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelAcq QM G0 { mem0 with current := 0
 
 /-- **`mpRelAcq` gives 0 or 42 under every schedule** (every oracle `o`, every `fuel`): after
 the acquire load reads the writer's release store, the read of `data` sees 42. -/
-theorem mpRelAcq_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelAcq mem0).run = some (.ok (v, m))) :
+theorem mpRelAcq_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o mpRelAcq (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 0 ∨ v = .ok 42 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `mpRelAcq` gives an error**: the read of `data` does not race with the write,
 under every schedule. -/
-theorem mpRelAcq_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o mpRelAcq mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem mpRelAcq_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o mpRelAcq (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 end Atomics.MP

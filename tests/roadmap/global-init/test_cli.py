@@ -74,7 +74,7 @@ def main():
     text = accept(binary, fixtures())
     assert text == GEN.read_text(), "fresh translation differs from GlobalInit/Gen.lean"
     assert "structure ExternInit where" in text
-    assert "def mem0 (ext : ExternInit) : Zig.Mem" in text
+    assert "def mem0 (σ : Zig.Placement) (ext : ExternInit) : Zig.Mem" in text
     assert text.index("  counter : BitVec 32") < text.index("  limit : BitVec 32"), "block order"
     assert "(Zig.Enc.encode (ext.counter : BitVec 32), 4, .global)" in text
     assert "(Zig.Enc.encode (ext.limit : BitVec 32), 4, .constGlobal)" in text
@@ -82,10 +82,10 @@ def main():
     assert "(Array.replicate (Zig.Enc.size (BitVec 32)) .undef, 4, .global)" in text
     checks += 1
 
-    # Without an extern global, mem0 keeps its parameterless form (no reserved structure).
+    # Without an extern global, mem0 takes only the placement (no reserved structure).
     plain = {k: v for k, v in fixtures().items() if "Scratch" in k}
     text = accept(binary, plain)
-    assert "ExternInit" not in text and "def mem0 : Zig.Mem :=" in text
+    assert "ExternInit" not in text and "def mem0 (σ : Zig.Placement) : Zig.Mem :=" in text
     checks += 1
 
     # An `ExternInit` field never collides with the structure constructor or another field.

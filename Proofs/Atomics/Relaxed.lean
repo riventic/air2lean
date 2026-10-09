@@ -573,7 +573,8 @@ theorem inv_fork {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} (hi : Inv G m
   · rw [hcl u (by simp at hu; omega)]
     exact VClock.le_trans (hi.pw e he hh 0 (by rw [hs1]; decide)) (VClock.le_bump _ _)
 
-theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 mpRelaxed QM G0 { mem0 σ with current := 0 } d := by
   unfold mpRelaxed
   -- the blocks: `data`, `flag`, the `MpCtx`
   refine WP.bind (WP.liftMem (fun _ _ => rfl) fun s0 m₁ ha₁ => ?_)
@@ -590,13 +591,13 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e5 : s5 = cPtr := by rw [hq₃]; rfl
   subst e5
-  refine ⟨by rw [hm₃], ?_⟩
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
-            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
+            b0 := by blkat_alloc
+            b1 := by blkat_alloc
+            b2 := by blkat_alloc }
   have hv₃ : (m₃.clocks[0]!).get 1 = 0 := by rw [hm₃]; rfl
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
@@ -702,10 +703,10 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
 
 /-- **Every result of `mpRelaxed` is 0** (every oracle `o`, every `fuel`): a run where `main`
 reads 1 at the relaxed flag races at `data` and gives no result. -/
-theorem mpRelaxed_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelaxed mem0).run = some (.ok (v, m))) : v = .ok 0 := by
+theorem mpRelaxed_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o mpRelaxed (mem0 σ)).run = some (.ok (v, m))) : v = .ok 0 := by
   obtain ⟨_, _, hv⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun h => absurd h (by decide)) rfl main_spec h
+    (fun h => absurd h (by decide)) rfl (main_spec σ) h
   exact hv
 
 end Atomics.MPR

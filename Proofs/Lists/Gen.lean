@@ -25,8 +25,8 @@ instance : Zig.Enc array_list_Aligned_u32_null where
   encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.items), (16, Zig.Enc.encode v.capacity)]
   decode bs := do pure { items := ← Zig.Enc.decodeAt bs 0, capacity := ← Zig.Enc.decodeAt bs 16 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: a constant
   (Zig.Enc.encode ((#v[] : Vector (BitVec 32) 0) : Vector (BitVec 32) 0), 4, .constGlobal)]
 

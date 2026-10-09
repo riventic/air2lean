@@ -247,13 +247,14 @@ theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
     rwa [hpo] at this
 
 /-- A write to the `const` table through `@constCast` throws `.illegal`: its block (3) is
-read-only. -/
-theorem writeTable_illegal (i : BitVec 64) (v : BitVec 32) (h : i.toNat < 3) :
-    (writeTable i v).run mem0 = throw .illegal := by
-  have hb : mem0.blocks[3]? = some ⟨Enc.encode (#v[(10 : BitVec 32), (20 : BitVec 32),
-      (30 : BitVec 32)] : Vector (BitVec 32) 3), 4, .constGlobal, true, 4104⟩ := by
-    simp [mem0, Mem.ofGlobals, Mem.addGlobal, alignUp]
-  have hacc : mem0.access ((⟨some 3, 0⟩ : Ptr).elem 4 i) (Enc.size (BitVec 32)) 4 =
+read-only. This holds for every placement: the item's address is aligned because the block is. -/
+theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h : i.toNat < 3) :
+    (writeTable i v).run (mem0 σ) = throw .illegal := by
+  obtain ⟨A, hb⟩ : ∃ A, (mem0 σ).blocks[3]? = some ⟨Enc.encode (#v[(10 : BitVec 32),
+      (20 : BitVec 32), (30 : BitVec 32)] : Vector (BitVec 32) 3), 4, .constGlobal, true, A⟩ :=
+    ⟨_, by simp [mem0, Mem.ofGlobals_getElem?]; rfl⟩
+  have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
+  have hacc : (mem0 σ).access ((⟨some 3, 0⟩ : Ptr).elem 4 i) (Enc.size (BitVec 32)) 4 =
       pure (3, _, ((⟨some 3, 0⟩ : Ptr).elem 4 i).off.toNat) :=
     access_of rfl hb rfl (by simp [Ptr.elem, Ptr.add]; omega)
       (by simp [Ptr.elem, Ptr.add, Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign,

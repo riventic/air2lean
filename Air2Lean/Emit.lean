@@ -2114,12 +2114,22 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .ptr .., .gt => some s!"Zig.ptrLt {rv b} {rv a}"
       | .ptr .., .ge => some s!"Zig.ptrLe {rv b} {rv a}"
       | _, _ => none
-    let nullable := fc.nullableVal a || fc.nullableVal b
-    let expr := match ptrOrder, op with
-      | some e, _ => s!"{fc.callMName} ({e})"
-      | none, .eq => if nullable then s!"{fc.callMName} (Zig.ptrEqAddr {rv a} {rv b})" else s!"pure ({expr})"
-      | none, .ne => if nullable then s!"{fc.callMName} (do pure (!(← Zig.ptrEqAddr {rv a} {rv b})))" else s!"pure ({expr})"
-      | none, _ => s!"pure ({expr})"
+    -- `==` on pointers of every kind compares the addresses (`Zig.ptrEqAddr`, MM-4), also for
+    -- optional pointers (`Zig.optPtrEqAddr`): two pointers with different provenance can have
+    -- the same address.
+    let addrPtr (t : Ty) := match t with
+      | .ptr "slice" .. => false
+      | .ptr .. => true
+      | _ => false
+    let optAddrPtr (t : Ty) := match t with | .optional c => addrPtr (fc.tyOfId c) | _ => false
+    let eqFn := if addrPtr (fc.valTy a) || addrPtr (fc.valTy b) then some "Zig.ptrEqAddr"
+      else if optAddrPtr (fc.valTy a) || optAddrPtr (fc.valTy b) then some "Zig.optPtrEqAddr"
+      else none
+    let expr := match ptrOrder, op, eqFn with
+      | some e, _, _ => s!"{fc.callMName} ({e})"
+      | none, .eq, some f => s!"{fc.callMName} ({f} {rv a} {rv b})"
+      | none, .ne, some f => s!"{fc.callMName} (do pure (!(← {f} {rv a} {rv b})))"
+      | none, _, _ => s!"pure ({expr})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
   | .boolOr a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
@@ -3092,7 +3102,10 @@ def FCtx.stackBlocks (fc : FCtx) : Array (InstId × String × Nat × Nat) :=
     let field := (fc.allocFields.find? (·.1 == aid)).map (·.2) |>.getD s!"local{aid}"
     let child := match fc.tyOfId (fc.instTyId aid) with | .ptr _ _ c => c | _ => 0
     let l := fc.layouts[child]?.getD {}
-    (aid, field, l.size.getD 0, l.align.getD 1)
+    -- Zig guarantees the alignment of the `alloc`'s pointer type (`align(N)` or the child's ABI
+    -- alignment), the only alignment the placement gives the block (MM-1).
+    let align := (fc.layouts[fc.instTyId aid]?.bind (·.ptrAlign)).getD (l.align.getD 1)
+    (aid, field, l.size.getD 0, align)
 
 /-- Shared body text for a definition and its opt-in unfolding theorem. -/
 def emitFunctionBody (fc : FCtx) (localsName exitName : String)
@@ -3383,6 +3396,19 @@ def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := no
   | some (.undef _) | none => fc.storageExpr g.ty s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
   | some init => fc.storageExpr g.ty (encodeTerm (fc.resolveVal #[] init) ty)
 
+/-- Every pointer constant in `v`, at any depth, whose pointer type's alignment `a` (`ptr_align`)
+is known and divides its offset: its global and `a`. Zig guarantees `(addr + off) % a = 0`, so
+then `addr % a = 0`: `a` is a true lower bound on the global's address alignment. -/
+partial def Val.ptrConstAligns (layouts : Array Layout) (v : Val) : Array (Nat × Nat) :=
+  match v with
+  | .ptrConst ty g off => match layouts[ty]?.bind (·.ptrAlign) with
+    | some a => if 0 < a && off % a == 0 then #[(g, a)] else #[]
+    | none => #[]
+  | .agg _ vs => vs.flatMap (Val.ptrConstAligns layouts)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => Val.ptrConstAligns layouts v
+  | .sliceConst _ p n => Val.ptrConstAligns layouts p ++ Val.ptrConstAligns layouts n
+  | _ => #[]
+
 /-- The globals of the program, and the block of each global of each function (by function
 name). A named global is one block, shared by name. An unnamed constant (a string literal) with
 the same type and value as another one shares its block. Named globals come first. An `extern`
@@ -3426,6 +3452,20 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
                       tls := g.threadlocal }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
+  -- The block's alignment is what Zig guarantees for the global's address (MM-1): its declared
+  -- alignment, which the export does not record. Each pointer constant into it at an offset its
+  -- alignment divides is a true lower bound (`Val.ptrConstAligns`); the largest one caps the
+  -- type's ABI alignment (`&g` of an `align(1)` global is `*align(1) T`). The smallest one is not
+  -- a bound: `&g.a : *u8` or a coercion to `*align(1) T` of an aligned global claims less.
+  let mut bound : Array Nat := out.map fun _ => 0
+  for (f, k) in funcs.zipIdx do
+    let vals := f.allInsts.flatMap (placeOperands ·.op) ++ f.globals.filterMap (·.init)
+    for (g, a) in vals.flatMap (Val.ptrConstAligns f.layouts) do
+      if let some id := ids[k]!.2[g]? then
+        if id < bound.size then bound := bound.set! id (Nat.max bound[id]! a)
+  for (b, id) in bound.zipIdx do
+    if let some pg := out[id]? then
+      if 0 < b && b < pg.align then out := out.set! id { pg with align := b }
   return (out, ids)
 
 /-- The enums whose tag names a function reads (`@tagName`), as `(Zig name, Lean name, fields,
@@ -3471,9 +3511,11 @@ def nameBytes (s : String) : String :=
   let bs := s.toUTF8.toList.map (s!"{·}")
   encodeTerm s!"#v[{", ".intercalate (bs ++ ["0"])}]" s!"Vector (BitVec 8) {bs.length + 1}"
 
-/-- `mem0`: the memory at program start, one block per global. With an `extern` global, `mem0`
-takes the explicit external initial state `ext : ExternInit`, one field per `extern` global in
-block order: a proof from `mem0 ext` states its assumptions about external storage on `ext`. -/
+/-- `mem0 σ`: the memory at program start, one block per global, at the addresses that the
+placement `σ` gives them (`Zig.Placement`, MM-1). A theorem from `mem0 σ` holds for every `σ`,
+so it cannot depend on where a block is. With an `extern` global, `mem0` also takes the explicit
+external initial state `ext : ExternInit`, one field per `extern` global in block order: a proof
+from `mem0 σ ext` states its assumptions about external storage on `ext`. -/
 def emitMem0 (gs : Array ProgGlobal) : String :=
   let kind (g : ProgGlobal) := if g.isVar then ".global" else ".constGlobal"
   let lines := gs.toList.zipIdx.map fun (g, k) =>
@@ -3483,8 +3525,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
     s!"  -- {k}: {g.label}{source}\n  ({g.bytes}, {g.align}, {kind g})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
   let keys := gs.toList.zipIdx.filterMap fun (g, k) => if g.tls then some s!"{k}" else none
-  let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals {body}" else
-    s!"(Zig.Mem.ofGlobals {body}).mainTls #[{", ".intercalate keys}]"
+  let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals σ {body}" else
+    s!"(Zig.Mem.ofGlobals σ {body}).mainTls #[{", ".intercalate keys}]"
   let tlsDoc := if keys.isEmpty then "" else
     " The main thread's instance of a `threadlocal` global is its block (its TLS key)."
   let tlsInit := if keys.isEmpty then "" else
@@ -3497,17 +3539,17 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
     let access := if g.isVar then "`var`, writable" else "`const`, read-only"
     s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
   if externs.isEmpty then
-    s!"/-- The memory at program start: block `k` is global `k`.{tlsDoc} -/\n\
-      def mem0 : Zig.Mem := {body}{tlsInit}"
+    s!"/-- The memory at program start under the placement `σ`: block `k` is global `k`.{tlsDoc} -/\n\
+      def mem0 (σ : Zig.Placement) : Zig.Mem := {body}{tlsInit}"
   else
     s!"/-- External initial state: the initial value of each `extern` global, which this program \
       does not define. Fields follow block (initialization) order. Contract: the external \
       definition holds a valid encoding of the field's type before the program starts; any \
       other assumption about external storage is a hypothesis on this value. -/\n\
       structure {externInitName} where\n{"\n".intercalate externs}\n\n\
-      /-- The memory at program start: block `k` is global `k`. Blocks are added in order; an \
-      `extern` block holds its `ext` field, never a default.{tlsDoc} -/\n\
-      def mem0 (ext : {externInitName}) : Zig.Mem := {body}{tlsInit}"
+      /-- The memory at program start under the placement `σ`: block `k` is global `k`. Blocks \
+      are added in order; an `extern` block holds its `ext` field, never a default.{tlsDoc} -/\n\
+      def mem0 (σ : Zig.Placement) (ext : {externInitName}) : Zig.Mem := {body}{tlsInit}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)

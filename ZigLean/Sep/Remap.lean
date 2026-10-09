@@ -95,44 +95,12 @@ theorem afterByteRemap_sameThreads (m : Mem) (b : BlockId) (blk : Block) (n : Na
     m.SameThreads (m.afterByteRemap b blk n) :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- The resized block ends strictly below the monotonic future-allocation boundary. -/
-theorem afterByteRemap_nextAddr (m : Mem) (b : BlockId) (blk : Block) (n : Nat) :
-    m.nextAddr ≤ (m.afterByteRemap b blk n).nextAddr ∧
-      blk.addr + n < (m.afterByteRemap b blk n).nextAddr := by
-  change m.nextAddr ≤ Nat.max m.nextAddr (blk.addr + n + 1) ∧
-    blk.addr + n < Nat.max m.nextAddr (blk.addr + n + 1)
-  exact ⟨Nat.le_max_left _ _,
-    Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_max_right _ _)⟩
-
-
-/-- Whole-block replacement preserves the sequential-memory invariant. Frame cells
-retain their old bounds, and every resized cell lies below the enlarged boundary. -/
+/-- Whole-block replacement preserves the sequential-memory invariant. -/
 theorem afterByteRemap_seq {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
-    (hb : m.blocks[b]? = some blk) (hl : blk.live)
-    (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF)
-    (hst : m.Seq) (n : Nat) : (m.afterByteRemap b blk n).Seq := by
-  obtain ⟨_, hm', _⟩ := afterByteRemap_owned_frame hb hl hd hm n
-  refine ⟨(afterByteRemap_sameThreads m b blk n).singleThread hst.single, ?_⟩
-  intro l c hc
-  rw [hm', Heap.union_apply] at hc
-  cases he : blockHeap b { blk with bytes := remapBytes blk.bytes n } l with
-  | some c0 =>
-    rw [he] at hc
-    cases hc
-    simp only [blockHeap] at he
-    split at he
-    · cases he
-      simpa [remapBytes_size] using (afterByteRemap_nextAddr m b blk n).2
-    · cases he
-  | none =>
-    rw [he, Option.none_or] at hc
-    have ho : blockHeap b blk l = none := (hd l).resolve_right (by rw [hc]; simp)
-    have hcold : m.heap l = some c := by
-      rw [hm, Heap.union_apply, ho, Option.none_or]
-      exact hc
-    have ha := hst.addr l c hcold
-    have hn := (afterByteRemap_nextAddr m b blk n).1
-    omega
+    (_hb : m.blocks[b]? = some blk) (_hl : blk.live)
+    (_hd : Heap.Disjoint (blockHeap b blk) hF) (_hm : m.heap = blockHeap b blk ∪ hF)
+    (hst : m.Seq) (n : Nat) : (m.afterByteRemap b blk n).Seq :=
+  ⟨(afterByteRemap_sameThreads m b blk n).singleThread hst.single⟩
 
 /-- The actual in-place runtime branch, with explicit access/race/resource premises.
 No undefined byte is decoded, and no external frame assumption is hidden in the run fact. -/
@@ -141,7 +109,7 @@ theorem remapByteBuffer_inPlace_run {m : Mem} {s : Slice} {b : BlockId} {blk : B
     (hacc : m.access s.ptr s.len.toNat 1 = pure (b, blk, 0))
     (hkind : blk.kind = .heap) (hsize : blk.bytes.size = s.len.toNat) (halign : blk.align = 1)
     (hpos : n ≠ 0) (hcap : n ≤ m.allocPolicy.maxBytes)
-    (hlatest : blk.bytes.size < n → m.byteRemapLast b blk = true)
+    (hlatest : blk.bytes.size < n → m.growFree b blk n = true)
     (hrace : NoRace m b 0 blk.bytes.size .write) :
     (remapByteBuffer s n).run m =
       pure (some ⟨s.ptr, BitVec.ofNat 64 n⟩,
@@ -154,7 +122,7 @@ theorem remapByteBuffer_inPlace_run {m : Mem} {s : Slice} {b : BlockId} {blk : B
     simp [hkind, hsize]
   have haligned : ¬ (blk.align ≠ 1 ∨ n = 0 ∨ m.allocPolicy.maxBytes < n) := by
     simp [halign, hpos, Nat.not_lt.mpr hcap]
-  have hgrowth : ¬ (blk.bytes.size < n ∧ m.byteRemapLast b blk = false) := by
+  have hgrowth : ¬ (blk.bytes.size < n ∧ m.growFree b blk n = false) := by
     rintro ⟨hg, hf⟩
     have ht := hlatest hg
     rw [ht] at hf
@@ -172,7 +140,7 @@ theorem remapByteBuffer_inPlace_owned {m : Mem} {s : Slice} {b : BlockId} {blk :
     (hacc : m.access s.ptr s.len.toNat 1 = pure (b, blk, 0))
     (hkind : blk.kind = .heap) (hsize : blk.bytes.size = s.len.toNat) (halign : blk.align = 1)
     (hpos : n ≠ 0) (hcap : n ≤ m.allocPolicy.maxBytes)
-    (hlatest : blk.bytes.size < n → m.byteRemapLast b blk = true)
+    (hlatest : blk.bytes.size < n → m.growFree b blk n = true)
     (hrace : NoRace m b 0 blk.bytes.size .write) :
     ∃ m', (remapByteBuffer s n).run m = pure (some ⟨s.ptr, BitVec.ofNat 64 n⟩, m') ∧
       Heap.Disjoint (blockHeap b { blk with bytes := remapBytes blk.bytes n }) hF ∧

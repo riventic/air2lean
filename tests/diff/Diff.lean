@@ -611,9 +611,9 @@ def runVectorCoverage : IO Unit := do
     pure (renderOk (Vectors.fMin (← floatVecOf .f32 (← getArr j)[0]!)) floatStr)
   processFile ex "fMax" fun j => do
     pure (renderOk (Vectors.fMax (← floatVecOf .f32 (← getArr j)[0]!)) floatStr)
-  -- A memory function: run from `mem0`.
+  -- A memory function: run from `mem0` under the harness's concrete placement.
   processFile ex "twiceInMem" fun j => do
-    pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' Vectors.mem0))
+    pure (renderVec ((Vectors.twiceInMem (← intVecOf 32 (← getArr j)[0]!)).run' (Vectors.mem0 .fresh)))
   processFile ex "vDiv" fun j => renderVecS <$> pairI Vectors.vDiv j
   processFile ex "vMod" fun j => renderVecS <$> pairI Vectors.vMod j
   processFile ex "sRem" fun j => do
@@ -701,7 +701,7 @@ def runVariants : IO Unit := do
 
 /-! ### Memory: `{"bufs":[…],"args":[…]}` (docs/generated-code.md §Differential test)
 
-The memory at the start is the example's `mem0`: its `g` globals are blocks `0 … g-1`. Input
+The memory at the start is the example's `mem0 .fresh` (the harness's concrete placement): its `g` globals are blocks `0 … g-1`. Input
 buffer `i` is block `g + i`. -/
 
 /-- One 16-byte aligned block per input buffer, after the globals of `m0`. The allocator did not
@@ -795,7 +795,7 @@ def unitStr (_ : Zig.Mem) (_ : Unit) : String := "null"
 
 def runPointers : IO Unit := do
   let ex := "pointers"
-  let m0 := Pointers.mem0
+  let m0 := (Pointers.mem0 .fresh)
   processMem ex m0 "swap" (fun g a => return Pointers.swap (← ptrOf g a[0]!) (← ptrOf g a[1]!)) unitStr
   processMem ex m0 "delay"
     (fun g a => return Pointers.delay (← ptrOf g a[0]!) (bv 32 (← getInt a[1]!))) unitStr
@@ -821,7 +821,7 @@ def pureMem {α : Type} (r : Zig.Result α) : Zig.MemM α := StateT.lift r
 
 def runLayout : IO Unit := do
   let ex := "layout"
-  let m0 := Layout.mem0
+  let m0 := (Layout.mem0 .fresh)
   let ptrRes (size : Nat) (m : Zig.Mem) (p : Zig.Ptr) := ptrStr m0.blocks.size m p size
   processMem ex m0 "addrEq" (fun g a => return Layout.addrEq (← ptrOf g a[0]!) (← ptrOf g a[1]!))
     fun _ b => if b then "1" else "0"
@@ -921,7 +921,7 @@ def runLayout : IO Unit := do
 
 def runSlices : IO Unit := do
   let ex := "slices"
-  let m0 := Slices.mem0
+  let m0 := (Slices.mem0 .fresh)
   let u32 (_ : Zig.Mem) (v : BitVec 32) := natStr v false
   let bytes (m : Zig.Mem) (s : Zig.Slice) := sliceStr m0.blocks.size m 1 s
   processMem ex m0 "reverse" (fun g a => return Slices.reverse (← sliceOf g a[0]!)) unitStr
@@ -993,7 +993,7 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
 
 def runLists : IO Unit := do
   let ex := "lists"
-  let m0 := Lists.mem0
+  let m0 := (Lists.mem0 .fresh)
   let a : Zig.Allocator := {}
   let wide (_ : Zig.Mem) (v : Except Zig.ErrName (BitVec 64)) := errStr v true
   let items (size : Nat) (m : Zig.Mem) : Except Zig.ErrName Zig.Slice → String

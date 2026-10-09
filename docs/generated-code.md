@@ -182,7 +182,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
 | `optional_payload_ptr`, `optional_payload_ptr_set` | `p` (the payload is at offset 0); `_set` of a `?T` sets the flag: `Zig.optSetSome T p` |
-| `cmp_eq`, `cmp_neq` on pointers | Ordinary pointers: `==`, `!=` on block/offset. Scalar C/allowzero pointers: address comparison through `Zig.ptrEqAddr`. |
+| `cmp_eq`, `cmp_neq` on pointers | Every pointer kind: address comparison through `Zig.ptrEqAddr` (`Zig.optPtrEqAddr` for `?*T`); provenance does not count ([address-placement.md](address-placement.md)). |
 | `cmp_lt`, `cmp_lte`, `cmp_gt`, `cmp_gte` on pointers | `Zig.ptrLt`, `Zig.ptrLe`: the order of the addresses (`Zig.ptrAddr`) |
 | `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
 | `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
@@ -203,7 +203,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 
 `@memset`, `@memcpy` and `@memmove` do nothing for 0 bytes, also through a pointer that is not valid; this includes a positive count of zero-size items. `Zig.readSlice` does nothing for 0 items. For a positive count of zero-size items it decodes the empty encoding once and returns that many decoded values, preserving decoder errors without accessing memory. For nonzero-size items, `Zig.readSlice` (a `[]const T` argument of a pure function) throws `.unspecified` if any item has an `undef` byte, also an item that the callee does not read.
 
-`Zig.ptrFromAddr` recovers a block's provenance for addresses inside it or exactly one byte past its last byte, including dead blocks. The one-past pointer can be moved back into the block; it cannot be dereferenced, and recovering provenance does not revive a freed block. Addresses in allocation gaps retain no block. Under the opt-in address-reuse policy (`AllocPolicy.reuseAddr`), a freed block and a later block can cover the same address; then the recovery throws `.unspecified` unless the program declares the address-sensitive contract `ProvenanceMode.liveBlock` ([address-reuse.md](address-reuse.md)).
+`Zig.ptrFromAddr` recovers a block's provenance for addresses inside it or exactly one byte past its last byte, including dead blocks. The one-past pointer can be moved back into the block; it cannot be dereferenced, and recovering provenance does not revive a freed block. Addresses in allocation gaps retain no block. When the placement reuses a freed block's address or puts two blocks next to each other, two blocks can cover the same address; then the recovery throws `.unspecified` unless the program declares the address-sensitive contract `ProvenanceMode.liveBlock` ([address-reuse.md](address-reuse.md)).
 
 Two pointers into different blocks have the order of the model's addresses, which can differ from the compiled code. The `@memcpy` overlap check of `ReleaseSafe` compares pointers: for two blocks, the model and the compiled code both find no overlap.
 
@@ -213,10 +213,10 @@ A big-endian profile (`profile.endian = "big"`, s390x-linux, [profiles.md](profi
 
 ### Globals
 
-A function file lists the globals that its pointer constants point into (`docs/air-json.md` §Global). The translator makes one program-wide table: a named global is one block, shared by name; an unnamed constant (a string literal) with the same type and value as another one shares its block. Then one block per name of each enum that a function reads with `@tagName`, and one per name of each error of the program's error sets if a function reads `@errorName`. `mem0` is the memory at program start: block `k` is global `k`, with its initial bytes. A pointer constant is `⟨some k, off⟩`. An array with a sentinel (`[12:0]u8`) is stored with its sentinel.
+A function file lists the globals that its pointer constants point into (`docs/air-json.md` §Global). The translator makes one program-wide table: a named global is one block, shared by name; an unnamed constant (a string literal) with the same type and value as another one shares its block. Then one block per name of each enum that a function reads with `@tagName`, and one per name of each error of the program's error sets if a function reads `@errorName`. `mem0 σ` is the memory at program start: block `k` is global `k`, with its initial bytes, at the address that the placement `σ` gives it ([address-placement.md](address-placement.md)); a theorem about the program start quantifies over `σ`. A pointer constant is `⟨some k, off⟩`. An array with a sentinel (`[12:0]u8`) is stored with its sentinel.
 
 ```lean
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: slices.counter
   (Zig.Enc.encode ((0 : BitVec 32) : BitVec 32), 4),
   ...]
@@ -241,22 +241,23 @@ file has no initial value".
 **External initial state.** An `extern` global (`extern var x: T;`, `extern const`) has no
 initial value in the program. If the program has one, the translator emits a structure
 `ExternInit` with one field per `extern` global, named after it without the prefix, in block
-order, and `mem0` takes it explicitly:
+order, and `mem0` takes it explicitly after the placement:
 
 ```lean
 structure ExternInit where
   /-- Block 0: `global_init.counter` (`var`, writable). -/
   counter : BitVec 32
 
-def mem0 (ext : ExternInit) : Zig.Mem := Zig.Mem.ofGlobals [
+def mem0 (σ : Zig.Placement) (ext : ExternInit) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: global_init.counter (extern: initial value `ext.counter`)
   (Zig.Enc.encode (ext.counter : BitVec 32), 4, .global),
   ...]
 ```
 
-The blocks of `mem0` are added in order (`Mem.ofGlobals`), which fixes their addresses and the
-initialization order: block addresses do not depend on the external values. Every statement
-about the program start is therefore about `mem0 ext` for an `ext` that the proof quantifies
+The blocks of `mem0` are added in order (`Mem.ofGlobals`), which fixes the initialization
+order; their addresses are the placement's and do not depend on the external values. Every
+statement about the program start is therefore about `mem0 σ ext` for a `σ` and an `ext` that the
+proof quantifies
 over; assumptions about external storage are hypotheses on `ext`
 (`tests/roadmap/global-init/GlobalInit/Proofs.lean`). The field type is the contract: the
 external definition must hold a valid encoding of that type (padding bytes undefined) before the
@@ -264,8 +265,8 @@ program starts; external writes during the run are not modelled. Only a named, p
 union-free and error-free type qualifies (integers, floats, `bool`, enums, arrays, vectors,
 structs, tuples and optionals of these); an `extern` function, pointer, union or error storage,
 an `extern` with an `init`, and an unnamed `extern` are rejected (`GLOBAL_FAILURE`). A name
-shared by several files must agree on `extern`. Without an `extern` global, `mem0 : Zig.Mem` is
-unchanged.
+shared by several files must agree on `extern`. Without an `extern` global, `mem0` takes only the
+placement.
 
 ### Thread-local storage
 

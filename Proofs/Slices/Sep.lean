@@ -14,16 +14,19 @@ unchanged. `bump_spec` and `reverse_step` execute the generated code symbolicall
 
 open Slices Zig Assn
 
-/-- The global `counter` is block 0 of `mem0`. -/
+/-- The global `counter` is block 0 of `mem0 σ`. -/
 abbrev counter : Ptr := ⟨some 0, 0⟩
 
-/-- At program start, the memory owns the counter with the value 0. -/
-theorem counter_init : ∃ h hF, Heap.Disjoint h hF ∧ mem0.heap = h ∪ hF ∧ pts counter 4 (0 : BitVec 32) h := by
-  have hb : mem0.blocks[0]? = some ⟨Enc.encode (0 : BitVec 32), 4, .global, true, 4096⟩ := by
-    simp [mem0, Mem.ofGlobals, Mem.addGlobal, alignUp]
+/-- At program start, the memory owns the counter with the value 0, for every placement `σ`:
+the counter's address is only known to be 4-aligned. -/
+theorem counter_init (σ : Placement) :
+    ∃ h hF, Heap.Disjoint h hF ∧ (mem0 σ).heap = h ∪ hF ∧ pts counter 4 (0 : BitVec 32) h := by
+  obtain ⟨A, hb⟩ : ∃ A, (mem0 σ).blocks[0]? = some ⟨Enc.encode (0 : BitVec 32), 4, .global, true, A⟩ :=
+    ⟨_, by simp [mem0, Mem.ofGlobals_getElem?]; rfl⟩
+  have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   obtain ⟨h, hF, hd, hm, hbytes⟩ := Mem.heap_split hb rfl
-  refine ⟨h, hF, hd, hm, 4096, _, _, _, rfl, LawfulEnc.size_encode _, LawfulEnc.decode_encode _,
-    hbytes, by decide⟩
+  refine ⟨h, hF, hd, hm, A, _, _, _, by simpa using hA, LawfulEnc.size_encode _,
+    LawfulEnc.decode_encode _, hbytes, by simp⟩
 
 /-- `bump` adds 1 to the counter and returns the new value. -/
 theorem bump_spec (x : BitVec 32) (hx : x.toNat + 1 < 2 ^ 32) :

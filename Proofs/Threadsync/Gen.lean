@@ -180,8 +180,8 @@ instance : Zig.Enc Thread_Futex_Deadline where
   encode v := Zig.Enc.fields 48 [(0, Zig.Enc.encode v.timeout), (16, Zig.Enc.encode v.started)]
   decode bs := do pure { timeout := ← Zig.Enc.decodeAt bs 0, started := ← Zig.Enc.decodeAt bs 16 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 /-- The spawn targets of the program. -/
 inductive Tgt where

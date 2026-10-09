@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Architecture audit 2/6 (memory model): reproduce the counterexamples of
 # docs/architecture-audit/memory-model.md. Each fixture is exported to AIR (patched compiler,
-# ReleaseSafe), translated, run in Lean from the generated `mem0`, and compared with the
-# native ReleaseSafe build. The script asserts that the model and native results DIFFER as
-# recorded (the findings are open). When a structural fix lands, the matching assertion
-# fails and the fixture should be turned into an agreement test.
+# ReleaseSafe), translated, run in Lean from the generated `mem0 σ` under several placements,
+# and compared with the native ReleaseSafe build. MM-1, MM-2 and MM-4 are fixed by the
+# placement oracle (docs/address-placement.md): the script asserts agreement with native, or
+# that the result depends on the placement (Theorems.lean: the old statements are not
+# provable for every placement). MM-3 and MM-6 are still open: their divergence is asserted.
 #
 #   AIR2LEAN_AUDIT_ZIG_AIR=/opt/dev/air2lean-build/zig-air-0.16.0/bin/zig \
 #   AIR2LEAN_AUDIT_ZIG_NATIVE=$HOME/.cache/air2lean/host-0.16.0/zig \
@@ -52,18 +53,24 @@ native_run oob_ptr
 
 L=$work/memmodel.lean.txt N=$work/memmodel.native.txt
 echo "--- model"; cat "$L"; echo "--- native"; grep -v '^ \|^/\|^???\|^\s*\^' "$N" || true
-# MM-1: a fixed model address.
-[ "$(field addrOfLocal "$L")" = 4096 ] || { echo 'MM-1: model address changed' >&2; exit 1; }
-[ "$(field addrOfLocal "$N")" != 4096 ] || { echo 'MM-1: native address coincides' >&2; exit 1; }
-# MM-4: structural `==` vs equal addresses (native: both true = 3).
-[ "$(field eqVsAddr "$L")" = 1 ] && [ "$(field eqVsAddr "$N")" = 3 ] ||
-  { echo 'MM-4 no longer diverges' >&2; exit 1; }
-# MM-1: cross-block distance is the model's layout (1-byte gap), not the native frame.
-[ "$(field crossDistance "$L")" = 9 ] && [ "$(field crossDistance "$N")" != 9 ] ||
-  { echo 'MM-1 (distance) no longer diverges' >&2; exit 1; }
-# MM-2: the over-aligning @alignCast passes in the model and panics natively.
-[ "$(field overAlign "$L")" = 2 ] && grep -q 'panic: incorrect alignment' "$N" ||
-  { echo 'MM-2 no longer diverges' >&2; exit 1; }
+fail() { echo "$1" >&2; exit 1; }
+# MM-1 (fixed): the address of a local is the placement's (Zig.Placement), not a constant.
+[ "$(field addrOfLocal "$L")" = 4096 ] && [ "$(field addrOfLocal@high "$L")" = 1099511627776 ] ||
+  fail 'MM-1: the model address does not follow the placement'
+[ "$(field addrOfLocal "$N")" != 4096 ] || fail 'MM-1: native address coincides'
+# MM-4 (fixed): `==` compares addresses, so the model agrees with native (3) under placements.
+[ "$(field eqVsAddr "$L")" = 3 ] && [ "$(field eqVsAddr@adjacent "$L")" = 3 ] &&
+  [ "$(field eqVsAddr "$N")" = 3 ] || fail 'MM-4: pointer == disagrees with native'
+# MM-1 (fixed): distance and order of two locals follow the placement; the native frame's
+# adjacent layout (distance 8) is one of the placements.
+[ "$(field crossDistance@adjacent "$L")" = "$(field crossDistance "$N")" ] ||
+  fail 'MM-1: the adjacent placement does not give the native distance'
+[ "$(field crossDistance "$L")" = 9 ] && [ "$(field crossOrder "$L")" = 1 ] &&
+  [ "$(field crossOrder@swapped "$L")" = 0 ] || fail 'MM-1: order/distance not placement-dependent'
+# MM-2 (fixed): the over-aligning @alignCast panics under a placement without the extra
+# alignment, as natively; it passes only where the placement happens to give it.
+grep -q 'panic: incorrect alignment' "$N" || fail 'MM-2: native no longer panics'
+case "$(field overAlign@misaligned "$L")" in error*) ;; *) fail 'MM-2: misaligned placement does not panic';; esac
 
 L=$work/oob_ptr.lean.txt N=$work/oob_ptr.native.txt
 echo "--- model"; cat "$L"; echo "--- native"; cat "$N"
@@ -71,11 +78,12 @@ echo "--- model"; cat "$L"; echo "--- native"; cat "$N"
 [ "$(field 'oobCompare(2^63)' "$L")" = 1 ] && [ "$(field 'oobCompare(2^63)' "$N")" = 0 ] ||
   { echo 'MM-3 no longer diverges' >&2; exit 1; }
 
-# The model facts above are theorems (kernel + `native_decide`), and the emitter placeholders
-# are successful no-ops in the logic (MM-6).
+# Kernel checks (no `native_decide`): the old address theorems are not provable for every
+# placement (addrOfLocal = 4096, crossDistance = 9, overAlign never panics), and the emitter
+# placeholders are successful no-ops in the logic (MM-6, open).
 sed '/^-- Appended to the fresh/,$d' "$work/memmodel.lean" > "$work/thm.lean"
 cat "$here/Theorems.lean" >> "$work/thm.lean"
 lake env lean "$work/thm.lean"
 lake env lean "$here/PanicDefault.lean"
 
-echo "memory-model audit counterexamples reproduced (MM-1, MM-2, MM-3, MM-4, MM-6)"
+echo "memory-model audit: MM-1, MM-2, MM-4 fixed (placement oracle); MM-3, MM-6 reproduced"

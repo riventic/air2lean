@@ -250,7 +250,7 @@ class ZigGenerator(unittest.TestCase):
         text = zig_gen.lean_checks(pure, "Fuzzs1", expected)
         self.assertIn("#guard successful (Fuzzs1.entry 0#32 0#32) == some 1#32", text)
         text = zig_gen.lean_checks(memory, "Fuzzs1", expected)
-        self.assertIn(".run' Fuzzs1.mem0", text)
+        self.assertIn(".run' Fuzzs1.mem0 .fresh", text)
         with self.assertRaises(ValueError):
             zig_gen.lean_checks("def other", "Fuzzs1", expected)
 

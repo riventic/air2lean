@@ -94,7 +94,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
-| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) |
+| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
@@ -248,18 +248,16 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### ALC-08 — Address reuse and provenance recovery
 
 - Kind: environment.
-- Statement: `Mem.allocPolicy.reuseAddr` is an arbitrary opt-in oracle that may give a new heap
-  or owned block the address of a freed block (`Mem.reuseOk`: nonzero, aligned, below
-  `nextAddr`, clear of every live block with a 1-byte gap). Block ids stay unique and every
-  liveness check uses them, so lifetime theorems over arbitrary `Mem` hold under every reuse
-  policy. Stack blocks and globals keep fresh addresses. `@ptrFromInt` of an address that two
-  blocks cover is `.unspecified` under the default `.strict` provenance mode; the
-  address-sensitive contract `.liveBlock` recovers the live block. A theorem that observes
-  addresses holds only under the policy and mode it states. No native allocator address
-  behavior is claimed.
-- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withReuse`, `liveBlock` (the opt-in policy
-  and provenance mode; the default path `Mem.reuseAddr?`/`ProvenanceMode.strict` that every
-  `alloc`/`@ptrFromInt` unfolds to is not a token).
+- Statement: The placement oracle (SEM-07) may give a new block the address of a freed block.
+  Block ids stay unique and every liveness check uses them, so lifetime theorems over arbitrary
+  `Mem` hold under every placement (`Triple.withPlacement`). `@ptrFromInt` of an address that two
+  blocks cover (a dead and a live block, or one block's end and an adjacent block's start) is
+  `.unspecified` under the default `.strict` provenance mode; the address-sensitive contract
+  `.liveBlock` recovers the live block. A theorem that observes addresses holds only under the
+  mode it states. No native allocator address behavior is claimed.
+- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withPlacement`, `liveBlock` (the
+  provenance mode; the default `ProvenanceMode.strict` that every `@ptrFromInt` unfolds to is not
+  a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
 
 <a id="alc-09"></a>
@@ -734,6 +732,26 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   or canonicalization (TRU-02).
 - Derived from: `Air2Lean.Sem`.
 - Sources: [air-semantics.md](air-semantics.md).
+
+<a id="sem-07"></a>
+### SEM-07 — Block addresses are the environment's placement
+
+- Kind: environment.
+- Statement: The address of every block (global, stack, heap, allocator) is chosen by the
+  placement oracle `Mem.place`, an arbitrary function of the block id. The model takes a
+  proposal only if it satisfies what Zig guarantees (`Mem.placeOk`): nonzero, a multiple of the
+  block's declared alignment, ending at or below 2^64, and disjoint from every live block of
+  nonzero size; adjacency, any order and reuse of a dead block's address are allowed. Otherwise
+  the block goes after every block (`Mem.top`). A generated program-start memory is `mem0 σ`
+  and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
+  programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
+  the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment
+  capped by the largest alignment of a pointer constant into it at an offset that alignment
+  divides (the export does not record a global's own `align(N)`). Zero-size objects are not separated from other blocks. In-place
+  growth needs only that the grown range is clear of other live blocks (`Mem.growFree`).
+- Derived from: `ZigLean.Mem.Basic`; implied by SEM-02.
+- Sources: [address-placement.md](address-placement.md),
+  `tests/roadmap/architecture-audit/memory-model`.
 
 ## External models
 

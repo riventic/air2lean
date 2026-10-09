@@ -286,29 +286,8 @@ theorem storeUndef_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {x : U
   simp only [Array.size_replicate] at ha ⊢
   exact ⟨b, blk, o, ha, hk, rfl⟩
 
-/-- `alloc` with a fresh address: always for a stack block, and for a heap or owned block when
-the policy reuses no address (`Mem.reuseAddr?`; `hk` is `rfl` there). `alloc_ok'` holds for
-every address policy. -/
+/-- `alloc` under every placement: the new block id, and `Mem.afterAlloc`. -/
 theorem alloc_ok {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
-    (h : ((alloc kind size align).run m).run = some (.ok (q, m')))
-    (hk : m.reuseAddr? kind size align = none := by rfl) :
-    q = ⟨some m.blocks.size, 0⟩ ∧ m' = { m with
-      blocks := m.blocks.push
-        { bytes := Array.replicate size .undef, align, kind, live := true,
-          addr := alignUp m.nextAddr align },
-      nextAddr := alignUp m.nextAddr align + size + 1 } := by
-  unfold alloc at h
-  obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
-  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
-  obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
-  have := MemM.set_ok hs
-  subst this
-  obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₂
-  refine ⟨rfl, ?_⟩
-  simp only [Mem.afterAlloc, Mem.newAddr, Mem.newNext, hk]
-
-/-- `alloc` under every address policy: the new block id, and `Mem.afterAlloc`. -/
-theorem alloc_ok' {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
     (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
     q = ⟨some m.blocks.size, 0⟩ ∧ m' = m.afterAlloc kind size align := by
   unfold alloc at h
@@ -1855,6 +1834,31 @@ theorem BlkAt.write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}
 theorem BlkAt.congr {m m' : Mem} (h : m'.blocks = m.blocks) {b sz a : Nat} (hb : BlkAt m b sz a) :
     BlkAt m' b sz a := by
   unfold BlkAt; rw [h]; exact hb
+
+/-- A new stack block is `BlkAt` its id, at an address aligned to its alignment: all that holds
+for every placement (`Mem.newAddr_mod`). -/
+theorem BlkAt.alloc (m : Mem) (size a : Nat) (ha : 0 < a) :
+    BlkAt (m.afterAlloc .stack size a) m.blocks.size size a :=
+  ⟨{ bytes := Array.replicate size .undef, align := a, kind := .stack, live := true,
+      addr := m.newAddr size a }, by simp [Mem.afterAlloc], rfl, by simp, rfl,
+    m.newAddr_mod size a ha⟩
+
+/-- An allocation keeps `BlkAt` of every existing block. -/
+theorem BlkAt.afterAlloc {m : Mem} {b sz a : Nat} (h : BlkAt m b sz a) (kind : BlockKind)
+    (size al : Nat) : BlkAt (m.afterAlloc kind size al) b sz a := by
+  obtain ⟨blk, hb, hl, hs, hk, ha⟩ := h
+  have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
+  exact ⟨blk, by simp [Mem.afterAlloc, Array.getElem?_push, Nat.ne_of_lt hlt, hb], hl, hs, hk, ha⟩
+
+/-- `BlkAt m b size a` for `m` a chain of `Mem.afterAlloc`s whose block `b` is a stack block of
+`size` bytes and alignment `a` (`BlkAt.alloc`, `BlkAt.afterAlloc`): a function's stack blocks at
+its entry, for every placement. -/
+syntax "blkat_alloc" : tactic
+macro_rules
+  | `(tactic| blkat_alloc) =>
+    `(tactic| first
+      | exact BlkAt.alloc _ _ _ (by decide)
+      | (refine BlkAt.afterAlloc ?_ _ _ _; blkat_alloc))
 
 /-- After a write of `bs` at `o` of block `b`: `bs` there. -/
 theorem curBytes_write_same {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte}

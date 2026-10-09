@@ -1460,7 +1460,7 @@ theorem joined_final {G : ThreadId → Gh} {m : Mem} {J : List Nat} (hi : Inv n 
 before `main`'s clock. -/
 structure PreA (m : Mem) : Prop where
   cur : m.current = 0
-  th : m.threads = mem0.threads
+  th : m.threads = #[{ spawner := 0, joined := true }]
   cs : m.clocks.size = 1
   atm : m.atomics = #[]
   fp : ∀ e ∈ m.footprint, VClock.le e.clock (m.clocks[0]!) = true
@@ -1482,7 +1482,7 @@ theorem preA_write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte} (h : Pr
 
 theorem preA_alloc {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr} (h : PreA m)
     (ha : ((alloc kind size align).run m).run = some (.ok (q, m'))) : PreA m' := by
-  obtain ⟨-, rfl⟩ := Proto.alloc_ok' ha; exact ⟨h.cur, h.th, h.cs, h.atm, h.fp⟩
+  obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; exact ⟨h.cur, h.th, h.cs, h.atm, h.fp⟩
 
 /-- The counter's bytes do not change by a write to another block, or by `recordAccess`. -/
 theorem curBytes_write {m : Mem} {b o : Nat} {blk : Block} {bs : Array Byte} (hb : b ≠ 1) :
@@ -2070,30 +2070,31 @@ theorem bump_spec (p : Ptr) (u : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : 
     rw [this]; exact ⟨inv_current n hi, he⟩
 
 /-- `main` keeps the protocol, and its result is `4 * n`. -/
-theorem main_spec (d : Nat) :
+theorem main_spec (σ : Placement) (d : Nat) :
     (proto n).WP 0 (parallelCounter n) (QM n) (fun u => if u = 0 then .main 0 [] else .none)
-      { mem0 with current := 0 } d := by
+      { mem0 σ with current := 0 } d := by
   unfold parallelCounter
-  have hpa0 : PreA { mem0 with current := 0 } := ⟨rfl, rfl, rfl, rfl, by simp [mem0, Mem.ofGlobals]⟩
+  have hpa0 : PreA { mem0 σ with current := 0 } := ⟨rfl, rfl, rfl, rfl, by simp [mem0, Mem.ofGlobals]⟩
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s4 m₁ ha₁ => ?_)
   have hpa1 := preA_alloc hpa0 ha₁
   obtain ⟨rfl, hm₁⟩ := Proto.alloc_ok ha₁
-  refine ⟨by rw [hm₁], ?_⟩
+  refine ⟨by rw [hm₁] <;> rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s1 m₂ ha₂ => ?_)
   have hpa2 := preA_alloc hpa1 ha₂
   obtain ⟨rfl, hm₂⟩ := Proto.alloc_ok ha₂
-  refine ⟨by rw [hm₂], ?_⟩
+  refine ⟨by rw [hm₂] <;> rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s25 m₃ ha₃ => ?_)
   have hpa3 := preA_alloc hpa2 ha₃
   obtain ⟨rfl, hm₃⟩ := Proto.alloc_ok ha₃
-  refine ⟨by rw [hm₃], ?_⟩
-  have e0 : ({ mem0 with current := 0 } : Mem).blocks.size = 0 := rfl
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
+  have e0 : ({ mem0 σ with current := 0 } : Mem).blocks.size = 0 := rfl
   have e1 : m₁.blocks.size = 1 := by rw [hm₁]; rfl
-  have e2 : m₂.blocks.size = 2 := by rw [hm₂]; simp [e1]
+  have e2 : m₂.blocks.size = 2 := by rw [hm₂]; simp [Mem.afterAlloc, e1]
   -- The three blocks.
   have hpb3 : PreB m₃ := by
     subst hm₁ hm₂ hm₃
-    simp [PreB, BlkAt, mem0, Mem.ofGlobals, alignUp_mod]
+    refine ⟨by blkat_alloc, by blkat_alloc, by blkat_alloc, fun e he => ?_⟩
+    simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he
   simp only [e0, e1, e2]
   refine WP.bind ?_
   show (proto n).WP 0 ((fun (r : parallelCounterExit × parallelCounterLocals) => r.1) <$>
@@ -2263,21 +2264,21 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt g) (u : Thre
 
 /-- **`parallelCounter n` gives `4 * n` under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem parallelCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
-    {m : Mem} (h : (Sched.run dispatch fuel o (parallelCounter n) mem0).run = some (.ok (v, m))) :
+theorem parallelCounter_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+    {m : Mem} (h : (Sched.run dispatch fuel o (parallelCounter n) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok (4 * n) := by
   obtain ⟨_, _, hv, -⟩ := (proto n).run_sound dispatch (fun u => if u = 0 then .main 0 [] else .none)
     (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
-    (main_spec n) h
+    (main_spec n σ) h
   exact hv
 
 /-- **No run of `parallelCounter n` gives an error**, under any schedule: no data race, no
 deadlock, no overflow, no other illegal behaviour. -/
-theorem parallelCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (parallelCounter n) mem0).run ≠ some (.error e) :=
+theorem parallelCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o (parallelCounter n) (mem0 σ)).run ≠ some (.error e) :=
   (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
     (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
-    (main_spec n)
+    (main_spec n σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, `parallelCounter 1` returns 4 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with

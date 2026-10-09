@@ -4,20 +4,19 @@ import ZigLean.Sep.Total
 /-!
 # Address reuse (M05)
 
-The model gives every block a fresh address by default. Real allocators reuse the address of a
-freed block. `AllocPolicy.reuseAddr` is the opt-in reuse policy: a heap or owned block may get
-any valid reused address (`Mem.reuseOk`), for example the address of a dead block. Block ids stay
-unique (`docs/address-reuse.md`).
+Real allocators reuse the address of a freed block. The placement oracle (`Mem.place`,
+`docs/address-placement.md`) can give any block any valid address (`Mem.placeOk`), for example the
+address of a dead block. Block ids stay unique (`docs/address-reuse.md`).
 
-Lifetime safety does not depend on fresh addresses: `Mem.access` and `free` check the block that
-a pointer's provenance names, never an address. This file states that for every reuse policy:
+Lifetime safety does not depend on addresses: `Mem.access` and `free` check the block that a
+pointer's provenance names, never an address. This file states that for every placement:
 
 * `afterAlloc_old`: an allocation leaves every existing block, dead or live, unchanged, so it
   never revives a freed block, even one whose address it reuses;
 * `access_stale`, `free_stale`: an access or a free through a pointer to a dead block throws
   `.illegal` after any allocations (use after free, double free);
-* `Triple.withReuse`, `TotalTriple.withReuse`: every separation-logic triple holds under every
-  reuse policy and provenance mode (the frame rule included): a triple quantifies over all
+* `Triple.withPlacement`, `TotalTriple.withPlacement`: every separation-logic triple holds under
+  every placement and provenance mode (the frame rule included): a triple quantifies over all
   memories, and `alloc_run` (`ZigLean/Sep/Block.lean`) holds for every address `alloc` gives;
 * `reuse_witness`: reuse happens: a freed block's address is given to a new block, and a pointer
   to the freed block is still dangling.
@@ -31,16 +30,15 @@ namespace Zig
 
 open Assn
 
-/-- `m` with the address-reuse oracle `pick` and the provenance mode `pm`. -/
-def Mem.withReuse (m : Mem) (pick : BlockId → Option Nat) (pm : ProvenanceMode := .strict) :
-    Mem :=
-  { m with allocPolicy := { m.allocPolicy with reuseAddr := pick, provenance := pm } }
+/-- `m` with the placement `σ` and the provenance mode `pm`. -/
+def Mem.withPlacement (m : Mem) (σ : Placement) (pm : ProvenanceMode := .strict) : Mem :=
+  { m with place := σ, allocPolicy := { m.allocPolicy with provenance := pm } }
 
-@[simp] theorem Mem.heap_withReuse (m : Mem) (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    (m.withReuse pick pm).heap = m.heap := rfl
+@[simp] theorem Mem.heap_withPlacement (m : Mem) (σ : Placement) (pm : ProvenanceMode) :
+    (m.withPlacement σ pm).heap = m.heap := rfl
 
-theorem Mem.Seq.withReuse {m : Mem} (h : m.Seq) (pick : BlockId → Option Nat)
-    (pm : ProvenanceMode) : (m.withReuse pick pm).Seq := ⟨h.single, h.addr⟩
+theorem Mem.Seq.withPlacement {m : Mem} (h : m.Seq) (σ : Placement) (pm : ProvenanceMode) :
+    (m.withPlacement σ pm).Seq := ⟨h.single⟩
 
 /-! ## Lifetimes follow block ids -/
 
@@ -89,27 +87,26 @@ theorem rawFree_stale {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? =
     (rawFree ⟨some b, off⟩ n).run m = throw .illegal := by
   simp [rawFree, access_dead_block hb hd, zig_unfold]
 
-/-! ## Every triple holds under every reuse policy -/
+/-! ## Every triple holds under every placement -/
 
-/-- A triple holds from a memory with any reuse oracle and provenance mode: the frame rule, the
+/-- A triple holds from a memory with any placement and provenance mode: the frame rule, the
 allocation and free rules and every client spec built from them are address-independent. -/
-theorem Triple.withReuse {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} (ht : Triple P c Q)
-    {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF) (hp : P hP)
-    (hs : m.Seq) (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    match (c.run (m.withReuse pick pm)).run with
+theorem Triple.withPlacement {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
+    (ht : Triple P c Q) {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF)
+    (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) (σ : Placement) (pm : ProvenanceMode) :
+    match (c.run (m.withPlacement σ pm)).run with
     | none => True
     | some (.error _) => False
     | some (.ok (v, m')) =>
       ∃ hQ, Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq :=
-  ht _ hP hF hd hm hp (hs.withReuse pick pm)
+  ht _ hP hF hd hm hp (hs.withPlacement σ pm)
 
-theorem TotalTriple.withReuse {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
+theorem TotalTriple.withPlacement {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}
     (ht : TotalTriple P c Q) {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF)
-    (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) (pick : BlockId → Option Nat)
-    (pm : ProvenanceMode) :
-    ∃ v m' hQ, c.run (m.withReuse pick pm) = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
+    (hm : m.heap = hP ∪ hF) (hp : P hP) (hs : m.Seq) (σ : Placement) (pm : ProvenanceMode) :
+    ∃ v m' hQ, c.run (m.withPlacement σ pm) = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
       m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq :=
-  ht _ hP hF hd hm hp (hs.withReuse pick pm)
+  ht _ hP hF hd hm hp (hs.withPlacement σ pm)
 
 /-! ## Reuse happens, and the stale pointer stays dangling -/
 
@@ -117,8 +114,9 @@ theorem TotalTriple.withReuse {α : Type} {P : Assn} {c : MemM α} {Q : α → A
 def runValue {α : Type} (x : MemM α) (m : Mem) : Option (Except Error α) :=
   (x.run m).run.map (·.map Prod.fst)
 
-/-- The policy of the witnesses: block 1 proposes the address 4096, the first heap address. -/
-def reuseFirst : BlockId → Option Nat := fun b => if b = 1 then some 4096 else none
+/-- The placement of the witnesses: block 1 at 4096, the address of block 0 under
+`Placement.fresh`; every other block fresh. -/
+def reuseFirst : Placement := ⟨fun b => if b = 1 then some 4096 else none⟩
 
 /-- Allocate 8 bytes, free them, allocate 8 bytes again; the two addresses and the new block. -/
 def reuseRun : MemM (Int × Int × Option BlockId) := do
@@ -129,10 +127,10 @@ def reuseRun : MemM (Int × Int × Option BlockId) := do
 
 /-- Under `reuseFirst`, block 1 gets block 0's address. -/
 theorem reuse_witness :
-    runValue reuseRun (({} : Mem).withReuse reuseFirst) =
+    runValue reuseRun (({} : Mem).withPlacement reuseFirst) =
       some (.ok (4096, 4096, some 1)) := by decide +kernel
 
-/-- By default (fresh addresses) the second block gets a new address. -/
+/-- Under `Placement.fresh` the second block gets a new address. -/
 theorem fresh_witness : runValue reuseRun {} = some (.ok (4096, 4112, some 1)) := by decide +kernel
 
 /-- Allocate, free, allocate again at the same address, store 7 in the new block, then load
@@ -147,7 +145,7 @@ def staleLoadRun : MemM (BitVec 64) := do
 /-- The freed block's pointer still names block 0: the load throws `.illegal`, though a live
 block now occupies exactly its address. -/
 theorem reuse_stale_load :
-    runValue staleLoadRun (({} : Mem).withReuse reuseFirst) = some (.error .illegal) := by
+    runValue staleLoadRun (({} : Mem).withPlacement reuseFirst) = some (.error .illegal) := by
   decide +kernel
 
 /-! ## Stale integer addresses (`@ptrFromInt`) -/
@@ -168,16 +166,17 @@ block's provenance. Two blocks cover the address, so the recovery is `.unspecifi
 address reasoning "the integer is the new block's address, so the load reads 7" is not a theorem
 of the model. -/
 theorem stale_int_strict :
-    runValue staleIntRun (({} : Mem).withReuse reuseFirst) = some (.error .unspecified) := by
+    runValue staleIntRun (({} : Mem).withPlacement reuseFirst) = some (.error .unspecified) := by
   decide +kernel
 
 /-- The address-sensitive contract `.liveBlock`: the program declares that the address recovers
 the live block's provenance, and the load reads the new block's 7. -/
 theorem stale_int_liveBlock :
-    runValue staleIntRun (({} : Mem).withReuse reuseFirst .liveBlock) = some (.ok 7#64) := by
+    runValue staleIntRun (({} : Mem).withPlacement reuseFirst .liveBlock) = some (.ok 7#64) := by
   decide +kernel
 
-/-- Without reuse the integer recovers the dead block, and the load is a use after free. -/
+/-- Under `Placement.fresh` the integer recovers the dead block, and the load is a use after
+free. -/
 theorem stale_int_fresh : runValue staleIntRun {} = some (.error .illegal) := by decide +kernel
 
 end Zig

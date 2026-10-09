@@ -546,7 +546,7 @@ theorem sep_ex_lift {R : Assn} {φ : Nat → Prop} {P : Nat → Assn} {h : Heap}
 theorem TTriple.free {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} (hS : bs.size = S)
     (h0 : p.off = 0) (hpos : 0 < S) : TTriple (bytesAt p A S K bs) (Zig.free p) (fun _ => emp) :=
   TTriple.of_run fun m _ hF hd hm hb _ ho => by
-    obtain ⟨m', hr, hm', hsz, hs, -⟩ := free_run_core hb hm hd hS h0 hpos
+    obtain ⟨m', hr, hm', hsz, hs⟩ := free_run_core hb hm hd hS h0 hpos
     refine ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty hF).symm, hm', rfl, ?_,
       StepIn.sameThreads hs (by omega)⟩
     intro e he ht

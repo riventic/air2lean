@@ -46,8 +46,8 @@ the value fixed by `mutexCounter_spec`.
 Prove that no schedule loses an increment, so no finished run returns 3:
 
 ```lean
-theorem never_three (io : Io) (fuel : Nat) (o : Nat → Nat) (m : Mem) :
-    (Sched.run dispatch fuel o (mutexCounter io) mem0).run ≠ some (.ok (.ok 3, m))
+theorem never_three (σ : Placement) (io : Io) (fuel : Nat) (o : Nat → Nat) (m : Mem) :
+    (Sched.run dispatch fuel o (mutexCounter io) (mem0 σ)).run ≠ some (.ok (.ok 3, m))
 ```
 
 A solution is in [`Solution.lean`](Solution.lean).
@@ -82,9 +82,12 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
+- [SEM-07](../../docs/premises.md#sem-07): block addresses are the environment's placement
+  (`docs/address-placement.md`); the result holds for every placement.
 - [TRU-01](../../docs/premises.md#tru-01), [TRU-02](../../docs/premises.md#tru-02),
   [TRU-03](../../docs/premises.md#tru-03): Lean kernel, translation and native lowering.
 
-Remaining obligations: the result is about the initial memory `mem0` of this program, and it
+Remaining obligations: the result is about the initial memory `mem0 σ` of this program (for every
+placement `σ` of its blocks, `docs/address-placement.md`), and it
 is not a liveness or fairness guarantee (no theorem says a run finishes). Spawn failure is
 excluded by THR-02; see [spawn failure](../../docs/spawn-failure.md) for the fallible policy.

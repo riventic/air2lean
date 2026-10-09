@@ -652,17 +652,17 @@ theorem cnt_decode {bs : Array Byte} {w : BitVec 32} (hs : bs.size = 8)
     show (4 + 4 : Nat) ≤ 8 by decide, show (4 + 4 : Nat) = 8 by rfl, hw2, hn2, pure_bind]
 
 
-theorem main_spec (d : Nat) :
-    proto.WP 0 mutexCounter QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 mutexCounter QM G0 { mem0 σ with current := 0 } d := by
   unfold mutexCounter
   -- the `Counter`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 8 4 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA4⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = cPtr from rfl] at hb₁ ⊢
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -672,7 +672,7 @@ theorem main_spec (d : Nat) :
   obtain ⟨he0, he4, he8⟩ := enc_counter
   refine WP.bind (WP.liftM_owned (TTriple.storeAt' (p := cPtr) (A := A) (S := 8) (K := .stack) (bs := Array.replicate 8 .undef)
     (k := 0) (a := 4) counter0 he8 rfl (by decide) (by simp [Enc.size]) (by simp [cPtr]; omega)
-    (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact hb₁)
+    (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact hb₁)
     fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
   rw [writeBytes_all (by rw [he8]; simp)] at F₂
@@ -849,18 +849,18 @@ theorem main_spec (d : Nat) :
 /-! ## The results -/
 
 /-- **`threadsync.mutexCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem mutexCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mutexCounter mem0).run = some (.ok (v, m))) :
+theorem mutexCounter_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o mutexCounter (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 4 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec) h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `threadsync.mutexCounter` gives an error**: no data race on the counter, no deadlock
 at the futex, no panic, under every schedule. -/
-theorem mutexCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o mutexCounter mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem mutexCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o mutexCounter (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Mutex` counter returns 4 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with

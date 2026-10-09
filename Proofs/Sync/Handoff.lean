@@ -3645,17 +3645,17 @@ theorem vOf_of_rdy {x : X} (h : rdyOf x = true) : vOf x = 7 := by
   simp at h
   rw [if_pos ⟨h.1, by omega⟩]
 
-theorem main_spec (io : Io) (d : Nat) :
-    proto.WP 0 (handoff io) QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
+    proto.WP 0 (handoff io) QM G0 { mem0 σ with current := 0 } d := by
   unfold handoff
   -- the `Box`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 40 8 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
   -- its five parts
   obtain ⟨hI, hR₁, dI, rfl, hI₁, hR₁'⟩ := bytesAt_split hb₁ (k := 16) (by simp)
   obtain ⟨hW, hR₂, dW, rfl, hW₁, hR₂'⟩ := bytesAt_split hR₁' (k := 4) (by simp)
@@ -3675,7 +3675,7 @@ theorem main_spec (io : Io) (d : Nat) :
   simp only [StateT.run_pure]
   simp only [pure_bind]
   have ho₁' : Owned (upd (fun _ => Heap.empty) 0 (hI ∪ (hW ∪ (hS ∪ (hR ∪ hP))))) m₁ := ho₁
-  have hth₁ : 0 < m₁.threads.size := by rw [hs₁.threads]; decide
+  have hth₁ : 0 < m₁.threads.size := by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]
   have F₁ : (bytesAt bPtr A 40 .stack (Array.replicate 16 .undef) ∗
       (bytesAt (bPtr.add 16) A 40 .stack (Array.replicate 4 .undef) ∗
       (bytesAt (bPtr.add 20) A 40 .stack (Array.replicate 12 .undef) ∗
@@ -3818,18 +3818,18 @@ theorem main_spec (io : Io) (d : Nat) :
 /-! ## The results -/
 
 /-- **`handoff` gives 7 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem handoff_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run dispatch fuel o (handoff io) mem0).run = some (.ok (v, m))) :
+theorem handoff_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run dispatch fuel o (handoff io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 7 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io) h
   exact hv
 
 /-- **No run of `handoff` gives an error**: no data race, no deadlock at a futex, no
 `unreachable`, under every schedule. -/
-theorem handoff_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (handoff io) mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+theorem handoff_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (handoff io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Condition` handoff returns 7 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with

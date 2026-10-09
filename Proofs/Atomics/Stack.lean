@@ -1742,7 +1742,8 @@ theorem next_lt (k : Nat) (hk : k < 3) :
     lt false (BitVec.ofInt 64 (val false (BitVec.ofNat 32 k))) 3 = true := by
   rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2) with rfl | rfl | rfl <;> rfl
 
-theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) :
+    proto.WP 0 stackPush QM G0 { mem0 σ with current := 0 } d := by
   unfold stackPush
   -- the blocks: the `Stack`, the two `PushCtx`
   refine WP.bind (WP.liftMem (fun e h => (alloc_noErr e h).elim) fun s0 m₁ ha₁ => ?_)
@@ -1759,13 +1760,13 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
   obtain ⟨hq₃, hm₃⟩ := alloc_ok ha₃
   have e2 : s2 = cPtr 2 := by rw [hq₃]; rfl
   subst e2
-  refine ⟨by rw [hm₃], ?_⟩
+  refine ⟨by rw [hm₃] <;> rfl, ?_⟩
   have hp₃ : Pre m₃ := by
     rw [hm₃]
-    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals] at he⟩
-            b0 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b1 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩
-            b2 := ⟨_, rfl, rfl, rfl, rfl, by decide⟩ }
+    exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
+            b0 := by blkat_alloc
+            b1 := by blkat_alloc
+            b2 := by blkat_alloc }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -2011,18 +2012,18 @@ theorem main_spec (d : Nat) : proto.WP 0 stackPush QM G0 { mem0 with current := 
 
 /-- **`stackPush` gives 120 or 210 under every schedule** (every oracle `o`, every `fuel`): both
 nodes are on the stack, the top one first, then the other, then 0. -/
-theorem stackPush_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o stackPush mem0).run = some (.ok (v, m))) :
+theorem stackPush_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o stackPush (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 120 ∨ v = .ok 210 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `stackPush` gives an error**: no data race on `next`, no out-of-bounds index, no
 overflow, under every schedule. -/
-theorem stackPush_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o stackPush mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem stackPush_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o stackPush (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with

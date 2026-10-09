@@ -11,8 +11,8 @@ structure ExternInit where
   /-- Block 1: `global_init.limit` (`const`, read-only). -/
   limit : BitVec 32
 
-/-- The memory at program start: block `k` is global `k`. Blocks are added in order; an `extern` block holds its `ext` field, never a default. -/
-def mem0 (ext : ExternInit) : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. Blocks are added in order; an `extern` block holds its `ext` field, never a default. -/
+def mem0 (σ : Zig.Placement) (ext : ExternInit) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: global_init.counter (extern: initial value `ext.counter`)
   (Zig.Enc.encode (ext.counter : BitVec 32), 4, .global),
   -- 1: global_init.limit (extern: initial value `ext.limit`)

@@ -325,7 +325,7 @@ def main (args : List String) : IO Unit := do
   writeCase directory "names" #[enumHelpers, structMembers, localNames, identityFile "BitVec", identityFile "dup?", identityFile "dup!", identityFile "enumHelpersLocals"]
     "example : successful ((Review.enumHelpers Review.E.toBits).map BitVec.toNat) = some 0 := by native_decide\nexample : successful ((Review.enumHelpers Review.E.rec_air2lean1).map BitVec.toNat) = some 5 := by native_decide\nexample : successful ((Review.structMembers { mk_air2lean1 := 1, rec_air2lean1 := 2, «a-b» := 3 }).map BitVec.toNat) = some 3 := by native_decide\nexample : successful ((Review.localNames 3).map BitVec.toNat) = some 10 := by native_decide"
   writeCase directory "indirectCapture" #[indirectLoop, target]
-    "example : successful (((Review.indirectLoop 4).run Review.mem0).map fun (v, _) => v.toNat) = some 5 := by native_decide"
+    "example : successful (((Review.indirectLoop 4).run (Review.mem0 .fresh)).map fun (v, _) => v.toNat) = some 5 := by native_decide"
   for j in #[blockLoopVoid, blockLoopValue] do
     let f ← accept j
     require ((brTargets f.allInsts).isEmpty &&
@@ -340,7 +340,7 @@ def main (args : List String) : IO Unit := do
   writeCase directory "unionTagCapture" #[tagLoop]
     "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .a _ => 0 | .b n => n.toNat) = some 17 := by native_decide"
   writeCase directory "spawnedSlice" #[spawnSlice, sliceWorker]
-    "example : successful ((Zig.Sched.run Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) Review.mem0).map fun (v, _) => v) = some () := by native_decide"
+    "example : successful ((Zig.Sched.run Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) (Review.mem0 .fresh)).map fun (v, _) => v) = some () := by native_decide"
   for (mode, name) in #[(FloatSemantics.ieee, "floatIeee"), (.compilerRt, "floatCompilerRt")] do
     let expected : Nat := match mode with | .ieee => 512 | .compilerRt => 0
     writeCase directory name #[floatConversion]

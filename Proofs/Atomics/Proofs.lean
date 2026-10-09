@@ -9,9 +9,10 @@ The RC11 model of atomics (`ZigLean/Mem/Thread.lean`). The specs over all schedu
 is 0) and `Stack.lean` (`stackPush`: 120 or 210, no error). This file shows that the model has the
 results that only a weak memory model explains, each under a concrete schedule (an oracle), the
 result of the sequentially consistent schedule (the oracle always picks option 0: the newest
-message, the thread that is first), and the race of `mpRelaxed`. The kernel computes each run
-(`decide +kernel`); `stackPush` has a loop, defined by `partial_fixpoint`, which the kernel does
-not run.
+message, the thread that is first), and the race of `mpRelaxed`. Each is a possibility: it holds
+for some placement of the blocks (`Mem.place`), the one the kernel computes the run for
+(`decide +kernel`, under `Placement.fresh`). `stackPush` has a loop, defined by
+`partial_fixpoint`, which the kernel does not run.
 -/
 
 open Zig Atomics
@@ -27,21 +28,20 @@ def sched (cs : List Nat) : Nat → Nat := fun i => cs.getD i 0
 
 /-- Store buffering: the sequentially consistent schedule gives `2` (the second thread reads
 the first thread's write). -/
-theorem sb_sc : okVal (Sched.run dispatch 100 (sched []) sbRelaxed mem0) = some 2 := by
-  decide +kernel
+theorem sb_sc :
+    ∃ σ, okVal (Sched.run dispatch 100 (sched []) sbRelaxed (mem0 σ)) = some 2 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- Store buffering: both threads read the old value, a result of a weak memory model. -/
 theorem sb_weak :
-    okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) sbRelaxed mem0) =
-      some 0 := by
-  decide +kernel
+    ∃ σ, okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) sbRelaxed (mem0 σ)) = some 0 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- 2+2W: both first writes are last in the modification order, a result of a weak memory
 model (`x = 1`, `y = 1`). -/
 theorem twoPlusTwoW_weak :
-    okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) twoPlusTwoW mem0) =
-      some 11 := by
-  decide +kernel
+    ∃ σ, okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) twoPlusTwoW (mem0 σ)) = some 11 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- Relaxed message passing completes under the sequentially consistent schedule, with 0. -/
 theorem mpRelaxed_completes : okVal (Sched.run dispatch 100 (sched []) mpRelaxed mem0) = some 0 := by
@@ -49,16 +49,16 @@ theorem mpRelaxed_completes : okVal (Sched.run dispatch 100 (sched []) mpRelaxed
 
 /-- Message passing: the reader sees the flag and then the data. -/
 theorem mp_sees_data :
-    okVal (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelAcq mem0) = some 42 := by
-  decide +kernel
+    ∃ σ, okVal (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelAcq (mem0 σ)) = some 42 :=
+  ⟨.fresh, by decide +kernel⟩
 
 /-- The same schedule with relaxed atomics: the read of the data after the flag is a data race
 (`.illegal`), since the relaxed load gives no happens-before edge. -/
 theorem mpRelaxed_race :
-    (match (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelaxed mem0).run with
+    ∃ σ, (match (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelaxed (mem0 σ)).run with
       | some (.error .illegal) => true
-      | _ => false) = true := by
-  decide +kernel
+      | _ => false) = true :=
+  ⟨.fresh, by decide +kernel⟩
 
 namespace Zig
 

@@ -4470,17 +4470,17 @@ theorem inv_join {G₃ : ThreadId → Gh SPh} {m₈ m₉ : Mem} (hi : (proto E�
     (by rw [hg₃]; rfl))
   exact ⟨hL, hU, he'⟩
 
-theorem main_spec (io : Io) (d : Nat) :
-    (proto E₀).WP 0 (rwLockRead io) QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
+    (proto E₀).WP 0 (rwLockRead io) QM G0 { mem0 σ with current := 0 } d := by
   unfold rwLockRead
   -- the `Shared`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 64 8 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s1 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA8⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
   -- its four parts
   obtain ⟨hI, hR₁, dI, rfl, hI₁, hR₁'⟩ := bytesAt_split hb₁ (k := 16) (by simp)
   obtain ⟨hS, hR₂, dS, rfl, hS₁, hR₂'⟩ := bytesAt_split hR₁' (k := 40) (by simp)
@@ -4504,20 +4504,20 @@ theorem main_spec (io : Io) (d : Nat) :
       (hI ∪ (hS ∪ (hN ∪ hP))) := ⟨hI, _, dI, rfl, hI₁, hS, _, dS, rfl, hS₁, hN, hP, dN, rfl, hN₁, hP₁⟩
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := bPtr) (A := A) (S := 64) (K := .stack) (k := 0)
     (a := 8) io rfl (by decide) (by rw [hsI]; decide) (by simp [bPtr]; omega) (by decide)).frame)
-    ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁)
+    ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₁)
     fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 16) (A := A) (S := 64) (K := .stack)
     (k := 0) (a := 8) rw0 (by rw [rw_size]; rfl) rfl (by decide)
     (by rw [hsS]; decide) (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
-    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
+    (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₂)
     fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (bPtr.add 16).add 40) (A := A) (S := 64)
     (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsN]; decide)
     (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₃
     (hs₃.current.trans (hs₂.current.trans hc₁))
-    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₃)
+    (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; simp [mem0, Mem.ofGlobals]) (by rw [upd_self]; exact F₃)
     fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
   rw [upd_upd] at ho₄
   have hth₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by
@@ -4587,18 +4587,18 @@ theorem main_spec (io : Io) (d : Nat) :
 
 /-- **`rwLockRead` gives 2, 12 or 22 under every schedule** (every oracle `o`, every `fuel`): the
 first read sees 0, 1 or 2 increments, the read after the join sees both. -/
-theorem rwLockRead_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run dispatch fuel o (rwLockRead io) mem0).run = some (.ok (v, m))) :
+theorem rwLockRead_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run dispatch fuel o (rwLockRead io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 2 ∨ v = .ok 12 ∨ v = .ok 22 := by
   obtain ⟨_, _, hv, -⟩ := (proto E₀).run_sound dispatch G0 (dispatch_spec spec₀)
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io) h
   exact hv
 
 /-- **No run of `rwLockRead` gives an error**: no data race on `n`, no deadlock, no panic, under
 every schedule. -/
-theorem rwLockRead_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (rwLockRead io) mem0).run ≠ some (.error e) :=
-  (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀) (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+theorem rwLockRead_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run dispatch fuel o (rwLockRead io) (mem0 σ)).run ≠ some (.error e) :=
+  (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀) (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.RwLock` reader returns 2 (it reads before the writer) within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with

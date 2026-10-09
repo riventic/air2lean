@@ -183,21 +183,21 @@ theorem forgetFree_leaks (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) 
     have hn := (hd₁ (b, 0)).resolve_left (hcell 0 (by decide))
     simpa [Heap.union, hn] using hl
 
-/-- Address reuse (M05) does not hide either bug: with any reuse oracle and provenance mode,
-the stale pointer still throws `.illegal`. -/
+/-- Address reuse (M05) does not hide either bug: with any placement and provenance mode, the
+stale pointer still throws `.illegal`. -/
 theorem doubleFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
-    (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    (doubleFree a v).run (m.withReuse pick pm) = throw .illegal :=
-  doubleFree_illegal a v (hs.withReuse pick pm) hc
+    (σ : Placement) (pm : ProvenanceMode) :
+    (doubleFree a v).run (m.withPlacement σ pm) = throw .illegal :=
+  doubleFree_illegal a v (hs.withPlacement σ pm) hc
 
 theorem useAfterFree_reuse (a : Allocator) (v : BitVec 32) {m : Mem} (hs : m.Seq) (hc : Room m)
-    (pick : BlockId → Option Nat) (pm : ProvenanceMode) :
-    (useAfterFree a v).run (m.withReuse pick pm) = throw .illegal :=
-  useAfterFree_illegal a v (hs.withReuse pick pm) hc
+    (σ : Placement) (pm : ProvenanceMode) :
+    (useAfterFree a v).run (m.withPlacement σ pm) = throw .illegal :=
+  useAfterFree_illegal a v (hs.withPlacement σ pm) hc
 
 /-- The default memory (`{}`: one thread, no allocation fails) has room for a node. -/
 theorem default_seq : ({} : Mem).Seq :=
-  ⟨⟨by decide, by simp⟩, fun l c h => by simp [Mem.heap] at h⟩
+  ⟨⟨by decide, by simp⟩⟩
 
 theorem default_room : Room {} := by unfold Room; decide
 
