@@ -401,6 +401,11 @@ def check_sources(root=ROOT, registry=None):
             if entry and A64_WORDS.search(body) and AARCH64 not in entry['targets']:
                 problems.append(f'{key}: uses an aarch64-only float rule but its label omits {AARCH64}')
     for key in sorted(labeled - declared):
+        # A test module's theorem is named by its `lean -R` module (`BigEndian.Proofs::…`), which
+        # this scan does not resolve; the compiled theorem-universe audit (F2) labels it and
+        # reports a stale label.
+        if not key.startswith(('ZigLean.', 'Proofs.')):
+            continue
         problems.append(f'{key}: registry names no declared theorem')
     for check in sorted(registry['checks']):
         if check not in checks_seen:
