@@ -257,7 +257,7 @@ theorem step_ctx {G : ThreadId → Gh} {m m' : Mem} {o : Nat} {q q₀ : Ptr} (hi
   cases hacc
   have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
     have := hq; unfold curBytes at this; rw [hb₂] at this; exact this
-  rw [hx, LawfulEnc.decode_encode] at hdec
+  rw [hx, decodeLoad_of_decode (LawfulEnc.decode_encode _)] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht (fun h => by cases h) (by decide) (.inr (.inr (.inr (.inr ⟨rfl, rfl⟩))))⟩
 
@@ -713,7 +713,7 @@ theorem step_read {G : ThreadId → Gh} {m m' : Mem} {v : BitVec 32} (hi : Inv G
   rw [hb₀] at h42
   have : (Enc.decode (blk.bytes.extract 0 (0 + Enc.size (BitVec 32))) : Result (BitVec 32)).run =
       some (.ok 42) := h42
-  rw [this] at hdec
+  rw [decodeLoad_run_of_decode this] at hdec
   simp only [Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht (fun _ h => by cases h) (by decide) (.inr (.inr (.inl ⟨rfl, rfl, hfin⟩)))⟩
 

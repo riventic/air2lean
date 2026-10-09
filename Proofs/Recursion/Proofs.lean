@@ -10,6 +10,12 @@ extent the translation is faithful (see the differential tests in `tests/diff/`)
 `isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`; their unfold equation is `<fn>.eq_1`. The
 `isEven`/`isOdd`/`fact` proofs do induction on `n.toNat` (one less each call); the `gcd` proof
 does strong induction on the second argument (`a % b < b`).
+
+**Stack premise.** These functions are pure (`Zig.Result`), so the model charges no frames:
+each theorem holds for the native function only if the native stack holds the recursion it
+states (premise STK-01, `docs/premises.md`). The recursion depth is `n.toNat + 1` for
+`isEven`/`isOdd`/`fact` and at most `b.toNat + 1` for `gcd`, so a statement about large inputs
+assumes a native stack of that many frames (MM-5, `docs/architecture-audit/memory-model.md`).
 -/
 
 open Recursion

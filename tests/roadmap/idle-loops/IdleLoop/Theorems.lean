@@ -57,7 +57,7 @@ theorem store_mem1 : ∃ blk, (mem1 σ).blocks[0]? = some blk ∧ blk.bytes.size
   obtain ⟨blk, hb, hk, hs, hacc⟩ := acc_g (gblk_mem1 0 (.inl rfl)) (len := Enc.size (BitVec 32))
     (by decide)
   refine ⟨blk, hb, hs, ?_⟩
-  exact store_run (p := dPtr) (42 : BitVec 32) hacc (by rw [hk]; decide) rfl
+  exact store_run (p := dPtr) (42 : BitVec 32) hacc (by rw [hk]; decide) (noRace_of_raceAt rfl)
 
 /-- The memory after `main`'s write of `data`. -/
 theorem inv_mem2 {blk : Block} (hb : (mem1 σ).blocks[0]? = some blk) (hs : blk.bytes.size = 4) :

@@ -110,7 +110,7 @@ theorem readLimit_from_start (σ : Placement) (ext : ExternInit) :
     exact Array.extract_size
   obtain ⟨A₀, A₁, A₂, h₀, h₁, h₂, he⟩ := mem0_eq σ ext
   rw [he]
-  simp [h₁, readLimit, load, loadBytes, recordAccess, Mem.access, raceAt, Enc.size, intSize,
+  simp [h₁, readLimit, load, loadBytes, recordAccess, Mem.access, raceCheck, Mem.solo, raceAt, Enc.size, intSize,
     intAlign, alignUp, LawfulEnc.size_encode, hfull, LawfulEnc.decode_encode, set,
     MonadStateOf.set, StateT.set, zig_unfold]
   exact ⟨_, rfl, rfl⟩
@@ -121,7 +121,7 @@ theorem readScratch_undefined (σ : Placement) (ext : ExternInit) :
     (readScratch.run (mem0 σ ext)).run = some (.error .unspecified) := by
   obtain ⟨A₀, A₁, A₂, h₀, h₁, h₂, he⟩ := mem0_eq σ ext
   rw [he]
-  simp [h₂, readScratch, load, loadBytes, recordAccess, Mem.access, raceAt, Enc.decode, Enc.size,
+  simp [h₂, readScratch, load, loadBytes, recordAccess, Mem.access, raceCheck, Mem.solo, raceAt, Enc.decode, Enc.size,
     intSize, intAlign, alignUp, intOfBytes, byteBits, set, MonadStateOf.set, StateT.set,
     zig_unfold]
   rfl

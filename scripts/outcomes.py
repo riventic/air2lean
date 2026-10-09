@@ -31,6 +31,8 @@ class Outcome(str, Enum):
     DEADLOCK = 'deadlock'
     # A CPU fault of an allowlisted inline-asm instruction (`Zig.Error.trap`, ASM-04).
     HARDWARE_TRAP = 'hardware_trap'
+    # The selected stack budget ran out (`Zig.Error.stackOverflow`, MM-5).
+    STACK_OVERFLOW = 'stack_overflow'
     # Tests only observe scheduler fuel exhaustion (`bounded_no_result`); it is not divergence.
     DIVERGENCE = 'divergence'
     SEARCH_CAP = 'search_cap'
@@ -39,7 +41,7 @@ class Outcome(str, Enum):
 # Model failures. A partial or total triple rules out each of them (`Zig.Error`); a Zig error
 # union value is an ordinary returned value and is not among them.
 SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
-                             Outcome.DEADLOCK, Outcome.HARDWARE_TRAP})
+                             Outcome.DEADLOCK, Outcome.HARDWARE_TRAP, Outcome.STACK_OVERFLOW})
 # Evidence that cannot show a failure is absent, whatever was observed elsewhere.
 INCOMPLETE = frozenset({Outcome.SEARCH_CAP, Outcome.DIVERGENCE, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
                         Outcome.UNSUPPORTED})
@@ -75,6 +77,7 @@ DIFF_KINDS = {
     'unspecified_timer': Outcome.UNSPECIFIED_TIMER,
     'deadlock': Outcome.DEADLOCK,
     'trap': Outcome.HARDWARE_TRAP,
+    'stack_overflow': Outcome.STACK_OVERFLOW,
     'bounded_no_result': Outcome.DIVERGENCE,
     'search_cap': Outcome.SEARCH_CAP,
     'native_panic': None,
@@ -92,6 +95,7 @@ DIFF_STATUSES = {
     'illegal_exclusion': Outcome.ILLEGAL,
     'unspecified_exclusion': Outcome.UNSPECIFIED,
     'unspecified_timer_exclusion': Outcome.UNSPECIFIED_TIMER,
+    'stack_overflow_exclusion': Outcome.STACK_OVERFLOW,
     'search_cap': Outcome.SEARCH_CAP,
     'bounded_no_result': Outcome.DIVERGENCE,
 }

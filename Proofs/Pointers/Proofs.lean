@@ -228,7 +228,7 @@ example (σ : Placement) :
     (Enc.encode (2 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read) _ _ _ 1 2
   all_goals simp [load, loadBytes, recordAccess, hb₀, hb₁, hA₀, hA₁, Mem.access,
     Mem.recordAt, Enc.size, intSize, intAlign, alignUp, LawfulEnc.size_encode,
-    hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+    hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
 
 example (σ : Placement) :
     let m := Mem.ofGlobals σ [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
@@ -246,7 +246,7 @@ example (σ : Placement) :
     _ _ 4294967295 1
   · simp [load, loadBytes, recordAccess, hb, hA, Mem.access,
       Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
-      hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+      hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide
 
 /-! ## Non-vacuity witnesses: the runs on two `u32` one after the other in one block -/

@@ -163,6 +163,12 @@ charges its escaping-local bytes plus a per-call constant. Exhaustion is its own
 depth premise. Short of that, add a premise and a claim-strength row now: "results assume the
 native stack does not overflow".
 
+**Status: fixed on `codex/fix-mm-hardening`.** `Mem.stackLimit`/`stackUsed` and
+`Zig.enterFrame`/`leaveFrame` (emitted for recursive functions that use memory),
+`Zig.Error.stackOverflow` (outcome `stack_overflow`), premise STK-01 for every theorem that
+recursion reaches, and a claim-strength note. `check.sh` now asserts agreement for
+`stack_depth.zig` under an 8 MiB budget.
+
 ---
 
 ## FAIL-OPEN RISK
@@ -240,6 +246,14 @@ proofs, but it makes outcome reports and native diffs wrong. **Fix:** PNVI-ae-st
 exposure: a `ptrFrag` read as an integer yields its address under the MM-1 oracle. Integer
 bytes read as a pointer go through `ptrFromAddr`.
 
+**Status: fixed on `codex/fix-mm-hardening`.** `load` decodes with `decodeLoad`: a decode that
+is `.unspecified` and meets pointer bytes is retried with each pointer byte read as the byte of
+its pointer's address (`exposeBytes`, the block's `addr` plus the offset). `Enc Ptr` reads eight
+integer bytes as the pointer to that address without a block (an access through it is
+`.illegal`); resolving it to a live block like `ptrFromAddr` is left to the placement model
+(TODO in `ZigLean/Mem/Enc.lean`). Atomic loads, `readSlice` and byte locals keep the strict
+decode. Regression: `tests/roadmap/memory-hardening/Bytes.lean`.
+
 ### MM-12. Zero-length accesses, address-zero projections (known: L05)
 
 `Mem.access p 0 _` still needs a live block and in-bounds offset. `memset`/`memmove`/`readSlice`
@@ -258,6 +272,12 @@ found, but this is the one remaining `undefined → 0` default in the value repr
 **Fix:** the value union constructor takes `Bytes` for a fresh payload (undefined), as byte
 locals do.
 
+**Status: fixed on `codex/fix-mm-hardening`.** A retag from another field gives `undef_f`, a
+payload that is not defined: a read is `.unspecified`, its memory encoding is undefined bytes,
+and it becomes defined by a whole-payload write (`set_f`) or a write of every field of a struct
+payload (`setField_f`). A partial write deeper than one struct field leaves it undefined
+(conservative). Regression: `tests/roadmap/memory-hardening/Union.lean`.
+
 ### MM-14. Unbounded footprint and block arrays
 
 `recordAccess` appends every access to `Mem.footprint`, also with one thread, and `raceAt`
@@ -266,6 +286,10 @@ scans it linearly. Dead blocks are never removed. `depth(n)` evaluates in under 
 `decide`-style proofs on loops. **Fix:** with a single live thread, `recordAccess` keeps only
 the entries a later spawn can race with: none, because a spawn copies the parent's clock.
 Clear the footprint whenever `threads` has one live entry.
+
+**Status: fixed on `codex/fix-mm-hardening`** by skipping the scan instead of clearing the
+footprint (`Mem.solo`, `raceCheck`): clearing would change `Mem.recordAt`, on which the
+concurrency proofs rely. The footprint and dead blocks still grow linearly.
 
 ### MM-15. `@memcpy` overlap (control)
 

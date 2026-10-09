@@ -15,6 +15,66 @@ namespace Zig
 
 attribute [zig_unfold] callM callR
 
+/-! ## Pointer bytes as integers (MM-11) -/
+
+/-- A load's decode is the plain decode whenever that succeeds. -/
+theorem decodeLoad_of_decode {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte} {v : α}
+    (h : Enc.decode bs = pure v) : decodeLoad blocks bs = pure v := by
+  unfold decodeLoad; rw [h]; rfl
+
+/-- `decodeLoad_of_decode` in `ExceptT.run` form. -/
+theorem decodeLoad_run_of_decode {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte}
+    {v : α} (h : (Enc.decode bs : Result α).run = some (.ok v)) :
+    (decodeLoad blocks bs : Result α).run = some (.ok v) :=
+  decodeLoad_of_decode h
+
+/-- A successful load decode: the plain decode, or (pointer bytes read as an integer) the decode
+of the bytes with the pointer bytes exposed as addresses. -/
+theorem decodeLoad_ok {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte} {v : α}
+    (h : (decodeLoad blocks bs).run = some (.ok v)) :
+    (Enc.decode bs : Result α).run = some (.ok v) ∨
+      ((Enc.decode bs : Result α).run = some (.error .unspecified) ∧
+        (Enc.decode (exposeBytes blocks bs) : Result α).run = some (.ok v)) := by
+  unfold decodeLoad at h
+  simp only [ExceptT.run_mk] at h
+  split at h
+  · rename_i heq
+    split at h
+    · exact .inr ⟨heq, h⟩
+    · cases h
+  · exact .inl h
+
+/-! ## Stack budget (MM-5) -/
+
+/-- Without a stack budget (`stackLimit = none`, every generated `mem0`), a frame is charged
+and never overflows. A statement over such a memory carries premise STK-01. -/
+theorem enterFrame_run_none {m : Mem} (h : m.stackLimit = none) (bytes : Nat) :
+    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+  simp [enterFrame, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+    set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind,
+    ExceptT.bindCont]
+
+/-- A frame that fits in the budget is charged. -/
+theorem enterFrame_run_fits {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
+    (hfit : m.stackUsed + (frameBase + bytes) ≤ limit) :
+    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+  have : ¬ limit < m.stackUsed + (frameBase + bytes) := by omega
+  simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk,
+    ExceptT.bind, ExceptT.bindCont]
+
+/-- A frame that does not fit in the budget overflows the stack. -/
+theorem enterFrame_overflow {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
+    (hover : limit < m.stackUsed + (frameBase + bytes)) :
+    ((enterFrame bytes).run m).run = some (.error .stackOverflow) := by
+  simp [enterFrame, h, hover, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
+    pure, ExceptT.pure, StateT.lift, ExceptT.run]
+
+/-- Releasing a frame restores the bytes that `enterFrame` charged. -/
+theorem leaveFrame_run (m : Mem) (bytes : Nat) :
+    (leaveFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed - (frameBase + bytes) }) := rfl
+
 /-- An access that succeeds: its block is live, the bytes are in the block, and the address is
 aligned. -/
 theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
@@ -80,7 +140,13 @@ invariant on `Mem` (an arbitrary `Mem` value has no such invariant), so a caller
 accesses in one thread (no concurrent access to the same bytes, the common case for the example
 proofs) discharges it directly at each step. -/
 def NoRace (m : Mem) (block : BlockId) (off len : Nat) (kind : AccessKind) : Prop :=
-  raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+  raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+
+/-- No footprint entry races with the access: `NoRace`, whether or not `m.solo` skips the scan. -/
+theorem noRace_of_raceAt {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
+    (h : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none) :
+    NoRace m block off len kind := by
+  unfold NoRace raceCheck; split <;> simp_all
 
 theorem recordAccess_run {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
     (hnr : NoRace m block off len kind) :
@@ -246,12 +312,29 @@ theorem singleThread_empty {m : Mem} (hf : m.footprint = #[]) (hc : m.current < 
 
 theorem noRace_of_singleThread {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : NoRace m block off len kind := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   have ⟨_, hle⟩ := h.2 e he
   have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
   simp [VClock.concurrent, hle']
+
+/-- MM-14: on a single-thread memory, `raceCheck`'s skip changes nothing — the scan it skips
+finds no race either. -/
+theorem raceCheck_eq_raceAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
+    (kind : AccessKind) :
+    raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) block off len kind =
+      raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind := by
+  have hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind
+      = none := by
+    unfold raceAt
+    rw [Array.findSome?_eq_none_iff]
+    intro e he
+    have ⟨_, hle⟩ := h.2 e he
+    have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
+    simp [VClock.concurrent, hle']
+  unfold raceCheck; split <;> simp [hr]
 
 theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
@@ -368,8 +451,9 @@ theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId
     (hnr : NoRace m b o (Enc.size α) .read) :
     (load α a p).run m = pure (v, m.recordAt b o (Enc.size α) .read) := by
   simp only [load, StateT.run_bind, loadBytes_run h hnr]
-  simp [hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
-    liftM, monadLift, MonadLift.monadLift, StateT.lift]
+  simp [decodeLoad_of_decode hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind,
+    ExceptT.bindCont, StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, get, getThe,
+    MonadStateOf.get, StateT.get]
 
 theorem store_run {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId}
     {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o))
@@ -473,7 +557,7 @@ memory is the input with the read recorded (`Mem.recordAt`). -/
 theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     (h : (load α a p).run m = pure (v, m')) :
     ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
-      Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
+      decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
       m' = m.recordAt b o (Enc.size α) .read := by
   simp only [load, loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
     MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
@@ -486,14 +570,14 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
   | some (.ok (b, blk, o)), hacc, h =>
     simp only [ExceptT.bindCont, Option.bind_some] at h
-    generalize hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o
+    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o
       (Enc.size α) .read = r at h
     match r, hr, h with
     | some _, _, h =>
       cases h
     | none, hr, h =>
       simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk] at h
-      generalize hd2 : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
+      generalize hd2 : (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
       match d, hd2, h with
       | none, _, h => simp at h
       | some (.error _), _, h =>
@@ -502,6 +586,11 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
         simp only [ExceptT.bindCont, Option.bind_some] at h
         obtain ⟨rfl, rfl⟩ := h
         exact ⟨b, blk, o, rfl, hd2, rfl⟩
+
+/-- A load of the bytes of a value of a lawful encoding decodes the value. -/
+@[simp] theorem decodeLoad_encode {α : Type} [Enc α] [LawfulEnc α] (blocks : Array Block) (v : α) :
+    decodeLoad blocks (Enc.encode v) = pure v :=
+  decodeLoad_of_decode (LawfulEnc.decode_encode v)
 
 instance : LawfulEnc Bool where
   size_encode _ := rfl

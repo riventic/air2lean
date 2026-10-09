@@ -101,7 +101,7 @@ example (σ : Placement) :
   have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
   simp [load, loadBytes, recordAccess, hb, Mem.access,
     Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
-    Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set,
+    Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set,
     StateT.set, zig_unfold, Nat.add_mod, hA]
 
 /-! ## Non-vacuity witnesses -/

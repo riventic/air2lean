@@ -649,7 +649,7 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
 
 
 def premise_key(pid: str) -> tuple:
-    order = ["PRF", "ALC", "IOM", "THR", "ORD", "TMR", "MTH", "ASM", "SEM", "EXT", "TRU"]
+    order = ["PRF", "ALC", "IOM", "THR", "ORD", "TMR", "MTH", "ASM", "SEM", "STK", "EXT", "TRU"]
     prefix = pid.split("-")[0]
     return (order.index(prefix) if prefix in order else len(order), pid)
 

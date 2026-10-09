@@ -63,15 +63,20 @@ theorem prioValue_spec (p : Prio) : prioValue p = pure p.toBits := by
 theorem isUrgent_spec (p : Prio) : isUrgent p = pure (p == .high) := by
   cases p <;> rfl
 
+/-- A shape whose payload is defined: not one that a retag left undefined (`undef_*`, MM-13). -/
+def Shape.Defined : Shape → Prop
+  | .undef_circle .. | .undef_rect .. | .undef_square .. => False
+  | _ => True
+
 /-- The area of a shape as a natural number (`circle`: `3 * r * r`). -/
 def areaNat : Shape → Nat
   | .circle r => 3 * r.toNat * r.toNat
   | .rect r => r.w.toNat * r.h.toNat
   | .square a => a.toNat * a.toNat
-  | .empty => 0
+  | .empty | .undef_circle .. | .undef_rect .. | .undef_square .. => 0
 
 /-- `area` is `areaNat` when it fits in `u64`. -/
-theorem area_spec (s : Shape) (h : areaNat s < 2 ^ 64) :
+theorem area_spec (s : Shape) (hs : s.Defined) (h : areaNat s < 2 ^ 64) :
     area s = pure (BitVec.ofNat 64 (areaNat s)) := by
   unfold area
   cases s with
@@ -100,10 +105,21 @@ theorem area_spec (s : Shape) (h : areaNat s < 2 ^ 64) :
       Nat.mod_eq_of_lt (show a.toNat < 2 ^ 64 by omega), Nat.not_le.mpr h]
     congr 2
   | empty => rfl
+  | undef_circle => cases hs
+  | undef_rect => cases hs
+  | undef_square => cases hs
 
-/-- `radius` is the payload of a circle, and panics (`inactiveUnionField`) otherwise. -/
+/-- A shape whose payload a retag left undefined has no area: its read is `.unspecified`. -/
+theorem area_undef (r : BitVec 32) (w : List String) :
+    area (.undef_circle r w) = throw .unspecified := rfl
+
+/-- `radius` is the payload of a circle, and panics (`inactiveUnionField`) otherwise; an
+undefined circle payload is `.unspecified` (MM-13). -/
 theorem radius_spec (s : Shape) :
-    radius s = match s with | .circle r => pure r | _ => throw .panic := by
+    radius s = match s with
+      | .circle r => pure r
+      | .undef_circle _ _ => throw .unspecified
+      | _ => throw .panic := by
   cases s <;> rfl
 
 theorem isRound_spec (s : Shape) : isRound s = pure (s.tag == .circle) := by
@@ -117,6 +133,9 @@ def scaleSpec (s : Shape) (k : BitVec 32) : Shape :=
   | .rect rc => .rect { w := rc.w * k, h := rc.h * k }
   | .square a => .square (a * k)
   | .empty => .empty
+  | .undef_circle r w => .undef_circle r w
+  | .undef_rect r w => .undef_rect r w
+  | .undef_square r w => .undef_square r w
 
 /-- Every size of `s`, times `k`, fits in `u32`. -/
 def scaleFits (s : Shape) (k : BitVec 32) : Prop :=
@@ -124,6 +143,7 @@ def scaleFits (s : Shape) (k : BitVec 32) : Prop :=
   | .circle r | .square r => r.toNat * k.toNat < 2 ^ 32
   | .rect rc => rc.w.toNat * k.toNat < 2 ^ 32 ∧ rc.h.toNat * k.toNat < 2 ^ 32
   | .empty => True
+  | .undef_circle .. | .undef_rect .. | .undef_square .. => False
 
 theorem scale_spec (s : Shape) (k : BitVec 32) (h : scaleFits s k) :
     scale s k = pure (scaleSpec s k) := by
@@ -133,17 +153,25 @@ theorem scale_spec (s : Shape) (k : BitVec 32) (h : scaleFits s k) :
   cases s with
   | circle r =>
     simp only [scaleFits] at h
-    simp [zig_unfold, Shape.tag, Shape.get_circle, Shape.setTag_circle, Shape.modify_circle, hd,
+    simp [zig_unfold, Shape.tag, Shape.get_circle, Shape.setTag_circle, Shape.set_circle, hd,
       scaleSpec, Nat.not_le.mpr h]
   | rect rc =>
     simp only [scaleFits] at h
-    simp [zig_unfold, Shape.tag, Shape.get_rect, Shape.setTag_rect, Shape.modify_rect, hd, scaleSpec,
+    -- The retagged payload is undefined until both fields are written (MM-13).
+    have hw : Shape.setField_rect "h" (fun x => { w := x.w, h := rc.h * k })
+        (Shape.setField_rect "w" (fun x => { w := rc.w * k, h := x.h }) (Shape.undef_rect default []))
+        = .rect { w := rc.w * k, h := rc.h * k } := by
+      simp [Shape.setField_rect]
+    simp [zig_unfold, Shape.tag, Shape.get_rect, Shape.setTag_rect, hd, hw, scaleSpec,
       Nat.not_le.mpr h.1, Nat.not_le.mpr h.2]
   | square a =>
     simp only [scaleFits] at h
-    simp [zig_unfold, Shape.tag, Shape.get_square, Shape.setTag_square, Shape.modify_square, hd,
+    simp [zig_unfold, Shape.tag, Shape.get_square, Shape.setTag_square, Shape.set_square, hd,
       scaleSpec, Nat.not_le.mpr h]
   | empty => rfl
+  | undef_circle => simp [scaleFits] at h
+  | undef_rect => simp [scaleFits] at h
+  | undef_square => simp [scaleFits] at h
 
 /-- Scaling keeps the shape's tag. -/
 theorem scaleSpec_tag (s : Shape) (k : BitVec 32) : (scaleSpec s k).tag = s.tag := by
@@ -224,7 +252,7 @@ theorem areaSum_le (xs : Array Shape) (k : Nat) :
   omega
 
 theorem totalArea_loop_step (xs : Array Shape) (hs : xs.size < 2 ^ 64)
-    (hsum : (xs.toList.map areaNat).sum < 2 ^ 64) (s : totalAreaLocals)
+    (hdef : ∀ x ∈ xs.toList, x.Defined) (hsum : (xs.toList.map areaNat).sum < 2 ^ 64) (s : totalAreaLocals)
     (hk : s.local3.toNat ≤ xs.size) (ht : s.total.toNat = areaSum xs s.local3.toNat) :
     ∃ e s', (totalArea.loop7 xs (Zig.len xs)).run s = pure (e, s') ∧
       (if totalArea.again7 e then
@@ -247,7 +275,7 @@ theorem totalArea_loop_step (xs : Array Shape) (hs : xs.size < 2 ^ 64)
     refine ⟨.rep7,
       { total := s.total + BitVec.ofNat 64 (areaNat xs[s.local3.toNat])
         local3 := s.local3 + 1 }, ?_, ?_⟩
-    · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, area_spec _ harea, hmod, hadd, hinc]
+    · simp [zig_unfold, Zig.len, Zig.index, hlt, hm, area_spec _ (hdef _ (Array.getElem_mem_toList hlt)) harea, hmod, hadd, hinc]
     · have h1 : (s.local3 + 1).toNat = s.local3.toNat + 1 := Zig.toNat_add_one _ (by omega)
       have htot : (s.total + BitVec.ofNat 64 (areaNat xs[s.local3.toNat])).toNat
           = s.total.toNat + areaNat xs[s.local3.toNat] := by
@@ -265,14 +293,14 @@ theorem totalArea_loop_step (xs : Array Shape) (hs : xs.size < 2 ^ 64)
 /-- `totalArea` returns the summed area of all shapes, and never panics, when the sum fits in
 `u64`. -/
 theorem totalArea_spec (xs : Array Shape) (hs : xs.size < 2 ^ 64)
-    (hsum : (xs.toList.map areaNat).sum < 2 ^ 64) :
+    (hdef : ∀ x ∈ xs.toList, x.Defined) (hsum : (xs.toList.map areaNat).sum < 2 ^ 64) :
     ∃ r, totalArea xs = pure r ∧ r.toNat = (xs.toList.map areaNat).sum := by
   obtain ⟨⟨e, s'⟩, hrun, he, hpost⟩ := Zig.loop_spec (totalArea.loop7 xs (Zig.len xs))
     totalArea.again7
     (fun s => s.local3.toNat ≤ xs.size ∧ s.total.toNat = areaSum xs s.local3.toNat)
     (fun s => xs.size - s.local3.toNat)
     (fun r => r.1 = .br6 ∧ r.2.total.toNat = areaSum xs xs.size)
-    (fun s h => totalArea_loop_step xs hs hsum s h.1 h.2)
+    (fun s h => totalArea_loop_step xs hs hdef hsum s h.1 h.2)
     { total := 0, local3 := 0 } (by simp [areaSum])
   subst he
   refine ⟨s'.total, ?_, ?_⟩

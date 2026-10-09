@@ -111,7 +111,8 @@ theorem Mem.Owns.frameSelf (hs : StepIn hF m m') (ho : m.Owns m.current h)
 theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : m.Owns m.current h)
     (hlen : 0 < len) (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) :
     NoRace m b off len kind := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   split

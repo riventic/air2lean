@@ -211,7 +211,8 @@
     {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
     {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"},
-    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"}
+    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"},
+    {"premise": "STK-01", "scope": "closure", "pattern": "^partial_fixpoint$|(?:^|\\.)(?:enterFrame|stackLimit)$"}
   ],
   "implies": {
     "DEV-01": ["SEM-02"],

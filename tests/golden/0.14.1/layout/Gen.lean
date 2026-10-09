@@ -75,36 +75,55 @@ inductive Shape where
   | circle (v : BitVec 32)
   | rect (v : Rect)
   | none
+  | undef_circle (v : BitVec 32) (written : List String)
+  | undef_rect (v : Rect) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def Shape.tag : Shape → ShapeTag
   | .circle _ => .circle
+  | .undef_circle _ _ => .circle
   | .rect _ => .rect
+  | .undef_rect _ _ => .rect
   | .none => .none
 
 def Shape.get_circle : Shape → Zig.Result (BitVec 32)
   | .circle v => pure v
+  | .undef_circle _ _ => throw .unspecified
   | _ => throw .panic
 
 def Shape.modify_circle (g : BitVec 32 → BitVec 32) : Shape → Shape
   | .circle v => .circle (g v)
-  | _ => .circle (g default)
+  | .undef_circle v w => .undef_circle (g v) w
+  | _ => .undef_circle (g default) []
 
 def Shape.setTag_circle : Shape → Shape
   | .circle v => .circle v
-  | _ => .circle default
+  | .undef_circle v w => .undef_circle v w
+  | _ => .undef_circle default []
+
+def Shape.set_circle (v : BitVec 32) (_ : Shape) : Shape := .circle v
 
 def Shape.get_rect : Shape → Zig.Result (Rect)
   | .rect v => pure v
+  | .undef_rect _ _ => throw .unspecified
   | _ => throw .panic
 
 def Shape.modify_rect (g : Rect → Rect) : Shape → Shape
   | .rect v => .rect (g v)
-  | _ => .rect (g default)
+  | .undef_rect v w => .undef_rect (g v) w
+  | _ => .undef_rect (g default) []
 
 def Shape.setTag_rect : Shape → Shape
   | .rect v => .rect v
-  | _ => .rect default
+  | .undef_rect v w => .undef_rect v w
+  | _ => .undef_rect default []
+
+def Shape.set_rect (v : Rect) (_ : Shape) : Shape := .rect v
+
+def Shape.setField_rect (k : String) (g : Rect → Rect) : Shape → Shape
+  | .rect v => .rect (g v)
+  | .undef_rect v w => if ["w", "h"].all (k :: w).contains then .rect (g v) else .undef_rect (g v) (k :: w)
+  | _ => if ["w", "h"].all ([k]).contains then .rect (g default) else .undef_rect (g default) ([k])
 
 def Shape.get_none : Shape → Zig.Result (Unit)
   | .none => pure ()
@@ -125,6 +144,8 @@ instance : Zig.Enc Shape where
     | .circle x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .rect x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .none => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+    | .undef_circle _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+    | .undef_rect _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
   decode bs := do
     let t : ShapeTag ← Zig.Enc.decodeAt bs 4
     match t with
@@ -236,35 +257,49 @@ instance : Zig.Enc NumTag where
 inductive Num where
   | int (v : BitVec 32)
   | small (v : BitVec 8)
+  | undef_int (v : BitVec 32) (written : List String)
+  | undef_small (v : BitVec 8) (written : List String)
   deriving Repr, Inhabited, DecidableEq
 
 def Num.tag : Num → NumTag
   | .int _ => .int
+  | .undef_int _ _ => .int
   | .small _ => .small
+  | .undef_small _ _ => .small
 
 def Num.get_int : Num → Zig.Result (BitVec 32)
   | .int v => pure v
+  | .undef_int _ _ => throw .unspecified
   | _ => throw .panic
 
 def Num.modify_int (g : BitVec 32 → BitVec 32) : Num → Num
   | .int v => .int (g v)
-  | _ => .int (g default)
+  | .undef_int v w => .undef_int (g v) w
+  | _ => .undef_int (g default) []
 
 def Num.setTag_int : Num → Num
   | .int v => .int v
-  | _ => .int default
+  | .undef_int v w => .undef_int v w
+  | _ => .undef_int default []
+
+def Num.set_int (v : BitVec 32) (_ : Num) : Num := .int v
 
 def Num.get_small : Num → Zig.Result (BitVec 8)
   | .small v => pure v
+  | .undef_small _ _ => throw .unspecified
   | _ => throw .panic
 
 def Num.modify_small (g : BitVec 8 → BitVec 8) : Num → Num
   | .small v => .small (g v)
-  | _ => .small (g default)
+  | .undef_small v w => .undef_small (g v) w
+  | _ => .undef_small (g default) []
 
 def Num.setTag_small : Num → Num
   | .small v => .small v
-  | _ => .small default
+  | .undef_small v w => .undef_small v w
+  | _ => .undef_small default []
+
+def Num.set_small (v : BitVec 8) (_ : Num) : Num := .small v
 
 instance : Zig.Enc Num where
   size := 8
@@ -272,6 +307,8 @@ instance : Zig.Enc Num where
   encode v := match v with
     | .int x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
     | .small x => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag), (0, Zig.Enc.encode x)]
+    | .undef_int _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
+    | .undef_small _ _ => Zig.Enc.fields 8 [(4, Zig.Enc.encode v.tag)]
   decode bs := do
     let t : NumTag ← Zig.Enc.decodeAt bs 4
     match t with

@@ -159,6 +159,12 @@ the initial memory, so their derived domain is scoped (`scoped: ...` must be dec
 reports its unit, but the bound's value is not checked against a manifest. An `Exists`
 conclusion is unclassified even when its body states a successful run.
 
+Every derived strength assumes that the native stack does not overflow
+([STK-01](premises.md#stk-01)): a theorem about the generated `mem0` sets no stack budget, so
+`no-panic` and `guaranteed-return` do not exclude a native stack overflow, which ReleaseSafe
+does not check. The premise index lists STK-01 for each theorem that recursion reaches. A
+statement that bounds `Mem.stackLimit` itself can exclude `.stackOverflow` for that budget.
+
 ## Tests
 
 `python3 tests/roadmap/claims/test_claims.py` runs fast classification, binding, domain,

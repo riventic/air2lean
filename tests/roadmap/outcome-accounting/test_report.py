@@ -366,6 +366,19 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(row['model_kind'],'deadlock')
         self.assertEqual(row['status'],'mismatch')
 
+    def test_stack_overflow_is_a_pinned_exclusion(self):
+        # MM-5: the model's stack budget is an environment choice, never an exact match.
+        self.seed({'fail':'unknown'},{'fail':'Zig.Error.stackOverflow'},K.NATIVE_SIGNAL,K.STACK_OVERFLOW)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        code,data=self.compare()
+        self.assertEqual(code,0)
+        self.assertEqual(data['counts'],{'stack_overflow_exclusion':1})
+        (self.root/'tests/diff/basic/unspecified.txt').write_text('')
+        code,data=self.compare()
+        self.assertEqual(code,1)
+        with self.assertRaises(REPORT.Invalid):
+            REPORT.observation(json.dumps({'schema':1,'kind':'model_panic','legacy_line':'{"fail":"Zig.Error.stackOverflow"}'}),{'fail':'Zig.Error.stackOverflow'},'model')
+
     def test_host_difference_is_not_an_exact_match(self):
         self.seed({'ok':'0x7fc00000'},{'ok':'0xffc00001'})
         (self.root/'tests/diff/basic/host.txt').write_text(HOST_ALL)

@@ -17,6 +17,7 @@ case row) onto these outcomes. Names agree with the preflight `outcomes` record 
 | `unspecified_timer` | model `unspecified_timer`: `Zig.Error.unsupportedTimer`, a clock or timed wait the model has no semantics for ([TMR-01](premises.md#tmr-01)) | both |
 | `deadlock` | model `deadlock` | both |
 | `hardware_trap` | model `trap` (an allowlisted inline-asm fault: `Zig.asmTrap`, [ASM-04](premises.md#asm-04)); `trap_match` against a native `SIGFPE` | both |
+| `stack_overflow` | model `stack_overflow` (`Zig.Error.stackOverflow`): a frame did not fit in the selected stack budget (`Mem.stackLimit`, [STK-01](premises.md#stk-01)). The differential runner reports it as `stack_overflow_exclusion`, pinned like `unspecified` | both |
 | `divergence` | `bounded_no_result` or a search with a no-result branch: scheduler fuel ran out; divergence is not established | both |
 | `search_cap` | a `capped` schedule search | both |
 | `unsupported_semantics` | exporter-marked unsupported AIR (coverage), or an unknown model kind | both |
@@ -28,7 +29,8 @@ no-result branch counts both `nondeterministic_valid` and `divergence`.
 ## Absence claims
 
 `no-panic` denies `panic`, `illegal_behavior`, `unspecified_behavior`, `unspecified_timer`,
-`deadlock` and `hardware_trap`, since `Zig.Triple` is false on every `Zig.Error`. `guaranteed-return` also denies
+`deadlock`, `hardware_trap` and
+`stack_overflow`, since `Zig.Triple` is false on every `Zig.Error`. `guaranteed-return` also denies
 `divergence`. Each claim is also refused by incomplete evidence: `search_cap`, `divergence`,
 `unspecified_behavior`, `unspecified_timer` and `unsupported_semantics`. A capped search, a
 fuel-bounded run or an unclocked timer therefore never supports a proved absence of a failure.

@@ -774,7 +774,8 @@ theorem load_n {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c 
   have hv := (hctx blk hblk (u - 1) hk4).2
   have ho' : o = 16 * (u - 1) + 8 := by rw [ho]; exact ctx_off (u - 1) 8
   subst ho'
-  rw [show 16 * (u - 1) + 8 + Enc.size (BitVec 32) = 16 * (u - 1) + 12 from rfl, hv] at hd
+  rw [show 16 * (u - 1) + 8 + Enc.size (BitVec 32) = 16 * (u - 1) + 12 from rfl,
+    decodeLoad_run_of_decode hv] at hd
   simp only [Option.some.injEq, Except.ok.injEq] at hd
   exact ⟨hd.symm, _, rfl⟩
 
@@ -792,7 +793,8 @@ theorem load_cnt {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {
   have hv := (hctx blk hblk (u - 1) hk4).1
   have ho' : o = 16 * (u - 1) + 0 := by rw [ho]; exact ctx_off (u - 1) 0
   subst ho'
-  rw [show 16 * (u - 1) + 0 + Enc.size Ptr = 16 * (u - 1) + 8 from rfl, Nat.add_zero, hv] at hd
+  rw [show 16 * (u - 1) + 0 + Enc.size Ptr = 16 * (u - 1) + 8 from rfl, Nat.add_zero,
+    decodeLoad_run_of_decode hv] at hd
   simp only [Option.some.injEq, Except.ok.injEq] at hd
   exact ⟨hd.symm, _, rfl⟩
 

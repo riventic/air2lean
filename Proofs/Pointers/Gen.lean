@@ -28,6 +28,7 @@ inductive addDownExit where
 mutual
 
 def addDown (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
+  Zig.enterFrame 0
   let e ← ((do
     match ← ((do
       let i3 ← pure (p1 == (0 : BitVec 32))
@@ -44,6 +45,7 @@ def addDown (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
       let _i12 ← Zig.callM (addDown p0 i11)
       pure .ret)
     | e => pure e) : Zig.MM addDownLocals addDownExit).run' (default : addDownLocals)
+  Zig.leaveFrame 0
   match e with
   | .ret => pure ()
   | _ => throw .panic

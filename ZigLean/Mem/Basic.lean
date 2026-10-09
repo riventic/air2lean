@@ -389,6 +389,13 @@ structure Mem where
   /-- The installed environment of the bound OS primitives (`ZigLean/Env/Linux.lean`, E03). The
   default has no open handle, so a program that never calls one is unaffected. -/
   host : Env.Host := {}
+  /-- The stack budget in bytes (MM-5): a call whose frame (`Zig.enterFrame`) would take
+  `stackUsed` above it throws `.stackOverflow`. `none` (the default, and every generated
+  `mem0`) sets no budget: a statement about such a memory assumes that the native stack holds
+  every call chain it reaches (premise STK-01, `docs/premises.md`). -/
+  stackLimit : Option Nat := none
+  /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
+  stackUsed : Nat := 0
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -433,14 +440,28 @@ def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off l
         VClock.concurrent e.clock clock then racePair e.kind kind
     else none
 
+/-- Only the main thread can run: it is the current thread and every spawned thread has been
+joined. Then no recorded access is concurrent with the current one: the main thread's own
+accesses happened before, and a join merged each joined thread's clock (which covers that
+thread's accesses and, through its own joins, its children's) into the joiner's. -/
+def Mem.solo (m : Mem) : Bool := m.current == 0 && m.threads.all (·.joined)
+
+/-- The race check of `recordAccess`: `raceAt` over the footprint, skipped when `m.solo`. In
+every memory that a run from `Mem.ofGlobals` reaches, `raceAt` is `none` when `m.solo`
+(`raceCheck_eq_raceAt` states it for single-thread memories), so the skip changes no outcome;
+it keeps a single-thread run linear instead of quadratic in its number of accesses (MM-14). -/
+def raceCheck (m : Mem) (clock : VClock) (block : BlockId) (off len : Nat) (kind : AccessKind) :
+    Option Error :=
+  if m.solo then none else raceAt m.footprint clock block off len kind
+
 /-- Record one access at `block`/`off`/`len` by the current thread (`ZigLean/Mem/Thread.lean`),
 checking it against every earlier overlapping access from a concurrent thread (`racePair`, via
-`raceAt`). Throws the race's error before recording anything. -/
+`raceCheck`). Throws the race's error before recording anything. -/
 def recordAccess (block : BlockId) (off len : Nat) (kind : AccessKind) : MemM Unit := do
   let m ← get
   let t := m.current
   let clock := VClock.bump (m.clocks[t]!) t
-  match raceAt m.footprint clock block off len kind with
+  match raceCheck m clock block off len kind with
   | some err => throw err
   | none =>
     set { m with
@@ -533,6 +554,33 @@ def free (p : Ptr) : MemM Unit := do
 /-- The stack block of a local whose address escapes: made at function entry. -/
 @[inline] def allocStack (size align : Nat) : MemM Ptr := alloc .stack size align
 
+/-! ## Stack budget (MM-5)
+
+A function of a recursive call group that uses memory charges its frame when it is entered
+(`enterFrame`) and releases it when it returns (`leaveFrame`). The frame is `frameBase` bytes
+plus the bytes of the function's escaping locals (each rounded up to its alignment), written by
+the translator. AIR has no frame size: native frames also hold spill slots, saved registers
+and locals that the model keeps as values, and inlining or tail calls can merge frames. So the
+figure is an estimate that ties a model overflow to the depth of the recursion; it is not a
+bound on the native frame (`docs/premises.md` STK-01). -/
+
+/-- The fixed part of every charged frame: a return address and a saved frame pointer. -/
+def frameBase : Nat := 16
+
+/-- Charge a frame of `frameBase + bytes` bytes: `.stackOverflow` if it takes `stackUsed`
+above `stackLimit`. -/
+def enterFrame (bytes : Nat) : MemM Unit := do
+  let m ← get
+  let used := m.stackUsed + (frameBase + bytes)
+  match m.stackLimit with
+  | some limit => if limit < used then throw .stackOverflow
+  | none => pure ()
+  set { m with stackUsed := used }
+
+/-- Release the frame that `enterFrame bytes` charged. -/
+def leaveFrame (bytes : Nat) : MemM Unit :=
+  modify fun m => { m with stackUsed := m.stackUsed - (frameBase + bytes) }
+
 /-! ## Typed access -/
 
 /-- The memory encoding of a Lean type: its size and alignment in bytes (the Zig ABI values),
@@ -544,11 +592,47 @@ class Enc (α : Type) where
   encode : α → Array Byte
   decode : Array Byte → Result α
 
+/-- The address of `p` over the blocks `blocks` (`ptrAddr`), if its block exists. -/
+def addrIn (blocks : Array Block) (p : Ptr) : Option Int :=
+  match p.block with
+  | none => some p.off
+  | some b => (blocks[b]?).map fun blk => blk.addr + p.off
+
+/-- `bs` with every pointer byte replaced by the byte of its pointer's address
+(little-endian, two's complement in 64 bits): the bytes as an integer read sees them (MM-11). A
+pointer byte whose block does not exist stays. -/
+def exposeBytes (blocks : Array Block) (bs : Array Byte) : Array Byte :=
+  bs.map fun
+    | .ptrFrag q i =>
+      match addrIn blocks q with
+      | some a => .int (BitVec.ofNat 8 ((BitVec.ofInt 64 a).toNat >>> (8 * i.val)))
+      | none => .ptrFrag q i
+    | b => b
+
+/-- The byte is a pointer byte. -/
+def Byte.isPtrFrag : Byte → Bool
+  | .ptrFrag .. => true
+  | _ => false
+
+/-- The decode of a load (MM-11, PNVI-ae style exposure): `Enc.decode bs`, except that a decode
+that is `.unspecified` and meets pointer bytes is retried with the pointer bytes read as their
+addresses (`exposeBytes`, over the memory's `blocks`). So the bytes of a pointer read as an
+integer (`asBytes(&p)`, a `*usize` cast of `&p`) give its address, as in Zig. A value that mixes
+a pointer and integer bytes holding a pointer then decodes its pointer from the address, without
+a block. Integer bytes read as a pointer give a pointer without a block (`Enc Ptr`). -/
+def decodeLoad {α : Type} [Enc α] (blocks : Array Block) (bs : Array Byte) : Result α :=
+  ExceptT.mk <|
+    match (Enc.decode bs : Result α).run with
+    | some (.error .unspecified) =>
+      if bs.any Byte.isPtrFrag then (Enc.decode (exposeBytes blocks bs) : Result α).run
+      else some (.error .unspecified)
+    | r => r
+
 /-- `load`/`store` take the alignment of the pointer type (`*align(N) T`), which can differ from
 the type's own alignment. -/
 def load (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM α := do
   let bs ← loadBytes p (Enc.size α) align
-  Enc.decode bs
+  decodeLoad (← get).blocks bs
 
 def store {α : Type} [Enc α] (align : Nat) (p : Ptr) (v : α) : MemM Unit :=
   storeBytes p align (Enc.encode v)

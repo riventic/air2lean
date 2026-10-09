@@ -36,6 +36,7 @@ class Kind(str, Enum):
     UNSPECIFIED_TIMER = 'unspecified_timer'
     DEADLOCK = 'deadlock'
     TRAP = 'trap'
+    STACK_OVERFLOW = 'stack_overflow'
     BOUNDED_NO_RESULT = 'bounded_no_result'
     SEARCH_CAP = 'search_cap'
     INPUT_FAILURE = 'input_failure'
@@ -49,6 +50,7 @@ class Status(str, Enum):
     ILLEGAL = 'illegal_exclusion'
     UNSPECIFIED = 'unspecified_exclusion'
     UNSPECIFIED_TIMER = 'unspecified_timer_exclusion'
+    STACK_OVERFLOW = 'stack_overflow_exclusion'
     SEARCH_CAP = 'search_cap'
     BOUNDED_NO_RESULT = 'bounded_no_result'
     HOST = 'host_difference'
@@ -60,12 +62,14 @@ class Status(str, Enum):
     UB_EXCLUDED = 'ub_excluded'
 
 ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock',
-          'unsupportedTimer', 'trap'}
+          'unsupportedTimer', 'trap', 'stackOverflow'}
 # Model constructors with their own observation kind; every other `Zig.Error` is a model panic.
 MODEL_ERROR_KINDS = {'illegal': Kind.ILLEGAL, 'unspecified': Kind.UNSPECIFIED,
-                     'unsupportedTimer': Kind.UNSPECIFIED_TIMER, 'deadlock': Kind.DEADLOCK, 'trap': Kind.TRAP}
+                     'unsupportedTimer': Kind.UNSPECIFIED_TIMER, 'deadlock': Kind.DEADLOCK, 'trap': Kind.TRAP,
+                     'stackOverflow': Kind.STACK_OVERFLOW}
 # Legacy compatibility projection: these model errors count in the legacy `unspecified` bucket.
-LEGACY_UNSPECIFIED = {'Zig.Error.illegal', 'Zig.Error.unspecified', 'Zig.Error.unsupportedTimer'}
+LEGACY_UNSPECIFIED = {'Zig.Error.illegal', 'Zig.Error.unspecified', 'Zig.Error.unsupportedTimer',
+                      'Zig.Error.stackOverflow'}
 IDENT = re.compile(r'[a-zA-Z0-9_-]+\Z')
 # The synchronous fault signals tests/diff/common.zig reports by name (`native_signal`).
 SIGNALS = frozenset({'SIGFPE', 'SIGILL', 'SIGSEGV', 'SIGBUS'})
@@ -389,6 +393,8 @@ def _classify(native, model, nkind, mkind, search, host=False, values_match=None
             return Status.ILLEGAL if mkind == Kind.ILLEGAL else Status.UNSPECIFIED
         return Status.MISMATCH
     if mkind == Kind.UNSPECIFIED_TIMER: return Status.UNSPECIFIED_TIMER
+    # The model's stack budget is chosen by the environment (MM-5), not the native stack size.
+    if mkind == Kind.STACK_OVERFLOW: return Status.STACK_OVERFLOW
     if mkind == Kind.SEARCH_CAP: return Status.SEARCH_CAP
     if exclude_ub and mkind == Kind.MODEL_PANIC: return Status.UB_EXCLUDED
     expected = 'Zig.Error.' + PANICS.get(native.get('fail'), '')

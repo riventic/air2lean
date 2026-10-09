@@ -70,8 +70,11 @@ Each tagged union `U` with tag enum `UTag` also gets, per field `f`:
 |---|---|
 | `U.tag : U → UTag` | `get_union_tag` |
 | `U.get_f : U → Zig.Result T` | the payload of `f` (`struct_field_val`); throws `.panic` if `f` is not active. Sema checks the tag first (`inactiveUnionField`), so the throw is not reached. |
-| `U.modify_f : (T → T) → U → U` | a store into the payload of `f`: `f` becomes active with `g` applied to its payload, or to `default` if another field was active |
-| `U.setTag_f : U → U` | `set_union_tag`: `f` becomes active; its payload stays if `f` was active, else it is `default` (Zig: undefined) |
+| `U.modify_f : (T → T) → U → U` | a store into part of the payload of `f`: `g` applied to the payload; if another field was active, `f` becomes active with an undefined payload (`undef_f`) |
+| `U.setTag_f : U → U` | `set_union_tag`: `f` becomes active; its payload stays if `f` was active, else it is undefined (`undef_f default []`, MM-13) |
+| `U.undef_f (v : T) (written : List String)` | a constructor: `f` is active and its payload is not defined yet; `v` holds the struct fields named in `written`. `get_f` of it throws `.unspecified`; its `Zig.Enc` encoding has undefined payload bytes. Only for a union with another field and a payload with bits |
+| `U.set_f : T → U → U` | a store of the whole payload of `f`: `f` becomes active with a defined payload |
+| `U.setField_f : String → (T → T) → U → U` | a store of the whole struct field `k` of the payload of `f`: once every field is written, the payload is defined (`.f v`) |
 
 Zig keeps the payload bytes when the tag changes, and the Zig versions write a union result in different orders: 0.15.2 and 0.16.0 set the tag first, then store the payload; 0.14.1 stores the payload first. `modify_f` and `setTag_f` give the same value for both orders.
 
@@ -134,13 +137,13 @@ only the lane's bits of the host bytes (`docs/vector-proofs.md` §Lane pointers)
 A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`; `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr` of a slice), or a `bitcast` of a place. If every place of an `alloc` is used only as the pointer operand of `load`, `store`, a field pointer, `bitcast`, `set_union_tag` and `ret_load` (`Air2Lean/Memory.lean`), the local is a `Locals` field plus a path of struct fields and union payloads. Any other use (a call argument, a stored value, a returned pointer, `optional_payload_ptr`, an item pointer of a local array) makes the address escape: the local is then a stack block in memory (§Memory).
 
 ```lean
--- store to rect.w in the result local (a union): change the payload of `rect`
-modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i19 }) s.local2) })
+-- store to rect.w in the result local (a union): write the field `w` of the payload of `rect`
+modify (fun s => { s with local2 := (Shape.setField_rect "w" (fun x => { x with w := i19 }) s.local2) })
 ```
 
 ## Memory
 
-`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers, or 32-bit pointers for a wasm32 profile (§Pointer width); a qualified big-endian profile selects the big-endian encodings (§Byte order). The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects a value that differs from the schema-12 profile's `endian`, big endian without such a profile, or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices (4 and 8 bytes for a 32-bit profile). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
+`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers, or 32-bit pointers for a wasm32 profile (§Pointer width); a qualified big-endian profile selects the big-endian encodings (§Byte order). The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects a value that differs from the schema-12 profile's `endian`, big endian without such a profile, or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices (4 and 8 bytes for a 32-bit profile). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset. A typed `load` decodes with `Zig.decodeLoad` (MM-11): if the plain decode is `.unspecified` and the bytes hold pointer bytes, they are read as the bytes of their pointer's address (`Zig.exposeBytes`), so the bytes of a pointer read as an integer give its address. Eight integer bytes read as a pointer give the pointer to that address without a block (`Enc Ptr`), through which every access is `.illegal`. Atomic loads, `readSlice` and byte locals keep the strict decode.
 
 ### Pointer width
 
@@ -406,6 +409,26 @@ def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   let s1 ← Zig.allocStack 8 8
   let e ← ((do ...) : Zig.MM sumToLocals sumToExit).run' { (default : sumToLocals) with acc := s1 }
   Zig.free s1
+  match e with ...
+```
+
+**Stack budget (MM-5).** A function of a recursive call group (`callGroups`) that uses memory
+charges its frame to the stack budget: `Zig.enterFrame b` first and `Zig.leaveFrame b` after
+the frees, where `b` is the bytes of its escaping locals, each rounded up to its alignment, and
+`Zig.enterFrame` adds `Zig.frameBase` (16) for the return address and frame pointer. Under a
+budget (`Mem.stackLimit = some n`) a frame that does not fit throws `.stackOverflow`; the
+generated `mem0` has none, and its statements carry premise
+[STK-01](premises.md#stk-01). Non-recursive and pure functions charge nothing (their depth is
+bounded by the call graph, or they have no memory state); STK-01 covers them too. AIR has no
+frame size, so the charge is an estimate, not the native frame:
+
+```lean
+def depth (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
+  Zig.enterFrame 64
+  let s1 ← Zig.allocStack 64 1
+  ...
+  Zig.free s1
+  Zig.leaveFrame 64
   match e with ...
 ```
 

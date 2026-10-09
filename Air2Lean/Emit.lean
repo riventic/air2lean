@@ -135,8 +135,11 @@ def helperNames (ty : Ty) (reserved : Array String := #[]) : Array (String × St
     | .enum _ _ exhaustive _ =>
       (if exhaustive then #[] else #["bits", "mk"]) ++ #["toBits", "ofInt?", "isNamed", "tagName"]
     | .union _ _ tag fs =>
-      (if tag.isSome then #["tag"] else #[]) ++ fs.flatMap fun (p : String × TyId) =>
-        #[s!"get_{p.1}", s!"modify_{p.1}"] ++ (if tag.isSome then #[s!"setTag_{p.1}"] else #[])
+      (if tag.isSome then #["tag"] else #[]) ++ (fs.flatMap fun (p : String × TyId) =>
+        #[s!"get_{p.1}", s!"modify_{p.1}"] ++ (if tag.isSome then #[s!"setTag_{p.1}"] else #[])) ++
+      -- A retagged payload (MM-13): its constructor and the writes that define it.
+      (if tag.isSome && fs.size > 1 then fs.flatMap fun (p : String × TyId) =>
+        #[s!"undef_{p.1}", s!"set_{p.1}", s!"setField_{p.1}"] else #[])
     | _ => #[]
   let mut used := typeCoreNames ++ runtimeNames ++ reserved ++ (memberNames ty reserved).map (·.2)
   let mut out := #[]
@@ -151,6 +154,24 @@ def helperLookup (ty : Ty) (reserved : Array String := #[]) : String → String 
   fun raw => (names.find? (·.1 == raw)).map (·.2) |>.getD (mangleField raw)
 
 def helperName (ty : Ty) (raw : String) (reserved : Array String := #[]) : String := helperLookup ty reserved raw
+
+/-- Field `idx` of the tagged union `uty` gets an undefined payload when a retag activates it
+(MM-13): the union has another field, and the payload has bits (not `void`, not a struct
+without fields). `some (some names)`: the payload is a struct with the Lean member `names`; it
+becomes defined once each of them is written. `some none`: only a whole-payload write defines
+it. -/
+def unionFreshPayload (types : Array Ty) (uty : Ty) (idx : Nat) (reserved : Array String := #[]) :
+    Option (Option (Array String)) :=
+  match uty with
+  | .union _ _ (some _) fields =>
+    if fields.size ≤ 1 then none else do
+    let (_, id) ← fields[idx]?
+    match types[id]? with
+    | some .void | none => none
+    | some t@(.struct _ _ sfs) =>
+      if sfs.isEmpty then none else some (some (sfs.map (memberName t ·.1 reserved)))
+    | some _ => some none
+  | _ => none
 
 /-! ## Types (`docs/generated-code.md` §Types) -/
 
@@ -406,10 +427,14 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let enc := fields.toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
       else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes s.errBits id "Zig.Enc.encode x" s.srcLayouts})]"
+    -- A retagged payload that is not defined yet: its bytes are undefined (MM-13).
+    let encUndef := (List.range fields.size).filterMap fun i =>
+      (unionFreshPayload s.srcTypes s.ty i (structNames.map (·.2))).map fun _ =>
+        s!"    | .{hn s!"undef_{fields[i]!.1}"} _ _ => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
     let dec := fields.toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => pure .{fm f}"
       else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes s.errBits id s!"Zig.Enc.decodeAt bs {po}" s.srcLayouts}))"
-    String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++
+    String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++ encUndef ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
   | .struct _ "packed" fields =>
     -- Its backing integer (`Zig.Packed`).
@@ -497,16 +522,42 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       | none => "Unit"
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
     let wild := if fields.size > 1 then ["  | _ => throw .panic"] else []
+    -- A retag leaves a payload with bits undefined (MM-13): `undef_f v written` holds `f`'s
+    -- payload while it is not defined, `v` with the struct fields `written` (`setField_f`).
+    let fresh := (List.range fields.size).map fun i =>
+      unionFreshPayload s.srcTypes s.ty i (structNames.map (·.2))
+    let undefCtors := (fields.toList.zip fresh).filterMap fun ((f, id), fr) =>
+      fr.map fun _ => s!"  | {hn s!"undef_{f}"} (v : {tyStr id}) (written : List String)"
     let ctors := fields.toList.map fun (f, id) =>
       if isVoid id then s!"  | {fm f}" else s!"  | {fm f} (v : {tyStr id})"
-    let tagArms := fields.toList.map fun (f, id) =>
+    let tagArms := (fields.toList.zip fresh).flatMap fun ((f, id), fr) =>
       let pat := if isVoid id then s!".{fm f}" else s!".{fm f} _"
-      s!"  | {pat} => .{fm f}"
-    let perField := fields.toList.flatMap fun (f, id) =>
+      [s!"  | {pat} => .{fm f}"] ++ (fr.map fun _ => s!"  | .{hn s!"undef_{f}"} _ _ => .{fm f}").toList
+    let perField := (fields.toList.zip fresh).flatMap fun ((f, id), fr) =>
       let fm := fm f
       let (pat, val, pty) :=
         if isVoid id then (s!".{fm}", "()", "Unit") else (s!".{fm} v", "v", tyStr id)
-      -- Another field is active: `f` becomes active, its payload `default` (Zig: undefined).
+      match fr with
+      | some names =>
+        let u := s!".{hn s!"undef_{f}"}"
+        let complete (v w : String) : String := match names with
+          | some ns =>
+            let lit := String.intercalate ", " (ns.toList.map fun k => s!"\"{k}\"")
+            s!"if [{lit}].all ({w}).contains then .{fm} ({v}) else {u} ({v}) ({w})"
+          | none => s!"{u} ({v}) ({w})"
+        ["", s!"def {n}.{hn s!"get_{f}"} : {n} → Zig.Result ({pty})", s!"  | {pat} => pure {val}",
+         s!"  | {u} _ _ => throw .unspecified"] ++ wild ++
+        ["", s!"def {n}.{hn s!"modify_{f}"} (g : {pty} → {pty}) : {n} → {n}", s!"  | {pat} => .{fm} (g v)",
+         s!"  | {u} v w => {u} (g v) w", s!"  | _ => {u} (g default) []"] ++
+        ["", s!"def {n}.{hn s!"setTag_{f}"} : {n} → {n}", s!"  | {pat} => .{fm} v",
+         s!"  | {u} v w => {u} v w", s!"  | _ => {u} default []"] ++
+        ["", s!"def {n}.{hn s!"set_{f}"} (v : {pty}) (_ : {n}) : {n} := .{fm} v"] ++
+        (if names.isSome then
+          ["", s!"def {n}.{hn s!"setField_{f}"} (k : String) (g : {pty} → {pty}) : {n} → {n}",
+           s!"  | {pat} => .{fm} (g v)", s!"  | {u} v w => {complete "g v" "k :: w"}",
+           s!"  | _ => {complete "g default" "[k]"}"] else [])
+      | none =>
+      -- Void, or the only field: a retag keeps or makes the value.
       let (keep, apply, fresh, applyFresh, g) :=
         if isVoid id then (s!".{fm}", s!".{fm}", s!".{fm}", s!".{fm}", "_g")
         else (s!".{fm} v", s!".{fm} (g v)", s!".{fm} default", s!".{fm} (g default)", "g")
@@ -516,7 +567,7 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
         multi s!"  | _ => {applyFresh}" ++
       ["", s!"def {n}.{hn s!"setTag_{f}"} : {n} → {n}", s!"  | {pat} => {keep}"] ++ multi s!"  | _ => {fresh}"
     String.intercalate "\n"
-      ([s!"inductive {n} where"] ++ ctors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
+      ([s!"inductive {n} where"] ++ ctors ++ undefCtors ++ ["  deriving Repr, Inhabited, DecidableEq", "",
         s!"def {n}.{hn "tag"} : {n} → {tagName}"] ++ tagArms ++ perField)
   | .struct _ layout fields =>
     let fieldLines := (fields.map fun (fname, fty) => s!"  {fm fname} : {tyStr fty}").toList
@@ -618,8 +669,12 @@ inductive FloatSemantics where
 field. -/
 inductive PathStep where
   | field (name : String)
-  /-- `union`: the union's Lean name; `name`: the field's Zig name (`FCtx.unionField?`). -/
+  /-- `union`: the union's Lean name; `getName`/`modifyName`: the field's accessors
+  (`FCtx.unionField?`). `fresh`: for a field whose payload a retag leaves undefined (MM-13), the
+  helpers that write the whole payload (`set_f`) and one whole field of a struct payload
+  (`setField_f`, `none` if the payload is not a struct). -/
   | ufield (union : String) (getName modifyName : String)
+      (fresh : Option (String × Option String) := none)
   deriving Inhabited
 
 structure FCtx where
@@ -706,6 +761,10 @@ structure FCtx where
   exactFloatDivs : Array InstId := #[]
   /-- The sentinel slicings that a Sema check compares (`sentinelCheckedSlices`). -/
   sentinelChecked : Array InstId := #[]
+  /-- This function is in a recursive call group (`callGroups`): its call depth is not bounded
+  by the call graph, so a function that uses memory charges its frame to the stack budget
+  (`Zig.enterFrame`, MM-5). -/
+  recursive : Bool := false
 
 /-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
 `r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
@@ -1060,7 +1119,11 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
             PathStep.field ((fields[idx]?).map (fc.memberName base ·.1) |>.getD s!"fld{idx}")
           | .union .. =>
             match fc.unionField? base idx with
-            | some (u, f, _) => .ufield u (fc.helperName base s!"get_{f}") (fc.helperName base s!"modify_{f}")
+            | some (u, f, _) =>
+              let fresh := (unionFreshPayload fc.types base idx (fc.structNames.map (·.2))).map fun structFields =>
+                (fc.helperName base s!"set_{f}",
+                 structFields.map fun _ => fc.helperName base s!"setField_{f}")
+              .ufield u (fc.helperName base s!"get_{f}") (fc.helperName base s!"modify_{f}") fresh
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
         acc.push (i.id, root, path.push step)
@@ -1149,7 +1212,7 @@ def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
     path.foldl (init := s!"(← get).{field}") fun e step =>
       match step with
       | .field f => s!"({e}).{f}"
-      | .ufield u g _ => s!"(← {fc.callRName} ({u}.{g} {e}))"
+      | .ufield u g _ _ => s!"(← {fc.callRName} ({u}.{g} {e}))"
   | none => "(panic! \"air2lean: load through a pointer that is not a place\")"
 
 /-- `base` with the value `old` at `path` replaced by `new old`. -/
@@ -1157,10 +1220,20 @@ def setPath (path : List PathStep) (new : String → String) (base : String) : S
   match path with
   | [] => new base
   | .field f :: rest => s!"\{ {base} with {f} := {setPath rest new s!"({base}).{f}"} }"
-  | .ufield u _ m :: rest =>
+  | .ufield u _ m fresh :: rest =>
     let inner := setPath rest new "x"
-    let x := if inner == setPath rest new "y" then "_" else "x"
-    s!"({u}.{m} (fun {x} => {inner}) {base})"
+    let whole := inner == setPath rest new "y"
+    let modify := s!"({u}.{m} (fun {if whole then "_" else "x"} => {inner}) {base})"
+    -- A write that defines the whole payload, or one whole field of a struct payload, of a
+    -- union whose retag leaves the payload undefined (MM-13).
+    match fresh, rest with
+    | none, _ => modify
+    | some (set, _), _ =>
+      if whole then s!"({u}.{set} ({inner}) {base})" else
+      match fresh, rest with
+      | some (_, some setField), [.field k] =>
+        if new "a" == new "b" then s!"({u}.{setField} \"{k}\" (fun x => {inner}) {base})" else modify
+      | _, _ => modify
 
 /-- The statement that replaces the value `old` at a place by `new old`. -/
 def FCtx.modifyPlace (fc : FCtx) (ptr : Val) (new : String → String) : String :=
@@ -3128,6 +3201,13 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let init := if sets.isEmpty then s!"(default : {localsName})"
     else s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"
   let freeLines := (stack.map fun (aid, _, _, _) => s!"  Zig.free s{aid}").toList
+  -- A recursive function that uses memory charges its frame against the stack budget
+  -- (`Zig.enterFrame`, MM-5): the bytes of its escaping locals, each rounded up to its
+  -- alignment; `Zig.enterFrame` adds the fixed per-call part (`Zig.frameBase`).
+  let (enterLines, leaveLines) := if fc.recursive && fc.mem && !fc.conc then
+      let bytes := stack.foldl (fun acc (_, _, size, align) => acc + Zig.alignUp size align) 0
+      ([s!"  Zig.enterFrame {bytes}"], [s!"  Zig.leaveFrame {bytes}"])
+    else ([], [])
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
     | _ => "| .ret v => pure v"
@@ -3137,8 +3217,8 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
   String.intercalate "\n"
-    (["do"] ++ allocLines ++
-     [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
+    (["do"] ++ enterLines ++ allocLines ++
+     [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++ leaveLines ++
      ["  match e with"] ++ matchLines)
 
 /-- Whether a value of type `root` contains a `target` (`Ty.allocator`, `Ty.io`): the type itself,
@@ -3244,11 +3324,11 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
-    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[]) :
-    FuncParts :=
+    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
+    (recursive : Bool := false) : FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
-  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap }.prepareInstUses
+  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
@@ -4104,7 +4184,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive
     let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

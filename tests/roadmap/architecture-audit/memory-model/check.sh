@@ -10,8 +10,9 @@
 #   AIR2LEAN_AUDIT_ZIG_AIR=/opt/dev/air2lean-build/zig-air-0.16.0/bin/zig \
 #   AIR2LEAN_AUDIT_ZIG_NATIVE=$HOME/.cache/air2lean/host-0.16.0/zig \
 #     tests/roadmap/architecture-audit/memory-model/check.sh
-# Manual fixtures (not run here): memcpy_overlap.zig (control, model and native both panic)
-# and stack_depth.zig (native stack overflow; the model has no bound).
+# Manual fixture (not run here): memcpy_overlap.zig (control, model and native both panic).
+# stack_depth.zig is an agreement test since MM-5 was fixed: under the 8 MiB budget of the
+# native main thread the model overflows (`.stackOverflow`) where the native build dies.
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$here/../../../.." && pwd)
@@ -78,6 +79,16 @@ echo "--- model"; cat "$L"; echo "--- native"; cat "$N"
 [ "$(field 'oobCompare(2^63)' "$L")" = 1 ] && [ "$(field 'oobCompare(2^63)' "$N")" = 0 ] ||
   { echo 'MM-3 no longer diverges' >&2; exit 1; }
 
+lean_run stack_depth StackDepth StackRunner.lean
+native_run stack_depth
+L=$work/stack_depth.lean.txt N=$work/stack_depth.native.txt
+echo "--- model"; cat "$L"; echo "--- native"; grep -v '^ \|^/\|^???\|^\s*\^' "$N" || true
+# MM-5 (fixed): both overflow for depth(10^7); depth(1000) returns 1000 on both.
+[ "$(field 'depth(1000)' "$L")" = 1000 ] && [ "$(field 'depth(1000,8MiB)' "$L")" = 1000 ] &&
+  [ "$(field 'depth(10000000,8MiB)' "$L")" = 'error Zig.Error.stackOverflow' ] &&
+  grep -q '^depth(1000) 1000$' "$N" && grep -q '^exit ' "$N" &&
+  ! grep -q '^depth(10000000)' "$N" || { echo 'MM-5: model and native disagree on stack overflow' >&2; exit 1; }
+
 # Kernel checks (no `native_decide`): the old address theorems are not provable for every
 # placement (addrOfLocal = 4096, crossDistance = 9, overAlign never panics), and the emitter
 # placeholders are successful no-ops in the logic (MM-6, open).
@@ -86,4 +97,4 @@ cat "$here/Theorems.lean" >> "$work/thm.lean"
 lake env lean "$work/thm.lean"
 lake env lean "$here/PanicDefault.lean"
 
-echo "memory-model audit: MM-1, MM-2, MM-4 fixed (placement oracle); MM-3, MM-6 reproduced"
+echo "memory-model audit: MM-1, MM-2, MM-4 fixed (placement oracle), MM-5 agrees (stack budget); MM-3, MM-6 reproduced"
