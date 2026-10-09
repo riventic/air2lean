@@ -106,8 +106,8 @@ def is_failure_kind(kind):
 # --- Localization -------------------------------------------------------------------------
 
 MEMORY_TAGS = re.compile(r'(load|store|store_safe|atomic_.*|cmpxchg_.*|memcpy|memmove|memset.*|ptr_elem_val|ret_load)\Z')
-DEADLOCK_CALL = re.compile(r'\.(join|wait|timedWait|lock|lockShared)(__anon_\d+)?\Z')
-FREE_CALL = re.compile(r'\.(free|destroy)(__anon_\d+)?\Z')
+DEADLOCK_CALL = re.compile(r'\.(join|wait|timedWait|lock|lockShared)(__anon_[0-9a-f]+)?\Z')
+FREE_CALL = re.compile(r'\.(free|destroy)(__anon_[0-9a-f]+)?\Z')
 ARITH = {'overflow': {'add_safe', 'sub_safe', 'mul_safe', 'intcast_safe', 'int_from_float_safe'},
          'divByZero': {'div_trunc', 'div_floor', 'div_exact', 'rem', 'mod'},
          'unreachable': {'unreach'}}

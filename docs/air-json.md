@@ -43,6 +43,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
 | `name` | the function's fully qualified name: its path inside its module (`basic.scale`) |
 | `module` | the function's module (§Identity): `root` for the main module, `std` for the standard library, else the module's name. Additive (no schema change); older exports omit it. |
+| `instance_key` | a generic instance only (`name` is `<generic>__anon_<n>`): its content-addressed key, 64 hex digits (§Instances). Additive; older exports omit it, and so does an instance whose comptime arguments have no stable identity. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
@@ -139,7 +140,7 @@ One of:
 | `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false`, `void`. |
 | `{"ty": 3, "fbits": "0x40490fdb"}` | float constant. `fbits`: the value `@bitCast` to an unsigned int of the same width, lowercase hex, zero-padded to `width/4` digits (`f80`: 20 digits). Read from the `InternPool` storage, not `fmtValue`. |
 | `{"ty": 3, "undef": true}` | `undefined` |
-| `{"ty": 9, "func": "basic.tardiness", "module": "root", "noreturn": false}` | function and its module (§Identity). `noreturn: true` when the return type is `noreturn` (panic handlers). A generic instance with a function as a comptime argument (`Thread.spawn`'s) also has `comptime_fn` and `comptime_fn_module`: that function and its module. |
+| `{"ty": 9, "func": "basic.tardiness", "module": "root", "noreturn": false}` | function and its module (§Identity). `noreturn: true` when the return type is `noreturn` (panic handlers). A generic instance also has its `instance_key` (§Instances). A generic instance with a function as a comptime argument (`Thread.spawn`'s) also has `comptime_fn` and `comptime_fn_module`: that function and its module, and `comptime_fn_instance_key` if it is a keyed instance. |
 | `{"ty": 1, "err": "NotDigit"}` | error value, or an error union constant in the error state. `ty`'s `k` (`error_set` vs `error_union`) disambiguates. |
 | `{"ty": 1, "payload": Ref}` | error union constant holding a payload (nested `Ref`, recursively). |
 | `{"ty": 2, "some": Ref}` | optional constant holding a payload (nested `Ref`, recursively). |
@@ -219,6 +220,56 @@ key (`duplicate function name`), and a program that mixes files with and without
 with its names as keys, as before. Such an export cannot tell modules apart: a name in a
 dependency or a user file named like a std namespace is taken as the std name. Re-export with
 the current exporter.
+
+## Instances
+
+The compiler names a generic instance `<generic>__anon_<n>` (`mem.Allocator.dupeZ__anon_16959`).
+`n` is the instance's InternPool index: it depends on everything that the compilation analysed
+before, so it differs between programs, source orders, Zig versions and host OSes. Two
+compilations can even give two different instances one name. The name identifies the instance
+only inside one compilation.
+
+**Instance key.** The exporter writes an intrinsic identity next to the name: `instance_key`
+for the function itself and for a function reference, `comptime_fn_instance_key` for a spawned
+function (`zig-patch/air-json/identity.zig`). It is the SHA-256 (64 hex digits) of a canonical,
+prefix-free encoding of what makes the instance (the compiler's own instance identity):
+
+* the generic declaration: (module, fqn) (§Identity);
+* each comptime argument, or "runtime" for a runtime parameter. A type is encoded by its
+  stable identity: a struct, enum, union or opaque by its (module, name), every other type
+  structurally (integer signedness and bits, pointer attributes and child, array length and
+  sentinel, tuple fields, function types, error sets by their sorted names, …). A value is
+  encoded with its type and its contents: an integer by sign and magnitude, a float by its bits,
+  an aggregate by its elements, a pointer by its base (a declaration's identity, or the
+  constant it points into) and byte offset, a function by its identity (a generic instance by
+  its own encoding);
+* the instance's parameter types, calling convention, `noalias` and `noinline` (an `anytype`
+  parameter's type is not a comptime argument).
+
+No InternPool index or compiler number enters the encoding, so the same instance has the same
+key in every program that uses it and in every source order, and two different instances have
+different keys. The encoding starts with its version (`air2lean-instance-v1`).
+
+An instance has no key when an argument has no stable identity: a container whose
+compiler-made name has a number (`__struct_<n>`, an `__anon_<n>` in it), a pointer into
+comptime-mutable memory, a lazy `@sizeOf` before 0.16.0, or nesting deeper than 64. Such an
+instance keeps the compiler's name (the translator numbers it, as for a legacy export). One
+compilation never gives two instances one key: the exporter claims (generic, key) for the
+instance (§Identity, *Fail closed*), and it claims the (module, name) of every container in a
+key, as for a type table.
+
+A key does not describe the instance's body: a user type `Foo` of two programs has the same
+(module, name) whatever its fields. A cache of translated instances must also key the version
+of the modules involved (architecture audit S1).
+
+**Names in the translator.** `Air2Lean/Air/Anon.lean` renames a keyed instance
+`<generic>__anon_<the key's first 12 hex digits>` (Lean `mem_Allocator_dupeZ__anon_ad013b83a643`)
+in every identity, so the Lean name is the same in every program, version and host that
+compiles the instance. A program with keyed instances emits its functions in the order of these
+names. `Identity.rewrite` checks that a keyed name ends with its key's digits (one compiler name
+with two keys, for example from two compilations, is rejected), and `checkProgram` that no two
+keys share one name. An instance without a key keeps a number by first use
+(`Anon.renumberAnon`), so a legacy export translates as before.
 
 ## Independent validation (V03)
 
