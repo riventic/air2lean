@@ -35,6 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "const_bases.maybeBytePtr",
+ "src": {
+  "file": "const_bases.zig",
+  "module": "const_bases",
+  "decl_line": 26
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -42,7 +47,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 32
   },
   {
    "id": 1,
@@ -64,7 +70,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 3,

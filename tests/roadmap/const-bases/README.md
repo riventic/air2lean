@@ -74,9 +74,9 @@ from a patched compiler of that version (stage2_x86_64, x86_64-linux-musl, basel
 ReleaseSafe). `provenance.json` records the source, exporter (`json.zig`, `pointer-offset.zig`),
 compiler and per-file hashes. The command was `ZIG_AIR_JSON_FILTER=const_bases. zig build-obj
 -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl
--mcpu=baseline`. The 0.15.2 and 0.14.1 compilers were built by `zig-patch/build.sh` from the
-exporter of this tree. The 0.16.0 export is the earlier one, from an older exporter tree, so it
-lacks the additive `src` and `column` fields. `test_cli.py` checks every version against the
+-mcpu=baseline`. All three compilers were built by `zig-patch/build.sh` from the exporter of this
+tree, and `provenance.json` records each compiler binary's hash (the installs under
+`/opt/dev/air2lean-build` are older builds). `test_cli.py` checks every version against the
 hand-written fixtures:
 
 * Every returned constant pointer has the same global (`const_bases.table`), offset

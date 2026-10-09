@@ -35,6 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "const_bases.projectRes",
+ "src": {
+  "file": "const_bases.zig",
+  "module": "const_bases",
+  "decl_line": 43
+ },
  "params": [
   0
  ],
@@ -78,7 +83,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -89,7 +95,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 15
     },
     {
      "id": 7,
@@ -168,7 +175,8 @@
        "id": 13,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 2
+       "line": 2,
+       "column": 26
       },
       {
        "id": 14,
@@ -194,7 +202,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 38
   },
   {
    "id": 18,
@@ -214,7 +223,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 20,

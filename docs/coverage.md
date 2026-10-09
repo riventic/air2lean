@@ -242,6 +242,10 @@ AIR2LEAN_ZIG_AIR=<dir holding zig-air-<version>/bin/zig> tests/roadmap/runtime-t
 python3 tests/roadmap/runtime-tags/test_provenance.py --refresh
 ```
 
+The canonical compilers are built by `zig-patch/build.sh` from this checkout's `zig-patch` tree;
+`export.sh --check` refuses a compiler whose `bin/zig-unlocked` hash differs from
+`provenance.json` and otherwise compares a fresh export byte for byte.
+
 Some tags need a particular lowering, so a function can differ from what one would expect:
 `div_exact` and `shl_exact` appear only with runtime safety off (safe builds lower them to
 `div_trunc`/`rem` and `shl_with_overflow` checks), `bool_and` comes from the invalid-error-code

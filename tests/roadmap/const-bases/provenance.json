@@ -16,22 +16,23 @@
     "0.15.2/const_bases.readResElem.json": "c14eddd80808d1997608bc8c146f15201249722da459faad8a77da11979fdcac",
     "0.15.2/const_bases.resCodePtr.json": "5f51fe9ce832fea3b803c72839c692eedbf0bf7f297012f53196b300a38f220a",
     "0.15.2/const_bases.resElemPtr.json": "1e3dc1e567c052c814359e055b99d73c405fb1770149d0f25118ec10d859c454",
-    "0.16.0/const_bases.maybeBytePtr.json": "0bb146b86ef1caa75c6d4ac7b6ccb9d7e958af526135b38b56b6ed5a6ce383e8",
-    "0.16.0/const_bases.maybeElemPtr.json": "b0ef418e6a267ee6af3bddd7367d8d98a78273222f3ad63fd5cbca657aa9a2f2",
-    "0.16.0/const_bases.maybeSlice.json": "53f925b4628563faa4b3f613699216b8101ba4a8ceb0c34cc146296f56bd91d3",
-    "0.16.0/const_bases.projectMaybe.json": "79643b5b5a9c1894bef75d547d923d7d79ec3cb6d21fe1ffc236f62560737756",
-    "0.16.0/const_bases.projectRes.json": "b76ce1853536d1fa25e624eb2028031fb7e17f87d89332495dd0e9d44eb2978c",
-    "0.16.0/const_bases.readResElem.json": "1fd816e439086dc4a504bd51b67b97d2a63d6f31bc3843908a29b50934f8bab6",
-    "0.16.0/const_bases.resCodePtr.json": "2c5660f8ac690493d2e27b4f8642b5b1a35040ce5afa5255ab696b86cadaea62",
-    "0.16.0/const_bases.resElemPtr.json": "10f931a2fd320ce2ea422a220f2b7b5a578a12a5bddfa63996030593ee90f9a7"
+    "0.16.0/const_bases.maybeBytePtr.json": "418cf0fdbe59c542fc2270de313d59a7e90b0a66da063e6a168f776af6f484d2",
+    "0.16.0/const_bases.maybeElemPtr.json": "2fcc9720cb13e73fa5b81c20208d3392e01ad42e946fa20083b0c281b0e67e87",
+    "0.16.0/const_bases.maybeSlice.json": "01e1120862b87d57b0f645ec0549fb518b576ba63b4ed45add4931e037efb3c1",
+    "0.16.0/const_bases.projectMaybe.json": "9079786b68c0ebc89082eda110b83303ac2a934f39101b844ddce5ca18070876",
+    "0.16.0/const_bases.projectRes.json": "153f11ee008c65c1e11a80d7fc56761be4ddbf4c7f7150c0b253482debd6d865",
+    "0.16.0/const_bases.readResElem.json": "311f1839af1f5133ddc680f1678c0dea44cbf9f7ae682ad9452f3fb5935577b1",
+    "0.16.0/const_bases.resCodePtr.json": "fe2ff08a16288b976bb2506c5435c127a4d45a1f5839cd1a55a76e3b45415077",
+    "0.16.0/const_bases.resElemPtr.json": "6522a81e8543ea22e4d2a9ec5991acd8ff8ab6975860c199aca14a0ed49d0784"
   },
   "command": "ZIG_AIR_JSON_DIR=air-fresh/<version> ZIG_AIR_JSON_FILTER=const_bases. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl -mcpu=baseline const_bases.zig",
   "exporter": "zig-patch/air-json/json.zig",
   "exporter_sha256": "c470a8c9041176fd3fde7b74fb4edcbe32e0459ca37191dbae83fde68521aa03",
-  "note": "0.16.0 is the earlier PR126 export (an older exporter tree: no src or column fields). 0.15.2 and 0.14.1 were exported by compilers built from this tree's exporter (efd353ed) with zig-patch/build.sh. The exports differ only in those additive fields and in the version's profile. patched_compiler_sha256 hashes the compiler binary (bin/zig-unlocked behind the AIR-only lock wrapper) of the two new exports; the 0.16.0 compiler of the earlier export is not recorded.",
+  "note": "All three exports come from compilers built by zig-patch/build.sh from this tree's exporter. patched_compiler_sha256 hashes the compiler binary (bin/zig-unlocked behind the AIR-only lock wrapper, which is the same file for every version).",
   "patched_compiler_sha256": {
     "0.14.1": "368a8bdfd0e24d9159a156d2c536d4d33c3e29e03bd57448864cc4c133b88d3c",
-    "0.15.2": "ad039f2bf22665ec324ca92ee80204c761a4b4d8a3cba73bf9a154f3232d4bdc"
+    "0.15.2": "ad039f2bf22665ec324ca92ee80204c761a4b4d8a3cba73bf9a154f3232d4bdc",
+    "0.16.0": "6bc790af7677e861b73d88dff2c5079c8052da38c6b12846ea332cdebf4d0082"
   },
   "pointer_offset_sha256": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a",
   "source": "tests/roadmap/const-bases/const_bases.zig",
