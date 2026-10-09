@@ -172,10 +172,6 @@ structure Layout where
   hostSize : Nat := 0
   /-- A bit-pointer: the first bit of its field in the host integer. -/
   bitOffset : Nat := 0
-  /-- A vector type of an AIR file whose schema-12 profile names the LLVM backend
-  (`stage2_llvm`): its lanes are bit-packed in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`).
-  Set by `normalize`, never by the exporter; other backends lay out lanes differently. -/
-  packedLanes : Bool := false
   /-- A pointer to one lane of a vector (`&v[i]`): the lane. Its `hostSize` is then the vector
   length, not a byte count. -/
   vectorIndex : Option Nat := none
@@ -184,6 +180,10 @@ structure Layout where
   /-- The type entry has a `vector_index` field (`null` for a packed field pointer). An older
   export has none, so its bit-pointers may be lane pointers. -/
   vectorIndexExported : Bool := false
+  /-- A vector type of an AIR file whose schema-12 profile names the LLVM backend
+  (`stage2_llvm`): its lanes are bit-packed in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`).
+  Set by `normalize`, never by the exporter; other backends lay out lanes differently. -/
+  packedLanes : Bool := false
   deriving Repr, Inhabited, BEq
 
 /-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/
@@ -309,7 +309,8 @@ def panicErrorFor? (calleeName : String) : Option String :=
   | some "exactDivisionRemainder" | some "unwrapNull" | some "unwrapError"
   | some "forLenMismatch" | some "invalidEnumValue" | some "inactiveUnionField"
   | some "corruptSwitch" | some "call" | some "sentinelMismatch" | some "copyLenMismatch"
-  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment" => some ".panic"
+  | some "memcpyAlias" | some "castToNull" | some "incorrectAlignment"
+  | some "unexpectedErrorCode" | some "loadUninstantiableType" => some ".panic"
   | some "startGreaterThanEnd" => some ".outOfBounds"
   | _ => none
 
@@ -349,8 +350,9 @@ inductive ArithOp where
   | add | sub | mul
   deriving Repr, Inhabited, BEq
 
+/-- `divCeil` is `@divCeil` (Zig 0.17.0's `div_ceil`). -/
 inductive DivOp where
-  | divTrunc | divFloor | divExact | rem | mod
+  | divTrunc | divFloor | divExact | rem | mod | divCeil
   deriving Repr, Inhabited, BEq
 
 inductive BitOp where
@@ -410,7 +412,8 @@ inductive Op where
   | shlWithOverflow (a b : Val)
   | countBits (op : BitCountOp) (a : Val)
   | permuteBits (op : BitPermuteOp) (a : Val)
-  /-- `splat`: a vector with every lane equal to the scalar `a`. -/
+  /-- `splat`: a vector with every lane equal to the scalar `a`. Zig 0.17.0 also splats to an
+  array; `Check.lean` rejects that. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
   or `b` (false). -/

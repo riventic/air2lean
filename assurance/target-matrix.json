@@ -3,6 +3,15 @@
   "requirement": "Q05",
   "paths": [
     {
+      "zig": "0.17.0", "host": "x86_64-linux", "target": "x86_64-linux", "profile": "abi64-le-v1",
+      "job": "test", "matrix": {"zig": "0.17.0", "full": true, "mutate": false},
+      "evidence": {
+        "native_execution": ["Golden AIR, translate, build, differential test"],
+        "target_probe": ["Float target probe"],
+        "proof_check": ["Build proofs"]
+      }
+    },
+    {
       "zig": "0.16.0", "host": "x86_64-linux", "target": "x86_64-linux", "profile": "abi64-le-v1",
       "job": "test", "matrix": {"zig": "0.16.0", "full": true, "mutate": false},
       "evidence": {
@@ -29,6 +38,15 @@
       },
       "gaps": {
         "target_probe": "the float probe runs in full jobs only and the ABI probe is 0.16.0-only; 0.14.1 has no target probe in CI"
+      }
+    },
+    {
+      "zig": "0.17.0", "host": "aarch64-macos", "target": "aarch64-macos", "profile": "abi64-le-v1",
+      "job": "macos",
+      "evidence": {
+        "native_execution": ["macOS golden AIR, translate, differential test (0.17.0)"],
+        "target_probe": ["macOS ABI target probe (0.17.0)"],
+        "proof_check": ["macOS proofs (0.17.0)"]
       }
     },
     {

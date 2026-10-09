@@ -34,7 +34,7 @@ def main : IO Unit := do
   require (f.allInsts.any fun i => match i.op with
     | .call (.func name ..) _ => threadFn? name == some .spawn
     | _ => false) "boundary fixture has no spawn call"
-  for version in #["0.14.1", "0.15.2", "0.16.0"] do
+  for version in #["0.14.1", "0.15.2", "0.16.0", "0.17.0"] do
     let f := { f with zigVersion := version }
     for stack in #[(1048576 : Int), 16777216] do
       require ((checkFallibleSpawnCalls #[configVariant f stack]).toOption.isSome)
@@ -46,6 +46,7 @@ def main : IO Unit := do
       "custom allocator accepted"
     require ((checkFallibleSpawnCalls #[configVariant f 1048576 false true]).toOption.isNone)
       "runtime config accepted"
-  require ((checkFallibleSpawnCalls #[{ f with zigVersion := "0.17.0" }]).toOption.isNone)
+  -- 0.17.0's `Thread.spawn`/`SpawnConfig` are unchanged and audited (docs/std-models.md).
+  require ((checkFallibleSpawnCalls #[{ f with zigVersion := "0.18.0" }]).toOption.isNone)
     "unaudited version accepted"
   IO.println "audited spawn resource boundary passed"

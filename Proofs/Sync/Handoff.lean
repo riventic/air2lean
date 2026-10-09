@@ -1,4 +1,5 @@
 import ZigLean.Conc.WeakWord
+import ZigLean.VersionGate
 import Proofs.Sync.Lock
 import ZigLean.Conc.Word
 
@@ -1533,6 +1534,43 @@ theorem wt_sleep {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m)
   have hc := hf.late rfl (by omega)
   simp [eN, hc] at h0; omega
 
+theorem sig_pos {k : Nat} (hk : k ≤ 3)
+    (h : gt false (Packed.ofBits (sv k) : Io_Condition_State).signals 0 = true) : k = 2 := by
+  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl <;>
+    first | rfl | (exfalso; revert h; decide)
+
+
+/-- `main` holds the mutex with the resource `hL`, in which `ready` is `false`: the producer has
+not stored `ready = true`. -/
+theorem rdy_now {G : ThreadId → Gh} {m : Mem} {x : X} {hL : Heap} {Y : ThreadId → X}
+    (hi : proto.inv G m) (hg : G 0 = gH x hL) (hR : R Y hL) (hY : rdyOf (Y 1) = false) :
+    rdyOf (G 1).2 = false := by
+  have hres := hi.1.res 0 (by rw [hg]; rfl)
+  rw [show L.held (G 0) = hL by rw [hg]; rfl] at hres
+  have := R_rdy (Y := fun u => (G u).2) hres hR
+  rw [← hY]; exact this
+
+theorem reg_x0 {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X} (h : RegHB (upd G 0 (a, x)) m)
+    (hc : x'.cw = x.cw) : RegHB (upd G 0 (a, x')) m := by
+  intro hcw
+  rw [upd_self] at hcw
+  obtain ⟨h1, h2⟩ := h (by rw [upd_self]; rw [← hc]; exact hcw)
+  rw [upd0_1] at h1 h2 ⊢
+  refine ⟨fun hr => ?_, h2⟩
+  rcases h1 hr with ⟨hh, hle⟩ | hb | hle
+  · exact .inl ⟨by rw [upd_self] at hh ⊢; exact hh, hle⟩
+  · exact .inr (.inl hb)
+  · exact .inr (.inr hle)
+
+theorem lt_w : lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters (65535 : BitVec 16) =
+    true := by decide +kernel
+
+-- `Condition.waitUncancelable` per translation (`ZigLean.VersionGate`): Zig 0.16.0 calls
+-- `waitInner(…, true)`, whose loops also hold the cancelable path; Zig 0.17.0 inlines the
+-- uncancelable loops (`loop22`, `loop45`). Each proves `condWait_spec_v*`; `condWait_spec` is the
+-- version-neutral statement.
+when_defined Io_Condition_waitInner
+
 /-- The inner loop's invariant: `main` at `wt` with epoch 0 and the state value it read, or at
 `seen` with epoch 1 and `(1, 1)`. -/
 def inv56 (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat) :
@@ -1549,11 +1587,6 @@ def post56 (D : Nat) (r : Io_Condition_waitInnerExit × Io_Condition_waitInnerLo
   d < D ∧ m.current = 0 ∧
   ((r.1 = .br55 ∧ r.2.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m) ∨
     (r.1 = .ret (.ok ()) ∧ ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m))
-
-theorem sig_pos {k : Nat} (hk : k ≤ 3)
-    (h : gt false (Packed.ofBits (sv k) : Io_Condition_State).signals 0 = true) : k = 2 := by
-  rcases (by omega : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3) with rfl | rfl | rfl | rfl <;>
-    first | rfl | (exfalso; revert h; decide)
 
 theorem loop56_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : ThreadId → Gh)
     (m : Mem) (d : Nat) (h : inv56 D s G m d) :
@@ -1743,31 +1776,6 @@ theorem loop23_body (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals) (G : 
       subst this
       exact .inr ⟨rfl, hi₅, by rw [hr, hbj]⟩
 
-/-- `main` holds the mutex with the resource `hL`, in which `ready` is `false`: the producer has
-not stored `ready = true`. -/
-theorem rdy_now {G : ThreadId → Gh} {m : Mem} {x : X} {hL : Heap} {Y : ThreadId → X}
-    (hi : proto.inv G m) (hg : G 0 = gH x hL) (hR : R Y hL) (hY : rdyOf (Y 1) = false) :
-    rdyOf (G 1).2 = false := by
-  have hres := hi.1.res 0 (by rw [hg]; rfl)
-  rw [show L.held (G 0) = hL by rw [hg]; rfl] at hres
-  have := R_rdy (Y := fun u => (G u).2) hres hR
-  rw [← hY]; exact this
-
-theorem reg_x0 {G : ThreadId → Gh} {m : Mem} {a : LG} {x x' : X} (h : RegHB (upd G 0 (a, x)) m)
-    (hc : x'.cw = x.cw) : RegHB (upd G 0 (a, x')) m := by
-  intro hcw
-  rw [upd_self] at hcw
-  obtain ⟨h1, h2⟩ := h (by rw [upd_self]; rw [← hc]; exact hcw)
-  rw [upd0_1] at h1 h2 ⊢
-  refine ⟨fun hr => ?_, h2⟩
-  rcases h1 hr with ⟨hh, hle⟩ | hb | hle
-  · exact .inl ⟨by rw [upd_self] at hh ⊢; exact hh, hle⟩
-  · exact .inr (.inl hb)
-  · exact .inr (.inr hle)
-
-theorem lt_w : lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters (65535 : BitVec 16) =
-    true := by decide +kernel
-
 theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
@@ -1830,7 +1838,7 @@ theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL :
 
 /-- `Condition.waitUncancelable` by `main`, which holds the mutex at `run` and read
 `ready = false`: it holds the mutex again at `cons`. -/
-theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+theorem condWait_spec_v016 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
     {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
     (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
     proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
@@ -1847,6 +1855,279 @@ theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : 
   simp only [pure_bind]
   simp only [isNonErr, ↓reduceIte, StateT.run_pure]
   exact WP.pure' (WP.pure' ⟨hd₁, hc₁, hL₁, hi₁⟩)
+
+end_when
+
+when_defined Io_Condition_waitUncancelable.loop22
+
+/-- The inner loop's invariant: `main` at `wt` with epoch 0 and the state value it read, or at
+`seen` with epoch 1 and `(1, 1)`. -/
+def inv45 (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat) :
+    Prop :=
+  d < D ∧ m.current = 0 ∧
+  ((s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m ∧
+      ∃ k ≤ 3, s.prev_state = Packed.ofBits (sv k)) ∨
+    (s.epoch = 1 ∧ proto.inv (upd G 0 (gP { ph := .seen, cw := true })) m ∧
+      s.prev_state = Packed.ofBits (sv 2)))
+
+/-- The inner loop ends with `main` at `wt` (no signal to take), or holding the mutex at `cons`. -/
+def post45 (D : Nat) (r : Io_Condition_waitUncancelableExit × Io_Condition_waitUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = 0 ∧
+  ((r.1 = .br44 ∧ r.2.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m) ∨
+    (r.1 = .ret ∧ ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m))
+
+theorem loop45_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → Gh)
+    (m : Mem) (d : Nat) (h : inv45 D s G m d) :
+    proto.WP 0 ((Io_Condition_waitUncancelable.loop45 (bPtr.add 20) io (bPtr.add 16)).run s) (fun r G' m' d' =>
+      if Io_Condition_waitUncancelable.again45 r.1 then inv45 D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitUncancelableLocals) => 0) s)
+      else post45 D r G' m' d') G m d := by
+  obtain ⟨ep, ps⟩ := s
+  obtain ⟨hD, hc, hcase⟩ := h
+  -- the cases: a signal to take, or none (at `wt`)
+  have key : (ps = Packed.ofBits (sv 2) ∧ ∃ x : X, (x.ph = .wt ∨ x.ph = .seen) ∧ x.cw = true ∧
+        x.vw = false ∧ proto.inv (upd G 0 (gP x)) m ∧ (x.ph = .wt → ep = 0) ∧
+        (x.ph = .seen → ep = 1)) ∨
+      (gt false ps.signals 0 = false ∧ ep = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m) := by
+    rcases hcase with ⟨he, hi, k, hk, hp⟩ | ⟨he, hi, hp⟩ <;> simp only at he hp
+    · cases hg : gt false ps.signals 0
+      · exact .inr ⟨rfl, he, hi⟩
+      · rw [hp] at hg
+        have := sig_pos hk hg
+        subst this
+        exact .inl ⟨hp, _, .inl rfl, rfl, rfl, hi, (fun _ => he), (fun h => by cases h)⟩
+    · exact .inl ⟨hp, _, .inr rfl, rfl, rfl, hi, (fun h => by cases h), (fun _ => he)⟩
+  unfold Io_Condition_waitUncancelable.loop45
+  simp only [StateT.run_bind, StateT.run_get]
+  simp only [pure_bind]
+  refine WP.bind ?_
+  simp only [StateT.run_pure]
+  simp only [pure_bind]
+  rcases key with ⟨rfl, x, hx, hcw, hvw, hi, hxw, hxs⟩ | ⟨hg, rfl, hi⟩
+  · rw [if_pos (by decide)]
+    simp only [StateT.run_bind, StateT.run_get]
+    simp only [pure_bind]
+    refine WP.bind (WP.bind (WP.callRC (fun e he => by
+      change (sub false _ 1).run = _ at he; rw [sub_w] at he; cases he) fun a ha => ?_))
+    have ha' : a = (Packed.ofBits (sv 2) : Io_Condition_State).waiters - 1 := by
+      change (sub false _ 1).run = _ at ha; rw [sub_w] at ha; cases ha; rfl
+    subst ha'
+    refine WP.bind (WP.callRC (fun e he => by
+      change (sub false _ 1).run = _ at he; rw [sub_s] at he; cases he) fun b hb => ?_)
+    have hb' : b = (Packed.ofBits (sv 2) : Io_Condition_State).signals - 1 := by
+      change (sub false _ 1).run = _ at hb; rw [sub_s] at hb; cases hb; rfl
+    subst hb'
+    dsimp only
+    rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+    refine WP.bind (WP.bind (wp_weakCasAs (.inl rfl) (g := gP x) hi (fun _ _ _ hi₁ => main_alive hi₁)
+      (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
+        ⟨fun hv hU hh hacq => ?_, fun j b r hd hj hv hfl hacq hh => ?_⟩))
+    · -- success: `main` takes the signal
+      rw [bits_sv2] at hv
+      rw [bits_take] at hh
+      have hi₂ := inv_cons hx hcw hvw (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hw' hop
+        (by rw [upd_g hg₁]; exact hL) hv hh
+      refine WP.pure' ?_
+      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+      simp only [StateT.run_bind]
+      refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.lock_spec fits mptr rfl 0 (gP { ph := .cons, cw := true })
+        rfl _ G₁ m' k hi₂)))
+      rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL₂, hi₃⟩
+      simp only [StateT.run_pure]
+      refine WP.pure' (WP.pure' (WP.pure' ?_))
+      simp only [Io_Condition_waitUncancelable.again45, Bool.false_eq_true, ↓reduceIte]
+      exact ⟨by omega, hc₂, .inr ⟨rfl, hL₂, hi₃⟩⟩
+    · -- failure may keep either the waiting or seen phase.
+      have hip : proto.inv (upd G₁ 0 (gP x)) m₁ := by rw [upd_g hg₁]; exact hi₁
+      have hi₂ := inv_mload (.inl rfl) hip hw' hop (by rw [upd_g hg₁]; exact hL) hh
+      have hp : x.ph.post = false := by rcases hx with h | h <;> rw [h] <;> rfl
+      obtain ⟨hj2, hbj, hseen⟩ := state_read hip hcw hp hj hv
+      have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
+      simp only [StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [Option.isSome_some, ↓reduceIte]
+      simp only [StateT.run_bind]
+      refine WP.bind (WP.callRC_ok (v := r) rfl ?_)
+      simp only [StateT.run_pure, StateT.run_modify]
+      refine WP.pure' (WP.pure' (WP.pure' ?_))
+      simp only [Io_Condition_waitUncancelable.again45, ↓reduceIte]
+      refine ⟨⟨by omega, hop.current, ?_⟩, .inl (by omega)⟩
+      rcases hx with hwt | hs
+      · have hx' : x = { ph := .wt, cw := true } := by
+          cases x; simp only at hwt hcw hvw; subst hwt hcw hvw; rfl
+        subst hx'
+        exact .inl ⟨hxw rfl, hi₂, j, by omega, by rw [hr, hbj]⟩
+      · have hx' : x = { ph := .seen, cw := true } := by
+          cases x; simp only at hs hcw hvw; subst hs hcw hvw; rfl
+        subst hx'
+        have hjseen : j = 2 := hseen rfl hfl
+        subst hjseen
+        exact .inr ⟨hxs rfl, hi₂, by rw [hr, hbj]⟩
+
+  · rw [if_neg (by rw [hg]; simp)]
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [Io_Condition_waitUncancelable.again45, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨hD, hc, .inl ⟨rfl, rfl, hi⟩⟩
+
+/-- The outer loop's invariant: `main` at `wt` with epoch 0. -/
+def inv22 (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat) :
+    Prop :=
+  d < D ∧ m.current = 0 ∧ s.epoch = 0 ∧ proto.inv (upd G 0 (gP { ph := .wt, cw := true })) m
+
+/-- The outer loop ends with `main` holding the mutex at `cons`. -/
+def post22 (D : Nat) (r : Io_Condition_waitUncancelableExit × Io_Condition_waitUncancelableLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ r.1 = .ret ∧ m.current = 0 ∧
+    ∃ hL, proto.inv (upd G 0 (gH { ph := .cons, cw := true } hL)) m
+
+theorem loop22_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → Gh)
+    (m : Mem) (d : Nat) (h : inv22 D s G m d) :
+    proto.WP 0 ((Io_Condition_waitUncancelable.loop22 (bPtr.add 20) io (bPtr.add 16)).run s)
+      (fun r G' m' d' =>
+        if Io_Condition_waitUncancelable.again22 r.1 then inv22 D r.2 G' m' d' ∧
+          (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitUncancelableLocals) => 0) s)
+        else post22 D r G' m' d') G m d := by
+  obtain ⟨ep, ps⟩ := s
+  obtain ⟨hD, hc, he, hi⟩ := h
+  simp only at he
+  subst he
+  unfold Io_Condition_waitUncancelable.loop22
+  simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
+  rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  refine WP.bind (wp_mwait (.inr (.inl rfl)) (by decide) hi (fun G₁ m₁ hg₁ hi₁ hU => ?_)
+    fun k hk G₁ m₁ hc₁ hi₁ => ?_)
+  · -- it sleeps: `QOk` with `main` at the epoch
+    intro w hw
+    rcases Array.mem_push.mp hw with hw | rfl
+    · exact hi₁.2.q w hw
+    · exact .inr (.inl ⟨rfl, rfl, by rw [hg₁]; rfl, wt_sleep hi₁ hg₁ hU⟩)
+  dsimp only
+  refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gP { ph := .wt, cw := true }) hi₁
+    (fun _ _ _ h => main_alive h) fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL => ?_))
+  have hcase := inv_seen (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hw' hop (by rw [upd_g hg₂]; exact hL)
+    hh hj hv (hacq rfl)
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  -- the state's load, then the inner loop
+  obtain ⟨x, hx, hcwx, hvwx, hpx, hi₃⟩ : ∃ x : X, (x.ph = .wt ∧ v = 0 ∨ x.ph = .seen ∧ v = 1) ∧
+      x.cw = true ∧ x.vw = false ∧ x.ph.post = false ∧ proto.inv (upd G₂ 0 (gP x)) m₃ := by
+    rcases hcase with ⟨rfl, h⟩ | ⟨rfl, h⟩
+    · exact ⟨_, .inl ⟨rfl, rfl⟩, rfl, rfl, rfl, h⟩
+    · exact ⟨_, .inr ⟨rfl, rfl⟩, rfl, rfl, rfl, h⟩
+  refine WP.bind (WP.bind (WP.bind (wp_loadAs (.inl rfl) (g := gP x) hi₃
+    (fun _ _ _ h => main_alive h) (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩)
+    fun k₃ hk₃ G₃ m₄ m₅ b r j' hg₃ hi₄ hd hj' hv' hfl' hacq' hh' hw₅ hop₅ hL₅ => ?_)))
+  have hi₅ := inv_mload (.inl rfl) (G := G₃) (by rw [upd_g hg₃]; exact hi₄) hw₅ hop₅
+    (by rw [upd_g hg₃]; exact hL₅) hh'
+  obtain ⟨hj2, hbj, hseen2⟩ := state_read (G := G₃) (by rw [upd_g hg₃]; exact hi₄) hcwx hpx hj' hv'
+  have hr : r = Packed.ofBits b := by rw [ofBits_cst] at hd; cases hd; rfl
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv45 d) (fun _ => 0) (post45 d) (loop45_body d io) _ G₃
+    m₅ k₃ ⟨by omega, hop₅.current, ?_⟩))
+  · rintro ⟨e, s'⟩ G₄ m₆ d₄ ⟨hd₄, hc₆, ⟨rfl, hep, hi₆⟩ | ⟨rfl, hL₆, hi₆⟩⟩
+    · simp only [StateT.run_pure]
+      refine WP.pure' (WP.pure' ?_)
+      simp only [Io_Condition_waitUncancelable.again22, ↓reduceIte]
+      exact ⟨⟨by omega, hc₆, hep, hi₆⟩, .inl (by omega)⟩
+    · simp only [StateT.run_pure]
+      refine WP.pure' (WP.pure' ?_)
+      simp only [Io_Condition_waitUncancelable.again22, Bool.false_eq_true, ↓reduceIte]
+      exact ⟨by omega, rfl, hc₆, hL₆, hi₆⟩
+  · rcases hx with ⟨hwt, rfl⟩ | ⟨hs, rfl⟩
+    · have hx' : x = { ph := .wt, cw := true } := by
+        cases x; simp only at hwt hcwx hvwx; subst hwt hcwx hvwx; rfl
+      subst hx'
+      exact .inl ⟨rfl, hi₅, j', by omega, by rw [hr, hbj]⟩
+    · have hx' : x = { ph := .seen, cw := true } := by
+        cases x; simp only at hs hcwx hvwx; subst hs hcwx hvwx; rfl
+      subst hx'
+      have := hseen2 rfl hfl'
+      subst this
+      exact .inr ⟨rfl, hi₅, by rw [hr, hbj]⟩
+
+/-- `Condition.waitUncancelable` by `main`, which holds the mutex at `run` and read
+`ready = false`: it holds the mutex again at `cons`. -/
+theorem condWait_spec_v017 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+    {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
+    (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
+    proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
+      d' < d ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
+      G m d := by
+  unfold Io_Condition_waitUncancelable
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  simp only [StateT.run_pure, pure_bind]
+  rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gH { ph := .run } hL) hi
+    (fun _ _ _ h => main_alive h) fun k₁ hk₁ G₁ m₁ m₂ v j hg₁ hi₁ hj hv _ _ hh hw' hop hL₁ => ?_))
+  have hrd := rdy_now hi₁ hg₁ hR hY
+  obtain ⟨rfl, hi₂⟩ := inv_ep (G := G₁) (by rw [upd_g hg₁]; exact hi₁) hrd hw' hop
+    (by rw [upd_g hg₁]; exact hL₁) hh hj hv
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind, StateT.run_modify]
+  simp only [pure_bind]
+  rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  refine WP.bind (WP.bind (WP.bind (wp_rmwAs (.inl rfl) (g := gH { ph := .ep } hL) hi₂
+    (fun _ _ _ h => main_alive h) (fun _ _ _ _ b _ => ⟨_, ofBits_cst b⟩)
+    fun k₂ hk₂ G₂ m₃ m₄ old r hg₂ hi₃ hd hv₂ _ hh₂ _ hw₂ hop₂ hL₂ => ?_)))
+  have hrd₂ := rdy_now hi₃ hg₂ hR hY
+  obtain ⟨rfl, hi₄⟩ := inv_reg (G := G₂) (by rw [upd_g hg₂]; exact hi₃) hrd₂ hw₂ hop₂
+    (by rw [upd_g hg₂]; exact hL₂) hv₂ hh₂
+  have hr : r = Packed.ofBits 0 := by rw [ofBits_cst] at hd; cases hd; rfl
+  subst hr
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  rw [lt_w]
+  refine WP.bind (WP.callRC_ok dbg_true ?_)
+  simp only [StateT.run_pure]
+  refine WP.pure' ?_
+  dsimp only
+  simp only [StateT.run_bind]
+  -- `unlock`
+  refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl 0
+    (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄)))
+  rintro _ G₃ m₅ d₃ ⟨hd₃, hc₅, hi₅⟩
+  have hi₅' : proto.inv (upd G₃ 0 (gP { ph := .reg, cw := true })) m₅ := hi₅
+  have hfl := hi₅'.2.flags
+  rw [upd_self, upd0_1] at hfl
+  -- `main` goes to the wait loop (`wt`)
+  have hi₆ : proto.inv (upd G₃ 0 (gP { ph := .wt, cw := true })) m₅ :=
+    inv_mx hi₅' (by decide) rfl (by decide) (by simp [sN, gP, Ph.post]) (by simp [vL, gP])
+      ⟨hfl.sig, ⟨fun _ => .inr (.inl rfl), fun _ => rfl⟩, (fun _ h => by cases h <;> contradiction),
+        hfl.pcw, hfl.pcw', (fun h => by cases h), (fun h => by cases h), hfl.pvw,
+        (fun h => by have := hfl.setw h; simp [gP] at this), hfl.late, hfl.pfin, hfl.sg1⟩
+      (reg_x0 hi₅'.2.reg rfl) (fun h => by cases h) (fun h => by cases h)
+      (qok_of (G := upd G₃ 0 (gP { ph := .reg, cw := true })) hi₅' (by rw [upd_self]; decide))
+  refine WP.mono ?_ (WP.loop _ _ (inv22 d) (fun _ => 0) (post22 d) (loop22_body d io) _ G₃ m₅ d₃
+    ⟨by omega, hc₅, rfl, hi₆⟩)
+  rintro ⟨e, s'⟩ G₄ m₆ d₄ ⟨hd₄, rfl, hc₆, hL₆, hi₇⟩
+  exact WP.pure' ⟨hd₄, hc₆, hL₆, hi₇⟩
+
+end_when
+
+theorem condWait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL : Heap)
+    {Y : ThreadId → X} (hR : R Y hL) (hY : rdyOf (Y 1) = false)
+    (hi : proto.inv (upd G 0 (gH { ph := .run } hL)) m) (hc : m.current = 0) :
+    proto.WP 0 (Io_Condition_waitUncancelable (bPtr.add 20) io (bPtr.add 16)) (fun _ G' m' d' =>
+      d' < d ∧ m'.current = 0 ∧ ∃ hL', proto.inv (upd G' 0 (gH { ph := .cons, cw := true } hL')) m')
+      G m d := by
+  first
+  | exact condWait_spec_v016 G m d io hL hR hY hi hc
+  | exact condWait_spec_v017 G m d io hL hR hY hi hc
 
 /-! ## `main`'s event wait -/
 

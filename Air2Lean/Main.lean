@@ -48,7 +48,7 @@ def help : String :=
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
   "  --source-map-json <json>     Also write source maps for fingerprints; see docs/stable-generation.md.\n" ++
   "  -h, --help                   Show this help.\n\n" ++
-  "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
+  "Supported AIR: Zig 0.17.0, 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++

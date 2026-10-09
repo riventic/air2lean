@@ -18,7 +18,23 @@
     "default": "0.16.0",
     "versions": [
       {
+        "version": "0.17.0",
+        "status": "in-qualification",
+        "hosts": ["x86_64-linux", "aarch64-macos"],
+        "source": {
+          "url": "https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz",
+          "sha256": "b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd"
+        },
+        "hook": "0.17.0/hook.patch",
+        "llvm": "22",
+        "ci_host_zig": {
+          "url": "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz",
+          "sha256": "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+        }
+      },
+      {
         "version": "0.16.0",
+        "status": "qualified",
         "hosts": ["x86_64-linux", "aarch64-macos"],
         "source": {
           "url": "https://ziglang.org/download/0.16.0/zig-0.16.0.tar.xz",
@@ -33,6 +49,7 @@
       },
       {
         "version": "0.15.2",
+        "status": "qualified",
         "hosts": ["x86_64-linux", "aarch64-macos"],
         "source": {
           "url": "https://ziglang.org/download/0.15.2/zig-0.15.2.tar.xz",
@@ -47,6 +64,7 @@
       },
       {
         "version": "0.14.1",
+        "status": "qualified",
         "hosts": ["x86_64-linux"],
         "source": {
           "url": "https://ziglang.org/download/0.14.1/zig-0.14.1.tar.xz",

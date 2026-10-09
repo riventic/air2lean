@@ -32,6 +32,13 @@ jobs:
             examples: ""
             full: true
             mutate: false
+          # 0.17.0 is in qualification (docs/zig-0.17-ci.md): a full job, but gates whose
+          # source/native qualification is version-specific stay on their qualified versions.
+          # The default and the mutation shards stay on 0.16.0 until 0.17.0 is qualified.
+          - zig: "0.17.0"
+            examples: ""
+            full: true
+            mutate: false
           # 0.14.1: `floatconv` is excluded (0.14.1 lowers `@intFromFloat` without the check,
           # zig-patch/0.14.1/TAGS.md), `slices` (no `@memmove`) and `lists` (its
           # `ArrayListUnmanaged` is another type, docs/std-models.md). Its std cannot build the
@@ -512,6 +519,26 @@ jobs:
           bash tests/roadmap/packed-fields/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
+
+      # Synthetic 0.17.0 AIR (no compiler output): tag table, @divCeil, new/renamed tag
+      # translation and rejections, and the 0.16.0 goldens rewritten to 0.17.0 spelling.
+      - name: Zig 0.17.0 translator regressions
+        if: ${{ !matrix.mutate && matrix.zig == '0.17.0' }}
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/zig017/Tags.lean
+          python3 -B tests/roadmap/zig017/test_cli.py "$PWD/.lake/build/bin/air2lean" --elaborate
+
+      # Logical-order @bitCast (docs/bitcast-semantics.md): the committed 0.17.0 AIR, its
+      # translation, the ZigLean.BitCast lemmas, and the same cases natively with stock 0.17.0.
+      - name: Zig 0.17.0 bitcast semantics
+        if: ${{ !matrix.mutate && matrix.zig == '0.17.0' }}
+        run: |
+          set -euo pipefail
+          tests/roadmap/bitcast-017/check.sh
+          AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
+          # @divCeil: committed compiler-exported AIR, translation and native differential.
+          AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
@@ -1038,9 +1065,10 @@ jobs:
             tests/roadmap/vcs/Extract.lean > "$RUNNER_TEMP/vcs/report.json"
           diff -u tests/roadmap/vcs/report.json "$RUNNER_TEMP/vcs/report.json"
 
-      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16.
+      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
+      # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
       - name: Loop-switch dispatch regressions
-        if: ${{ !matrix.mutate }}
+        if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
@@ -1070,6 +1098,7 @@ jobs:
           AIR2LEAN_REVIEW_ZIG14: ${{ matrix.zig == '0.14.1' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_ZIG15: ${{ matrix.zig == '0.15.2' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_ZIG16: ${{ matrix.zig == '0.16.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
+          AIR2LEAN_REVIEW_ZIG17: ${{ matrix.zig == '0.17.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
         run: scripts/review.sh
 
@@ -1199,6 +1228,7 @@ jobs:
             tar -xJf "$RUNNER_TEMP/zig-$1.tar.xz" -C "$RUNNER_TEMP/host-zig-$1" --strip-components=1
             [ "$("$RUNNER_TEMP/host-zig-$1/zig" version)" = "$1" ]
           }
+          install_zig 0.17.0 b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a
           install_zig 0.16.0 b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
           install_zig 0.15.2 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
 
@@ -1214,6 +1244,25 @@ jobs:
               --profile "tests/roadmap/abi-probes/aarch64-macos-none-$mode.json" \
               --output "$RUNNER_TEMP/abi-aarch64-macos-none-$mode.json"
           done
+
+      # Zig 0.17.0 (in qualification) contract: tests/roadmap/abi-probes/0.17.0/ (LLVM 22 features).
+      - name: macOS ABI target probe (0.17.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          for mode in ReleaseSafe ReleaseFast; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.17.0/zig" \
+              --profile "tests/roadmap/abi-probes/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-0.17.0-aarch64-macos-none-$mode.json"
+          done
+
+      - name: Cache patched zig 0.17.0 (macOS)
+        id: cache-zig-air-17
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-0.17.0/
+          key: zig-air-macos-arm64-0.17.0-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.17.0/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
 
       - name: Cache patched zig 0.16.0 (macOS)
         id: cache-zig-air-16
@@ -1232,12 +1281,12 @@ jobs:
       # One retry per version, as in the Linux job. The 7 GiB runner is below the 7.8/8 GB
       # bound that Zig's build.zig declares for compiling the compiler; --maxrss lets it start.
       - name: Build patched zig (macOS)
-        if: steps.cache-zig-air-16.outputs.cache-hit != 'true' || steps.cache-zig-air-15.outputs.cache-hit != 'true'
+        if: steps.cache-zig-air-17.outputs.cache-hit != 'true' || steps.cache-zig-air-16.outputs.cache-hit != 'true' || steps.cache-zig-air-15.outputs.cache-hit != 'true'
         env:
           AIR2LEAN_ZIG_MAXRSS: "8000000000"
         run: |
           set -euo pipefail
-          for v in 0.16.0 0.15.2; do
+          for v in 0.17.0 0.16.0 0.15.2; do
             if [ ! -x "zig-air-$v/bin/zig" ]; then
               PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
                 || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
@@ -1293,6 +1342,23 @@ jobs:
         run: lake build Proofs
 
       - name: Restore committed translations (0.16.0)
+        run: git checkout -- Proofs
+
+      - name: macOS golden AIR, translate, differential test (0.17.0)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.17.0/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.17.0
+        run: scripts/check.sh
+
+      - name: macOS proofs (0.17.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: lake build Proofs
+
+      - name: Restore committed translations (0.17.0)
         run: git checkout -- Proofs
 
       # 0.15.2's Thread.Mutex is os_unfair_lock here: check.sh selects

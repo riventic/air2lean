@@ -22,17 +22,20 @@ const InternPool = @import("../InternPool.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 
-/// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0). The compiler
-/// is built by a host zig of its own version (`zig-patch/build.sh`), so `builtin.zig_version`
-/// is the version being patched. Each `if` on `v14`/`v16` is comptime-known, so a version
-/// analyses only its own branch.
+/// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0, 0.17.0). The
+/// compiler is built by a host zig of its own version (`zig-patch/build.sh`), so
+/// `builtin.zig_version` is the version being patched. Each `if` on `v14`/`v16`/`v17` is
+/// comptime-known, so a version analyses only its own branch. `v16` and `v17` mean "this
+/// version or later": 0.17.0 keeps every 0.16.0 API the exporter uses unless a `v17` branch
+/// says otherwise.
 const Compat = struct {
     const zv = @import("builtin").zig_version;
     const v14 = zv.minor == 14;
-    const v16 = zv.minor == 16;
+    const v16 = zv.minor >= 16;
+    const v17 = zv.minor >= 17;
     comptime {
         // A new version needs its own review of every branch below (PLAN.md §Zig version support).
-        if (zv.major != 0 or zv.minor < 14 or zv.minor > 16)
+        if (zv.major != 0 or zv.minor < 14 or zv.minor > 17)
             @compileError("air2lean exporter: Zig version without a Compat branch");
     }
 
@@ -150,9 +153,37 @@ const Compat = struct {
         return if (v16) key == .bitpack else false;
     }
 
-    /// A `ty_op` tag that does not exist in every version (`int_from_float_safe`: 0.15.2+).
+    /// A `ty_op` tag that does not exist in every version: `int_from_float_safe` (0.15.2+).
+    /// 0.17.0 renamed `bitcast`/`intcast`/`intcast_safe` to `bit_cast`/`int_cast`/
+    /// `int_cast_safe` and split the other casts that `bitcast` covered into their own tags
+    /// (`zig-patch/0.17.0/TAGS.md`). Each branch names only its own version's tags.
     fn isNewTyOp(tag: Air.Inst.Tag) bool {
-        return if (v14) false else tag == .int_from_float_safe;
+        return if (v14)
+            tag == .bitcast or tag == .intcast or tag == .intcast_safe
+        else if (v17)
+            tag == .int_from_float_safe or tag == .bit_cast or tag == .bit_cast_safe or
+                tag == .int_cast or tag == .int_cast_safe or tag == .ptr_cast or
+                tag == .ptr_from_int or tag == .int_from_ptr or tag == .error_cast or
+                tag == .error_from_int or tag == .int_from_error or tag == .union_from_enum or
+                tag == .array_to_vector
+        else
+            tag == .int_from_float_safe or tag == .bitcast or tag == .intcast or tag == .intcast_safe;
+    }
+
+    /// A `bin_op` tag that does not exist in every version: `memmove` (0.15.2+), `div_ceil`
+    /// (0.17.0+), `bool_and`/`bool_or` (before 0.17.0).
+    fn isNewBinOp(tag: Air.Inst.Tag) bool {
+        return if (v14)
+            tag == .bool_and or tag == .bool_or
+        else if (v17)
+            tag == .memmove or tag == .div_ceil
+        else
+            tag == .memmove or tag == .bool_and or tag == .bool_or;
+    }
+
+    /// `struct_field_val`, renamed `agg_field_val` in 0.17.0 (`ty_pl`, payload `StructField`).
+    fn isFieldVal(tag: Air.Inst.Tag) bool {
+        return if (v17) tag == .agg_field_val else tag == .struct_field_val;
     }
 
     /// A lane pointer whose lane is runtime-known: `VectorIndex.runtime`, which 0.16.0 removed.
@@ -160,9 +191,40 @@ const Compat = struct {
         return if (v16) false else vector_index == .runtime;
     }
 
-    /// A `bin_op` tag that does not exist in every version (`memmove`: 0.15.2+).
-    fn isNewBinOp(tag: Air.Inst.Tag) bool {
-        return if (v14) false else tag == .memmove;
+    /// The type of a `ty_pl` instruction: an `Air.Inst.Ref` before 0.17.0, a `Type` since.
+    fn tyPlType(ty_pl: anytype) Type {
+        return if (v17) ty_pl.ty else ty_pl.ty.toType();
+    }
+
+    /// The integer tag type of an enum: `intTagType` was renamed `backingIntType` in 0.17.0.
+    fn enumTagType(ty: Type, zcu: *Zcu) Type {
+        return if (v17) ty.backingIntType(zcu) else ty.intTagType(zcu);
+    }
+
+    /// The printers of a value and a type take a `Zcu.PerThread` before 0.17.0, a `*Zcu` since.
+    fn fmtValue(pt: Zcu.PerThread, val: Value) @TypeOf(val.fmtValue(if (v17) pt.zcu else pt)) {
+        return val.fmtValue(if (v17) pt.zcu else pt);
+    }
+    fn fmtType(pt: Zcu.PerThread, ty: Type) Type.Formatter {
+        return ty.fmt(if (v17) pt.zcu else pt);
+    }
+
+    /// The fully qualified name of a container type. 0.17.0 returns both the short `name` and
+    /// the `fqn`; before, the one name it returns is the fully qualified one.
+    fn containerTypeName(ty: Type, ip: *const InternPool) []const u8 {
+        const name = ty.containerTypeName(ip);
+        return (if (v17) name.fqn else name).toSlice(ip);
+    }
+
+    /// `profile.build_mode`. 0.17.0 renamed the `std.lang.Optimize` tags (`debug`, `safe`,
+    /// `fast`, `small`); the JSON keeps the build-mode names of `-O`.
+    fn buildMode(mode: anytype) []const u8 {
+        return if (v17) switch (mode) {
+            .debug => "Debug",
+            .safe => "ReleaseSafe",
+            .fast => "ReleaseFast",
+            .small => "ReleaseSmall",
+        } else @tagName(mode);
     }
 
     /// `@shuffle` on 0.14.1: one `shuffle` tag, mask is a comptime `@Vector(mask_len, i32)`
@@ -568,7 +630,7 @@ const W = struct {
         }
         try w.j.endArray();
         try w.field("build_mode");
-        try w.j.write(@tagName(mod.optimize_mode));
+        try w.j.write(Compat.buildMode(mod.optimize_mode));
         try w.field("float_mode");
         try w.j.write("per-instruction");
         try w.field("error_set_bits");
@@ -682,8 +744,6 @@ const W = struct {
             .cmp_gte,
             .cmp_gt,
             .cmp_neq,
-            .bool_and,
-            .bool_or,
             .store,
             .store_safe,
             .array_elem_val,
@@ -764,10 +824,7 @@ const W = struct {
                 try w.writeArgs(&.{w.data(inst).un_op});
             },
             .not,
-            .bitcast,
             .load,
-            .intcast,
-            .intcast_safe,
             .trunc,
             .slice_ptr,
             .slice_len,
@@ -871,12 +928,7 @@ const W = struct {
                 try w.field("name");
                 try w.j.write(name.toSlice(w.air.*));
             },
-            .struct_field_ptr, .struct_field_val => {
-                const extra = w.air.extraData(Air.StructField, w.data(inst).ty_pl.payload).data;
-                try w.writeArgs(&.{extra.struct_operand});
-                try w.field("index");
-                try w.j.write(extra.field_index);
-            },
+            .struct_field_ptr => try w.writeStructField(inst),
             .field_parent_ptr => {
                 const extra = w.air.extraData(Air.FieldParentPtr, w.data(inst).ty_pl.payload).data;
                 try w.writeArgs(&.{extra.field_ptr});
@@ -885,7 +937,7 @@ const W = struct {
             },
             .aggregate_init => {
                 const ty_pl = w.data(inst).ty_pl;
-                const ty = ty_pl.ty.toType();
+                const ty = Compat.tyPlType(ty_pl);
                 const len: usize = switch (ty.zigTypeTag(zcu)) {
                     .@"struct" => ty.structFieldCount(zcu),
                     else => @intCast(ty.arrayLen(zcu)),
@@ -969,12 +1021,21 @@ const W = struct {
                 try w.writeAsm(inst);
             },
             .alloc, .ret_ptr, .unreach, .trap, .dbg_empty_stmt => {},
-            // `@shuffle`: 0.14.1 has one `shuffle` tag; 0.15.2+ split it into `shuffle_one`
-            // (single source) and `shuffle_two` (two sources). The two forms use unrelated
-            // declarations (`Air.Shuffle` vs `unwrapShuffleOne`/`unwrapShuffleTwo`), so each
-            // is behind its own comptime-known `Compat.v14` branch (only the live Zig version's
-            // declarations are ever referenced).
-            else => if (!Compat.v14) {
+            // A tag that some version lacks or names differently: each `Compat.is*` helper
+            // names only the tags of the version being built.
+            else => if (Compat.isNewTyOp(tag)) {
+                try w.writeArgs(&.{w.data(inst).ty_op.operand});
+            } else if (Compat.isNewBinOp(tag)) {
+                const b = w.data(inst).bin_op;
+                try w.writeArgs(&.{ b.lhs, b.rhs });
+            } else if (Compat.isFieldVal(tag)) {
+                try w.writeStructField(inst);
+            } else if (!Compat.v14) {
+                // `@shuffle`: 0.14.1 has one `shuffle` tag; 0.15.2+ split it into
+                // `shuffle_one` (single source) and `shuffle_two` (two sources). The two forms
+                // use unrelated declarations (`Air.Shuffle` vs `unwrapShuffleOne`/
+                // `unwrapShuffleTwo`), so each is behind its own comptime-known `Compat.v14`
+                // branch (only the live Zig version's declarations are ever referenced).
                 if (tag == .shuffle_one) {
                     const s = w.air.unwrapShuffleOne(zcu, inst);
                     try w.writeArgs(&.{s.operand});
@@ -983,11 +1044,6 @@ const W = struct {
                     const s = w.air.unwrapShuffleTwo(zcu, inst);
                     try w.writeArgs(&.{ s.operand_a, s.operand_b });
                     try w.writeShuffleTwoMask(s.mask);
-                } else if (Compat.isNewTyOp(tag)) {
-                    try w.writeArgs(&.{w.data(inst).ty_op.operand});
-                } else if (Compat.isNewBinOp(tag)) {
-                    const b = w.data(inst).bin_op;
-                    try w.writeArgs(&.{ b.lhs, b.rhs });
                 } else {
                     try w.field("unsupported");
                     try w.j.write(true);
@@ -1002,6 +1058,14 @@ const W = struct {
             },
         }
         try w.j.endObject();
+    }
+
+    /// `struct_field_ptr`, `struct_field_val` (`agg_field_val` in 0.17.0): operand and index.
+    fn writeStructField(w: *W, inst: Air.Inst.Index) Error!void {
+        const extra = w.air.extraData(Air.StructField, w.data(inst).ty_pl.payload).data;
+        try w.writeArgs(&.{extra.struct_operand});
+        try w.field("index");
+        try w.j.write(extra.field_index);
     }
 
     /// `assembly`: source, per-output/-input constraint+name+operand, clobbers, volatile.
@@ -1270,7 +1334,7 @@ const W = struct {
                         try w.j.endArray();
                     } else {
                         try w.field("val");
-                        try w.writeFmt(val.fmtValue(w.pt));
+                        try w.writeFmt(Compat.fmtValue(w.pt, val));
                     }
                 },
                 else => if (Compat.isBitpack(ip.indexToKey(ip_index)) and
@@ -1283,7 +1347,7 @@ const W = struct {
                     try w.j.write(true);
                 } else {
                     try w.field("val");
-                    try w.writeFmt(val.fmtValue(w.pt));
+                    try w.writeFmt(Compat.fmtValue(w.pt, val));
                 },
             }
         }
@@ -1571,10 +1635,11 @@ const W = struct {
                     try w.j.write(info.packed_offset.bit_offset);
                 }
                 // A pointer to one lane of a vector (`&v[i]`): its `host_size` is the vector
-                // length, not bytes, and the lane is only in the type. Only a lane that is not a
-                // whole power-of-two number of bytes gets one. A bit-pointer always has the field,
-                // `null` for a packed field pointer: an export without it cannot tell the two
-                // apart, so the translator then accepts only bit-pointers that it sees made.
+                // length, not bytes, and the lane is only in the type. Before 0.17.0 only a lane
+                // that is not a whole power-of-two number of bytes gets one; 0.17.0 uses it for
+                // every lane. A bit-pointer always has the field, `null` for a packed field
+                // pointer: an export without it cannot tell the two apart, so the translator
+                // then accepts only bit-pointers that it sees made.
                 if (info.flags.vector_index != .none) {
                     try w.field("vector_index");
                     if (Compat.isRuntimeLane(info.flags.vector_index))
@@ -1651,7 +1716,7 @@ const W = struct {
                 try w.j.write(if (is_tuple) "tuple" else "struct");
                 if (!is_tuple) {
                     try w.field("name");
-                    try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                    try w.j.write(Compat.containerTypeName(ty, ip));
                     try w.field("layout");
                     try w.j.write(@tagName(ty.containerLayout(zcu)));
                 }
@@ -1686,9 +1751,9 @@ const W = struct {
             .@"enum" => {
                 try w.j.write("enum");
                 try w.field("name");
-                try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                try w.j.write(Compat.containerTypeName(ty, ip));
                 try w.field("tag");
-                try w.writeTypeRef(ty.intTagType(zcu));
+                try w.writeTypeRef(Compat.enumTagType(ty, zcu));
                 try w.field("exhaustive");
                 try w.j.write(!ty.isNonexhaustiveEnum(zcu));
                 try w.field("fields");
@@ -1707,7 +1772,7 @@ const W = struct {
             .@"union" => {
                 try w.j.write("union");
                 try w.field("name");
-                try w.j.write(ty.containerTypeName(ip).toSlice(ip));
+                try w.j.write(Compat.containerTypeName(ty, ip));
                 try w.field("layout");
                 try w.j.write(@tagName(ty.containerLayout(zcu)));
                 if (!Compat.hasFields(zcu, ty)) {
@@ -1740,7 +1805,7 @@ const W = struct {
             else => {
                 try w.j.write("other");
                 try w.field("name");
-                try w.writeFmt(ty.fmt(w.pt));
+                try w.writeFmt(Compat.fmtType(w.pt, ty));
             },
         }
         // The size and alignment in bytes, for the types that can be in memory.

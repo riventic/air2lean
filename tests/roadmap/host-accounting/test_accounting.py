@@ -21,6 +21,7 @@ SPEC = importlib.util.spec_from_file_location('air2lean_accounting', ROOT/'scrip
 ACC = importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(ACC)
 EXAMPLES = sorted(p.name for p in (ROOT/'examples').iterdir() if p.is_dir())
 CLAIMED = {  # README's default selections (x86_64); the committed-tree test pins them to CI.
+    '0.17.0': [e for e in EXAMPLES if e != 'threadsync'],  # in qualification; full CI job
     '0.16.0': [e for e in EXAMPLES if e != 'threadsync'],
     '0.15.2': [e for e in EXAMPLES if e not in ('iogroup', 'sync')],
 }
@@ -232,7 +233,7 @@ class Claims(Temp):
         self.assertIn('restricted job', rows['0.14.1']['ci'])
 
     def test_full_matrix_summaries_hold(self):
-        code, output = self.claims(summary('0.16.0'), summary('0.15.2'),
+        code, output = self.claims(summary('0.17.0'), summary('0.16.0'), summary('0.15.2'),
                                    summary('0.16.0', 'Darwin-arm64',
                                            examples=[e for e in CLAIMED['0.16.0'] if e != 'asm']),
                                    require=True)
@@ -262,7 +263,7 @@ class Claims(Temp):
         self.assertClaim('README claims a full Zig 0.15.2 job')
 
     def test_supported_version_absent_from_ci(self):
-        self.edit('README.md', 'Supported: Zig **0.16.0** (default),', 'Supported: Zig **0.13.0**, **0.16.0** (default),')
+        self.edit('README.md', 'Supported: Zig **0.17.0** (in qualification),', 'Supported: Zig **0.13.0**, **0.17.0** (in qualification),')
         self.assertClaim('CI matrix runs')
 
     def test_restricted_prose_contradicting_row(self):

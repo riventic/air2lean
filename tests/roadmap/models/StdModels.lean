@@ -62,6 +62,18 @@ def main : IO Unit := do
   -- Version qualification is table data, checked before the typed signature.
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.allocSentinel__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.allocSentinel qualified Zig 0.16.0"
+  -- A row without versions covers only `baseZigVersions`: a newer Zig is listed per row.
+  let qualifies (symbol version : String) : Bool := ((stdModel? symbol).map (·.qualifies version)).getD false
+  for v in baseZigVersions do
+    require (qualifies "Thread.Futex.wait" v && qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
+  for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
+      "Io.Group.await"] do
+    require (qualifies symbol "0.17.0") s!"{symbol}: audited for 0.17.0"
+  for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
+    require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
+  require (qualifies "Thread.detach" "0.17.0") "a rejection holds in every version"
+  expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])
+    "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2, 0.16.0"
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.realloc qualified Zig 0.16.0"
   -- A translated function cannot reuse a built-in std model name.

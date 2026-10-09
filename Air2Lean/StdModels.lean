@@ -8,7 +8,7 @@ The single table of qualified standard-library names that the translator recogni
 `stdModel?` and the typed projections below; none of them carries its own name table.
 
 Each entry records the typed model it selects, its Zig-version qualification (empty: every
-audited version; the checked AIR profile still applies), and its semantic dependencies: the
+version in `baseZigVersions`; the checked AIR profile still applies), and its semantic dependencies: the
 `ZigLean` declarations the emitter may reference for it. `tests/roadmap/models/StdModels.lean`
 checks that every dependency exists in the `ZigLean` environment. Adding a model means one row
 here, one typed signature case in `checkModelSignature` and one emission case; no name test. -/
@@ -48,44 +48,64 @@ inductive StdModelKind where
   | rejected (reason : String)
   deriving BEq, Repr
 
+/-- The Zig versions that a row without an explicit `zigVersions` is qualified for. A later
+version is fail-closed: a row qualifies for it only by listing it, after its std source was
+re-audited for that version (`docs/std-models.md` §Zig 0.17.0 audit). -/
+def baseZigVersions : Array String := #["0.14.1", "0.15.2", "0.16.0"]
+
+/-- `baseZigVersions` and 0.17.0: a row whose std source (name, signature and semantics) did not
+change from 0.16.0 to 0.17.0. -/
+private def through017 : Array String := baseZigVersions.push "0.17.0"
+
 structure StdModel where
   /-- The qualified std name; an instance `<symbol>__anon_<n>` selects the same model. -/
   symbol : String
   kind : StdModelKind
-  /-- Zig versions this model is qualified for; empty means every audited version. -/
+  /-- Zig versions this model is qualified for; empty means `baseZigVersions`. -/
   zigVersions : Array String := #[]
   /-- `ZigLean` declarations the emitted term may reference (the semantic dependencies). -/
   dependencies : Array String := #[]
   deriving Repr
 
+/-- The Zig versions `m` is qualified for. -/
+def StdModel.qualifiedVersions (m : StdModel) : Array String :=
+  if m.zigVersions.isEmpty then baseZigVersions else m.zigVersions
+
+/-- A rejection holds in every version; a model only in its qualified versions. -/
 def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
-  m.zigVersions.isEmpty || m.zigVersions.contains zigVersion
+  match m.kind with
+  | .rejected _ => true
+  | _ => m.qualifiedVersions.contains zigVersion
 
 private def allocModel (symbol : String) (fn : AllocFn) (deps : Array String)
     (zigVersions : Array String := #[]) : StdModel :=
   { symbol, kind := .alloc fn, zigVersions, dependencies := deps.map ("Zig.Allocator." ++ ·) }
-private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String) : StdModel :=
-  { symbol, kind := .thread fn, dependencies := deps.map ("Zig." ++ ·) }
+private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
+    (zigVersions : Array String := #[]) : StdModel :=
+  { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
 
-/-- The one table of built-in std models. -/
+/-- The one table of built-in std models. Rows without 0.17.0 are 0.17.0-unqualified on purpose
+(`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
+`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.16.0 and 0.17.0 no
+longer have. -/
 def stdModels : Array StdModel := #[
-  allocModel "mem.Allocator.create" .create #["create"],
-  allocModel "mem.Allocator.destroy" .destroy #["destroy"],
-  allocModel "mem.Allocator.alloc" .alloc #["alloc"],
-  allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"],
-  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #["0.16.0"],
-  allocModel "mem.Allocator.free" .free #["free", "freeSentinel"],
-  allocModel "mem.Allocator.dupe" .dupe #["dupe"],
-  allocModel "mem.Allocator.remap" .remap #["remap"],
+  allocModel "mem.Allocator.create" .create #["create"] through017,
+  allocModel "mem.Allocator.destroy" .destroy #["destroy"] through017,
+  allocModel "mem.Allocator.alloc" .alloc #["alloc"] through017,
+  allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"] through017,
+  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] #["0.16.0", "0.17.0"],
+  allocModel "mem.Allocator.free" .free #["free", "freeSentinel"] through017,
+  allocModel "mem.Allocator.dupe" .dupe #["dupe"] through017,
+  allocModel "mem.Allocator.remap" .remap #["remap"] through017,
+  threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"] through017,
+  threadModel "Thread.join" .join #["joinC"] through017,
+  threadModel "Thread.yield" .yield #["threadYieldC"] through017,
+  threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] through017,
   allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
-  threadModel "Thread.spawn" .spawn #["spawnC", "spawnWithPolicyC"],
-  threadModel "Thread.join" .join #["joinC"],
-  threadModel "Thread.yield" .yield #["threadYieldC"],
-  threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
   threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
-  threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"],
-  threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"],
-  threadModel "Io.futexWake" .futexWake #["futexWakeC"],
+  threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] through017,
+  threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] through017,
+  threadModel "Io.futexWake" .futexWake #["futexWakeC"] through017,
   threadModel "Thread.Futex.wait" .threadFutexWait #["threadFutexWaitC"],
   threadModel "Thread.Futex.wake" .threadFutexWake #["threadFutexWakeC"],
   threadModel "Thread.Mutex.DarwinImpl.lock" .osLock #["osUnfairLockC"],
@@ -94,10 +114,10 @@ def stdModels : Array StdModel := #[
   threadModel "time.Timer.start" .timerStart #["callRC", "Error.unspecified"],
   threadModel "time.Timer.read" .timerRead #["callRC", "Error.unspecified"],
   threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unspecified"],
-  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"],
-  threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"],
-  threadModel "Io.Group.await" .groupAwait #["groupAwaitC"],
-  threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"],
+  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] through017,
+  threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] through017,
+  threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] through017,
+  threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] through017,
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.detach",

@@ -125,6 +125,25 @@ theorem Float.ceilRtLegacyChk_eq {fmt : FloatFmt} (x : Float fmt)
     (h : x.isPseudoDenormalF80 = false) : Float.ceilRtLegacyChk x = Float.ceilChk x := by
   simp [Float.ceilRtLegacyChk, Float.ceilChk, legacyRoundInput, h]
 
+/-- A pseudo-denormal whose low 63 fraction bits are zero (`±0x0000_8000000000000000`): its f128
+extension (`__extendxftf2`) is a signed zero. -/
+def Float.isZeroExtPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
+  x.isPseudoDenormalF80 && x.bits.toNat % 2 ^ 63 == 0
+
+/-- Zig 0.17.0's f80 `@trunc` (`truncl` → `trunc_f80`, `@floatCast(trunc_f128(x))`): when the
+f128 extension has no fraction bits to clear, `trunc_f128` returns its argument, and LLVM 22 folds
+`fptrunc (fpext x)` back to the original f80 `x`. For a value that is its own truncation this is
+the same result; for a pseudo-denormal whose extension is a signed zero the original encoding is
+returned instead of zero. Observed with stock 0.17.0 on x86_64-linux (`truncl`'s
+disassembly reloads the saved operand; a 200,000-encoding scan finds no other difference from
+0.16.0, which returns the signed zero). -/
+def Float.truncRt017Chk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
+  if x.isZeroExtPseudoDenormalF80 then pure x else Float.truncChk x
+
+theorem Float.truncRt017Chk_eq {fmt : FloatFmt} (x : Float fmt)
+    (h : x.isPseudoDenormalF80 = false) : Float.truncRt017Chk x = Float.truncChk x := by
+  simp [Float.truncRt017Chk, Float.isZeroExtPseudoDenormalF80, h]
+
 /-! ## f80 to f16 conversion (`__truncxfhf2`, `truncf.zig`)
 
 The reference target calls the same helper in Zig 0.14.1, 0.15.2 and 0.16.0. It clears
@@ -491,6 +510,11 @@ def Float.divTruncRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
 /-- `@divFloor` in `compiler-rt` mode on Zig 0.16.0. -/
 def Float.divFloorRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   Float.floor (Float.divRt016 a b)
+
+/-- `@divCeil` in `compiler-rt` mode from Zig 0.16.0 (`@divCeil` itself is 0.17.0's; 0.17.0's
+`divtf3.zig` keeps 0.16.0's algorithm). -/
+def Float.divCeilRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
+  Float.ceil (Float.divRt016 a b)
 
 /-- `@mulAdd` in `compiler-rt` mode, guarded against group C on any operand — the same guard as
 `Float.fmaChk` (`Ops.lean`), around `Float.fmaRt` instead of `Float.fma`. -/

@@ -260,6 +260,13 @@ pub const panic = struct {
     pub fn noreturnReturned() noreturn {
         reportPanic("noreturnReturned");
     }
+    // Members added in Zig 0.17.0; earlier versions do not look them up.
+    pub fn unexpectedErrorCode(_: anyerror) noreturn {
+        reportPanic("unexpectedErrorCode");
+    }
+    pub fn loadUninstantiableType() noreturn {
+        reportPanic("loadUninstantiableType");
+    }
 };
 
 /// Writes `v`'s diff-protocol "ok" payload text (the part that goes inside `{"ok": ... }`) to
@@ -306,7 +313,7 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
             } else {
                 const width = @bitSizeOf(T);
                 const digits = std.fmt.comptimePrint("{d}", .{width / 4});
-                const bits: std.meta.Int(.unsigned, width) = @bitCast(v);
+                const bits: compat.Bits(T) = @bitCast(v);
                 try writer.print("\"0x{x:0>" ++ digits ++ "}\"", .{bits});
             }
         },
@@ -320,12 +327,13 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
                 try writer.writeAll("}");
             },
         },
-        .@"struct" => |st| {
+        .@"struct" => {
             try writer.writeAll("{");
-            inline for (st.fields, 0..) |f, i| {
+            inline for (0..comptime compat.fieldCount(T)) |i| {
+                const name = comptime compat.fieldName(T, i);
                 if (i > 0) try writer.writeAll(",");
-                try writer.print("\"{s}\":", .{f.name});
-                try renderPayload(f.type, writer, quote_wide, @field(v, f.name));
+                try writer.print("\"{s}\":", .{name});
+                try renderPayload(compat.FieldType(T, i), writer, quote_wide, @field(v, name));
             }
             try writer.writeAll("}");
         },
@@ -370,8 +378,7 @@ fn renderPayload(comptime T: type, writer: anytype, quote_wide: bool, v: T) !voi
 /// `width/4` digits (docs/generated-code.md, docs/floats.md). Inputs are always hex, never
 /// `"nan"` — `tests/diff/gen_inputs.zig` encodes a NaN input as its bit pattern too.
 pub fn parseFloatHex(comptime T: type, s: []const u8) T {
-    const width = @bitSizeOf(T);
-    const bits = std.fmt.parseInt(std.meta.Int(.unsigned, width), s[2..], 16) catch unreachable;
+    const bits = std.fmt.parseInt(compat.Bits(T), s[2..], 16) catch unreachable;
     return @bitCast(bits);
 }
 
@@ -568,6 +575,8 @@ pub fn writeResult(writer: anytype, outcome: Outcome) !void {
 /// Re-exported so each tests/diff/<ex>/harness.zig calls `common.makePath` instead of importing
 /// compat.zig itself.
 pub const makePath = compat.makePath;
+pub const fieldCount = compat.fieldCount;
+pub const FieldType = compat.FieldType;
 
 /// Reads `tests/diff/<ex>/inputs/<name>.jsonl`, opens `tests/diff/out/zig/<ex>/<name>.jsonl`,
 /// and calls `perLine` for each non-empty input line with the parsed JSON array and the output
