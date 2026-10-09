@@ -472,14 +472,18 @@ schedules (`ZigLean/Conc/Logic.lean`) can name it. -/
 
 /-- A futex wait of the current thread at `p` for the value `e`: `true` if the thread sleeps
 (it is added to `waiters`). A woken thread goes on. Else the kernel compares the `u32` at `p`,
-the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. -/
+the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. The
+kernel's compare is an atomic read of the word (`recordAccess … .atomicRead`): a plain write
+that races with it is `.illegal`. -/
 def futexWait (p : Ptr) (e : BitVec 32) : MemM Bool := do
   let m ← get
   if m.woken.contains m.current then
     set { m with woken := m.woken.erase m.current }
     pure false
   else
-    let (_, blk, o) ← m.access p 4 4
+    let (b, blk, o) ← m.access p 4 4
+    recordAccess b o 4 .atomicRead
+    let m ← get
     let v ← intOfBytes 32 (blk.bytes.extract o (o + 4))
     if v = e then
       set { m with waiters := m.waiters.push (m.current, p) }

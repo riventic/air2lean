@@ -179,10 +179,30 @@ private def wakeTests : IO Unit := do
   check "wake choices" ((s.chooseWake (fun _ => 1) p 2).1, (s.chooseWake (fun _ => 1) p 2).2.trace)
     ([1, 0], #[2, 1])
 
+/-- Audit #14: the kernel's compare of a futex wait is an atomic read of the word, so a plain
+write that races with it is `.illegal`; after the join it is ordered. -/
+private def futexReadTests : IO Unit := do
+  let dispatch : Ptr → ConcM Ptr Unit := fun p => ConcM.liftMem (store 4 p (1#32))
+  let prog (joinFirst : Bool) : ConcM Ptr Nat := do
+    let p ← ConcM.liftMem (alloc .heap 4 4)
+    ConcM.liftMem (store 4 p (0#32))
+    let tid ← spawnT p
+    if joinFirst then ConcM.sync (.join tid)
+    let _ ← ConcM.sync (.wait p 5)
+    unless joinFirst do ConcM.sync (.join tid)
+    pure 7
+  let run := fun (o : Nat) (joinFirst : Bool) =>
+    value (Sched.runTrace ⟨.any, .available⟩ dispatch 40 (fun _ => o) (prog joinFirst) {}).1
+  for o in [0, 1] do
+    check s!"futex compare races with a plain write (oracle {o})" (run o false)
+      (some (.error .illegal))
+  check "futex compare after the join" (run 0 true) (some (.ok 7))
+
 end ConcurrencyRegression
 
 def main : IO Unit := do
   ConcurrencyRegression.wakeTests
+  ConcurrencyRegression.futexReadTests
   ConcurrencyRegression.traceTests
   ConcurrencyRegression.catchTests
   ConcurrencyRegression.joinTests

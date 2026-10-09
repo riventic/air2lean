@@ -2736,6 +2736,28 @@ theorem inv_away {G : ThreadId → Gh} {m : Mem} {h : Heap} {x : X}
   rw [upd_upd] at hl
   exact ⟨hl, U_l0 (a := (gM h x).1) hi.2 rfl hfd⟩
 
+/-- `U` after an op of `main` at the event that keeps its writes (the kernel's read of a futex
+wait), with the same ghost values. -/
+theorem U_evRd {G : ThreadId → Gh} {m₁ M : Mem} (hi : proto.inv G m₁) (hr : (G 0).2.ph.rank ≤ 7)
+    (hw' : EV.Ok M) (hop : EV.Op 0 m₁ M) (hh : EV.hist M = EV.hist m₁) (hq : QOk G M) :
+    U G M := by
+  have hp := hi.2.pre hr
+  have hkG := Word.keep_op hop (W' := WG) (.inr (.inr (by decide)))
+  have := U_main (g := G 0) hi
+    (by rw [upd_same]; have hs := hi.2.shape; unfold Shape at hs ⊢; rw [hop.threads]; exact hs)
+    (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [EV] at h; omega)) hi.2.part0
+    (by rw [upd_same]; exact hq)
+    (fun _ => by
+      rw [upd_same]
+      exact Pre.keep hp (fun _ => XEq.refl _) (hp.wg.keep hkG) hw' (Word.hist_keep hp.wg hkG) hh
+        hop.clocks (t := 0) (by decide) (.inl (main_x hi).2.2.1) hop.fpt)
+    (fun h6 => by
+      rw [upd_same] at h6
+      obtain ⟨a, b, c, d⟩ := hi.2.done h6
+      exact ⟨a, b, VClock.le_trans c (hop.clocks 0), VClock.le_trans d (hop.clocks 0)⟩)
+    (main_x hi)
+  rwa [upd_same] at this
+
 /-- `main`'s futex wait at the event (value `1`) at `ev1`, with its part `h`: it sleeps only while
 the newest write is its own `1` (no set yet). It goes on at `ev1`. -/
 theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap}
@@ -2756,27 +2778,25 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
       rw [hg₁]; rfl]; exact hl, ?_⟩
     rw [← upd_g hg₁] at hu
     exact U_l0 (a := (gA h { ph := .ev1, e1 := true }).1) hu rfl rfl
+  have hr0 : (G₁ 0).2.ph.rank ≤ 7 := by rw [hg₁]; show Ph.ev1.rank ≤ 7; decide
+  have ht0 : (0 : ThreadId) < m₁.threads.size := (hi₁.1.live 0 (by rw [hph]; decide)).1
+  have hi₀ := inv_cur hi₁ 0
+  have hp₀ := hi₀.2.pre hr0
   refine ⟨fun _ => live_all hi₁ 0, fun hq0 => ⟨fun _ => ?_, fun b m' hr => ?_⟩⟩
-  · by_cases hwk : ({ m₁ with current := 0 } : Mem).woken.contains
-      ({ m₁ with current := 0 } : Mem).current = true
-    · exact ⟨_, _, futexWait_run_woken hwk⟩
-    · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
-      obtain ⟨v, hv⟩ := hw.val
-      rw [Word.holds_bytes hb] at hv
-      exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
-  have hl := hi₁.1.waitOff hph (by decide) hq0 hr
-  rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+  · exact hp₀.ev.futexWait_run ht0
+  have hl := hi₁.1.waitOff hph (by decide)
+    (Word.offWord hw (fun u => off_own hi₁ shE.b shE.o u) (off_R shE.b shE.o G₁) apE) hq0 hr
+  -- the kernel's compare is an atomic read of the event: an op that keeps `U`
+  have hrd : ∀ M, EV.Ok M → EV.Op 0 { m₁ with current := 0 } M →
+      EV.hist M = EV.hist { m₁ with current := 0 } → U G₁ M := fun M hok hop hh =>
+    U_evRd hi₀ hr0 hok hop hh fun w hw => hi₁.2.q w (by rw [hop.waiters] at hw; exact hw)
+  rcases hp₀.ev.futexWait rfl ht0 (hcs_of hi₀) hr with
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hH, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     exact hQ k hk G₁ _ rfl (hgo _ rfl hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
   · -- it sleeps: the word is `1`, so no task set the event
     simp only [↓reduceIte] at hl ⊢
-    obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hw.access
-    have : ({ m₁ with current := 0 } : Mem).access EV.ptr 4 4 = m₁.access EV.ptr 4 4 := rfl
-    rw [this, ha₀] at ha
-    cases ha
-    have hve' : v = 1 := by rw [hve]; rfl
-    have hH : EV.Holds m₁ 1 := by rw [Word.holds_bytes hb₀, ← hve']; exact hv
     have hlast := hw.holds_last.mp hH
     have hns : (!(G₁ 1).2.sx && !(G₁ 2).2.sx) = true := by
       cases e : ((G₁ 1).2.sx || (G₁ 2).2.sx)
@@ -2786,13 +2806,13 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
           (by unfold evL; rw [e]; rfl)
         have := val_eq hlast h2
         revert this; decide
-    refine ⟨hl, U_mem hi₁.2 rfl rfl rfl rfl rfl fun w hw' => ?_⟩
+    refine ⟨hl, U_mem (hrd _ hok hop hh) rfl rfl rfl rfl rfl fun w hw' => ?_⟩
     rcases Array.mem_push.mp hw' with hw' | rfl
-    · exact hi₁.2.q w hw'
+    · exact hi₁.2.q w (by rw [hop.waiters] at hw'; exact hw')
     · exact .inr ⟨rfl, rfl, by rw [hg₁]; rfl, .inl hns⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
-    obtain ⟨-, hl'⟩ := hl
-    exact hQ k hk G₁ _ rfl (hgo _ rfl hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
+    obtain ⟨hc, hl'⟩ := hl
+    exact hQ k hk G₁ _ hc (hgo _ hc hl' (hrd _ hok hop hh))
 
 /-! ## `waitUntilSet` -/
 

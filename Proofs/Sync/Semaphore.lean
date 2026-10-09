@@ -1824,35 +1824,33 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     rwa [upd_self, upd_upd] at this
   have hph : (G₁ t).1.ph = .away := by rw [hg₁]
   obtain ⟨hl₁, hs₁, hu₁⟩ := hP.split hi₁
-  refine ⟨fun _ => live_reg hP hi₁ (by rw [hg₁]) hph, fun hq0 => ⟨fun _ => ?_, fun b m' hr => ?_⟩⟩
-  · by_cases hwk : ({ m₁ with current := t } : Mem).woken.contains
-      ({ m₁ with current := t } : Mem).current = true
-    · exact ⟨_, _, futexWait_run_woken hwk⟩
-    · obtain ⟨blk, hb, -, -, ha, -⟩ := hs₁.we.access
-      obtain ⟨v, hv⟩ := hs₁.we.val
-      rw [Word.holds_bytes hb] at hv
-      exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
-  have hl := hl₁.waitOff (t := t) (by change (G₁ t).1.ph = _; exact hph) ptr_ne hq0 hr
+  have ht : t < m₁.threads.size := alive hP hi₁ hg₁ (fun h => by cases h)
+  have hi₀ := hP.cur t t m₁.woken hi₁
+  obtain ⟨-, hs₀, -⟩ := hP.split hi₀
+  refine ⟨fun _ => live_reg hP hi₁ (by rw [hg₁]) hph, fun hq0 => ⟨fun _ => hs₀.we.futexWait_run ht,
+    fun b m' hr => ?_⟩⟩
+  have hoff := wd_off (.inr rfl) hl₁ hs₁
+  have hl := hl₁.waitOff (t := t) (by change (G₁ t).1.ph = _; exact hph) ptr_ne
+    (Word.offWord hs₁.we hoff.1 hoff.2 apE) hq0 hr
   have hout : ∀ m₂ : Mem, m₂.current = t → S.L.Inv (upd G₁ t (S.L.set (G₁ t) .out Heap.empty)) m₂ →
       S.Inv G₁ m₂ → U G₁ m₂ → Q ((), s) G₁ m₂ k := fun m₂ hc hl₂ hs₂ hu₂ => by
     have := hgo G₁ m₂ .away .out (by rw [hg₁]) (by simp) (by rw [hg₁]; exact hinS) hs₂ hu₂ (by rw [hg₁] at hl₂ ⊢; exact hl₂)
     rw [hg₁] at this
     exact h k hk G₁ m₂ hc this
-  rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+  rcases hs₀.we.futexWait rfl ht (hcs hP hi₀) hr with
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hE, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.cur t m₁ t (m₁.woken.erase t)) rfl rfl (fun h => .inl h)
       (fun h => by rcases h with h | h <;> exact absurd rfl h)
     rw [upd_same] at this
     exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
-  · simp only [↓reduceIte] at hl ⊢
-    obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hs₁.we.access
-    have : ({ m₁ with current := t } : Mem).access S.WE.ptr 4 4 = m₁.access S.WE.ptr 4 4 := rfl
-    rw [this, ha₀] at ha
-    cases ha
-    have hE : S.WE.Holds m₁ e := by
-      rw [Word.holds_bytes hb₀, ← show (Packed.toBits e).setWidth 32 = e from BitVec.setWidth_eq e,
-        ← hve]; exact hv
-    have hlast := (hs₁.we.holds_last).mp hE
+  · -- it sleeps: the epoch is `e`, its write `i`; the kernel's read is an op `M`
+    simp only [↓reduceIte] at hl ⊢
+    have hsM : S.Inv G₁ M := hs₀.opKeep (.inr rfl) hop hok hh
+    have huM : U G₁ M := (hP.op (.inr rfl) hi₀ hop).2
+    have hE' : S.WE.Holds m₁ e := by
+      rw [show (Packed.toBits e).setWidth 32 = e from BitVec.setWidth_eq e] at hE; exact hE
+    have hlast := (hs₁.we.holds_last).mp hE'
     have he := hs₁.era t i jr false e (by rw [hg₁])
     have hsz : (S.WE.hist m₁).size = i + 1 := by
       rcases he.esz with h1 | ⟨h1, -, -⟩
@@ -1861,25 +1859,28 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
         have h2 := val_eq (he.eval.2 h1) hlast
         have := congrArg BitVec.toNat h2
         simp [BitVec.toNat_add] at this; omega
-    have hk : ∀ W : Word 32 4, W.Keep m₁ { m₁ with current := t, waiters := m₁.waiters.push (t, S.WE.ptr) } :=
-      fun _ => Word.keep_same m₁ t m₁.seen m₁.nextMsg _ m₁.woken m₁.groups
-    refine hP.pack hl (hs₁.mono (hs₁.ws.keep (hk _)) (hs₁.we.keep (hk _)) (Word.hist_congr rfl rfl)
+    have hszM : (S.WE.hist M).size = i + 1 := by rw [hh]; exact hsz
+    have hk : ∀ W : Word 32 4, W.Keep M { M with waiters := M.waiters.push (t, S.WE.ptr) } :=
+      fun _ => Word.keep_same M M.current M.seen M.nextMsg _ M.woken M.groups
+    refine hP.pack hl (hsM.mono (hsM.ws.keep (hk _)) (hsM.we.keep (hk _)) (Word.hist_congr rfl rfl)
       (Word.hist_congr rfl rfl) (fun _ => VClock.le_refl _) (fun _ h => h) (fun h => .inl h)
       (fun w hw _ => ?_) (fun _ h => h)) ?_
     · rcases Array.mem_push.mp hw with hw | rfl
       · exact .inl hw
-      · exact .inr ⟨i, jr, e, by rw [hg₁], hsz⟩
-    · have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.sleep (t := t) (m := m₁) (m₁.waiters.push (t, S.WE.ptr)) m₁.woken fun w hw => by
+      · exact .inr ⟨i, jr, e, by rw [hg₁], hszM⟩
+    · have := hP.stable G₁ M _ t (G₁ t) huM (Step.sleep (t := t) (m := M) (M.waiters.push (t, S.WE.ptr)) M.woken fun w hw => by
         rcases Array.mem_push.mp hw with hw | rfl
         · exact .inl hw
         · exact .inr rfl) rfl rfl (fun h => .inl h)
         (fun h => by rcases h with h | h <;> exact absurd rfl h)
-      rwa [upd_same] at this
+      rw [upd_same] at this
+      have hMc : ({ M with current := t, waiters := M.waiters.push (t, S.WE.ptr), woken := M.woken } :
+          Mem) = { M with waiters := M.waiters.push (t, S.WE.ptr) } := by
+        have hc : M.current = t := hop.current
+        rw [hc]
+      rwa [hMc] at this
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
-    have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.cur t m₁ t m₁.woken) rfl rfl (fun h => .inl h)
-      (fun h => by rcases h with h | h <;> exact absurd rfl h)
-    rw [upd_same] at this
-    exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
+    exact hout _ hl.1 hl.2 (hs₀.opKeep (.inr rfl) hop hok hh) (hP.op (.inr rfl) hi₀ hop).2
 
 
 /-! ## `Condition.wait` by a holder that saw no permit -/

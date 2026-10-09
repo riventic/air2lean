@@ -1169,6 +1169,65 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hop.waiters ▸ hp)
     exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
+/-! ## A futex wait at the word
+
+The kernel's compare of a futex wait is a recorded atomic read of the word (`Thread.futexWait`):
+an `Op` that keeps the word's writes. -/
+
+section futex
+
+variable {W : Word 32 4}
+
+/-- A futex wait at the word by the current thread `t`: a woken thread goes on; else the
+kernel's read of the word is an op `M` that keeps the word's writes, and the thread sleeps (it
+joins `waiters`) only if the word holds `e`. -/
+theorem Ok.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) :
+    (m.woken.contains m.current = true ∧ b = false ∧
+      m' = { m with woken := m.woken.erase m.current }) ∨
+    (m.woken.contains m.current = false ∧ ∃ M, W.Ok M ∧ W.Op t m M ∧ W.hist M = W.hist m ∧
+      ((W.Holds m e ∧ b = true ∧ m' = { M with waiters := M.waiters.push (t, W.ptr) }) ∨
+       (b = false ∧ m' = M))) := by
+  rcases futexWait_eq h with hwk | ⟨hwk, bid, blk, o, v, ha, -, hv, hcase⟩
+  · exact .inl hwk
+  obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hw.access
+  rw [ha₀] at ha
+  cases ha
+  obtain ⟨hok, hop, hh⟩ := hw.record (k := .atomicRead) hc ht hcs rfl
+  refine .inr ⟨hwk, _, hok, hop, hh, ?_⟩
+  rcases hcase with ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
+  · subst hc; exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, rfl⟩
+  · exact .inr ⟨rfl, rfl⟩
+
+/-- A futex wait at the word has no error. -/
+theorem Ok.futexWait_run {m : Mem} {e : BitVec 32} (hw : W.Ok m)
+    (ht : m.current < m.threads.size) :
+    ∃ b m', ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m')) := by
+  by_cases hwk : m.woken.contains m.current = true
+  · exact ⟨_, _, futexWait_run_woken hwk⟩
+  · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
+    obtain ⟨v, hv⟩ := hw.val
+    rw [holds_bytes hb] at hv
+    exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha (hw.noRace rfl ht) hv⟩
+
+/-- The word is off the lock's word, the threads' parts and the resources: a futex wait at it
+keeps the lock's invariant (`Lock.Inv.waitOff`). -/
+theorem offWord {γ : Type} {L : Lock γ} {G : ThreadId → γ} {m : Mem} (hw : W.Ok m)
+    (hown : ∀ u, W.Off (L.own G m u)) (hR : ∀ hL, L.R G hL → W.Off hL) (hap : Apart L W) :
+    L.OffWord G m W.ptr := by
+  intro bid blk o ha
+  obtain ⟨blk₀, -, -, -, ha₀, -⟩ := hw.access
+  rw [ha₀] at ha
+  cases ha
+  refine ⟨fun u x h1 h2 => hown u x h1 h2, fun hL hRL x h1 h2 => hR hL hRL x h1 h2, ?_⟩
+  rcases hap with h | h | h
+  · exact .inl (Ne.symm h)
+  · exact .inr (.inr h)
+  · exact .inr (.inl h)
+
+end futex
+
 end Word
 
 end Conc

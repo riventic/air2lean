@@ -453,18 +453,32 @@ theorem chooseWake_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} 
     {cs : List Nat} (h : s.chooseWake o p n = (cs, s')) :
     ∃ st tr, s' = { s with step := st, trace := tr } := chooseMany_eq h
 
+/-- A recorded access keeps the threads and the current thread. -/
+theorem recordAccess_keeps {b o l : Nat} {k : AccessKind} {m m' : Mem} {x : Unit}
+    (h : ((recordAccess b o l k).run m).run = some (.ok (x, m'))) :
+    m'.threads = m.threads ∧ m'.current = m.current ∧ m'.waiters = m.waiters := by
+  unfold recordAccess at h
+  obtain ⟨a, m₁, hg, h₁⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  dsimp only at h₁
+  split at h₁
+  · exact (MemM.throw_ok h₁).elim
+  · have := MemM.set_ok h₁; subst this; exact ⟨rfl, rfl, rfl⟩
+
 /-- What a futex wait did: a woken thread goes on (it leaves `woken`); else the kernel read the
-`u32` `v` at `p`, and the thread sleeps (it joins `waiters`) if `v = e`. -/
+`u32` `v` at `p` with a recorded atomic read (memory `m₁`), and the thread sleeps (it joins
+`waiters`) if `v = e`. -/
 theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
     (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
-    (m.woken.contains m.current = false ∧ ∃ bid blk o v, m.access p 4 4 = pure (bid, blk, o) ∧
+    (m.woken.contains m.current = false ∧ ∃ bid blk o v m₁, m.access p 4 4 = pure (bid, blk, o) ∧
+      ((recordAccess bid o 4 .atomicRead).run m).run = some (.ok ((), m₁)) ∧
       (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v) ∧
-      ((v = e ∧ b = true ∧ m' = { m with waiters := m.waiters.push (m.current, p) }) ∨
-       (v ≠ e ∧ b = false ∧ m' = m))) := by
+      ((v = e ∧ b = true ∧ m' = { m₁ with waiters := m₁.waiters.push (m₁.current, p) }) ∨
+       (v ≠ e ∧ b = false ∧ m' = m₁))) := by
   unfold Thread.futexWait at h
-  obtain ⟨a, m₁, hg, h₁⟩ := MemM.bind_ok h
+  obtain ⟨a, m₀, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   split at h₁
   · rename_i hw
@@ -474,23 +488,30 @@ theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
   · rename_i hw
     refine .inr ⟨by simpa using hw, ?_⟩
     obtain ⟨⟨bid, blk, o⟩, m₂, hx, h₂⟩ := MemM.bind_ok h₁
-    obtain ⟨hx', rfl⟩ := MemM.lift_ok (r := m₁.access p 4 4) hx
-    obtain ⟨v, m₃, hv, h₃⟩ := MemM.bind_ok h₂
+    obtain ⟨hx', rfl⟩ := MemM.lift_ok (r := m₀.access p 4 4) hx
+    obtain ⟨_, m₁, hr, h₃⟩ := MemM.bind_ok h₂
+    obtain ⟨a', m₃, hg', h₄⟩ := MemM.bind_ok h₃
+    obtain ⟨ha', hm₃⟩ := MemM.get_ok hg'
+    subst a' m₃
+    obtain ⟨v, m₄, hv, h₅⟩ := MemM.bind_ok h₄
     obtain ⟨hv', rfl⟩ := MemM.lift_ok hv
-    refine ⟨bid, blk, o, v, hx', hv', ?_⟩
-    split at h₃
+    refine ⟨bid, blk, o, v, _, hx', hr, hv', ?_⟩
+    split at h₅
     · rename_i he
-      obtain ⟨_, m₄, hs, hp⟩ := MemM.bind_ok h₃
+      obtain ⟨_, m₅, hs, hp⟩ := MemM.bind_ok h₅
       obtain ⟨rfl, rfl⟩ := MemM.pure_ok hp
       exact .inl ⟨he, rfl, MemM.set_ok hs⟩
     · rename_i he
-      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₃
+      obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₅
       exact .inr ⟨he, rfl, rfl⟩
 
 /-- A futex wait keeps the threads. -/
 theorem futexWait_threads {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
     (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
-  rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, -, -, ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩⟩ <;> rfl
+  rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, m₁, -, hr, -, ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩⟩
+  · rfl
+  · exact (recordAccess_keeps hr).1
+  · exact (recordAccess_keeps hr).1
 
 /-- A thread's run reached `tree` (`Sched.settle`): it stops at a sync op, with a new ghost
 value and the invariant, or it ends. -/

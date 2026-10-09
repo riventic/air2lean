@@ -264,7 +264,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-05 — Futex model
 
 - Kind: environment.
-- Statement: A futex wait on a matching `u32` sleeps until a wake at that address. A wake of
+- Statement: A futex wait on a matching `u32` sleeps until a wake at that address. The
+  kernel's compare is an atomic read of the word (a plain write that races with it is
+  `.illegal`). A wake of
   up to `n` waiters wakes the ones the oracle picks (no order is assumed). There is no spurious wakeup or cancellation, and a wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
 - Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.

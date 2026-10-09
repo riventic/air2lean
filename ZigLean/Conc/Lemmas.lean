@@ -1423,6 +1423,23 @@ theorem cmpxchgAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : 
     obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
     exact .inr ⟨b, v, rfl, ho, hd⟩
 
+/-- What a futex wait did (`futexWait_ok`), with the recorded atomic read of the word spelled
+out: no race, and the memory `m.recordAt b o 4 .atomicRead`. -/
+theorem futexWait_eq {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+    (m.woken.contains m.current = true ∧ b = false ∧
+      m' = { m with woken := m.woken.erase m.current }) ∨
+    (m.woken.contains m.current = false ∧ ∃ bid blk o v, m.access p 4 4 = pure (bid, blk, o) ∧
+      NoRace m bid o 4 .atomicRead ∧
+      (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v) ∧
+      ((v = e ∧ b = true ∧ m' = { m.recordAt bid o 4 .atomicRead with
+          waiters := m.waiters.push (m.current, p) }) ∨
+       (v ≠ e ∧ b = false ∧ m' = m.recordAt bid o 4 .atomicRead))) := by
+  rcases futexWait_ok h with hw | ⟨hw, bid, blk, o, v, m₁, ha, hr, hv, hc⟩
+  · exact .inl hw
+  obtain ⟨hnr, rfl⟩ := recordAccess_ok hr
+  exact .inr ⟨hw, bid, blk, o, v, ha, hnr, hv, hc⟩
+
 /-- A futex wait of a woken thread goes on; it leaves `woken`. -/
 theorem futexWait_run_woken {p : Ptr} {e : BitVec 32} {m : Mem}
     (hw : m.woken.contains m.current = true) :
@@ -1433,19 +1450,21 @@ theorem futexWait_run_woken {p : Ptr} {e : BitVec 32} {m : Mem}
   simp [StateT.run, set, StateT.set, pure, StateT.pure, bind, ExceptT.bind,
     ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run]
 
-/-- A futex wait of a thread that is not woken: the kernel reads `v`; the thread sleeps if
-`v = e`. -/
+/-- A futex wait of a thread that is not woken: the kernel reads `v` (a recorded atomic read
+that does not race); the thread sleeps if `v = e`. -/
 theorem futexWait_run_go {p : Ptr} {e : BitVec 32} {m : Mem} {bid : BlockId} {blk : Block}
     {o : Nat} {v : BitVec 32} (hw : m.woken.contains m.current = false)
-    (ha : m.access p 4 4 = pure (bid, blk, o))
+    (ha : m.access p 4 4 = pure (bid, blk, o)) (hnr : NoRace m bid o 4 .atomicRead)
     (hv : intOfBytes 32 (blk.bytes.extract o (o + 4)) = pure v) :
     ((Thread.futexWait p e).run m).run = some (.ok (decide (v = e),
-      if v = e then { m with waiters := m.waiters.push (m.current, p) } else m)) := by
+      if v = e then { m.recordAt bid o 4 .atomicRead with waiters := m.waiters.push (m.current, p) }
+      else m.recordAt bid o 4 .atomicRead)) := by
   unfold Thread.futexWait
+  have hrec := recordAccess_run hnr
   simp only [hw, ha, Bool.false_eq_true, ↓reduceIte, StateT.run_bind, StateT.run_get, pure_bind]
   split <;> simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set,
     StateT.set, pure, StateT.pure, bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure,
-    ExceptT.bindCont, ExceptT.run]
+    ExceptT.bindCont, ExceptT.run, Mem.recordAt, MonadStateOf.get, StateT.get]
 
 /-- `Zig.add` of 1 that gave a result: no overflow, one more. -/
 theorem add_one_ok {w : Nat} {a r : BitVec w} (h : (add false a 1).run = some (.ok r))
