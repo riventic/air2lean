@@ -65,11 +65,11 @@ original rejection.
   load reads any message not older than the newest one that happened before it. It neither
   uses nor updates the thread's own read view, so it admits every outcome of a `monotonic`
   load and more. `unordered` stores stay rejected.
-- **Pointer-valued atomics**: an atomic load (any order) and a *strong* compare-exchange of an
-  8-byte pointer or nullable pointer (`PageAllocator`'s address hint). Messages keep the
-  pointer's bytes and provenance; compare-exchange matches by address, as the hardware does.
-  Pointer stores, RMWs and weak compare-exchanges stay rejected. A function with one of these is
-  concurrent (`Zig.ConcM`), and so is every caller, through the vtable included.
+- **Pointer-valued atomics** (`PageAllocator`'s address hint) are the thread model's pointer
+  atomics, the same in both modes (`ZigLean/Mem/AtomicPtr.lean`, C09): messages keep the
+  pointer's bytes and provenance, and a compare-exchange compares identities (`.unspecified`
+  when identity and address disagree). A function with an atomic op is concurrent
+  (`Zig.ConcM`), and so is every caller, through the vtable included.
 
 Two general fixes reached by the allocator code apply in both modes and change no committed
 translation: a function type counts as error-free storage (a vtable of function pointers is a

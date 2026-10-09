@@ -5,7 +5,9 @@ Status: the translated `PageAllocator` (Zig 0.16.0, x86_64-linux and aarch64-mac
 `AllocSpec` ([alloc-spec.md](alloc-spec.md)) as it is stated, in any logic and for any invariant
 that holds at program start. This is a limit of the specification's logic, not a bug of the
 allocator or of the OS model: the native program is fine. This page records the obstructions,
-their kernel-checked evidence, two upstream Zig bugs, the native comparison, and what a fix needs.
+their kernel-checked evidence, two upstream Zig bugs, the native comparison, and the status with
+the full-state logic: `free`, `resize` and `remap` are proved against `FAllocSpec`; `alloc` is
+blocked by O4, an ambiguous `@ptrFromInt` in the memory model.
 
 ## The obstructions
 
@@ -69,22 +71,52 @@ only; `check.sh` now picks `expected-linux.txt` on 4 KiB-page hosts (the output 
 page size only), and CI runs the comparison. `native.zig` prints the first three `page_resize`
 cases; the `(10,20000)`, `remap` and aligned-alloc rows are from one-off native runs.
 
-## What a fix needs
+## Status with the full-state logic (`codex/alloc-p4b-page`)
 
-1. **Block metadata in `granted` (O2, proof-only, P3 modules).** Give the token the region's
-   block: e.g. an allocator field `blk : Ptr → Nat → Nat → Nat → Nat → BlockKind → Prop` and
-   `granted I p k bs := (∃ A S K, ⌜I.blk p n k A S K⌝ ∗ regionIn p A S K (2^k) bs) ∗ I.tok p n k`.
-   The page allocator's `blk` says `K = .mapped p.off`, `S = p.off + alignUp n P`, `P ∣ A`; its
-   token owns the tail `regionIn (p.add n) A S K 1 tail`. The wrapper proofs need
-   `regionIn`-preserving versions of `memsetUndef`, `storeItem` and `memcpy`.
-2. **Memory beyond the heap (O1, O3, core).** Assertions must be able to constrain atomic
-   locations and dead blocks' metadata, and frames must keep them: either per-location ownership
-   of atomics plus persistent block metadata in the heap model, or an allocator specification in
-   the concurrent logic (`ZigLean/Conc/Logic.lean`), whose protocol invariant is a predicate on
-   the whole `Mem` (the page allocator is a concurrent object: `addr_hint` is shared by every
-   thread). The second also gives the thread-safety statement the first lacks.
-3. **Size bounds (upstream bugs).** Preconditions `len + 2^k ≤ 2^64 - P` for `alloc` and
-   `n + P - 1 < 2^64` for `resize`/`remap`, or an upstream fix.
+The full-state separation logic (`ZigLean/Sep/Full`, [sep-full-state.md](sep-full-state.md))
+restates the specification as `FAllocSpec` (`ZigLean/Sep/Full/AllocSpec.lean`): the same entries,
+pre- and postconditions, over assertions that can own atomic layouts (`apts`, O3) and keep block
+knowledge after `free` (`known`, O1).
 
-Until then `resize`, `remap` and `free` (plain `MemM`, no atomics or hint) can be proved against
-a spec with fix 1, and `alloc` only from memories with a known hint block and well-formed atomics.
+| | status | where |
+|---|---|---|
+| O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`) | `PageSpec.tok` |
+| `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only | `tests/roadmap/alloc-translated/PageSpec.lean` |
+| size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
+| O1, O3 | specifiable (`known`, `apts`); not needed by `free`/`resize`/`remap` | `ZigLean/Sep/Full/Triple.lean`, `Atomic.lean` |
+| `alloc` | **open: O4** | below |
+
+### O4: an ambiguous `@ptrFromInt`
+
+`alloc` turns the derived hint address back into a pointer (`@ptrFromInt`, `Zig.ptrFromAddr`)
+before it passes it to `mmap`. Both modelled targets grow the stack down, so the address is
+`((@intFromPtr(hint) -% page_aligned_len) & ~(alignment - 1)) -% max_drop_len`, below the last
+mapping. Under the default `.strict` provenance mode, `ptrFromAddr` throws `.unspecified` when two
+or more blocks' ranges `[addr, addr + size]` contain the address (dead blocks count), and
+`.liveBlock` throws when none of them is live.
+
+No precondition can rule this out. The covering blocks belong to the frame or are dead, and
+`Mem.Seq` (and `FSeq`) allows such layouts: they arise under M05 address reuse and under any
+placement oracle that allows adjacent blocks. Knowledge that "only block `b` covers `n`" is not
+stable under later allocations, so it cannot be persistent (`KMono`).
+
+`PageObstruction.lean` checks this in the kernel. `hintedAmb` is the real post-`free` state
+`hinted` plus one dead 8-byte block that ends at the derived address 4096, where global block 0
+starts. It holds every full-state resource that `hinted` holds, with the same frame
+(`holds_hintedAmb`), and `alloc(1, align 1)` throws `.unspecified` from it (`alloc_hintedAmb`).
+Hence `alloc_no_ftriple_O4` (no precondition that `hinted` holds gives an `alloc` triple) and
+`not_fallocSpec_O4` (no such invariant satisfies `FAllocSpec`, in any full-state logic).
+
+Natively nothing goes wrong: the hint goes only to `mmap`, which may ignore it. The fix is in the
+memory model, not in the specification: an ambiguous recovery returns the provenance-free
+pointer `⟨none, n⟩`. `ptrAddr` of it is still `n`, and every access through it is `.illegal`.
+This is a conservative over-approximation. It is approved by the coordinator but not applied on
+this branch, because it changes `ZigLean/Mem/Basic.lean`, which needs the user's permission.
+With it, `alloc` needs a pointer-valued `apts` and a `cmpxchg` rule (`ZigLean/Sep/Full/Atomic.lean`
+has only 64-bit integer words), and a sequential reading of the scheduler's one-thread run.
+
+### Negative check
+
+`tests/roadmap/alloc-translated/mutant.sh` deletes the tail `munmap` from the translated
+`realloc` (a shrink that leaks the cut pages but runs without an error) and rechecks
+`PageSpec.lean`, which then fails. The size-pinning token is what rejects it.

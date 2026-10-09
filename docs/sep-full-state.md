@@ -1,9 +1,10 @@
-# Separation logic over the full state (design and prototype)
+# Separation logic over the full state
 
-Status: design plus a proof-only prototype in `ZigLean/Sep/Full/` (`Res`, `Triple`, `Atomic`,
-`Toy`). `ZigLean.lean` does not import it, and no existing rule changes. CI builds the four
-modules (`Full-state separation logic prototype`). The axioms are `propext`,
-`Classical.choice` and `Quot.sound`. There is no `sorry`, `admit` or `native_decide`.
+Status: proof-only modules in `ZigLean/Sep/Full/`: the prototype (`Res`, `Triple`, `Atomic`, `Toy`)
+and migration stages 1 and 2 (`Logic`, `AllocSpec`, `Tame`, see §Migration). `ZigLean.lean` does
+not import them, and no existing rule changes. CI builds them (`Full-state separation logic`). The
+axioms are `propext`, `Classical.choice` and `Quot.sound`. There is no `sorry`, `admit` or
+`native_decide`.
 
 ## The problem
 
@@ -114,7 +115,7 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Triple` | `FTriple.frame`, `conseq`, `bind`, `ret`, `ex`, `lift`, `drop`, `of_pure_run` | structural rules |
 | `Triple` | `FTriple.ofTriple` | **lifting**: `Triple P c Q → Tame c → FTriple (up P) c (up ∘ Q)` |
 | `Triple` | `Tame.load`, `store`, `loadBytes`, `storeBytes`, `alloc`, `free`, `ptrAddr`, `pure'`, `bind` | the plain primitives keep the layout and every block's address |
-| `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` |
+| `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing, but throws `.unspecified` on an ambiguous address (O4, `docs/alloc-page.md`) |
 | `Triple` | `Mem.LiveDisjoint`, `Holds.apart` | owned bytes of two different blocks lie in disjoint address ranges (given the placement invariant) |
 | `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
@@ -141,12 +142,12 @@ The invariant owns only knowledge of the mapping, so `toyFree_spec` keeps it, an
 good memory in the resources a precondition can see. `odd` differs in the hint bytes' tag
 (`inv_no_odd`); `hintedLost` lacks the knowledge `known 6 A` (`inv_no_lost`).
 
-The toy keeps the pointer in a plain slot and the hint as a `u64`. Main has no pointer-valued
-atomics; those exist on `codex/alloc-translated-p4-page` (`ZigLean/Conc/AtomicWord.lean`,
-`atomicLoadUnorderedEncAt`, `cmpxchgEncAt`). There the two slots become one `apts` with a `Ptr`
-value. The same `locIdx_post` argument applies: an `unordered` read at choice 0 reads the newest
-message, and the pointer-`cmpxchg` comparison `ptrBytesAddr` needs `known` for the expected
-pointer's block, which is O1 again.
+The toy keeps the pointer in a plain slot and the hint as a `u64`. The translated
+`PageAllocator` uses the thread model's pointer atomics (`ZigLean/Mem/AtomicPtr.lean`, C09) and
+an `unordered` pointer load (`ZigLean/Conc/AtomicWord.lean`). There the two slots become one
+`apts` with a `Ptr` value. The same `locIdx_post` argument applies: an `unordered` read at choice
+0 reads the newest message. The pointer `cmpxchg` compares identities (`ptrValEq`), so a
+sequential run that compares the value it just read needs no address.
 
 ## Soundness
 
@@ -245,13 +246,22 @@ pointer's block, which is O1 again.
 2. **Legacy rules lift unchanged** through `FTriple.ofTriple` and `Tame`. Every generated
    plain-memory primitive is `Tame`, and `Tame` is closed under `bind`. Loops need a `Tame` for the
    fixpoint, by `loop` induction like `loop_spec_mm`. That is mechanical, but not done here.
-3. **Proposed staging:**
-   1. Add the `Full` modules to `ZigLean.lean`. Add `FLogic`, the `Logic` record over `FTriple`
-      (all fields hold already: `frame`, `bind`, `conseq`, `ex`, `lift`, `ofTotal` via a total
-      variant, `congr` as for `Triple`).
-   2. Re-state `AllocSpec` over `FAssn` (next section). The FBA and Page proofs use `FTriple`
-      directly; existing clients use `up` and the lifting theorem.
-   3. With the placement fix, add `LiveDisjoint` to `FSeq` and the `apart` rule.
+3. **Staging** (status on `codex/alloc-p4b-page`):
+   1. Done (`Logic.lean`): `FTotalTriple` (`FTriple` and `FReturns`) with its structural rules,
+      `FTotalTriple.ofTotal` (lifting a legacy `TotalTriple` of a `Tame` program), and `FLogic`,
+      the `Logic` record over full-state assertions (`FLogic.partial`, `FLogic.total`). The modules
+      stay proof-only like the rest of `ZigLean/Sep`, so they are not added to `ZigLean.lean`.
+   2. Done (`AllocSpec.lean`, `Tame.lean`): `FAllocSpec` over `FAllocInv` (next section).
+      `FAllocSpec.ofTotal` turns a legacy total `AllocSpec` of a `VTame` vtable into a full one
+      (`AllocInv.toFull`). `tame` proves `Tame` for normalized generated code (`gen_norm`), and the
+      OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. The FixedBufferAllocator gets
+      `FBA.fallocSpec` this way (`tests/roadmap/alloc-fba/AllocFba/Full.lean`). The page
+      allocator's `free`, `resize` and `remap` are proved against it
+      (`tests/roadmap/alloc-translated/PageSpec.lean`); its `alloc` is blocked by O4
+      (`docs/alloc-page.md`). The wrapper contracts and the FBA client stay on the legacy
+      `AllocSpec`.
+   3. Open: needs the placement fix (`codex/soundness-batch`), which is not on `main` yet. Then add
+      `LiveDisjoint` to `FSeq`, an `apart` rule, and the disjointness of a new block to `Tame.alloc`.
    4. Once everything uses `FTriple`, fold the tag into `Cell` and make `Triple := FTriple`. Every
       `bytesAt`-based lemma keeps its statement, because tags are "any" under `up`.
 4. **Cost.** The atomic rules took about 500 lines (`Atomic.lean`) on top of the existing
@@ -293,11 +303,17 @@ This builds on the FBA branch's O2 shape (`codex/alloc-translated-p4-fba` 02a845
 7. **Size bounds.** These come from the upstream bugs in `docs/alloc-page.md`. Add the
    preconditions `len + 2^k ≤ 2^64 - P` for `alloc` and `n + P - 1 < 2^64` for `resize`/`remap`.
 
-## Limits of the prototype
+Items 1, 2, 4 and 7 are done (`FAllocSpec`, `PageSpec.tok`, `PageSpec.legacy.fits`). Item 5 is
+not needed for the lifted FBA proof, which keeps its pin byte. Item 3 needs O4 fixed first. Item 6
+needs stage 3.
+
+## Limits
 
 * Atomic rules cover only 64-bit integer words with natural alignment, at choice 0 (sequential
   runs, `Sched.run` with one thread). There is no `cmpxchg` rule, no RMW rule, and no
-  pointer-valued atomics.
+  pointer-valued atomics (the pointer atomics of `ZigLean/Mem/AtomicPtr.lean`).
 * `LiveDisjoint` is stated and used (`Holds.apart`) but not part of `FSeq`, because main has no
   placement invariant that maintains it.
+* `@ptrFromInt` has no full-state rule: on `main` an ambiguous address throws `.unspecified`, and
+  no assertion can rule that out (O4).
 * `Tame` for loops and calls (`loop`, `callM`) is not proved. The lifting theorem is per program.

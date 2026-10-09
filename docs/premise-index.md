@@ -5,25 +5,25 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2974 theorems in 176 files.
+3166 theorems in 182 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 741 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 635 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 682 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 91 | Single modelled allocator |
+| [ALC-01](premises.md#alc-01) | 142 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 86 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
-| [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
-| [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
+| [ALC-03](premises.md#alc-03) | 68 | Byte remap policy |
+| [ALC-04](premises.md#alc-04) | 6 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 8 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
-| [THR-01](premises.md#thr-01) | 1444 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 179 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1461 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 196 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 20 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 841 | Futex model |
@@ -33,11 +33,11 @@ premise was derived. This index covers the committed generated modules.
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1170 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1170 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1187 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1187 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 412 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 507 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
+| [ORD-05](premises.md#ord-05) | 26 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 130 | Executable IEEE-754 float model |
@@ -46,22 +46,23 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2840 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2409 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1214 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 3017 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2565 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1335 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 248 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2974 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1451 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1451 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 3166 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1498 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1498 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
+| [OSM-01](premises.md#osm-01) | 27 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 
 ## `Proofs/Asm/Effects.lean`
 
@@ -2346,6 +2347,240 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `AggregateCastsClients.optUnwrap_some` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `AggregateCastsClients.ptrWrap_some` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `AggregateCastsClients.wrap_unwrap` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Bridge.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, ALC-04, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.ctz1` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.ctz4` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.fromByteUnits_one` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.fromByteUnits_four` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.mul_one` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.two_ne_zero` | TRU-01 |
+| `AllocFba.mask_three` | TRU-01 |
+| `AllocFba.enc_size_u8` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.enc_align_u8` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.bind_ext` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.allocBytes4_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.allocBytes1_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.alloc_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.alignedAlloc_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.create_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.destroy_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.free_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.freeAligned_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.freeSentinel_eq` | PRF-02, ALC-01, ALC-03, ALC-04, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.dupe_eq` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.realloc_eq` | PRF-02, ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.allocSentinel_eq` | PRF-02, ALC-01, ALC-03, ALC-04, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Client.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.Client.spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.grantSep'` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.tc_bind` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.tc_pre` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.tc_pure` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.tc_exit` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.alloc_fresh` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `AllocFba.Client.slice_decode_encode` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `AllocFba.Client.extract_writeBytes_lt` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.Client.enc_sv_eq` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.enc_e_size` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.Client.enc_s_size` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.Client.enc_w1_size` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.Client.enc_sv_size` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.enc_sv_end` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.enc_sv_buf` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.store_struct` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.split_buffer` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `AllocFba.Client.cov_of` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.exit_free` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.granted_memset` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.granted_store` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.granted_load` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.granted_load0` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.reset_step` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.Client.decode_byte` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.Client.byte_at` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocFba.Client.intCast_byte` | SEM-01, TRU-01 |
+| `AllocFba.Client.add32` | SEM-01, TRU-01 |
+| `AllocFba.Client.tc_ex` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.flat_size` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocFba.Client.fitsI` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.leave` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.prefix_byte` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.Client.own_junk` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.entry` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.Client.client_spec` | PRF-02, ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Fba.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.FBA.own_intro` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.body_absorb` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.two_pow_lt` | TRU-01 |
+| `AllocFba.FBA.toNat_two_pow` | TRU-01 |
+| `AllocFba.FBA.toNat_mask` | TRU-01 |
+| `AllocFba.FBA.debug_assert_true` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.toByteUnits_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.isPowerOfTwo_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.isValidAlign_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.and_not_add_and` | TRU-01 |
+| `AllocFba.FBA.toNat_and_not_mask` | TRU-01 |
+| `AllocFba.FBA.alignOffset_facts` | TRU-01 |
+| `AllocFba.FBA.result_bind_eq_pure` | SEM-01, TRU-01 |
+| `AllocFba.FBA.pts_slice_parts` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocFba.FBA.pts_slice_field_load` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.load_end` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.load_ptr` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.load_len` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.load_slice` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.store_end` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.ptrAddr_ctx` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.add_ok` | SEM-01, TRU-01 |
+| `AllocFba.FBA.toNat_add_ok` | TRU-01 |
+| `AllocFba.FBA.sub_ok` | SEM-01, TRU-01 |
+| `AllocFba.FBA.gt_eq` | SEM-01, TRU-01 |
+| `AllocFba.FBA.le_eq` | SEM-01, TRU-01 |
+| `AllocFba.FBA.ofInt_toNat` | TRU-01 |
+| `AllocFba.FBA.sub_one_eq` | SEM-01, TRU-01 |
+| `AllocFba.FBA.rem_one` | SEM-01, TRU-01 |
+| `AllocFba.FBA.divTrunc_one` | SEM-01, TRU-01 |
+| `AllocFba.FBA.alignPointerOffset_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.off_add_nat` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `AllocFba.FBA.grant_intro` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.carve_grant` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.own_open` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.pin_ownsIn` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.pin_block` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.alloc_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.ptr_ext` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.FBA.ofInt_toNat_lt` | TRU-01 |
+| `AllocFba.FBA.ownsSlice_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.isLast_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.open_grant` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.during_body` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.during_ownsIn` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.post_same` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.keepsPrefix_extract` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.post_shrink` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.post_last_shrink` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.post_last_grow` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.post_free_last` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.post_free_leak` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.toNat_sub_le` | TRU-01 |
+| `AllocFba.FBA.ofNat_eq_of_toNat` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.prologue` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.resize_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.remap_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.free_spec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.allocSpec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.grantSep` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.sep_junk` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.FBA.own_init` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.own_state` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.state_bytes` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocFba.FBA.getElem!_ofFn` | SEM-01, SEM-02, TRU-01 |
+| `AllocFba.FBA.reset_spec` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-fba/AllocFba/Full.lean`
+
+File premises: PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `AllocFba.FBA.tame_alignPointerOffset` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_sliceContainsSlice` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_ownsSlice` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_isLastAllocation` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_alloc` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_resize` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_remap` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.tame_free` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.vtame` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocFba.FBA.fallocSpec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/alloc-translated/PageObstruction.lean`
+
+File premises: ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageObstruction.run_of_errOf` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.seq_of_blocks` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.no_error_of_triple` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocTranslated.PageObstruction.odd_heap` | ALC-01, ALC-03, SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.odd_seq` | ALC-01, ALC-03, SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_odd` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.alloc_args` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.alloc_no_triple_at_start` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.not_allocSpec_at_start` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.hinted_heap` | ALC-01, ALC-03, SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.hintedLost_seq` | ALC-01, ALC-03, SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_hintedLost` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.alloc_no_triple_after_free` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.hintedAmb_heap` | ALC-01, ALC-03, SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_hintedAmb` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.hintedAmb_fseq` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocTranslated.PageObstruction.holds_hintedAmb` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocTranslated.PageObstruction.alloc_no_ftriple_O4` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageObstruction.not_fallocSpec_O4` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+
+## `tests/roadmap/alloc-translated/PageSpec.lean`
+
+File premises: ALC-01, ALC-03, ALC-05, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageSpec.P_eq` | SEM-01, SEM-02, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.grant_mapping` | SEM-01, SEM-02, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.add_ok` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.alignUp_eq` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.toNat_and_not_4095` | TRU-01 |
+| `AllocTranslated.PageSpec.validAlign4096` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.debug_assert_true` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.alignBackward_eq` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.alignForward_eq` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.open_grant` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.alignUp_ge` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.alignUp_pos` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.toNat_alignUp` | SEM-01, SEM-02, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.mapping_block` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.addr_mask` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageSpec.free_total` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.regrant` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.keepsPrefix_of` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageSpec.extract_min` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.post_some` | ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.two_pow_lt` | TRU-01 |
+| `AllocTranslated.PageSpec.toNat_two_pow` | TRU-01 |
+| `AllocTranslated.PageSpec.toByteUnits_eq` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.gt_eq` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.lt_eq` | SEM-01, TRU-01 |
+| `AllocTranslated.PageSpec.realloc_total` | ALC-01, ALC-03, ALC-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.sep_emp_left` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.resize_total` | ALC-01, ALC-03, ALC-05, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.remap_total` | ALC-01, ALC-03, ALC-05, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_realloc` | SEM-01, SEM-02, SEM-03, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_free` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_resize` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.tame_remap` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.pre_up` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageSpec.post_own` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageSpec.free_spec` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.resize_spec` | ALC-01, ALC-03, ALC-05, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageSpec.remap_spec` | ALC-01, ALC-03, ALC-05, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
 
 ## `tests/roadmap/allocator-identity/Kernel.lean`
 
