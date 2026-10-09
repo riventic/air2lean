@@ -20,8 +20,7 @@ statements `T.nonvacuous` and `T.returns` of a triple `T` end in them definition
 namespace Zig
 
 theorem Mem.seq_default : ({} : Mem).Seq :=
-  ⟨singleThread_empty rfl (by decide), fun l c h => by
-    obtain ⟨b, o⟩ := l; simp [Mem.heap] at h⟩
+  ⟨singleThread_empty rfl (by decide)⟩
 
 theorem Mem.heap_default : ({} : Mem).heap = Heap.empty := by
   funext l; obtain ⟨b, o⟩ := l; simp [Mem.heap]; rfl
@@ -43,12 +42,8 @@ theorem mem1_heap (bs : Array Byte) (kind : BlockKind) (l : Loc) :
   · by_cases h : o < bs.size <;> simp [Mem.heap, mem1, blk, h]
   · simp [Mem.heap, mem1]
 
-theorem mem1_seq (bs : Array Byte) (kind : BlockKind) : (mem1 bs kind).Seq := by
-  refine ⟨singleThread_empty rfl Nat.zero_lt_one, fun l c hc => ?_⟩
-  rw [mem1_heap] at hc
-  split at hc
-  · cases hc; simp [mem1]
-  · cases hc
+theorem mem1_seq (bs : Array Byte) (kind : BlockKind) : (mem1 bs kind).Seq :=
+  ⟨singleThread_empty rfl Nat.zero_lt_one⟩
 
 theorem mem1_bytesAt (bs : Array Byte) (kind : BlockKind) :
     bytesAt p0 4096 bs.size kind bs (mem1 bs kind).heap :=
@@ -127,14 +122,8 @@ theorem mem2_heap (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) (l : Loc) :
   · simp [Mem.heap, mem2]
 
 theorem mem2_seq {bs₁ bs₂ : Array Byte} (k₁ k₂ : BlockKind) (h : bs₁.size < 4096) :
-    (mem2 bs₁ bs₂ k₁ k₂).Seq := by
-  refine ⟨singleThread_empty rfl Nat.zero_lt_one, fun l c hc => ?_⟩
-  rw [mem2_heap] at hc
-  split at hc
-  · cases hc; simp [mem2]; omega
-  · split at hc
-    · cases hc; simp [mem2]
-    · cases hc
+    (mem2 bs₁ bs₂ k₁ k₂).Seq :=
+  ⟨singleThread_empty rfl Nat.zero_lt_one⟩
 
 /-- Each block of `mem2` is owned separately. -/
 theorem mem2_bytesAt (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) :

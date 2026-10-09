@@ -43,7 +43,7 @@ def tableA : ErrorTable := ⟨#["A"], by decide⟩
 
 /-! ## `ZigLean/Bit.lean` -/
 
-nonvacuity_witness shlExact_of_noOverflow := ⟨8, 8, false, 1, 0, by decide, trivial⟩
+nonvacuity_witness shlExact_of_noOverflow := ⟨8, 8, false, 1, 0, by decide, by decide, trivial⟩
 nonvacuity_witness shlWithOverflow_noOverflow := ⟨8, 8, false, 1, 0, by decide, by decide, trivial⟩
 nonvacuity_witness shlWithOverflow_overflow := ⟨8, 8, false, 128, 1, by decide, by decide, trivial⟩
 nonvacuity_witness shlWithOverflow_result := ⟨8, 8, false, 1, 0, by decide, trivial⟩

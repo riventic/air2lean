@@ -45,6 +45,26 @@ against the exporter's `abi_size`/`abi_align` in `Check.lean`); 64-bit little-en
 `Triple` and the frame rule (proved for every memory satisfying `Mem.Seq`, no axioms,
 `sorry` or `implemented_by` in `ZigLean/Sep`).
 
+## Fix status (soundness batch)
+
+`tests/roadmap/architecture-audit/memory-model/check.sh` asserts agreement with the native
+build for each fixed finding below and the recorded divergence for each open one.
+
+| Finding | Status | Fix |
+|---|---|---|
+| MM-1 | fixed | placement oracle `Mem.place` for every block kind; generated `mem0 σ`; theorems hold for every `σ` (premise SEM-07, `docs/address-placement.md`) |
+| MM-2 | fixed | alignment checks follow the placement; a placement without the extra alignment panics as natively |
+| MM-3 | open | inbounds-GEP poison (out-of-allocation pointer arithmetic) |
+| MM-4 | fixed | pointer `==` compares addresses for every pointer kind (`Zig.ptrEqAddr`, `Zig.optPtrEqAddr`) |
+| MM-5 | fixed | stack budget `Mem.stackLimit`/`Zig.enterFrame`, `Zig.Error.stackOverflow`; premise STK-01 without a budget |
+| MM-6, MM-7 | open | emitter placeholders; the ReleaseFast premise |
+| MM-8 | fixed | no allocation-order address facts in Sep (every placement) |
+| MM-9 | fixed | address reuse is one case of the placement (ALC-08) |
+| MM-10, MM-12 | open | hardening (fixed-buffer aliasing; zero-length/address-zero projections) |
+| MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
+| MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
+| MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
+
 ## Measurements
 
 | Fixture | Model (Lean, from `mem0`) | Native ReleaseSafe 0.16.0 |
