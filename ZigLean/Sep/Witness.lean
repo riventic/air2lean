@@ -56,6 +56,9 @@ theorem mem1_bytesAt (bs : Array Byte) (kind : BlockKind) :
     bytesAt p0 4096 bs.size kind bs (mem1 bs kind).heap :=
   ⟨0, rfl, by decide, fun l => by simp [mem1_heap, p0]⟩
 
+theorem mem1_bytesAt' {bs : Array Byte} {kind : BlockKind} {S : Nat} (h : bs.size = S) :
+    bytesAt p0 4096 S kind bs (mem1 bs kind).heap := h ▸ mem1_bytesAt bs kind
+
 /-- `p0` points to the value that the block holds. -/
 theorem mem1_pts {T : Type} [Enc T] {bs : Array Byte} {kind : BlockKind} {a : Nat} {v : T}
     (hs : bs.size = Enc.size T) (hv : Enc.decode bs = pure v) (ha : 4096 % a = 0)
@@ -86,6 +89,48 @@ theorem mem1_pts₂ {T U : Type} [Enc T] [LawfulEnc T] [Enc U] [LawfulEnc U] (v 
   refine ⟨h₁, h₂, hd, he, ⟨_, _, _, _, by simpa [p0] using ha, hv, LawfulEnc.decode_encode v, hb₁,
     by decide⟩, ⟨_, _, _, _, ?_, hw, LawfulEnc.decode_encode w, hb₂, by decide⟩⟩
   simpa [p0, Ptr.add] using hb
+
+/-! ## Two blocks of bytes -/
+
+theorem mem2_heap (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) (l : Loc) :
+    (mem2 bs₁ bs₂ k₁ k₂).heap l =
+      if l.1 = 0 ∧ l.2 < bs₁.size then some ⟨bs₁[l.2]!, 4096, bs₁.size, k₁⟩
+      else if l.1 = 1 ∧ l.2 < bs₂.size then some ⟨bs₂[l.2]!, 8192, bs₂.size, k₂⟩ else none := by
+  obtain ⟨b, o⟩ := l
+  rcases b with _ | _ | b
+  · by_cases h : o < bs₁.size <;> simp [Mem.heap, mem2, blk, h]
+  · by_cases h : o < bs₂.size <;> simp [Mem.heap, mem2, blk, h]
+  · simp [Mem.heap, mem2]
+
+theorem mem2_seq {bs₁ bs₂ : Array Byte} (k₁ k₂ : BlockKind) (h : bs₁.size < 4096) :
+    (mem2 bs₁ bs₂ k₁ k₂).Seq := by
+  refine ⟨singleThread_empty rfl Nat.zero_lt_one, fun l c hc => ?_⟩
+  rw [mem2_heap] at hc
+  split at hc
+  · cases hc; simp [mem2]; omega
+  · split at hc
+    · cases hc; simp [mem2]
+    · cases hc
+
+/-- Each block of `mem2` is owned separately. -/
+theorem mem2_bytesAt (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) :
+    (bytesAt p0 4096 bs₁.size k₁ bs₁ ∗ bytesAt p1 8192 bs₂.size k₂ bs₂) (mem2 bs₁ bs₂ k₁ k₂).heap := by
+  refine ⟨fun l => if l.1 = 0 ∧ l.2 < bs₁.size then some ⟨bs₁[l.2]!, 4096, bs₁.size, k₁⟩ else none,
+    fun l => if l.1 = 1 ∧ l.2 < bs₂.size then some ⟨bs₂[l.2]!, 8192, bs₂.size, k₂⟩ else none,
+    fun l => ?_, funext fun l => ?_, ⟨0, rfl, by decide, fun l => by simp [p0]⟩,
+    ⟨1, rfl, by decide, fun l => by simp [p1]⟩⟩
+  · by_cases h : l.1 = 0
+    · right; simp [h]
+    · left; simp [h]
+  · rw [mem2_heap]
+    by_cases h : l.1 = 0 ∧ l.2 < bs₁.size
+    · simp [h]
+    · simp only [h, ↓reduceIte, Heap.union_apply, Option.none_or]
+
+theorem mem2_bytesAt' {bs₁ bs₂ : Array Byte} {k₁ k₂ : BlockKind} {S₁ S₂ : Nat} (h₁ : bs₁.size = S₁)
+    (h₂ : bs₂.size = S₂) :
+    (bytesAt p0 4096 S₁ k₁ bs₁ ∗ bytesAt p1 8192 S₂ k₂ bs₂) (mem2 bs₁ bs₂ k₁ k₂).heap := by
+  subst h₁ h₂; exact mem2_bytesAt bs₁ bs₂ k₁ k₂
 
 /-! ## Admissible inputs and returning runs -/
 

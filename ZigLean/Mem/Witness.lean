@@ -22,8 +22,15 @@ def blk (bs : Array Byte) (kind : BlockKind := .heap) : Block :=
 def mem1 (bs : Array Byte) (kind : BlockKind := .heap) : Mem :=
   { blocks := #[blk bs kind], nextAddr := 4096 + bs.size + 1 }
 
+/-- Two live blocks: `0` with the bytes `bs₁` at address 4096 and `1` with `bs₂` at 8192. -/
+def mem2 (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind := .heap) : Mem :=
+  { blocks := #[blk bs₁ k₁, { blk bs₂ k₂ with addr := 8192 }], nextAddr := 8192 + bs₂.size + 1 }
+
 /-- The first byte of block `0`. -/
 def p0 : Ptr := ⟨some 0, 0⟩
+
+/-- The first byte of block `1`. -/
+def p1 : Ptr := ⟨some 1, 0⟩
 
 theorem mem1_access {bs : Array Byte} {kind : BlockKind} {o n a : Nat} (hn : o + n ≤ bs.size)
     (ha : (4096 + o) % a = 0) :

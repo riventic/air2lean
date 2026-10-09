@@ -27,15 +27,11 @@ theorem w32_size : w32.size = 4 := LawfulEnc.size_encode _
 theorem w32_access : (mem1 w32).access (p0.add 0) (Enc.size (BitVec 32)) 4 = pure (0, blk w32, 0) :=
   mem1_access (by rw [w32_size]; decide) (by decide)
 
-/-- Two live blocks with the bytes `bs`: `0` at 4096 and `1` at 8192. -/
-def mem2 (bs : Array Byte) : Mem :=
-  { blocks := #[blk bs, { blk bs with addr := 8192 }], nextAddr := 8192 + bs.size + 1 }
-
 theorem w32_access₁ :
-    (mem2 w32).access (p0.add 0) (Enc.size (BitVec 32)) 4 = pure (0, blk w32, 0) := by
+    (mem2 w32 w32).access (p0.add 0) (Enc.size (BitVec 32)) 4 = pure (0, blk w32, 0) := by
   with_unfolding_all rfl
 
-theorem w32_access₂ : (mem2 w32).access ⟨some 1, 0⟩ (Enc.size (BitVec 32)) 4 =
+theorem w32_access₂ : (mem2 w32 w32).access p1 (Enc.size (BitVec 32)) 4 =
     pure (1, { blk w32 with addr := 8192 }, 0) := by
   with_unfolding_all rfl
 
@@ -89,7 +85,7 @@ nonvacuity_witness access_store_same :=
     0, w32_access, w32_access, trivial⟩
 
 nonvacuity_witness access_store_other :=
-  ⟨BitVec 32, inferInstance, mem2 w32, p0.add 0, ⟨some 1, 0⟩, 4, 4, 4, 0, 1, blk w32,
+  ⟨BitVec 32, inferInstance, mem2 w32 w32, p0.add 0, p1, 4, 4, 4, 0, 1, blk w32,
     { blk w32 with addr := 8192 }, 0, 0, 0, w32_access₁, w32_access₂, by decide, trivial⟩
 
 nonvacuity_witness load_run :=
@@ -101,7 +97,7 @@ nonvacuity_witness load_store_same :=
     w32_access, mem1_noRace w32 .heap _ _ _ _, trivial⟩
 
 nonvacuity_witness load_store_other :=
-  ⟨BitVec 32, BitVec 32, inferInstance, inferInstance, inferInstance, mem2 w32, p0.add 0, ⟨some 1, 0⟩,
+  ⟨BitVec 32, BitVec 32, inferInstance, inferInstance, inferInstance, mem2 w32 w32, p0.add 0, p1,
     4, 4, 0, 1, blk w32, { blk w32 with addr := 8192 }, 0, 0, 0, 0, w32_access₁, w32_access₂,
     Or.inl (by decide), by with_unfolding_all rfl,
     noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) _ _ _ _, trivial⟩

@@ -1,6 +1,7 @@
 import Proofs.Threads.Gen
 import ZigLean.Conc.Csl
 import ZigLean.Simp
+import ZigLean.Conc.Witness
 
 /-!
 # `disjoint` over all schedules: concurrent separation logic
@@ -668,5 +669,36 @@ theorem disjoint_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o (disjoint a b) mem0).run ≠ some (.error e) :=
   (proto a b).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     main_spec
+
+/-! ## Non-vacuity and liveness witnesses -/
+
+/-- A context block `c` (block 0) whose `x` field points to block 1 and whose value is 0. -/
+abbrev ctxW : Array Byte :=
+  Enc.encode Witness.p1 ++ Enc.encode (0 : BitVec 32) ++ Array.replicate 4 .undef
+
+abbrev flagW : Mem := Witness.mem2 ctxW (Array.replicate 4 .undef) .stack .stack
+
+theorem flagW_pre : (bytesAt Witness.p0 4096 16 .stack ctxW ∗
+    bytesAt Witness.p1 8192 4 .stack (Array.replicate 4 .undef)) flagW.heap :=
+  Witness.mem2_bytesAt' (by decide +kernel) rfl
+
+nonvacuity_witness writeFlag_spec :=
+  ⟨Witness.p0, Witness.p1, 4096, 8192, ctxW, Array.replicate 4 .undef, 0, rfl, by decide, rfl,
+    by decide, by decide +kernel, rfl, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    Witness.TAdmit.of_heap flagW_pre Nat.zero_lt_one rfl⟩
+liveness_witness writeFlag_spec :=
+  ⟨Witness.p0, Witness.p1, 4096, 8192, ctxW, Array.replicate 4 .undef, 0, rfl, by decide, rfl,
+    by decide, by decide +kernel, rfl, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    Witness.TLive.of_heap flagW_pre Nat.zero_lt_one rfl (Witness.ok_of_okb (by decide +kernel))⟩
+
+theorem front_pre : (bytesAt Witness.p0 4096 1 .stack #[.undef] ∗ emp)
+    (Witness.mem1 #[.undef] .stack).heap :=
+  sep_emp.mpr (Witness.mem1_bytesAt _ _)
+
+nonvacuity_witness free_front :=
+  ⟨emp, Witness.p0, 4096, 1, #[.undef], rfl, rfl, by decide, Witness.TAdmit.mem1 front_pre⟩
+liveness_witness free_front :=
+  ⟨emp, Witness.p0, 4096, 1, #[.undef], rfl, rfl, by decide,
+    Witness.TLive.mem1 front_pre (Witness.ok_of_okb (by decide +kernel))⟩
 
 end Threads.Disjoint
