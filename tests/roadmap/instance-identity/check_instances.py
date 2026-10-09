@@ -12,7 +12,9 @@ instance; a function name stands for one instantiation in every program.
   source order, and two different instantiations never have the same key;
 * one key is one instance body (AIR without compiler names) in every program;
 * the translation names each instance `<generic>__anon_<key[:12]>`, and a shared instance has
-  the same Lean definition in every program.
+  the same Lean definition in every program;
+* a program and the same program in another source order (`<p>_reordered`) translate to the
+  same Lean.
 """
 
 import hashlib
@@ -132,6 +134,16 @@ def main():
                 fail(f"{name}: no Lean definition {lean_name} for {function}")
             if definition_of.setdefault(lean_name, lean[lean_name]) != lean[lean_name]:
                 fail(f"{name}: Lean definition {lean_name} differs from another program's")
+
+    # A program in another source order translates to the same Lean (up to its namespace):
+    # names and definition order follow the keys, not the compiler's numbers.
+    for name in names:
+        reordered = name + "_reordered"
+        if reordered in programs:
+            ours = (work / f"{name}.lean").read_text()
+            theirs = (work / f"{reordered}.lean").read_text().replace(f"P_{reordered}", f"P_{name}")
+            if ours != theirs:
+                fail(f"{reordered}.zig translates differently from {name}.zig")
 
     # The compiler's names differ between the programs: the keys do not.
     renamed = {}

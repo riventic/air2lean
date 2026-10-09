@@ -36,8 +36,7 @@ the same renumbering, after the functions (`renumberAll`).
 (`Identity.instanceSuffix`), the same in every program that uses it, whatever the scan order.
 Only the instances without a key (a legacy export, or an argument without a stable identity)
 are numbered as above; a legacy export translates as before. A program with a keyed instance
-also emits its functions in the order of these names, not of the compiler's names
-(`renumberAllWithNames`).
+emits its functions in the order of these names, not of the compiler's names (`Main.lean`).
 -/
 
 namespace Air2Lean.Anon
@@ -186,31 +185,27 @@ def renumberAnon (texts : Array String) (marker : String := "__anon_") : Array S
   let keyed := if marker == "__anon_" then programInstanceKeys parsed else {}
   compressParsed texts (renumberParsed texts parsed marker keyed)
 
-/-- The renamed parse and texts. -/
-private def renumberAllParsed (texts : Array String) (initialParsed : Array (Option Lean.Json))
-    (keyed : Std.HashMap Inst String) : Array (Option Lean.Json) × Array String := Id.run do
+private def renumberAllParsed (texts : Array String)
+    (initialParsed : Array (Option Lean.Json)) : Array String := Id.run do
+  let keyed := programInstanceKeys initialParsed
   let mut parsed := initialParsed
   let mut current := texts
   for marker in ["__anon_", "__struct_", "__enum_", "__union_", "__opaque_"] do
     parsed := renumberParsed current parsed marker (if marker == "__anon_" then keyed else {})
     current := compressParsed current parsed
-  return (parsed, current)
+  return current
 
-/-- Internal pipeline result: the full names (module-qualified keys, `Identity.fileKey`) that
-order emission, and all rewritten texts, sharing the initial parse. Without keyed instances the
-names are captured before any identity marker is renumbered (the historical order); with
-them, after (the order of the content-addressed names). -/
+/-- Internal pipeline result: original full names (module-qualified keys, `Identity.fileKey`)
+and all rewritten texts, sharing the initial parse. Names are captured before any identity
+marker is renumbered. -/
 def renumberAllWithNames (texts : Array String) : Array String × Array String :=
   let parsed := texts.map fun text => (StrictJson.parse text).toOption
-  let keyed := programInstanceKeys parsed
-  let (renamed, out) := renumberAllParsed texts parsed keyed
-  let names := (if keyed.isEmpty then parsed else renamed).map fun j =>
-    (j.map Identity.fileKey).getD ""
-  (names, out)
+  let names := parsed.map fun j => (j.map Identity.fileKey).getD ""
+  (names, renumberAllParsed texts parsed)
 
 /-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
 def renumberAll (texts : Array String) : Array String :=
   let parsed := texts.map fun text => (StrictJson.parse text).toOption
-  (renumberAllParsed texts parsed (programInstanceKeys parsed)).2
+  renumberAllParsed texts parsed
 
 end Air2Lean.Anon

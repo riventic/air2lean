@@ -130,6 +130,24 @@ const encoding_version = "air2lean-instance-v1";
 /// generic instance or an argument has no stable identity.
 pub fn instanceKey(zcu: *Zcu, gpa: std.mem.Allocator, f: InternPool.Key.Func) ?[64]u8 {
     if (f.generic_owner == .none) return null;
+    // An instance is hashed and claimed once per compilation, however often it is referenced.
+    const cache_key: [2]usize = .{ @intFromPtr(zcu), @intFromEnum(f.owner_nav) };
+    {
+        lock.lock();
+        defer lock.unlock();
+        if (instance_keys.get(cache_key)) |cached| return cached;
+    }
+    const key = computeInstanceKey(zcu, gpa, f);
+    lock.lock();
+    defer lock.unlock();
+    instance_keys.put(arena.allocator(), cache_key, key) catch fatalOom();
+    return key;
+}
+
+/// The keys of the instances seen so far, by (compilation, instance `Nav`); `null`: no key.
+var instance_keys: std.AutoHashMapUnmanaged([2]usize, ?[64]u8) = .empty;
+
+fn computeInstanceKey(zcu: *Zcu, gpa: std.mem.Allocator, f: InternPool.Key.Func) ?[64]u8 {
     var e: Encoder = .{ .zcu = zcu, .gpa = gpa, .h = Sha256.init(.{}) };
     e.str(encoding_version);
     e.instance(f, 0) catch |err| switch (err) {

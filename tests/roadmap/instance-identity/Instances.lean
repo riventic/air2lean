@@ -50,10 +50,9 @@ private def names (texts : Array String) : Array String :=
   -- Without keys (a legacy export) nothing changes.
   let legacy := #[file "main.f" none [("mem.dupe__anon_16959", none)], file "mem.dupe__anon_16959" none []]
   require (names legacy == #["main.f", "mem.dupe__anon_1"]) "legacy renumbering changed"
-  -- Emission order of a keyed program: the content-addressed names.
-  let (order, _) := Anon.renumberAllWithNames #[file "mem.dupe__anon_9" (some keyB) [],
-    file "mem.dupe__anon_10" (some keyA) []]
-  require (order == #["mem.dupe__anon_b1b2c3d4e5f6", "mem.dupe__anon_a1b2c3d4e5f6"]) s!"order names {order}"
+  -- The original names stay available (source maps, legacy emission order).
+  let (original, _) := Anon.renumberAllWithNames #[file "mem.dupe__anon_9" (some keyB) []]
+  require (original == #["mem.dupe__anon_9"]) s!"original names {original}"
   -- Identity records carry the key; a name that is not its key's, or a malformed key, fails.
   let records (s : String) := (Identity.rewrite (json s)).map (·.2)
   require (match records (file "mem.dupe__anon_a1b2c3d4e5f6" (some keyA) []) with

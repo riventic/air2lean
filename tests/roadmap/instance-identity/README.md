@@ -21,7 +21,8 @@ patched compiler and translates them:
   instantiations never share a key, although the compiler names differ between the programs;
 * one key is one instance body (the AIR without compiler names) in every program;
 * the translation names each instance by its key, and a shared instance has the same Lean
-  definition in every program.
+  definition in every program;
+* `a.zig` and `a_reordered.zig` translate to the same Lean file (up to the namespace).
 
 `Instances.lean` checks the translator side without a compiler: keyed names do not depend on
 compiler numbers or input order, a legacy export is numbered as before, and a name with another
