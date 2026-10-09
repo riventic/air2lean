@@ -968,6 +968,17 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: tests/roadmap/claims/check.sh
 
+      # Architecture audit 4 counterexamples: spoofed heads, vacuous or circular hypotheses,
+      # ground instances, roots outside the subject and non-returning programs stay unverified.
+      - name: Claim binding counterexamples (S2-S6)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          lake build ZigLean AssuranceTools Proofs.Asm.Gen
+          tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S2,S3,S4,S5,S6
+
       # Error returns satisfy a partial triple; every model failure constructor falsifies it.
       - name: Outcome taxonomy Lean fixture
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}

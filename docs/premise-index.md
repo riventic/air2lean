@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2338 theorems in 133 files.
+2341 theorems in 133 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -19,14 +19,14 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1254 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1256 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 125 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 13 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 811 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
-| [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1056 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-07](premises.md#thr-07) | 63 | Progress hints without fairness |
+| [THR-08](premises.md#thr-08) | 1057 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
 | [ORD-01](premises.md#ord-01) | 1019 | RC11 approximation for atomics |
 | [ORD-02](premises.md#ord-02) | 1019 | No load buffering in compiled code |
@@ -39,14 +39,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2209 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1865 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2212 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1868 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
+| [SEM-04](premises.md#sem-04) | 58 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2341 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2178,7 +2178,7 @@ File premises: ALC-01, ALC-02, ALC-04, SEM-01, SEM-02, TRU-01
 
 ## `tests/roadmap/claims/Fixture.lean`
 
-File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
+File premises: THR-01, THR-07, THR-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 
 | Theorem | Premises |
 |---|---|
@@ -2188,6 +2188,7 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `ClaimFixture.ret_returns` | SEM-01, SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.ret_partial` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `ClaimFixture.ret_run` | SEM-01, SEM-02, TRU-01 |
+| `ClaimFixture.ret_run_ground` | SEM-01, SEM-02, TRU-01 |
 | `ClaimFixture.panic_run` | SEM-01, SEM-02, TRU-01 |
 | `ClaimFixture.ret_some` | SEM-01, SEM-02, TRU-01 |
 | `ClaimFixture.panic_some` | SEM-01, SEM-02, TRU-01 |
@@ -2196,6 +2197,8 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `ClaimFixture.premise_total` | SEM-01, SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.wrapped_total` | SEM-01, SEM-02, SEM-04, TRU-01 |
 | `ClaimFixture.partial_and_returns` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `ClaimFixture.ret_thread` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
+| `ClaimFixture.countdown_total` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, TRU-01 |
 
 ## `tests/roadmap/container-contracts/Clients.lean`
 

@@ -30,7 +30,7 @@ FIXTURE = ROOT / 'tests' / 'roadmap' / 'claims' / 'fixture-report.json'
 O = outcomes.Outcome
 
 
-def case(status, kind=None, schedule=None, function='root'):
+def case(status, kind=None, schedule=None, function='ret'):
     row = {'schema': 1, 'example': 'example', 'function': function, 'status': status}
     if kind is not None:
         row['model_kind'] = kind
@@ -109,12 +109,12 @@ class ClaimsEvidenceTests(unittest.TestCase):
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.diff = self.base / 'diff.json'
 
-    def run_check(self, rows, strength='total_correctness', function='example.root', complete=True, diff=True):
+    def run_check(self, rows, strength='total_correctness', function='example.ret', complete=True, diff=True):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
                     'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
                     'allowed_assumptions': [],
                     'roots': [{'id': 'root', 'function': function, 'air': ['f.json'], 'namespace': 'ClaimFixture',
-                               'prefix': '', 'contracts': ['Fixture.lean'],
+                               'prefix': 'example.', 'contracts': ['Fixture.lean'],
                                'goals': [{'theorem': 'ClaimFixture.ret_total', 'strength': strength, 'domain': 'all'}],
                                'assumptions': [], 'exclusions': []}]}
         path = self.base / 'project.json'
@@ -147,7 +147,7 @@ class ClaimsEvidenceTests(unittest.TestCase):
     def test_other_functions_and_unbound_roots_do_not_count(self):
         code, _, err = self.run_check([case('value_match', 'value'), case('search_cap', 'value', search('capped'), 'other')])
         self.assertEqual(code, 0, err)
-        code, result, err = self.run_check([case('search_cap', 'value', search('capped'))], function='root')
+        code, result, err = self.run_check([case('search_cap', 'value', search('capped'))], function='ret')
         self.assertEqual(code, 0, err)
         self.assertIsNone(result['roots'][0]['outcomes'])
 

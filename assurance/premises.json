@@ -122,6 +122,8 @@
     "ZigLean.Sep.Owned": ["ALC-07"],
     "ZigLean.Sep.ArenaClient": ["ALC-07"],
     "ZigLean.Sep.Total": ["SEM-04"],
+    "ZigLean.Sep.Witness": ["SEM-02"],
+    "ZigLean.Witness": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
