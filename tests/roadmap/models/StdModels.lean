@@ -89,7 +89,10 @@ def main : IO Unit := do
     require (qualifies symbol "0.17.0") s!"{symbol}: audited for 0.17.0"
   for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
     require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
-  require (qualifies "Thread.detach" "0.17.0") "a rejection holds in every version"
+  require (qualifies "Io.futexWaitTimeout" "0.17.0") "a rejection holds in every version"
+  -- C07 detach and the C08 future API are audited for 0.16.0 only.
+  for symbol in #["Thread.detach", "Io.async", "Io.checkCancel"] do
+    require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
   expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])
     "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2, 0.16.0"
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
