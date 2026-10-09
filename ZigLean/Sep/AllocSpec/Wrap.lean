@@ -51,9 +51,8 @@ def alignCast (k : Nat) (p : Ptr) : MemM (Except ErrName Ptr) :=
 /-- `allocBytesWithAlignment`. -/
 def allocBytes (k : Nat) (n ra : BitVec 64) : MemM (Except ErrName Ptr) :=
   if n = 0 then pure (.ok (zeroPtr (2 ^ k))) else
-  vt.alloc ctx n k ra >>= fun r => match r with
-    | none => pure (.error outOfMemory)
-    | some p => memset (α := BitVec 8) 1 p n none >>= fun _ => alignCast k p
+  vt.alloc ctx n k ra >>= fun r => r.elim (pure (.error outOfMemory)) fun p =>
+    memset (α := BitVec 8) 1 p n none >>= fun _ => alignCast k p
 
 /-- `allocWithSizeAndAlignment`: the byte count, checked for overflow (`math.mul`). -/
 def allocItems (size k : Nat) (n ra : BitVec 64) : MemM (Except ErrName Ptr) :=
@@ -135,17 +134,15 @@ def reallocAdvanced (size k : Nat) (old : Slice) (newN ra : BitVec 64) :
   if (BitVec.ofNat 64 size).umulOverflow newN then pure (.error outOfMemory) else
   let ob : Slice := ⟨old.ptr, byteLen size old⟩
   let nb := BitVec.ofNat 64 size * newN
-  vt.remap ctx ob k nb ra >>= fun r => match r with
-    | some p => pure (.ok ⟨p, newN⟩)
-    | none => vt.alloc ctx nb k ra >>= fun r' => match r' with
-      | none => pure (.error outOfMemory)
-      | some q =>
-        let c := Zig.min false nb ob.len
-        if Zig.le false c ob.len = true then
-          copyChecked 1 1 1 q ob.ptr c >>= fun _ =>
-          memset (α := BitVec 8) 1 ob.ptr ob.len none >>= fun _ =>
-          vt.free ctx ob k ra >>= fun _ => pure (.ok ⟨q, newN⟩)
-        else throw .outOfBounds
+  vt.remap ctx ob k nb ra >>= fun r => r.elim
+    (vt.alloc ctx nb k ra >>= fun r' => r'.elim (pure (.error outOfMemory)) fun q =>
+      let c := Zig.min false nb ob.len
+      if Zig.le false c ob.len = true then
+        copyChecked 1 1 1 q ob.ptr c >>= fun _ =>
+        memset (α := BitVec 8) 1 ob.ptr ob.len none >>= fun _ =>
+        vt.free ctx ob k ra >>= fun _ => pure (.ok ⟨q, newN⟩)
+      else throw .outOfBounds)
+    fun p => pure (.ok ⟨p, newN⟩)
 
 /-- `realloc(old, newN)`. -/
 def realloc (size k : Nat) (old : Slice) (newN : BitVec 64) : MemM (Except ErrName Slice) :=
@@ -164,6 +161,12 @@ theorem allocItems_one (k : Nat) (n ra : BitVec 64) :
   congr 1
   apply BitVec.eq_of_toNat_eq
   simp [Nat.mod_eq_of_lt n.isLt]
+
+theorem umulOverflow_one (n : BitVec 64) : (BitVec.ofNat 64 1).umulOverflow n = false := by
+  simp [BitVec.umulOverflow, n.isLt]
+
+theorem ofNat_one_mul (n : BitVec 64) : BitVec.ofNat 64 1 * n = n := by
+  apply BitVec.eq_of_toNat_eq; simp [Nat.mod_eq_of_lt n.isLt]
 
 theorem free_one (k : Nat) (s : Slice) : free vt ctx 1 k s = freeBytes vt ctx k s := by
   simp [free, byteLen_one]

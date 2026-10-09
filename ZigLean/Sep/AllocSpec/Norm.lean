@@ -51,6 +51,16 @@ theorem run_get (s : σ) : (get : MM σ σ).run s = pure (s, s) := rfl
 
 theorem run_modify (f : σ → σ) (s : σ) : (modify f : MM σ Unit).run s = pure ((), f s) := rfl
 
+theorem elim_bind {m : Type → Type} [Monad m] [LawfulMonad m] (o : Option α) (a : m β)
+    (f : α → m β) {γ : Type} (k : β → m γ) :
+    (o.elim a f >>= k) = o.elim (a >>= k) (fun x => f x >>= k) := by
+  cases o <;> rfl
+
+/-- A generated `if o.isSome then … optPayload o … else …` is `Option.elim`. -/
+theorem isSome_ite (o : Option α) (f : α → MemM β) (g : MemM β) :
+    (if o.isSome = true then (StateT.lift (optPayload o) : MemM α) >>= f else g) = o.elim g f := by
+  cases o <;> rfl
+
 theorem sub_zero (x : BitVec 64) : Zig.sub false x 0 = pure x := by
   simp [Zig.sub, BitVec.usubOverflow]
 

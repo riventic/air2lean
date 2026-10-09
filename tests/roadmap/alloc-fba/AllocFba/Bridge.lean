@@ -48,15 +48,10 @@ theorem mul_one (x : BitVec 64) : math_mul__anon_1 1 x = pure (.ok x) := by
   rw [Norm.mulWithOverflow_one]
   rfl
 
+theorem two_ne_zero : ((2 : Nat) = 0) = False := by decide
 theorem mask_three : BitVec.ofNat 64 (2 ^ 2 - 1) = 3 := rfl
 theorem enc_size_u8 : Enc.size (BitVec 8) = 1 := rfl
 theorem enc_align_u8 : Enc.align (BitVec 8) = 1 := rfl
-
-theorem isSome_ite {α β : Type} (o : Option α) (f : α → MemM β) (g : MemM β) :
-    (if o.isSome = true then (StateT.lift (optPayload o) : MemM α) >>= f else g) =
-      match o with
-      | none => g
-      | some p => f p := by cases o <;> rfl
 
 /-- Normalize a generated wrapper and its `Wrap.*` counterpart. -/
 macro "bridge_norm" : tactic => `(tactic| (
@@ -70,8 +65,11 @@ macro "bridge_norm" : tactic => `(tactic| (
     Norm.throw_bind, Norm.lift_pure, Norm.lift_throw, Norm.sub_zero, Norm.elem_zero,
     Norm.run_get, Norm.run_modify,
     bind_assoc, pure_bind, map_pure, bind_map_left, map_bind, Norm.beq_true_iff,
-    fromByteUnits_one, fromByteUnits_four, mul_one, bind_pure_unit, mask_three, enc_size_u8, enc_align_u8]
-  try simp only [isSome_ite, bind_assoc, pure_bind, Norm.ite_bind, bind_pure_unit]))
+    fromByteUnits_one, fromByteUnits_four, mul_one, bind_pure_unit, mask_three, two_ne_zero, enc_size_u8, enc_align_u8, eq_self_iff_true,
+    Norm.elim_bind, Wrap.umulOverflow_one, Wrap.ofNat_one_mul, mem_Alignment.«1»,
+    mem_Alignment.«4»]
+  try simp only [Norm.isSome_ite, Norm.elim_bind, bind_assoc, pure_bind, Norm.ite_bind,
+    bind_pure_unit]))
 
 theorem bind_ext {α β : Type} {x : MemM α} {f g : α → MemM β} (h : ∀ a, f a = g a) :
     x >>= f = x >>= g := by
@@ -144,7 +142,7 @@ theorem dupe_eq (a : mem_Allocator) (s : Slice) :
   bridge_norm
   bridge_close
 
-set_option maxHeartbeats 1000000 in
+set_option maxHeartbeats 4000000 in
 theorem realloc_eq (a : mem_Allocator) (s : Slice) (n : BitVec 64) :
     mem_Allocator_realloc__anon_1 a s n = Wrap.realloc (vt a) a.ptr 1 0 s n := by
   simp only [mem_Allocator_realloc__anon_1, mem_Allocator_reallocAdvanced__anon_1,

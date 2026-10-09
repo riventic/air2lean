@@ -187,9 +187,9 @@ theorem allocBytes_spec (h : AllocSpec L vt ctx I) (k : Nat) (n ra : BitVec 64) 
     have hn := ne_zero_toNat h0
     refine L.bind (h.alloc n k ra hn hk (hfit hn n.isLt)) fun r => ?_
     cases r with
-    | none => exact L.ret' _ fun hh hp => sep_lift.mpr ⟨rfl, hp⟩
+    | none => dsimp only [Option.elim]; exact L.ret' _ fun hh hp => sep_lift.mpr ⟨rfl, hp⟩
     | some p =>
-      dsimp only
+      dsimp only [Option.elim]
       refine granted_ex' fun bs hs => granted_open fun A S K => ?_
       refine L.bind (L.pre (L.frame (R := I.own ∗ I.tok p bs.size k A S K)
         (L.ofTotal (Region.memsetUndefIn (p := p) (A := A) (S := S) (K := K) (a := 2 ^ k)
@@ -374,7 +374,7 @@ theorem dupe_spec (h : AllocSpec L vt ctx I) (size k sa a' : Nat) (src : Slice) 
   cases r with
   | error e => exact L.ret' _ fun hh hp => sep_assoc hp
   | ok d =>
-    dsimp only
+    dsimp only [Option.elim]
     refine L.pre ?_ fun hh hp => sep_assoc hp
     refine L.lift fun hlen => ?_
     rw [if_pos hlen, owned_pos (by rw [Array.size_replicate, hsize]; omega)]
@@ -483,12 +483,12 @@ theorem reallocAdvanced_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Sl
           unfold byteLen; rw [← hsz]; exact toNat_ofNat_lt hbs
         have hcpos : 0 < size * newN.toNat := Nat.mul_pos hsize (ne_zero_toNat h1)
         have hf : I.fits (BitVec.ofNat 64 size * newN).toNat k := by rw [ec]; exact hfit hcpos hlt
-        dsimp only
+        dsimp only [Option.elim]
         refine L.bind (h.remap ⟨old.ptr, byteLen size old⟩ k (BitVec.ofNat 64 size * newN) ra bs hk
           (by rw [ec]; exact hcpos) hf eo hbpos) fun r => ?_
         cases r with
         | some p =>
-          dsimp only
+          dsimp only [Option.elim]
           refine L.ret' _ fun hh hp => ?_
           simp only [remapPost, ec] at hp
           obtain ⟨bs', hp⟩ := sep_ex_right.mp hp
@@ -496,16 +496,16 @@ theorem reallocAdvanced_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Sl
           refine sep_lift.mpr ⟨rfl, sep_ex_right.mpr ⟨bs', sep_lift_right.mpr ⟨⟨hs', hkp⟩, ?_⟩⟩⟩
           rw [owned_pos (by omega)]; exact hp
         | none =>
-          dsimp only
+          dsimp only [Option.elim]
           refine L.bind (L.pre (L.frame (R := granted I old.ptr k bs)
             (h.alloc (BitVec.ofNat 64 size * newN) k ra (by rw [ec]; omega) hk hf))
             fun hh hp => hp) fun r' => ?_
           cases r' with
           | none =>
-            dsimp only
+            dsimp only [Option.elim]
             exact L.ret' _ fun hh hp => sep_lift.mpr ⟨rfl, by rw [owned_pos (by omega)]; exact hp⟩
           | some p =>
-            dsimp only
+            dsimp only [Option.elim]
             refine granted_ex fun bn hbn => ?_
             rw [ec] at hbn
             rw [if_pos (le_min_right _ _)]
@@ -611,7 +611,7 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
   cases r with
   | error e => exact L.ret' _ fun hh hp => hp
   | ok s =>
-    dsimp only
+    dsimp only [Option.elim]
     refine L.lift fun hlen => ?_
     rw [hlen, e1]
     have hpos : Enc.size T * (n.toNat + 1) ≠ 0 := Nat.ne_of_gt (Nat.mul_pos hT (Nat.succ_pos _))
