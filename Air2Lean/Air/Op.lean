@@ -204,6 +204,10 @@ def ptrBytesOf (layouts : Array Layout) : Nat := (layouts[0]?.map (·.ptrBytes))
 def Layout.isLanePtr (l : Layout) : Bool :=
   l.vectorIndex.isSome || l.runtimeLane
 
+/-- The versions whose comptime lane pointers into bit-packed vectors are modelled as
+bit-pointers (`lanePtrLayout`); 0.17.0 has no native lane-pointer evidence yet. -/
+def lanePtrVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
+
 /-- A lane pointer that `normalize` made a bit-pointer into the vector's integer
 (`Zig.loadLane`/`Zig.storeLane`). -/
 def Layout.laneBitPtr (l : Layout) : Bool :=

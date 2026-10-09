@@ -211,6 +211,23 @@ theorem decode_boolVec {n : Nat} (bs : Array Byte) :
     (Enc.decode bs : Result (Vec Bool n)) =
       (do let x ← intOfBytes (n * 1) bs; pure ⟨Vector.ofFn fun i => laneOf 1 x.toNat i == 1#1⟩) := rfl
 
+/-- A 1-bit lane of an integer is that integer's bit (`toBools`' reading). -/
+theorem laneOf_one_eq_getLsbD {m : Nat} (x : BitVec m) (i : Nat) :
+    (laneOf 1 x.toNat i == 1#1) = x.getLsbD i := by
+  unfold laneOf
+  rw [BitVec.getLsbD, Nat.mul_one]
+  rcases Nat.mod_two_eq_zero_or_one (x.toNat >>> i) with h | h <;>
+    simp [Nat.testBit, Nat.shiftRight_eq_div_pow, BitVec.ofNat, Fin.ofNat] at h ⊢ <;>
+    simp [h] <;> omega
+
+/-- The memory decoder of `@Vector(n, bool)` gives lane `i` the bit `i` of the `uN` it reads, as
+`toBools` does: the in-memory order is the bitcast's logical order. -/
+theorem decode_boolVec_bits {n : Nat} (bs : Array Byte) :
+    (Enc.decode bs : Result (Vec Bool n)) =
+      (do let x ← intOfBytes (n * 1) bs; pure ⟨Vector.ofFn fun i => x.getLsbD i.val⟩) := by
+  rw [decode_boolVec]
+  simp only [laneOf_one_eq_getLsbD]
+
 /-! ## Agreement with the memory encoding (Zig ≤0.16 `@bitCast` through memory) -/
 
 /-- The bytes of a whole-byte integer: each `.int`, little-endian. -/

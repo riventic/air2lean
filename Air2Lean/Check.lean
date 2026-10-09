@@ -154,7 +154,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     if l.isLanePtr && !l.laneBitPtr then
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
-        Zig 0.14.1-0.16.0 profile for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
+        profile of Zig {String.intercalate ", " lanePtrVersions} for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -649,7 +649,7 @@ def CheckCtx.lanePtr (cx : CheckCtx) (line : Nat) (ty : TyId) (ptr idx : Val) :
   unless ptrChild cx.types ty == some e && lane.isSome && l.vectorIndex == lane &&
       lane.any (· < n) && l.hostSize == (n * w + 7) / 8 do
     cx.fail line "a lane pointer whose type does not match its vector and comptime lane"
-  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get! cx.errBits
 
 /-- The size of the type `id` is in the AIR file (pointer arithmetic, `@memcpy`). -/
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
@@ -3146,6 +3146,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
           else if !modelledStdFn callee then
             issues := issues.push (issue .callee
               s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)")
+  -- Needs the whole program (before the memory items, as `checkProgram` always reported them): every task an `Io.async` reaches (`checkFutureCancelation`).
+  if let .error message := checkFutureCancelation funcs then
+    issues := issues.push { kind := .futureCancel, message }
+  if let .error message := checkIoTaskThreadlocals funcs then
+    issues := issues.push { kind := .ioTaskThreadlocal, message }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -3170,11 +3175,6 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         for c in items do
           if let .error message := checkMemTy f.name f.types f.layouts 0 c f.errorSetBits then
             issues := issues.push { kind := .memory, function := f.name, instruction := i.id, message }
-  -- Needs the whole program: every task an `Io.async` reaches (`checkFutureCancelation`).
-  if let .error message := checkFutureCancelation funcs then
-    issues := issues.push { kind := .futureCancel, message }
-  if let .error message := checkIoTaskThreadlocals funcs then
-    issues := issues.push { kind := .ioTaskThreadlocal, message }
   return issues
 
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
