@@ -3,14 +3,14 @@ import ZigLean.Conc.Spec.Mutex
 /-!
 # A spin mutex that satisfies `MutexSpec`, and one that does not
 
-`spin rel`: one atomic word, `0` (free) or `1` (held).
+`spinMutex rel`: one atomic word, `0` (free) or `1` (held).
 
 * `lock`: `cmpxchg(0 → 1)` with acquire, repeated until it succeeds (a spin lock; no futex).
 * `tryLock`: one `cmpxchg(0 → 1)` with acquire.
 * `unlock`: `xchg(0)`, with release if `rel`, else monotonic.
 
-`spin_spec : MutexSpec (spin true)`: mutual exclusion, ownership transfer and no deadlock (a
-spinning thread can always step). `relaxed_not_spec : ¬ MutexSpec (spin false)`: without the
+`spinMutex_spec : MutexSpec (spinMutex true)`: mutual exclusion, ownership transfer and no deadlock (a
+spinning thread can always step). `relaxed_not_spec : ¬ MutexSpec (spinMutex false)`: without the
 release, the next holder adopts the message of an older `unlock` and does not see the previous
 holder's write (a run of two threads, `view` fails). Mutual exclusion alone does not catch
 this; the views do.
@@ -37,7 +37,7 @@ inductive SpinStep {X : Type} (rel : Bool) : SL → AWord X → X → SL → AWo
       SpinStep rel .rel w v (.fin false) ⟨0, if rel then v else w.msg⟩ v
 
 /-- The spin mutex (module doc). -/
-abbrev spin (rel : Bool) : MutexImpl where
+abbrev spinMutex (rel : Bool) : MutexImpl where
   Sh X := AWord X
   init x₀ w := w = ⟨0, x₀⟩
   Loc := SL
@@ -69,7 +69,7 @@ end SpinPlace
 open SpinPlace
 
 /-- The invariant of the spin mutex. -/
-structure SpinInv {rel : Bool} {X : Type} (s : MState (spin rel) X) : Prop where
+structure SpinInv {rel : Bool} {X : Type} (s : MState (spinMutex rel) X) : Prop where
   ok : ∀ t, SpinPlace.ok (s.ctl t) = true
   excl : AtMostOne (fun c => own c = true) s.ctl
   word : (s.sh.val = 0 ∧ ∀ t, own (s.ctl t) = false) ∨ (s.sh.val = 1 ∧ ∃ t, own (s.ctl t) = true)
@@ -78,7 +78,7 @@ structure SpinInv {rel : Bool} {X : Type} (s : MState (spin rel) X) : Prop where
 
 /-- A step that changes only thread `t`'s place, to one with the same ownership, and keeps the
 shared state and the views. -/
-theorem SpinInv.place {rel : Bool} {X : Type} {s : MState (spin rel) X} (hi : SpinInv s)
+theorem SpinInv.place {rel : Bool} {X : Type} {s : MState (spinMutex rel) X} (hi : SpinInv s)
     {t : Tid} {c : Ctl SL} (hok : SpinPlace.ok c = true) (ho : own c = own (s.ctl t)) :
     SpinInv { s with ctl := tset s.ctl t c } := by
   have hown : ∀ u, own (tset s.ctl t c u) = own (s.ctl u) := fun u =>
@@ -97,12 +97,12 @@ theorem SpinInv.place {rel : Bool} {X : Type} {s : MState (spin rel) X} (hi : Sp
   · intro hn; exact hi.msg fun u => by rw [← hown u]; exact hn u
 
 /-- The thread `t` at `l` in op `op`: the pair is one of the places of the code. -/
-theorem SpinInv.op_ok {rel : Bool} {X : Type} {s : MState (spin rel) X} (hi : SpinInv s)
+theorem SpinInv.op_ok {rel : Bool} {X : Type} {s : MState (spinMutex rel) X} (hi : SpinInv s)
     {t : Tid} {op : MOp} {l : SL} (h : s.ctl t = .run op l) : SpinPlace.ok (.run op l) = true := by
   rw [← h]; exact hi.ok t
 
-theorem spin_inductive (rel : Bool) (hrel : rel = true) (X : Type) :
-    (mgc (spin rel) X).Inductive SpinInv := by
+theorem spinMutex_inductive (rel : Bool) (hrel : rel = true) (X : Type) :
+    (mgc (spinMutex rel) X).Inductive SpinInv := by
   refine ⟨?_, ?_⟩
   · rintro ⟨sh, ctl, cur, val⟩ ⟨x₀, hsh, hctl, hcur, hval⟩
     dsimp only at hsh hctl hcur hval
@@ -187,45 +187,45 @@ theorem spin_inductive (rel : Bool) (hrel : rel = true) (X : Type) :
         · intro _; subst hrel; exact hi.view t hown0
 
 /-- No deadlock: a thread in the spin mutex's code can always step. -/
-theorem spin_enabled {rel : Bool} {X : Type} {s : MState (spin rel) X} {t : Tid} {op : MOp}
-    {l : SL} (h : s.ctl t = .run op l) : (mgc (spin rel) X).Enabled t s := by
+theorem spinMutex_enabled {rel : Bool} {X : Type} {s : MState (spinMutex rel) X} {t : Tid} {op : MOp}
+    {l : SL} (h : s.ctl t = .run op l) : (mgc (spinMutex rel) X).Enabled t s := by
   cases l with
   | fin b => exact enabled_ret h rfl
   | cas =>
     by_cases hw : s.sh.val = 0
-    · exact enabled_exec (I := spin rel) h (SpinStep.casOk hw)
-    · exact enabled_exec (I := spin rel) h (SpinStep.casFail hw)
+    · exact enabled_exec (I := spinMutex rel) h (SpinStep.casOk hw)
+    · exact enabled_exec (I := spinMutex rel) h (SpinStep.casFail hw)
   | attempt =>
     by_cases hw : s.sh.val = 0
-    · exact enabled_exec (I := spin rel) h (SpinStep.tryOk hw)
-    · exact enabled_exec (I := spin rel) h (SpinStep.tryFail hw)
-  | rel => exact enabled_exec (I := spin rel) h SpinStep.unlock
+    · exact enabled_exec (I := spinMutex rel) h (SpinStep.tryOk hw)
+    · exact enabled_exec (I := spinMutex rel) h (SpinStep.tryFail hw)
+  | rel => exact enabled_exec (I := spinMutex rel) h SpinStep.unlock
 
-theorem spin_spec : MutexSpec (spin true) where
-  excl X := (spin_inductive true rfl X).invariant fun s hi t u ht hu =>
+theorem spinMutex_spec : MutexSpec (spinMutex true) where
+  excl X := (spinMutex_inductive true rfl X).invariant fun s hi t u ht hu =>
     hi.excl t u (by rw [ht]; rfl) (by rw [hu]; rfl)
-  view X := (spin_inductive true rfl X).invariant fun s hi t ht => hi.view t (by rw [ht]; rfl)
-  live X := fun s _ ⟨⟨t, op, l, h⟩, _, hn⟩ => hn t op l h (spin_enabled h)
+  view X := (spinMutex_inductive true rfl X).invariant fun s hi t ht => hi.view t (by rw [ht]; rfl)
+  live X := fun s _ ⟨⟨t, op, l, h⟩, _, hn⟩ => hn t op l h (spinMutex_enabled h)
 
 /-- An `unlock` without release breaks ownership transfer: thread 0 locks, writes `true`,
 unlocks with a monotonic `xchg`; thread 1 locks and sees the initial `false`. -/
-theorem relaxed_not_spec : ¬ MutexSpec (spin false) := by
+theorem relaxed_not_spec : ¬ MutexSpec (spinMutex false) := by
   intro h
-  have r0 : (mgc (spin false) Bool).Reach
-      (⟨⟨0, false⟩, fun _ => .idle, fun _ => false, false⟩ : MState (spin false) Bool) :=
+  have r0 : (mgc (spinMutex false) Bool).Reach
+      (⟨⟨0, false⟩, fun _ => .idle, fun _ => false, false⟩ : MState (spinMutex false) Bool) :=
     .init ⟨false, rfl, fun _ => rfl, fun _ => rfl, rfl⟩
-  have r1 := r0.next 0 (MStep.call (I := spin false) .lock (by decide) (by decide))
-  have r2 := r1.next 0 (MStep.exec (I := spin false) (op := .lock) (l := .cas) (by decide)
+  have r1 := r0.next 0 (MStep.call (I := spinMutex false) .lock (by decide) (by decide))
+  have r2 := r1.next 0 (MStep.exec (I := spinMutex false) (op := .lock) (l := .cas) (by decide)
     (SpinStep.casOk (rel := false) (v := false) rfl))
-  have r3 := r2.next 0 (MStep.ret (I := spin false) (op := .lock) (l := .fin true) (b := true) (by decide) rfl)
-  have r4 := r3.next 0 (MStep.write (I := spin false) true (by decide))
-  have r5 := r4.next 0 (MStep.unlock (I := spin false) (by decide))
-  have r6 := r5.next 0 (MStep.exec (I := spin false) (op := .unlock) (l := .rel) (by decide)
+  have r3 := r2.next 0 (MStep.ret (I := spinMutex false) (op := .lock) (l := .fin true) (b := true) (by decide) rfl)
+  have r4 := r3.next 0 (MStep.write (I := spinMutex false) true (by decide))
+  have r5 := r4.next 0 (MStep.unlock (I := spinMutex false) (by decide))
+  have r6 := r5.next 0 (MStep.exec (I := spinMutex false) (op := .unlock) (l := .rel) (by decide)
     (SpinStep.unlock (rel := false)))
-  have r7 := r6.next 1 (MStep.call (I := spin false) .lock (by decide) (by decide))
-  have r8 := r7.next 1 (MStep.exec (I := spin false) (op := .lock) (l := .cas) (by decide)
+  have r7 := r6.next 1 (MStep.call (I := spinMutex false) .lock (by decide) (by decide))
+  have r8 := r7.next 1 (MStep.exec (I := spinMutex false) (op := .lock) (l := .cas) (by decide)
     (SpinStep.casOk (rel := false) rfl))
-  have r9 := r8.next 1 (MStep.ret (I := spin false) (op := .lock) (l := .fin true) (b := true) (by decide) rfl)
+  have r9 := r8.next 1 (MStep.ret (I := spinMutex false) (op := .lock) (l := .fin true) (b := true) (by decide) rfl)
   have := h.view Bool _ r9 1 rfl
   exact absurd this (by decide)
 

@@ -11,7 +11,7 @@ import ZigLean.Conc.Spec.Futex
   `fifo_spec`: it satisfies `FutexSpec`. It is the hand model of `Thread.futexWait`/`futexWake`
   (THR-05) as an abstract futex.
 * `Futex.spin W`: a wait never sleeps: it reads the word and returns `intr` (an always-spurious
-  futex). `spin_spec`: it satisfies `FutexSpec` too, so a client cannot assume that a wait
+  futex). `spinFutex_spec`: it satisfies `FutexSpec` too, so a client cannot assume that a wait
   blocks.
 * `Futex.lazyWake W`: `fifo` whose wake never wakes anyone. `lazyWake_not_spec`.
 * `Futex.noRecheck W`: `fifo` whose wait sleeps without comparing the word with the expected
@@ -166,7 +166,7 @@ theorem fifo_spec_of_ref : FutexSpec W (Futex.fifo W) := by
     exact ⟨_, (Queue.waitersAt_nodup hwf a).sublist (List.take_sublist _ _),
       fun _ hu => Queue.mem_waitersAt.mp (List.mem_of_mem_take hu), List.length_take, rfl, rfl⟩
 
-theorem spin_spec : FutexSpec W (Futex.spin W) where
+theorem spinFutex_spec : FutexSpec W (Futex.spin W) where
   init _ _ := rfl
   wait_word := by
     rintro t a e tm m q r q' ⟨⟨v, hv⟩, rfl⟩

@@ -430,6 +430,13 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      - name: Generic sync specifications (futex, mutex, event)
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/thread-specs"
+          lake build ZigLean.Conc.Spec.Sys ZigLean.Conc.Spec.Futex ZigLean.Conc.Spec.FutexToy ZigLean.Conc.Spec.Mutex ZigLean.Conc.Spec.MutexToy ZigLean.Conc.Spec.IoMutex ZigLean.Conc.Spec.Event 2>&1 | tee "$RUNNER_TEMP/thread-specs/build.log"
+
       - name: Loop template and range-conversion regressions
         if: ${{ !matrix.mutate }}
         run: |
