@@ -50,7 +50,7 @@ SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
 OUTCOMES = ('exact_match', 'host_difference', 'undefined_behavior', 'unspecified_behavior', 'unspecified_timer',
             'nondeterministic_valid', 'unsupported_semantics', 'panic', 'error_return',
-            'illegal_behavior', 'deadlock', 'divergence', 'search_cap', 'skipped', 'proof_exclusion')
+            'illegal_behavior', 'deadlock', 'hardware_trap', 'divergence', 'search_cap', 'skipped', 'proof_exclusion')
 LIMITS = {'max_file_bytes': 8 * 1024 * 1024, 'max_total_bytes': 64 * 1024 * 1024,
           'max_json_depth': 128, 'max_files': 4096, 'max_roots': 256, 'max_total_output_bytes': 64 * 1024 * 1024, 'timeout_seconds': 60, 'max_output_bytes': 8 * 1024 * 1024}
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\Z')
@@ -736,7 +736,7 @@ EVIDENCE_JSON = dict(LIMITS, max_file_bytes=64 * 1024 * 1024)
 DIFF_FAILURES = ('mismatch', 'host_difference', 'input_failure', 'native_harness_failure')
 DIFF_EXCLUSIONS = ('illegal_exclusion', 'unspecified_exclusion', 'unspecified_timer_exclusion', 'search_cap',
                    'bounded_no_result')
-DIFF_MATCHES = ('value_match', 'error_return_match', 'panic_match')
+DIFF_MATCHES = ('value_match', 'error_return_match', 'panic_match', 'trap_match')
 
 
 def stage(status, reason, **extra):
@@ -932,7 +932,8 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
                            derived_strength=found['strength'], claim_class=found['claim_class'],
                            derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
-                           witnesses=found['witnesses'])
+                           witnesses=found['witnesses'],
+                           premises=claims.premises_of(theorem, found['claims']))
         goals.append(row)
     return compiled, goals
 

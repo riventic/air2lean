@@ -1,5 +1,10 @@
-op16
-op32
-op64
-op80
-op128
+# Typed host differences (F3, scripts/diff-report.py HOST_KINDS): <fn> <kind>[,<kind>...].
+# Off x86_64-linux a disagreement of two returned values is a host difference only if every
+# differing float has a listed kind; anything else is a mismatch.
+op16 nan_payload,zero_sign
+# libm_ulp: with Zig 0.15.2 on arm64 macOS the transcendental routines differ by one ulp.
+op32 nan_payload,zero_sign,libm_ulp
+op64 nan_payload,zero_sign,libm_ulp
+# f80_precision: arm64 has no x87; soft-float f80 rounds some results one ulp apart.
+op80 nan_payload,zero_sign,f80_precision
+op128 nan_payload,zero_sign,libm_ulp

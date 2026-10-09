@@ -64,9 +64,8 @@ FINDINGS.update({'spoofed-total-head': 'S2', 'spoofed-registered-head': 'S2', 'r
                  'host-allowlist-masks-panic': 'F3', 'model-illegal-masks-native-value': 'F3',
                  'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1'})
 # Fixed: S1 (kernel replay rejects AuditClaims.Unchecked), F2, H1 (codex/fix-evidence-integrity),
-# S2-S6 (codex/fix-claim-binding). Open: S7 (asm opaques), F1, F3.
-EXPECTED_EXPOSED = {'AuditClaims.asm_divmod_universal', 'receipt-schema-skew',
-                    'host-allowlist-masks-panic', 'model-illegal-masks-native-value'}
+# S2-S6 (codex/fix-claim-binding), S7 and F3 (codex/fix-asm-faults-hostdiff). Open: F1.
+EXPECTED_EXPOSED = {'receipt-schema-skew'}
 
 
 def coverage_level(theorem_name, definition, strength):
@@ -111,8 +110,23 @@ def verdict(name, definition, strength, heads=HEADS):
 
 
 def lean_case(name):
-    definition, strength, _ = LEAN_CASES[name]
-    return verdict(name, definition, strength)
+    definition, strength, finding = LEAN_CASES[name]
+    if name not in THEOREMS:
+        # S7 fixed: the asm wrapper traps on a zero divisor, so the universal success equation no
+        # longer elaborates (AsmTotal.lean states the trap instead).
+        return False, 'theorem no longer elaborates against the generated code'
+    exposed, detail = verdict(name, definition, strength)
+    if finding == 'S7':
+        # The hypothesis-free zero-divisor theorem must not be a claim, and a total claim that
+        # avoids the fault must carry the asm fault-condition premise (ASM-04).
+        module = NODES[definition]['module']
+        nonzero = claims.check_goal({'theorem': 'AuditClaims.asm_divmod_nonzero', 'strength': strength,
+                                     'domain': 'scoped: b != 0'}, THEOREMS, definition=definition, heads=HEADS,
+                                    generated=claims.generated_definitions(NODES, {module}), nodes=NODES)
+        carried = nonzero['status'] == 'accepted' and 'ASM-04' in (nonzero['premises'] or ())
+        exposed = exposed or not carried
+        detail += f'; nonzero: claims={nonzero["status"]} premises={nonzero["premises"]} ({nonzero["reason"]})'
+    return exposed, detail
 
 
 def spoofed_total_head():
@@ -147,19 +161,28 @@ def receipt_schema_skew():
 
 
 def host_allowlist_masks_panic():
-    """Off Linux-x86_64 a function listed in tests/diff/<ex>/host.txt turns *any* disagreement,
-    including a model panic against a native value, into `host_difference`, not `mismatch`."""
+    """Off Linux-x86_64 a function listed in tests/diff/<ex>/host.txt turned *any* disagreement,
+    including a model panic against a native value, into `host_difference`, not `mismatch`.
+    Fixed: only typed float differences of two values are host differences."""
+    every = frozenset(diff_report.HOST_KINDS)
     status = diff_report.classify({'ok': 1}, {'fail': 'Zig.Error.overflow'}, diff_report.Kind.VALUE,
                                   diff_report.Kind.MODEL_PANIC, None, host=True)
-    return status == diff_report.Status.HOST, f'native ok / model overflow panic -> {status.value}'
+    panic = diff_report.host_difference({'ok': '0x3f800000'}, {'fail': 'Zig.Error.overflow'}, every)
+    value = diff_report.host_difference({'ok': '0x3f800000'}, {'ok': '0x40000000'}, every)
+    exposed = status == diff_report.Status.HOST or panic is not None or value is not None
+    return exposed, f'native ok / model overflow panic -> {status.value}; untyped value difference -> {value}'
 
 
 def model_illegal_masks_native_value():
-    """A model `illegal`/`unspecified` result is an exclusion whatever the native side returned;
-    only the per-function count is pinned, so the input it occurs on is not."""
+    """A model `illegal`/`unspecified` result was an exclusion whatever the native side returned;
+    only the per-function count was pinned, so the input it occurs on was not. Fixed: it is an
+    exclusion only on an input pinned by SHA-256 (unspecified.txt), otherwise a mismatch."""
     status = diff_report.classify({'ok': 7}, {'fail': 'Zig.Error.illegal'}, diff_report.Kind.VALUE,
                                   diff_report.Kind.ILLEGAL, None)
-    return status == diff_report.Status.ILLEGAL, f'native ok / model illegal -> {status.value}'
+    pinned = diff_report.classify({'ok': 7}, {'fail': 'Zig.Error.illegal'}, diff_report.Kind.VALUE,
+                                  diff_report.Kind.ILLEGAL, None, pinned=True)
+    return status != diff_report.Status.MISMATCH or pinned != diff_report.Status.ILLEGAL, \
+        f'native ok / model illegal -> {status.value} (pinned input: {pinned.value})'
 
 
 def indexed_theorems_unaudited():

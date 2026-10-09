@@ -29,6 +29,8 @@ class Outcome(str, Enum):
     UNSPECIFIED_TIMER = 'unspecified_timer'
     UNSUPPORTED = 'unsupported_semantics'
     DEADLOCK = 'deadlock'
+    # A CPU fault of an allowlisted inline-asm instruction (`Zig.Error.trap`, ASM-04).
+    HARDWARE_TRAP = 'hardware_trap'
     # Tests only observe scheduler fuel exhaustion (`bounded_no_result`); it is not divergence.
     DIVERGENCE = 'divergence'
     SEARCH_CAP = 'search_cap'
@@ -37,7 +39,7 @@ class Outcome(str, Enum):
 # Model failures. A partial or total triple rules out each of them (`Zig.Error`); a Zig error
 # union value is an ordinary returned value and is not among them.
 SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
-                             Outcome.DEADLOCK})
+                             Outcome.DEADLOCK, Outcome.HARDWARE_TRAP})
 # Evidence that cannot show a failure is absent, whatever was observed elsewhere.
 INCOMPLETE = frozenset({Outcome.SEARCH_CAP, Outcome.DIVERGENCE, Outcome.UNSPECIFIED, Outcome.UNSPECIFIED_TIMER,
                         Outcome.UNSUPPORTED})
@@ -51,6 +53,7 @@ REFUSAL_REASONS = {
     Outcome.PANIC: 'observed panic',
     Outcome.ILLEGAL: 'observed illegal behavior',
     Outcome.DEADLOCK: 'observed deadlock',
+    Outcome.HARDWARE_TRAP: 'observed hardware trap',
 }
 # Absence claims (scripts/claims.py names) and the outcomes each one denies.
 ABSENCE_CLAIMS = {
@@ -71,6 +74,7 @@ DIFF_KINDS = {
     'unspecified': Outcome.UNSPECIFIED,
     'unspecified_timer': Outcome.UNSPECIFIED_TIMER,
     'deadlock': Outcome.DEADLOCK,
+    'trap': Outcome.HARDWARE_TRAP,
     'bounded_no_result': Outcome.DIVERGENCE,
     'search_cap': Outcome.SEARCH_CAP,
     'native_panic': None,
@@ -84,6 +88,7 @@ DIFF_STATUSES = {
     'error_return_match': Outcome.ERROR_RETURN,
     'panic_match': Outcome.PANIC,
     'ub_excluded': Outcome.PANIC,
+    'trap_match': Outcome.HARDWARE_TRAP,
     'illegal_exclusion': Outcome.ILLEGAL,
     'unspecified_exclusion': Outcome.UNSPECIFIED,
     'unspecified_timer_exclusion': Outcome.UNSPECIFIED_TIMER,

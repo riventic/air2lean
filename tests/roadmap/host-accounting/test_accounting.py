@@ -7,6 +7,7 @@ summaries and negative controls.
 """
 import contextlib
 import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -101,10 +102,12 @@ class Publish(Temp):
         (root/'ZigLean').mkdir(); (root/'ZigLean/Basic.lean').write_text('-- runtime\n')
         diff = root/'tests/diff'
         (diff/'basic/inputs').mkdir(parents=True)
-        (diff/'basic/host.txt').write_text('foo\n')
-        (diff/'basic/unspecified.txt').write_text('foo 1\n')
+        (diff/'basic/host.txt').write_text('foo zero_sign\n')
+        # Per-input exclusion pin (F3): the illegal case is input `[2]`.
+        pin = hashlib.sha256(b'[2]\n').hexdigest()
+        (diff/'basic/unspecified.txt').write_text(f'foo {pin} 1 fixture\n')
         rows = [({'ok': 1}, {'ok': 1}, 'value', 'value'),
-                ({'ok': 1}, {'ok': 2}, 'value', 'value'),  # declared host-dependent
+                ({'ok': '0x00000000'}, {'ok': '0x80000000'}, 'value', 'value'),  # typed host difference
                 ({'ok': 3}, {'fail': 'Zig.Error.illegal'}, 'value', 'illegal')]
         (diff/'basic/inputs/foo.jsonl').write_text(''.join(f'[{i}]\n' for i in range(len(rows))))
         for side, pos in (('zig', 0), ('lean', 1)):

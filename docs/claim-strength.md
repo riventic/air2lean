@@ -80,11 +80,15 @@ witness; `caps` lists why.
 
 `python3 scripts/claims.py report --assurance REPORT` lists `claims`, `claim_class` (the
 strongest claim), `type_strength`, `derived_strength`, `bound`, `subject`, `witnesses` and
-`caps` for every audited theorem. `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks
+`caps` for every audited theorem, and `premises`: what a claim rests on beyond its type (a
+theorem whose closure contains an inline-asm opaque carries [ASM-01](premises.md#asm-01), and a
+no-panic or guaranteed-return claim over one also [ASM-04](premises.md#asm-04), the allowlist
+fault conditions, S7). `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks
 every project goal (`docs/project-workflow.md`) against its root's generated definition
 `namespace.(function without prefix)`. A goal is rejected (exit 1) when:
 
-* its theorem name is not an exact audited theorem or the theorem has assurance violations;
+* its theorem name is not an exact audited theorem, the theorem has assurance violations, or
+  the report lacks the theorem's closure (`opaque_dependencies`);
 * the declared strength is `resource_bound` or `correspondence` (not derivable from these
   interfaces), or exceeds the derived strength in the order `safety < partial_correctness <
   total_correctness`, or the theorem only guarantees a return under a schedule premise

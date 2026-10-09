@@ -16,6 +16,7 @@ case row) onto these outcomes. Names agree with the preflight `outcomes` record 
 | `unspecified_behavior` | model `unspecified` (Zig leaves the result open) | both |
 | `unspecified_timer` | model `unspecified_timer`: `Zig.Error.unsupportedTimer`, a clock or timed wait the model has no semantics for ([TMR-01](premises.md#tmr-01)) | both |
 | `deadlock` | model `deadlock` | both |
+| `hardware_trap` | model `trap` (an allowlisted inline-asm fault: `Zig.asmTrap`, [ASM-04](premises.md#asm-04)); `trap_match` against a native `SIGFPE` | both |
 | `divergence` | `bounded_no_result` or a search with a no-result branch: scheduler fuel ran out; divergence is not established | both |
 | `search_cap` | a `capped` schedule search | both |
 | `unsupported_semantics` | exporter-marked unsupported AIR (coverage), or an unknown model kind | both |
@@ -26,8 +27,8 @@ no-result branch counts both `nondeterministic_valid` and `divergence`.
 
 ## Absence claims
 
-`no-panic` denies `panic`, `illegal_behavior`, `unspecified_behavior`, `unspecified_timer` and
-`deadlock`, since `Zig.Triple` is false on every `Zig.Error`. `guaranteed-return` also denies
+`no-panic` denies `panic`, `illegal_behavior`, `unspecified_behavior`, `unspecified_timer`,
+`deadlock` and `hardware_trap`, since `Zig.Triple` is false on every `Zig.Error`. `guaranteed-return` also denies
 `divergence`. Each claim is also refused by incomplete evidence: `search_cap`, `divergence`,
 `unspecified_behavior`, `unspecified_timer` and `unsupported_semantics`. A capped search, a
 fuel-bounded run or an unclocked timer therefore never supports a proved absence of a failure.
@@ -47,8 +48,8 @@ excludes that input: domains are not machine-checked.
 
 `tests/roadmap/outcome-taxonomy/Taxonomy.lean` shows that the contract types already
 keep error returns and model failures apart. A partial triple holds for an `Except ErrName`
-error return and fails for `.panic`, `.illegal`, `.unspecified`, `.unsupportedTimer` and
-`.deadlock`; divergence satisfies it vacuously. `.unsupportedTimer` is its own `Zig.Error`
+error return and fails for `.panic`, `.illegal`, `.unspecified`, `.unsupportedTimer`,
+`.deadlock` and `.trap`; divergence satisfies it vacuously. `.unsupportedTimer` is its own `Zig.Error`
 constructor: generated `time.Timer.start`/`.read`/`Thread.Futex.timedWait` calls and the
 timed scheduler's no-clock, wrong-clock and unselected-timeout paths throw it instead of
 `.unspecified`.

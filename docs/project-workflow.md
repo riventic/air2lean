@@ -211,7 +211,8 @@ terms:
 
 Each direct goal records `derived_strength` (the strength `scripts/claims.py` derives from the
 head, capped at `safety` without a non-vacuity witness and, for partial triples, without a
-liveness witness), `claim_class`, `witnesses`, `caps` and the derived domain
+liveness witness), `claim_class`, `witnesses`, `caps`, `premises` (ASM-01/ASM-04 over an
+inline-asm opaque) and the derived domain
 (`derived_domain`, `scope`). A declared `safety`/`partial_correctness`/`total_correctness`
 counts toward levels and absence claims only up to the derived strength. The domain is
 `universal` when every explicit root argument and initial state is a distinct universally

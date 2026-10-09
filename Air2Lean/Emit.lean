@@ -2532,8 +2532,20 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       [s!"Zig.Asm.guard [{", ".intercalate locs}]"]
     let args := inputs.toList.map (fun i => rv i.ref.get!) ++ rwOuts.map (rwName ·.2)
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
+    -- S7: an opaque is total, so the allowlist entry's fault condition guards it
+    -- (`Zig.asmTrap`, `Zig.Error.trap`); an entry that never faults keeps `pure`. The checker
+    -- admits no other asm here (`Op.isDeviceAsm`), so a missing entry or input index is an
+    -- unknown identifier: the generated module does not build.
+    let cond? : Option (Option String) := (inst.op.asmAllowEntry? fc.targetArch).bind fun e =>
+      match e.fault with
+      | .never => some none
+      | f => (f.condition? args).map some
+    let guarded := match cond? with
+      | some none => s!"pure ({call})"
+      | some (some c) => s!"Zig.asmTrap ({c}) ({call})"
+      | none => "air2lean_asm_fault_unknown"
     if outputs.size ≤ 1 && outputs.all (·.ref.isNone) then
-      let (env, l) := bindLet fc env inst.id s!"pure ({call})"
+      let (env, l) := bindLet fc env inst.id guarded
       (env, some l)
     else
       -- The tuple of the outputs; output `k` of `n` is `.2.….2.1` (`k` times `.2`), the last one
@@ -2543,8 +2555,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let n := outputs.size
       let proj (k : Nat) : String :=
         t ++ tupleProjection n k
+      let first := match cond? with
+        | some none => s!"let {t} := {call}"
+        | _ => s!"let {t} ← {guarded}"
       let (env, lines) := outputs.toList.zipIdx.foldl
-        (init := (env, guard ++ rwReads ++ [s!"let {t} := {call}"]))
+        (init := (env, guard ++ rwReads ++ [first]))
         fun (env, ls) (o, k) => match o.ref with
           | none =>
             let (env, l) := bindLet fc env inst.id s!"pure {proj k}"

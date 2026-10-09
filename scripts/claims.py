@@ -45,6 +45,23 @@ FUNCTIONAL = ('partial_correctness', 'total_correctness')
 # Witness statuses that establish an inhabited premise telescope (ZigLean/Witness.lean).
 NONVACUOUS = ('verified', 'trivial')
 FINGERPRINT = re.compile(r'[0-9a-f]{32}')
+# An allowlisted inline-asm opaque in a theorem's dependency closure (docs/premises.md ASM-01).
+ASM_OPAQUE = re.compile(r'(?:^|\.)airAsm_[0-9]+\Z')
+# Claims that the asm entries' fault conditions carry (ASM-04): the model throws `trap` exactly
+# when an entry's `AsmFault` holds, so absence of a failure is only as good as that condition.
+ABSENCE_CLAIMS = frozenset({NO_PANIC, GUARANTEED_RETURN})
+
+
+def premises_of(theorem: dict, claims) -> list[str] | None:
+    """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
+    opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one.
+    None if the report lacks the closure (`opaque_dependencies`)."""
+    opaques = theorem.get('opaque_dependencies')
+    if not isinstance(opaques, list):
+        return None
+    if not any(isinstance(n, str) and ASM_OPAQUE.search(n) for n in opaques):
+        return []
+    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
 
 
 def load_heads(path: Path = HEADS_PATH) -> dict:
@@ -316,6 +333,7 @@ def classify(report: dict, heads: dict | None = None) -> dict:
                          'type_strength': found['type_strength'], 'bound': found['bound'],
                          'witnesses': found['witnesses'], 'caps': found['caps'],
                          'caller_obligations': obligations.get(theorem['name'], []),
+                         'premises': premises_of(theorem, found['claims']),
                          'allowed': theorem.get('allowed') is True})
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
@@ -341,17 +359,21 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
               'derived_strength': None, 'claim_class': None, 'bound': None, 'domain': goal['domain'],
               'derived_domain': None, 'binding': None, 'caps': [],
-              'caller_obligations': (obligations or {}).get(goal['theorem'], [])}
+              'caller_obligations': (obligations or {}).get(goal['theorem'], []), 'premises': None}
     theorem = theorems.get(goal['theorem'])
     if theorem is None:
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
     found = assess(theorem, load_heads() if heads is None else heads, definition, generated=generated,
                    allowed=allowed, audited=theorems, nodes=nodes)
+    premises = premises_of(theorem, found['claims'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
-                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'])
+                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
     if theorem.get('allowed') is not True:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
+    if premises is None:
+        return {**result, 'status': 'rejected',
+                'reason': 'assurance report lacks the dependency closure (opaque_dependencies); regenerate it'}
     declared = goal['strength']
     if declared not in ORDERED:
         return {**result, 'status': 'rejected', 'reason': f'{declared} is not derivable from a theorem type'}
@@ -467,7 +489,9 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
                      'definition; hypotheses may not mention generated definitions or claim heads; a scoped derived '
                      'domain needs a domain declared `scoped: ...`. caller_obligations lists the premises '
                      '(ALC-09, IOM-01) under which a claim about a function with an Allocator or Io parameter '
-                     'holds: the caller passes the model one. Differential outcomes (when supplied) can only '
+                     'holds: the caller passes the model one. premises lists what an accepted goal rests on '
+                     'beyond its type: an inline-asm opaque in the closure carries ASM-01, and ASM-04 (allowlist '
+                     'fault conditions) for a no-panic or guaranteed-return claim. Differential outcomes (when supplied) can only '
                      'refuse absence claims: capped, fuel-bounded, unsupported, unsupported-timer or unspecified '
                      'outcomes and observed failures reject a goal; error returns do not. Summaries must be bound to '
                      'the current tree (source/runner fingerprints and case hash) or the check fails. outcomes is '

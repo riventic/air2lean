@@ -18,6 +18,10 @@ REPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPORT)
 K = REPORT.Kind
 S = REPORT.Status
+# Per-input exclusion pin (F3) of the one seeded input line `[1]`.
+INPUT_SHA = REPORT.hashlib.sha256(b'[1]\n').hexdigest()
+PIN = f'foo {INPUT_SHA} 1 fixture exclusion\n'
+HOST_ALL = 'foo ' + ','.join(REPORT.HOST_KINDS) + '\n'
 
 class Outcomes(unittest.TestCase):
     def setUp(self):
@@ -92,33 +96,33 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(data['setup_failures'],0)
 
     def test_native_signal_domain_is_native_unknown_only(self):
-        meta={'schema':1,'kind':'native_signal','legacy':{'fail':'unknown'}}
-        self.assertEqual(REPORT.observation(json.dumps(meta),{'fail':'unknown'},'native')[0],K.NATIVE_SIGNAL)
-        with self.assertRaises(REPORT.Invalid):REPORT.observation(json.dumps(meta),{'fail':'unknown'},'model')
-        for wire in ({'fail':'panic'},{'ok':7},{'fail':'unknown','signal':8}):
+        meta={'schema':1,'kind':'native_signal','legacy':{'fail':'SIGSEGV'}}
+        self.assertEqual(REPORT.observation(json.dumps(meta),{'fail':'SIGSEGV'},'native')[0],K.NATIVE_SIGNAL)
+        with self.assertRaises(REPORT.Invalid):REPORT.observation(json.dumps(meta),{'fail':'SIGSEGV'},'model')
+        for wire in ({'fail':'panic'},{'ok':7},{'fail':'unknown'},{'fail':'SIGKILL'},{'fail':'SIGFPE','signal':8}):
             meta['legacy']=wire
             with self.assertRaises(REPORT.Invalid):REPORT.observation(json.dumps(meta),wire,'native')
 
     def test_native_signal_is_excluded_only_for_model_exclusion(self):
-        self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_SIGNAL,K.ILLEGAL)
-        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        self.seed({'fail':'SIGSEGV'},{'fail':'Zig.Error.illegal'},K.NATIVE_SIGNAL,K.ILLEGAL)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         code,data=self.compare()
         self.assertEqual(code,0)
         self.assertEqual(data['counts'],{'illegal_exclusion':1})
         self.assertEqual(data['setup_failures'],0)
         self.assertEqual(data['mutation_eligible'],0)
-        self.seed({'fail':'unknown'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE)
+        self.seed({'fail':'SIGSEGV'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE)
         (self.root/'tests/diff/basic/unspecified.txt').write_text('')
         code,data=self.compare()
         self.assertEqual(code,1)
         self.assertEqual(data['counts'],{'mismatch':1})
         self.assertEqual(data['mutation_eligible'],1)
-        self.assertEqual(REPORT.classify({'fail':'unknown'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE,None,True),S.MISMATCH)
-        self.assertEqual(REPORT.classify({'fail':'unknown'},{'fail':'Zig.Error.panic'},K.NATIVE_SIGNAL,K.MODEL_PANIC,None),S.MISMATCH)
+        self.assertEqual(REPORT.classify({'fail':'SIGSEGV'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE,None,True),S.MISMATCH)
+        self.assertEqual(REPORT.classify({'fail':'SIGSEGV'},{'fail':'Zig.Error.panic'},K.NATIVE_SIGNAL,K.MODEL_PANIC,None),S.MISMATCH)
 
     def test_renderer_and_resource_failure_remain_fatal_against_illegal(self):
         self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
-        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         code,data=self.compare()
         self.assertEqual(code,1)
         self.assertEqual(data['counts'],{'native_harness_failure':1})
@@ -199,11 +203,11 @@ class Outcomes(unittest.TestCase):
             root=self.root/('valid' if wrong is None else wrong)
             directory=root/'tests/diff/out/zig/outcome-accounting';directory.mkdir(parents=True)
             payloads={'prefix':{'ok':7},'renderer':{'fail':'harnessRenderFailure'},
-                      'source':{'fail':'panic'},'signal':{'fail':'unknown'},
+                      'source':{'fail':'panic'},'signal':{'fail':'SIGFPE'},
                       'interrupt':{'fail':'unknown'},'abort':{'fail':'unknown'},'renderer-fault':{'fail':'unknown'}}
             kinds={'prefix':'value','renderer':'native_harness_failure','source':'native_panic',
                    'signal':'native_signal','interrupt':'native_harness_failure','abort':'native_harness_failure','renderer-fault':'native_harness_failure'}
-            if wrong:kinds[wrong]='native_signal'
+            if wrong:kinds[wrong]='native_signal';payloads[wrong]={'fail':'SIGFPE'}
             for name,legacy in payloads.items():
                 (directory/(name+'.jsonl')).write_text(json.dumps(legacy)+'\n')
                 metadata=[dict(schema=1,kind=kinds[name],legacy=legacy)]
@@ -291,7 +295,7 @@ class Outcomes(unittest.TestCase):
     def test_illegal_and_unspecified_split_with_same_legacy_pin(self):
         for kind,name,status in [(K.ILLEGAL,'illegal','illegal_exclusion'),(K.UNSPECIFIED,'unspecified','unspecified_exclusion')]:
             self.seed({'ok':1},{'fail':'Zig.Error.'+name},K.VALUE,kind)
-            (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+            (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
             code,data=self.compare()
             self.assertEqual(code,0)
             self.assertEqual(data['counts'],{status:1})
@@ -329,12 +333,12 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(data['counts'],{'search_cap':1})
         self.assertEqual(data['mutation_eligible'],0)
         self.assertEqual(data['pin_violations'][0]['counter'],'capped')
-        (self.root/'tests/diff/basic/capped.txt').write_text('foo 1\n')
+        (self.root/'tests/diff/basic/capped.txt').write_text(PIN)
         self.assertEqual(self.compare()[0],0)
 
     def test_pin_drop_caused_by_cap_is_not_semantic_detection(self):
         self.seed({'ok':1},{'fail':'Zig.Error.capped'},K.VALUE,K.SEARCH_CAP,self.search())
-        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         self.assertEqual(len(self.compare()[1]['pin_violations']),2)
         self.assertEqual(self.compare()[1]['mutation_eligible'],0)
 
@@ -351,7 +355,7 @@ class Outcomes(unittest.TestCase):
 
     def test_pinned_illegal_change_remains_detection(self):
         self.seed({'ok':1},{'ok':1})
-        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         self.assertEqual(self.compare()[1]['mutation_eligible'],1)
 
     def test_deadlock_not_panic_or_divergence(self):
@@ -363,14 +367,89 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(row['status'],'mismatch')
 
     def test_host_difference_is_not_an_exact_match(self):
-        self.seed({'ok':1},{'ok':2})
-        (self.root/'tests/diff/basic/host.txt').write_text('foo\n')
+        self.seed({'ok':'0x7fc00000'},{'ok':'0xffc00001'})
+        (self.root/'tests/diff/basic/host.txt').write_text(HOST_ALL)
         code=REPORT.compare(self.root,['basic'],'0.16.0','Darwin-arm64',self.summary)
         data=json.loads(self.summary.read_text())
         self.assertEqual(code,0)
         self.assertEqual(data['counts'],{'host_difference':1})
         self.assertEqual(data['exact_matches'],0)
         self.assertEqual(data['mutation_eligible'],0)
+
+    def test_untyped_host_differences_are_mismatches(self):
+        self.seed({'ok':1},{'ok':1})
+        (self.root/'tests/diff/basic/host.txt').write_text(HOST_ALL)
+        for native,model in [({'ok':1},{'ok':2}),({'ok':'0x3f800000'},{'ok':'0x40000000'}),
+                             ({'ok':'0x3f800000'},{'fail':'Zig.Error.overflow'})]:
+            with self.subTest(native=native,model=model):
+                self.seed(native,model,K.VALUE,K.MODEL_PANIC if 'fail' in model else K.VALUE)
+                code=REPORT.compare(self.root,['basic'],'0.16.0','Darwin-arm64',self.summary)
+                self.assertEqual((code,json.loads(self.summary.read_text())['counts']),(1,{'mismatch':1}))
+        self.seed({'ok':['0x00000000','0x7fc00000']},{'ok':['0x80000000','0x7fc00000']})
+        (self.root/'tests/diff/basic/host.txt').write_text('foo nan_payload\n')
+        self.assertEqual(REPORT.compare(self.root,['basic'],'0.16.0','Darwin-arm64',self.summary),1)
+        (self.root/'tests/diff/basic/host.txt').write_text('foo nan_payload,zero_sign\n')
+        self.assertEqual(REPORT.compare(self.root,['basic'],'0.16.0','Darwin-arm64',self.summary),0)
+        row=json.loads(Path(str(self.summary)+'.jsonl').read_text())
+        self.assertEqual((row['status'],row['host_kinds']),('host_difference',['zero_sign']))
+        self.assertEqual(REPORT.compare(self.root,['basic'],'0.16.0','Linux-x86_64',self.summary),1)
+
+    def test_host_kind_predicates_check_the_values(self):
+        every=frozenset(REPORT.HOST_KINDS)
+        kinds=lambda n,m:REPORT.leaf_host_kinds(n,m)
+        self.assertEqual(kinds('0x7fc00000','0xffc00001'),{'nan_payload'})
+        self.assertEqual(kinds('0x7e00','0xfe01'),{'nan_payload'})
+        self.assertEqual(kinds('0x0000000000000000','0x8000000000000000'),{'zero_sign'})
+        self.assertEqual(kinds('0x3f800000','0x3f800001'),{'libm_ulp'})
+        self.assertEqual(kinds('0x80000000','0x00000001'),{'libm_ulp'})
+        self.assertEqual(kinds('0x3f800000','0x3f800002'),frozenset())
+        self.assertEqual(kinds('0x7f800000','0x7f7fffff'),frozenset())
+        self.assertEqual(kinds('0x7f800000','0x7fc00000'),frozenset())
+        self.assertEqual(kinds('0x3fff8000000000000000','0x3fff8000000000000001'),{'f80_precision','libm_ulp'})
+        self.assertEqual(kinds('0x3fff7fffffffffffffff','0x3ffeffffffffffffffff'),frozenset())
+        self.assertEqual(kinds('0x7fffc000000000000000','0xffffc000000000000001'),{'nan_payload'})
+        self.assertEqual(kinds('0x3f800000','0x000000003f800000'),frozenset())
+        self.assertEqual(kinds(1,2),frozenset())
+        self.assertEqual(kinds('0x3F800000','0x3f800001'),frozenset())
+        self.assertIsNone(REPORT.host_difference({'ok':'0x7fc00000'},{'ok':'0x7fc00001'},frozenset({'zero_sign'})))
+        self.assertIsNone(REPORT.host_difference({'ok':['0x7fc00000']},{'ok':['0x7fc00001','0x0']},every))
+        self.assertIsNone(REPORT.host_difference({'ok':'0x7fc00000','live':1},{'ok':'0x7fc00001'},every))
+        self.assertEqual(REPORT.host_difference({'ok':{'err':'A'}},{'ok':{'err':'A'}},every),None)
+        self.assertEqual(REPORT.host_difference({'ok':['0x7fc00000','1']},{'ok':['0x7fc00001','1']},every),['nan_payload'])
+
+    def test_model_exclusion_needs_a_pin_for_its_input(self):
+        self.seed({'ok':7},{'fail':'Zig.Error.illegal'},K.VALUE,K.ILLEGAL)
+        code,data=self.compare()
+        self.assertEqual((code,data['counts']),(1,{'mismatch':1}))
+        self.assertEqual(data['pin_violations'][0]['input_sha256'],INPUT_SHA)
+        other=REPORT.hashlib.sha256(b'[2]\n').hexdigest()
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(f'foo {other} 1 moved exclusion\n')
+        code,data=self.compare()
+        self.assertEqual((code,data['counts']),(1,{'mismatch':1}))
+        self.assertEqual(sorted(v['input_sha256'] for v in data['pin_violations']),sorted([INPUT_SHA,other]))
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
+        code,data=self.compare()
+        self.assertEqual((code,data['counts']),(0,{'illegal_exclusion':1}))
+        row=json.loads(Path(str(self.summary)+'.jsonl').read_text())
+        self.assertEqual(row['exclusion_reason'],'fixture exclusion')
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(f'foo {INPUT_SHA} 0-3 racy\n')
+        self.assertEqual(self.compare()[0],0)
+        self.seed({'ok':7},{'ok':7})
+        self.assertEqual(self.compare()[0],0)
+
+    def test_native_fault_signal_matches_model_trap(self):
+        self.seed({'fail':'SIGFPE'},{'fail':'Zig.Error.trap'},K.NATIVE_SIGNAL,K.TRAP)
+        code,data=self.compare()
+        self.assertEqual((code,data['counts'],data['legacy_counts']),(0,{'trap_match':1},{'fail_match':1}))
+        self.assertEqual(data['exact_matches'],1)
+        for native,nk in [({'fail':'SIGSEGV'},K.NATIVE_SIGNAL),({'ok':7},K.VALUE),({'fail':'divideByZero'},K.NATIVE_PANIC)]:
+            with self.subTest(native=native):
+                self.seed(native,{'fail':'Zig.Error.trap'},nk,K.TRAP)
+                self.assertEqual(self.compare()[1]['counts'],{'mismatch':1})
+        self.seed({'fail':'SIGFPE'},{'ok':7},K.NATIVE_SIGNAL,K.VALUE)
+        self.assertEqual(self.compare()[1]['counts'],{'mismatch':1})
+        meta=json.dumps({'schema':1,'kind':'model_panic','legacy':{'fail':'Zig.Error.trap'}})
+        with self.assertRaises(REPORT.Invalid):REPORT.observation(meta,{'fail':'Zig.Error.trap'},'model')
 
     def test_skipped_examples_are_separate_from_comparisons(self):
         self.seed({'ok':1},{'ok':1})
@@ -435,8 +514,16 @@ class Outcomes(unittest.TestCase):
         with self.assertRaises(REPORT.Invalid):list(REPORT.lines(path))
 
     def test_invalid_pins_and_schedule_metadata(self):
-        pin=self.root/'pins';pin.write_text('foo 2-1\n')
-        with self.assertRaises(REPORT.Invalid):REPORT.pins(pin)
+        pin=self.root/'pins'
+        for text in (f'foo {INPUT_SHA} 2-1 reason\n','foo 1\n',f'foo {INPUT_SHA} 1\n',f'foo {INPUT_SHA[:-1]} 1 reason\n',
+                     f'foo {INPUT_SHA} 1 a\nfoo {INPUT_SHA} 1 b\n'):
+            pin.write_text(text)
+            with self.assertRaises(REPORT.Invalid,msg=text):REPORT.pins(pin)
+        pin.write_text(f'# comment\nfoo {INPUT_SHA} 0-20 racy flag # tail\n')
+        self.assertEqual(REPORT.pins(pin),{'foo':{INPUT_SHA:(0,20,'racy flag')}})
+        for text in ('foo\n','foo ulp\n','foo nan_payload\nfoo zero_sign\n','foo nan_payload extra\n'):
+            pin.write_text(text)
+            with self.assertRaises(REPORT.Invalid,msg=text):REPORT.host_allowances(pin)
         meta={'schema':1,'kind':'value','legacy':{'ok':1},'search':self.search('bounded',False)}
         with self.assertRaises(REPORT.Invalid):REPORT.observation(json.dumps(meta),{'ok':1},'model')
 
@@ -515,7 +602,7 @@ class Outcomes(unittest.TestCase):
 
     def test_actual_comparison_tail_keeps_total_and_reports_native_setup_failure(self):
         self.seed({'fail':'unknown'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL)
-        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         result=self._run_comparison_tail()
         self.assertEqual(result.returncode,1,result.stderr)
         self.assertIn('TOTAL: ok=0 fail_match=0 unspecified=1 capped=0 mismatch=0',result.stdout,result.stderr)
@@ -538,7 +625,7 @@ class Outcomes(unittest.TestCase):
         self.seed(native,model,nk,mk,search)
         scripts=self.root/'scripts';scripts.mkdir(exist_ok=True)
         (scripts/'diff-report.py').write_text((ROOT/'scripts/diff-report.py').read_text())
-        if host:(self.root/'tests/diff/basic/host.txt').write_text('foo\n')
+        if host:(self.root/'tests/diff/basic/host.txt').write_text(HOST_ALL)
         original=(ROOT/'ZigLean/Conc.lean').read_bytes()
         conc=self.root/'ZigLean/Conc.lean';conc.parent.mkdir(exist_ok=True);conc.write_bytes(original)
         backup=self.root/'Conc.before.lean';backup.write_bytes(original)
@@ -579,7 +666,7 @@ class Outcomes(unittest.TestCase):
         self.assertIn('RESULT=0',result.stdout)
 
     def test_mutation_wrapper_host_exclusion_is_not_detection(self):
-        result=self.mutation_mock({'ok':1},{'ok':2},K.VALUE,K.VALUE,host=True)
+        result=self.mutation_mock({'ok':'0x7fc00000'},{'ok':'0xffc00001'},K.VALUE,K.VALUE,host=True)
         self.assertIn('RESULT=0',result.stdout)
 
     def test_mutation_wrapper_aborts_on_setup_and_missing_total(self):

@@ -44,9 +44,29 @@ RECEIPTS = 'tests/roadmap/proof-receipts/test_receipt.py'
 POLICY = 'tests/roadmap/assurance/test_policy.py'
 CLAIMS = 'tests/roadmap/claims/test_claims.py'
 COVERAGE = 'tests/roadmap/coverage-report/test_coverage.py'
+OUTCOMES = 'tests/roadmap/outcome-accounting/test_report.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
+    # V06 (F3): a host allowance must type each differing float, not accept any difference.
+    'diff-host-difference-untyped': (
+        'scripts/diff-report.py', '        kinds = leaf_host_kinds(*pair) & allowed\n', '        kinds = allowed\n',
+        OUTCOMES, 'REPORT', ('Outcomes.test_untyped_host_differences_are_mismatches',
+                             'Outcomes.test_host_kind_predicates_check_the_values')),
+    # V06 (F3): a host-listed function's native signal against a model value is a mismatch.
+    'diff-host-masks-non-values': (
+        'scripts/diff-report.py', '    if host and nkind == mkind == Kind.VALUE: return Status.HOST\n',
+        '    if host: return Status.HOST\n', OUTCOMES, 'REPORT',
+        ('Outcomes.test_native_signal_is_excluded_only_for_model_exclusion',)),
+    # V06 (F3): a model exclusion counts only on an input pinned for it.
+    'diff-exclusion-unpinned': (
+        'scripts/diff-report.py', "        if pinned or (search and (search['status'] == 'capped' or search['saw_no_result'])):\n",
+        '        if True:\n', OUTCOMES, 'REPORT', ('Outcomes.test_model_exclusion_needs_a_pin_for_its_input',)),
+    # L13 (S7): a claim over an asm opaque carries the allowlist fault-condition premise.
+    'claims-asm-fault-premise-dropped': (
+        'scripts/claims.py', "    return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']\n",
+        "    return ['ASM-01']\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_asm_closure_carries_fault_premise',)),
     # T01: legacy (pre-12) AIR selects the named legacy profile, not schema-12 validation.
     'profile-legacy-schema-misrouted': (
         'scripts/normalize-generated.py', '    if schema < 12:\n', '    if schema < 11:\n',
