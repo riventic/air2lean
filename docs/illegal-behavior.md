@@ -103,5 +103,9 @@ These rows have no claim beyond it.
 - Native: `native.zig` prints what a ReleaseSafe and a ReleaseFast build return for each input
   class (`native/*.txt`; [build-modes.md](build-modes.md)). The differential harness (`scripts/diff.sh`) counts every
   `.illegal` row as an `illegal` exclusion in every mode, so it compares none of them:
-  `tests/diff/floatops/unspecified.txt` pins `divExact64`.
+  `tests/diff/floatops/unspecified.txt` pins `divExact64`: 123 of its 300 inputs are
+  `.illegal`, 23 are the NaN panic. A ReleaseFast or ReleaseSmall build can differ from
+  ReleaseSafe only where the quotient is not a whole number, and each such input is
+  `.illegal`, so float `@divExact` needs no exception to the
+  [build-modes](build-modes.md) transfer premise.
 - `tests/roadmap/architecture-audit/trust-chain/check.py unchecked-memcpy --require-fixed`.

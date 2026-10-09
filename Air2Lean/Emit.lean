@@ -2330,7 +2330,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | some (Op.slicePtr sl) => some sl
         | _ => none
       | _ => none
-    let m := if hasLen src then sn else (slicePtrOf.map (s!"{rv ·}.len")).getD n
+    let lenOf (sl : Val) : String := match sl with
+      | .inst _ => s!"{rv sl}.len"
+      | _ => s!"({rv sl}).len"
+    let m := if hasLen src then sn else (slicePtrOf.map lenOf).getD n
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
     let args := s!"{size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n}"
