@@ -36,7 +36,7 @@ inductive ThreadFn where
   `.unspecified` at run time (the diff test pins that count), not a rejection. Each has its
   own runtime signature (`checkModelSignature`). -/
   | timerStart | timerRead | futexTimedWait
-  /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
+  /-- `Io.Group.async` (a thread, the caller or deferred), `.concurrent`, `.await`, `.cancel` (0.16.0). -/
   | groupAsync | groupConcurrent | groupAwait | groupCancel
   deriving BEq, Repr
 
