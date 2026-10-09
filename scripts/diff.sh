@@ -166,6 +166,24 @@ pub inline fn symbol(comptime func: *const anyopaque, comptime name: []const u8)
     _ = func;
     _ = name;
 }
+// 0.17.0's op files declare their (unexported, see `symbol`) C wrappers with these ABI types.
+// Bytes, not the float: f80 is not a C-ABI parameter type on every host (aarch64).
+fn BytesAbi(comptime T: type) type {
+    return struct {
+        pub const Abi = extern struct { bytes: [@sizeOf(T)]u8 };
+        pub inline fn toAbi(x: T) Abi {
+            return .{ .bytes = @import("std").mem.toBytes(x) };
+        }
+        pub inline fn fromAbi(a: Abi) T {
+            return @import("std").mem.bytesToValue(T, &a.bytes);
+        }
+    };
+}
+pub const @"f16" = BytesAbi(f16);
+pub const @"f32" = BytesAbi(f32);
+pub const @"f64" = BytesAbi(f64);
+pub const @"f80" = BytesAbi(f80);
+pub const @"f128" = BytesAbi(f128);
 EOF
 cat >"$build_dir/air2lean_root.zig" <<'EOF'
 pub const sin = @import("compiler_rt/sin.zig");

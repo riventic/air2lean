@@ -1,0 +1,22 @@
+{
+ "badMode017": "unsupported profile.build_mode 'ReleaseSafer'",
+ "bitCastOn015": "tag 'bit_cast' is not a Zig 0.15.2 AIR tag (introduced in 0.17.0)",
+ "divCeilOn016": "tag 'div_ceil' is not a Zig 0.16.0 AIR tag (introduced in 0.17.0)",
+ "divCeilOptimized": "optimized float mode is outside the subset (div_ceil_optimized)",
+ "i0": "type i0 does not exist in Zig 0.17.0",
+ "intFromError": "raw error representation casts require finalized error ordinals",
+ "noreturnEnum": "enum 'zig017.Never' tag type 1 is not an integer",
+ "oldBitcast": "tag 'bitcast' is not a Zig 0.17.0 AIR tag",
+ "oldBoolAnd": "tag 'bool_and' is not a Zig 0.17.0 AIR tag",
+ "oldIntcast": "tag 'intcast_safe' is not a Zig 0.17.0 AIR tag",
+ "oldStructFieldVal": "tag 'struct_field_val' is not a Zig 0.17.0 AIR tag",
+ "safeOn016": "unsupported profile.build_mode 'safe'",
+ "spirv": "SPIR-V runtime arrays",
+ "splatArray": "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset",
+ "subByteLane": "a pointer to a vector lane (vector_index) is outside the subset",
+ "toVec": "tag 'array_to_vector': Zig 0.17.0's array-to-vector coercion is outside the subset",
+ "toVecSentinel": "tag 'array_to_vector': Zig 0.17.0's array-to-vector coercion",
+ "unionFromEnum": "tag 'union_from_enum': Zig 0.17.0's enum-to-tagged-union coercion is outside the subset",
+ "unionFromEnumOn016": "tag 'union_from_enum' is not a Zig 0.16.0 AIR tag (introduced in 0.17.0)",
+ "unknownTag": "unknown AIR tag 'int_from_bitpack'"
+}

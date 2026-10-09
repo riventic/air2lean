@@ -20,6 +20,8 @@ from pathlib import Path
 
 SCHEMA = 'air2lean-compatibility/1'
 KNOWN_HOSTS = ('x86_64-linux', 'aarch64-macos')
+# A pinned version is `qualified` or still `in-qualification` (CI runs it; not the default).
+STATUSES = ('qualified', 'in-qualification')
 SHA = re.compile(r'^[0-9a-f]{64}$')
 # Files whose bytes determine a patched compiler (same set as scripts/local-ci.sh's cache key).
 EXPORTER_FILES = ('zig-patch/versions.toml', 'zig-patch/toml-get.sh', 'zig-patch/build.sh',
@@ -144,12 +146,17 @@ def check(root):
                 errors.append('zig %s %s.sha256 is not a lowercase sha256' % (v, label))
         if table.get('hook') and not (root / 'zig-patch' / table['hook']).is_file():
             errors.append('zig %s hook file is missing: zig-patch/%s' % (v, table['hook']))
+        if entry.get('status') not in STATUSES:
+            errors.append('zig %s status must be one of %s' % (v, ', '.join(STATUSES)))
         hosts = entry.get('hosts')
         if not isinstance(hosts, list) or not hosts or any(h not in KNOWN_HOSTS for h in hosts):
             errors.append('zig %s hosts must be a non-empty subset of %s' % (v, ', '.join(KNOWN_HOSTS)))
     default = get(('zig', 'default'))
     if default not in pinned:
         errors.append('zig.default %r is not a pinned version' % default)
+    elif any(isinstance(e, dict) and e.get('version') == default and e.get('status') != 'qualified'
+             for e in entries):
+        errors.append('zig.default %r is not a qualified version' % default)
     translate = text('scripts/translate.sh')
     found = re.search(r'AIR2LEAN_ZIG_VERSION:-([0-9.]+)\}', translate)
     expect('zig.default', default, found.group(1) if found else None, 'scripts/translate.sh')

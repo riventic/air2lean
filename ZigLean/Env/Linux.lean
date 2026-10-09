@@ -1,3 +1,4 @@
+import ZigLean.Env
 import ZigLean.Mem.Lemmas
 import ZigLean.External
 

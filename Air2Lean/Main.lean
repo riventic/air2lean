@@ -77,7 +77,7 @@ def help : String :=
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
-  "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
+  "Supported AIR: Zig 0.17.0, 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
   "Example:\n" ++
   "  lake exe air2lean out -o MyGen.lean --namespace My --prefix myfile.\n\n" ++

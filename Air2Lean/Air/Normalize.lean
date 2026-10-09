@@ -9,8 +9,12 @@ version-specific knowledge — the AIR tag table — lives here. `Check.lean` an
 never see a `Raw.RawFunc` or a tag string.
 
 One tag table serves every supported version: no subset tag differs between 0.14.1, 0.15.2 and
-0.16.0 (`zig-patch/<version>/TAGS.md`). To add a Zig version: add it to `supportedVersions`;
-if a subset tag differs, add a version case to `normalizeOp` (`PLAN.md` §Zig version support).
+0.16.0 (`zig-patch/<version>/TAGS.md`). Zig 0.17.0's renamed and split tags are mapped back to
+the 0.16.0 spelling by `Canon.lean`'s `versionTags`, which also rejects a tag that the file's
+version does not have; the table below reads the result, plus `div_ceil`, which only 0.17.0
+has (`array_to_vector`, `union_from_enum` and `spirv_runtime_array_len` stay rejected). To add a
+Zig version: add it to `supportedVersions`; if a subset tag differs, add a version case to
+`normalizeOp` (`PLAN.md` §Zig version support).
 -/
 
 namespace Air2Lean
@@ -74,7 +78,13 @@ def runtimeTagReasons : Array (Array String × String) := #[
   (#["runtime_nav_ptr"],
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
   (#["err_return_trace", "set_err_return_trace", "save_err_return_trace_index"],
-    "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics")]
+    "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics"),
+  (#["spirv_runtime_array_len"],
+    "SPIR-V runtime arrays exist only on SPIR-V targets, outside the x86_64-linux/aarch64-macos model"),
+  (#["array_to_vector"],
+    "Zig 0.17.0's array-to-vector coercion is outside the subset; the vector model has no array conversion"),
+  (#["union_from_enum"],
+    "Zig 0.17.0's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion")]
 
 /-- The reason for a tag in `runtimeTagReasons`. -/
 def runtimeTagReason? (tag : String) : Option String :=
@@ -165,6 +175,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "div_trunc" => let (a, b) ← arg2 fnName raw; return .div .divTrunc a b
   | "div_floor" => let (a, b) ← arg2 fnName raw; return .div .divFloor a b
   | "div_exact" => let (a, b) ← arg2 fnName raw; return .div .divExact a b
+  | "div_ceil" => let (a, b) ← arg2 fnName raw true; return .div .divCeil a b
   | "div_float" => let (a, b) ← arg2 fnName raw; return .divFloat a b
   | "rem" => let (a, b) ← arg2 fnName raw; return .div .rem a b
   | "mod" => let (a, b) ← arg2 fnName raw; return .div .mod a b
@@ -438,7 +449,7 @@ end
 probes each; `tests/roadmap/op-effects` checks this list against `normalizeOp`'s arms. -/
 def decodedTags : Array String := #[
   "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
-  "mul", "mul_safe", "mul_wrap", "mul_sat", "div_trunc", "div_floor", "div_exact", "div_float",
+  "mul", "mul_safe", "mul_wrap", "mul_sat", "div_trunc", "div_floor", "div_ceil", "div_exact", "div_float",
   "rem", "mod", "min", "max", "add_with_overflow", "sub_with_overflow", "mul_with_overflow",
   "shl_with_overflow", "clz", "ctz", "popcount", "byte_swap", "bit_reverse", "bit_and", "bit_or",
   "xor", "not", "neg", "abs", "sqrt", "floor", "ceil", "trunc_float", "round", "sin", "cos",
@@ -466,7 +477,8 @@ def decodedTags : Array String := #[
   "dbg_arg_inline", "dbg_empty_stmt", "assembly", "call", "call_always_tail", "call_never_tail",
   "call_never_inline"]
 
-def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
+
+def supportedVersions : List String := ["0.17.0", "0.16.0", "0.15.2", "0.14.1"]
 
 /-- The layout of a lane pointer `*align(a:0:n:i) T` (`&v[i]` of `@Vector(n, T)`, `T` an integer
 or `bool` of `w` bits) as the bit-pointer that `Zig.loadLane`/`Zig.storeLane` take: the
@@ -494,9 +506,9 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   let ptrBytes := raw.profile.pointerBits / 8
   -- A lane pointer into a bit-packed vector (`tests/roadmap/vector-layouts/lanes.zig`) becomes
   -- a bit-pointer into the vector's integer, as LLVM lays it out; checked natively only on
-  -- these targets.
-  let laneTarget := llvm && ["x86_64", "aarch64"].contains
-    ((raw.profile.targetTriple.splitOn "-").headD "")
+  -- these targets, and not for Zig 0.17.0, whose lane pointers have no native evidence yet.
+  let laneTarget := llvm && ["0.14.1", "0.15.2", "0.16.0"].contains raw.zigVersion &&
+    ["x86_64", "aarch64"].contains ((raw.profile.targetTriple.splitOn "-").headD "")
   let layouts := raw.layouts.mapIdx fun i l =>
     let l := { l with ptrBytes }
     match raw.types[i]? with

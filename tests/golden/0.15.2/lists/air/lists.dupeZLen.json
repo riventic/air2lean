@@ -55,7 +55,13 @@
    "line": 2
   },
   {
-   "id": 6,
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 4,
+   "line": 2
+  },
+  {
+   "id": 8,
    "tag": "load",
    "ty": 0,
    "args": [
@@ -65,13 +71,13 @@
    ]
   },
   {
-   "id": 9,
+   "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
    "line": 2
   },
   {
-   "id": 10,
+   "id": 12,
    "tag": "call",
    "ty": 6,
    "callee": {
@@ -81,7 +87,7 @@
    },
    "args": [
     {
-     "inst": 6
+     "inst": 8
     },
     {
      "inst": 1
@@ -89,92 +95,92 @@
    ]
   },
   {
-   "id": 16,
+   "id": 19,
    "tag": "try",
    "ty": 8,
    "args": [
     {
-     "inst": 10
+     "inst": 12
     }
    ],
    "body": [
     {
-     "id": 11,
+     "id": 14,
      "tag": "unwrap_errunion_err",
      "ty": 9,
      "args": [
       {
-       "inst": 10
-      }
-     ]
-    },
-    {
-     "id": 12,
-     "tag": "dbg_stmt",
-     "ty": 4,
-     "line": 2
-    },
-    {
-     "id": 13,
-     "tag": "bitcast",
-     "ty": 10,
-     "args": [
-      {
-       "inst": 11
-      }
-     ]
-    },
-    {
-     "id": 14,
-     "tag": "wrap_errunion_err",
-     "ty": 2,
-     "args": [
-      {
-       "inst": 13
+       "inst": 12
       }
      ]
     },
     {
      "id": 15,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 2
+    },
+    {
+     "id": 16,
+     "tag": "bitcast",
+     "ty": 10,
+     "args": [
+      {
+       "inst": 14
+      }
+     ]
+    },
+    {
+     "id": 17,
+     "tag": "wrap_errunion_err",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 16
+      }
+     ]
+    },
+    {
+     "id": 18,
      "tag": "ret_safe",
      "ty": 11,
      "args": [
       {
-       "inst": 14
+       "inst": 17
       }
      ]
     }
    ]
   },
   {
-   "id": 17,
+   "id": 20,
    "tag": "dbg_var_val",
    "ty": 4,
    "args": [
     {
-     "inst": 16
+     "inst": 19
     }
    ],
    "name": "z"
   },
   {
-   "id": 18,
+   "id": 21,
    "tag": "dbg_stmt",
    "ty": 4,
    "line": 4
   },
   {
-   "id": 19,
+   "id": 22,
    "tag": "alloc",
    "ty": 12
   },
   {
-   "id": 20,
+   "id": 23,
    "tag": "store_safe",
    "ty": 4,
    "args": [
     {
-     "inst": 19
+     "inst": 22
     },
     {
      "ty": 13,
@@ -183,40 +189,56 @@
    ]
   },
   {
-   "id": 21,
+   "id": 24,
    "tag": "dbg_var_ptr",
    "ty": 4,
    "args": [
     {
-     "inst": 19
+     "inst": 22
     }
    ],
    "name": "n"
   },
   {
-   "id": 22,
+   "id": 25,
    "tag": "block",
    "ty": 4,
    "body": [
     {
-     "id": 23,
+     "id": 26,
      "tag": "loop",
      "ty": 11,
      "body": [
       {
-       "id": 24,
+       "id": 27,
        "tag": "block",
        "ty": 4,
        "body": [
         {
-         "id": 25,
+         "id": 28,
          "tag": "dbg_stmt",
          "ty": 4,
          "line": 5
         },
         {
-         "id": 26,
+         "id": 29,
          "tag": "load",
+         "ty": 13,
+         "args": [
+          {
+           "inst": 22
+          }
+         ]
+        },
+        {
+         "id": 30,
+         "tag": "dbg_stmt",
+         "ty": 4,
+         "line": 5
+        },
+        {
+         "id": 31,
+         "tag": "slice_len",
          "ty": 13,
          "args": [
           {
@@ -225,54 +247,38 @@
          ]
         },
         {
-         "id": 27,
-         "tag": "dbg_stmt",
-         "ty": 4,
-         "line": 5
-        },
-        {
-         "id": 28,
-         "tag": "slice_len",
-         "ty": 13,
-         "args": [
-          {
-           "inst": 16
-          }
-         ]
-        },
-        {
-         "id": 29,
+         "id": 32,
          "tag": "cmp_lte",
          "ty": 14,
          "args": [
           {
-           "inst": 26
+           "inst": 29
           },
           {
-           "inst": 28
+           "inst": 31
           }
          ]
         },
         {
-         "id": 32,
+         "id": 35,
          "tag": "block",
          "ty": 4,
          "body": [
           {
-           "id": 33,
+           "id": 36,
            "tag": "cond_br",
            "ty": 11,
            "args": [
             {
-             "inst": 29
+             "inst": 32
             }
            ],
            "then": [
             {
-             "id": 34,
+             "id": 37,
              "tag": "br",
              "ty": 11,
-             "target": 32,
+             "target": 35,
              "args": [
               {
                "ty": 4,
@@ -283,7 +289,7 @@
            ],
            "else": [
             {
-             "id": 30,
+             "id": 33,
              "tag": "call",
              "ty": 11,
              "callee": {
@@ -293,15 +299,15 @@
              },
              "args": [
               {
-               "inst": 26
+               "inst": 29
               },
               {
-               "inst": 28
+               "inst": 31
               }
              ]
             },
             {
-             "id": 31,
+             "id": 34,
              "tag": "unreach",
              "ty": 11
             }
@@ -310,25 +316,25 @@
          ]
         },
         {
-         "id": 35,
+         "id": 38,
          "tag": "slice_elem_val",
          "ty": 16,
          "args": [
           {
-           "inst": 16
+           "inst": 19
           },
           {
-           "inst": 26
+           "inst": 29
           }
          ]
         },
         {
-         "id": 36,
+         "id": 39,
          "tag": "cmp_neq",
          "ty": 14,
          "args": [
           {
-           "inst": 35
+           "inst": 38
           },
           {
            "ty": 16,
@@ -337,61 +343,28 @@
          ]
         },
         {
-         "id": 48,
+         "id": 51,
          "tag": "cond_br",
          "ty": 11,
          "args": [
           {
-           "inst": 36
+           "inst": 39
           }
          ],
          "then": [
           {
-           "id": 38,
+           "id": 41,
            "tag": "dbg_stmt",
            "ty": 4,
            "line": 5
           },
           {
-           "id": 39,
+           "id": 42,
            "tag": "load",
            "ty": 13,
            "args": [
             {
-             "inst": 19
-            }
-           ]
-          },
-          {
-           "id": 40,
-           "tag": "dbg_stmt",
-           "ty": 4,
-           "line": 5
-          },
-          {
-           "id": 41,
-           "tag": "add_safe",
-           "ty": 13,
-           "args": [
-            {
-             "inst": 39
-            },
-            {
-             "ty": 13,
-             "val": "1"
-            }
-           ]
-          },
-          {
-           "id": 42,
-           "tag": "store_safe",
-           "ty": 4,
-           "args": [
-            {
-             "inst": 19
-            },
-            {
-             "inst": 41
+             "inst": 22
             }
            ]
           },
@@ -403,14 +376,47 @@
           },
           {
            "id": 44,
+           "tag": "add_safe",
+           "ty": 13,
+           "args": [
+            {
+             "inst": 42
+            },
+            {
+             "ty": 13,
+             "val": "1"
+            }
+           ]
+          },
+          {
+           "id": 45,
+           "tag": "store_safe",
+           "ty": 4,
+           "args": [
+            {
+             "inst": 22
+            },
+            {
+             "inst": 44
+            }
+           ]
+          },
+          {
+           "id": 46,
+           "tag": "dbg_stmt",
+           "ty": 4,
+           "line": 5
+          },
+          {
+           "id": 47,
            "tag": "dbg_empty_stmt",
            "ty": 4
           },
           {
-           "id": 46,
+           "id": 49,
            "tag": "br",
            "ty": 11,
-           "target": 24,
+           "target": 27,
            "args": [
             {
              "ty": 4,
@@ -421,10 +427,10 @@
          ],
          "else": [
           {
-           "id": 47,
+           "id": 50,
            "tag": "br",
            "ty": 11,
-           "target": 22,
+           "target": 25,
            "args": [
             {
              "ty": 4,
@@ -437,39 +443,39 @@
        ]
       },
       {
-       "id": 49,
+       "id": 52,
        "tag": "repeat",
        "ty": 11,
-       "target": 23
+       "target": 26
       }
      ]
     }
    ]
   },
   {
-   "id": 50,
+   "id": 53,
    "tag": "dbg_stmt",
    "ty": 4,
    "line": 6
   },
   {
-   "id": 51,
+   "id": 54,
    "tag": "load",
    "ty": 13,
    "args": [
     {
-     "inst": 19
+     "inst": 22
     }
    ]
   },
   {
-   "id": 52,
+   "id": 55,
    "tag": "dbg_stmt",
    "ty": 4,
    "line": 3
   },
   {
-   "id": 53,
+   "id": 56,
    "tag": "load",
    "ty": 0,
    "args": [
@@ -479,13 +485,13 @@
    ]
   },
   {
-   "id": 56,
+   "id": 59,
    "tag": "dbg_stmt",
    "ty": 4,
    "line": 3
   },
   {
-   "id": 57,
+   "id": 60,
    "tag": "call",
    "ty": 4,
    "callee": {
@@ -495,36 +501,36 @@
    },
    "args": [
     {
-     "inst": 53
+     "inst": 56
     },
     {
-     "inst": 16
+     "inst": 19
     }
    ]
   },
   {
-   "id": 58,
+   "id": 61,
    "tag": "dbg_stmt",
    "ty": 4,
    "line": 6
   },
   {
-   "id": 59,
+   "id": 62,
    "tag": "wrap_errunion_payload",
    "ty": 2,
    "args": [
     {
-     "inst": 51
+     "inst": 54
     }
    ]
   },
   {
-   "id": 60,
+   "id": 63,
    "tag": "ret_safe",
    "ty": 11,
    "args": [
     {
-     "inst": 59
+     "inst": 62
     }
    ]
   }

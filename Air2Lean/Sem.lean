@@ -143,6 +143,7 @@ def divFn (op : DivOp) (s : Bool) {w : Nat} (a b : BitVec w) : Result (BitVec w)
   | .divExact => Zig.divExact s a b
   | .rem => Zig.rem s a b
   | .mod => Zig.mod s a b
+  | .divCeil => Zig.divCeil s a b
 
 def bitFn (op : BitOp) {w : Nat} (a b : BitVec w) : BitVec w :=
   match op with

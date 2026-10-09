@@ -78,7 +78,7 @@ def arithOp : ArithOp → String | .add => ".add" | .sub => ".sub" | .mul => ".m
 def mode : Mode → String | .checked => ".checked" | .wrap => ".wrap" | .sat => ".sat"
 def divOp : DivOp → String
   | .divTrunc => ".divTrunc" | .divFloor => ".divFloor" | .divExact => ".divExact"
-  | .rem => ".rem" | .mod => ".mod"
+  | .rem => ".rem" | .mod => ".mod" | .divCeil => ".divCeil"
 def bitOp : BitOp → String | .and => ".and" | .or => ".or" | .xor => ".xor"
 def cmpOp : CmpOp → String
   | .lt => ".lt" | .le => ".le" | .eq => ".eq" | .ne => ".ne" | .ge => ".ge" | .gt => ".gt"

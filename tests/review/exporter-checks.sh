@@ -171,7 +171,7 @@ if "$work/one/bin/zig" build-exe source.zig 2>/dev/null; then fail 'published co
 
 # Opt-in actual compiler tests. Each compiler must be patched and locked; library paths can
 # be supplied for builds using -Dno-lib. AIR2LEAN_REVIEW_TRANSLATOR enables round-trip parsing.
-for version in 14 15 16; do
+for version in 14 15 16 17; do
   eval "compiler=\${AIR2LEAN_REVIEW_ZIG${version}:-}"
   eval "lib=\${AIR2LEAN_REVIEW_LIB${version}:-}"
   [ -n "$compiler" ] || continue
@@ -201,7 +201,7 @@ def constant_shape(ref):
     return {key: [constant_shape(child) for child in value] if key == 'elems' else value
             for key, value in ref.items() if key in ('elems', 'enum', 'val')}
 
-if sys.argv[2] == '16':
+if sys.argv[2] in ('16', '17'):
     expected_constants = {'packedConstant': {'val': '69'}, 'nestedConstant': {'val': '158'}}
 else:
     # Before 0.16 packed structs are aggregates, including their enum and nested fields.

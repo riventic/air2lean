@@ -29,6 +29,8 @@ against the future's result type.
 | `Io.Batch.awaitAsync/awaitConcurrent/cancel`, `Io.operate`, `Io.operateTimeout` | Io operations and batches are not modelled. |
 | `Io.sleep`, `Io.futexWaitTimeout` | The model has no clock. |
 | A cancelation point other than `Io.checkCancel` that an `Io.async` task can reach, in a program that calls `Future.cancel` | This covers a cancelable `Io.futexWait` (also inside `Io.Mutex.lock` or `Io.Condition.wait`), `Io.Group.await` and a nested `Future.await`. std would deliver the request there, but the model does not (`checkFutureCancelation`). |
+| `Future.await` that an `Io.Group` task can reach (also through a task it may run inline), in a program that calls `Io.Group.cancel` | std's `await` hands the awaiting task's cancelation request to the awaited future (`await` in `Io/Threaded.zig`); the model's `awaitC` is a plain join (`checkFutureCancelation`). |
+| `threadlocal` storage that an `Io.async` or `Io.Group` task can reach | std runs these tasks on pooled worker threads (or the caller's thread) whose instances outlive a task; the model gives each task fresh instances (`checkIoTaskThreadlocals`, [generated-code.md](generated-code.md#thread-local-storage)). |
 
 ## Semantics
 

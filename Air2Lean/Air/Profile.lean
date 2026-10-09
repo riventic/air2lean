@@ -49,6 +49,20 @@ private def strField (j : Json) (k : String) : Except String String := do
 private def natField (j : Json) (k : String) : Except String Nat :=
   ((j.getObjVal? k).bind Json.getNat?).mapError fun e => s!"profile.{k}: {e}"
 
+/-- The build mode in its 0.16.0 spelling. Zig 0.17.0 renamed `std.builtin.OptimizeMode` to
+`std.lang.Optimize` with the tags `debug`, `safe`, `fast`, `small`; the exporter writes the tag
+name. A 0.17.0 profile may carry either spelling, older ones only their own, and the parsed
+profile always holds the 0.16.0 spelling. -/
+def canonicalBuildMode (zigVersion mode : String) : Except String String :=
+  let renamed := if zigVersion == "0.17.0" then
+      [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")].lookup mode
+    else none
+  match renamed with
+  | some m => pure m
+  | none =>
+    if ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"].contains mode then pure mode
+    else throw s!"unsupported profile.build_mode '{mode}'"
+
 private abbrev Collect := StateM (Array String)
 
 private def report (message : String) : Collect Unit := modify (·.push message)
@@ -142,10 +156,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   for f in features.getD #[] do
     unless !f.isEmpty && !seen.contains f do report "profile.features: empty or duplicate feature"
     seen := seen.insert f
-  let buildMode ← take? (strField p "build_mode")
-  if let some buildMode := buildMode then
-    unless ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"].contains buildMode do
-      report s!"unsupported profile.build_mode '{buildMode}'"
+  let buildMode ← take? (do canonicalBuildMode zigVersion (← strField p "build_mode"))
   let floatMode ← take? (strField p "float_mode")
   if let some floatMode := floatMode then
     unless floatMode == "per-instruction" do

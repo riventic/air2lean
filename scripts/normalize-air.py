@@ -15,7 +15,7 @@ import sys
 HASHED_NAME = re.compile(r"~air2lean-sha256-[0-9a-f]{64}\.json")
 
 
-IDENTITY_MARKER = re.compile(r"__(anon|enum|opaque|union|struct)_[0-9]+")
+IDENTITY_MARKER = re.compile(r"__(anon|func|enum|opaque|union|struct)_[0-9]+")
 
 
 def storage_name(name, document):

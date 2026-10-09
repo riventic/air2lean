@@ -732,7 +732,8 @@ FUNCTIONAL = ('partial_correctness', 'total_correctness')
 # returns, with a liveness witness that some admissible run returns; termination not proved.
 LEVELS = ('none', 'translated', 'compiled', 'tested_sampled', 'proved_scoped',
           'correct_if_returns', 'functionally_verified_total')
-EVIDENCE_JSON = dict(LIMITS, max_file_bytes=64 * 1024 * 1024)
+# Receipt evidence: up to proof-receipt.py's MAX_JSON (an all-shipped audit.json exceeds 64 MiB).
+EVIDENCE_JSON = dict(LIMITS, max_file_bytes=256 * 1024 * 1024)
 DIFF_FAILURES = ('mismatch', 'host_difference', 'input_failure', 'native_harness_failure')
 DIFF_EXCLUSIONS = ('illegal_exclusion', 'unspecified_exclusion', 'unspecified_timer_exclusion', 'search_cap',
                    'bounded_no_result')

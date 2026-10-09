@@ -15,9 +15,11 @@ ROOT = Path(__file__).resolve().parents[3]
 FILES = ('scripts/doctor.sh', 'scripts/doctor.py', 'scripts/compat.py', 'scripts/workflow-common.sh',
          'scripts/translate.sh', 'scripts/local-ci.sh', 'scripts/clean-env.sh', 'compatibility.json',
          'lean-toolchain', 'tests/diff/lean-toolchain', 'lakefile.toml', 'lake-manifest.json',
-         'zig-patch/versions.toml', 'zig-patch/lock.sh', 'zig-patch/0.16.0/hook.patch',
-         'zig-patch/0.15.2/hook.patch', 'zig-patch/0.14.1/hook.patch', '.github/workflows/ci.yml',
+         'zig-patch/versions.toml', 'zig-patch/lock.sh', '.github/workflows/ci.yml',
          'Air2Lean/Air/Profile.lean', 'Dockerfile.clean-env', 'tutorials/first-proof/Main.lean')
+# Every listed version's hook, copied when present (another track may add a version's hook later).
+FILES += tuple('zig-patch/' + e['hook'] for e in
+               json.loads((ROOT / 'compatibility.json').read_text())['zig']['versions'])
 TOOLCHAIN = (ROOT / 'lean-toolchain').read_text().strip()
 FAKE = r'''#!/usr/bin/env python3
 import os, pathlib, sys
@@ -52,6 +54,8 @@ class Doctor(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.repo = self.base / 'repo'
         for rel in FILES:
+            if rel.endswith('/hook.patch') and not (ROOT / rel).exists():
+                continue
             (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / rel, self.repo / rel)
         self.bin = self.base / 'bin'
@@ -233,6 +237,14 @@ class HostRules(unittest.TestCase):
         self.assertIn('0.16.0', check['hint'])
         self.assertTrue(self.selection('x86_64-linux', '0.14.1')[0])
         self.assertTrue(self.selection('aarch64-macos', '0.15.2')[0])
+
+    def test_in_qualification_version_is_noted(self):
+        ok, check = self.selection('x86_64-linux', '0.17.0')
+        self.assertTrue(ok)
+        self.assertEqual((check['id'], check['status']), ('zig-version-status', 'note'))
+        self.assertIn('0.16.0', check['hint'])
+        ok, check = self.selection('x86_64-linux', '0.16.0')
+        self.assertEqual(check['id'], 'zig-version')
 
     def test_lock_wrapper_matches_lock_sh_output(self):
         with tempfile.TemporaryDirectory() as temp:

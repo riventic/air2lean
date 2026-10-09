@@ -2,7 +2,7 @@
 
 `python3 scripts/coverage.py` inventories the actual Zig compiler sources, without
 starting Zig, Lake or Lean. The checked inventories in `coverage/` record Zig
-0.14.1, 0.15.2 and 0.16.0. Every AIR enum field, `std.builtin.Type` field,
+0.14.1, 0.15.2, 0.16.0 and 0.17.0. Every AIR enum field, `std.builtin.Type` field,
 `InternPool.Key` field and pointer `BaseAddr` field receives a named disposition.
 InternPool keys include internal and comptime entries: this is an exhaustive
 compiler representation list, not a claim that every key reaches executable AIR.
@@ -19,8 +19,9 @@ It never substitutes a README or exporter tag list for missing compiler sources.
 ## Generate and check
 
 Pass a source root containing `src/Air.zig`, `src/InternPool.zig` and
-`lib/std/builtin.zig`. A patched source checkout is usable: the fingerprint will
-record that exact checkout. The release label is supplied by the caller; source
+`lib/std/builtin.zig` (`lib/std/lang.zig` from 0.17.0, where `std.builtin.Type` moved
+to `std.lang.Type`; with neither file the command fails). A patched source checkout
+is usable: the fingerprint will record that exact checkout. The release label is supplied by the caller; source
 fingerprints, rather than a compiler `--version` process, establish snapshot
 identity. Review source provenance before publishing an inventory.
 
@@ -308,7 +309,10 @@ python3 scripts/qualify-upgrade.py check qualification/0.16.0.json \
 obligation under `<record>.d/logs/` and records the exit code, log hash and Git HEAD after
 each one, so an interrupted run resumes; passed obligations rerun only with `--rerun`.
 `record` stores a review decision (`--reviewer`, `--decision accepted|rejected`) or an
-externally produced result (`--status pass|fail --evidence ...`, e.g. a CI run). `check`
+externally produced result (`--status pass|fail --evidence ...`, e.g. a CI run), or a reviewed
+exclusion of a `translation:`/`proofs:` obligation (`--status not-applicable --reviewer --note
+--evidence`), accepted only while `examples/<ex>/zig-versions` omits the target version; it is
+not a pass, and `check` names the excluded obligations. `check`
 fails when an obligation has no result or a failing one, a review is not accepted, a support
 expansion or model change has no review evidence, a run log is missing or edited, the
 obligation list was edited after `plan` (digest), or, with `--before/--after`, the plan is

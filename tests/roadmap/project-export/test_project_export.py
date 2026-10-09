@@ -213,6 +213,7 @@ class ExportTest(unittest.TestCase):
 
     def test_manifest_validation(self):
         bad = [dict(flags=['@args.rsp']), dict(flags=['-femit-bin=x']), dict(flags=['-femit-llvm-ir']), dict(flags=['extra.zig']),
+               dict(flags=['--zig-lib-dir']), dict(flags=['--zig-lib-dir=/tmp/std']),
                dict(flags=['-Mx=y']), dict(zig_version='0.13.0'), dict(references=['nomodule.f']),
                dict(references=['proj']), dict(max_iterations=0),
                dict(options={'module': 'proj', 'values': {}}),

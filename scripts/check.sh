@@ -96,10 +96,13 @@ for ex in $examples; do
 
   # examples/<ex>/filter, if present: more name prefixes to translate, one per line: the std
   # functions that the example calls and that have no model (docs/std-models.md).
+  # examples/<ex>/filter-<version> adds prefixes for that Zig version only.
   filter="$ex."
-  if [ -f "examples/$ex/filter" ]; then
-    filter="$filter,$(paste -sd, "examples/$ex/filter")"
-  fi
+  for filter_file in "examples/$ex/filter" "examples/$ex/filter-$zig_version"; do
+    if [ -f "$filter_file" ]; then
+      filter="$filter,$(paste -sd, "$filter_file")"
+    fi
+  done
   echo "== $ex: dumping AIR ==" >&2
   workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
     build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"

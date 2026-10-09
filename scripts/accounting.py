@@ -194,7 +194,7 @@ def readme_claims(root):
     if not supported:
         raise MATRIX.Stale('README.md: supported-version sentence not found')
     rows = {}
-    for m in re.finditer(r'^\| (\d+\.\d+\.\d+)(?: \(default\))? \| ([^|]+) \| ([^|]+) \|', region, re.M):
+    for m in re.finditer(r'^\| (\d+\.\d+\.\d+)(?: \((?:default|in qualification)\))? \| ([^|]+) \| ([^|]+) \|', region, re.M):
         rows[m.group(1)] = {'ci': m.group(2).strip(), 'examples': sorted(re.findall(r'`([^`]+)`', m.group(3)))}
     return text, re.findall(r'\*\*(\d+\.\d+\.\d+)\*\*', supported.group(1)), rows
 

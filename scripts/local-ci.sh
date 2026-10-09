@@ -110,7 +110,7 @@ case "$mode" in
   matrix|mutations) [ "$#" = 1 ] || usage ;;
   *) usage ;;
 esac
-case "$version" in 0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
+case "$version" in 0.17.0|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-local-ci.XXXXXX")

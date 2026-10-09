@@ -81,6 +81,10 @@ FIXTURES = [
     # (normalized, schema-11) AIR carries no profile.
     ("case-studies/flow-time/FlowTime/Gen.lean", "case-studies/flow-time/air",
      ["--namespace", "FlowTime", "--prefix", "flow_time.", "--float-semantics", "ieee"], "body"),
+    ("tests/roadmap/bitcast-017/BitCastReal/Gen.lean", "tests/roadmap/bitcast-017/air/0.17.0",
+     ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
+    ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.0",
+     ["--namespace", "DivCeil", "--prefix", "divceil."], "body"),  # committed without the host header
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
      ["--namespace", "Provenance", "--prefix", "provenance."], "exact"),
     ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",

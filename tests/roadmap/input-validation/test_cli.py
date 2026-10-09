@@ -162,7 +162,7 @@ def lane_pointers(binary):
     # `struct_field_ptr` of a packed struct, and stay accepted.
     root = Path(__file__).resolve().parents[3]
     for name in ("layout/air/layout.bumpPair.json", "0.15.2/layout/air/layout.bumpPair.json",
-                 "0.14.1/layout/air/layout.isOk.json", "sync/air/Io.Condition.signal.json"):
+                 "0.14.1/layout/air/layout.isOk.json", "0.16.0/sync/air/Io.Condition.signal.json"):
         golden = json.loads((root / "tests/golden" / name).read_text())
         assert any(t.get("host_size", 0) and "vector_index" not in t for t in golden["types"]), name
         checks += run(binary, [golden])

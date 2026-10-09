@@ -14,7 +14,8 @@ translation's profile.
   `Float.div` on every version for `f16`..`f80`; `op128_spec` leaves out `sel` 3, 5, 6, 9
   (`f128` division and `@sqrt` differ by version). Multiplication and remainder use the
   compiler-rt helpers selected by this example. `op80_spec` excludes a pseudo-denormal
-  numerator because f80 floor/ceil changed in 0.16.0. `opN_other`: a `sel` of 26 or more returns
+  numerator because f80 floor/ceil changed in 0.16.0 and f80 trunc in 0.17.0
+  (`docs/floats.md` groups H and I). `opN_other`: a `sel` of 26 or more returns
   `a` unchanged.
 - `op128_spec_full`: every `sel` of `op128` is `opSpec128 op128Profile`: the division family and
   `@sqrt` use the helpers of the translation's profile (`F128Rt.legacy` for 0.14.1 and 0.15.2,
@@ -330,7 +331,10 @@ theorem op80_spec (sel : BitVec 8) (a b c : Zig.Float .f80)
       generalize Zig.Float.ceilChk a = x; rcases x with _ | _ | _ <;> rfl
     | 12, _ =>
       show _ = Zig.Float.truncChk a
-      unfold op80; generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
+      unfold op80
+      -- 0.17.0 output keeps a zero-extension pseudo-denormal (`truncRt017Chk`, group I).
+      try rw [Zig.Float.truncRt017Chk_eq a ha]
+      generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
     | 13, _ =>
       show _ = Zig.Float.roundChk a
       unfold op80; generalize Zig.Float.roundChk a = x; rcases x with _ | _ | _ <;> rfl

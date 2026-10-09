@@ -236,6 +236,15 @@ def table_reasons(table, field):
     return {tag: row[field] for tag, row in table['tags'].items() if row[field]}
 
 
+def canon_aliases(text):
+    """Canon.lean's `tagAliases017`: Zig 0.17.0 tags read in their 0.16.0 spelling."""
+    section = text.split('def tagAliases017', 1)[1].split('\n\n', 1)[0]
+    pairs = re.findall(r'\("([^"]+)", "([^"]+)"\)', section)
+    if not pairs:
+        raise ValueError('Canon.lean: tagAliases017 not found')
+    return dict(pairs)
+
+
 def source_hits(paths, symbol, cache):
     pattern = re.compile(r'(?<![A-Za-z0-9_])' + re.escape(symbol) + r'(?![A-Za-z0-9_])')
     return [str(p.relative_to(ROOT)) for p in paths if pattern.search(cache.text(p))]
@@ -290,6 +299,9 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/big-endian/air/{version}/x86_64-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/s390x-reject': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
+    'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
+    'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
+    'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
@@ -313,6 +325,8 @@ NON_COMPILER_AIR = {
     'tests/roadmap/air-semantics/fixtures': 'hand-written caller of the golden basic.scale (docs/air-semantics.md)',
     'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
     'tests/roadmap/illegal-behavior': 'illegal-behaviour fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
+    'tests/roadmap/zig017/air': 'synthetic 0.17.0 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
+    'tests/roadmap/zig017/reject': 'synthetic 0.17.0 rejection inputs (tests/roadmap/zig017/test_cli.py)',
 }
 
 
@@ -381,10 +395,15 @@ def exact_file(path):
                                        for child in path.parent.iterdir())
 
 
+TYPE_FILES = ('lib/std/builtin.zig', 'lib/std/lang.zig')
+
+
 def compiler_inventory(source, cache=None):
     cache = cache if cache is not None else SourceCache()
+    # Zig 0.17 moved std.builtin's language types (including Type) to std.lang.
+    type_file = next((relative for relative in TYPE_FILES if exact_file(source / relative)), TYPE_FILES[0])
     specs = [('air_tags', 'src/Air.zig', 'Tag', 'enum'),
-             ('types', 'lib/std/builtin.zig', 'Type', 'union'),
+             ('types', type_file, 'Type', 'union'),
              ('intern_keys', 'src/InternPool.zig', 'Key', 'union'),
              ('pointer_bases', 'src/InternPool.zig', 'BaseAddr', 'union')]
     out, hashes = {}, {}
@@ -723,6 +742,11 @@ def generate(version, source, os_name='linux'):
     rejection_reasons = table_reasons(table, 'runtime_reason')
     exporter_reasons = table_reasons(table, 'exporter_reason')
     fast_guidance = table['fast_math_reason']
+    # Canon.versionTags renames 0.17.0's split and renamed tags to the 0.16.0 spelling before
+    # normalizeOp reads them: such a tag has its canonical tag's constructors.
+    for alias, canonical in canon_aliases(cache.text(ROOT/'Air2Lean/Air/Canon.lean')).items():
+        if canonical in norms:
+            norms.setdefault(alias, norms[canonical])
     fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
     semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
@@ -858,7 +882,7 @@ def changes(before, after):
     report['compiler_source_changes'] = [p for p in sorted(set(old_compiler) | set(new_compiler)) if old_compiler.get(p) != new_compiler.get(p)]
     report['compiler_sources_changed'] = bool(report['compiler_source_changes'])
     report['model_recognition_changed'] = before['models'] != after['models']
-    report['model_boundary_changed'] = report['model_recognition_changed'] or bool(report['source_changes'].get('model-boundaries')) or any(p.startswith('lib/std/') and p != 'lib/std/builtin.zig' for p in report['compiler_source_changes'])
+    report['model_boundary_changed'] = report['model_recognition_changed'] or bool(report['source_changes'].get('model-boundaries')) or any(p.startswith('lib/std/') and p not in TYPE_FILES for p in report['compiler_source_changes'])
     def first_rows(rows):
         result = {}
         for row in rows:

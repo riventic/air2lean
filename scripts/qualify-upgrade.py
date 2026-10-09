@@ -46,6 +46,9 @@ LEGACY_RANKS = {
 NO_SUPPORT = ('unreachable-at-export',)
 ROW_KEYS = {'tags': 'tag', 'types': 'name', 'constants': 'name', 'pointer_bases': 'name'}
 REVIEW_DECISIONS = ('accepted', 'rejected')
+# A translation/proof obligation of an example whose `examples/<ex>/zig-versions` omits the target
+# version may be recorded as not applicable (a reviewed exclusion, never a pass).
+NOT_APPLICABLE = 'not-applicable'
 STATIC_FIELDS = ('id', 'kind', 'reason', 'scope', 'command', 'env', 'requires_evidence')
 PLACEHOLDER = re.compile(r'\{(zig|out)\}')
 
@@ -316,6 +319,8 @@ def run_obligations(path, zig, only=(), rerun=False, executor=subprocess_executo
         if obligation['command'] is None or (only and oid not in only):
             continue
         previous = record['results'].get(oid)
+        if previous and previous['status'] == NOT_APPLICABLE:
+            continue
         if previous and previous['status'] == 'pass' and not rerun:
             continue
         argv = [expand(a, zig, out) for a in obligation['command']]
@@ -332,12 +337,27 @@ def run_obligations(path, zig, only=(), rerun=False, executor=subprocess_executo
     return failures
 
 
+def excluded_example(record, obligation, root=ROOT):
+    """The example of a translation/proof obligation, if its `zig-versions` omits the target."""
+    kind, _, example = obligation['id'].partition(':')
+    if obligation['kind'] not in ('translation', 'proofs') or kind != obligation['kind']:
+        raise ValueError(f"{obligation['id']}: only translation and proof obligations can be not applicable")
+    versions = root / 'examples' / example / 'zig-versions'
+    if not versions.is_file() or record['to'] in versions.read_text().split():
+        raise ValueError(f"{obligation['id']}: examples/{example}/zig-versions must exist and omit {record['to']}")
+    return example
+
+
 def record_result(path, oid, status=None, reviewer=None, decision=None, evidence=(), note=None, root=ROOT):
     record = load_record(path)
     obligation = next((o for o in record['obligations'] if o['id'] == oid), None)
     if obligation is None:
         raise ValueError(f'unknown obligation {oid}')
-    if obligation['kind'] == 'review':
+    if status == NOT_APPLICABLE:
+        excluded_example(record, obligation, root)
+        if not reviewer or not note or not evidence:
+            raise ValueError(f'{oid}: a not-applicable result needs --reviewer, --note and --evidence')
+    elif obligation['kind'] == 'review':
         if decision not in REVIEW_DECISIONS or not reviewer:
             raise ValueError(f'{oid}: a review needs --reviewer and --decision accepted|rejected')
         status = 'pass' if decision == 'accepted' else 'fail'
@@ -364,6 +384,14 @@ def check_record(path, before=None, after=None, root=ROOT, coverage=ROOT / 'scri
         oid, result = obligation['id'], record['results'].get(obligation['id'])
         if result is None:
             problems.append(f'{oid}: no result recorded')
+            continue
+        if result.get('status') == NOT_APPLICABLE:
+            try:
+                excluded_example(record, obligation, root)
+            except ValueError as error:
+                problems.append(str(error))
+            if not (result.get('reviewer') and result.get('note') and result.get('evidence')):
+                problems.append(f'{oid}: not-applicable result needs a reviewer, a note and evidence')
             continue
         if result.get('status') != 'pass':
             problems.append(f'{oid}: result is {result.get("status")}')
@@ -402,7 +430,7 @@ def main(argv=None):
     p = sub.add_parser('record')
     p.add_argument('record', type=Path)
     p.add_argument('obligation')
-    p.add_argument('--status', choices=('pass', 'fail'))
+    p.add_argument('--status', choices=('pass', 'fail', NOT_APPLICABLE))
     p.add_argument('--reviewer')
     p.add_argument('--decision', choices=REVIEW_DECISIONS)
     p.add_argument('--evidence', action='append', default=[])
@@ -438,7 +466,10 @@ def main(argv=None):
         print(f'qualify-upgrade: {problem}', file=sys.stderr)
     if problems:
         return 1
-    print(f'{args.record}: all upgrade obligations have passing results')
+    record = load_record(args.record)
+    excluded = sorted(oid for oid, r in record['results'].items() if r.get('status') == NOT_APPLICABLE)
+    print(f'{args.record}: all upgrade obligations have passing results' +
+          (f' ({len(excluded)} not applicable: {", ".join(excluded)})' if excluded else ''))
     return 0
 
 

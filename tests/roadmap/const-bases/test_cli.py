@@ -182,6 +182,10 @@ def main():
 
     checks += reject(binary, program(llvm), "offset 24 of global 0 may address")
     checks += reject(binary, program(llvm), LLVM)
+    # The wasm backend's `lowerPtr` has the same `eu_payload` measure (codegen/wasm/CodeGen.zig).
+    def wasm(d):
+        d["profile"]["backend"] = "stage2_wasm"
+    checks += reject(binary, program(wasm), "such constants are outside the stage2_wasm profile")
     for off in (22, 25):
         checks += reject(binary, retarget(off), f"offset {off} of global 0 may address")
 

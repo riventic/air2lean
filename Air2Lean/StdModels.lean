@@ -86,24 +86,30 @@ def StdModel.qualifies (m : StdModel) (zigVersion : String) : Bool :=
 below cites the files whose definition of its symbol was compared with the model. -/
 private def review (file : String) (hashes : List (String × String)) : Array StdReview :=
   (hashes.map fun (zigVersion, sha256) => { zigVersion, file, sha256 }).toArray
-private def allocatorZig (versions : List String := ["0.14.1", "0.15.2", "0.16.0"]) : Array StdReview :=
+/-- 0.17.0 rows: the std source (name, signature and semantics) did not change from 0.16.0 for
+the models that list 0.17.0 (`docs/std-models.md` §Zig 0.17.0 audit). -/
+private def allocatorZig (versions : List String := ["0.14.1", "0.15.2", "0.16.0", "0.17.0"]) : Array StdReview :=
   review "mem/Allocator.zig" <| [
     ("0.14.1", "2abc46d48236f1914c5cb9f1a8d526210c1159613bdf19bb57dda054c4f408b5"),
     ("0.15.2", "679b9ca1d9314e138a7c7303bce1520c7a8fd7de7cfaf3d47659e23c3ae3aa77"),
-    ("0.16.0", "f6ad8a10185701ef1399350f127692ed5e89141773ea3c7e5ccc54a652120397")].filter
+    ("0.16.0", "f6ad8a10185701ef1399350f127692ed5e89141773ea3c7e5ccc54a652120397"),
+    ("0.17.0", "25099a1aaed1fe80b811e1eaedf8c3e2059a3fe7b6c29db868a68da3085b7997")].filter
     (versions.contains ·.1)
 private def threadZig : Array StdReview := review "Thread.zig" [
   ("0.14.1", "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d"),
   ("0.15.2", "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a"),
-  ("0.16.0", "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb")]
+  ("0.16.0", "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb"),
+  ("0.17.0", "36dab581ad0a30b2ac9fc3321db6b071331c3893f3811f1ec6628d59020c7f87")]
 private def atomicZig : Array StdReview := review "atomic.zig" [
   ("0.14.1", "5765a0e92346ae81cae3034d1d58ba4fc2c3e800fb59f80e87b7694c9b810f72"),
   ("0.15.2", "8421886c8789d9cf7619b40f81ea9e24f7af8c31beaf8a93ba610fcc21bba269"),
-  ("0.16.0", "1f53df09898b7c88f8ad3ffff60b22e5656c0ea1a7c84663c6a0b8466c139c22")]
+  ("0.16.0", "1f53df09898b7c88f8ad3ffff60b22e5656c0ea1a7c84663c6a0b8466c139c22"),
+  ("0.17.0", "85b467837478ff64aba29bf52cf9eef9b973ddb3ec6b5472901500a8e4a925c5")]
 /-- `std.Io` has the futex and `Group` API only from 0.16.0 (0.14.1/0.15.2 `Io.zig` is the
 reader/writer namespace). -/
 private def ioZig : Array StdReview := review "Io.zig" [
-  ("0.16.0", "2d452f28cbeca10280f471b8e1962cdfe2a01000535050af6f6ebcc1a56365d6")]
+  ("0.16.0", "2d452f28cbeca10280f471b8e1962cdfe2a01000535050af6f6ebcc1a56365d6"),
+  ("0.17.0", "382a4e343017183eff88e311f983066f88306e7bfcd85a890723b3697f4b2732")]
 /-- `std.Thread.Futex` is removed in 0.16.0 (replaced by `Io.futex*`). -/
 private def futexZig : Array StdReview := review "Thread/Futex.zig" [
   ("0.14.1", "f1f8fd850c94e0eb99a9332a2e51dd793f4057e35b6e8f7a04efd46a65c04960"),
@@ -133,13 +139,15 @@ private def only (versions : List String) (reviewed : Array StdReview) : Array S
 private def asyncReason (symbol reason : String) : String :=
   s!"{symbol} is not a qualified async API: {reason} (docs/futures.md)"
 
-/-- The one table of built-in std models. -/
+/-- The one table of built-in std models. Rows without a 0.17.0 review are 0.17.0-unqualified on
+purpose (`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
+`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.0 no longer has. -/
 def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.create" .create #["create"],
   allocModel "mem.Allocator.destroy" .destroy #["destroy"],
   allocModel "mem.Allocator.alloc" .alloc #["alloc"],
   allocModel "mem.Allocator.alignedAlloc" .alignedAlloc #["alloc"],
-  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] (allocatorZig ["0.16.0"]),
+  allocModel "mem.Allocator.allocSentinel" .allocSentinel #["allocSentinel"] (allocatorZig ["0.16.0", "0.17.0"]),
   allocModel "mem.Allocator.free" .free #["free", "freeSentinel"],
   allocModel "mem.Allocator.dupe" .dupe #["dupe"],
   allocModel "mem.Allocator.remap" .remap #["remap"],
@@ -164,10 +172,10 @@ def stdModels : Array StdModel := #[
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] ioZig,
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] ioZig,
-  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] ioZig,
-  threadModel "Io.Future.await" .futureAwait #["awaitC"] ioZig,
-  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] ioZig,
-  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] ioZig,
+  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] (only ["0.16.0"] ioZig),
+  threadModel "Io.Future.await" .futureAwait #["awaitC"] (only ["0.16.0"] ioZig),
+  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] (only ["0.16.0"] ioZig),
+  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] (only ["0.16.0"] ioZig),
   { symbol := "Io.concurrent",
     kind := .rejected (asyncReason "Io.concurrent" "its guaranteed unit of concurrency and ConcurrencyUnavailable outcome are not modelled for futures") },
   { symbol := "Io.recancel",

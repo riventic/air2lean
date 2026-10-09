@@ -1,11 +1,13 @@
 import Proofs.Lists.Gen
 import ZigLean.Sep
+import ZigLean.VersionGate
 import ZigLean.Sep.Cost
 
 /-!
 # `ArrayListUnmanaged(u32).append`
 
-`alist p ptr cap xs`: the list header at `p` (24 bytes: `items.ptr`, `items.len`, `capacity`)
+`alist p ptr cap xs`: the list header at `p` (`items.ptr`, `items.len`, `capacity`, and in Zig
+0.17.0 `pointer_stability`, unlocked: 24 or 32 bytes, `Enc.size array_list_Aligned_u32_null`)
 and its buffer at `ptr` (a heap block of `4 * cap` bytes, the first `xs.length` items are `xs`;
 no block for `cap = 0`).
 
@@ -17,6 +19,11 @@ no block for `cap = 0`).
 * `append_cost_run`: `append_run` with its allocation cost (`ZigLean/Sep/Cost.lean`). With
   spare capacity, `append` makes no allocation request and retains no new block.
 
+Zig 0.17.0's `ensureTotalCapacityPrecise` first asserts that `pointer_stability` is unlocked
+(`debug.SafetyLock.assertUnlocked`). The header bytes after `capacity` are `lockBytes` (none before
+0.17.0), and each proof steps through the translation it is built with (`first`, keyed on a
+definition that only that translation has).
+
 The items pointer of a list with `cap = 0` points into a block with no bytes (`.empty` points
 into a constant global), so no assertion can state that its block exists; `append_run` takes it
 as a fact about the memory (`ptrOk`), and gives it back.
@@ -27,9 +34,19 @@ open Zig Assn
 
 /-! ## The header -/
 
+/-- The header bytes after `capacity`: Zig 0.17.0's `pointer_stability` (a `debug.SafetyLock`,
+8 bytes in ReleaseSafe), `unlocked` (0); none before 0.17.0. -/
+def lockBytes : Array Byte :=
+  (Enc.encode (0 : BitVec 64)).extract 0 (Enc.size array_list_Aligned_u32_null - 24)
+
 /-- The bytes of a list header. -/
 def hdrBytes (ptr : Ptr) (len cap : BitVec 64) : Array Byte :=
-  Enc.encode ptr ++ Enc.encode len ++ Enc.encode cap
+  Enc.encode ptr ++ Enc.encode len ++ Enc.encode cap ++ lockBytes
+
+/-- The header's value: `items = ⟨ptr, len⟩`, `capacity = cap` (and an unlocked
+`pointer_stability`). -/
+def hdrVal (ptr : Ptr) (len cap : BitVec 64) : array_list_Aligned_u32_null :=
+  { (default : array_list_Aligned_u32_null) with items := ⟨ptr, len⟩, capacity := cap }
 
 theorem enc_ptr_size (q : Ptr) : (Enc.encode q).size = 8 := LawfulEnc.size_encode q
 theorem enc_u64_size (v : BitVec 64) : (Enc.encode v).size = 8 := LawfulEnc.size_encode v
@@ -40,25 +57,41 @@ theorem enc_u64_size (v : BitVec 64) : (Enc.encode v).size = 8 := LawfulEnc.size
   rw [← enc_u64_size v]; exact Array.extract_size
 theorem extract_none (x : Array Byte) {a b : Nat} (h : b ≤ a) : x.extract a b = #[] := by
   simp; omega
+theorem extract_past (x : Array Byte) {a b : Nat} (h : x.size ≤ a) : x.extract a b = #[] := by
+  simp; omega
+theorem extract_full (x : Array Byte) {b : Nat} (h : x.size ≤ b) : x.extract 0 b = x := by
+  apply Array.ext
+  · simp; omega
+  · intro i h1 h2; simp
+theorem add24_sub (n : Nat) : 8 + (8 + (8 + n)) - 24 = n := by omega
 
-theorem hdrBytes_size (ptr : Ptr) (len cap : BitVec 64) : (hdrBytes ptr len cap).size = 24 := by
-  simp [hdrBytes, enc_ptr_size, enc_u64_size]
+theorem hdr_size_ge : 24 ≤ Enc.size array_list_Aligned_u32_null := by decide
+theorem hdr_size_le : Enc.size array_list_Aligned_u32_null ≤ 32 := by decide
+
+theorem lockBytes_size : lockBytes.size = Enc.size array_list_Aligned_u32_null - 24 := by
+  have := hdr_size_le
+  simp [lockBytes, enc_u64_size]; omega
+
+theorem hdrBytes_size (ptr : Ptr) (len cap : BitVec 64) :
+    (hdrBytes ptr len cap).size = Enc.size array_list_Aligned_u32_null := by
+  have := hdr_size_ge
+  simp [hdrBytes, enc_ptr_size, enc_u64_size, lockBytes_size]; omega
 
 theorem hdr_ptr (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 0 (0 + 8) = Enc.encode ptr := by
-  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size]
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, lockBytes_size]
 
 theorem hdr_len (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 8 (8 + 8) = Enc.encode len := by
-  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none, lockBytes_size]
 
 theorem hdr_cap (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 16 (16 + 8) = Enc.encode cap := by
-  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none, lockBytes_size]
 
 theorem hdr_slice (ptr : Ptr) (len cap : BitVec 64) :
     (hdrBytes ptr len cap).extract 0 (0 + 16) = Enc.encode ptr ++ Enc.encode len := by
-  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size]
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, lockBytes_size]
 
 theorem decode_slice (ptr : Ptr) (len : BitVec 64) :
     Enc.decode (Enc.encode ptr ++ Enc.encode len : Array Byte) = (pure ⟨ptr, len⟩ : Result Slice) := by
@@ -70,27 +103,64 @@ theorem decode_slice (ptr : Ptr) (len : BitVec 64) :
     LawfulEnc.decode_encode, LawfulEnc.decode_encode]
   rfl
 
+theorem hdr_tail (ptr : Ptr) (len cap : BitVec 64) :
+    (hdrBytes ptr len cap).extract 24 (24 + lockBytes.size) = lockBytes := by
+  simp [hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_past]
+
+when_defined debug_SafetyLock_assertUnlocked
+/-- Zig 0.17.0: the lock bytes are an unlocked `debug.SafetyLock`. -/
+theorem decode_lockBytes : Enc.decode lockBytes =
+    (pure { state := debug_SafetyLock_State__enum_1.unlocked } : Result debug_SafetyLock) := by
+  rw [show lockBytes = Enc.encode (0 : BitVec 64) from
+    extract_full _ (by rw [enc_u64_size]; decide)]
+  show (do pure { state := ← Enc.decodeAt (Enc.encode (0 : BitVec 64)) 0 } :
+    Result debug_SafetyLock) = _
+  unfold Enc.decodeAt
+  rw [show Enc.size debug_SafetyLock_State__enum_1 = 8 from rfl, enc_u64_all]
+  show (do pure { state := ← (do
+      let b : BitVec 64 ← Enc.decode (Enc.encode (0 : BitVec 64))
+      pure (⟨b⟩ : debug_SafetyLock_State__enum_1)) } : Result debug_SafetyLock) = _
+  rw [LawfulEnc.decode_encode]
+  rfl
+end_when
+
 theorem decode_hdr (ptr : Ptr) (len cap : BitVec 64) :
     Enc.decode (hdrBytes ptr len cap) =
-      (pure { items := ⟨ptr, len⟩, capacity := cap } : Result array_list_Aligned_u32_null) := by
-  show (do pure { items := ← Enc.decodeAt _ 0, capacity := ← Enc.decodeAt _ 16 } :
-    Result array_list_Aligned_u32_null) = _
-  unfold Enc.decodeAt
-  rw [show Enc.size Slice = 16 from rfl, show Enc.size (BitVec 64) = 8 from rfl, hdr_slice,
-    hdr_cap, decode_slice, LawfulEnc.decode_encode]
-  rfl
+      (pure (hdrVal ptr len cap) : Result array_list_Aligned_u32_null) := by
+  first
+  | -- Zig 0.16.0 and earlier: no `pointer_stability`.
+    show (do pure { items := ← Enc.decodeAt _ 0, capacity := ← Enc.decodeAt _ 16 } :
+      Result array_list_Aligned_u32_null) = _
+    unfold Enc.decodeAt
+    rw [show Enc.size Slice = 16 from rfl, show Enc.size (BitVec 64) = 8 from rfl, hdr_slice,
+      hdr_cap, decode_slice, LawfulEnc.decode_encode]
+    rfl
+  | -- Zig 0.17.0: `pointer_stability` at 24, unlocked.
+    have _ := @debug_SafetyLock_assertUnlocked
+    show (do
+        pure { items := ← Enc.decodeAt _ 0, capacity := ← Enc.decodeAt _ 16,
+               pointer_stability := ← Enc.decodeAt _ 24 } : Result array_list_Aligned_u32_null) = _
+    unfold Enc.decodeAt
+    rw [show Enc.size Slice = 16 from rfl, show Enc.size (BitVec 64) = 8 from rfl, hdr_slice,
+      hdr_cap, decode_slice, LawfulEnc.decode_encode,
+      show 24 + Enc.size debug_SafetyLock = 24 + lockBytes.size by rw [lockBytes_size]; rfl, hdr_tail,
+      decode_lockBytes]
+    rfl
 
 theorem hdr_set_ptr (ptr ptr' : Ptr) (len cap : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 0 (Enc.encode ptr') = hdrBytes ptr' len cap := by
-  simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none,
+    extract_past, extract_full, add24_sub]
 
 theorem hdr_set_len (ptr : Ptr) (len len' cap : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 8 (Enc.encode len') = hdrBytes ptr len' cap := by
-  simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none,
+    extract_past, extract_full, add24_sub]
 
 theorem hdr_set_cap (ptr : Ptr) (len cap cap' : BitVec 64) :
     writeBytes (hdrBytes ptr len cap) 16 (Enc.encode cap') = hdrBytes ptr len cap' := by
-  simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none]
+  simp [writeBytes, hdrBytes, Array.extract_append, enc_ptr_size, enc_u64_size, extract_none,
+    extract_past, extract_full, add24_sub]
 
 /-- `ptrAddr` of the items pointer does not throw: its block exists. -/
 def ptrOk (m : Mem) (ptr : Ptr) : Prop := ∀ b, ptr.block = some b → b < m.blocks.size
@@ -314,6 +384,7 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ hdr p ptr (len + 1) cap h' := by
   obtain ⟨A, S, K, hA, hK, hb⟩ := hh
   have hs := hdrBytes_size ptr len cap
+  have h24 := hdr_size_ge
   have e8 : Enc.size (BitVec 64) = 8 := rfl
   have e16 : Enc.size Slice = 16 := rfl
   have q8 : (p.add 0).add 8 = p.add ((8 : Nat) : Int) := by simp [Ptr.add]
@@ -396,22 +467,41 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
   obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
   obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
   have hs := hdrBytes_size ptr len cap
+  have h24 := hdr_size_ge
   have e8 : Enc.size (BitVec 64) = 8 := rfl
-  have e24 : Enc.size array_list_Aligned_u32_null = 24 := rfl
   have q16 : p.add 16 = p.add ((16 : Nat) : Int) := rfl
   have q0 : p = p.add ((0 : Nat) : Int) := by simp [Ptr.add]
   have dcap : Enc.decode ((hdrBytes ptr len cap).extract 16 (16 + Enc.size (BitVec 64))) =
       pure cap := by rw [e8, hdr_cap, dec_u64]
   have dall : Enc.decode ((hdrBytes ptr len cap).extract 0
       (0 + Enc.size array_list_Aligned_u32_null)) =
-      pure ({ items := ⟨ptr, len⟩, capacity := cap } : array_list_Aligned_u32_null) := by
-    rw [e24, Nat.zero_add, ← hs, Array.extract_size]; exact decode_hdr ptr len cap
-  obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hmH hst q16 (by decide)
+      pure (hdrVal ptr len cap) := by
+    rw [Nat.zero_add, ← hs, Array.extract_size]; exact decode_hdr ptr len cap
+  -- Zig 0.17.0 first loads `pointer_stability` (at 24) and asserts that it is unlocked.
+  first
+  | have _ := @debug_SafetyLock_assertUnlocked
+    have dlock : Enc.decode ((hdrBytes ptr len cap).extract 24 (24 + Enc.size debug_SafetyLock)) =
+        pure ({ state := debug_SafetyLock_State__enum_1.unlocked } : debug_SafetyLock) := by
+      rw [show 24 + Enc.size debug_SafetyLock = 24 + lockBytes.size by rw [lockBytes_size]; rfl,
+        hdr_tail, decode_lockBytes]
+    have e32 : Enc.size array_list_Aligned_u32_null = 24 + Enc.size debug_SafetyLock := rfl
+    obtain ⟨m₀, l₀, hm₀, hs₀, hb₀⟩ := bytesAt_load_run (a := 8) hb hmH hst
+      (show p.add 24 = p.add ((24 : Nat) : Int) from rfl) (by decide) (by omega) (by omega) dlock
+    have hun : debug_SafetyLock_assertUnlocked
+        ({ state := debug_SafetyLock_State__enum_1.unlocked } : debug_SafetyLock) = pure () := by
+      simp [debug_SafetyLock_assertUnlocked, debug_assert, zig_unfold]
+    simp only [StateT.run] at l₀
+  | obtain ⟨m₀, hm₀, hs₀, hb₀, l₀⟩ : ∃ m₀ : Mem, m₀.heap = hH ∪ (hB ∪ hF) ∧ m₀.Seq ∧
+        m₀.blocks = m.blocks ∧ m = m₀ := ⟨m, hmH, hst, rfl, rfl⟩
+    subst l₀
+    have l₀ : True := trivial
+    have hun : True := trivial
+  obtain ⟨m₁, l₁, hm₁, hs₁, hb₁⟩ := bytesAt_load_run (a := 8) hb hm₀ hs₀ q16 (by decide)
     (by omega) (by omega) dcap
   obtain ⟨m₂, l₂, hm₂, hs₂, hb₂⟩ := bytesAt_load_run (a := 8) hb hm₁ hs₁ q0 (by decide)
     (by omega) (by omega) dall
   have hm₂' : m₂.heap = (hH ∪ hB) ∪ hF := hm₂.trans (hmH.symm.trans hm)
-  have hz₂ : m₂.blocks.size = m.blocks.size := by rw [hb₂, hb₁]
+  have hz₂ : m₂.blocks.size = m.blocks.size := by rw [hb₂, hb₁, hb₀]
   have hge : Zig.ge false cap g = false := by
     simp [Zig.ge, Zig.le, BitVec.ule]; omega
   have hg0 : ¬ g.toNat = 0 := by omega
@@ -423,7 +513,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
     obtain ⟨rfl, hm₃⟩ := hpost
     refine ⟨.error "OutOfMemory", m₃, ?_, hs₃, hz, hH, hB, dHB, hd, hm₃, rfl, ⟨A, S, K, hA, hK, hb⟩,
       hbf, ptrOk_mono hok hz⟩
-    simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
+    simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₀, hun, l₁, l₂, hdrVal, hge,
       array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, Zig.unwrapErr]
   | ok sl =>
     obtain ⟨hsl, hoff, hg4, hN, dN, hm₃, dHBN, A', hA', hbN, habove⟩ := hpost
@@ -490,7 +580,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
       · have r₁ := ptrLe_run aO aN0
         have r₂ := ptrLe_run aN0 aO
         simp only [StateT.run] at s₆ s₇ r₁ r₂
-        simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
+        simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₀, hun, l₁, l₂, hdrVal, hge,
           array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
           r₁, r₂, hor, memcpy, Ptr.overlaps, memmove, checkSliceEnd, Allocator.free, hc0, s₆, s₇,
           Zig.le, BitVec.ule]
@@ -564,7 +654,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
       · have r₁ := ptrLe_run aO1 aN0
         have r₂ := ptrLe_run (aN len) aO0
         simp only [StateT.run] at s₈ s₉ r₁ r₂ mv fr
-        simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
+        simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₀, hun, l₁, l₂, hdrVal, hge,
           array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
           r₁, r₂, hle1, memcpy_eq_memmove rfl (Or.inl hne), checkSliceEnd, mv, fr, s₈, s₉, Zig.le, BitVec.ule,
           show len.toNat ≤ g.toNat by omega]
@@ -614,6 +704,7 @@ theorem ensure_run (a : Allocator) {xs : List (BitVec 32)} {hH hB : Heap} {n : B
   obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
   obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
   have hs := hdrBytes_size ptr len cap
+  have h24 := hdr_size_ge
   have e8 : Enc.size (BitVec 64) = 8 := rfl
   have q16 : p.add 16 = p.add ((16 : Nat) : Int) := rfl
   have dcap : Enc.decode ((hdrBytes ptr len cap).extract 16 (16 + Enc.size (BitVec 64))) =
@@ -724,6 +815,7 @@ theorem append_cost_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} 
   obtain ⟨dHF, dBF⟩ := Heap.disjoint_union_left.mp hd
   obtain ⟨hmH, -, -, -⟩ := heap3 hm dHB dHF dBF
   have hs := hdrBytes_size ptr len cap
+  have h24 := hdr_size_ge
   have e8 : Enc.size (BitVec 64) = 8 := rfl
   have q8 : (p.add 0).add 8 = p.add ((8 : Nat) : Int) := by simp [Ptr.add]
   have dlen : Enc.decode ((hdrBytes ptr len cap).extract 8 (8 + Enc.size (BitVec 64))) =

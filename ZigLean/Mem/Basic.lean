@@ -1,5 +1,5 @@
 import ZigLean.Basic
-import ZigLean.Env
+import ZigLean.Env.Host
 
 /-!
 # Byte-level memory
