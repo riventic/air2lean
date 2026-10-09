@@ -10,10 +10,16 @@ proved once from it.
 |---|---|
 | `ZigLean/Sep/AllocSpec/Region.lean` | region permissions and their algebra |
 | `ZigLean/Sep/AllocSpec.lean` | `Logic`, `RawVTable`, `AllocInv`, `granted`, `AllocSpec` |
-| `ZigLean/Sep/AllocSpec/Wrappers.lean` | the `std.mem.Allocator` wrappers and their contracts |
+| `ZigLean/Sep/AllocSpec/Wrap.lean` | the step semantics `Wrap.*` of the `std.mem.Allocator` wrappers |
+| `ZigLean/Sep/AllocSpec/Wrappers.lean` | the wrappers' contracts |
+| `ZigLean/Sep/AllocSpec/Ops.lean` | triples for `@returnAddress`, `@intFromPtr`, pointer `<=`, read-only and explicit-block `pts`, coverage |
+| `ZigLean/Sep/AllocSpec/Norm.lean` | normalizing generated code (`MM σ` bodies) to `MemM` programs |
+| `ZigLean/Sep/AllocSpec/Dispatch.lean` | the vtable dispatch of translated wrappers and `dispatch_allocSpec` |
 | `ZigLean/Sep/AllocSpec/Toy.lean` | a bump allocator that satisfies it; negative checks |
 
-CI builds all four (`Generic allocator specification`).
+CI builds all of them (`Generic allocator specification`). The translated
+`FixedBufferAllocator` instance, the wrapper bridge and a proved client are in
+`tests/roadmap/alloc-fba` (`Translated FixedBufferAllocator against AllocSpec`).
 
 ## Statement
 
@@ -41,19 +47,23 @@ structure RawVTable where
 ```
 
 **The invariant.** `AllocInv` has `own : Assn`, the allocator's state and the memory it has
-not handed out, and `tok : Ptr → Nat → Nat → Assn`, its evidence that it issued the `n`-byte
-region at `p` with alignment `k`. `granted I p k bs := region p (2 ^ k) bs ∗ I.tok p bs.size k`.
-The token is needed because a free (resize, remap) of memory that the allocator did not issue
-is illegal in Zig even when the caller owns those bytes. It is an assertion, so it can be a
-pure fact (the region lies in this buffer) or own memory (the rest of a page mapping).
+not handed out; `tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Assn`, its evidence `tok p n k
+A S K` that it issued the `n`-byte region at `p` with alignment `k` from the block with address
+`A`, size `S` and kind `K`; and `fits : Nat → Nat → Prop` (default: every request), the requests
+within its arithmetic range. `granted I p k bs := ∃ A S K, regionIn p A S K (2 ^ k) bs ∗
+I.tok p bs.size k A S K`. The token is needed because a free (resize, remap) of memory that the
+allocator did not issue is illegal in Zig even when the caller owns those bytes. It is an
+assertion, so it can be a pure fact (the region lies in this buffer) or own memory (the rest of a
+page mapping); it sees the region's block so that it can pin which block a free releases (a page
+allocator unmaps the whole mapping: obstruction O2 of the PageAllocator work).
 
 **The contract.** `AllocSpec L vt ctx I`:
 
 | entry | precondition | postcondition |
 |---|---|---|
-| `alloc ctx len k ra`, `0 < len`, `k < 64` | `I.own` | `null`: `I.own`; `p`: `I.own ∗ ∃ bs, ⌜bs.size = len⌝ ∗ granted I p k bs` |
-| `resize ctx s k n ra`, `0 < n` | `I.own ∗ granted I s.ptr k bs`, `s.len = bs.size > 0` | `true`: `I.own ∗ ∃ bs', ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗ granted I s.ptr k bs'`; `false`: unchanged |
-| `remap ctx s k n ra`, `0 < n` | same | `null`: unchanged; `q`: `I.own ∗ ∃ bs', ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗ granted I q k bs'` |
+| `alloc ctx len k ra`, `0 < len`, `k < 64`, `I.fits len k` | `I.own` | `null`: `I.own`; `p`: `I.own ∗ ∃ bs, ⌜bs.size = len⌝ ∗ granted I p k bs` |
+| `resize ctx s k n ra`, `0 < n`, `I.fits n k` | `I.own ∗ granted I s.ptr k bs`, `s.len = bs.size > 0` | `true`: `I.own ∗ ∃ bs', ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗ granted I s.ptr k bs'`; `false`: unchanged |
+| `remap ctx s k n ra`, `0 < n`, `I.fits n k` | same | `null`: unchanged; `q`: `I.own ∗ ∃ bs', ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗ granted I q k bs'` |
 | `free ctx s k ra` | same | `I.own` |
 
 `keepsPrefix old new` is `new.extract 0 old.size = old.extract 0 new.size`: the common prefix
@@ -70,30 +80,75 @@ unfolded step semantics).
 ## The wrappers
 
 `Wrap.*` are the step semantics of the `std.mem.Allocator` wrapper functions over a
-`RawVTable`, byte-level (an item type is its size and the log2 of its alignment), following
-`lib/std/mem/Allocator.zig` line by line: zero-length requests return the constant
-`zeroAllocPtr (2 ^ k)` without a call, `allocBytesWithAlignment` poisons fresh memory with
-`@memset(_, undefined)`, `free` poisons before `rawFree`, `destroy` does not, `realloc`
-tries `remap`, then allocates, copies the common prefix, poisons and frees.
+`RawVTable`, byte-level (an item type is its size and the log2 of its alignment). They follow
+the code that the compiler emits for `lib/std/mem/Allocator.zig`, which is the ground truth:
+`tests/roadmap/alloc-fba/AllocFba/Bridge.lean` proves each generated wrapper equal to its
+`Wrap.*`.
+
+* Zero-length requests return the constant `zeroPtr (2 ^ k) = ⟨none, 2^64 - 2^k⟩` without a call
+  (the translator's integer pointer constant `⟨none, addr⟩` is exactly this).
+* `@returnAddress()` is read where the source reads it: first in `alloc`, `alignedAlloc`,
+  `create`, `allocSentinel` and `realloc`, after the `@memset` in `free`, not at all for a
+  zero-sized `create`/`destroy` or an empty `free`.
+* `allocBytesWithAlignment` poisons fresh memory with `@memset(_, undefined)` and then checks
+  the `@alignCast` of the result (`alignCast`) when the alignment is above 1.
+* `free` poisons before `rawFree`, `destroy` does not; `free` of a sentinel-terminated slice
+  absorbs the sentinel with an overflow-checked `len + 1` (`freeSentinel`).
+* `dupe` and the copying path of `realloc` check the `@memcpy`: the lengths agree and the two
+  address ranges do not overlap (two `ptrLe`, `copyChecked`).
+* `allocSentinel` computes `n + 1` with an overflow check, stores the sentinel and reads it back
+  when it slices `ptr[0..n :sentinel]`.
 
 | theorem | contract |
 |---|---|
-| `allocBytes_spec`, `allocItems_spec` | `I.own` ⇒ `.ok p`: `I.own ∗ owned I k p (replicate n undef)`; `.error OutOfMemory`: `I.own` |
+| `allocBytes_spec`, `allocItems_spec`, `allocAdvanced_spec` | `I.own` ⇒ `.ok p`: `I.own ∗ owned I k p (replicate n undef)`; `.error OutOfMemory`: `I.own` |
 | `allocSlice_spec` (`alloc`, `alignedAlloc`) | the same, as a slice of `n` items |
 | `create_spec` / `destroy_spec` | one item; `destroy` consumes `owned` |
-| `free_spec` | `I.own ∗ owned I k s.ptr bs` ⇒ `I.own` |
-| `dupe_spec` | `I.own ∗ region src` ⇒ a fresh copy of the source bytes, source unchanged |
+| `freeBytes_spec`, `free_spec`, `freeSentinel_spec` | `I.own ∗ owned I k s.ptr bs` ⇒ `I.own` |
+| `copyChecked_spec` | the checked `@memcpy` between two regions with disjoint address ranges |
+| `dupe_spec` | `I.own ∗ regionIn src` ⇒ a fresh copy of the (nonempty) source bytes, source unchanged |
 | `allocSentinel_spec` | `n + 1` items, undefined but the last, which is the sentinel |
-| `realloc_spec` | a slice of `size * n` bytes that keeps the common prefix, or `OutOfMemory` with the old slice unchanged |
+| `reallocAdvanced_spec`, `realloc_spec` | a slice of `size * n` bytes that keeps the common prefix, or `OutOfMemory` with the old slice unchanged |
 
-Two simplifications, both preconditions of the theorems rather than modelled behaviour: a
-sentinel-terminated slice is passed to `free`/`realloc` with its absorbed length (`len + 1`
-items, as `mem.absorbSentinel` computes), and `allocSentinel_spec` assumes `n + 1` does not
-overflow (Zig panics there in safe builds).
+Premises beyond `AllocSpec`, each a check in the generated code: `Wrap.Fits I n k` for every
+request that reaches the allocator; for `realloc`'s copying path `GrantSep I k` (two grants have
+disjoint address ranges: provable for an allocator whose token fixes the block, as the
+`FixedBufferAllocator`'s does); for `dupe` `SrcSep` (the source's address range is disjoint from
+every grant). The memory model does not give address disjointness of two live blocks (`Mem.Seq`
+says nothing about addresses), so across blocks it is a placement fact that the client states.
 
-`owned I k p bs` is `emp` for zero bytes and `granted I p k bs` otherwise. Each proof uses
-only `AllocSpec L vt ctx I` and the `Logic` rules, so it holds for every allocator in both
-logics.
+`owned I k p bs` is `emp` for zero bytes and `granted I p k bs` otherwise. Each proof uses only
+`AllocSpec L vt ctx I` and the `Logic` rules, so it holds for every allocator in both logics.
+
+## Translated allocators: dispatch and the FixedBufferAllocator
+
+A translated wrapper loads the function pointer from the `VTable` constant and calls it if it is
+one of the program's allocator functions (`.illegal` otherwise). `dispatch impl fns vtp` is that
+`RawVTable`; `dispatch_allocSpec : AllocSpec L impl ctx I → AllocSpec L (dispatch impl fns vtp)
+ctx (I.withVTable vtp fns)` adds the read-only vtable (`vtR`) to the invariant.
+
+`tests/roadmap/alloc-fba` proves `FBA.allocSpec : AllocSpec Logic.total impl ctx (FBA.inv ctx B)`
+for the translated `std.heap.FixedBufferAllocator` (Zig 0.16.0), for every struct and buffer:
+alignment padding (`alignPointerOffset` on the 64-bit address read from the block), out of
+memory, the last allocation shrinking, growing and being given back, a non-last allocation
+shrinking in place and leaking on free. Findings that shaped the specification:
+
+* `alloc` computes `end_index + adjust_off + n` and `resize` computes `new_len - len + end_index`
+  with overflow checks: a large request panics. Hence `AllocInv.fits`
+  (`FBA.fits n k := cap + 2^k + n ≤ 2^64`).
+* `alloc` with an alignment above 1 evaluates `@intFromPtr(buffer.ptr + end_index)` also when
+  every buffer byte is lent out. The model's `ptrAddr` needs the block to exist in the memory,
+  and an invariant that owns no byte of the block cannot say so; the invariant keeps one byte of
+  the buffer's block outside the buffer (`pin`). A total `ptrAddr` or persistent block metadata
+  (the core gap of obstruction O1) would remove it. The allocator has no atomics (O3) and reads
+  no dead block.
+* `reset` makes every buffer byte free again. Without ghost state, its specification
+  (`reset_spec`) asks that the caller's heap has every buffer byte (`Covers`); a caller that
+  still holds a grant would see its bytes reused.
+
+`AllocFba/Client.lean` proves a client (alloc, write, realloc, an allocation that does not fit,
+free of the last allocation, reset, a fresh allocation) from these contracts only; `mutant.sh`
+shows that an `alloc` that does not advance `end_index` fails the proof.
 
 ## Sanity instances and negative checks
 
@@ -101,12 +156,13 @@ logics.
   a bump allocator in the monadic style of generated code (state in memory, `ptrAddr` and
   `alignUp` for alignment, overflow-free capacity checks), with `noResize`/`noRemap` behaviour
   and a leaking `free`. The spec is satisfiable by an allocator that really allocates, and
-  every wrapper contract follows for it (the `realloc` example).
+  every wrapper contract follows for it (the `alloc` example).
 * `Static.not_allocSpec`: an allocator that returns the same buffer on every `alloc` (a
-  double issue) satisfies `AllocSpec` for no invariant that holds in some memory, even in the
-  partial logic: the second grant would overlap the first.
-* `trapFree_alloc_none`: if `free` traps, `AllocSpec` forces `alloc` never to succeed: the
-  `free` obligation is not vacuous.
+  double issue) satisfies `AllocSpec` for no invariant that holds in some memory and admits a
+  one-byte request (`I.fits 1 0`), even in the partial logic: the second grant would overlap the
+  first.
+* `trapFree_alloc_none`: if `free` traps, `AllocSpec` forces `alloc` never to succeed (for a
+  request within `fits`): the `free` obligation is not vacuous.
 
 ## The region library for allocator proofs
 
@@ -126,17 +182,17 @@ logics.
 ## What the other phases provide
 
 * P1 (translator, `--allocator-model=translated`): the generated `mem.Allocator` wrappers and
-  vtable entries as `MemM` functions. To use the wrapper contracts, show that each generated
-  wrapper has the same runs as its `Wrap.*` counterpart for `vt := ⟨fun c len k ra => Gen.alloc c len ⟨BitVec.ofNat 6 k⟩ ra, …⟩`
-  (the vtable field loads and the indirect calls reduce to `vt.*`), then apply `Logic.congr`.
+  vtable entries as `MemM` functions. The generated wrappers are equal to `Wrap.*` over
+  `dispatch impl fns vtp` with `impl := ⟨fun c len k ra => Gen.alloc c len ⟨BitVec.ofNat 6 k⟩ ra, …⟩`
+  (`tests/roadmap/alloc-fba/AllocFba/Bridge.lean`, normalized with `Norm.lean`).
   `@returnAddress()` is an oracle value: every contract here holds for every `ra`.
 * P2 (posix model): `mmap` returns a fresh `.mapped` block as `bytesAt ⟨some b, 0⟩ A S K bs`
   with `A` page-aligned; `regionIn_of_block`, `regionIn_split` and `region_join_of_heap`
   convert between mappings and granted regions (`tok` of a page allocator owns the mapping's
   tail beyond `len`).
-* P4 (PageAllocator), FixedBufferAllocator: prove `AllocSpec Logic.total vt ctx I` for the
-  translated vtable with an `I` describing the allocator's state; every wrapper contract then
-  follows from this file.
+* P4 (PageAllocator), FixedBufferAllocator (done, `tests/roadmap/alloc-fba`): prove
+  `AllocSpec Logic.total vt ctx I` for the translated vtable with an `I` describing the
+  allocator's state; every wrapper contract then follows.
 
 ## Relation to the legacy models it replaces
 
