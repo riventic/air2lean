@@ -8,6 +8,7 @@ import Air2Lean.ModuleSplit
 import Air2Lean.Revision
 import Air2Lean.Device
 import Air2Lean.Certificate
+import Air2Lean.OpTable
 
 /-!
 # CLI
@@ -45,7 +46,8 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]\n" ++
+    "       air2lean --print-op-table"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -70,6 +72,7 @@ def help : String :=
   "                               See docs/modular-output.md.\n" ++
   "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
+  "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig 0.16.0 (default), 0.15.2 and 0.14.1, a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -410,6 +413,9 @@ private def run (args : List String) : IO UInt32 := do
 def main (args : List String) : IO UInt32 := do
   if args.head? == some "--diagnostics-json" then
     Diagnostics.runCheck args
+  else if args == ["--print-op-table"] then
+    IO.println opTableJson.pretty
+    pure 0
   else if args == ["--help"] || args == ["-h"] then
     IO.println help
     pure 0

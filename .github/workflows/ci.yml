@@ -76,6 +76,11 @@ jobs:
       - name: Offline compiler inventory regressions
         run: python3 tests/roadmap/inventory/test_inventory.py
 
+      # S2: the committed op table covers every normalizeOp tag and every Op constructor;
+      # the classifier and the analyses that read it keep no wildcard arm.
+      - name: Op effects table source checks
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/op-effects/test_op_table.py --self-test
+
       - name: Profile golden pipeline regressions
         run: python3 -B tests/roadmap/profiles/test_golden_pipeline.py
 
@@ -640,6 +645,12 @@ jobs:
       - name: Shift-count panic mapping
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: python3 -B tests/roadmap/bitops-native/shift-panic/test_cli.py "$PWD/.lake/build/bin/air2lean"
+
+      # S2: `air2lean --print-op-table` is the committed coverage/op-table/op-table.json, and an
+      # unknown or unlisted tag is rejected rather than decoded or skipped.
+      - name: Op effects table and unknown-tag rejection
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/op-effects/test_op_table.py "$PWD/.lake/build/bin/air2lean"
 
       # Partly `undefined` constant operands: explicit undefined bytes in a store, generated-
       # client proofs that reading them is `.unspecified`, and rejection of every other

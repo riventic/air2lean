@@ -25,11 +25,7 @@ namespace Air2Lean
 /-- Is `op` a terminator: the one instruction that ends its containing body (`docs/air-json.md`
 / `PLAN.md`)? A noreturn call counts (the `unreach` Sema emits right after it is dead code). -/
 def isTerminating (op : Op) : Bool :=
-  match op with
-  | .br .. | .switchDispatch .. | .«repeat» .. | .ret .. | .unreach | .trap | .condBr .. | .switchBr .. => true
-  | .retLoad _ => true
-  | .call (.func _ noreturn ..) _ => noreturn
-  | _ => false
+  op.emitRoute == .terminator
 
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
 
@@ -2558,7 +2554,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
               (env, ls ++ [s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {proj k}"])
             else (env, ls ++ [fc.storePlace ptr (proj k)])
       (env, some ("\n".intercalate lines))
-  | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
+  -- `emitStmts` and `emitTerminator` emit these (`Op.emitRoute`).
+  | .block .. | .loop .. | .br .. | .«repeat» .. | .condBr .. | .switchBr .. | .loopSwitchBr ..
+  | .switchDispatch .. | .«try» .. | .tryPtr .. | .ret .. | .retLoad .. | .unreach | .trap =>
+    (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
 
 
 /-- A lane-wise op on vectors: its operands, and the same op with other operands. `arith`,

@@ -96,27 +96,19 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(coverage.version_minor('0.15.2'), 15)
         self.assertIsNone(coverage.version_minor('synthetic'))
 
-    def test_emission_dispatch_arms_and_erasure(self):
-        emit = '''def emitScalar (fc : FCtx) :=
-  match inst.op with
-  | .arith op a b => (env, some "x")
-  | .line _ => (env, none)
-  | .«try» v _ | .dbg _ _ => (env, none)
-  | _ => (env, some "-- unexpected")
-
-def laneOp? : Op → Option Op
-  | .notDispatched => none
-
-mutual
-partial def emitStmts (fc : FCtx) := match i.op with
-      | .block body => ""
-partial def emitTerminator (fc : FCtx) := match inst.op with
-  | .ret v => ""
-end
-'''
-        arms, erased = coverage.emission_arms(emit)
-        self.assertEqual(arms, {'arith', 'line', 'try', 'dbg', 'block', 'ret'})
-        self.assertEqual(erased, {'line', 'try', 'dbg'})
+    def test_op_table_drives_normalization_and_emission(self):
+        table = coverage.op_table()
+        rows = table['tags']
+        # The translator's table, not a source scan: every decoded tag has one constructor
+        # and an emitter route; switch_br is not loop_switch_br.
+        self.assertEqual(rows['switch_br']['constructor'], 'switchBr')
+        self.assertEqual(rows['loop_switch_br']['constructor'], 'loopSwitchBr')
+        self.assertEqual(rows['call_never_inline']['constructor'], 'call')
+        self.assertEqual({rows[t]['emit'] for t in ('dbg_stmt', 'dbg_var_val')}, {'erased'})
+        self.assertTrue(all(row['emit'] for row in rows.values() if row['constructor']))
+        self.assertEqual(table['fast_math_suffix'], '_optimized')
+        self.assertIn('breakpoint', coverage.table_reasons(table, 'exporter_reason'))
+        self.assertIn('runtime_nav_ptr', coverage.table_reasons(table, 'runtime_reason'))
 
     def test_committed_inventories_name_every_disposition(self):
         for path in sorted((ROOT/'coverage').glob('*.json')):
@@ -374,10 +366,6 @@ end
         self.assertEqual(coverage.changes(minimal, changed_duplicate)['tag_dispositions_changed'], [])
         changed_first = dict(minimal, tags=[{'tag': 'a', 'value': 4}, {'tag': 'a', 'value': 2}])
         self.assertEqual(coverage.changes(minimal, changed_first)['tag_dispositions_changed'], ['a'])
-
-    def test_normalizer_branch_does_not_capture_fallback(self):
-        sample = '\n  match raw.tag with\n  | "add" | "add_safe" => return .arith .add\n  | "try" => return .«try» a\n  | "assembly" => return .asm a\n  | tag =>\n    return .call target args\n'
-        self.assertEqual(coverage.normalizer(sample), {'add': ['arith'], 'add_safe': ['arith'], 'try': ['try'], 'assembly': ['asm']})
 
     def test_model_recognition_is_not_verification(self):
         sample = '''def stdModels : Array StdModel := #[
