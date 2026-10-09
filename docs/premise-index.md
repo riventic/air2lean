@@ -46,6 +46,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
+| [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
 | [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |

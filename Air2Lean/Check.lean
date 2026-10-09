@@ -2486,10 +2486,12 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
   let mut out : Array Func := #[]
   for f in funcs do
     let mut renames : Std.HashMap String String := {}
+    let mut seen : Std.HashSet String := {}
     for i in f.allInsts do
       let .call (.func callee ..) _ := i.op | continue
       let some symbol := externSymbol? callee | continue
-      if renames.contains callee || unbound.contains (f.name, symbol) then continue
+      if seen.contains callee then continue
+      seen := seen.insert callee
       let some e := f.externs.find? (·.name == symbol)
         | throw s!"{f.name}: inst {i.id}: extern callee '{symbol}' has no 'externs' entry"
       if e.varargs then
