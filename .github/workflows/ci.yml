@@ -16,7 +16,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The 0.16.0 full job also runs the three T06 build-mode differential runs (~15 min).
+    timeout-minutes: 90
     env:
       AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:
@@ -758,6 +759,14 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
+      # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
+      # proofs of the native values and fail-closed rejections. Runs no compiler.
+      - name: Noreturn union variants
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/noreturn-variants/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
@@ -1242,8 +1251,10 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build-modes"
+          failed=0
           for mode in Debug ReleaseFast ReleaseSmall; do
-            summary="$RUNNER_TEMP/build-mode-$mode.json"
+            summary="$RUNNER_TEMP/build-modes/$mode.json"
             # ReleaseFast/ReleaseSmall have triaged mismatches (float @divExact), so diff.sh exits 1
             # there; `record --verify` then requires exactly the committed counts and triage.
             status=0
@@ -1253,8 +1264,21 @@ jobs:
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
               --mode "$mode" --backend llvm --explicit-backend \
-              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json)
+              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json) \
+              || failed=1
           done
+          [ "$failed" -eq 0 ]
+
+      # The summaries behind the build-mode check, so that a changed example set can be
+      # re-recorded (`build-modes.py record --summary ... --zig-sha256 ...`, docs/build-modes.md).
+      - name: Upload the build-mode differential summaries
+        if: ${{ !cancelled() && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/build-modes/
+          if-no-files-found: warn
+          retention-days: 30
 
       # A failed check hands out the AIR that this host dumped: the golden files of this OS
       # (tests/golden/<version>/<ex>/air-linux/) come from here (docs/generated-code.md).
@@ -1482,8 +1506,9 @@ jobs:
       # and every row is compared with stock Zig executables in four optimization modes:
       # x86_64-linux natively and aarch64-linux under qemu-user. The committed evidence
       # (aarch64-macos and native aarch64-linux come from their own jobs) must be reproduced.
+      # 0.17.0 has no wide bit-operation evidence yet (qualify.py VERSIONS).
       - name: Wide integer bit operations native differential (x86_64-linux, aarch64-linux)
-        if: ${{ !matrix.mutate }}
+        if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -1673,6 +1698,10 @@ jobs:
           set -euo pipefail
           repo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')
           cd "$repo_root"
+          # check.sh left this host's profile-headed translations in Proofs/<Ex>/Gen.lean. With
+          # AIR2LEAN_CI=1 it already failed on any body that differs from the committed module, so
+          # only the header is discarded here; the receipt binds the committed modules.
+          git checkout -- Proofs
           temp_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")
           lean_executable=$(elan which lean)
           lean_toolchain=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True).parent.parent)' "$lean_executable")
@@ -2080,8 +2109,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B tests/roadmap/bitops-native/gen.py --check
+          # Every version runs; the step fails afterwards if any did.
+          failed=""
           for version in 0.16.0 0.15.2 0.14.1; do
             python3 -B tests/roadmap/bitops-native/qualify.py native --version "$version" \
               --zig "$RUNNER_TEMP/host-zig-$version/zig" --target aarch64-linux \
-              --evidence "tests/roadmap/bitops-native/evidence/$version.json"
+              --evidence "tests/roadmap/bitops-native/evidence/$version.json" || failed="$failed $version"
           done
+          [ -z "$failed" ] || { echo "native aarch64-linux bit-operation mismatch on:$failed" >&2; exit 1; }

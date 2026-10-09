@@ -1,0 +1,73 @@
+{
+  "sources_sha256": {
+    "noreturn_variants.zig": "49d04d5f7128d4acd29301b40273fd55ba9d862e109172d05823667c07c0f287",
+    "reject.zig": "e54ee7bc70309fadb5bc8256aa5b1dbe7913b5c8f4945c37ebee710c25e8a401",
+    "native.zig": "9da248b6fa99d5a5db07f53fef58e47b2928c2acec5add78b9e84f1afe74a878"
+  },
+  "air": {
+    "schema": 12,
+    "target": "x86_64-linux",
+    "cpu": "baseline",
+    "optimization": "ReleaseSafe",
+    "error_tracing": false,
+    "command": "ZIG_AIR_JSON_DIR=air/<version> ZIG_AIR_JSON_FILTER=noreturn_variants. <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline noreturn_variants.zig; air-reject/<version>: the same with ZIG_AIR_JSON_FILTER=reject. and reject.zig"
+  },
+  "patched_compiler_sha256": {
+    "0.16.0": "fe2ff13fca8b6825ae90e97993e229e00798a70ab86cdfc2c344f953f79f0790",
+    "0.15.2": "56c78bad94ac13634142e0ce089d68f8cf94e4f4b544069bc990152916a9e433"
+  },
+  "stock_compiler_sha256": {
+    "0.16.0": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
+    "0.15.2": "c65cd34917923f575448cc0603dd7c2326da0af0e5c323043d090662dcdf351c"
+  },
+  "qualification": {
+    "0.16.0": "fresh export with the patched 0.16.0 compiler (zig-patch tree 5715fa4a); translation, kernel proofs (NoreturnVariants/Proofs.lean) and CLI rejections passed; stock 0.16.0 aarch64-macos `zig test native.zig` passed (1 test); Linux CI pending",
+    "0.15.2": "fresh export with the patched 0.15.2 compiler (zig-patch tree 5715fa4a); translation and the same kernel proofs passed; stock 0.15.2 aarch64-macos `zig test native.zig` passed (1 test); Linux CI pending"
+  },
+  "air_sha256": {
+    "air/0.15.2/noreturn_variants.bump.json": "93b5ad0e309936759d1c037d4c9eb1192014c674234e448b395ce3e084a5755e",
+    "air/0.15.2/noreturn_variants.colorOf.json": "c7961c3dce714a941bf8ebcdd1f8cbcea50c5ed0beb47396dedfe99d44368805",
+    "air/0.15.2/noreturn_variants.get.json": "28d81c150bfb9efea85feab1b91ee822512042d74d7b3e16cb1292dda4b4ae67",
+    "air/0.15.2/noreturn_variants.holderColor.json": "287e3d5e9a34faa5e786e091108775528bdf174b64e6aa9c6bcdc1b56b750571",
+    "air/0.15.2/noreturn_variants.holderRoundTrip.json": "6e2c359eff7a9feb5b41bdf9268b5ee1512dc4c85a0fbff65964bec377276cf9",
+    "air/0.15.2/noreturn_variants.isColor.json": "0983a3476c192056fce4a9a3aa936d0e4ba351e0e43403165c1bc343b4f33fa4",
+    "air/0.15.2/noreturn_variants.memRoundTrip.json": "35b2cf32e59156e1052e33b2c1edb978f026d8d31768374232c513e8f59a18b9",
+    "air/0.15.2/noreturn_variants.memV.json": "86c734a99004eccdae517d26948c6e4722e7f39dc63a5ff4a1fc14d14e573cce",
+    "air/0.15.2/noreturn_variants.mk.json": "c689a5be4240d1e1efc7b794a05fdb3401044edb776c37a5164c66454a985309",
+    "air/0.15.2/noreturn_variants.mkV.json": "25190ebab98bbd204acdc259d908bb640a29d30e6ec492d1b7ee38f0cf682cbd",
+    "air/0.15.2/noreturn_variants.oneRoundTrip.json": "7b2376f8107a44a945552a2c58c0a3e316e1a06b2c2ae8a29a395a4b47d68975",
+    "air/0.15.2/noreturn_variants.oneValue.json": "dbae22c1e27bfd36e591878dec9ed604ffb502f2d3959565dbf37a1d3b666fbc",
+    "air/0.15.2/noreturn_variants.readU.json": "c193fb7ff62f4e386b3e31a4f1101987905c9c420c8f63d7c0ce162b0f7f3c6a",
+    "air/0.15.2/noreturn_variants.readV.json": "afca858e3c19e9eeb548595cd55b33af691f6ea8dfd31ac39d1d1545e92cadd6",
+    "air/0.15.2/noreturn_variants.roundTrip.json": "736847c4c35fadca869eb2647d9631bb71867f13b8896a18d37b32e9d4a007dc",
+    "air/0.15.2/noreturn_variants.setMode.json": "349a063f6c437594a693aca58af917c35e34373f3c99b4298e1b4cab7a66b5c6",
+    "air/0.15.2/noreturn_variants.vTag.json": "251f1b831e9bdd98d85ffe0bfb2c6176ee02943e6d07456296309bf8936050a6",
+    "air/0.15.2/noreturn_variants.vValue.json": "44731da1e023337f53dd260bc5161934eeec0172fcee87c5b3608ef4161cf3d0",
+    "air/0.16.0/noreturn_variants.bump.json": "2d8c6abfb4fcd8c17a859cc2ec869c49354d59f5f58bc18dbcd3167beb53d247",
+    "air/0.16.0/noreturn_variants.colorOf.json": "cdbe64827ba0bdb7ac73fa9020723506996ff08bf7d9e43e717bdaa25a6d23ff",
+    "air/0.16.0/noreturn_variants.get.json": "4177beafd6cb28a416f23870a34370e57347d894e0d32f773214878fae9736aa",
+    "air/0.16.0/noreturn_variants.holderColor.json": "f14d1e6a6e36f272c537057a12701eb215953a4934ed7a7debe58c11413a4c74",
+    "air/0.16.0/noreturn_variants.holderRoundTrip.json": "3261dd4a17bd71c9fcf30bf897cb0fb1b36acdb9b96b629dbe78ba9a6f2838c6",
+    "air/0.16.0/noreturn_variants.isColor.json": "e99bb738c5e2b1436b4202ad78d16e7f6d026a786f0c5fcf67883119ec046068",
+    "air/0.16.0/noreturn_variants.memRoundTrip.json": "ae6e90b658c1910a640adf40e8f0a51ea20be6d0e3f3fc152006c530eb265ca7",
+    "air/0.16.0/noreturn_variants.memV.json": "f3f1abfa70742100c565242140087a2196647439ae892142ba93c60b3f0babbc",
+    "air/0.16.0/noreturn_variants.mk.json": "141f4b9c6a56593f3e50b326a7d79fdf31af5388c0b172b98997fe2251da25fc",
+    "air/0.16.0/noreturn_variants.mkV.json": "810946cac3b08ad1c6ba802f2fb3ccb4a0c45a599d1108038ebdd6405aada3ea",
+    "air/0.16.0/noreturn_variants.oneRoundTrip.json": "190e38db735d748832fd026b46a36f835ab25adc5ddcd7030847e927ee044db0",
+    "air/0.16.0/noreturn_variants.oneValue.json": "e89401ee6fc13e232e1341b52b2fefcfab6e169b6ad6c5b0d3a04607d08c8d9c",
+    "air/0.16.0/noreturn_variants.readU.json": "0279cf3717476879664aa0a361579da510084dc494183d6379f9f0bdb73f04e5",
+    "air/0.16.0/noreturn_variants.readV.json": "8a0db2c34182b5f9f143226b93e326aabc1f947fd0d65036b8ae8cb1dd47f479",
+    "air/0.16.0/noreturn_variants.roundTrip.json": "d0f5e3a2afd5634995491a5c1a3dd187b1a909d1eba5b66f04e13b341d86060f",
+    "air/0.16.0/noreturn_variants.setMode.json": "b3c8fdd28b8eb7bbc45c87c921ce318f002e2b0b771db203ee0ebb5bf829b50f",
+    "air/0.16.0/noreturn_variants.vTag.json": "d2217f1b7716500cdf255bca24472244a7628e9ed90dfe9d4c5d51ceb55afb81",
+    "air/0.16.0/noreturn_variants.vValue.json": "32964581848fe53b7e23f758919a5654dbc57ae678780df1248cc1323b3b2e04",
+    "air-reject/0.15.2/reject.memOne.json": "55f84b1b512acd8602113cac5e5a5c1195ce06d2beb51befd1d1df3ec70c28c5",
+    "air-reject/0.15.2/reject.memPair.json": "1ceaf843a409d497fd337cfe4ce2de3b664f56805da32a63bf062b22ac79d5d3",
+    "air-reject/0.15.2/reject.readOne.json": "9a0437a621a7fbf95c764c7244af4171f1db38d794ab3ace6e4f0d88374d08ac",
+    "air-reject/0.15.2/reject.readPair.json": "975889bca8c4492060a558ec9a67afb9b6127692f9d4d2541c82235dbc0506bb",
+    "air-reject/0.16.0/reject.memOne.json": "b6aa0df0a22e7a5c58ab1dad73768051a7c44c90bf7ac6831ddde4d6d30d7d51",
+    "air-reject/0.16.0/reject.memPair.json": "293cc8140104d8284149b4fa59c6d2673ba96c3d6f98bc9be10849edfa856e75",
+    "air-reject/0.16.0/reject.readOne.json": "4a40132b5e05701474e6462993b4fc6d80adb9e73b55973a696dd6d1ab255fc6",
+    "air-reject/0.16.0/reject.readPair.json": "8acbdbc8fe27e6de14cc5322617edd94a786126788d71b57c5a010c6c8b05a12"
+  }
+}

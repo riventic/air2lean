@@ -211,10 +211,11 @@ def reproduce(row):
 MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs the Linux test job'
 # Matrix-free jobs on native runners that scripts/local-ci.sh cannot reproduce: Q05 `macos` and
 # T04 `aarch64-linux` and L02 `bitops-native-arm` (ubuntu-24.04-arm).
+ARM_REPRODUCE = 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job'
 NATIVE_JOBS = {
     'macos': MACOS_REPRODUCE,
-    'aarch64-linux': 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job',
-    'bitops-native-arm': 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job',
+    'aarch64-linux': ARM_REPRODUCE,
+    'bitops-native-arm': ARM_REPRODUCE,
 }
 
 

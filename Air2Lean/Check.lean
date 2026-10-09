@@ -185,7 +185,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     if l.isLanePtr && !l.laneBitPtr then
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
-        Zig 0.14.1-0.16.0 profile for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
+        profile of Zig {String.intercalate ", " lanePtrVersions} for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -243,6 +243,15 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .union name layout tag fields =>
     if fields.any (fun (_, c) => nullablePtrTy types layouts c) then
       throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
+    -- A `noreturn` field is a variant that is never active (`uninhabitedTy`); the union needs
+    -- another field to have a value, and only a tagged union can have one.
+    if fields.any (uninhabitedTy types ·.2) then
+      if tag.isNone then
+        throw s!"{fnName}: near line {line}: union '{name}' ({layout}, no tag) has a noreturn \
+          field: outside the subset"
+      if (inhabitedFields types fields).isEmpty then
+        throw s!"{fnName}: near line {line}: union '{name}' has only noreturn fields: it has no \
+          values, outside the subset"
     match tag with
     | none =>
       -- `extern`, `packed`: the bytes (`ZigLean/Union.lean`). In `ReleaseSafe` a bare union
@@ -301,6 +310,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
+  | some .noreturn => throw "noreturn has no values and no storage"
   -- A C/allowzero pointer is stored with `Zig.nullablePtrEnc` (null = eight zero bytes).
   | some (.ptr size ..) =>
     if pb != 8 && nullablePtrTy types layouts id then
@@ -391,10 +401,18 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
       throw s!"an error set storage layout must be the profile's {errBits}-bit error integer \
         ({Zig.errCodeSize errBits} bytes aligned to {Zig.errCodeAlign errBits})"
     pure (Zig.errCodeSize errBits, Zig.errCodeAlign errBits)
-  | some (.union _ _ (some tag) fields) =>
+  | some (.union name _ (some tag) fields) =>
+    -- A `noreturn` field is never active: no payload bytes (`uninhabitedTy`).
     let (ts, ta) ← modelLayout types layouts tag errBits
-    let fs ← fields.mapM fun (_, t) => modelLayout types layouts t errBits
+    let fs ← (inhabitedFields types fields).mapM fun (_, t) => modelLayout types layouts t errBits
     let (_, _, s, a) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
+    -- Also inside a struct, whose check compares only its own size: the generated `Zig.Enc`
+    -- has the exporter's size and the model's offsets. 0.16.0 stores no tag for a union with
+    -- one possible active field.
+    let (s', a') ← exported
+    unless s == s' && a == a' do
+      throw s!"the memory model gives union '{name}' size {s} and alignment {a}, the compiler \
+        {s'} and {a'}"
     pure (s, a)
   | some (.union name layout none fields) =>
     unless layout == "extern" || layout == "packed" do
@@ -406,11 +424,12 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | none => throw s!"unknown type id {id}"
 
 /-- The tag and payload offsets of a tagged union with the tag type `tag` and the field types
-`fields` in memory (`unionLayout`). -/
+`fields` in memory (`unionLayout`); a `noreturn` field adds no payload bytes. -/
 def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (fields : Array TyId)
     (errBits : Nat := 16) : Option (Nat × Nat) := do
   let (ts, ta) ← (modelLayout types layouts tag errBits).toOption
-  let fs ← fields.mapM fun t => (modelLayout types layouts t errBits).toOption
+  let fs ← (fields.filter (!uninhabitedTy types ·)).mapM fun t =>
+    (modelLayout types layouts t errBits).toOption
   let (to, po, _, _) := unionLayout ts ta (fs.foldl (Nat.max · ·.1) 0) (fs.foldl (Nat.max · ·.2) 1)
   pure (to, po)
 
@@ -665,7 +684,7 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
-  if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
+  if laneBitPtrTy cx.layouts pty then
     cx.fail line "an atomic op through a vector lane pointer is outside the subset"
   if atomicPtrPointee cx.types cx.layouts c then
     match rmw with
@@ -736,15 +755,17 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
 def CheckCtx.lanePtr (cx : CheckCtx) (line : Nat) (ty : TyId) (ptr idx : Val) :
     Except String Unit := do
   let pty ← cx.memPtrTy line ptr
-  let some (.vector n e) := (ptrChild cx.types pty).bind (cx.types[·]?)
+  let some vec := ptrChild cx.types pty
+    | cx.fail line "a lane pointer that does not point into a vector"
+  let some (.vector n e) := cx.types[vec]?
     | cx.fail line "a lane pointer that does not point into a vector"
   let l := cx.layouts[ty]?.getD {}
   let lane := match idx with | .int _ k => if k ≥ 0 then some k.toNat else none | _ => none
-  let w := match cx.types[e]? with | some (.int _ bits) => bits | some .bool => 1 | _ => 0
-  unless ptrChild cx.types ty == some e && lane.isSome && l.vectorIndex == lane &&
+  let w := ((cx.types[e]?).bind laneBits?).getD 0
+  unless ptrChild cx.types ty == some e && l.vectorIndex == lane &&
       lane.any (· < n) && l.hostSize == (n * w + 7) / 8 do
     cx.fail line "a lane pointer whose type does not match its vector and comptime lane"
-  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+  checkMemTy cx.fnName cx.types cx.layouts line vec cx.errBits
 
 /-- The size of the type `id` is in the AIR file (pointer arithmetic, `@memcpy`). -/
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
@@ -1024,6 +1045,38 @@ def CheckCtx.checkSentinelSlice (cx : CheckCtx) (line : Nat) (inst : Inst) : Exc
 /-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
 def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
 
+/-- The union and field names of field `idx` of the union `uty` if that field is `noreturn`
+(`uninhabitedTy`): a variant that is never active. -/
+def uninhabitedUnionField? (types : Array Ty) (uty : TyId) (idx : Nat) : Option (String × String) :=
+  match types[uty]? with
+  | some (.union name _ _ fields) => match fields[idx]? with
+    | some (f, t) => if uninhabitedTy types t then some (name, f) else none
+    | none => none
+  | _ => none
+
+/-- An instruction that activates, reads or points to a `noreturn` variant of a union. Zig code
+that reaches one is unreachable, so the variant has no value in the translation; fail closed
+instead of emitting one. -/
+def CheckCtx.checkNoreturnVariant (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
+    Except String Unit := do
+  let pointee (v : Val) : Option TyId := (cx.valTy? v).bind (ptrChild cx.types)
+  let (what, hit) := match op with
+    | .unionInit idx _ => ("union_init of", uninhabitedUnionField? cx.types ty idx)
+    | .structFieldVal s idx =>
+      ("a read of", (cx.valTy? s).bind (uninhabitedUnionField? cx.types · idx))
+    | .fieldPtr b idx => ("a pointer to", (pointee b).bind (uninhabitedUnionField? cx.types · idx))
+    | .setUnionTag p (.enumTag _ v) =>
+      ("set_union_tag to", (pointee p).bind fun uty => do
+        let some (.union _ _ (some tagTy) fields) := cx.types[uty]? | none
+        let some (.enum _ _ _ tags) := cx.types[tagTy]? | none
+        let (name, _) ← tags.find? (fun (t : String × Int) => t.2 == v)
+        uninhabitedUnionField? cx.types uty
+          (← fields.findIdx? (fun (field : String × TyId) => field.1 == name)))
+    | _ => ("", none)
+  if let some (u, f) := hit then
+    cx.fail line s!"{what} the noreturn variant '{f}' of union '{u}': the variant has no \
+      values, so this code is unreachable in Zig and outside the subset"
+
 mutual
 
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
@@ -1042,6 +1095,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -1305,10 +1359,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- `undefined` to a packed struct field: `Zig.storeUndefBits` makes only the field's bits
     -- undefined (a local with such a store is a stack block: `escapingAllocs`). A vector lane
     -- (`Zig.storeLane`) has no undefined-bits store.
-    if let .undef _ := v then
-      if let some pty := cx.valTy? ptr then
-        if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
-          cx.fail line "a store of `undefined` to a vector lane is outside the subset"
+    if v matches .undef _ && (cx.valTy? ptr).any (laneBitPtrTy cx.layouts) then
+      cx.fail line "a store of `undefined` to a vector lane is outside the subset"
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -1359,7 +1411,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
     if let .elemPtr _ idx := op then
-      if (cx.layouts[ty]?.map (·.laneBitPtr)).getD false then
+      if laneBitPtrTy cx.layouts ty then
         cx.lanePtr line ty p idx
         return line
     -- The result is a pointer to an item: its child is the item type.
@@ -2137,7 +2189,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
     | .elemPtr p n =>
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
       -- A lane pointer is the vector's address (`CheckCtx.lanePtr`).
-      if (f.layouts[i.ty]?.map (·.laneBitPtr)).getD false then return (g, off)
+      if laneBitPtrTy f.layouts i.ty then return (g, off)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty
@@ -2697,8 +2749,11 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
   | .ptrOther .., .ptr .. => pure ()
   | .optSome _ payload, .optional child => recur child payload
   | .errUnionOk _ payload, .errorUnion _ child => recur child payload
-  | .unionVal _ field payload, .union _ _ _ fields =>
-    let some (_, ty) := fields[field]? | fail
+  | .unionVal _ field payload, .union name _ _ fields =>
+    let some (fname, ty) := fields[field]? | fail
+    if uninhabitedTy f.types ty then
+      throw s!"{f.name}: a constant of union '{name}' with the noreturn variant '{fname}' active \
+        is outside the subset (the variant has no values)"
     recur ty payload
   | .agg _ elems, .array n child sentinel =>
     unless elems.size == n + (if sentinel then 1 else 0) do fail
@@ -3568,6 +3623,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
           else if !modelledStdFn callee then
             issues := issues.push (issue .callee
               s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)")
+  -- Needs the whole program (before the memory items, as `checkProgram` always reported them): every task an `Io.async` reaches (`checkFutureCancelation`).
+  if let .error message := checkFutureCancelation funcs then
+    issues := issues.push { kind := .futureCancel, message }
+  if let .error message := checkIoTaskThreadlocals funcs then
+    issues := issues.push { kind := .ioTaskThreadlocal, message }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -3592,11 +3652,6 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         for c in items do
           if let .error message := checkMemTy f.name f.types f.layouts 0 c f.errorSetBits then
             issues := issues.push { kind := .memory, function := f.name, instruction := i.id, message }
-  -- Needs the whole program: every task an `Io.async` reaches (`checkFutureCancelation`).
-  if let .error message := checkFutureCancelation funcs then
-    issues := issues.push { kind := .futureCancel, message }
-  if let .error message := checkIoTaskThreadlocals funcs then
-    issues := issues.push { kind := .ioTaskThreadlocal, message }
   return issues
 
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])

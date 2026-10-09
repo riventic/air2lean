@@ -86,6 +86,15 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- A type without values (`noreturn`). A union field of this type can never be active: it
+adds no payload bytes, has no constructor in the translation, and every instruction or constant
+that activates or reads it is rejected (`Check.lean`'s `uninhabitedUnionField?`). -/
+def uninhabitedTy (types : Array Ty) (id : TyId) : Bool := types[id]? == some .noreturn
+
+/-- The fields of a union that can be active (`uninhabitedTy`). -/
+def inhabitedFields (types : Array Ty) (fields : Array (String × TyId)) : Array (String × TyId) :=
+  fields.filter fun (_, t) => !uninhabitedTy types t
+
 /-- Children traversed through values; a pointer ends a value-type path. -/
 def valueChildTys (ty : Ty) : Array TyId :=
   match ty with
@@ -209,10 +218,24 @@ def ptrBytesOf (layouts : Array Layout) : Nat := (layouts[0]?.map (·.ptrBytes))
 def Layout.isLanePtr (l : Layout) : Bool :=
   l.vectorIndex.isSome || l.runtimeLane
 
+/-- The versions whose comptime lane pointers into bit-packed vectors are modelled as
+bit-pointers (`lanePtrLayout`); 0.17.0 has no native lane-pointer evidence yet. -/
+def lanePtrVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
+
 /-- A lane pointer that `normalize` made a bit-pointer into the vector's integer
 (`Zig.loadLane`/`Zig.storeLane`). -/
 def Layout.laneBitPtr (l : Layout) : Bool :=
   l.vectorIndex.isSome && l.packedLanes
+
+/-- The pointer type `ty` is a `Layout.laneBitPtr` (false without a layout). -/
+def laneBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
+  (layouts[ty]?.map (·.laneBitPtr)).getD false
+
+/-- The bit width of a lane that a lane pointer may address: an integer's bits, 1 for `bool`. -/
+def laneBits? : Ty → Option Nat
+  | .int _ bits => some bits
+  | .bool => some 1
+  | _ => none
 
 /-- A bit-pointer whose export has no `vector_index`. It can be a packed field pointer or a lane
 pointer. -/

@@ -428,15 +428,18 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
     let (to, po) := (unionOffsets s.srcTypes s.srcLayouts tag (fields.map (·.2)) s.errBits).getD (0, 0)
     let tagTy := emitTy structNames s.srcTypes s.srcTypes[tag]!
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
-    let enc := fields.toList.map fun (f, id) =>
+    let enc := (inhabitedFields s.srcTypes fields).toList.map fun (f, id) =>
       if isVoid id then s!"    | .{fm f} => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
       else s!"    | .{fm f} x => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"}), ({po}, {withStorageEnc structNames s.srcTypes s.errBits id "Zig.Enc.encode x" s.srcLayouts})]"
     -- A retagged payload that is not defined yet: its bytes are undefined (MM-13).
     let encUndef := (List.range fields.size).filterMap fun i =>
       (unionFreshPayload s.srcTypes s.ty i (structNames.map (·.2))).map fun _ =>
         s!"    | .{hn s!"undef_{fields[i]!.1}"} _ _ => Zig.Enc.fields {size} [({to}, Zig.Enc.encode v.{hn "tag"})]"
+    -- The tag of a `noreturn` variant names no value: its bytes are illegal, like an enum tag
+    -- without a name.
     let dec := fields.toList.map fun (f, id) =>
-      if isVoid id then s!"    | .{fm f} => pure .{fm f}"
+      if uninhabitedTy s.srcTypes id then s!"    | .{fm f} => throw .illegal"
+      else if isVoid id then s!"    | .{fm f} => pure .{fm f}"
       else s!"    | .{fm f} => pure (.{fm f} (← {withStorageEnc structNames s.srcTypes s.errBits id s!"Zig.Enc.decodeAt bs {po}" s.srcLayouts}))"
     String.intercalate "\n" (head ++ ["  encode v := match v with"] ++ enc ++ encUndef ++
       ["  decode bs := do", s!"    let t : {tagTy} ← Zig.Enc.decodeAt bs {to}", "    match t with"] ++ dec)
@@ -525,6 +528,8 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       | some t => emitTy structNames s.srcTypes t
       | none => "Unit"
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
+    -- A `noreturn` variant has no constructor and no accessors (`uninhabitedTy`).
+    let fields := inhabitedFields s.srcTypes fields
     let wild := if fields.size > 1 then ["  | _ => throw .panic"] else []
     -- A retag leaves a payload with bits undefined (MM-13): `undef_f v written` holds `f`'s
     -- payload while it is not defined, `v` with the struct fields `written` (`setField_f`).
@@ -1370,7 +1375,7 @@ def FCtx.fieldOffset (fc : FCtx) (base : Val) (idx : Nat) : Nat :=
   | _ => 0
 
 /-- `ptrTy` is a lane pointer into a bit-packed vector (`Layout.laneBitPtr`). -/
-def FCtx.laneBitPtr (fc : FCtx) (ptrTy : TyId) : Bool := (fc.layouts[ptrTy]?.map (·.laneBitPtr)).getD false
+def FCtx.laneBitPtr (fc : FCtx) (ptrTy : TyId) : Bool := laneBitPtrTy fc.layouts ptrTy
 
 /-- The byte offset of field `idx` of the struct that the pointer type `ptrTy` points to
 (`field_parent_ptr`'s own result type, unlike `fieldOffset`'s operand type). -/
@@ -2611,7 +2616,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           | none => (env, some (placeholder "a store of a partly undefined value"))
         else
         if host != 0 then
-          let f := if ((fc.valTyId? ptr).map fc.laneBitPtr).getD false then "Zig.storeLane"
+          let f := if ptrTy?.any fc.laneBitPtr then "Zig.storeLane"
             else fc.bitsFn "storeBits"
           (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))

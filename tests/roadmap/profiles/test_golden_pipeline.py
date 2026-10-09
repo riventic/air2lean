@@ -73,6 +73,17 @@ class ReceiptTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "incompatible target profile"):
                 HELPER["profile_for_air"](changed)
 
+    def test_error_width_follows_the_profile_parser(self):
+        # L10 widths: `BuildProfile.collect` admits a 1..32-bit error integer, and so does the header check.
+        for bits, ok in ((8, True), (17, True), (32, True), (0, False), (33, False)):
+            changed = copy.deepcopy(CURRENT)
+            changed["profile"]["error_set_bits"] = bits
+            if ok:
+                self.assertEqual(HELPER["profile_for_air"](changed)["error_set_bits"], bits)
+            else:
+                with self.assertRaisesRegex(ValueError, "incompatible target profile"):
+                    HELPER["profile_for_air"](changed)
+
     def test_future_schema_fails_closed(self):
         changed = copy.deepcopy(CURRENT)
         changed["schema"] = 13

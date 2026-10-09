@@ -110,7 +110,10 @@ runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated o
 host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
 segment of release builds).
 
-Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux llvm run.
+Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux run (emulated). The
+x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
+run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
+those summaries (`build-mode-summaries-*`) and verifies the records on every run.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |
