@@ -782,7 +782,7 @@ theorem load_n {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c 
 /-- `bump` loads the counter's address from its context. -/
 theorem load_cnt {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {c : Nat} {d : Bool}
     {a : Ptr} (hi : Inv n G m) (hg : G u = .bump p c d)
-    (h : ((load Ptr 8 (p.add 0)).run m).run = some (.ok (a, m₁))) :
+    (h : ((load Ptr 8 p).run m).run = some (.ok (a, m₁))) :
     a = counterPtr ∧ ∃ o, m₁ = m.recordAt 0 o 8 .read := by
   obtain ⟨-, -, hk4, rfl⟩ := inv_kid n hi hg
   obtain ⟨b, blk, o, ha, -, hd, rfl⟩ := Proto.load_ok h
@@ -791,7 +791,7 @@ theorem load_cnt {G : ThreadId → Gh} {m m₁ : Mem} {u : ThreadId} {p : Ptr} {
   subst hb
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, hctx, _⟩ := hi
   have hv := (hctx blk hblk (u - 1) hk4).1
-  have ho' : o = 16 * (u - 1) + 0 := by rw [ho]; exact ctx_off (u - 1) 0
+  have ho' : o = 16 * (u - 1) + 0 := by rw [ho]; simpa using ctx_off (u - 1) 0
   subst ho'
   rw [show 16 * (u - 1) + 0 + Enc.size Ptr = 16 * (u - 1) + 8 from rfl, Nat.add_zero,
     decodeLoad_run_of_decode hv] at hd
@@ -819,6 +819,14 @@ theorem ctx_load_noErr {T : Type} [Enc T] {G : ThreadId → Gh} {m : Mem} {u : T
     rwa [ctx_off] at this
   exact MemM.noErr_of_run (load_run hacc (hv blk hb) (noRace_b0 hf (by rw [hcur]; exact hlt))) e
 
+/-- `&ctx.n` of a kid's context (block 0, 64 bytes) is formed (`ptrProject`, MM-3). -/
+theorem proj_ctx {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {p : Ptr} {c : Nat} {d : Bool}
+    (hi : Inv n G m) (he : Ex G m) (hg : G u = .bump p c d) {k : Nat} (hk : k ≤ 16) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) := by
+  obtain ⟨-, -, hk4, rfl⟩ := inv_kid n hi hg
+  obtain ⟨⟨blk, hblk, -, hsz, -⟩, -⟩ := he
+  exact ptrProject_block_run hblk rfl (by simp [ctxPtr]; omega) (by simp [ctxPtr, hsz]; unfold ThreadId at *; omega)
+
 /-- A kid's load of `n` gives no error. -/
 theorem load_n_noErr {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {p : Ptr} {c : Nat} {d : Bool}
     (hi : Inv n G m) (he : Ex G m) (hg : G u = .bump p c d) (hcur : m.current = u) (e : Error) :
@@ -831,12 +839,12 @@ theorem load_n_noErr {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {p : Ptr} {c
 /-- A kid's load of the counter's address gives no error. -/
 theorem load_cnt_noErr {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {p : Ptr} {c : Nat}
     {d : Bool} (hi : Inv n G m) (he : Ex G m) (hg : G u = .bump p c d) (hcur : m.current = u)
-    (e : Error) : ((load Ptr 8 (p.add 0)).run m).run ≠ some (.error e) := by
+    (e : Error) : ((load Ptr 8 p).run m).run ≠ some (.error e) := by
   have hk4 := (inv_kid n hi hg).2.2.1
   have hctx : CtxOk n m := by obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, h, _⟩ := hi; exact h
-  refine ctx_load_noErr (v := counterPtr) (j := 0) n hi he hg hcur (by decide)
-    (fun A k h => by omega) (fun blk hb => ?_) e
-  exact (hctx blk hb (u - 1) hk4).1
+  have := ctx_load_noErr (v := counterPtr) (j := 0) (a := 8) n hi he hg hcur (by decide)
+    (fun A k h => by omega) (fun blk hb => (hctx blk hb (u - 1) hk4).1) e
+  simpa using this
 
 /-- The location of an atomic op at the counter is the counter (`cntAt_locIdx`), after the
 `recordAccess` of the op. -/
@@ -965,6 +973,8 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     obtain ⟨_, _, _, _, h1, h2, _⟩ := hi; rw [h1, h2]
   unfold bump.loop4
   simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
+  refine WP.bind (WP.callMC_ptrProject (proj_ctx n hi he hg (k := 8) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM (fun e h => (load_n_noErr n hi he hg hcur e h).elim)
     fun a m₁ hl => ?_)
   obtain ⟨ha, o, rfl⟩ := load_n n hi hg hl
@@ -995,9 +1005,9 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     have hlt₃ : ({ m₃ with current := u } : Mem).current < ({ m₃ with current := u } : Mem).threads.size :=
       (inv_kid n hi₃ hg₁).2.1
     refine WP.bind (WP.callMC (fun e h => by
-      rw [ptr_add_zero] at h; exact (rmw_noErr n hi₃' he₃' hnd₃ hlt₃ hcr e h).elim)
+      exact (rmw_noErr n hi₃' he₃' hnd₃ hlt₃ hcr e h).elim)
       fun old m₄ hr => ?_)
-    rw [ptr_add_zero] at hr
+
     obtain ⟨hi₄, he₄, hc₄⟩ := inv_rmw n hi₃' he₃' hg₁ rfl hr
     refine ⟨inv_size n hi₃' hi₄ (Conc.upd_ne _ _ (Nat.ne_of_lt (inv_kid n hi₃ hg₁).1)), ?_⟩
     have hlt' : s.i.toNat < n.toNat := by simpa [lt, BitVec.ult] using hlt
@@ -1648,8 +1658,16 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
     have e4 : (Enc.encode n).size = 4 := LawfulEnc.size_encode _
     obtain ⟨bk1, hbk1, hk1, hsz64, hacc1⟩ := access_blk (o := 16 * s.local6.toNat)
       (len := (Enc.encode counterPtr).size) (a := 8) hpb.1 (by rw [e8]; omega)
-      (fun A h => by omega) (p := ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6).add 0)
+      (fun A h => by omega) (p := (⟨some 0, 0⟩ : Ptr).elem 16 s.local6)
       (by simp [Ptr.elem, Ptr.add])
+    -- `&ctxs[i]` (`ptrProject`, MM-3): in bounds of the 64-byte block
+    have pr₁ : (ptrProject (⟨some 0, 0⟩ : Ptr) (·.elem 16 s.local6)).run m =
+        pure ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6, m) := by
+      obtain ⟨-, hblk1, -, -, hn1, -⟩ := access_eq hacc1
+      exact ptrProject_run _ rfl (inBounds_of rfl hblk1 (by decide) (by simp))
+        (by simpa using inBounds_of_access hacc1 0 (Nat.zero_le _))
+    refine WP.bind (WP.callMC_ptrProject pr₁ ?_)
+    dsimp only
     refine WP.bind (WP.liftM (fun e h => (store_noErr_pre hpa hacc1 hk1 e h).elim)
       fun _ m₁ hs₁ => ?_)
     obtain ⟨b, blk, o, ha, -, rfl⟩ := Proto.store_ok hs₁
@@ -1674,6 +1692,19 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
       (len := (Enc.encode n).size) (a := 4) hpb1.1 (by rw [e4]; omega)
       (fun A h => by omega) (p := ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6).add 8)
       (by simp [Ptr.elem, Ptr.add] <;> omega)
+    -- `&ctxs[i].n`
+    have pr₂ : (ptrProject ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6) (·.add 8)).run
+        (Mem.write (m.recordAt 0 (16 * s.local6.toNat) (Enc.encode counterPtr).size .write) 0 blk
+          (16 * s.local6.toNat) (Enc.encode counterPtr)) =
+        pure (((⟨some 0, 0⟩ : Ptr).elem 16 s.local6).add 8, Mem.write (m.recordAt 0
+          (16 * s.local6.toNat) (Enc.encode counterPtr).size .write) 0 blk (16 * s.local6.toNat)
+          (Enc.encode counterPtr)) := by
+      obtain ⟨-, hblk2, -, h02, hn2, -⟩ := access_eq hacc2
+      exact ptrProject_add_run
+        (inBounds_of (by simp [Ptr.elem]) hblk2 (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add] at hn2 ⊢; omega))
+        (by simpa using inBounds_of_access hacc2 0 (Nat.zero_le _))
+    refine WP.bind (WP.callMC_ptrProject pr₂ ?_)
+    dsimp only
     refine WP.bind (WP.liftM (fun e h => (store_noErr_pre hpa1 hacc2 hk2 e h).elim)
       fun _ m₂ hs₂ => ?_)
     obtain ⟨b2, blk2, o2, ha2, -, rfl⟩ := Proto.store_ok hs₂
@@ -1842,6 +1873,20 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
   · rename_i hlt
     have hlt' : s.local29.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
+    -- `&handles[i]`, `&ctxs[i]` (`ptrProject`, MM-3)
+    have prH : (ptrProject (⟨some 2, 0⟩ : Ptr) (·.elem 8 s.local29)).run m =
+        pure ((⟨some 2, 0⟩ : Ptr).elem 8 s.local29, m) := by
+      obtain ⟨blk, hb, -, hsz, -⟩ := he.2.2.1
+      exact ptrProject_run _ rfl (inBounds_of rfl hb (by decide) (by simp))
+        (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add, hsz]; omega))
+    have prC : (ptrProject (⟨some 0, 0⟩ : Ptr) (·.elem 16 s.local29)).run m =
+        pure ((⟨some 0, 0⟩ : Ptr).elem 16 s.local29, m) := by
+      obtain ⟨blk, hb, -, hsz, -⟩ := he.1
+      exact ptrProject_run _ rfl (inBounds_of rfl hb (by decide) (by simp))
+        (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add, hsz]; omega))
+    refine WP.bind (WP.callMC_ptrProject prH ?_)
+    refine WP.bind (WP.callMC_ptrProject prC ?_)
+    dsimp only
     refine WP.bind (WP.spawnC fun k hk => ⟨.main s.local29.toNat [], ⟨hi, he⟩,
       fun G₁ m₁ hg₁ hie₁ => ⟨_, rfl, fun child m₂ hf => ?_⟩⟩)
     obtain ⟨hi₁, he₁⟩ := hie₁
@@ -2216,7 +2261,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   obtain ⟨hr, hcur9, J, hJ4, hi₉, he₉⟩ := hp
   obtain ⟨e, s₃⟩ := r
   simp only at hr; subst hr
-  simp only [atomicLoadC, StateT.run_bind, bind_assoc, ptr_add_zero]
+  simp only [atomicLoadC, StateT.run_bind, bind_assoc, Ptr.add_zero]
   -- The load after the joins.
   refine WP.bind (WP.pickC fun k hk => ⟨.main 4 J, ⟨hi₉, he₉⟩,
     fun G₁ m₁ hg₁ hie₁ c hcr => ?_⟩)

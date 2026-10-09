@@ -2,10 +2,12 @@ import ZigLean
 
 /-! Fail-open emitter placeholders (docs/architecture-audit/memory-model.md, MM-6).
 
-`Air2Lean/Emit.lean` writes `(panic! "air2lean: …")` (17 sites) and `pure default` (2 sites)
-where it assumes `Check.lean` already rejected the input. In the logic, `panic! msg` is
+Before the fix, `Air2Lean/Emit.lean` wrote `(panic! "air2lean: …")` (17 sites) and `pure default`
+(2 sites) where it assumed `Check.lean` had already rejected the input. It now writes an
+unelaborable `placeholder` there and rejects any output that contains one (EMITTER_PLACEHOLDER);
+these theorems record why. In the logic, `panic! msg` is
 `default`, and `default : Zig.MemM α` is a successful return of `default` with the memory
-unchanged. A checker gap therefore yields a translation whose theorems treat the unsupported
+unchanged. A checker gap therefore yielded a translation whose theorems treat the unsupported
 operation as a no-op that succeeds, not as an error. (`default : Zig.Result α` is
 `.error .overflow`, which is wrong in the other direction: an arbitrary error.) -/
 

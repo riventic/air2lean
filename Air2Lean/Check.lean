@@ -554,6 +554,35 @@ def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
 def CheckCtx.fail {α : Type} (cx : CheckCtx) (line : Nat) (msg : String) : Except String α :=
   throw s!"{cx.fnName}: near line {line}: {msg}"
 
+/-- The pointee type of the pointer `ptr`. -/
+def CheckCtx.pointee? (cx : CheckCtx) (ptr : Val) : Option Ty :=
+  ((cx.valTy? ptr).bind (ptrChild cx.types)).bind (cx.types[·]?)
+
+/-- `ptr` carries an item count: a slice, or a single pointer to an array (`withVector`: or a
+vector). `Emit.lean`'s `FCtx.itemsOf` reads the count from it. A many-pointer to arrays
+(`[*][4]u8`) has none: its items are the arrays. -/
+def CheckCtx.hasLength (cx : CheckCtx) (ptr : Val) (withVector : Bool := true) : Bool :=
+  match (cx.valTy? ptr).bind (cx.types[·]?), cx.pointee? ptr with
+  | some (.ptr "slice" ..), _ | some (.ptr "one" ..), some (.array ..) => true
+  | some (.ptr "one" ..), some (.vector ..) => withVector
+  | _, _ => false
+
+/-- Field `idx` of the type `c` has a known offset: `Emit.lean`'s `FCtx.fieldOffsetIn` reads it,
+and an unknown one would be offset 0, a silent `pure p`. -/
+def CheckCtx.fieldKnown (cx : CheckCtx) (c : TyId) (idx : Nat) : Bool :=
+  let offset := (cx.layouts[c]?.bind (·.offsets[idx]?)).isSome
+  match cx.types[c]? with
+  | some (.struct _ "packed" fs) | some (.union _ _ _ fs) => idx < fs.size
+  | some (.struct _ _ fs) => idx < fs.size && offset
+  | some (.tuple fs) => idx < fs.size && offset
+  | _ => offset
+
+/-- The lane count and lane type of a vector-typed value. -/
+def CheckCtx.vectorOf? (cx : CheckCtx) (v : Val) : Option (Nat × TyId) :=
+  match (cx.valTy? v).bind (cx.types[·]?) with
+  | some (.vector len lane) => some (len, lane)
+  | _ => none
+
 /-- The pointer type of `ptr`, a pointer that is not a place, with its `ptr_align`. -/
 def CheckCtx.memPtrTy (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String TyId := do
   let some pty := cx.valTy? ptr
@@ -611,7 +640,7 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
 
 /-- Nullable pointer slicing, bulk memory operations and parent recovery are not part of the
 qualified fragment. Field/element projections and pointer arithmetic are
-(`Zig.ptrProjectNullable`). Cast to a nonnullable pointer after a null check first. -/
+(`Zig.ptrProject`, `Zig.ptrProjectNonnull`). Cast to a nonnullable pointer after a null check first. -/
 def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
     cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
@@ -1238,8 +1267,38 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           struct or union to or from an integer is outside the subset"
       | _, _ => pure line
     | none => pure line
-  | .setUnionTag ptr _ | .retLoad ptr | .isNullPtr _ ptr | .optPayloadPtr _ ptr | .isErrPtr _ ptr | .errPayloadPtr _ ptr
-  | .errCodePtr ptr => cx.memAccess line ptr; pure line
+  | .setUnionTag ptr tag =>
+    cx.memAccess line ptr
+    let some (.union _ _ tagTy fields) := cx.pointee? ptr
+      | cx.fail line "`set_union_tag` operand is not a pointer to a union"
+    -- A union local held as a Lean value retags by the tag's field name: a constant.
+    if let (some tagTy, .inst p) := (tagTy, ptr) then
+      if cx.places.contains p then
+        let named : Bool := match cx.types[tagTy]?, tag with
+          | some (.enum _ _ _ tags), .enumTag _ v =>
+            (tags.find? (·.2 == v)).any fun (name, _) => fields.any (·.1 == name)
+          | _, _ => false
+        unless named do
+          cx.fail line "`set_union_tag` of a union local needs a constant tag that names a field"
+    pure line
+  | .isNullPtr _ ptr =>
+    cx.memAccess line ptr
+    let some (.optional _) := cx.pointee? ptr
+      | cx.fail line "`is_null_ptr` operand is not a pointer to an optional"
+    pure line
+  | .isErrPtr _ ptr | .errPayloadPtr _ ptr | .errCodePtr ptr =>
+    cx.memAccess line ptr
+    let some (.errorUnion ..) := cx.pointee? ptr
+      | cx.fail line "an error-union pointer op on a pointer to another type"
+    pure line
+  | .optPayloadPtr _ ptr =>
+    cx.memAccess line ptr
+    -- The payload of `?T` is at offset 0; of a C pointer (`*[*c]T`) it is the pointer itself.
+    -- Any other pointee would make the emitted `pure p` a silent no-op.
+    match cx.pointee? ptr with
+    | some (.optional _) | some (.ptr "c" ..) => pure line
+    | _ => cx.fail line "`optional_payload_ptr` operand is not a pointer to an optional"
+  | .retLoad ptr => cx.memAccess line ptr; pure line
   | .load ptr => cx.memAccess line ptr; pure line
   | .store ptr v =>
     cx.memAccess line ptr
@@ -1257,12 +1316,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .atomicRmw op _ ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr op; pure line
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
-  | .fieldPtr base _ =>
+  | .fieldPtr base idx =>
     if let .inst b := base then
       if cx.places.contains b then return line
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
-    checkMemTy fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
+    let c := (ptrChild cx.types pty).get!
+    checkMemTy fnName cx.types cx.layouts line c cx.errBits
+    unless cx.fieldKnown c idx do
+      cx.fail line "`struct_field_ptr` field index has no known offset"
     pure line
   | .fieldParentPtr fieldPtr idx =>
     cx.rejectNullableProjection line fieldPtr
@@ -1280,6 +1342,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let some (.ptr _ _ parent) := cx.types[ty]?
       | cx.fail line "`@fieldParentPtr`'s result is not a pointer"
     checkMemTy fnName cx.types cx.layouts line parent cx.errBits
+    unless cx.fieldKnown parent idx do
+      cx.fail line "`@fieldParentPtr` field index has no known offset"
     pure line
   | .ptrElemVal p _ => cx.itemAccess line p; pure line
   -- A pure function indexes the items (`Array`); `checkProgram` checks the item type of a
@@ -1287,7 +1351,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .sliceElemVal .. => pure line
   -- An address only: the access through the field pointer is checked at its `load`/`store`.
   | .sliceFieldPtr .. => pure line
-  | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
+  | .memset p _ =>
+    cx.rejectNullableProjection line p
+    cx.itemAccess line p
+    unless cx.hasLength p do
+      cx.fail line "`memset` destination is not a slice or a pointer to an array"
+    pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
     if let .elemPtr _ idx := op then
       if (cx.layouts[ty]?.map (·.laneBitPtr)).getD false then
@@ -1308,6 +1377,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let _ ← cx.memPtrTy line src
     let dty ← cx.memPtrTy line dst
     cx.knownSize line (itemTy cx.types dty).get!
+    -- The count comes from the destination if it is a slice or array pointer, else the source.
+    unless cx.hasLength dst (withVector := false) || cx.hasLength src do
+      cx.fail line "`memcpy` has no operand with an item count (a slice or a pointer to an array)"
     pure line
   | .wrapOptional p =>
     if (cx.valTy? p |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
@@ -1316,9 +1388,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .slice p _ => cx.rejectNullableProjection line p; pure line
   | .arrayToSlice p =>
     cx.rejectNullableProjection line p
-    let pty ← cx.memPtrTy line p
+    let _ ← cx.memPtrTy line p
     -- The emitted slice takes its length from the pointee (`FCtx.itemsOf`).
-    match (ptrChild cx.types pty).bind (cx.types[·]?) with
+    match cx.pointee? p with
     | some (.array ..) | some (.vector ..) => pure line
     | _ => cx.fail line "`array_to_slice` operand is not a pointer to an array"
   | .call callee _ =>
@@ -1489,6 +1561,39 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if !isIntTy rty then
         throw s!"{fnName}: near line {line}: asm input '{i.name}' is not an integer register \
           value (M21)"
+    pure line
+  -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
+  -- arithmetic on integer and float lanes); the result is one lane.
+  | .reduce rop a =>
+    let some (_, lane) := cx.vectorOf? a | cx.fail line "`@reduce` operand is not a vector"
+    let ok := match cx.types[lane]?, rop with
+      | some (.int ..), _ => true
+      | some .bool, .and | some .bool, .or | some .bool, .xor => true
+      | some (.float _), .add | some (.float _), .mul | some (.float _), .min
+      | some (.float _), .max => true
+      | _, _ => false
+    unless ok do cx.fail line "`@reduce` operator is not defined for the vector's lane type"
+    unless ty == lane do cx.fail line "`@reduce` result is not the vector's lane type"
+    pure line
+  -- Every mask lane names an existing lane of an existing source; the result has one lane per
+  -- mask entry.
+  | .shuffle a b mask =>
+    let some (alen, _) := cx.vectorOf? a | cx.fail line "`@shuffle` operand is not a vector"
+    let blen := (b.bind cx.vectorOf?).map (·.1)
+    if b.isSome && blen.isNone then cx.fail line "`@shuffle` second operand is not a vector"
+    let some (.vector rlen _) := cx.types[ty]? | cx.fail line "`@shuffle` result is not a vector"
+    unless rlen == mask.size do cx.fail line "`@shuffle` mask length is not the result's length"
+    for lane in mask do
+      match lane with
+      | .a idx => unless idx < alen do cx.fail line "`@shuffle` mask lane is out of range"
+      | .b idx =>
+        unless blen.any (fun n => idx < n) do
+          cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
+      | _ => pure ()
+    pure line
+  | .unionInit idx _ =>
+    let some (.union _ _ _ fields) := cx.types[ty]? | cx.fail line "`union_init` result is not a union"
+    unless idx < fields.size do cx.fail line "`union_init` field index is out of range"
     pure line
   -- Pure values, locals, jumps, returns and debug info: `checkTy` of the result and the
   -- whole-function operand checks (`check`) are their rules. Fail closed on any other op: one
@@ -2353,6 +2458,32 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
         fail "`@fieldParentPtr` from a byte pointer to a packed struct field"
     | _ => pure ()
 
+/-- Is `op` a terminator: the one instruction that ends its containing body (`docs/air-json.md`
+/ `PLAN.md`)? A noreturn call counts (the `unreach` Sema emits right after it is dead code). -/
+def isTerminating (op : Op) : Bool :=
+  op.emitRoute == .terminator
+
+/-- `insts` ends in a control transfer as `Emit.lean`'s `emitStmts` reads it: a terminator, a
+loop (it never falls through), or a block that no `br` in `targets` continues after (its body
+ends the sequence). Instructions after it are dead. A body that runs out of instructions has no
+Lean term (MM-6). -/
+def bodyEnds (targets : Std.HashSet InstId) : List Inst → Bool
+  | [] => false
+  | i :: rest =>
+    isTerminating i.op || match i.op with
+      | .loop _ | .loopSwitchBr .. => true
+      | .block _ => !targets.contains i.id || bodyEnds targets rest
+      | _ => bodyEnds targets rest
+
+/-- Every body of `f` ends in a control transfer (`bodyEnds`). -/
+def checkBodiesEnd (f : Func) : Except String Unit := do
+  let targets := f.allInsts.foldl (init := ({} : Std.HashSet InstId)) fun targets i =>
+    match i.op with | .br t _ => targets.insert t | _ => targets
+  for body in bodyLists f.body do
+    unless bodyEnds targets body.toList do
+      throw s!"{f.name}: a body ends without a terminator (`br`, `ret`, `unreach`, a noreturn \
+        call, …)"
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
@@ -2429,7 +2560,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
-  pure ()
+  checkBodiesEnd f
 
 /-- First-occurrence instruction types and literal IDs for one function. Building this
 index does not hide duplicate-ID errors: structural validation still scans in source order. -/

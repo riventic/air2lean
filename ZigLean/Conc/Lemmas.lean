@@ -46,6 +46,27 @@ theorem WP.callMC {x : MemM α} {s : σ} {Q : α × σ → (ThreadId → γ) →
     P.WP t ((callMC x : CM Tgt σ α).run s) Q G m n :=
   WP.liftM (x := x) herr h
 
+/-- Forming a derived pointer in bounds (`ptrProject`, MM-3): no stop, no error, the memory
+does not change. -/
+theorem WP.callMC_ptrProject {p : Ptr} {f : Ptr → Ptr} {s : σ}
+    {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hin : (ptrProject p f).run m = pure (f p, m)) (h : Q (f p, s) G m n) :
+    P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
+  refine WP.callMC (fun e he => ?_) fun a m' hr => ?_
+  · rw [hin] at he; cases he
+  · obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
+    exact ⟨rfl, h⟩
+
+/-- Pointer formation in partial correctness (`P.strict = false`): an error satisfies every
+post, and a result is the projection with the memory unchanged. -/
+theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}
+    {Q : Ptr × σ → (ThreadId → γ) → Mem → Nat → Prop} (hs : P.strict = false)
+    (h : Q (f p, s) G m n) :
+    P.WP t ((Zig.callMC (ptrProject p f) : CM Tgt σ Ptr).run s) Q G m n := by
+  refine WP.callMC (fun _ _ => hs) fun a m' hr => ?_
+  obtain ⟨rfl, rfl⟩ := ptrProject_ok (m := m) (p := p) (project := f) hr
+  exact ⟨rfl, h⟩
+
 /-- A call to a pure function: no stop, the memory does not change. -/
 theorem WP.callRC {x : Result α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (herr : ∀ e, x.run = some (.error e) → P.strict = false)
@@ -686,8 +707,6 @@ theorem insertIdxIfInBounds_size_self {α : Type} (xs : Array α) (v : α) :
 theorem intOfBytes_rmw {n : Nat} [LawfulEnc (BitVec n)] (v : BitVec n) :
     (intOfBytes n (padTo (intSize n) (intBytes v))).run = some (.ok v) :=
   congrArg ExceptT.run (LawfulEnc.decode_encode (α := BitVec n) v)
-
-theorem ptr_add_zero (p : Ptr) : p.add 0 = p := by simp [Ptr.add]
 
 /-- An insert at the end: the location has one more message, and the block has its bytes. -/
 theorem insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
@@ -1815,6 +1834,13 @@ theorem blk_ne {x : BlockId} {a b : Nat} (ha : x = a) (hb : x = b) (hab : a ≠ 
 def BlkAt (m : Mem) (b size a : Nat) : Prop :=
   ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = size ∧
     blk.kind = .stack ∧ blk.addr % a = 0
+
+/-- A pointer `k` bytes into a block of `size` bytes (one past the end included) is formed
+(`ptrProject`, MM-3). -/
+theorem BlkAt.ptrProject_run {b size a o k : Nat} (hb : BlkAt m b size a) (hk : o + k ≤ size) :
+    (ptrProject ⟨some b, (o : Int)⟩ (·.add k)).run m = pure ((⟨some b, (o : Int)⟩ : Ptr).add k, m) := by
+  obtain ⟨blk, hblk, -, hsz, -⟩ := hb
+  exact ptrProject_block_run hblk rfl (by simp) (by simp; omega)
 
 theorem alignUp_mod (n a : Nat) (ha : 0 < a) : alignUp n a % a = 0 := by
   unfold alignUp

@@ -58,8 +58,11 @@ class AirFuzz(unittest.TestCase):
     def test_emit_oracle(self):
         header = "-- air2lean-profile: {}\n"
         self.assertIsNone(air_fuzz.classify_emit(0, "", header + "def f := 1\n"))
-        self.assertEqual(air_fuzz.classify_emit(0, "", header + '(panic! "air2lean: unbound inst 3")'),
-                         "emit:placeholder")
+        self.assertEqual(air_fuzz.classify_emit(
+            0, "", header + '(air2lean_emitter_placeholder "unbound inst 3")'), "emit:placeholder")
+        # The CLI's fail-closed rejection of a placeholder is still a checker gap, so a finding.
+        self.assertEqual(air_fuzz.classify_emit(
+            1, "error: EMITTER_PLACEHOLDER: translator bug", air_fuzz.SENTINEL), "emit:placeholder")
         self.assertEqual(air_fuzz.classify_emit(0, "", "garbage"), "emit:bad-output")
         self.assertIsNone(air_fuzz.classify_emit(1, "x.json: offset 3: expected: \"", air_fuzz.SENTINEL))
         self.assertEqual(air_fuzz.classify_emit(1, "", air_fuzz.SENTINEL), "emit:untyped-rejection")
@@ -80,6 +83,9 @@ class AirFuzz(unittest.TestCase):
                          "diag:unknown-code")
         self.assertEqual(air_fuzz.classify_diagnostics(1, report("rejected", ["PREREQUISITE_SKIPPED"]), ""),
                          "diag:untyped-rejection")
+        self.assertEqual(air_fuzz.classify_diagnostics(1, report("rejected", ["EMITTER_PLACEHOLDER"]), ""),
+                         "diag:placeholder")
+        self.assertIsNone(air_fuzz.classify_diagnostics(1, report("rejected", ["PACKED_LAYOUT"]), ""))
         self.assertEqual(air_fuzz.classify_diagnostics(0, "{", ""), "diag:not-json")
         self.assertEqual(air_fuzz.classify_diagnostics(134, "", ""), "diag:exit-134")
 

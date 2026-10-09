@@ -43,13 +43,17 @@ theorem failName_other (n : BitVec 8) (h : n ≠ 0) (m : Mem) :
   have h' : ¬ n = 0#8 := h
   simp [failName, zig_unfold, errorNameOf, h']
 
-/-- `(p + 1)[0]` reads the `u32` 4 bytes after `p`. -/
+/-- `(p + 1)[0]` reads the `u32` 4 bytes after `p`. Forming `p + 1` needs `p` and `p + 4` in
+bounds of `p`'s block (`getelementptr inbounds`, `ptrProject`). -/
 theorem second_spec {m₁ : Mem} (p : Ptr) (m : Mem) (x : BitVec 32)
+    (hb : m.inBounds p = true) (hb4 : m.inBounds (p.add 4) = true)
     (hx : (load (BitVec 32) 4 (p.add 4)).run m = pure (x, m₁)) :
     (second p).run m = pure (x, m₁) := by
-  have hp : (p.elem 4 1#64).elem 4 0#64 = p.add 4 := by simp [Ptr.elem, Ptr.add]
-  simp only [StateT.run] at hx
-  simp [second, zig_unfold, hp, hx]
+  have he : p.elem 4 1#64 = p.add 4 := by simp [Ptr.elem]
+  have he0 : (p.add 4).elem 4 0#64 = p.add 4 := by simp [Ptr.elem]
+  have hp := ptrProject_run (m := m) (·.elem 4 1#64) rfl hb (by rw [he]; exact hb4)
+  simp only [StateT.run] at hx hp
+  simp [second, zig_unfold, he, he0, hp, hx]
 
 /-- `@memset` of a whole slice. -/
 theorem fill_spec (s : Slice) (v : BitVec 8) (m m' : Mem)
@@ -64,11 +68,27 @@ theorem lenOr_none (m : Mem) : (lenOr none).run m = pure (0, m) := by
 theorem lenOr_some (s : Slice) (m : Mem) : (lenOr (some s)).run m = pure (s.len, m) := by
   simp [lenOr, zig_unfold, optPayload]
 
-/-- `s[a..b :0]` with `b < a` panics (`startGreaterThanEnd`). -/
-theorem subZ_start (s : Slice) (a b : BitVec 64) (h : b.toNat < a.toNat) (m : Mem) :
+/-- `s[a..b :0]` with `b < a` panics (`startGreaterThanEnd`). The AIR forms `s.ptr + a` before
+the check, so the pointer must be in bounds: a start past the end of the allocation is already
+illegal behaviour in the model (`ptrProject`; LLVM poison that the native panic never uses). -/
+theorem subZ_start (s : Slice) (a b : BitVec 64) (h : b.toNat < a.toNat) (m : Mem)
+    (hb : m.inBounds s.ptr = true) (ha : m.inBounds (s.ptr.elem 1 a) = true) :
     (subZ s a b).run m = throw .outOfBounds := by
   have hle : Zig.le false a b = false := by simp [Zig.le, BitVec.ule]; omega
-  simp [subZ, zig_unfold, hle]
+  have hp := ptrProject_run (m := m) (·.elem 1 a) rfl hb ha
+  simp only [StateT.run] at hp
+  simp [subZ, zig_unfold, hle, hp]
+
+/-- `s[a..b :0]` with a start `a > 0` outside the allocation is illegal behaviour (`ptrProject`,
+MM-3), whatever `b` is: forming `s.ptr + a` comes first. -/
+theorem subZ_oob (s : Slice) (a b : BitVec 64) (ha0 : a.toNat ≠ 0) (m : Mem)
+    (ha : m.inBounds (s.ptr.elem 1 a) = false) :
+    (subZ s a b).run m = throw .illegal := by
+  have hne : s.ptr.elem 1 a ≠ s.ptr := by
+    intro he; have := congrArg Ptr.off he; simp [Ptr.elem, Ptr.add_off] at this; omega
+  have hp := ptrProject_illegal (m := m) (·.elem 1 a) hne (by simp [ha])
+  simp only [StateT.run] at hp
+  simp [subZ, zig_unfold, hp]
 
 /-- `@memcpy` of two slices of different lengths panics (`copyLenMismatch`). -/
 theorem copy_len (d s : Slice) (h : d.len ≠ s.len) (m : Mem) :
@@ -99,7 +119,7 @@ example (σ : Placement) :
   have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
   apply second_spec _ _ 2
   have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
-  simp [load, loadBytes, recordAccess, hb, Mem.access,
+  all_goals simp [Mem.inBounds, load, loadBytes, recordAccess, hb, Mem.access,
     Mem.recordAt, Enc.size, intSize, intAlign, alignUp, Ptr.add, LawfulEnc.size_encode,
     Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, decodeLoad_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set,
     StateT.set, zig_unfold, Nat.add_mod, hA]

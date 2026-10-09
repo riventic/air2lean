@@ -48,6 +48,8 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := arr_memmove_run (d := d) (s := s) (n := n) (a := 4) hp
     hm hdj (by decide) (by decide) (by decide) hd hs hst
   refine ⟨(), m', h', ?_, hd', hm', hp', hst'⟩
+  have hpd := arr_ptrProject_run (i := d) hp hm (by omega)
+  have hps := arr_ptrProject_run (i := s) hp hm (by omega)
   have hl := sl.len.isLt
   have hdo : d.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
   have hso : s.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
@@ -58,10 +60,10 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   have hdc : d.toNat + n.toNat ≤ sl.len.toNat := by omega
   have hsc : s.toNat + n.toNat ≤ sl.len.toNat := by omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
-  rw [e4] at hr
-  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
+  rw [e4] at hr hpd hps
+  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr hpd hps
   simp (config := { maxSteps := 1000000 }) [copyWithin, zig_unfold, Zig.add, Zig.le, BitVec.ule,
-    checkSliceEnd, hdc, hsc, hdo, hso, hdl, hsl, hr]
+    checkSliceEnd, hdc, hsc, hdo, hso, hdl, hsl, hr, hpd, hps]
 
 /-- `@memset` of a whole slice: every item becomes `v`. -/
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :

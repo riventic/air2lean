@@ -2,10 +2,11 @@
 # Architecture audit 2/6 (memory model): reproduce the counterexamples of
 # docs/architecture-audit/memory-model.md. Each fixture is exported to AIR (patched compiler,
 # ReleaseSafe), translated, run in Lean from the generated `mem0 σ` under several placements,
-# and compared with the native ReleaseSafe build. MM-1, MM-2 and MM-4 are fixed by the
-# placement oracle (docs/address-placement.md): the script asserts agreement with native, or
-# that the result depends on the placement (Theorems.lean: the old statements are not
-# provable for every placement). MM-3 and MM-6 are still open: their divergence is asserted.
+# and compared with the native ReleaseSafe build. Every finding it covers is fixed: MM-1, MM-2
+# and MM-4 by the placement oracle (docs/address-placement.md; the script asserts agreement with
+# native, or that the result depends on the placement, and Theorems.lean that the old
+# statements are not provable for every placement), MM-3 by checked pointer formation, MM-5 by
+# the stack budget and MM-6 by the fail-closed emitter.
 #
 #   AIR2LEAN_AUDIT_ZIG_AIR=/opt/dev/air2lean-build/zig-air-0.16.0/bin/zig \
 #   AIR2LEAN_AUDIT_ZIG_NATIVE=$HOME/.cache/air2lean/host-0.16.0/zig \
@@ -75,9 +76,15 @@ case "$(field overAlign@misaligned "$L")" in error*) ;; *) fail 'MM-2: misaligne
 
 L=$work/oob_ptr.lean.txt N=$work/oob_ptr.native.txt
 echo "--- model"; cat "$L"; echo "--- native"; cat "$N"
-# MM-3: inbounds-GEP poison: native folds the comparison, the model compares addresses.
-[ "$(field 'oobCompare(2^63)' "$L")" = 1 ] && [ "$(field 'oobCompare(2^63)' "$N")" = 0 ] ||
-  { echo 'MM-3 no longer diverges' >&2; exit 1; }
+# MM-3 (fixed): in-bounds pointer arithmetic agrees; a pointer formed outside its allocation is
+# `.illegal` in the model (`Zig.ptrProject`), as the inbounds-GEP result is poison natively,
+# so every native answer refines it.
+[ "$(field 'oobCompare(1)' "$L")" = 1 ] && [ "$(field 'oobCompare(1)' "$N")" = 1 ] ||
+  { echo 'MM-3: in-bounds pointer arithmetic disagrees' >&2; exit 1; }
+for k in 'oobCompare(2^63)' 'oobPtrCompare(2^63)'; do
+  [ "$(field "$k" "$L")" = 'error Zig.Error.illegal' ] ||
+    { echo "MM-3: $k is not illegal behaviour in the model" >&2; exit 1; }
+done
 
 lean_run stack_depth StackDepth StackRunner.lean
 native_run stack_depth
@@ -89,12 +96,16 @@ echo "--- model"; cat "$L"; echo "--- native"; grep -v '^ \|^/\|^???\|^\s*\^' "$
   grep -q '^depth(1000) 1000$' "$N" && grep -q '^exit ' "$N" &&
   ! grep -q '^depth(10000000)' "$N" || { echo 'MM-5: model and native disagree on stack overflow' >&2; exit 1; }
 
-# Kernel checks (no `native_decide`): the old address theorems are not provable for every
-# placement (addrOfLocal = 4096, crossDistance = 9, overAlign never panics), and the emitter
-# placeholders are successful no-ops in the logic (MM-6, open).
+# Kernel checks: the old address theorems are not provable for every placement
+# (addrOfLocal = 4096, crossDistance = 9, overAlign never panics).
 sed '/^-- Appended to the fresh/,$d' "$work/memmodel.lean" > "$work/thm.lean"
 cat "$here/Theorems.lean" >> "$work/thm.lean"
 lake env lean "$work/thm.lean"
+# MM-6 (fixed): a `panic!`/`default` placeholder would be a successful no-op in the logic
+# (PanicDefault.lean). The emitter writes none; every formerly reachable arm is a checker
+# rejection, and output with a placeholder is never written.
 lake env lean "$here/PanicDefault.lean"
+python3 tests/roadmap/emitter-placeholders/test_cli.py "$translator"
+lake env lean --run tests/roadmap/emitter-placeholders/Gate.lean
 
-echo "memory-model audit: MM-1, MM-2, MM-4 fixed (placement oracle), MM-5 agrees (stack budget); MM-3, MM-6 reproduced"
+echo "memory-model audit: MM-1, MM-2, MM-3, MM-4, MM-5 and MM-6 agree with native or are fixed"

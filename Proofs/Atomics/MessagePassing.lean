@@ -788,7 +788,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       rw [StateT.run'_eq]
       refine WP.map ?_
       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-      rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
+      rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
       have ht₀ : ({ m with current := 1 } : Mem).current < ({ m with current := 1 } : Mem).threads.size := by
         show 1 < _; rw [hs2]; decide
       -- the pointer to `data`
@@ -800,7 +800,9 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       refine WP.bind (WP.liftM (fun e he => (data_noErr hi₁ hgu rfl e he).elim) fun _ m₂ hs => ?_)
       obtain ⟨hc₂, hth₂, hi₂⟩ := step_data hi₁ hgu rfl hs
       refine ⟨by rw [hth₂], ?_⟩
-      rw [show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+      -- the pointer to `flag`'s field (`ptrProject`: in bounds of the 16-byte context)
+      refine WP.bind (WP.callMC_ptrProject (hi₂.b2.ptrProject_run (o := 0) (k := 8) (by decide)) ?_)
+      rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
       have ht₂ : m₂.current < m₂.threads.size := by rw [hc₂, hth₂]; exact ht₀
       -- the pointer to `flag`
       refine WP.bind (WP.liftM (fun e he => (ctx_noErr hi₂ ht₂ (by decide) (by decide) hi₂.ctx.2 e he).elim)
@@ -809,7 +811,6 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       refine ⟨rfl, ?_⟩
       -- the release store of 1
       simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc, atomicStoreC]
-      rw [show fPtr.add 0 = fPtr from rfl]
       refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.wrote, hi₃, fun G₁ m₄ hg₁ hi₄ c hcr => ?_⟩)
       have hi₄' : Inv G₁ { m₄ with current := 1 } := (hi₄ : Inv G₁ m₄).grow (grows_current _ _)
       have ht₄ : ({ m₄ with current := 1 } : Mem).current < ({ m₄ with current := 1 } : Mem).threads.size := by
@@ -1025,11 +1026,14 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine ⟨by rw [hp₅.thr, hp₄.thr], ?_⟩
   -- the `MpCtx`
   dsimp only
-  rw [show cPtr.add 0 = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl, show cPtr.add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
+  rw [show cPtr = ⟨some 2, ((0 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₆ hs₆ => ?_)
   obtain ⟨hp₆, h2₆, hk₆⟩ := pre_store hp₅ hp₅.b2 (by rw [size_encode_ptr]; omega) (fun A hA => by omega) hs₆
   refine ⟨by rw [hp₆.thr, hp₅.thr], ?_⟩
+  dsimp only
+  refine WP.bind (WP.callMC_ptrProject (hp₆.b2.ptrProject_run (o := 0) (k := 8) (by decide)) ?_)
+  rw [show (⟨some 2, ((0 : Nat) : Int)⟩ : Ptr).add 8 = ⟨some 2, ((8 : Nat) : Int)⟩ from rfl]
   dsimp only
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b2 (by rw [size_encode_ptr]; omega)
     (fun A hA => by omega) e he).elim) fun _ m₇ hs₇ => ?_)
@@ -1051,11 +1055,10 @@ theorem main_spec (σ : Placement) (d : Nat) :
     funext u; unfold upd G0; split <;> simp_all
   -- the spawn
   refine WP.bind (WP.spawnC fun k hk => ⟨.pre, by rw [hG0]; exact hi₇, fun G₁ m₈ hg₁ hi₈ =>
-    ⟨.start, by simp [proto], fun child m₉ hf => ?_⟩⟩)
+    ⟨.start, by simp [proto, cPtr], fun child m₉ hf => ?_⟩⟩)
   obtain ⟨rfl, hc₉, hi₉⟩ := inv_fork ((hi₈ : Inv G₁ m₈).grow (grows_current m₈ 0)) hg₁ rfl hf
   dsimp only
   simp only [StateT.run_bind, pure_bind, bind_assoc, atomicLoadC]
-  rw [show (⟨some 1, ((0 : Nat) : Int)⟩ : Ptr).add 0 = fPtr from rfl]
   -- the acquire load of the flag
   refine WP.bind (WP.pickC fun k₁ hk₁ => ⟨.run, hi₉, fun G₂ m₁₀ hg₂ hi₁₀ c hcr => ?_⟩)
   have hi₁₀' : Inv G₂ { m₁₀ with current := 0 } := (hi₁₀ : Inv G₂ m₁₀).grow (grows_current _ _)

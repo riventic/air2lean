@@ -13,7 +13,7 @@ inductive Code where
   | constantFailure | signatureFailure | modelFailure | programFailure | profileFailure
   | duplicateFunction | calleeMissing | calleeBlocked | calleeAmbiguous | calleeExternUnbound
   | prerequisiteSkipped
-  | volatileAccess | packedLayout | paddedAtomic | asmVolatileEffect
+  | volatileAccess | packedLayout | paddedAtomic | asmVolatileEffect | emitterPlaceholder
   deriving BEq, Repr
 
 def Code.text : Code → String
@@ -46,6 +46,7 @@ def Code.text : Code → String
   | .packedLayout => "PACKED_LAYOUT"
   | .paddedAtomic => "PADDED_ATOMIC"
   | .asmVolatileEffect => "ASM_VOLATILE_EFFECT"
+  | .emitterPlaceholder => "EMITTER_PLACEHOLDER"
 
 inductive Phase where
   | cli | input | decode | canonicalize | normalize | check | program | profile

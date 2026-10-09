@@ -185,7 +185,7 @@ nonvacuity_witness load_store_null :=
     undef8_access, undef8_access, mem1_noRace (Array.replicate 8 .undef) .heap _ _ _ _, trivial⟩
 nonvacuity_witness ptrIsNull_nonzero := ⟨mem1 w32, p0.add 0, 4096, p0_addr, by decide, trivial⟩
 nonvacuity_witness ptrOfOptional_toOptional := ⟨mem1 w32, p0.add 0, 4096, p0_addr, by decide, trivial⟩
-nonvacuity_witness ptrProjectNullable_ok :=
+nonvacuity_witness ptrProjectNonnull_ok :=
   ⟨mem1 w32, p0.add 0, 4096, id, p0_addr, by decide, trivial⟩
 
 end Zig.Witness

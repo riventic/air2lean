@@ -37,7 +37,11 @@ REGRESSIONS = HERE / "regressions"
 CORPUS_MAX_BYTES = 16 * 1024
 TIMEOUT = 10
 SENTINEL = "sentinel\n"
-PLACEHOLDER = re.compile(r'panic! "air2lean:')
+# `Emit.lean`'s `placeholder`: an arm the checker should exclude (MM-6). The CLI rejects output
+# that contains one (`EMITTER_PLACEHOLDER`, a checker gap, so a finding); the oracle also catches
+# one that slipped through into written output.
+PLACEHOLDER = re.compile(r'air2lean_emitter_placeholder "')
+PLACEHOLDER_CODE = "EMITTER_PLACEHOLDER"
 CRASH_MARKERS = ("PANIC at", "INTERNAL PANIC", "uncaught exception", "Stack overflow",
                  "stack overflow", "Segmentation fault")
 CODES = {"CLI_ARGUMENTS", "INPUT_READ", "INPUT_LIMIT", "JSON_SYNTAX", "AIR_DECODE",
@@ -47,7 +51,8 @@ CODES = {"CLI_ARGUMENTS", "INPUT_READ", "INPUT_LIMIT", "JSON_SYNTAX", "AIR_DECOD
          "MODEL_FAILURE", "PROGRAM_FAILURE", "PROFILE_FAILURE", "DUPLICATE_FUNCTION",
          "CALLEE_MISSING", "CALLEE_BLOCKED", "CALLEE_AMBIGUOUS", "CALLEE_EXTERN_UNBOUND",
          "PREREQUISITE_SKIPPED",
-         "VOLATILE_ACCESS", "PACKED_LAYOUT", "PADDED_ATOMIC"}
+         "VOLATILE_ACCESS", "PACKED_LAYOUT", "PADDED_ATOMIC",
+         "ASM_VOLATILE_EFFECT", "EMITTER_PLACEHOLDER"}
 
 
 # --- corpus ------------------------------------------------------------------------------
@@ -285,6 +290,8 @@ def classify_emit(code, stderr, output):
             return "emit:partial-output"
         if not stderr.strip():
             return "emit:untyped-rejection"
+        if PLACEHOLDER_CODE in stderr:
+            return "emit:placeholder"
         return None
     return f"emit:exit-{code}"
 
@@ -331,6 +338,8 @@ def classify_diagnostics(code, stdout, stderr):
         return "diag:unknown-code"
     if code == 1 and not any(d.get("code") != "PREREQUISITE_SKIPPED" for d in diagnostics):
         return "diag:untyped-rejection"
+    if any(d.get("code") == PLACEHOLDER_CODE for d in diagnostics):
+        return "diag:placeholder"
     return None
 
 

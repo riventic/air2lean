@@ -47,8 +47,6 @@ def threadMutexS : States (BitVec 32) where
   ne02 := by decide
   ne12 := by decide
 
-theorem add0 (p : Ptr) : p.add 0 = p := by cases p; simp [Ptr.add]
-
 if_decl Thread_Mutex_FutexImpl_lock in
 /-- The contended value of the mutex word (Linux `FutexImpl`). The lock of the proofs has this
 `Lock.c`. -/
@@ -87,7 +85,7 @@ theorem tryLock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc]
-  rw [add0, add0, hp]
+  rw [hp]
   refine WP.bind (wp_orLock hP hc3 hg hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
   simp only [StateT.run_pure, pure_bind]
   refine WP.pure' ?_
@@ -122,7 +120,7 @@ theorem loop16_body (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
   have hS : threadMutexS.c = L.c := hc3.symm
   unfold Thread_Mutex_FutexImpl_lockSlow.loop16
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [add0, add0, hp, atomicRmwC_eq]
+  rw [hp, atomicRmwC_eq]
   refine WP.bind (wp_xchgLock hP threadMutexS hS (g := L.set g .spin Heap.empty) (L.ph_set _ _ _)
     hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨hr, hi₁⟩
@@ -157,7 +155,7 @@ theorem lockSlow_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.pt
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [add0, add0, hp]
+  rw [hp]
   -- the loop, from `spin`
   have hloop : ∀ G₃ m₃ d₃, lockInv P L t g d default G₃ m₃ d₃ →
       P.WP t ((do
@@ -221,7 +219,7 @@ theorem futexLock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.p
 
 /-- `Thread.Mutex.lock` is `FutexImpl.lock` (Linux). -/
 theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
-    (Thread_Mutex_FutexImpl_lock (p.add 0) >>= fun _ => pure ()) := by
+    (Thread_Mutex_FutexImpl_lock p >>= fun _ => pure ()) := by
   unfold Thread_Mutex_lock
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
     bind_assoc, map_bind, map_pure]
@@ -234,7 +232,7 @@ theorem lockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr) 
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d := by
   rw [lock_eq]
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
-    (futexLock_spec hP hc3 (by rw [add0]; exact hp) t g hg G m d hi))
+    (futexLock_spec hP hc3 hp t g hg G m d hi))
 
 /-- `FutexImpl.unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem futexUnlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
@@ -248,7 +246,7 @@ theorem futexUnlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [add0, add0, hp, atomicRmwC_eq]
+  rw [hp, atomicRmwC_eq]
   refine WP.bind (wp_xchgUnlock hP threadMutexS hS (g := g) hg hi
     fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hi₁⟩ | ⟨rfl, hi₁⟩
@@ -270,7 +268,7 @@ theorem futexUnlock_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L
 
 /-- `Thread.Mutex.unlock` is `FutexImpl.unlock` (Linux). -/
 theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
-    (Thread_Mutex_FutexImpl_unlock (p.add 0) >>= fun _ => pure ()) := by
+    (Thread_Mutex_FutexImpl_unlock p >>= fun _ => pure ()) := by
   unfold Thread_Mutex_unlock
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
     bind_assoc, map_bind, map_pure]
@@ -283,7 +281,7 @@ theorem unlockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   rw [unlock_eq]
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
-    (futexUnlock_spec hP hc3 (by rw [add0]; exact hp) t g hg G m d hi))
+    (futexUnlock_spec hP hc3 hp t g hg G m d hi))
 
 end_if
 
@@ -351,7 +349,6 @@ theorem lockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) 
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   unfold osUnfairLockC
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [add0]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInvD P L t g d) (fun _ => 0) (lockPostD P L t g d)
     (loopD_body hP hc1 hp t g hg d) default G m d ⟨by omega, g, .inl rfl, hi⟩))
   rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hL, hi'⟩
@@ -371,7 +368,7 @@ theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   unfold osUnfairUnlockC
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [add0, hp]
+  rw [hp]
   refine WP.bind (wp_xchgRel hP hc1 hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hi₁ => ?_)
   simp only [StateT.run_pure, pure_bind]
   rw [threadFutexWakeC_eq]

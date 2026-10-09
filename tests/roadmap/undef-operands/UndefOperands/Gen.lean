@@ -43,7 +43,7 @@ def localA  : Zig.MemM (BitVec 32) := do
   let e ← ((do
     let i0 ← pure (← get).local0
     Zig.storeBytes i0 4 (Zig.writeBytes (Zig.Enc.encode (({ a := (1 : BitVec 32), b := (0#32) } : Pair) : Pair)) 4 (Array.replicate 4 .undef))
-    let i2 ← pure (i0.add 0)
+    let i2 ← pure i0
     let i3 ← Zig.load (BitVec 32) 4 i2
     pure (.ret i3)) : Zig.MM localALocals localAExit).run' { (default : localALocals) with local0 := s0 }
   Zig.free s0
@@ -62,7 +62,7 @@ def localB  : Zig.MemM (BitVec 32) := do
   let e ← ((do
     let i0 ← pure (← get).local0
     Zig.storeBytes i0 4 (Zig.writeBytes (Zig.Enc.encode (({ a := (1 : BitVec 32), b := (0#32) } : Pair) : Pair)) 4 (Array.replicate 4 .undef))
-    let i2 ← pure (i0.add 4)
+    let i2 ← Zig.callM (Zig.ptrProject i0 (·.add 4))
     let i3 ← Zig.load (BitVec 32) 4 i2
     pure (.ret i3)) : Zig.MM localBLocals localBExit).run' { (default : localBLocals) with local0 := s0 }
   Zig.free s0
@@ -78,7 +78,7 @@ inductive recLenExit where
 def recLen  : Zig.MemM (BitVec 8) := do
   let e ← ((do
     Zig.storeBytes (⟨some 0, 0⟩ : Zig.Ptr) 2 (Zig.writeBytes (Zig.Enc.encode (({ len := (2 : BitVec 8), buf := (#v[(1 : BitVec 16), (0#16), (3 : BitVec 16)] : Vector (BitVec 16) 3) } : Rec) : Rec)) 2 (Array.replicate 2 .undef))
-    let i1 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 6)
+    let i1 ← Zig.callM (Zig.ptrProject (⟨some 0, 0⟩ : Zig.Ptr) (·.add 6))
     let i2 ← Zig.load (BitVec 8) 1 i1
     pure (.ret i2)) : Zig.MM recLenLocals recLenExit).run' (default : recLenLocals)
   match e with
@@ -93,7 +93,7 @@ inductive recMidExit where
 def recMid  : Zig.MemM (BitVec 16) := do
   let e ← ((do
     Zig.storeBytes (⟨some 0, 0⟩ : Zig.Ptr) 2 (Zig.writeBytes (Zig.Enc.encode (({ len := (2 : BitVec 8), buf := (#v[(1 : BitVec 16), (0#16), (3 : BitVec 16)] : Vector (BitVec 16) 3) } : Rec) : Rec)) 2 (Array.replicate 2 .undef))
-    let i1 ← pure ((⟨some 0, 0⟩ : Zig.Ptr).add 0)
+    let i1 ← pure (⟨some 0, 0⟩ : Zig.Ptr)
     let i2 ← Zig.callM (Zig.load (BitVec 16) 2 (i1.elem 2 (1 : BitVec 64)))
     pure (.ret i2)) : Zig.MM recMidLocals recMidExit).run' (default : recMidLocals)
   match e with

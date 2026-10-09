@@ -30,12 +30,16 @@ open Zig Zig.Conc Zig.Conc.Proto Threads Assn
 
 namespace Threads.Disjoint
 
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+attribute [local irreducible] Proto.WP
+
 /-! ## `writeFlag` -/
 
-theorem writeFlag_eq (c : Ptr) : writeFlag c = (Zig.load Ptr 8 (c.add 0) >>= fun xp =>
-    Zig.load (BitVec 32) 4 (c.add 8) >>= fun v => Zig.store (α := BitVec 32) 4 xp v) := by
+theorem writeFlag_eq (c : Ptr) : writeFlag c = (Zig.load Ptr 8 c >>= fun xp =>
+    ptrProject c (·.add 8) >>= fun q => Zig.load (BitVec 32) 4 q >>= fun v =>
+      Zig.store (α := BitVec 32) 4 xp v) := by
   unfold writeFlag
-  simp [StateT.run'_eq, StateT.run_bind, StateT.run_monadLift]
+  simp [StateT.run'_eq, StateT.run_bind, StateT.run_monadLift, callM, StateT.run_lift]
 
 /-- `writeFlag(c)` reads the flag `x` and the value `v` of its context `c` and writes `v` to the
 flag. -/
@@ -47,9 +51,12 @@ theorem writeFlag_spec {c x : Ptr} {Ac Ax : Nat} {cb xb : Array Byte} {v : BitVe
       (fun _ => bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack (Enc.encode v)) := by
   rw [writeFlag_eq]
   refine TTriple.bind_eq (v := x) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_
-    (TTriple.bind_eq (v := v) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_ ?_)
-  · exact (TTriple.loadAt (k := 0) (a := 8) rfl (by decide) (by rw [hcs]; decide)
+    (TTriple.bind_eq (v := c.add 8) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_
+    (TTriple.bind_eq (v := v) (P' := bytesAt c Ac 16 .stack cb ∗ bytesAt x Ax 4 .stack xb) ?_ ?_))
+  · exact (TTriple.loadAt (k := 0) (a := 8) (by simp) (by decide) (by rw [hcs]; decide)
       (by simp [hc0, hAc]) hcx).frame.conseq (fun _ h => h) fun _ _ h => sep_assoc h
+  · exact (TTriple.ptrProjectAt (k := 8) (by rw [hcs]; decide) (by rw [hcs]; decide)).frame.conseq
+      (fun _ h => h) fun _ _ h => sep_assoc h
   · exact (TTriple.loadAt (k := 8) (a := 4) rfl (by decide) (by rw [hcs]; decide)
       (by simp [hc0]; omega) hcv).frame.conseq (fun _ h => h) fun _ _ h => sep_assoc h
   · refine (TTriple.storeAt (k := 0) (a := 4) v (by simp [Ptr.add]) (by decide)
@@ -419,14 +426,32 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
     (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hy0, hAy]) (by decide)).frame.frameL)
     ho₅ hc₅ (by rw [ht₅, htt₄]; decide) F₅ fun _ m₆ h₆ ho₆ F₆ hc₆ ht₆ => ?_)
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 0) (a := 8) s2
-    rfl (by decide) (by simp; decide) (by simp [h10, hA1]) (by decide)).frame.frameL.frameL)
+    (by simp) (by decide) (by simp; decide) (by simp [h10, hA1]) (by decide)).frame.frameL.frameL)
     ho₆ hc₆ (by rw [ht₆, ht₅, htt₄]; decide) F₆ fun _ m₇ h₇ ho₇ F₇ hc₇ ht₇ => ?_)
+  have pr₇ : (ptrProject s6 (·.add 8)).run m₇ = pure (s6.add 8, m₇) := by
+    have hs₇ : h₇.Sub m₇.heap := by simpa [upd_self] using ho₇.sub 0
+    obtain ⟨_, F, hs⟩ := sep_sub_right F₇ hs₇
+    obtain ⟨_, F, hs⟩ := sep_sub_right F hs
+    obtain ⟨_, F, hs⟩ := sep_sub_left F hs
+    exact bytesAt_ptrProject_sub F hs (k := 8) (by rw [ctxBytes_one]; decide)
+      (by rw [ctxBytes_one]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₇ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 8) (a := 4) a
     rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h10]; omega) (by decide)).frame.frameL.frameL)
     ho₇ hc₇ (by rw [ht₇, ht₆, ht₅, htt₄]; decide) F₇ fun _ m₈ h₈ ho₈ F₈ hc₈ ht₈ => ?_)
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 0) (a := 8) s4
-    rfl (by decide) (by simp; decide) (by simp [h20, hA2]) (by decide)).frameL.frameL.frameL)
+    (by simp) (by decide) (by simp; decide) (by simp [h20, hA2]) (by decide)).frameL.frameL.frameL)
     ho₈ hc₈ (by rw [ht₈, ht₇, ht₆, ht₅, htt₄]; decide) F₈ fun _ m₉ h₉ ho₉ F₉ hc₉ ht₉ => ?_)
+  have pr₉ : (ptrProject s11 (·.add 8)).run m₉ = pure (s11.add 8, m₉) := by
+    have hs₉ : h₉.Sub m₉.heap := by simpa [upd_self] using ho₉.sub 0
+    obtain ⟨_, F, hs⟩ := sep_sub_right F₉ hs₉
+    obtain ⟨_, F, hs⟩ := sep_sub_right F hs
+    obtain ⟨_, F, hs⟩ := sep_sub_right F hs
+    exact bytesAt_ptrProject_sub F hs (k := 8) (by rw [ctxBytes_one]; decide)
+      (by rw [ctxBytes_one]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₉ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 8) (a := 4) b
     rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h20]; omega) (by decide)).frameL.frameL.frameL)
     ho₉ hc₉ (by rw [ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]; decide) F₉

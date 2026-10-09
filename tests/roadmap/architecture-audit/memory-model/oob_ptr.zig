@@ -1,7 +1,8 @@
 // MM-3: Zig 0.16 lowers `ptr_add`/`ptr_sub`/field pointers to `getelementptr inbounds`
 // (src/codegen/llvm/FuncGen.zig `ptraddScaled`). A pointer outside its allocation (beyond one
-// past the end) is LLVM poison, and LLVM folds comparisons on it. The model's `Ptr.add` accepts
-// any offset and compares concrete addresses, with no `.illegal`, so it answers differently.
+// past the end) is LLVM poison, and LLVM folds comparisons on it. The model forms derived
+// pointers with `Zig.ptrProject`, which is `.illegal` outside [0, size] of the block (fixed;
+// before, `Ptr.add` accepted any offset and the model compared the concrete addresses).
 const std = @import("std");
 
 pub noinline fn oobCompare(k: usize) bool {

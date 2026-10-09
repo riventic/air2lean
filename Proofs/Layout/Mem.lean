@@ -127,7 +127,7 @@ theorem numInt_spec (p : Ptr) (x : BitVec 32) :
   have hl2 := load_run (α := BitVec 32) hacc hv' (noRace_of_singleThread hstA.single _ _ _ _)
   refine ⟨x, mA.recordAt b (p.off.toNat + 0) (Enc.size (BitVec 32)) .read, hP, ?_, hd, ?_,
     sep_lift.mpr ⟨rfl, hp⟩, hstA.recordAt _ _ _ _⟩
-  · simp only [StateT.run] at hl hl2
+  · simp only [StateT.run, Ptr.add_zero] at hl hl2
     simp [numInt, zig_unfold, hl, hl2, Num.tag]
   · funext l; rw [Mem.heap_recordAt]; exact congrFun hmA l
 
@@ -164,7 +164,7 @@ theorem setNum_spec (p : Ptr) (n : Num) (x : BitVec 32) :
       refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
       · have e₁ : (store 1 (p.add 4) NumTag.int).run m = pure ((), m₁) := hr₁
         have e₂ : (store 4 (p.add 0) x).run m₁ = pure ((), m₂) := hr₂
-        simp only [StateT.run] at e₁ e₂
+        simp only [StateT.run, Ptr.add_zero] at e₁ e₂
         simp [setNum, zig_unfold, e₁, e₂]
       · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
       · apply Num.decode_of_int
@@ -191,7 +191,7 @@ theorem setNum_spec (p : Ptr) (n : Num) (x : BitVec 32) :
     refine ⟨(), m₂, h₂, ?_, hd₂, hm₂, ⟨A, S, K, _, ha, ?_, ?_, hb₂, hK⟩, hst₂⟩
     · have e₁ : (store 4 (p.add 0) x).run m = pure ((), m₁) := hr₁
       have e₂ : (store 1 (p.add 4) NumTag.int).run m₁ = pure ((), m₂) := hr₂
-      simp only [StateT.run] at e₁ e₂
+      simp only [StateT.run, Ptr.add_zero] at e₁ e₂
       simp [setNum, zig_unfold, e₁, e₂]
     · rw [writeBytes_size _ _ _ (by omega), hs₁]; rfl
     · apply Num.decode_of_int
@@ -253,9 +253,12 @@ theorem bump_ok_spec (p : Ptr) (x : BitVec 8) :
   refine ⟨(), mC, h₃, ?_, hd₃, hm₃, ⟨A, S, K, _, ha, ?_, ?_, hb₃, hK⟩, hstC⟩
   · have e₃ : (store 1 (p.add 2) (x + 1#8)).run
         (mA.recordAt b (p.off.toNat + 2) (Enc.size (BitVec 8)) .read) = pure ((), mC) := hr₃
-    simp only [StateT.run] at hl hl2 e₃
     have hpp : errPayloadPtr (BitVec 8) p = p.add 2 := by simp [errPayloadPtr, hpo]
-    simp [bump, zig_unfold, hl, enc, domain, hpp, hl2, Zig.isNonErr, Zig.isErr, Zig.addWrap, e₃]
+    have hpr := ptrProject_run (m := mA) (errPayloadPtr (BitVec 8)) rfl
+      (by simpa using bytesAt_inBounds hb hmA (k := 0) (by omega) (by omega))
+      (by rw [hpp]; exact bytesAt_inBounds hb hmA (k := 2) (by omega) (by omega))
+    simp only [StateT.run] at hl hl2 e₃ hpr
+    simp [bump, zig_unfold, hl, enc, domain, hpr, hpp, hl2, Zig.isNonErr, Zig.isErr, Zig.addWrap, e₃]
   · rw [writeBytes_size _ _ _ (by omega)]; exact hs
   · have := errUnion_decode_setPayload (bs := bs) (x + 1) hs hcode
     rwa [hpo] at this
@@ -275,8 +278,14 @@ theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h :
         alignUp]; omega)
       (by simp [Ptr.elem, Ptr.add]; omega)
   have hst := store_constGlobal v hacc rfl
-  simp only [StateT.run] at hst
-  simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst]
+  have hpr := ptrProject_run (m := mem0) (·.elem 4 i) (p := ⟨some 3, 0⟩) rfl
+    (inBounds_of rfl hb (by decide) (by simp [Enc.encode, padTo, intBytes, intSize,
+      intAlign, alignUp]))
+    (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by
+      simp [Ptr.elem, Ptr.add, Enc.encode, padTo, intBytes, intSize, intAlign, alignUp]
+      omega))
+  simp only [StateT.run] at hst hpr
+  simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst, hpr]
 
 /-! ## Non-vacuity and liveness witnesses: one value in one block -/
 

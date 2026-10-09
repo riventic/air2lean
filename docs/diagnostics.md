@@ -65,7 +65,7 @@ The schema vocabulary is fixed independently of message text:
 
 | Field | Values |
 | --- | --- |
-| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `CALLEE_EXTERN_UNBOUND`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT`, `PADDED_ATOMIC`, `ASM_VOLATILE_EFFECT` |
+| `code` | `CLI_ARGUMENTS`, `INPUT_READ`, `INPUT_LIMIT`, `JSON_SYNTAX`, `AIR_DECODE`, `EXPORTER_UNSUPPORTED`, `OPTIMIZED_UNSUPPORTED`, `CANONICAL_FAILURE`, `NORMALIZATION_FAILURE`, `STRUCTURE_FAILURE`, `TYPE_FAILURE`, `GLOBAL_FAILURE`, `MEMORY_FAILURE`, `INSTRUCTION_FAILURE`, `CONSTANT_FAILURE`, `SIGNATURE_FAILURE`, `MODEL_FAILURE`, `PROGRAM_FAILURE`, `PROFILE_FAILURE`, `DUPLICATE_FUNCTION`, `CALLEE_MISSING`, `CALLEE_BLOCKED`, `CALLEE_AMBIGUOUS`, `CALLEE_EXTERN_UNBOUND`, `PREREQUISITE_SKIPPED`, `VOLATILE_ACCESS`, `PACKED_LAYOUT`, `PADDED_ATOMIC`, `ASM_VOLATILE_EFFECT`, `EMITTER_PLACEHOLDER` |
 | `phase` | `cli`, `input`, `decode`, `canonicalize`, `normalize`, `check`, `program`, `profile` |
 | `category` | `malformed_input`, `unsupported_semantics`, `validation_failure`, `resource_limit`, `io_failure`, `skipped_prerequisite` |
 | `anchor.id_space` | `unavailable`, `exported`, `canonical` |
@@ -95,6 +95,14 @@ anchor) marks inline asm that is neither on the reviewed allowlist (`Air2Lean/As
 nor a declared device event of `--device-contract`: `rdtsc`, `rdrand`, port I/O, barriers,
 output-less asm and every `memory` clobber ([volatile-effects.md](volatile-effects.md#inline-asm)).
 It also replaces the generic `INSTRUCTION_FAILURE` check of that instruction.
+
+`EMITTER_PLACEHOLDER` (phase `program`, category `validation_failure`) marks a program that
+passed every check but reached an emitter arm that the checker should exclude
+(`Air2Lean/Emit.lean`'s `placeholder`). Such an arm used to write `panic!` or `default`, which
+is a successful no-op in the logic (`docs/architecture-audit/memory-model.md`, MM-6). The CLI
+rejects the output before writing it and check-only mode runs the same gate (with the default emission options, since it takes no emission flags), so both modes
+agree. It is a translator bug: every known arm has a checker rule
+(`tests/roadmap/emitter-placeholders`).
 
 `diagnostics_observed` counts attempted diagnostic additions; it is not the total
 number of blockers in the inputs. Dependency reporting stops once truncated.

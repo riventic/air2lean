@@ -103,7 +103,7 @@ def atomicWorker (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) (p3 : BitVec 32)
     let i4 ← pure (Zig.addWrap p2 p3)
     Zig.store (α := BitVec 32) 4 p0 i4
     match ← ((do
-      let i7 ← pure (p1.add 0)
+      let i7 ← pure p1
       let i8 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 4 i7 p3
       pure (.br6 i8)) : Zig.CM Tgt atomicWorkerLocals atomicWorkerExit) with
     | .br6 _v6 => (do
@@ -161,7 +161,7 @@ def atomicShared (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
         let i28 ← pure (Zig.addWrap i26 i27)
         let i29 ← pure (i2)
         match ← ((do
-          let i31 ← pure (i29.add 0)
+          let i31 ← pure i29
           let i32 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i31
           pure (.br30 i32)) : Zig.CM Tgt atomicSharedLocals atomicSharedExit) with
         | .br30 v30 => (do
