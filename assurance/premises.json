@@ -125,7 +125,7 @@
     {"premise": "ALC-04", "scope": "closure", "pattern": "allocSentinel|freeSentinel"},
     {"premise": "ALC-05", "scope": "closure", "pattern": "(?:^|\\.)realloc|reallocSentinel|appendSentinel"},
     {"premise": "ALC-06", "scope": "closure", "pattern": "vtableAlloc|vtableResize|vtableRemap|vtableFree|rawAlignOk"},
-    {"premise": "ALC-08", "scope": "closure", "pattern": "reuseAddr|withReuse|ProvenanceMode|liveBlock"},
+    {"premise": "ALC-08", "scope": "closure", "pattern": "withPlacement|ProvenanceMode|liveBlock"},
     {"premise": "ALC-07", "scope": "closure", "pattern": "AllocRef|(?:^|\\.)(?:Arena\\.(?:init|deinit)|FixedBuffer\\.init|Owned\\.(?:init|reset))|owned(?:RawAlloc|AllocBytes|Free|RemapBytes|State)|resetOwned"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
     {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC"},
@@ -170,7 +170,7 @@
     "ASM-01": ["TRU-04"],
     "ASM-02": ["ASM-01"],
     "EXT-02": ["EXT-01"],
-    "SEM-02": ["SEM-01"],
+    "SEM-02": ["SEM-01", "SEM-06"],
     "SEM-03": ["SEM-01"],
     "THR-01": ["SEM-02"],
     "TRU-02": ["TRU-03", "SEM-01"]

@@ -23,7 +23,7 @@ REPAIRS = {
     'moved-old-stays-live': ('    poisonFree s.ptr s.len.toNat\n', '    pure ()\n'),
     'failure-mutates-old': ('  if m.allocPolicy.byteRemap = .fail then return none',
                             '  if m.allocPolicy.byteRemap = .fail then\n    poisonFree s.ptr s.len.toNat\n    return none'),
-    'in-place-frame-overlap': ('    if blk.bytes.size < n ∧ m.byteRemapLast b blk ≠ true then return none\n', ''),
+    'in-place-frame-overlap': ('    if blk.bytes.size < n ∧ m.growFree b blk n ≠ true then return none\n', ''),
 }
 
 

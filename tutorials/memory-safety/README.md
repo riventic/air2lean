@@ -162,8 +162,8 @@ The theorems of `Main.lean` hold in the model under the premises of
   [TRU-03](../../docs/premises.md#tru-03): the Lean kernel, the Zig exporter and translator, and
   the backend and native execution are trusted.
 
-The hypothesis `m.Seq` (`ZigLean/Sep/Heap.lean`) says that one thread runs and that every live
-block lies below `nextAddr`. The empty memory `{}` satisfies it (`default_seq`), and every
+The hypothesis `m.Seq` (`ZigLean/Sep/Heap.lean`) says that one thread runs. It says nothing
+about addresses, which the placement chooses. The empty memory `{}` satisfies it (`default_seq`), and every
 single-threaded memory operation the specs use preserves it.
 
 ## Limits
