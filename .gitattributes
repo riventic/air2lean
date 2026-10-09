@@ -1,0 +1,5 @@
+# Collapse generated artifacts in GitHub diffs (does not change repo size).
+tests/golden/**/*.json linguist-generated=true
+coverage/*.json linguist-generated=true
+qualification/**/*.json linguist-generated=true
+qualification/**/*.log linguist-generated=true
