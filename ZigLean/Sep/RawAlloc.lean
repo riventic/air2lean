@@ -120,7 +120,8 @@ theorem vtableFree_run (a : Allocator) {m : Mem} {s : Slice} {h hF : Heap} {A : 
 pointer and address. -/
 theorem rawInPlace_owned {m : Mem} {b : BlockId} {blk : Block} {hF : Heap} {n : Nat}
     (hblk : m.blocks[b]? = some blk) (hl : blk.live)
-    (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF) (hst : m.Seq) :
+    (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF) (hst : m.Seq)
+    (hlo : blk.kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     ∃ r m', (rawInPlace b blk n).run m = pure (r, m') ∧ m'.Seq ∧
       if r then Heap.Disjoint (blockHeap b { blk with bytes := remapBytes blk.bytes n }) hF ∧
           m'.heap = blockHeap b { blk with bytes := remapBytes blk.bytes n } ∪ hF ∧
@@ -142,9 +143,9 @@ theorem rawInPlace_owned {m : Mem} {b : BlockId} {blk : Block} {hF : Heap} {n : 
   have hbr : recorded.blocks[b]? = some blk := by simpa [recorded, Mem.recordAt] using hblk
   have hmr : recorded.heap = blockHeap b blk ∪ hF := by
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
-  obtain ⟨hd', hm', hp'⟩ := afterByteRemap_owned_frame hbr hl hd hmr n
+  obtain ⟨hd', hm', hp'⟩ := afterByteRemap_owned_frame hbr hl hd hmr n hlo
   refine ⟨true, recorded.afterByteRemap b blk n, ?_,
-    afterByteRemap_seq hbr hl hd hmr (hst.recordAt _ _ _ _) n, hd', hm', hp'⟩
+    afterByteRemap_seq hbr hl hd hmr (hst.recordAt _ _ _ _) n hlo, hd', hm', hp'⟩
   have hg' : ¬ (blk.bytes.size < n ∧ m.byteRemapLast b blk = false) := by simpa using hg
   have hc' : ¬ (m.allocPolicy.byteRemap ≠ .inPlace ∨ m.allocPolicy.maxBytes < n) := hc
   simp only [ne_eq] at hc'

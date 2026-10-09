@@ -626,10 +626,12 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
-  global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
-  misaligned or dead accesses are `.illegal`. Undefined bytes are explicit. `@returnAddress()`
-  and an `undefined` pointer operand (`--allocator-model translated`) read the explicit oracle
-  `Mem.arbitrary`, so a theorem over every initial memory covers every value sequence.
+  global, OS mapping). Layout comes from `Zig.Enc` instances checked against the profile.
+  Out-of-bounds, misaligned or dead accesses are `.illegal`; so is an access below an OS
+  mapping's first live offset (`BlockKind.mapped lo`). Undefined bytes are explicit.
+  `@returnAddress()` and an `undefined` pointer operand (`--allocator-model translated`) read
+  the explicit oracle `Mem.arbitrary`, so a theorem over every initial memory covers every
+  value sequence.
 - Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
@@ -716,10 +718,27 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `mremap` (Zig 0.16.0, x86_64-linux or aarch64-macos) is a call of `Zig.Os.mmap`, `munmap` or
   `mremap`. Everything above that boundary, `std.heap.PageAllocator` and the `mem.Allocator`
   wrappers included, is translated from its AIR; the syscall and libc layer below it is not.
-  The current definitions are stubs that throw `.unspecified`, so no successful page mapping
-  is provable; the page-mapping model that replaces them is believed to match the OS.
-- Derived from: `ZigLean.Os.Mmap`; tokens `Zig.Os`.
-- Sources: [allocator-model.md](allocator-model.md), `ZigLean/Os/Mmap.lean`.
+  The kernel's anonymous page mappings behave as `ZigLean/Os/Mmap.lean` says
+  ([os-mmap.md](os-mmap.md)). `mmap` with any hint, `PROT.READ|WRITE`,
+  `MAP.PRIVATE|ANONYMOUS`, `fd = -1`, offset 0 and `length > 0` either returns
+  `error.OutOfMemory` (the failure decision is the allocator's `Mem.allocDenied`, one attempt
+  index for every request) with no other change, or a fresh block of kind `.mapped 0` of
+  exactly `length` zero bytes at a page-aligned address above every earlier block. The
+  kernel fails such a mapping only with `ENOMEM` (no other `MMapError` member). Other argument
+  combinations are outside the model (`.unspecified`); `length = 0` is `.illegal`. `munmap` of
+  the whole live range of one mapping ends it, of a page-aligned prefix moves its first live
+  offset, of a page tail shrinks it; any other range (middle, past the mapping, not a live
+  mapping: a double `munmap`) is `.illegal`, stricter than the kernel. `mremap` (Linux only)
+  of a whole live mapping with flags 0 or `MAYMOVE`, no new address and `new_len > 0` shrinks
+  in place, or grows (an allocation attempt) in place, by a move to a fresh page-aligned block
+  under `MAYMOVE` (oracle `mremapMoves`, or no room), or fails with `error.OutOfMemory`;
+  grown bytes up to the old page end are undefined, the rest zero. Page size: 4 KiB
+  (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). Addresses are fresh:
+  no address is reused after `munmap`.
+- Derived from: `ZigLean.Os.Mmap`, `ZigLean.Sep.Mmap`; tokens `Zig.Os`; implies SEM-02.
+- Sources: [os-mmap.md](os-mmap.md), [allocator-model.md](allocator-model.md),
+  `ZigLean/Os/Mmap.lean`, `tests/roadmap/os-mmap/Check.lean`, Zig 0.16.0 `lib/std/posix.zig`,
+  `lib/std/heap/PageAllocator.zig`.
 
 ## Compiler and tool trust
 

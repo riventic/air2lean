@@ -56,7 +56,8 @@ theorem wholeBlock_frame_none {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
 same pointer/address and updated size metadata. An arbitrary disjoint caller frame is exact. -/
 theorem afterByteRemap_owned_frame {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
     (hb : m.blocks[b]? = some blk) (hl : blk.live)
-    (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF) (n : Nat) :
+    (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF) (n : Nat)
+    (hlo : blk.kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     let next := { blk with bytes := remapBytes blk.bytes n }
     Heap.Disjoint (blockHeap b next) hF ∧
       (m.afterByteRemap b blk n).heap = blockHeap b next ∪ hF ∧
@@ -78,7 +79,7 @@ theorem afterByteRemap_owned_frame {m : Mem} {b : BlockId} {blk : Block} {hF : H
         exact Array.getElem?_setIfInBounds_self_of_lt hlt
       simp only [Mem.afterByteRemap, Mem.heap, e]
       by_cases hy : y < (remapBytes blk.bytes n).size
-      · simp [blockHeap, hf, hl, hy, getElem!_pos]
+      · simp [blockHeap, hf, hl, hy, hlo, getElem!_pos]
       · simp [blockHeap, hf, hl, hy]
     · have e : (m.blocks.set! b { blk with bytes := remapBytes blk.bytes n })[x]? = m.blocks[x]? := by
         rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
@@ -110,8 +111,9 @@ retain their old bounds, and every resized cell lies below the enlarged boundary
 theorem afterByteRemap_seq {m : Mem} {b : BlockId} {blk : Block} {hF : Heap}
     (hb : m.blocks[b]? = some blk) (hl : blk.live)
     (hd : Heap.Disjoint (blockHeap b blk) hF) (hm : m.heap = blockHeap b blk ∪ hF)
-    (hst : m.Seq) (n : Nat) : (m.afterByteRemap b blk n).Seq := by
-  obtain ⟨_, hm', _⟩ := afterByteRemap_owned_frame hb hl hd hm n
+    (hst : m.Seq) (n : Nat) (hlo : blk.kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    (m.afterByteRemap b blk n).Seq := by
+  obtain ⟨_, hm', _⟩ := afterByteRemap_owned_frame hb hl hd hm n hlo
   refine ⟨(afterByteRemap_sameThreads m b blk n).singleThread hst.single, ?_⟩
   intro l c hc
   rw [hm', Heap.union_apply] at hc

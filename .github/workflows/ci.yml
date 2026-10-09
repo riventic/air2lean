@@ -996,6 +996,15 @@ jobs:
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
           bash tests/roadmap/error-width/check.sh
 
+      # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
+      # separation-logic rules and kernel-checked examples, and the runtime regressions.
+      - name: OS page-mapping model rules and runtime regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.Mmap
+          lake env lean tests/roadmap/os-mmap/Check.lean
+
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane
       # pointers: the native lanes.zig test, a fresh export, the committed translations,

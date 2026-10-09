@@ -803,7 +803,7 @@ theorem ctx_load_noErr {T : Type} [Enc T] {G : ThreadId → Gh} {m : Mem} {u : T
       Enc.decode (blk.bytes.extract (16 * (u - 1) + j) (16 * (u - 1) + j + Enc.size T)) = pure v)
     (e : Error) : ((load T a (p.add j)).run m).run ≠ some (.error e) := by
   obtain ⟨-, hlt, hk4, rfl⟩ := inv_kid n hi hg
-  obtain ⟨⟨blk, hb, hl, hs, -, hadd⟩, -, -, hf, -⟩ := he
+  obtain ⟨⟨blk, hb, hl, hs, hk, hadd⟩, -, -, hf, -⟩ := he
   have hoff : ((ctxPtr (u - 1)).add j).off = ((16 * (u - 1) + j : Nat) : Int) := by
     simp [ctxPtr, Ptr.add]
   have hacc : m.access ((ctxPtr (u - 1)).add j) (Enc.size T) a =

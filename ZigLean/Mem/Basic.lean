@@ -81,7 +81,24 @@ inductive BlockKind where
   `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
   free through one allocator of a block that another one made throws `.illegal`. -/
   | owned (a : AllocId)
+  /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OSM-01). The mapping's
+  live bytes are the offsets from `lo` to the block's size: `munmap` of a page prefix moves `lo`
+  up, of a page tail shrinks the bytes, of the whole mapping ends the block. An access below
+  `lo` throws `.illegal` (`Mem.access`), as one past the size does. -/
+  | mapped (lo : Nat)
   deriving DecidableEq, Repr
+
+/-- The first live offset of a block: `lo` for an OS mapping (`.mapped lo`), 0 otherwise. -/
+def BlockKind.mappedLo : BlockKind → Nat
+  | .mapped lo => lo
+  | _ => 0
+
+@[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
+@[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_global : BlockKind.global.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_constGlobal : BlockKind.constGlobal.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_owned (a : AllocId) : (BlockKind.owned a).mappedLo = 0 := rfl
 
 structure Block where
   bytes : Array Byte
@@ -235,6 +252,15 @@ inductive ProvenanceMode where
   | liveBlock
   deriving DecidableEq, Repr, Inhabited
 
+/-- The OS page-mapping oracle (premise OSM-01, `ZigLean/Os/Mmap.lean`). Whether an `mmap` or a
+growing `mremap` fails is the allocator failure decision (`Mem.allocDenied`, one attempt index
+for every request); this picks only whether a growth that may move does move, from the attempt
+index and the requested length in bytes. -/
+structure OsPolicy where
+  /-- A growth with `MREMAP.MAYMOVE` moves the mapping to a fresh address. -/
+  mremapMoves : Nat → Nat → Bool := fun _ _ => false
+  deriving Inhabited
+
 /-- Selected allocator environment: a per-request cap, finite failure indices, an arbitrary
 failure oracle over (attempt index, request bytes) and an optional live-heap budget.
 The cap and finite list are special cases of the oracle (`AllocPolicy.asOracle` in
@@ -256,13 +282,15 @@ structure AllocPolicy where
   reuseAddr : BlockId → Option Nat := fun _ => none
   /-- `@ptrFromInt` of an address that more than one block covers (only under reuse). -/
   provenance : ProvenanceMode := .strict
+  /-- The move choice of the OS page-mapping model (`ZigLean/Os/Mmap.lean`). -/
+  os : OsPolicy := {}
   deriving Inhabited
 
 /-- The oracles are functions, so they are shown opaquely. -/
 instance : Repr AllocPolicy where
   reprPrec p _ := f!"\{ maxBytes := {repr p.maxBytes}, failures := {repr p.failures}, " ++
     f!"byteRemap := {repr p.byteRemap}, fails := <oracle>, budget := {repr p.budget}, " ++
-    f!"reuseAddr := <oracle>, provenance := {repr p.provenance} }"
+    f!"reuseAddr := <oracle>, provenance := {repr p.provenance}, os := <oracle> }"
 
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
@@ -408,8 +436,9 @@ def undefPtr : MemM Ptr := do
 def alignUp (n a : Nat) : Nat := if a = 0 then n else (n + a - 1) / a * a
 
 /-- The block and the offset of an access of `n` bytes at `p` that needs alignment `align`.
-Throws `.illegal` if the block is dead, the bytes are not all in the block, or the address is
-not a multiple of `align`. -/
+Throws `.illegal` if the block is dead, the bytes are not all in the block (for an OS mapping:
+not all at or above its first live offset, `BlockKind.mappedLo`), or the address is not a
+multiple of `align`. -/
 def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block × Nat) :=
   match p.block with
   | none => throw .illegal
@@ -417,7 +446,8 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
     match m.blocks[b]? with
     | none => throw .illegal
     | some blk =>
-      if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0
+      if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0 ∧
+          blk.kind.mappedLo ≤ p.off.toNat
       then pure (b, blk, p.off.toNat) else throw .illegal
 
 /-- `Mem.access` for a write: a write to a `const` global throws `.illegal`. -/

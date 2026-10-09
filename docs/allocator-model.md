@@ -35,9 +35,9 @@ The model may return only `error.OutOfMemory`; the checker requires every call s
 set to admit it. `mremap` is Linux-only (`std.posix.MREMAP` is `void` on macOS). The call graph
 is cut there, above the syscall (Linux) and libc (macOS) layers, so their inline assembly and
 `extern` functions are never translated. A translated AIR file named `posix.mmap` is rejected
-as a conflict with the built-in row. The current definitions are stubs that throw
-`.unspecified`: a program that maps pages elaborates, but no successful mapping is provable
-until the page-mapping model replaces them (premise [OSM-01](premises.md#osm-01)).
+as a conflict with the built-in row. The definitions are the page-mapping model of premise
+[OSM-01](premises.md#osm-01) ([os-mmap.md](os-mmap.md)); its separation-logic rules are in
+`ZigLean/Sep/Mmap.lean`.
 
 ## What translated mode admits
 

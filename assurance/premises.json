@@ -167,6 +167,7 @@
     "ZigLean.Sep.AllocSpec.Ops": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.AllocSpec.Norm": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.AllocSpec.Dispatch": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.Mmap": ["OSM-01"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
