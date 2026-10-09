@@ -200,10 +200,6 @@ def Covers (b : BlockId) (lo hi : Nat) (h : Heap) : Prop := ∀ i, lo ≤ i → 
 /-- `h` owns a byte of block `b`, whose size is `S`. -/
 def Pins (b : BlockId) (S : Nat) (h : Heap) : Prop := ∃ o c, h (b, o) = some c ∧ c.size = S
 
-theorem Pins.union_left {b : BlockId} {S : Nat} {h₁ h₂ : Heap} (h : Pins b S h₁) :
-    Pins b S (h₁ ∪ h₂) := by
-  obtain ⟨o, c, hc, hS⟩ := h; exact ⟨o, c, by simp [hc], hS⟩
-
 theorem regionIn_pins {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {h : Heap}
     {b : BlockId} (hr : regionIn p A S K a bs h) (hb : p.block = some b) (hpos : 0 < bs.size) :
     Pins b S h := by

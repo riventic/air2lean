@@ -231,23 +231,30 @@ theorem flatten_replicate_single (x : Byte) (n : Nat) :
 
 theorem enc_size_byte : Enc.size (BitVec 8) = 1 := rfl
 
-/-- `@memset(region, undefined)` of all `n` bytes, in the region's block. -/
-theorem memsetUndefIn {n : BitVec 64} (hn : n.toNat = bs.size) :
-    TotalTriple (regionIn p A S K a bs) (memset (α := BitVec 8) 1 p n none)
-      (fun _ => regionIn p A S K a (Array.replicate n.toNat .undef)) := by
+/-- The bytes of one `u8` item of `@memset(_, v)`: `v`, or undefined. -/
+def memsetItem : Option (BitVec 8) → Array Byte
+  | some x => Enc.encode x
+  | none => Array.replicate 1 .undef
+
+theorem memsetItem_size (v : Option (BitVec 8)) : (memsetItem v).size = 1 := by
+  cases v with
+  | none => rfl
+  | some x => exact LawfulEnc.size_encode x
+
+/-- `@memset(region, v)` of all `n` bytes, in the region's block. -/
+theorem memsetIn (v : Option (BitVec 8)) {n : BitVec 64} (hn : n.toNat = bs.size) :
+    TotalTriple (regionIn p A S K a bs) (memset (α := BitVec 8) 1 p n v)
+      (fun _ => regionIn p A S K a (Array.replicate n.toNat (memsetItem v)).flatten) := by
   intro m hP hF hd hm hp hst
   by_cases h0 : n.toNat = 0
   · have hbs : bs = #[] := Array.eq_empty_of_size_eq_zero (by omega)
     subst hbs
-    refine ⟨(), m, hP, ?_, hd, hm, by rw [h0]; exact hp, hst⟩
+    refine ⟨(), m, hP, ?_, hd, hm, by rw [h0]; simpa using hp, hst⟩
     simp [memset, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
   obtain ⟨hA, hK, hb⟩ := hp
-  let bs' : Array Byte :=
-    (Array.replicate n.toNat (Array.replicate (Enc.size (BitVec 8)) Byte.undef)).flatten
-  have hs' : bs' = Array.replicate n.toNat .undef := by
-    show (Array.replicate n.toNat (Array.replicate 1 Byte.undef)).flatten = _
-    exact flatten_replicate_single _ _
-  have hsz : bs'.size = bs.size := by rw [hs', Array.size_replicate]; exact hn
+  let bs' : Array Byte := (Array.replicate n.toNat (memsetItem v)).flatten
+  have hsz : bs'.size = bs.size := by
+    simp only [bs', Array.size_flatten_replicate, memsetItem_size, Nat.mul_one]; exact hn
   have hp0 : p = p.add ((0 : Nat) : Int) := by simp [Ptr.add]
   have ha0 : (A + p.off.toNat + 0) % 1 = 0 := Nat.mod_one _
   obtain ⟨b, blk, hacc, -, -, -, -⟩ := bytesAt_access (q := p) (k := 0) (n := bs'.size) (a := 1)
@@ -255,13 +262,20 @@ theorem memsetUndefIn {n : BitVec 64} (hn : n.toNat = bs.size) :
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := 1)
     (bs' := bs') hb hm hd hp0 (by omega) (by omega) ha0 hst hK
   rw [writeBytes_all hsz] at hb'
-  refine ⟨(), m', h', ?_, hd', hm', ⟨hA, hK, hs' ▸ hb'⟩, hst'⟩
+  refine ⟨(), m', h', ?_, hd', hm', ⟨hA, hK, hb'⟩, hst'⟩
   have e : n.toNat * Enc.size (BitVec 8) = bs'.size := by
     rw [hsz, enc_size_byte, Nat.mul_one]; exact hn
   have hne : ¬ Enc.size (BitVec 8) = 0 := by rw [enc_size_byte]; decide
   simp only [StateT.run] at hrun
   simp only [memset, h0, hne, or_self, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
-  exact hrun
+  cases v <;> exact hrun
+
+/-- `@memset(region, undefined)` of all `n` bytes, in the region's block. -/
+theorem memsetUndefIn {n : BitVec 64} (hn : n.toNat = bs.size) :
+    TotalTriple (regionIn p A S K a bs) (memset (α := BitVec 8) 1 p n none)
+      (fun _ => regionIn p A S K a (Array.replicate n.toNat .undef)) :=
+  TotalTriple.conseq (memsetIn none hn) (fun _ x => x) fun _ _ x => by
+    rwa [show memsetItem none = #[Byte.undef] from rfl, flatten_replicate_single] at x
 
 /-- `@memset(region, undefined)` of all `n` bytes. -/
 theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :

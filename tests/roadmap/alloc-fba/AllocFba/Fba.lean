@@ -32,6 +32,8 @@ open Zig Gen Assn
 
 namespace FBA
 
+open Zig.Wrap (toNat_ofNat_lt)
+
 /-! ## The invariant -/
 
 /-- The buffer: its pointer and length, the address, size and kind of its block, and one byte
@@ -329,9 +331,6 @@ theorem gt_eq (a b : BitVec 64) : Zig.gt false a b = decide (b.toNat < a.toNat) 
 
 theorem le_eq (a b : BitVec 64) : Zig.le false a b = decide (a.toNat ≤ b.toNat) := by
   simp [Zig.le, BitVec.ule]
-
-theorem toNat_ofNat_lt {n : Nat} (h : n < 2 ^ 64) : (BitVec.ofNat 64 n).toNat = n := by
-  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
 
 theorem ofInt_toNat {x : Int} (h0 : 0 ≤ x) : (BitVec.ofInt 64 x).toNat = x.toNat % 2 ^ 64 := by
   obtain ⟨N, rfl⟩ : ∃ N : Nat, x = N := ⟨x.toNat, (Int.toNat_of_nonneg h0).symm⟩

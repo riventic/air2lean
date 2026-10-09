@@ -100,48 +100,6 @@ theorem tc_exit {α : Type} {Cur : Assn} {c : MemM α} {Post : α → Assn}
 
 end Steps
 
-/-! ## Memory steps -/
-
-/-- `@memset(s, v)` of a region with a defined byte. -/
-theorem memsetIn {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {n : BitVec 64}
-    (v : BitVec 8) (hn : n.toNat = bs.size) :
-    TotalTriple (regionIn p A S K a bs) (memset (α := BitVec 8) 1 p n (some v))
-      (fun _ => regionIn p A S K a (Array.replicate n.toNat (Enc.encode v)).flatten) := by
-  intro m hP hF hd hm hp hst
-  by_cases h0 : n.toNat = 0
-  · have hbs : bs = #[] := Array.eq_empty_of_size_eq_zero (by omega)
-    subst hbs
-    refine ⟨(), m, hP, ?_, hd, hm, by rw [h0]; simpa using hp, hst⟩
-    simp [memset, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
-  obtain ⟨hA, hK, hb⟩ := hp
-  let bs' : Array Byte := (Array.replicate n.toNat (Enc.encode v)).flatten
-  have he1 : (Enc.encode v).size = 1 := LawfulEnc.size_encode v
-  have hsz : bs'.size = bs.size := by
-    simp only [bs', Array.size_flatten_replicate, he1]; omega
-  have hp0 : p = p.add ((0 : Nat) : Int) := by simp [Ptr.add]
-  have ha0 : (A + p.off.toNat + 0) % 1 = 0 := Nat.mod_one _
-  obtain ⟨b, blk, hacc, -, -, -, -⟩ := bytesAt_access (q := p) (k := 0) (n := bs'.size) (a := 1)
-    hb hm hp0 (by omega) (by omega) ha0
-  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := 1)
-    (bs' := bs') hb hm hd hp0 (by omega) (by omega) ha0 hst hK
-  rw [writeBytes_all hsz] at hb'
-  refine ⟨(), m', h', ?_, hd', hm', ⟨hA, hK, hb'⟩, hst'⟩
-  have e : n.toNat * Enc.size (BitVec 8) = bs'.size := by
-    rw [hsz, Region.enc_size_byte, Nat.mul_one]; exact hn
-  have hne : ¬ Enc.size (BitVec 8) = 0 := by rw [Region.enc_size_byte]; decide
-  simp only [StateT.run] at hrun
-  simp only [memset, h0, hne, or_self, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
-  exact hrun
-
-/-- A load at the start of a region. -/
-theorem loadItemIn0 {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {a al : Nat}
-    {bs : Array Byte} {v : T} (hpos : 0 < Enc.size T) (ho : Enc.size T ≤ bs.size) (hal : al ∣ a)
-    (hv : Enc.decode (bs.extract 0 (Enc.size T)) = pure v) :
-    TotalTriple (regionIn p A S K a bs) (load T al p) (fun r => ⌜r = v⌝ ∗ regionIn p A S K a bs) := by
-  have t := loadItemIn (p := p) (A := A) (S := S) (K := K) (bs := bs) (o := 0) hpos (by omega) hal
-    (Nat.dvd_zero _) (by simpa using hv)
-  simpa [Ptr.add] using t
-
 /-! ## Entry and exit -/
 
 /-- The stack block of `fba`: a fresh block, so not the buffer's. -/
@@ -180,15 +138,15 @@ theorem slice_decode_encode (s : Slice) : Enc.decode (Enc.encode s) = (pure s : 
   rw [e1, e2, LawfulEnc.decode_encode, LawfulEnc.decode_encode]
   rfl
 
-theorem extract_writeBytes_out (a bs : Array Byte) {o n : Nat} (hn : n ≤ o)
-    (h : o + bs.size ≤ a.size) : (writeBytes a o bs).extract 0 n = a.extract 0 n := by
+theorem extract_writeBytes_lt (a bs : Array Byte) {o x n : Nat} (hn : x + n ≤ o)
+    (h : o + bs.size ≤ a.size) : (writeBytes a o bs).extract x (x + n) = a.extract x (x + n) := by
   have hs := writeBytes_size a o bs h
   apply Array.ext
-  · simp [hs] <;> omega
+  · simp [hs]
   · intro i h1 h2
     simp only [Array.size_extract] at h1
-    simp only [Array.getElem_extract, Nat.zero_add]
-    rw [writeBytes_getElem a o bs h _ (by omega), if_neg (by omega), getElem!_pos a i (by omega)]
+    simp only [Array.getElem_extract]
+    rw [writeBytes_getElem a o bs h _ (by omega), if_neg (by omega), getElem!_pos a _ (by omega)]
 
 theorem enc_sv_eq : Enc.encode sv = writeBytes (writeBytes (Array.replicate 24 .undef) 0
     (Enc.encode (0 : BitVec 64))) 8 (Enc.encode (⟨bufp, 12⟩ : Slice)) := rfl
@@ -207,7 +165,8 @@ theorem enc_sv_size : (Enc.encode sv).size = 24 := by
 
 theorem enc_sv_end : Enc.decode ((Enc.encode sv).extract 0 8) =
     (pure (BitVec.ofNat 64 0) : Result (BitVec 64)) := by
-  rw [enc_sv_eq, extract_writeBytes_out _ _ (Nat.le_refl 8) (by rw [enc_w1_size, enc_s_size] <;> omega)]
+  rw [enc_sv_eq, show (8 : Nat) = 0 + 8 from rfl,
+    extract_writeBytes_lt _ _ (Nat.le_refl _) (by rw [enc_w1_size, enc_s_size] <;> omega)]
   have := extract_writeBytes_in (Array.replicate 24 .undef) (Enc.encode (0 : BitVec 64)) 0 0 8
     (by rw [enc_e_size] <;> simp) (Nat.le_refl 0) (by rw [enc_e_size] <;> omega)
   simp only [Nat.zero_add, Nat.sub_self] at this
@@ -309,7 +268,8 @@ theorem granted_memset (v : BitVec 8) {n : BitVec 64} (hn : n.toNat = bs.size) :
     rw [Array.size_flatten_replicate, LawfulEnc.size_encode, show Enc.size (BitVec 8) = 1 from rfl,
       Nat.mul_one, hn]
   refine TotalTriple.ex fun A => TotalTriple.ex fun S => TotalTriple.ex fun K => ?_
-  refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K) (memsetIn v hn))
+  refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K)
+    (Region.memsetIn (some v) hn))
     (fun _ x => x) (fun _ h x => ⟨A, S, K, by rw [hs]; exact x⟩)
 
 /-- A store of an item into a granted region. -/
@@ -386,16 +346,6 @@ theorem reset_step {s1 : Ptr} {A₀ Ac : Nat} {g : Array Byte} (hblk : s1.block 
   exact this
 
 /-! ## Bytes and values -/
-
-theorem extract_writeBytes_lt (a bs : Array Byte) {o x n : Nat} (hn : x + n ≤ o)
-    (h : o + bs.size ≤ a.size) : (writeBytes a o bs).extract x (x + n) = a.extract x (x + n) := by
-  have hs := writeBytes_size a o bs h
-  apply Array.ext
-  · simp [hs]
-  · intro i h1 h2
-    simp only [Array.size_extract] at h1
-    simp only [Array.getElem_extract]
-    rw [writeBytes_getElem a o bs h _ (by omega), if_neg (by omega), getElem!_pos a _ (by omega)]
 
 theorem decode_byte (v : BitVec 8) : Enc.decode (Enc.encode v) = (pure v : Result (BitVec 8)) :=
   LawfulEnc.decode_encode v
