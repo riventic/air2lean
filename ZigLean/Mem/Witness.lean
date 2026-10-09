@@ -20,11 +20,11 @@ def blk (bs : Array Byte) (kind : BlockKind := .heap) : Block :=
 
 /-- One live block `0` with the bytes `bs` at address 4096; nothing else allocated. -/
 def mem1 (bs : Array Byte) (kind : BlockKind := .heap) : Mem :=
-  { blocks := #[blk bs kind], nextAddr := 4096 + bs.size + 1 }
+  { blocks := #[blk bs kind] }
 
 /-- Two live blocks: `0` with the bytes `bs₁` at address 4096 and `1` with `bs₂` at 8192. -/
 def mem2 (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind := .heap) : Mem :=
-  { blocks := #[blk bs₁ k₁, { blk bs₂ k₂ with addr := 8192 }], nextAddr := 8192 + bs₂.size + 1 }
+  { blocks := #[blk bs₁ k₁, { blk bs₂ k₂ with addr := 8192 }] }
 
 /-- The first byte of block `0`. -/
 def p0 : Ptr := ⟨some 0, 0⟩

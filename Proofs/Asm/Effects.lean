@@ -118,7 +118,7 @@ theorem storeBytes_inv {m m' : Mem} {p : Ptr} {a : Nat} {bs : Array Byte} {kind 
     | ok r =>
       obtain ⟨b, blk, o⟩ := r
       refine ⟨b, blk, o, rfl, ?_⟩
-      cases hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o bs.size
+      cases hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o bs.size
           kind with
       | some e =>
         simp [hacc, hr, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,

@@ -3429,9 +3429,10 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
                 | _ => issues := issues.push (issue .threadSpawn s!"{f.name}: Io.async has no Io.Future result")
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
           if let some symbol := externSymbol? callee then
-            throw s!"{f.name}: CALLEE_EXTERN_UNBOUND: extern function '{symbol}' is bound to \
-              neither a definition nor a registry model (docs/air-json.md §Extern calls)"
-          if let some reason := rejectedThreadFn? callee then
+            issues := issues.push (issue .callee s!"{f.name}: CALLEE_EXTERN_UNBOUND: extern function \
+              '{symbol}' is bound to neither a definition nor a registry model (docs/air-json.md \
+              §Extern calls)")
+          else if let some reason := rejectedThreadFn? callee then
             issues := issues.push (issue .callee s!"{f.name}: the callee '{callee}' is outside the subset: {reason}")
           else if !modelledStdFn callee then
             issues := issues.push (issue .callee

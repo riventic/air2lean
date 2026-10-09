@@ -137,7 +137,7 @@ nonvacuity_witness remapByteBuffer_default_run := ⟨{}, ⟨p0, 0⟩, 1, rfl, tr
 
 /-- One heap byte with alignment 1, whose allocator remaps in place. -/
 def remapMem : Mem :=
-  { blocks := #[{ blk #[.undef] with align := 1 }], nextAddr := 4098,
+  { blocks := #[{ blk #[.undef] with align := 1 }],
     allocPolicy := { byteRemap := .inPlace } }
 
 nonvacuity_witness remapByteBuffer_inPlace_run :=

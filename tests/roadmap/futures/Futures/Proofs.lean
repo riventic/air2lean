@@ -112,7 +112,7 @@ theorem reads_pending {α : Type} [Enc α] {p slot : Ptr} {m m' : Mem} {x : Unit
   intro f m'' hl
   rw [ha] at hl
   have := Future.load_after_store (pending_size slot) hs hl
-  rw [Future.decode_pending slot hsz] at this
+  rw [decodeLoad_of_decode (Future.decode_pending slot hsz)] at this
   cases this; rfl
 
 theorem awaitValue_wp (io : Io) (x : BitVec 32) (n : Nat) :
