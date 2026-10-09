@@ -24,6 +24,11 @@ pub fn errorCastUnsafe(e: Big) Small {
     return @errorCast(e);
 }
 
+pub fn errorCastUnionUnsafe(e: Big!u32) Small!u32 {
+    @setRuntimeSafety(false);
+    return @errorCast(e);
+}
+
 pub fn tagNameSafe(e: E) []const u8 {
     return @tagName(e);
 }
@@ -68,6 +73,7 @@ comptime {
     _ = &errorFromIntUnsafe;
     _ = &errorCastSafe;
     _ = &errorCastUnsafe;
+    _ = &errorCastUnionUnsafe;
     _ = &tagNameSafe;
     _ = &tagNameUnsafe;
     _ = &shl24Safe;

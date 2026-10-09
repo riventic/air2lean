@@ -1,0 +1,178 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "probe.die",
+ "params": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 1,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 2,
+    "func": "debug.defaultPanic",
+    "noreturn": true
+   },
+   "args": [
+    {
+     "ty": 3,
+     "slice_ptr": {
+      "ty": 4,
+      "ptr": {
+       "global": 0,
+       "off": 0
+      }
+     },
+     "slice_len": {
+      "ty": 5,
+      "val": "3"
+     }
+    },
+    {
+     "ty": 6,
+     "null": true
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "unreach",
+   "ty": 0
+  }
+ ],
+ "globals": [
+  {
+   "ty": 7,
+   "const": true,
+   "init": {
+    "ty": 7,
+    "elems": [
+     {
+      "ty": 8,
+      "val": "100"
+     },
+     {
+      "ty": 8,
+      "val": "105"
+     },
+     {
+      "ty": 8,
+      "val": "101"
+     },
+     {
+      "ty": 8,
+      "val": "0"
+     }
+    ]
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn ([]const u8, ?usize) noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 8,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": true,
+   "child": 8,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 5,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 3,
+   "child": 8,
+   "sentinel": true,
+   "abi_size": 4,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

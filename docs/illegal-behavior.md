@@ -46,9 +46,9 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 14 | Shift amount ≥ bit width (`<<`, `>>`, `@shlExact`, `@shrExact`), width not a power of two | `shiftRhsTooBig` | *rejected* (handler outside the table) | `Zig.shlChk`/`Zig.shrChk`/`Zig.shlExact`/`Zig.shrExact`: `.illegal` (**fixed**, was `0` or the shifted bits) |
 | 15 | Attempt to unwrap null | `unwrapNull` | `.panic` | `Zig.optPayload`, `Zig.optPtrUnwrap`: `.panic` |
 | 16 | Attempt to unwrap error | `unwrapError` | `.panic` | `Zig.unwrapPayload`: `.panic` |
-| 17 | Invalid error code (`@errorFromInt`) | `cmp_lte_errors_len` | *rejected* (normalizer) | *rejected* (probe `errorFromIntUnsafe`) |
+| 17 | Invalid error code (`@errorFromInt`) | `cmp_lte_errors_len` | *rejected* (normalizer) | *rejected*: raw error representation casts |
 | 18 | Invalid enum cast (`@enumFromInt`) | `invalidEnumValue` | `.panic` | `Zig.enumOf`: `.panic` |
-| 19 | Invalid error set cast (`@errorCast`) | `error_set_has_value` | *rejected* (exporter) | see probe `errorCastUnsafe` |
+| 19 | Invalid error set cast (`@errorCast`) | `error_set_has_value` | *rejected* (exporter) | error set: `Zig.errorIn`, `.illegal` (**fixed**, was the error). Error union: *rejected* |
 | 20 | Incorrect pointer alignment (`@alignCast`, `@ptrFromInt`) | `incorrectAlignment` | `.panic` | `Zig.checkAlign`, `Zig.checkAddr`: `.illegal` (**fixed**, was the pointer) |
 | 21 | Wrong union field access (tagged, bare) | `inactiveUnionField` | `.panic` | `U.get_f`: `.panic` |
 | 22 | Out-of-bounds float to integer (`@intFromFloat`, and `@floor`/`@ceil`/`@trunc`/`@round` to an integer) | `integerPartOutOfBounds`, false for a NaN | `.overflow`; NaN: `.illegal` (**fixed**, was `.unspecified`) | `int_from_float`: `.illegal` (**fixed**, was `.unspecified`) |
@@ -57,7 +57,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 25 | `@memcpy` arguments of unequal length | `copyLenMismatch` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove` with the destination's count) |
 | 26 | `@memcpy` arguments alias | `memcpyAlias` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove`) |
 | 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | **gap**: no single op holds both lengths. Each item read is checked as in rows 2 and 3 |
-| 28 | `@tagName` of an unnamed non-exhaustive enum value | `invalidEnumValue` | `.panic` | see probe `tagNameUnsafe` |
+| 28 | `@tagName` of an unnamed non-exhaustive enum value | `invalidEnumValue` (via `is_named_enum_value`) | `.panic` | `E.tagName`: `.illegal` (**fixed**, was `.panic`) |
 | 29 | Switch on a corrupt value | `corruptSwitch` | `.panic` | every model enum value is named; no corrupt value exists |
 | 30 | A `noreturn` function returns | `noreturnReturned` | *rejected* (handler outside the table) | — |
 | 31 | `@ptrCast` of a slice whose length does not divide | `sliceCastLenRemainder` | *rejected* | — |

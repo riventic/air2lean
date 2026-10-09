@@ -155,7 +155,7 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : 
                   else (do
                     throw .panic)) : Zig.MM array_list_Aligned_u32_null_ensureTotalCapacityPreciseLocals array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit) with
                 | .br72 => (do
-                  Zig.callM (Zig.memcpy 4 4 4 i54.ptr i65 i54.len i54.len)
+                  Zig.callM (Zig.memcpy 4 4 4 i54.ptr i65 i54.len i56.len)
                   let _i78 ← Zig.callM (Zig.Allocator.free p1 4 i13)
                   let i79 ← pure (p0.add 0)
                   let i80 ← pure (i79.add 0)
@@ -413,7 +413,7 @@ def array_list_Aligned_u32_null_toOwnedSlice (p0 : Zig.Ptr) (p1 : Zig.Allocator)
             else (do
               throw .panic)) : Zig.MM array_list_Aligned_u32_null_toOwnedSliceLocals array_list_Aligned_u32_null_toOwnedSliceExit) with
           | .br41 => (do
-            Zig.callM (Zig.memcpy 4 4 4 v20.ptr i34 v20.len v20.len)
+            Zig.callM (Zig.memcpy 4 4 4 v20.ptr i34 v20.len i25.len)
             let _i47 ← Zig.callM (array_list_Aligned_u32_null_clearAndFree p0 p1)
             let i48 ← pure (v20)
             let i49 ← pure ((.ok i48) : Except Zig.ErrName (Zig.Slice))
@@ -497,7 +497,7 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
             else (do
               throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
           | .br36 => (do
-            Zig.callM (Zig.memcpy 1 1 1 i20.ptr i29 i20.len i20.len)
+            Zig.callM (Zig.memcpy 1 1 1 i20.ptr i29 i20.len p1.len)
             let i42 ← pure p1.len
             let i43 ← pure v5.len
             let i44 ← pure (Zig.lt false i42 i43)

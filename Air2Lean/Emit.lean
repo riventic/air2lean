@@ -2003,6 +2003,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})"
       (env, some l)
     else
+    -- `@errorCast` to a set that lacks some source error checks its error itself.
+    let narrowedTo : Option (Array String) := match fc.valTy a, fc.tyOfId inst.ty with
+      | .errorSet src, .errorSet (some dst) => if src.any (·.all dst.contains) then none else some dst
+      | _, _ => none
+    if let some dst := narrowedTo then
+      let names := ", ".intercalate (dst.toList.map fun n => (repr n).pretty)
+      let (env, l) := bindLet fc env inst.id s!"Zig.errorIn [{names}] {rv a}"; (env, some l)
+    else
     let srcFloat := fc.isFloat a
     let dstFloat := fc.isFloatTy inst.ty
     let expr :=
@@ -3085,10 +3093,11 @@ def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : B
     let arms := fields.toList.zipIdx.map fun ((f, _), k) => s!"  | .{fm f} => pure {slice k f}"
     String.intercalate "\n" ([head, "  match e with"] ++ arms)
   else
-    -- A value without a name has no tag name: the AIR checks `is_named_enum_value` before.
+    -- A value without a name has no tag name: illegal behaviour, which with safety the AIR
+    -- checks before (`is_named_enum_value`).
     let arms := fields.toList.zipIdx.map fun ((f, v), k) =>
       s!"  if e.{hn "toBits"} == {tagLit bits v} then pure {slice k f} else"
-    String.intercalate "\n" ([head] ++ arms ++ ["  throw .panic"])
+    String.intercalate "\n" ([head] ++ arms ++ ["  throw .illegal"])
 
 /-! ## Call graph / emission order -/
 

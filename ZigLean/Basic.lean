@@ -253,6 +253,12 @@ instead of diverging. -/
   | .ok v => pure v
   | .error _ => throw .panic
 
+/-- `@errorCast` to the error set `names` (a `bitcast` between error sets): an error outside it
+is illegal behaviour that only Sema's check (`error_set_has_value`, which the exporter does not
+support) catches, so the model checks it itself: `.illegal`. -/
+@[inline] def errorIn (names : List ErrName) (e : ErrName) : Result ErrName :=
+  if names.contains e then pure e else throw .illegal
+
 /-- `unwrap_errunion_err`: Sema always checks the union first, so the `.ok` case here is
 statically impossible. -/
 @[inline] def unwrapErr {α : Type} (e : Except ErrName α) : Result ErrName :=

@@ -189,7 +189,7 @@ def copy (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
         else (do
           throw .panic)) : Zig.MM copyLocals copyExit) with
       | .br17 => (do
-        Zig.callM (Zig.memcpy 1 1 1 p0.ptr i10 p0.len p0.len)
+        Zig.callM (Zig.memcpy 1 1 1 p0.ptr i10 p0.len p1.len)
         pure .ret)
       | e => pure e)
     | e => pure e) : Zig.MM copyLocals copyExit).run' (default : copyLocals)
