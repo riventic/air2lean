@@ -112,9 +112,9 @@ def dPtr : Ptr := ⟨some 0, 0⟩
 /-- `flag` (block 1). -/
 def fPtr : Ptr := ⟨some 1, 0⟩
 
-/-- The two zero-initialized `u32` globals. -/
-def mem0 : Mem :=
-  Mem.ofGlobals [(Enc.encode (0 : BitVec 32), 4, .global), (Enc.encode (0 : BitVec 32), 4, .global)]
+/-- The two zero-initialized `u32` globals, at the addresses that the placement `σ` gives them. -/
+def mem0 (σ : Placement) : Mem :=
+  Mem.ofGlobals σ [(Enc.encode (0 : BitVec 32), 4, .global), (Enc.encode (0 : BitVec 32), 4, .global)]
 
 /-- The translated idle loop does not spawn: its target type is empty. -/
 def noTgt : IdleLoop.Tgt → Tgt := fun t => nomatch t
