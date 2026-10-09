@@ -69,12 +69,15 @@ def positive(binary, elaborate):
         # 0.17.0's `safe` build mode keeps the version-independent profile spelling.
         assert header["profile"]["build_mode"] == "ReleaseSafe", header
         assert "__func_" not in text, "a 0.17.0 instance name leaked into the translation"
+        assert "Zig.store (α := BitVec 32) 16 i2" not in text, "a lane pointer kept the vector's alignment"
         for needle in ("Zig.divCeil false", "Zig.divCeil true", "Zig.Float.divCeil",
                        "Zig.Vec.map2M (fun x0 x1 => Zig.divCeil true x0 x1)",
                        "Zig.enumOf (Color.ofInt?", "(p0 && p1)", "(i2 || p1)", "(p0 &&& p1)",
                        "Zig.load (BitVec 32) 4 i1", "Zig.Float.toBits? p0",
                        # `&v[i]` on a whole-byte lane reads as 0.16.0's element pointer.
                        "(p0.elem 4 (2 : BitVec 64))", "(p0.elem 4 (1 : BitVec 64))",
+                       # ... aligned for its own offset: lane 2 of an `align(16)` vector is 8-aligned.
+                       "Zig.store (α := BitVec 32) 8 i2 p1",
                        # A `__func_<n>` generic instance gets the stable `__anon_<k>` name.
                        "def double__anon_1"):
             assert needle in text, f"missing {needle!r}"

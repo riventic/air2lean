@@ -14464,7 +14464,7 @@
     },
     "translation": {
       "Air2Lean/Air/Anon.lean": "13a9d44527a4d7ad5bd451ec2bd6af31e97937a915d7f00400db79014f16ca8e",
-      "Air2Lean/Air/Canon.lean": "470f06283991247793366109f92f301c46fed2aa873b1f81942c22ea9feec36e",
+      "Air2Lean/Air/Canon.lean": "141d9488749d2273fdf7ccc3747b44de797d3acd31b91def565154d0044da923",
       "Air2Lean/Air/Compat.lean": "4ae8683e0cfa1b29094a412155c8c46764c5d03a08f6d2637f0e2be1335fcd31",
       "Air2Lean/Air/Json.lean": "03ec92765b65e3c2e001c3996cf04c0b30874bec6e93448c6a79774f37a9458c",
       "Air2Lean/Air/Normalize.lean": "42a37e0607d0864fc3871028f366e51ab558b773f0bd1c8fe22aa7b99ad94a2c",
@@ -14522,7 +14522,7 @@
       "ZigLean/External/Callback.lean": "28574fab3f472dffb951d08f1eae59e84b3e6f61b594f04876f8a202deb3d0f0",
       "ZigLean/External.lean": "70cb563a11197f83249fcebfa357ec601d01d2152a55ebd3a49d8e2cc1296fd4",
       "ZigLean/Float/Allowed.lean": "562d97fa9ed6bba75995953a0eebb34c3a495f03590a00fb948ca3bf7feebe66",
-      "ZigLean/Float/CompilerRt.lean": "375aba80da390cfc39b115109fe65d993b68d3b260618cf447a2b5511b0d4809",
+      "ZigLean/Float/CompilerRt.lean": "e44184154f297797bceadd7730e3da54493d5b4e913895ee937377062d0307a1",
       "ZigLean/Float/Error.lean": "d185a79a145a33bb3ccfd304544258d296b9e36e55010c4c5d347487e6deccb1",
       "ZigLean/Float/Format.lean": "75d9267bca4da30241f49c938e28a52e160282a892ecdd3788bd3de4c34b34b8",
       "ZigLean/Float/Lemmas.lean": "2fffd2ffeb1c65e1d9de51d434da836cb7c691a359aa9acee9b00eb98fcf9f7f",

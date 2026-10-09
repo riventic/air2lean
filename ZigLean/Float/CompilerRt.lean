@@ -419,9 +419,6 @@ def Float.divTruncRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.tru
 /-- `@divFloor` in `compiler-rt` mode: division, rounded once (`Float.divRt`), then floored. -/
 def Float.divFloorRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.divRt a b)
 
-/-- `@divCeil` in `compiler-rt` mode: division, rounded once (`Float.divRt`), then ceiled. -/
-def Float.divCeilRt {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.ceil (Float.divRt a b)
-
 /-! ## `f128` division, Zig 0.16.0 (`divtf3.zig`)
 
 0.16.0's `__divtf3` no longer flushes a subnormal quotient. It rounds the 113-bit quotient `q`

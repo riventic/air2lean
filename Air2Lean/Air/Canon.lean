@@ -104,7 +104,9 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
 (`Layout.vectorIndex`). 0.16.0 wrote `ptr_elem_ptr` of the vector pointer and the lane index,
 typed as a plain element pointer, when the lane is a power-of-two number of whole bytes. This
 gives those lanes the 0.16.0 form (adding the element pointer and `usize` types if the table
-lacks them); other lane pointers stay, and `Check.lean` rejects them. -/
+lacks them); other lane pointers stay, and `Check.lean` rejects them. A lane pointer carries the
+vector pointer's alignment (`*align(16:0:4:1) u32`); the element pointer gets the alignment of
+its own address, as in 0.16.0: `gcd(align, k * size)`, the power of two the lane offset keeps. -/
 def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
   let mut types := f.types
   let mut layouts := f.layouts
@@ -122,7 +124,8 @@ def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
     let bytes := ((layouts[lane]?).bind (·.size)).getD 0
     unless child == lane && k < n && bytes ∈ [1, 2, 4, 8, 16] && bits == 8 * bytes do continue
     let plain : Layout :=
-      { l with hostSize := 0, bitOffset := 0, vectorIndex := none, vectorIndexExported := false }
+      { l with hostSize := 0, bitOffset := 0, vectorIndex := none, vectorIndexExported := false,
+               ptrAlign := l.ptrAlign.map (Nat.gcd · (k * bytes)) }
     let t := Ty.ptr "one" isConst lane
     let id := match (types.zip layouts).findIdx? (· == (t, plain)) with
       | some id => id
