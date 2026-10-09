@@ -68,10 +68,12 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
         # "runtime" stays observable.
         if type_entry and key == "vector_index" and item is None:
             continue
-        # Module identity (B1, docs/air-json.md §Identity) is checked by translating the
-        # actual export: the generated names and std model bindings depend on it, and the
-        # generated file is compared with its golden. Goldens that predate it compare equal.
-        if key == "comptime_fn_module" or (key == "module" and (root or "func" in value or "name" in value)):
+        # Module identity (B1, docs/air-json.md §Identity) and instance keys (§Instances) are
+        # checked by translating the actual export: the generated names and std model bindings
+        # depend on them, and the generated file is compared with its golden. Goldens that
+        # predate them compare equal.
+        if key in ("comptime_fn_module", "comptime_fn_instance_key") or (
+                key in ("module", "instance_key") and (root or "func" in value or "name" in value)):
             continue
         identity = key in ("func", "comptime_fn") or (key == "name" and (root or type_entry))
         if identity:
