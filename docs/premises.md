@@ -84,7 +84,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
-| Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
+| Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
@@ -499,6 +499,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   decrease. Neither is related to an OS clock or to `Zig.Time.AwakeEnvironment` (TMR-02).
 - Derived from: tokens `monotonicNow`, `wallNow`.
 - Sources: [env-boundaries.md](env-boundaries.md#operations).
+
+<a id="env-03"></a>
+### ENV-03 — Linux raw read/write/close are the bound models
+
+- Kind: environment.
+- Statement: On `x86_64-linux` without libc, each call of `std.os.linux.read`, `write` or
+  `close` (one `syscall` instruction each) behaves as `Zig.Env.Linux.read`/`write`/`close` over
+  the `Zig.Env.Host` installed in `Zig.Mem`: the raw `usize` result is the byte count or
+  `-errno` for the six modelled errors (EAGAIN, EPIPE, ENOSPC, EACCES, EIO, ECONNRESET), `write`
+  offers exactly the `count` bytes at `buf` and `read` stores the received bytes there. The
+  models are stricter than the kernel: a descriptor that is negative or not open is `.illegal`
+  (no `EBADF`, no reuse), and `EINTR`, other errnos, signals and blocking are not modelled.
+  Everything above these three functions in std is translated from AIR, not assumed.
+- Derived from: `ZigLean.Env.Linux` (with ENV-01 for the operations' contract).
+- Sources: [env-boundaries.md](env-boundaries.md#bound-primitives),
+  `tests/roadmap/env-boundaries/StdIo.lean`.
 
 ## Device effects
 

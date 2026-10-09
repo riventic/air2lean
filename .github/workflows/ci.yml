@@ -676,13 +676,15 @@ jobs:
 
       # E03: selected environment-operation contract and its write-all client; the
       # documentation check requires an operation-to-premise row and the not-claimed list.
+      # check.sh also translates the committed std I/O AIR (0.15.2 fs.File/posix, 0.16.0
+      # posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
+      # proofs about the generated code. Fresh export: tests/roadmap/env-boundaries/export.sh.
       - name: Environment-operation boundary
         if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -B tests/roadmap/env-boundaries/test_env_boundaries.py -v
-          lake build ZigLean.Env
-          lake env lean tests/roadmap/env-boundaries/WriteAll.lean
+          lake build ZigLean ZigLean.Env ZigLean.Env.Linux air2lean
+          bash tests/roadmap/env-boundaries/check.sh
 
       # This checks committed Flow artifacts only: no production checkout, Zig export,
       # native reproduction, or claim about compiler preservation is part of this CI gate.

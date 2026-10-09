@@ -1,4 +1,5 @@
 import ZigLean.Basic
+import ZigLean.Env
 
 /-!
 # Byte-level memory
@@ -368,6 +369,9 @@ structure Mem where
   cancels : Array ThreadId := #[]
   /-- The device oracle and the trace of device events (`ZigLean/Mem/Device.lean`). -/
   dev : DevState := {}
+  /-- The installed environment of the bound OS primitives (`ZigLean/Env/Linux.lean`, E03). The
+  default has no open handle, so a program that never calls one is unaffected. -/
+  host : Env.Host := {}
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/

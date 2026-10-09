@@ -2603,7 +2603,8 @@
           "tests/golden/0.16.0/floatops/air/floatops.op32.json",
           "tests/golden/0.16.0/floatops/air/floatops.op64.json",
           "tests/golden/0.16.0/floatops/air/floatops.op80.json",
-          "tests/golden/vectors/air/vectors.vMinMax.json"
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {
@@ -4484,6 +4485,7 @@
           "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/TlsLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -7786,7 +7788,8 @@
           "tests/golden/layout/air/layout.digit.json",
           "tests/golden/sync/air/Io.Condition.signal.json",
           "tests/golden/sync/air/Io.Condition.waitInner.json",
-          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json"
+          "tests/golden/sync/air/Io.Semaphore.waitUncancelable.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json"
         ]
       },
       "proofs": {
@@ -8481,6 +8484,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -8604,6 +8608,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -9296,6 +9301,7 @@
           "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/TlsLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -12237,7 +12243,9 @@
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.populationLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftLanes.json",
           "tests/roadmap/bitops/qualified/0.16.0/air/bitops.shiftSignedLanes.json",
-          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json"
+          "tests/roadmap/bitops/qualified/0.16.0/air/bitops.trailingLanes.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/os.linux.errno.json",
+          "tests/roadmap/env-boundaries/air/0.16.0/posix.read.json"
         ]
       },
       "proofs": {

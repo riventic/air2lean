@@ -1016,7 +1016,9 @@
           "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/floats/air/floats.lerp.json",
           "tests/golden/slices/air/slices.subZ.json",
-          "tests/golden/slices/air/slices.sumMid.json"
+          "tests/golden/slices/air/slices.sumMid.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
         ]
       },
       "proofs": {
@@ -1084,7 +1086,8 @@
           "tests/golden/recursion/air/recursion.isOdd.json",
           "tests/golden/slices/air/slices.reverse.json",
           "tests/golden/slices/air/slices.sumMid.json",
-          "tests/golden/vectors/air/vectors.vNeg.json"
+          "tests/golden/vectors/air/vectors.vNeg.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json"
         ]
       },
       "proofs": {
@@ -2328,7 +2331,9 @@
           "tests/golden/slices/air/slices.prevItem.json",
           "tests/golden/slices/air/slices.second.json",
           "tests/golden/slices/air/slices.subZ.json",
-          "tests/golden/slices/air/slices.sumMid.json"
+          "tests/golden/slices/air/slices.sumMid.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
         ]
       },
       "proofs": {
@@ -2497,7 +2502,9 @@
           "tests/golden/floatops/air/floatops.op32.json",
           "tests/golden/floatops/air/floatops.op64.json",
           "tests/golden/floatops/air/floatops.op80.json",
-          "tests/golden/vectors/air/vectors.vMinMax.json"
+          "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -4194,6 +4201,7 @@
           "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/TlsLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -4508,7 +4516,11 @@
           "tests/golden/slices/air/slices.sumSlice.json",
           "tests/golden/slices/air/slices.sumZ.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -4643,7 +4655,11 @@
           "tests/golden/slices/air/slices.sumSlice.json",
           "tests/golden/slices/air/slices.sumZ.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -7017,7 +7033,9 @@
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/slices/air/slices.copyWithin.json",
           "tests/golden/slices/air/slices.subZ.json",
-          "tests/golden/slices/air/slices.sumMid.json"
+          "tests/golden/slices/air/slices.sumMid.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
         ]
       },
       "proofs": {
@@ -7164,7 +7182,10 @@
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
           "tests/golden/variants/air/variants.isRound.json",
           "tests/golden/variants/air/variants.isUrgent.json",
-          "tests/golden/variants/air/variants.radius.json"
+          "tests/golden/variants/air/variants.radius.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -7392,7 +7413,8 @@
           "tests/golden/floats/air/floats.clamp.json",
           "tests/golden/layout/air/layout.digit.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.finish.json",
-          "tests/golden/threadsync/air/Thread.WaitGroup.wait.json"
+          "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json"
         ]
       },
       "proofs": {
@@ -7910,7 +7932,10 @@
           "tests/golden/variants/air/variants.area.json",
           "tests/golden/variants/air/variants.next.json",
           "tests/golden/variants/air/variants.scale.json",
-          "tests/golden/variants/air/variants.severity.json"
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.close.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -8074,6 +8099,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -8180,6 +8206,7 @@
           "ZigLean/Conc/Lock.lean",
           "ZigLean/Conc/LockRules.lean",
           "ZigLean/Conc/Logic.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/Float/CompilerRt.lean",
           "ZigLean/Float/Error.lean",
           "ZigLean/Float/Lemmas.lean",
@@ -8785,6 +8812,7 @@
           "ZigLean/Conc/Share.lean",
           "ZigLean/Conc/TlsLemmas.lean",
           "ZigLean/Conc/Word.lean",
+          "ZigLean/Env/Linux.lean",
           "ZigLean/External.lean",
           "ZigLean/External/Callback.lean",
           "ZigLean/Mem/Alloc.lean",
@@ -11380,7 +11408,10 @@
           "tests/golden/basic/air/basic.absDiff.json",
           "tests/golden/variants/air/variants.codeOf.json",
           "tests/golden/variants/air/variants.lightOf.json",
-          "tests/golden/vectors/air/vectors.vNarrow.json"
+          "tests/golden/vectors/air/vectors.vNarrow.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -12672,7 +12703,10 @@
           "tests/golden/basic/air/basic.weightedTardiness.json",
           "tests/golden/variants/air/variants.area.json",
           "tests/golden/variants/air/variants.radius.json",
-          "tests/golden/variants/air/variants.scale.json"
+          "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.close.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.write.json"
         ]
       },
       "proofs": {
@@ -12865,7 +12899,9 @@
           "tests/golden/0.15.2/threads/air-linux/threads.parallelCounter.json",
           "tests/golden/slices/air/slices.copyWithin.json",
           "tests/golden/slices/air/slices.subZ.json",
-          "tests/golden/slices/air/slices.sumMid.json"
+          "tests/golden/slices/air/slices.sumMid.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
         ]
       },
       "proofs": {
@@ -12952,7 +12988,11 @@
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumMid.json",
           "tests/golden/slices/air/slices.sumSlice.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {
@@ -13013,7 +13053,11 @@
           "tests/golden/slices/air/slices.copy.json",
           "tests/golden/slices/air/slices.copyWithin.json",
           "tests/golden/slices/air/slices.subZ.json",
-          "tests/golden/slices/air/slices.sumMid.json"
+          "tests/golden/slices/air/slices.sumMid.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
         ]
       },
       "proofs": {

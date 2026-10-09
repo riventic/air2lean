@@ -58,6 +58,7 @@ premise was derived. This index covers the committed generated modules.
 | [TRU-04](premises.md#tru-04) | 40 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
+| [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
 
 ## `Proofs/Asm/Effects.lean`
 
@@ -2652,6 +2653,44 @@ File premises: SEM-01, SEM-03, TRU-01
 | `example@L55` | TRU-01 |
 | `example@L56` | TRU-01 |
 
+## `tests/roadmap/env-boundaries/StdIo.lean`
+
+File premises: PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03
+
+| Theorem | Premises |
+|---|---|
+| `EnvStdIo.intCast31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.setWidth31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.intCast64of31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.intCast64` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.min_cap` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.add_ofNat` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.OnlyWrites.append` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01 |
+| `EnvStdIo.written_append` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01 |
+| `EnvStdIo.OnlyWrites.not_closed` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01 |
+| `EnvStd15.Proofs.errno_err` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.errno_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.write_loop_body` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.posix_write_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.fs_File_write_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAll_body_done` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.bodyFacts` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.writeAll_body_err` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.writeAll_body_ok` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.writeAll_step` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAll_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.fs_File_close_run` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAllClose_spec` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.errno_err` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.errno_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd16.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd16.Proofs.read_loop_body` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.posix_read_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.closeFd_run` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.readClose_spec` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAllClose_spec_replay` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+
 ## `tests/roadmap/env-boundaries/WriteAll.lean`
 
 File premises: TRU-01, ENV-01, ENV-02
@@ -2668,6 +2707,25 @@ File premises: TRU-01, ENV-01, ENV-02
 | `Zig.Env.Client.demo_partial` | TRU-01, ENV-01, ENV-02 |
 | `Zig.Env.Client.demo_error` | TRU-01, ENV-01, ENV-02 |
 | `Zig.Env.Client.demo_closed` | TRU-01, ENV-01, ENV-02 |
+
+## `tests/roadmap/env-boundaries/expected/EnvStd15.lean`
+
+File premises: SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd15.air2lean_model_0_evidence` | SEM-01, EXT-01, TRU-01 |
+| `EnvStd15.air2lean_model_1_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `EnvStd15.air2lean_model_2_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+
+## `tests/roadmap/env-boundaries/expected/EnvStd16.lean`
+
+File premises: SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd16.air2lean_model_0_evidence` | SEM-01, EXT-01, TRU-01 |
+| `EnvStd16.air2lean_model_1_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
 
 ## `tests/roadmap/error-storage/Runtime.lean`
 

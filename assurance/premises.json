@@ -28,7 +28,9 @@
     "ErrorWidth10.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 10-bit fixtures into ErrorWidth10/Gen.lean.",
     "ErrorWidth17.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 17-bit fixtures into ErrorWidth17/Gen.lean.",
     "FuturesFallible.Gen": "tests/roadmap/futures/check.sh translates the committed AIR with --spawn-policy fallible into FuturesFallible/Gen.lean at gate time.",
-    "ThreadTuplesFallible.Gen": "tests/roadmap/thread-tuples/check.sh translates the committed AIR with --spawn-policy fallible into ThreadTuplesFallible/Gen.lean at gate time."
+    "ThreadTuplesFallible.Gen": "tests/roadmap/thread-tuples/check.sh translates the committed AIR with --spawn-policy fallible into ThreadTuplesFallible/Gen.lean at gate time.",
+    "EnvStd15.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.15.2 std I/O AIR into EnvStd15/Gen.lean with the ENV-03 registry.",
+    "EnvStd16.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.16.0 std I/O AIR into EnvStd16/Gen.lean with the ENV-03 registry."
   },
   "generated_premises": ["TRU-02"],
   "profiles": {
@@ -66,6 +68,7 @@
     "ZigLean.Asm": ["ASM-03"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Env": ["ENV-01"],
+    "ZigLean.Env.Linux": ["ENV-01", "ENV-03"],
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
     "ZigLean.Mem.ErrWidth": ["SEM-02"],
