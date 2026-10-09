@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Profile/golden receipt regressions; only fake Zig/Lake tools are invoked."""
 import copy
+import re
 import hashlib
 import json
 import os
@@ -267,8 +268,17 @@ class FakePipelineTests(unittest.TestCase):
         self.repo = Path(self.temp.name)
         for relative in ("scripts", "bin", "examples/basic", "tests/golden/basic/air", "Proofs/Basic"):
             (self.repo / relative).mkdir(parents=True)
-        for name in ("check.sh", "normalize-air.py", "normalize-generated.py"):
+        # Copy check.sh plus every script it (transitively) sources or invokes via $repo_root/scripts/.
+        pending, copied = ["check.sh", "normalize-air.py", "normalize-generated.py"], set()
+        while pending:
+            name = pending.pop()
+            if name in copied:
+                continue
+            copied.add(name)
             shutil.copy2(ROOT / "scripts" / name, self.repo / "scripts" / name)
+            if name.endswith(".sh"):
+                text = (ROOT / "scripts" / name).read_text()
+                pending += re.findall(r"repo_root/scripts/([\w.-]+\.(?:sh|py))", text)
         (self.repo / "examples/basic/basic.zig").touch()
         self.fixture = copy.deepcopy(CURRENT)
         self.fixture["name"] = "basic.fixture"
