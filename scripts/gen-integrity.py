@@ -131,10 +131,6 @@ FIXTURES = [
 
 # Reviewed generated-looking files that are not current translator output.
 EXCEPTIONS = {
-    "tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean":
-        "hand-written stand-in for a generated root in the claims audit counterexamples "
-        "(docs/architecture-audit/claims.md); compiled only by that audit's build.sh into a "
-        "private olean directory, imported by no shipped module",
     "tests/roadmap/try-pointers/origin/TryPointers/Gen.lean":
         "historical translator output retained byte-for-byte as a provenance input "
         "(tests/roadmap/try-pointers/README.md); check-artifacts.py pins its hash and no "
@@ -159,9 +155,16 @@ def git_files(*patterns):
     return [p for p in out.decode().split("\0") if p]
 
 
+# Architecture-audit counterexamples (docs/architecture-audit): untrusted by design, excluded
+# from the premise index (assurance/premises.json) and from this gate alike.
+AUDIT = "tests/roadmap/architecture-audit/"
+
+
 def tracked_generated():
     found = set()
     for path in git_files("*.lean"):
+        if path.startswith(AUDIT):
+            continue
         if GEN_NAME.fullmatch(Path(path).name):
             found.add(path)
             continue

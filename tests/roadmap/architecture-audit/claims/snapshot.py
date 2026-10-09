@@ -15,8 +15,9 @@ GENERATED = ('AuditClaims.root', 'AuditClaims.spin', 'Asm.divmod')
 SNAPSHOT = HERE / 'exposure-report.json'
 FIELDS = ('name', 'module', 'axioms', 'conclusion', 'statement_dependencies', 'conclusion_dependencies',
           'opaque_dependencies', 'extern_dependencies', 'compiler_redirections', 'violations', 'allowed', 'statement')
-# The Shadow contract redefines Zig.TotalTriple; the audit environment imports the real one.
-CLASH = "environment already contains 'Zig.TotalTriple'"
+# The Shadow contracts redefine Zig.TotalTriple and Zig.TotalTripleWithin; the audit
+# environment imports the registered ones.
+CLASH = "environment already contains 'Zig.TotalTriple"
 
 
 def extract():
@@ -33,12 +34,14 @@ def extract():
         theorems += [{k: t[k] for k in FIELDS} for t in report['theorems'] if '._proof' not in t['name']]
         nodes.update({n['name']: {'module': n['module'], 'kind': n['kind']} for n in report['nodes']
                       if n['name'] in GENERATED})
-    shadow = json.loads((OUT / 'assurance-Shadow.json').read_text())
-    shadow_audit = {'status': shadow.get('status'),
-                    'name_clash': CLASH in (OUT / 'assurance-Shadow.stderr').read_text()}
+    def shadow(name):
+        report = json.loads((OUT / f'assurance-{name}.json').read_text())
+        return {'status': report.get('status'), 'name_clash': CLASH in (OUT / f'assurance-{name}.stderr').read_text()}
+    shadow_audit = shadow('Shadow')
+    shadow_within_audit = shadow('ShadowWithin')
     return {'schema_version': 2, 'source': 'tests/roadmap/architecture-audit/claims/build.sh',
             'theorems': sorted(theorems, key=lambda t: t['name']), 'generated_nodes': dict(sorted(nodes.items())),
-            'shadow_audit': shadow_audit}
+            'shadow_audit': shadow_audit, 'shadow_within_audit': shadow_within_audit}
 
 
 def main(argv):

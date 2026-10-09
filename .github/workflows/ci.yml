@@ -432,13 +432,15 @@ jobs:
           python3 -I -B scripts/perf-budgets.py gate --portable --measurement "$RUNNER_TEMP/perf.json" \
             --json "$RUNNER_TEMP/perf-findings.json"
 
-      # docs/air-json.md §Schema table and profile admission: these audit counterexamples must
-      # stay rejected (the remaining trust-chain cases belong to other fixes).
-      - name: Trust-chain schema and admission counterexamples
+      # docs/architecture-audit/trust-chain.md: every fixed counterexample must stay fixed (schema
+      # table and admission, module identity, unchecked memcpy, volatile asm, claim binding);
+      # reduce-bool-handedit (placeholder emission) belongs to a later fix.
+      - name: Trust-chain audit counterexamples (fixed cases)
         if: ${{ !matrix.mutate }}
         run: |
           python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed \
-            addrspace comptime-field build-mode legacy-default unknown-key missing-flag
+            addrspace comptime-field build-mode legacy-default unknown-key missing-flag \
+            std-name-spoof std-type-spoof unchecked-memcpy volatile-asm claims-unbound
 
       # Before check.sh rewrites Proofs/<Ex>/Gen.lean: the sidecar flag must leave them byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR

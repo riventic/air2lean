@@ -13,11 +13,12 @@ for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal; do
   lake env lean -R "$src" -o "$out/lib/AuditClaims/$module.olean" "$src/AuditClaims/$module.lean"
 done
 # Separate audits: Shadow declares its own Zig.TotalTriple, exactly as a project contract audited
-# alone with --module. The audit environment imports the registered claim heads
-# (tools/Assurance.lean), so that audit must fail with a name clash; its stderr is kept.
+# alone with --module, and ShadowWithin its own Zig.TotalTripleWithin. The audit environment
+# imports the registered claim heads (tools/Assurance.lean), so both audits must fail with a
+# name clash; their stderr is kept.
 # Unchecked and Universal are audited apart because kernel replay (S1) rejects them and so
 # fails their whole report.
-for group in "Vacuous AsmTotal ShadowWithin" "Shadow" "Unchecked Universal"; do
+for group in "Vacuous AsmTotal" "Shadow" "ShadowWithin" "Unchecked Universal"; do
   name=${group%% *}
   args=()
   for module in $group; do args+=(--module "AuditClaims.$module"); done

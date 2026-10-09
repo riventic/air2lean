@@ -48,7 +48,6 @@ LEAN_CASES = {
     # S1/S7 originals fix a root argument (255, divisor 0): the derived domain (S4) now scopes them.
     'AuditClaims.unchecked_total': ('AuditClaims.root', 'total_correctness', 'S4'),
     'AuditClaims.unchecked_universal': ('AuditClaims.root', 'total_correctness', 'S1'),
-    'AuditClaims.spoofed_within': ('AuditClaims.root', 'total_correctness', 'S2'),
     'AuditClaims.hyp_is_claim': ('AuditClaims.root', 'total_correctness', 'S3'),
     'AuditClaims.unsat_pre': ('AuditClaims.root', 'total_correctness', 'S3'),
     'AuditClaims.total_false_pre': ('AuditClaims.spin', 'total_correctness', 'S3'),
@@ -137,12 +136,10 @@ def spoofed_total_head():
 
 
 def spoofed_registered_head():
-    """Once a head such as `Zig.TotalTripleWithin` is registered (codex/roadmap-batch8), a contract's
-    same-named declaration (not imported by the audit, so no clash) is still not the pinned one."""
-    heads = dict(HEADS, **{'Zig.TotalTripleWithin': {'module': 'ZigLean.Sep.Bounded', 'fingerprint': '0' * 32,
-                                                      'claims': list(claims.CLAIMS), 'program': 3, 'state': []}})
-    return verdict('AuditClaims.spoofed_within', 'AuditClaims.root', 'total_correctness', heads)
-
+    """`Zig.TotalTripleWithin` (codex/roadmap-batch8) is a registered head: the extractor imports
+    it, so a contract's same-named declaration cannot be audited next to it (name clash)."""
+    shadow = SNAPSHOT['shadow_within_audit']
+    return shadow['status'] == 'pass', f'ShadowWithin audit status={shadow["status"]} name_clash={shadow["name_clash"]}'
 
 def receipt_schema_skew():
     """proof-receipt.py seals schema 2 and its verifier demands 2; project.py coverage demands 1.
