@@ -1530,5 +1530,10 @@ theorem threadedWG_spec : WaitGroupSpec (threadedWG Fx) where
 
 end
 
+/-- The contract is met by a concrete system: the wait group over the FIFO futex (the hand model
+of THR-05). -/
+theorem threadedWG_fifo : WaitGroupSpec (threadedWG (Futex.fifo wordView)) :=
+  threadedWG_spec (fifo_spec wordView)
+
 end Spec
 end Zig

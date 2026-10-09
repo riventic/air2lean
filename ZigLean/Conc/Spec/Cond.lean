@@ -1200,7 +1200,7 @@ theorem seen_next (hi : CInv N s) (t : Tid) (acq : Bool) (u : Tid) :
   · exact hi.seen u
   · by_cases hu : u = t
     · simp [hu]
-    · simp only [if_true]; rw [tset_ne _ _ hu]; have := hi.seen u; omega
+    · simp only [↓reduceIte]; rw [tset_ne _ _ hu]; have := hi.seen u; omega
 
 /-- The return of `lock`, `tryLock` or `unlock`. -/
 theorem retM (hF : FutexSafe condView Fx) (hi : CInv N s) {t : Tid} {op : COp} {b : Bool}
@@ -2203,6 +2203,256 @@ theorem ioCond_inductive (X : Type) (N : Nat) : (cmgc (ioCond Fx) X N).Inductive
   ⟨fun _ h => ioCond_init hF h, fun _ _ _ hi hs => ioCond_step hF hi hs.1 hs.2⟩
 
 end
+
+/-! ## No deadlock, no lost wakeup -/
+
+theorem reg_le (c : CCtl CL) : reg c ≤ 1 := by
+  unfold reg; split <;> omega
+
+section
+variable (hF : FutexSpec condView Fx)
+include hF
+
+/-- `Io.Mutex`'s code can step at every place but its returns, for a thread outside the queue. -/
+theorem io_enabled {X : Type} {t : Tid} {l : IL} {w : AWord X} {f : Fx.F} {v : X}
+    (hl : ∀ b, l ≠ .fin b) (hrel : l = .rel → w.val = 1 ∨ w.val = 2)
+    (hq : (Fx.queue f).has t = false) (hwf : (Fx.queue f).WF) :
+    ∃ l' sh' v', IoStep Fx.atMtx t l w f v l' sh' v' := by
+  cases l with
+  | fin b => exact absurd rfl (hl b)
+  | cas =>
+    by_cases h0 : w.val = 0
+    · exact ⟨_, _, _, IoStep.casOk h0⟩
+    · by_cases h2 : w.val = 2
+      · exact ⟨_, _, _, IoStep.casWait h2⟩
+      · exact ⟨_, _, _, IoStep.casSpin h0 h2⟩
+  | attempt =>
+    by_cases h0 : w.val = 0
+    · exact ⟨_, _, _, IoStep.tryOk h0⟩
+    · exact ⟨_, _, _, IoStep.tryFail h0⟩
+  | xchg =>
+    by_cases h0 : w.val = 0
+    · exact ⟨_, _, _, IoStep.xchgOk h0⟩
+    · exact ⟨_, _, _, IoStep.xchgWait h0⟩
+  | wait =>
+    obtain ⟨r, f', hw⟩ := hF.wait_total t .mtx 2 false (w.val, 0) f _ rfl hq
+    cases r with
+    | none => exact ⟨_, _, _, IoStep.sleep (Fx := Fx.atMtx) ⟨0, hw⟩⟩
+    | some r => exact ⟨_, _, _, IoStep.back (Fx := Fx.atMtx) ⟨0, hw⟩⟩
+  | asleep =>
+    obtain ⟨r, f', hr⟩ := hF.resume_total t false f hq
+    exact ⟨_, _, _, IoStep.resume (Fx := Fx.atMtx) hr⟩
+  | rel =>
+    rcases hrel rfl with h1 | h2
+    · exact ⟨_, _, _, IoStep.relDone h1⟩
+    · exact ⟨_, _, _, IoStep.relWake h2⟩
+  | wake =>
+    obtain ⟨f', hk⟩ := hF.wake_total t .mtx 1 f hwf
+    exact ⟨_, _, _, IoStep.wake (Fx := Fx.atMtx) ⟨hwf, hk⟩⟩
+
+/-- **A thread in the code that is not asleep in the futex queue can step** (for at most `65535`
+threads: `wait`'s assertion on `waiters`). -/
+theorem ioCond_enabled {X : Type} {N : Nat} {s : CState (ioCond Fx) X} (hi : CInv N s) (hN : N ≤ 65535)
+    {t : Tid} {op : COp} {l : CL} (h : s.ctl t = .run op l) (hq : (Fx.queue s.sh.f).has t = false) :
+    (cmgc (ioCond Fx) X N).Enabled t s := by
+  have ht := hi.lt_of_run h
+  have hok := hi.ok t
+  rw [h] at hok
+  have ex : ∀ {l' : CL} {sh' : CSh Fx X} {v' : X},
+      CondStep Fx t l s.sh (s.cur t) l' sh' v' → (cmgc (ioCond Fx) X N).Enabled t s :=
+    fun hs => ⟨_, ht, CStep.exec h hs⟩
+  -- the owner of the mutex's word sees `1` or `2`
+  have hrel : IoPlace.own (projCtl (s.ctl t)) = true → s.sh.m.val = 1 ∨ s.sh.m.val = 2 := by
+    intro ho
+    have h0 : s.sh.m.val ≠ 0 := fun h0 => by
+      have := hi.mtx.word.mp h0 t; simp only [CState.proj] at this; rw [ho] at this; cases this
+    have := hi.mtx.bound; simp only [CState.proj] at this; omega
+  have ioex : ∀ {c : IL → CL} (il : IL), l = c il → (∀ b, il ≠ .fin b) →
+      (il = .rel → IoPlace.own (projCtl (s.ctl t)) = true) →
+      (∀ {il' : IL} {w' : AWord X} {f' : Fx.F} {v' : X},
+        IoStep Fx.atMtx t il s.sh.m s.sh.f (s.cur t) il' (w', f') v' →
+        CondStep Fx t (c il) s.sh (s.cur t) (c il') { s.sh with m := w', f := f' } v') →
+      (cmgc (ioCond Fx) X N).Enabled t s := by
+    intro c il hl hfin hown hmk
+    obtain ⟨il', ⟨w', f'⟩, v', hs⟩ := io_enabled hF hfin (fun hr => hrel (hown hr)) hq hi.qwf
+    exact ⟨_, ht, CStep.exec (by rw [h, hl]) (hmk hs)⟩
+  match l, hok, h with
+  | .m il, hok, h =>
+    cases il with
+    | fin b => exact ⟨_, ht, CStep.ret h rfl⟩
+    | _ =>
+      exact ioex (c := CL.m) _ rfl (fun _ he => by cases he)
+        (fun hr => by
+          cases hr <;> (rw [h]; cases op <;> first | rfl | simp [CPlace.ok, lockL, tryL] at hok))
+        fun hs => CondStep.mtx hs
+  | .wu e il, hok, h =>
+    cases il with
+    | fin b =>
+      cases b
+      · exact ex CondStep.wuDone
+      · cases op <;> simp [CPlace.ok, unlL] at hok
+    | rel =>
+      exact ioex (c := CL.wu e) _ rfl (fun _ he => by cases he)
+        (fun _ => by rw [h]; cases op <;> first | rfl | simp [CPlace.ok] at hok) fun hs => CondStep.wum hs
+    | _ =>
+      exact ioex (c := CL.wu e) _ rfl (fun _ he => by cases he) (fun hr => by cases hr)
+        fun hs => CondStep.wum hs
+  | .wl il, hok, h =>
+    cases il with
+    | fin b =>
+      cases b
+      · cases op <;> simp [CPlace.ok, lockL] at hok
+      · exact ⟨_, ht, CStep.ret h rfl⟩
+    | _ =>
+      exact ioex (c := CL.wl) _ rfl (fun _ he => by cases he)
+        (fun hr => by cases hr <;> (rw [h]; cases op <;> simp [CPlace.ok, lockL] at hok))
+        fun hs => CondStep.wlm hs
+  | .le0, _, _ => exact ex CondStep.le0
+  | .add e, hok, h =>
+    have hr0 : reg (s.ctl t) = 0 := by rw [h]; cases op <;> rfl
+    have := tsum_lt_of_zero (N := N) (g := fun u => reg (s.ctl u)) (fun u => reg_le _) ht hr0
+    have hw := hi.wcnt
+    exact ex (CondStep.add (by omega))
+  | .fw e, _, _ =>
+    obtain ⟨r, f', hw⟩ := hF.wait_total t .ep (BitVec.ofNat 32 e) false (s.sh.m.val, s.sh.ep) s.sh.f _ rfl hq
+    cases r with
+    | none => exact ex (CondStep.fwSleep hw)
+    | some r => exact ex (CondStep.fwRet hw)
+  | .sleep e, _, _ =>
+    obtain ⟨r, f', hr⟩ := hF.resume_total t false s.sh.f hq
+    exact ex (CondStep.resume hr)
+  | .le, _, _ => exact ex CondStep.le
+  | .ls e, _, _ =>
+    by_cases h0 : s.sh.sg = 0
+    · exact ex (CondStep.lsZero h0)
+    · exact ex (CondStep.lsPos (by omega))
+  | .cx e w sg, _, _ =>
+    by_cases hw : s.sh.w = w ∧ s.sh.sg = sg
+    · exact ex (CondStep.cxOk hw.1 hw.2)
+    · have hne : s.sh.w ≠ w ∨ s.sh.sg ≠ sg := by
+        by_cases h1 : s.sh.w = w
+        · exact .inr fun h2 => hw ⟨h1, h2⟩
+        · exact .inl h1
+      by_cases h0 : s.sh.sg = 0
+      · exact ex (CondStep.cxFailZero hne h0)
+      · exact ex (CondStep.cxFailPos hne (by omega))
+  | .sld bc, _, _ =>
+    by_cases hlt : s.sh.sg < s.sh.w
+    · exact ex (CondStep.sldGo hlt)
+    · exact ex (CondStep.sldDone (by omega))
+  | .scx bc w sg, _, _ =>
+    by_cases hw : s.sh.w = w ∧ s.sh.sg = sg
+    · exact ex (CondStep.scxOk hw.1 hw.2)
+    · have hne : s.sh.w ≠ w ∨ s.sh.sg ≠ sg := by
+        by_cases h1 : s.sh.w = w
+        · exact .inr fun h2 => hw ⟨h1, h2⟩
+        · exact .inl h1
+      by_cases hlt : s.sh.sg < s.sh.w
+      · exact ex (CondStep.scxFailGo hne hlt)
+      · exact ex (CondStep.scxFailDone hne (by omega))
+  | .bump n, _, _ => exact ex CondStep.bump
+  | .swake n, _, _ =>
+    obtain ⟨f', hk⟩ := hF.wake_total t .ep n s.sh.f hi.qwf
+    exact ex (CondStep.swake hk)
+  | .fin, _, h => exact ⟨_, ht, CStep.ret h rfl⟩
+
+end
+
+section
+variable (hF : FutexSpec condView Fx)
+include hF
+
+/-- In a state where no thread holds the mutex and no thread in an op can step, every thread in
+an op sleeps at the epoch: a thread asleep at the mutex word has a witness that can step
+(`IoInv.wit`). -/
+theorem stuck_sleep {X : Type} {N : Nat} {s : CState (ioCond Fx) X} (hi : CInv N s) (hN : N ≤ 65535)
+    (hnh : ∀ t, s.ctl t ≠ .holds)
+    (hn : ∀ t op l, s.ctl t = .run op l → ¬ (cmgc (ioCond Fx) X N).Enabled t s) :
+    ∀ u op l, s.ctl u = .run op l →
+      ∃ e, s.ctl u = .run .wait (.sleep e) ∧ (u, CA.ep) ∈ Fx.queue s.sh.f := by
+  have hall : ∀ u op l, s.ctl u = .run op l → (Fx.queue s.sh.f).has u = true := by
+    intro u op l hu
+    cases hq : (Fx.queue s.sh.f).has u
+    · exact absurd (ioCond_enabled hF hi hN hu hq) (hn u op l hu)
+    · rfl
+  have hnm : ∀ u, (u, CA.mtx) ∉ Fx.queue s.sh.f := by
+    intro u hu
+    obtain ⟨v, hv, hw⟩ := hi.mtx.wit (List.ne_nil_of_mem (mem_mtxQ.mpr hu))
+    have hpi : projCtl (s.ctl v) ≠ .idle := by
+      intro he
+      have hw' : WitOk (projCtl (s.ctl v)) s.sh.m.val := hw
+      rw [he] at hw'
+      rcases hw' with ⟨h1, -⟩ | h1 <;> cases h1
+    cases hc : s.ctl v with
+    | idle => rw [hc] at hpi; exact hpi rfl
+    | holds => exact hnh v hc
+    | run op l =>
+      obtain ⟨a, ha⟩ := Queue.has_eq_true.mp (hall v op l hc)
+      cases a
+      · exact Queue.has_eq_false.mp hv () (mem_mtxQ.mpr ha)
+      · obtain ⟨e, he⟩ := hi.qep v ha
+        exact hpi (by rw [he]; rfl)
+  intro u op l hu
+  obtain ⟨a, ha⟩ := Queue.has_eq_true.mp (hall u op l hu)
+  cases a
+  · exact absurd ha (hnm u)
+  · obtain ⟨e, he⟩ := hi.qep u ha; exact ⟨e, he, ha⟩
+
+/-- **`std.Io.Condition` with `std.Io.Mutex` satisfies the condition-variable contract over every
+futex that satisfies the futex contract**, for at most `65535` threads (`wait`'s assertion) and
+fewer than `2^32` `signal`/`broadcast` calls (the epoch's wrap-around, std's own comment). -/
+theorem ioCond_spec : CondSpec (ioCond Fx) 65535 (2 ^ 32) where
+  excl X N := (ioCond_inductive hF.toFutexSafe X N).invariant fun s hi t u ht hu =>
+    hi.mtx.excl t u (by show IoPlace.own (projCtl (s.ctl t)) = true; rw [ht]; rfl)
+      (by show IoPlace.own (projCtl (s.ctl u)) = true; rw [hu]; rfl)
+  view X N := (ioCond_inductive hF.toFutexSafe X N).invariant fun s hi t ht =>
+    hi.mtx.view t (by show IoPlace.own (projCtl (s.ctl t)) = true; rw [ht]; rfl)
+  live X N hN := (ioCond_inductive hF.toFutexSafe X N).invariant fun s hi ⟨hnh, ⟨t, op, l, h, hop⟩, hn⟩ => by
+    obtain ⟨e, he, -⟩ := stuck_sleep hF hi hN hnh hn t op l h
+    rw [h] at he; cases he; exact hop rfl
+  wake X N hN := (ioCond_inductive hF.toFutexSafe X N).invariant fun s hi hcalls ⟨hnh, hO, hn⟩ => by
+    have hs := stuck_sleep hF hi hN hnh hn
+    have hlt : s.sh.ep < 2 ^ 32 := by have := hi.epc; omega
+    have hY := hi.epoch hlt
+    have z : ∀ (g : CCtl CL → Nat), g .idle = 0 → g .holds = 0 → (∀ e, g (.run .wait (.sleep e)) = 0) →
+        tsum N (fun u => g (s.ctl u)) = 0 := by
+      intro g h1 h2 h3
+      exact tsum_eq_zero fun u _ => by
+        cases hc : s.ctl u with
+        | idle => exact h1
+        | holds => exact h2
+        | run op l =>
+          obtain ⟨e, he, -⟩ := hs u op l hc
+          rw [hc] at he; rw [he]; exact h3 e
+    have hB := z bW rfl rfl fun _ => rfl
+    have hW := z wW rfl rfl fun _ => rfl
+    have hP := z spend rfl rfl fun _ => rfl
+    have hC := z cwl rfl rfl fun _ => rfl
+    have hbp : ∀ u, bpend (s.ctl u) = false := fun u => by
+      cases hc : s.ctl u with
+      | idle => rfl
+      | holds => rfl
+      | run op l =>
+        obtain ⟨e, he, -⟩ := hs u op l hc
+        rw [hc] at he; rw [he]; rfl
+    have hA : tsum N (fun u => aw s.sh.ep (s.ctl u)) ≤ tsum N s.qi := tsum_le fun u _ => by
+      cases hc : s.ctl u with
+      | idle => exact Nat.zero_le _
+      | holds => exact Nat.zero_le _
+      | run op l =>
+        obtain ⟨e, he, hq⟩ := hs u op l hc
+        rw [hc] at he; rw [he]
+        show 1 ≤ _
+        unfold CState.qi; simp [hq]
+    have hS := hi.oblS hbp
+    omega
+
+end
+
+/-- The contract is met by a concrete system: the condition over the FIFO futex (the hand model
+of THR-05). -/
+theorem ioCond_fifo : CondSpec (ioCond (Futex.fifo condView)) 65535 (2 ^ 32) :=
+  ioCond_spec (fifo_spec condView)
 
 end Spec
 end Zig
