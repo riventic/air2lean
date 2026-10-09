@@ -80,6 +80,10 @@ def asmAllowlist : List AsmAllowEntry := [
     target := "x86_64", semantics := .opaque,
     reason := "64-bit add into a read-write register: a function of both inputs; it only clobbers flags",
     reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.addr.json; non-volatile" },
+  { template := "", constraints := [], clobbers := [], target := "x86_64", semantics := .opaque,
+    reason := "an empty template executes no instruction: the opaque is a constant",
+    reviewerNote := "A01 tests/roadmap/asm-effects/test_cli.py (`plain`, the barrier without its \
+      clobber: one hash, two opaques)" },
   { template := "", constraints := [], clobbers := ["memory"], target := "x86_64",
     semantics := .opaque,
     reason := "A01's compiler barrier (`asmPureRegistry`): no instruction, so no effect in a model \

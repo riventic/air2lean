@@ -93,7 +93,7 @@ def run(binary):
         branch = function("branchy", [inst(0, "arg", 3, param=0),
             inst(1, "cond_br", 2, [dict(ty=4, val="true")], **{"then": [
                 inst(10, "atomic_load", 0, [dict(inst=0)], order="unordered")], "else": [
-                inst(20, "assembly", 1, source="", volatile=False, clobbers=["memory"], outputs=[], inputs=[])]}),
+                inst(20, "assembly", 1, source="mfence", volatile=False, clobbers=["memory"], outputs=[], inputs=[])]}),
             inst(30, "ret", 2, [dict(ty=1, val="{}")])])
         branch.update(types=[cli.INT, cli.VOID, cli.NORETURN, cli.PTR, dict(k="bool", abi_size=1, abi_align=1)],
                       params=[3], ret=1)

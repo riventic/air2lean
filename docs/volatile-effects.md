@@ -187,6 +187,7 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    | `movq %[v], %[x]` | `=m`, `r` | none | x86_64 | opaque (A01 effect contract) | `asm_effects.setm` |
    | `movl %[a], %%eax` / `xchgl %%eax, %[b]` / `movl %%eax, %[a]` | `+m`, `+m` | `rax` | x86_64 | opaque (A01 effect contract) | `asm_effects.swapm` |
    | `addq %[v], %[x]` | `+r`, `r` | `cc` | x86_64 | opaque (A01 effect contract) | `asm_effects.addr` |
+   | (empty) | none | none | x86_64 | opaque (no instruction) | A01 `asm-effects/test_cli.py` (`plain`) |
    | (empty) | none | `memory` | x86_64 | A01 compiler barrier (`asmPureRegistry`) | `asm_effects.barrier`, `device_asm.barrier` |
 
    A01's read-write and memory operands (`docs/generated-code.md` §Effect contract) are a

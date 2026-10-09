@@ -81,6 +81,40 @@ FIXTURES = [
     # (normalized, schema-11) AIR carries no profile.
     ("case-studies/flow-time/FlowTime/Gen.lean", "case-studies/flow-time/air",
      ["--namespace", "FlowTime", "--prefix", "flow_time.", "--float-semantics", "ieee"], "body"),
+    ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
+     ["--namespace", "Provenance", "--prefix", "provenance."], "exact"),
+    ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",
+     ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
+    ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
+     ["--namespace", "ConstBases", "--prefix", "const_bases."], "exact"),
+    ("tests/roadmap/const-locals/ConstLocals/Gen.lean", "tests/roadmap/const-locals/air/0.16.0",
+     ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
+    ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",
+     ["--namespace", "FuzzS19", "--prefix", "fuzz_s19."], "exact"),
+    ("tests/roadmap/futures/Futures/Gen.lean", "tests/roadmap/futures/air/0.16.0",
+     ["--namespace", "Futures", "--prefix", "futures."], "exact"),
+    ("tests/roadmap/loop-tactics/nested/Nested/Gen.lean", "tests/roadmap/loop-tactics/nested/air",
+     ["--namespace", "Nested", "--prefix", "nested."], "exact"),
+    ("tests/roadmap/thread-locals/ThreadLocals/Gen.lean", "tests/roadmap/thread-locals/air/0.16.0",
+     ["--namespace", "ThreadLocals", "--prefix", "thread_locals."], "exact"),
+    ("tests/roadmap/vector-layouts/Lanes/Gen.lean", "tests/roadmap/vector-layouts/air/0.16.0",
+     ["--namespace", "Lanes", "--prefix", "lanes."], "exact"),
+    ("tests/roadmap/volatile-effects/DeviceEffects/Gen.lean", "tests/roadmap/volatile-effects/air/0.16.0",
+     ["--namespace", "DeviceEffects", "--prefix", "device_effects.",
+      "--device-contract", str(ROOT / "tests/roadmap/volatile-effects/uart.json")], "exact"),
+    # check-device.sh translates only `elapsed` (the declared rdtsc device event).
+    ("tests/roadmap/volatile-effects/DeviceAsm/Gen.lean",
+     "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json",
+     ["--namespace", "DeviceAsm", "--prefix", "device_asm.",
+      "--device-contract", str(ROOT / "tests/roadmap/volatile-effects/tsc.json")], "exact"),
+] + [
+    (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
+     ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")
+    for ns, target in (("S390x", "s390x-linux"), ("X64", "x86_64-linux"))
+] + [
+    (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",
+     ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")
+    for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [
     (f"tests/roadmap/error-width/expected/ErrorWidth{bits}.lean", f"tests/roadmap/error-width/air/bits{bits}",
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
@@ -227,7 +261,9 @@ class Translator:
             if case.mode == "golden":
                 compose(case.dirs, air, case.version)
             else:
-                for src in case.dirs[0].glob("*.json"):
+                # A fixture's AIR is a directory, or the one file its check translates.
+                source = case.dirs[0]
+                for src in (sorted(source.glob("*.json")) if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"
             result = subprocess.run([self.binary, str(air), "-o", str(out), *case.args],
@@ -258,7 +294,7 @@ def coverage_errors(cases):
         if path not in covered and path not in EXCEPTIONS:
             errors.append(f"{path}: tracked generated module with no retranslation rule")
     for case in cases:
-        if not (ROOT / case.path).is_file() or not case.dirs or any(not d.is_dir() for d in case.dirs):
+        if not (ROOT / case.path).is_file() or not case.dirs or any(not d.exists() for d in case.dirs):
             errors.append(f"{case.path} [{case.label}]: generated file or AIR input missing")
     lean = git_files("*.lean")
     for path in EXCEPTIONS:
@@ -282,7 +318,7 @@ def run_check(translator, cases, only):
     for index, case in enumerate(cases):
         if only and only not in case.path and only not in case.label:
             continue
-        if not (ROOT / case.path).is_file() or any(not d.is_dir() for d in case.dirs):
+        if not (ROOT / case.path).is_file() or any(not d.exists() for d in case.dirs):
             continue  # Reported by coverage_errors.
         try:
             difference = translator.matches(index, case, case.path)
