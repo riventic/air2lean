@@ -3055,6 +3055,7 @@
       "semantics": {
         "status": "symbol-index-only",
         "paths": [
+          "ZigLean/Basic.lean",
           "ZigLean/Mem/Basic.lean",
           "ZigLean/Mem/Device.lean"
         ]
@@ -3785,6 +3786,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/Proofs.lean",
           "Proofs/Atomics/Relaxed.lean",
@@ -4684,7 +4686,9 @@
       },
       "semantics": {
         "status": "symbol-index-only",
-        "paths": []
+        "paths": [
+          "ZigLean/Basic.lean"
+        ]
       },
       "emission": {
         "status": "dispatch-arm",
@@ -4698,7 +4702,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Asm/Proofs.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": {
@@ -16496,12 +16502,12 @@
       "Air2Lean/Air/Op.lean": "91ad5f1ba78f09f786735ef0bbcbb586364b2c4690f767024c7581461fa3eb29",
       "Air2Lean/Air/Profile.lean": "f5f4fe8064d68ce22ce0136e9277c54d5846cb25be7573b3ef6dfae7c3750da3",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/AsmAllowlist.lean": "36aed29cb8cd4449baef35ab1f9d7bf4c733c73d174340e4c538bfa62a0344aa",
+      "Air2Lean/AsmAllowlist.lean": "4415d138c0b8a684af03df95a84da17f2842778694212b7d967fb8e4d7752270",
       "Air2Lean/Check.lean": "3fb90ddf113fa2417a7aa6429535a667f0d8e3b4a8c1eb554fbe30b45c619c31",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "1690d74c5f2a46fc42b0d71e8d8cd75468185f101b16377481cdf33db0fc91ca",
       "Air2Lean/Diagnostic.lean": "8ecd9362b67664c28a6346fa48d15d69cf861fd8ae0a592a74e4841953cde291",
-      "Air2Lean/Emit.lean": "8f3153531fb81aada828c16f23038d3d7e841a4ac610f0d2da5c7941436f14e7",
+      "Air2Lean/Emit.lean": "9372d64ba8aca6dec453652b55aa3306b9eea0c49add1ca2690d1f40b01406f0",
       "Air2Lean/Main.lean": "9dc84502ecd9889877263b9efab52fabee98df94ab23cfb3035e7157ae70f005",
       "Air2Lean/Memory.lean": "229c10f4229809ceedb6ef1f82a9253496b08c3ac5311a41de13bf53ca9fa6a3",
       "Air2Lean/ModelRegistry.lean": "e33112809240e770ab834361b7703155b6c5d74054203f2eee788f304d4d0608",
@@ -16514,7 +16520,7 @@
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {
-      "ZigLean/Basic.lean": "61fadbf0435e81e47eeeb8f3d32ce4c4d8846f53873d9ec1a78307a1cd1e623b",
+      "ZigLean/Basic.lean": "66c4e09439ba4f36f91335028ba290874c3855db3578b2236714b0399d3b5b34",
       "ZigLean/Bit.lean": "e723daf6d3f5d118cbbf1380bc821cb744a03efcdfc85014e57bc8b3af2dce44",
       "ZigLean/Conc/Basic.lean": "0eb0b455238adb1c0e2c8c68248cf3e0e5c91243c60e0c8a75a780ab77083a77",
       "ZigLean/Conc/Call.lean": "1c280d4d4b16aca8a52d4290998209110f9c3b98da5431d9208846d088db6f50",
@@ -16599,7 +16605,7 @@
       "ZigLean/Sep/Try.lean": "d71810e014e3ba5dd7c6671f8c02f8b84c7ab86d6614c3d05ee6c0fd6c636845",
       "ZigLean/Sep/TryAlias.lean": "03b55c487ab937f43ef9979a2c338070252519089da5581907a38f1385d879c2",
       "ZigLean/Sep.lean": "f922b5327dc02b7725b5aa0f36e4ba7fc3dea4c1dd3a92a157a58435ab72504e",
-      "ZigLean/Simp.lean": "81da902a886787276fe83806ee687f8b5511af9211a0be44297ce25e507a0fb4",
+      "ZigLean/Simp.lean": "c3273b4eaa19128ab9e225e5fb7cf6a1de92625752d3737e9f2b5e6b57c027b7",
       "ZigLean/SimpAttr.lean": "5ea0f23219da196ee7d29ebdc07358a2ba2f4cdcf1261b40dd6a01635338f1b1",
       "ZigLean/Time.lean": "dde394fe1482a009839be9b5a874597890358075df8c6feaf17a86a50e5aab96",
       "ZigLean/Union.lean": "c86c9f834b81eb16b866faa577c2a9ac29980b51f4fe67d638aebf65191f5060",
@@ -16613,8 +16619,8 @@
       "ZigLean/VecMem.lean": "c20b6386f4b1a9eb15775b694dac5ca6a9a5be8448c43b2c6590d8794ac78ee5"
     },
     "proof-sources": {
-      "Proofs/Asm/Gen.lean": "4e9edbdd232e2638e7cd2ab6ee7648a58f2b9c2f6c49c7123e510d44ebe7ef98",
-      "Proofs/Asm/Proofs.lean": "a61fe3cba03c5af350da81b0b65fdcdb24be1f3a87debe7a924c69f0356ff87d",
+      "Proofs/Asm/Gen.lean": "146caa2012069879d10f161ea65924d36abb7caa69aba07e885535299c2e949d",
+      "Proofs/Asm/Proofs.lean": "ea3e8eaf7030935a45b7678ece9200459fc14fb4a9a20087e301f7db0af81dbe",
       "Proofs/Atomics/Gen.lean": "0ef02d7aef29b77fd9c6fe74d1ed04bbbf58c9c412071b5389ea42531ed4146e",
       "Proofs/Atomics/MessagePassing.lean": "5c8c65767d96d1383935a489608fa4149e069963635c0073fc62b18a2560bc67",
       "Proofs/Atomics/Proofs.lean": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
@@ -16687,15 +16693,15 @@
     "qualification-probes": {
       "scripts/floatprobe.sh": "085852eab980a9b0d87c975e3902ad276e5a44fd699ad31ed571f4dbe4b48989",
       "tests/diff/Concurrent.lean": "4895f5102ecade7c1c9084e719adc713e7459ea6d6a9133adc19696d96c9373d",
-      "tests/diff/Diff.lean": "b93d710b66dd18c2ca1a75a2572535f03b5c383ea9333fda4776cb9e3008d985",
-      "tests/diff/Outcome.lean": "cac6309e3373d6fd40b6666ef42d47ea937c8f7e478ca3f7bb7a9528630dc982",
+      "tests/diff/Diff.lean": "074068c9368088c929d56b3fe65cf7f48d3472afb1b12b5ee8a7ab40ba0a7c71",
+      "tests/diff/Outcome.lean": "4558576e206bbc7bff54e189e0e0435820cb82e2cc05ba18af4ab03cf14cdf16",
       "tests/diff/ScheduleSearch.lean": "ee4ea6c96f8da944fad95895ffcc2bc181be886c9d3abd695f8d8891d782932a",
       "tests/diff/ScheduleSearchTest.lean": "aa14b06fc3ee19578b9bb51e2d6de7e0e8fcf5ef05765f9c7f46c072ce76795b",
       "tests/diff/Schedules.lean": "918e647b5d17391f53bd9febffd3d331e7113955b658e0cb746d7f82ec927d56",
-      "tests/diff/asm/asm.zig": "fdc5a705e896f50cb8a2820dbfd8335dab6693d94def1c32690509c09aa2aa5e",
+      "tests/diff/asm/asm.zig": "3e89bf407385d17a0e68bbd96fb8fbe7a04b0b7972eb6e72f0623f8ae1e2721d",
       "tests/diff/asm/harness.zig": "b5ee279223d7103115811f9519f98d0029d6a973d27c75758942ba1268e02a3f",
       "tests/diff/asm/inputs/bswap32.jsonl": "1c05640dbf91022e14d52d7b38e524236d434585d1916c5e7a499d6a61fa8436",
-      "tests/diff/asm/inputs/divmod.jsonl": "3cb699815ddf1956fab4efa91b7492dce5fd6179ab158f00ccc4c39c9c2afee5",
+      "tests/diff/asm/inputs/divmod.jsonl": "8ac55a79b3fc03e72b5001f9c11edf6e70ed14713fe8224e9e93d4be1d5e4436",
       "tests/diff/asm/inputs/lzcnt64.jsonl": "14401e4d44554fb0f7fda7fffd0395943e5793d036ed13fd3333eb94902c3b64",
       "tests/diff/asm/inputs/popcnt64.jsonl": "f7617884ca3dc4fa8c2bf45ef5053395ec7c97f05ada4622ee97340f692ddbcb",
       "tests/diff/atomics/harness.zig": "bd98ad9a72a437b4602f89c15555e9d491b0e23c0101a316a4ec1b192b4049d2",
@@ -16704,7 +16710,7 @@
       "tests/diff/atomics/inputs/sbRelaxed.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/atomics/inputs/stackPush.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/atomics/inputs/twoPlusTwoW.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
-      "tests/diff/atomics/unspecified.txt": "38344bfe7e3a10155a63393e2643a84c80208a4668ea821fb6620621dad8b30d",
+      "tests/diff/atomics/unspecified.txt": "976fe4d01950a51c1c6f30c48e4d90b62a357fff9b6e3671ee40015d2e94626c",
       "tests/diff/basic/harness.zig": "8246b0658b52d57d30ed529dda353d043535295ac71b65622464870ef49a1e1a",
       "tests/diff/basic/inputs/absDiff.jsonl": "f75e39cdb3e902d8ec6e947c26e480a9ee76f20f3550377d49bbe7086580d8f8",
       "tests/diff/basic/inputs/clampAdd.jsonl": "2561661f2ccc3959cd32bb94c208d6d9730c437aff245d1ace1666d4fe845f06",
@@ -16714,14 +16720,14 @@
       "tests/diff/basic/inputs/tardiness.jsonl": "9b8ea2475e27ee91ffdbd2491293c56a8eed58023edb53ece80ffcb55ada76a9",
       "tests/diff/basic/inputs/totalWeightedTardiness.jsonl": "2ff2802f365df24b219339123d50005d68dd45d68248354a16a09b27b7d70e29",
       "tests/diff/basic/inputs/weightedTardiness.jsonl": "562940a5845f18637ad36aaf34454d1ba62d10754b18e9dabb386b7765853f4f",
-      "tests/diff/common.zig": "72a802f6c8c51e1615d3490d484ae98980ab6a7628eb23b6593da68aacb4ac75",
+      "tests/diff/common.zig": "dcaefb1f5e7d935b0717055681b05941c6153c586f303f46fbe281a9e09f33aa",
       "tests/diff/compat.zig": "106a726539d8b4339e33da66747de1bda6eb054fd0254714976a8311a6efa122",
       "tests/diff/errors/harness.zig": "22e5e9e8d2489741cfa084199d0494629188595d489158bce869b9ce438a13f7",
       "tests/diff/errors/inputs/digitOrZero.jsonl": "12131092f5f8f6b42647096c3b285db00b2980909d45954e54156f1a26b93a97",
       "tests/diff/errors/inputs/parseDigit.jsonl": "8a22d33c0ce12ba478ce26a0b3bcc5e1b5d641ef61469a1116d1eadf9bedda9e",
       "tests/diff/errors/inputs/sumDigits.jsonl": "c8372e36235067cadd2bbaf91f25dad70be8ad0464c4ccd2b9d57b14c02b36d6",
       "tests/diff/floatconv/harness.zig": "a534e63b216c2bec3565dab4f5e9451748eac179ead6a02f5ca512b356adeb22",
-      "tests/diff/floatconv/host.txt": "ef6598826f7cd3e0ba172c7aa971dc77b558dec55f06e1c5e8b5d98153eb3db7",
+      "tests/diff/floatconv/host.txt": "db2081c1cac3b5ced2bd11850950fb4ec5863180aa7da36b69654fe5e24eb876",
       "tests/diff/floatconv/inputs/bits32.jsonl": "235fc31e8ead3015839eea76ada932fa29871e24ce8058d30024ce7dd59377cb",
       "tests/diff/floatconv/inputs/f16ToF128.jsonl": "673dfc25998109416a3429dbd090c91cbed352833ffdfcf8559aaa444a8aafea",
       "tests/diff/floatconv/inputs/f64ToF16.jsonl": "7faec1599776fcb63f9d3001f607ca4a4c608d61d0a88363b3c47155f2e836e6",
@@ -16732,9 +16738,9 @@
       "tests/diff/floatconv/inputs/toByte.jsonl": "8c47a10e61193285fce285ec16d65658f926f3b4781b13cb6873071c3fe63a3b",
       "tests/diff/floatconv/inputs/toI32.jsonl": "ab7bdb47e4a42294d3e73b538a9ccb57054d7dac70d7ad81b50e1c231ec59471",
       "tests/diff/floatconv/inputs/toU64.jsonl": "d651a99980ad3cea7f754d9241a9774c1bd33686e6e701f77c5dac3d4d35030e",
-      "tests/diff/floatconv/unspecified.txt": "8a7e4180088922c0a6578fbd5849ab0c2977b6531875f7d2fee1441eea1a6781",
+      "tests/diff/floatconv/unspecified.txt": "4ad1ab2fc7918d8f98bfea976414b90e55767e820f6bc9a3a4a824730de1af34",
       "tests/diff/floatops/harness.zig": "26264f4790afb87422f0f2d9079012e7b4084a6c2fc9378acf7ac2bce8932563",
-      "tests/diff/floatops/host.txt": "b3d5e231bccda3b881dec71d752decf474b675458ee4f3131c361909cd25b828",
+      "tests/diff/floatops/host.txt": "23ab00df3427ac8a28294e15e1d1aa3c306c6724cf17aadc6bfe926d7000da37",
       "tests/diff/floatops/inputs/cmp64.jsonl": "f410e007a18603bbffa8325c7cc892db6b09fc6c844986810388f2643b1c2fd2",
       "tests/diff/floatops/inputs/divExact64.jsonl": "79305facfb46509f1a2e8d4fc6c40cb1f25e9addf396d1048ad255d3c4324dfc",
       "tests/diff/floatops/inputs/op128.jsonl": "0621d370507d7757de774ead5efdc2f698be6c41593d8696ca710fe81905b6fc",
@@ -16742,7 +16748,7 @@
       "tests/diff/floatops/inputs/op32.jsonl": "e36a85c1cb082a993478f38502cff079ef29cf8553f5353e8f73c452c485cf4c",
       "tests/diff/floatops/inputs/op64.jsonl": "443a4c3cbd18536975f4d0767d34ff03b2c655e97e2e948f9de2078a8a2e8c32",
       "tests/diff/floatops/inputs/op80.jsonl": "0a5968d4eb578b2b4a6094c982a2a77d4d8ffd733fb5a6a9d6e9ea74fed340ed",
-      "tests/diff/floatops/unspecified.txt": "25be28d61c81f01974a4e5bdd9ff2e8f465bc346a439e90ea439ef71b39ac8bf",
+      "tests/diff/floatops/unspecified.txt": "faab3d3e9da42bbaa5c8e92d96d5de89a12f89138907e366325a24fd55ab797c",
       "tests/diff/floats/harness.zig": "ba4d8aeefa215f7f21269b520ce7e9067a0c56e222812bd242634c2d2b128d59",
       "tests/diff/floats/inputs/celsius.jsonl": "549c2f8be5c8334c3a0936a97720cd7affdb1fee522d9725f7a707538ea2403d",
       "tests/diff/floats/inputs/clamp.jsonl": "e35167fa23b23badea24a9a0ace08a72bf9445db041c9239d623f52ccf9d9c33",
@@ -16750,7 +16756,7 @@
       "tests/diff/floats/inputs/hypot2.jsonl": "8d98ee43d80e2032e743df1baf1cb83fbac246b059ecd590b2881b7e24991b65",
       "tests/diff/floats/inputs/isNan.jsonl": "5939b5858a4b96edbb970232491e23fb792fada1905d0035e40ecc2dd2e84063",
       "tests/diff/floats/inputs/lerp.jsonl": "10564abc609aae3292974a4543d365f42b76770d07d569418501a020940c16d8",
-      "tests/diff/gen_inputs.zig": "59bb392c2a9aef8c5bddeb8c967c20e7c39e57e9384c67566fa64a89f446ec6e",
+      "tests/diff/gen_inputs.zig": "52be6190ffe7c7b768bdcf5a33197c79f682c4a6f6c3a8d2c09358fee44ab097",
       "tests/diff/iogroup/harness.zig": "04f7a39ba895e87ec31a961e40650d5a920770f8cfd383d2c12c02da312f5377",
       "tests/diff/iogroup/inputs/groupConcurrent.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/iogroup/inputs/groupCounter.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
@@ -16799,7 +16805,7 @@
       "tests/diff/layout/inputs/wordByte.jsonl": "de641416f5dd815c978c1834e84d6bef90c2d8d63f9fbc377b21a0aa506b23f6",
       "tests/diff/layout/inputs/wordHalf.jsonl": "86e9cad0b39b5b43e82ad770461b4f35004c674533f44b827b52fc7ae3ebf8a1",
       "tests/diff/layout/inputs/writeTable.jsonl": "eeebe16636b54fbd000e13ea15a289d85f0b244a8550d969219cfdb0dcd063fb",
-      "tests/diff/layout/unspecified.txt": "0fbfff9f32d547e0b961f055fa9dcb399d5818b89bc0512489b7a53c1caed755",
+      "tests/diff/layout/unspecified.txt": "7cbb52e27e8ead91b798e135072d6820587de037b6d35c3d54554b3b8fa45ecd",
       "tests/diff/lean-toolchain": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "tests/diff/libm/libm.zig": "5e6bbe2fa6b3eeb42bf8aa9231faa25b4073c603991340f94dfb21ac4184aa50",
       "tests/diff/libm/selfcheck.zig": "be039004f4fcdedef5735eca17bda8d81ec9db936d43ff0da7b61a290714cd07",
@@ -16864,7 +16870,7 @@
       "tests/diff/threads/inputs/parallelCounter.jsonl": "d9dd9148057c84cf64f4b79cf9c83e06945ce5f7c6a035830c0fb6e316de188b",
       "tests/diff/threads/inputs/race.jsonl": "8ad5d78af72f21c535b3f70b52de3f1d983569535c802f203069bd22239a0ab2",
       "tests/diff/threads/inputs/xchgRace.jsonl": "eea5e3d482e5427c628357c8e34c1ccfa9dbd0c7ef1a446318f43b4f2752dfe9",
-      "tests/diff/threads/unspecified.txt": "ec9163010bc102d42a5394de7626b2770a0b3680c703e809eb42f4d034c217e6",
+      "tests/diff/threads/unspecified.txt": "3ee73017a1c74113c36e8cf117e786b0cc6c6b5b4dd70e3a695792a8335c8ee3",
       "tests/diff/threadsync/harness.zig": "4168ec09587891ec115e48d4a34b41c0dfdc9300bd4d3fc98180dd4ee4d3fc3c",
       "tests/diff/threadsync/inputs/handoff.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/threadsync/inputs/mutexCounter.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
@@ -16883,7 +16889,7 @@
       "tests/diff/variants/inputs/severity.jsonl": "032dfb378f5520b25f2644ad6794b00f668a277ca05edfa353e98c5342d8bb8c",
       "tests/diff/variants/inputs/totalArea.jsonl": "f3070eb831f5491973eac36299898c17aecef6fb499a1f162ab78c5d4590c1bf",
       "tests/diff/vectors/harness.zig": "62dad25b38d1b12d31054afe45a30c3ad4cc1a625f20503844aca3b483ded35e",
-      "tests/diff/vectors/host.txt": "b86983cd417cf4964adc1a3a8e1e499c5b2bc149ec42ba5649409982bc831422",
+      "tests/diff/vectors/host.txt": "f73cbfb18464beeb276a8e2770e1d97f524027d850cebe44f62462a1415dc543",
       "tests/diff/vectors/inputs/andLanes.jsonl": "616c82611163b5002a2d03f369f9df7e35ed78e570665d7ccd04847974254e93",
       "tests/diff/vectors/inputs/checkedAdd.jsonl": "3baba73290fef4d4ce3157350b4dad264b9ed81c498bf32f7bb8b9bc5261b01d",
       "tests/diff/vectors/inputs/fDot.jsonl": "0e02225e4e497d5a31273ebf3255614311998efffe67e3d9344e81a8673d9f7e",
@@ -16914,7 +16920,7 @@
       "tests/diff/vectors/inputs/vShift.jsonl": "40d1a898bdc724c1dcb7d63be5fc2d5daacff9962805878ee12338d1ce80fe70",
       "tests/diff/vectors/inputs/vToFloat.jsonl": "87f4218b5e6749e6ab6164c20b93084b9062ac440d2ce43788cee55ecdb4c8a6",
       "tests/diff/vectors/inputs/xorLanes.jsonl": "ad9f928c109a0831aab1fd48307750bb855c93aebbaa11699d14bd6dcfa42464",
-      "tests/diff/vectors/unspecified.txt": "219ed28a5dc37df30d2576beab900ba902fe1e392d56e98f3bd9db775235c9c7",
+      "tests/diff/vectors/unspecified.txt": "a3e3aebcbcd1e43dfe3b10b9aaac1bd72beaf4e461d42cbb09d59dfb1575758c",
       "tests/golden/0.14.1/floatops/Gen.lean": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a",
       "tests/golden/0.14.1/layout/Gen.lean": "3310a2a83ceee5b599294e9d0b07437d15b71a93071a7e092f8935d066354c44",
       "tests/golden/0.14.1/layout/air/layout.bumpPair.json": "4a11a05c1a5802c3797224e38abff24d3c7051c1dc1edd8ba6595be225dc468e",
@@ -17426,7 +17432,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
       "Air2Lean/Memory.lean": "229c10f4229809ceedb6ef1f82a9253496b08c3ac5311a41de13bf53ca9fa6a3",
-      "docs/std-models.md": "e5225778dc3dd8dc2a30b750dee3f4d8118e1c425acd3518042c4d2db9d476cb"
+      "docs/std-models.md": "c9c0d11b5209776d1f3104912277ccbc4ee987cc4d387e658ea133d9e47dd15d"
     }
   },
   "summary": {
