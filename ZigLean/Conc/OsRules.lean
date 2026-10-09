@@ -45,7 +45,7 @@ theorem sublistsLen_sublist {α : Type} :
   | k + 1, x :: xs, ys, h => by
     simp only [sublistsLen, List.mem_append, List.mem_map] at h
     rcases h with ⟨zs, hz, rfl⟩ | h
-    · exact (sublistsLen_sublist k xs zs hz).cons₂ x
+    · exact (sublistsLen_sublist k xs zs hz).cons_cons x
     · exact (sublistsLen_sublist (k + 1) xs ys h).cons x
 
 theorem sublistsLen_ne_nil {α : Type} :
@@ -77,13 +77,18 @@ theorem wakeSets_mem {m : Mem} {p : Ptr} {n : Option Nat} {ts : List ThreadId}
 
 /-- A wake changes only the queue: the memory, the clocks, the footprint, the atomic locations
 and the threads are as before. No happens-before edge. -/
-theorem wakeAt_frame {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem} {k : Nat}
+theorem wakeAt_frame {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem} {k : Option Nat}
     (h : ((wakeAt c p n).run m).run = some (.ok (k, m'))) :
     m'.blocks = m.blocks ∧ m'.clocks = m.clocks ∧ m'.footprint = m.footprint ∧
       m'.atomics = m.atomics ∧ m'.threads = m.threads := by
-  simp only [wakeAt, wakeThreads, zig_unfold, ExceptT.run] at h
-  cases h
-  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  unfold wakeAt at h
+  cases hs : (wakeSets m p n)[c]? with
+  | none =>
+    simp [wakeThreads, zig_unfold, ExceptT.run, hs] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  | some ts =>
+    simp [wakeThreads, zig_unfold, ExceptT.run, hs] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- An interrupt changes only the queue and the interrupt set (OSG-01). -/
 theorem interrupt_frame {t : ThreadId} {m m' : Mem}

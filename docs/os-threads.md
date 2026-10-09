@@ -108,7 +108,8 @@ macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std re
 The new thread's thread-local instances are batch7 C02's (`tlsEnter` in the dispatcher), and
 `clone`'s `stack`/`tp` and `tls.prepareArea` belong to the row. Linux `PARENT_SETTID` writes
 `Env.tid child` to `ptid` after the fork. A child that reads `ptid` unsynchronized races, which is
-stricter than the kernel; std's child never reads it.
+stricter than the kernel. `pthread_create` writes the handle the same way. Std's child reads
+neither.
 
 **Linux exit and join.** The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`.
 After `entry` returns, `cloneExit` does `CHILD_CLEARTID` in one turn: a release store of `0` to

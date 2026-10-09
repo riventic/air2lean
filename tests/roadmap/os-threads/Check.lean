@@ -117,11 +117,13 @@ def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
 #guard wakeCount p0 (some 5) twoWaiters == 1
 #guard wakeCount p0 none twoWaiters == 1
 #guard ((wakeAt 0 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
-  some (.ok (1, #[1]))
+  some (.ok (some 1, #[1]))
 #guard ((wakeAt 1 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
-  some (.ok (1, #[2]))
+  some (.ok (some 1, #[2]))
+#guard ((wakeAt 2 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+  some (.ok (none, #[]))
 #guard ((wakeAt 0 p0 none).run twoWaiters).run.map (·.map fun (n, m) => (n, m.waiters.size)) ==
-  some (.ok (2, 1))
+  some (.ok (some 2, 1))
 -- Linux FUTEX_WAKE with nobody waiting wakes 0; `val = 0` still wakes one (kernel `nr_wake`).
 #guard outcomes noKids (do let p ← word 0; Linux.futex_3arg p 0x81 1) hex64 == ["0"]
 #guard Linux.wakeLimit 0 == 1 && Linux.wakeLimit 0xffffffff == 1 && Linux.wakeLimit 3 == 3
@@ -306,6 +308,14 @@ def sleeper : Mem := { threads := #[{ spawner := 0, joined := true }, { spawner 
 #guard ((Linux.tgkill env 1000 1001 9).run sleeper).run.map (·.map (·.1)) == some (.error .unspecified)
 #guard ((Darwin.pthread_kill 1 23).run sleeper).run.map (·.map fun (r, m) => (r, m.woken)) ==
   some (.ok (0, #[1]))
+-- A detached thread stays signalable; a joined one is gone (ESRCH).
+def detachKill : MemM (BitVec 32) := do
+  let _ ← Darwin.pthread_detach 1
+  Darwin.pthread_kill 1 23
+#guard (detachKill.run sleeper).run.map (·.map fun (r, m) => (r, m.woken)) == some (.ok (0, #[1]))
+#guard ((Darwin.pthread_kill 1 23).run { sleeper with
+    threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := true }] }).run.map
+  (·.map (·.1)) == some (.ok 3)
 -- A canceled sleeper: thread 1 waits, main signals it, then wakes nobody; the waiter returns
 -- EINTR (signal or spurious) or deadlocks only when main's signal came before its sleep.
 def intrKid : Tgt → ConcM Tgt Unit := fun _ => do

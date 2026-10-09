@@ -167,18 +167,18 @@ def wakeCount (p : Ptr) (n : Option Nat) (m : Mem) : Nat := (wakeSets m p n).len
 def wakeThreads (ts : List ThreadId) : MemM Unit := modify fun m =>
   { m with waiters := m.waiters.filter (fun w => !ts.contains w.1), woken := m.woken ++ ts.toArray }
 
-/-- Wake option `c` of up to `n` waiters at `p`: the number woken. -/
-def wakeAt (c : Nat) (p : Ptr) (n : Option Nat) : MemM Nat := do
-  let ts := ((wakeSets (← get) p n)[c]?).getD []
+/-- Wake option `c` of up to `n` waiters at `p`: the number woken, or `none` (nobody woken) past
+the last option. -/
+def wakeAt (c : Nat) (p : Ptr) (n : Option Nat) : MemM (Option Nat) := do
+  let some ts := (wakeSets (← get) p n)[c]? | return none
   wakeThreads ts
-  pure ts.length
+  return some ts.length
 
 /-- A futex wake of up to `n` waiters at `p` (`none`: all of them; module doc). With `spurious`,
-the last option is `none`: `EINTR`, nobody woken. -/
+there is one more option, `none`: `EINTR`, nobody woken. -/
 def futexWake (p : Ptr) (n : Option Nat) (spurious : Bool := false) : ConcM Tgt (Option Nat) := do
   let c ← pick fun m => wakeCount p n m + (if spurious then 1 else 0)
-  if spurious && c == wakeCount p n (← ConcM.liftMem get) then return none
-  some <$> ConcM.liftMem (wakeAt c p n)
+  ConcM.liftMem (wakeAt c p n)
 
 /-- Wake every thread queued at `p` (the kernel's wake after `CHILD_CLEARTID`): no choice. -/
 def wakeAll (p : Ptr) : MemM Unit := do
@@ -211,14 +211,9 @@ timeout: ?*const timespec) usize` with `cmd = .WAIT` (private or not): `0` (woke
 def futex_4arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) (timeout : Option Ptr) :
     ConcM Tgt (BitVec 64) := do
   if futex_op ≠ FUTEX_WAIT ∧ futex_op ≠ FUTEX_WAIT ||| FUTEX_PRIVATE then throw .unspecified
-  let timed ← match timeout with
-    | none => pure (some false)
-    | some ts => do
-      match ← ConcM.liftMem (readTimespec ts) with
-      | none => pure none
-      | some _ => pure (some true)
-  let some timed := timed | return negErrno E.INVAL
-  match ← futexWait uaddr val timed with
+  if let some ts := timeout then
+    if (← ConcM.liftMem (readTimespec ts)).isNone then return negErrno E.INVAL
+  match ← futexWait uaddr val timeout.isSome with
   | .woken => return 0
   | .mismatch => return negErrno E.AGAIN
   | .interrupted => return negErrno E.INTR

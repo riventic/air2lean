@@ -63,7 +63,7 @@ theorem Triple.mfree {p : Ptr} {A S : Nat} {bs : Array Byte} (hS : bs.size = S) 
     simp [Darwin.free, zig_unfold, hblk, hsz, hr]
 
 theorem Triple.mfreeNull : Triple emp (Darwin.free none) (fun _ => emp) :=
-  Triple.of_run fun m _ hF hd hm hp hst => ⟨(), m, Heap.empty, rfl, hp ▸ hd, hp ▸ hm, rfl, hst⟩
+  Triple.of_run fun m _ _ hd hm hp hst => ⟨(), m, Heap.empty, rfl, hp ▸ hd, hp ▸ hm, rfl, hst⟩
 
 /-- `free` of a pointer into a dead block (a double free, a free after a free) is `.illegal`. -/
 theorem Os.Darwin.free_dead {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hb : p.block = some b)

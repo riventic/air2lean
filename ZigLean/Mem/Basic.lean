@@ -265,6 +265,8 @@ structure OsState where
   clockReads : Nat := 0
   /-- Each thread's libc `errno` cell (macOS `__error()`), made at its first use. -/
   errno : Array (ThreadId × BlockId) := #[]
+  /-- The threads that `pthread_detach` released: they stay signalable while they run. -/
+  detached : Array ThreadId := #[]
   deriving Repr, Inhabited
 
 structure Mem where

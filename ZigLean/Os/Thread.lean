@@ -19,7 +19,8 @@ the parent (`Thread.fork`). Its thread-local variables are new instances (batch7
 generated dispatcher's `tlsEnter`; the `tls` argument of `clone` and `tls.prepareArea` are part
 of this row and not translated). Linux `PARENT_SETTID` writes the child's id to `ptid`; the
 parent makes that write after the fork, so a child that reads `ptid` without synchronizing races
-(stricter than the kernel; std's child never reads it).
+(stricter than the kernel; std's child never reads it). `pthread_create` writes the handle the
+same way.
 
 **Linux exit** (OST-02). The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`:
 the entry function, then the kernel's `CHILD_CLEARTID` in one turn (`cloneExit`): a release store
@@ -61,11 +62,13 @@ def spawnChoice (env : Env) (total : Nat) : ConcM Tgt Nat :=
   | .available => pure 0
   | .fallible => (assignmentChoiceC (Tgt := Tgt) (σ := Unit) total).run' ()
 
-/-- Thread `t` exists and has not exited (Linux) or been joined or detached (macOS); thread 0 is
-alive until the run ends. -/
+/-- Thread `t` can be signaled: it exists, and it has not exited (Linux `cloneExit`) or been
+joined (macOS); a detached macOS thread stays signalable (the model does not see its end, so a
+signal to one that ended returns `0`, where POSIX leaves it undefined). Thread 0 is alive until
+the run ends. -/
 def _root_.Zig.Mem.threadAlive (m : Mem) (t : ThreadId) : Bool :=
   match m.threads[t]? with
-  | some r => t == 0 || !r.joined
+  | some r => t == 0 || !r.joined || m.os.detached.contains t
   | none => false
 
 /-- A signal to thread `t` (OSG-01): it wakes if it sleeps at a futex; the interrupt is pending
@@ -227,7 +230,8 @@ def pthread_detach (thread : ThreadId) : MemM (BitVec 16) := do
   let m ← get
   let some rec := m.threads[thread]? | throw .illegal
   if rec.spawner != m.current || rec.joined then throw .illegal
-  set { m with threads := m.threads.set! thread { rec with joined := true } }
+  set { m with threads := m.threads.set! thread { rec with joined := true },
+               os := { m.os with detached := m.os.detached.push thread } }
   return 0
 
 /-- `pthread_self() pthread_t`. -/

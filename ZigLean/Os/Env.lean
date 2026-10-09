@@ -80,8 +80,9 @@ structure Env.Valid (env : Env) : Prop where
   clock_mono : ∀ k, k.monotone = true → ∀ i j, i ≤ j → env.clock k i ≤ env.clock k j
   clock_lt : ∀ k i, env.clock k i < timespecLimit
 
-/-- The environment of the runtime regressions: CPUs 0–3, assignment always succeeds, thread
-`t` has id `1000 + t`, a clock that ticks once per read, and no malloc slack. -/
+/-- The environment of the runtime regressions and examples: CPUs 0–3, assignment always
+succeeds, thread `t` has id `1000 + t`, a clock that ticks once per read, and no malloc slack. It
+is not `Valid` (the ids wrap at `2^32`); theorems quantify over environments instead. -/
 def Env.example : Env where
   cpuMask := 0xf
   spawn := .available
