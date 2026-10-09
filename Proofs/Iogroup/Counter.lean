@@ -1,6 +1,7 @@
 import Proofs.Iogroup.Gen
 import ZigLean.Conc.LockRules
 import ZigLean.Conc.Share
+import ZigLean.Witness
 
 /-!
 # `groupCounter` over all schedules
@@ -1416,5 +1417,7 @@ theorem groupCounter_reclaim {fuel : Nat} {o : Nat → Nat} {v : Except ErrName 
   obtain ⟨_, _, -, hq⟩ := proto.run_sound dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
   exact hq
+
+nonvacuity_witness take_run := ⟨{ groups := grp 3 }, rfl, trivial⟩
 
 end Iogroup.GroupCounter

@@ -1,5 +1,6 @@
 import Proofs.Threadsync.Deadline
 import ZigLean.Conc.Word
+import ZigLean.Witness
 
 /-!
 # `threadsync.waitGroup` over all schedules
@@ -3503,5 +3504,9 @@ read included), no deadlock at a futex, no panic, under every schedule. -/
 theorem waitGroup_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o waitGroup mem0).run ≠ some (.error e) :=
   proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
+nonvacuity_witness tally_decode :=
+  ⟨Array.replicate 24 (.int 0), 0, 0, 0, 0, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
 
 end Threadsync.WG

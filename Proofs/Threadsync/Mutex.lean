@@ -1,4 +1,5 @@
 import Proofs.Threadsync.Lock
+import ZigLean.Witness
 
 /-!
 # `threadsync.mutexCounter` over all schedules
@@ -859,6 +860,10 @@ at the futex, no panic, under every schedule. -/
 theorem mutexCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o mutexCounter mem0).run ≠ some (.error e) :=
   proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
+nonvacuity_witness cnt_decode :=
+  ⟨Enc.encode (0 : BitVec 32) ++ Enc.encode (4 : BitVec 32), 0, by decide +kernel,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
 
 end Threadsync.MutexCounter
 
