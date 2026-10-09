@@ -452,7 +452,73 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.arraySlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.divExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fetchAdd.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.isNull.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.loadAcquire.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.manyElem.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.narrow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.retreat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseBits.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseLanes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.splatLanes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeMonotonic.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeRelease.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeSeqCst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeUnordered.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subWrap.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.swapBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.toFloat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.truncUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.unsafeReturn.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.widen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.xorBits.json"
         ]
       },
       "proofs": {
@@ -520,7 +586,8 @@
           "tests/golden/floats/air/floats.hypot2.json",
           "tests/golden/floats/air/floats.lerp.json",
           "tests/golden/options/air/options.find.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -588,7 +655,11 @@
           "tests/golden/pointers/air/pointers.delay.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -700,7 +771,10 @@
           "tests/golden/0.14.1/layout/air/layout.laneSet.json",
           "tests/golden/layout/air/layout.bump.json",
           "tests/golden/layout/air/layout.incCount.json",
-          "tests/golden/layout/air/layout.succ.json"
+          "tests/golden/layout/air/layout.succ.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -819,7 +893,8 @@
           "tests/golden/floatops/air/floatops.op80.json",
           "tests/golden/floats/air/floats.celsius.json",
           "tests/golden/floats/air/floats.fitness.json",
-          "tests/golden/floats/air/floats.lerp.json"
+          "tests/golden/floats/air/floats.lerp.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -951,7 +1026,7 @@
     },
     {
       "tag": "sub_wrap",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -987,7 +1062,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subWrap.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -997,19 +1074,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "subWrap",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "sub_sat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -1045,7 +1118,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1055,12 +1130,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "subSat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -1300,7 +1371,7 @@
     },
     {
       "tag": "mul_sat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -1336,7 +1407,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulSat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1346,12 +1419,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "mulSat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -1705,7 +1774,7 @@
     },
     {
       "tag": "div_exact",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -1748,7 +1817,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.divExact.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1759,12 +1830,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "divExact",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -2061,7 +2128,7 @@
     },
     {
       "tag": "ptr_add",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2097,26 +2164,27 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "advance",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "ptr_sub",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2152,19 +2220,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.retreat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "retreat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -2285,7 +2351,7 @@
     },
     {
       "tag": "add_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2321,26 +2387,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "addOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "sub_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2376,26 +2440,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "subOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "mul_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2431,26 +2493,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "mulOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "shl_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2488,19 +2548,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shlOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -2584,7 +2642,15 @@
           "tests/golden/pointers/air/pointers.dueOf.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -2778,7 +2844,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json"
         ]
       },
       "proofs": {
@@ -2949,7 +3016,8 @@
           "tests/golden/layout/air/layout.align4.json",
           "tests/golden/layout/air/layout.maskStore.json",
           "tests/golden/layout/air/layout.ptrFromAddr.json",
-          "tests/golden/layout/air/layout.ptrRoundTrip.json"
+          "tests/golden/layout/air/layout.ptrRoundTrip.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json"
         ]
       },
       "proofs": {
@@ -3127,7 +3195,7 @@
     },
     {
       "tag": "shr_exact",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3169,19 +3237,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shrExact",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -3232,7 +3298,9 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json"
         ]
       },
       "proofs": {
@@ -3248,7 +3316,7 @@
     },
     {
       "tag": "shl_exact",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3290,26 +3358,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shlExact",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "shl_sat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3351,26 +3417,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shlSat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "xor",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3439,7 +3503,13 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.xorBits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -3454,12 +3524,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "xorBits",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -3731,7 +3797,18 @@
           "tests/golden/pointers/air/pointers.maxPtr.json",
           "tests/golden/variants/air/variants.prioValue.json",
           "tests/golden/variants/air/variants.totalArea.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -3886,7 +3963,17 @@
           "tests/golden/variants/air/variants.severity.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json"
         ]
       },
       "proofs": {
@@ -4020,7 +4107,8 @@
           "tests/golden/options/air/options.find.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -4134,7 +4222,8 @@
           "tests/golden/options/air/options.find.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -4254,7 +4343,17 @@
           "tests/golden/variants/air/variants.severity.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json"
         ]
       },
       "proofs": {
@@ -4273,7 +4372,7 @@
     },
     {
       "tag": "trap",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -4309,19 +4408,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "trapZero",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -4584,7 +4681,17 @@
           "tests/golden/variants/air/variants.next.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -4616,7 +4723,7 @@
     },
     {
       "tag": "call_always_tail",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -4680,7 +4787,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4703,19 +4812,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "alwaysTail",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "call_never_tail",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -4779,7 +4884,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4802,19 +4909,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "neverTail",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "call_never_inline",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -4878,7 +4981,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -4901,19 +5006,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "neverInline",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "clz",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -4949,26 +5050,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "leading",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "ctz",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5004,26 +5103,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "trailing",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "popcount",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5059,26 +5156,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "population",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "byte_swap",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5114,26 +5209,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.swapBytes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "swapBytes",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "bit_reverse",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5169,19 +5262,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseBits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "reverseBits",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -6229,7 +6320,9 @@
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -6336,7 +6429,9 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/floatops/air/floatops.cmp64.json"
+          "tests/golden/floatops/air/floatops.cmp64.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -6462,7 +6557,13 @@
           "tests/golden/recursion/air/recursion.isEven.json",
           "tests/golden/recursion/air/recursion.isOdd.json",
           "tests/golden/variants/air/variants.isRound.json",
-          "tests/golden/variants/air/variants.isUrgent.json"
+          "tests/golden/variants/air/variants.isUrgent.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json"
         ]
       },
       "proofs": {
@@ -6570,7 +6671,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/floatops/air/floatops.cmp64.json",
-          "tests/golden/pointers/air/pointers.maxPtr.json"
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json"
         ]
       },
       "proofs": {
@@ -6794,7 +6896,8 @@
           "tests/golden/floats/air/floats.isNan.json",
           "tests/golden/layout/air/layout.ptrFromAddr.json",
           "tests/golden/layout/air/layout.ptrRoundTrip.json",
-          "tests/golden/recursion/air/recursion.gcd.json"
+          "tests/golden/recursion/air/recursion.gcd.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json"
         ]
       },
       "proofs": {
@@ -7051,7 +7154,19 @@
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json"
         ]
       },
       "proofs": {
@@ -7120,7 +7235,8 @@
           "tests/golden/layout/air/layout.bumpDigit.json",
           "tests/golden/variants/air/variants.area.json",
           "tests/golden/variants/air/variants.next.json",
-          "tests/golden/variants/air/variants.severity.json"
+          "tests/golden/variants/air/variants.severity.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json"
         ]
       },
       "proofs": {
@@ -7138,7 +7254,7 @@
     },
     {
       "tag": "loop_switch_br",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -7175,7 +7291,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7184,19 +7302,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "dispatch",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "switch_dispatch",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -7232,19 +7346,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "dispatch",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -7333,7 +7445,7 @@
     },
     {
       "tag": "try_cold",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -7391,7 +7503,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -7405,19 +7519,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "coldTry",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "try_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -7453,26 +7563,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "tryPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "try_ptr_cold",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -7508,19 +7616,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "tryPtrCold",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -7678,7 +7784,73 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.arraySlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.divExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fetchAdd.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.isNull.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.loadAcquire.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.manyElem.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.narrow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.retreat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseBits.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseLanes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.splatLanes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeMonotonic.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeRelease.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeSeqCst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeUnordered.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subWrap.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.swapBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.toFloat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.truncUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.unsafeReturn.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.widen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.xorBits.json"
         ]
       },
       "proofs": {
@@ -7742,7 +7914,8 @@
           "tests/golden/options/air/options.find.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -7960,7 +8133,9 @@
           "tests/golden/layout/air/layout.setMode.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -8038,7 +8213,18 @@
           "tests/golden/variants/air/variants.area.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -8111,7 +8297,7 @@
     },
     {
       "tag": "is_null",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8147,19 +8333,19 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.isNull.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "isNull",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -8433,7 +8619,9 @@
         "paths": [
           "tests/golden/errors/air/errors.digitOrZero.json",
           "tests/golden/layout/air/layout.bump.json",
-          "tests/golden/layout/air/layout.bumpDigit.json"
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json"
         ]
       },
       "proofs": {
@@ -8560,9 +8748,9 @@
       },
       "rejection": null,
       "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "nonErrPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
+        "source": null,
+        "function": null,
+        "reason": "0.15.2 and 0.14.1 call analyzePtrIsNonErr only from zirRetLoad under error return tracing (the -fno-error-tracing export profile never reaches it; a ReleaseSafe probe of a large error-union return emitted no ret_load); 0.16.0 emits it for a by-reference error-union capture with an error switch (switchErrRef, exported)"
       },
       "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
@@ -8571,7 +8759,7 @@
     },
     {
       "tag": "bool_and",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "fallback-named-decoder",
         "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
@@ -8607,26 +8795,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "threeWay",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "bool_or",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "fallback-named-decoder",
         "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
@@ -8662,19 +8848,18 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "alignSlice",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -8797,7 +8982,20 @@
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/pointers/air/pointers.swap.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -8856,7 +9054,7 @@
     },
     {
       "tag": "ret",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8903,7 +9101,14 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.divExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.truncUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.unsafeReturn.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8946,12 +9151,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "unsafeReturn",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -9113,7 +9314,66 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.arraySlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fetchAdd.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.isNull.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.loadAcquire.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.manyElem.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.narrow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.retreat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseBits.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseLanes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.splatLanes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeMonotonic.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeRelease.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeSeqCst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeUnordered.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subWrap.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.swapBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.toFloat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.widen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.xorBits.json"
         ]
       },
       "proofs": {
@@ -9203,7 +9463,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
-          "tests/golden/0.14.1/variants/air/variants.scale.json"
+          "tests/golden/0.14.1/variants/air/variants.scale.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json"
         ]
       },
       "proofs": {
@@ -9467,7 +9728,20 @@
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/pointers/air/pointers.swap.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -9582,7 +9856,17 @@
           "tests/golden/variants/air/variants.area.json",
           "tests/golden/variants/air/variants.next.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -9600,7 +9884,7 @@
     },
     {
       "tag": "fptrunc",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -9636,26 +9920,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.narrow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "narrow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "fpext",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -9691,19 +9973,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.widen.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "widen",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -9769,7 +10049,14 @@
           "tests/golden/pointers/air/pointers.addTo.json",
           "tests/golden/variants/air/variants.area.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json"
         ]
       },
       "proofs": {
@@ -9928,7 +10215,12 @@
           "tests/golden/0.14.1/layout/air/layout.setNum.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shl64.json",
-          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json"
+          "tests/roadmap/bitops-native/shift-panic/air/0.14.1/shift.shr40.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json"
         ]
       },
       "proofs": {
@@ -10284,7 +10576,8 @@
         "paths": [
           "tests/golden/errors/air/errors.digitOrZero.json",
           "tests/golden/errors/air/errors.sumDigits.json",
-          "tests/golden/layout/air/layout.bumpDigit.json"
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json"
         ]
       },
       "proofs": {
@@ -10342,7 +10635,9 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/layout/air/layout.bump.json"
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json"
         ]
       },
       "proofs": {
@@ -10398,7 +10693,11 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/layout/air/layout.bump.json"
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -10414,7 +10713,7 @@
     },
     {
       "tag": "errunion_payload_ptr_set",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -10455,7 +10754,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10465,12 +10766,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "setPayload",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -10516,7 +10813,10 @@
         "paths": [
           "tests/golden/errors/air/errors.parseDigit.json",
           "tests/golden/errors/air/errors.sumDigits.json",
-          "tests/golden/layout/air/layout.digit.json"
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -10569,7 +10869,10 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/errors/air/errors.sumDigits.json"
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -10585,7 +10888,7 @@
     },
     {
       "tag": "struct_field_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -10621,19 +10924,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "fieldPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -10691,7 +10992,8 @@
           "tests/golden/0.14.1/layout/air/layout.wordOf.json",
           "tests/golden/0.14.1/variants/air/variants.scale.json",
           "tests/golden/pointers/air/pointers.delay.json",
-          "tests/golden/pointers/air/pointers.setOptJob.json"
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json"
         ]
       },
       "proofs": {
@@ -10753,7 +11055,8 @@
           "tests/golden/0.14.1/layout/air/layout.setNum.json",
           "tests/golden/0.14.1/variants/air/variants.scale.json",
           "tests/golden/pointers/air/pointers.dueOf.json",
-          "tests/golden/pointers/air/pointers.setOptJob.json"
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json"
         ]
       },
       "proofs": {
@@ -10926,7 +11229,14 @@
           "tests/golden/0.14.1/variants/air/variants.scale.json",
           "tests/golden/basic/air/basic.totalWeightedTardiness.json",
           "tests/golden/basic/air/basic.weightedTardiness.json",
-          "tests/golden/variants/air/variants.area.json"
+          "tests/golden/variants/air/variants.area.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json"
         ]
       },
       "proofs": {
@@ -11058,7 +11368,7 @@
     },
     {
       "tag": "slice",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11114,7 +11424,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -11128,12 +11440,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "subSlice",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -11185,7 +11493,13 @@
           "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/options/air/options.find.json",
           "tests/golden/options/air/options.findOr.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -11239,7 +11553,11 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.headerLen.json",
-          "tests/golden/0.14.1/layout/air/layout.readHeader.json"
+          "tests/golden/0.14.1/layout/air/layout.readHeader.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -11255,7 +11573,7 @@
     },
     {
       "tag": "ptr_slice_len_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11291,26 +11609,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "setLen",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "ptr_slice_ptr_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11346,19 +11662,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "setPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -11464,7 +11778,8 @@
           "tests/golden/floats/air/floats.dot.json",
           "tests/golden/floats/air/floats.fitness.json",
           "tests/golden/options/air/options.find.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -11480,7 +11795,7 @@
     },
     {
       "tag": "slice_elem_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11516,26 +11831,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "elemPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "ptr_elem_val",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11571,19 +11884,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.manyElem.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "manyElem",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -11629,7 +11940,9 @@
         "paths": [
           "tests/golden/0.14.1/layout/air/layout.laneSet.json",
           "tests/golden/layout/air/layout.maskStore.json",
-          "tests/golden/layout/air/layout.writeTable.json"
+          "tests/golden/layout/air/layout.writeTable.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json"
         ]
       },
       "proofs": {
@@ -11645,7 +11958,7 @@
     },
     {
       "tag": "array_to_slice",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11681,26 +11994,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.arraySlice.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "arraySlice",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "int_from_float",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11740,7 +12051,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.truncUnsafe.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -11749,12 +12062,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "truncUnsafe",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -11812,7 +12121,7 @@
     },
     {
       "tag": "float_from_int",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -11850,7 +12159,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.toFloat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -11859,12 +12170,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "toFloat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -11985,7 +12292,7 @@
     },
     {
       "tag": "splat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12023,7 +12330,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.splatLanes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12033,19 +12342,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "splatLanes",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "shuffle",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "fallback-named-decoder",
         "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
@@ -12083,7 +12388,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseLanes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12092,12 +12399,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "reverseLanes",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -12165,7 +12468,7 @@
     },
     {
       "tag": "memset",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12208,7 +12511,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearUnsafe.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12219,19 +12524,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "clearUnsafe",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "memset_safe",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12274,7 +12575,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearSafe.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12285,19 +12588,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "clearSafe",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "memcpy",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12337,7 +12636,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12347,19 +12648,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "copyBytes",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "cmpxchg_weak",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12404,7 +12701,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12419,19 +12718,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "casWeak",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "cmpxchg_strong",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12476,7 +12771,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12491,19 +12788,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "casStrong",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "atomic_load",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12539,26 +12832,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.loadAcquire.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "loadAcquire",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "atomic_store_unordered",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12594,26 +12885,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeUnordered.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "storeUnordered",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "atomic_store_monotonic",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12649,26 +12938,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeMonotonic.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "storeMonotonic",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "atomic_store_release",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12704,26 +12991,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeRelease.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "storeRelease",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "atomic_store_seq_cst",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12759,26 +13044,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeSeqCst.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "storeSeqCst",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "atomic_rmw",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12814,19 +13097,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fetchAdd.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "fetchAdd",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -12870,7 +13151,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/0.14.1/layout/air/layout.growCircle.json"
+          "tests/golden/0.14.1/layout/air/layout.growCircle.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json"
         ]
       },
       "proofs": {
@@ -12886,7 +13168,7 @@
     },
     {
       "tag": "tag_name",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12922,7 +13204,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12932,19 +13216,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "colorName",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "error_name",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12980,7 +13260,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12989,12 +13271,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "errorName",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -13052,7 +13330,7 @@
     },
     {
       "tag": "aggregate_init",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -13088,19 +13366,19 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "makePair",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -13462,7 +13740,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -14980,7 +15260,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "8cf1ec65f928d1d1506bf7b0c57d12da912521d27ae2c52afa59130931ac35f0",
+      "scripts/coverage.py": "f09df30da6f26d402b4ea6c1412c4f388f0b23f607d222c95451fa07ad91e057",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -16096,7 +16376,208 @@
       "tests/roadmap/diagnostics/Collector.lean": "0b44b0e6641d01e1c08b8dc882eb9f3fb8de29444de5f11ac706670a984233d1",
       "tests/roadmap/diagnostics/RuntimeTags.lean": "7653c5e231b47c061e232607123c3d87d5403deb8e3a7323c31383a162cec68f",
       "tests/roadmap/diagnostics/test_cli.py": "b8328fbc54b03a7007e227ae929a300b43693825842c1f81ea29b870909ae9d3",
-      "tests/roadmap/runtime-tags/runtime_tags.zig": "23422983282b3a6475593ed50e00cbc39cd39ee22aa15d56acaa9ea8365dd3df",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json": "cb633f9a85e60999806c9bd6c4f87132049c5d3c773faab30a1504aae2223bc4",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.advance.json": "41bae066b5921ba6dae110af35b17037527f8f0450fc0730834c1065da1f13af",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json": "dfc13ab90ccdf1485e3069153cfb1cfe9012352f18ce3dd973f8ba293cce11ec",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json": "997efd7a8c24764e623da86038f2932ea39c194c029ab3df603bbedc79dbc834",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.arraySlice.json": "449b76e831d3b46b2c96c166b6c08515355e1ebae0d47cfd1f699b5cb7915179",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json": "09c2f13b1f3f57ee324a7d58e212eae76ad0cd853097d93320303be0f8687fde",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json": "3618408300f7b013e9ddd43b823d478924f7988e8564d3c4c33fb5b74953b612",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearSafe.json": "072b8ea33210f222fb603e1608c31abb609573caf66574c6af20ff5d2c9d41c2",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearUnsafe.json": "4296f55975c6dfacea7ab9749306586d3a7db061f921b39e7624b1495d028c6c",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json": "856cf65f3dd4c02676410e60b8269caeabc3d9fc4c65e450b48344ce4799063a",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json": "4b97a7bf49b464ff5b0689da9c94cafbc580015361168c938ac57aa74d68f927",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json": "c62f396a98a19252b1e9dc9d2dff8027747193faf7259bd02ee1ff439bea777c",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json": "85e50cbea28036b7c445d761f98ee31470b6686ba0fe3eafbd2bbdee077ec9ac",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.divExact.json": "4ca63f408aa4777993d29272d590a4fb442e64a309353b739c77f0925de82fcf",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json": "544075ee45faaef06e92cfe1751add3c3b271bafa2153b933f8fd16fe7061eae",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json": "7195eaacc02e8d45c413f7d731040f7334c04cd663b769d8890581860b5b32c8",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json": "76879d340e03babe395b0c56c0291c35a415baa0f7524bfe0f469fe1cc6a6151",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fetchAdd.json": "d5c94e901cac1b38d9ee9e87bf21034134b31c6448ff277ad5ca7578cec1bb27",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json": "f4085f22d7b5ef2b3cdcafee47df80cf579f0101b556cc8cfa38698289f1c659",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.helper.json": "4322e78f617d990e3389256b03cbdd00086ac4caaf99383d43fdea686fbedc50",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.isNull.json": "df54772796062060d7ea6215563718a27fbaffe141305cc10a31b575ba496576",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json": "3c33aaef719def9b8865013aa4df3092bdc554727487b52dc912633062cb2745",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.loadAcquire.json": "212ba19d756e4e854f9e5d61fb99043273ac169334181f892c5e8a930b431ef9",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json": "523568edf98383d7a87379140eebb103d271616f1e4f1050909cbb907d820971",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.manyElem.json": "a952a87ba44dd44d0f7859ae5fdc0b4ad5505515456f25c50332e9f9d6881bfa",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json": "2d4ca349e82cb58722056efe2e9d96f8ec561f17e3c8885243ef0fd94fe4bd3c",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulSat.json": "3619aab0ba598ac945c8462365dc032584283fa516fd4ace5dd00e555a92a6f8",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.narrow.json": "289ab143e7af27af6f86d82c352cef7a59cd57dd6d9b18cb0ec2470c3a4f0c98",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json": "82cb2f49b2cc6935d1692fa2d93f2fd9ed916bb43cd9b354c522f3fe6ad8e8c6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json": "824b74c6c76a7a2e71fef148ed0451ba078fd4a7787a2c96109d665c6c82ef47",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json": "c4f31618c31bf53b266d73983063faae9cf1fb8c1fb27692f5ba92514563a3fc",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json": "622c4a6d5094b6cc2a3962e9c6ef005e71326a7c8f908d433bb649fa28065291",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.retreat.json": "d0fce134c24b776e16e2dcfd0b449026bfbf2616bc0ddaf781e23b6bc69e418d",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseBits.json": "c5e6c38cbb45c1e8ff1c168f6de21374b1be35efa3f43af7219cf53dfd5572d0",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseLanes.json": "5af719719081298c87e88f908ad2da434e4149ca374307230fe45e16bfdfe705",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json": "1270034f222fa456e31cfd7d1a5339763832da5741f8a383998644cba255622d",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json": "6acb416946da9e0faaa50d02453768e947b5d0cad47b7e83e01716868d1d3a54",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json": "8be304f41026bcd81f16f8da8535fbfd06bed953288c85dbb9009a1f0931e6d7",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json": "2238f0b101c1b6c84f55e8d0b8920da0c233e828d9f8df0f83baf2358fb6f5a7",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json": "4dc3810b0a7148b3bc75e93f7f67800efb92266efae3b6115bad17fb1cc121ba",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json": "836cc43913bcea722c5968f6b29073987bdade9d27e9e845c8642126e9594e29",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json": "02157675d28ed05ff00051933573452eb2715a446d713823bb5ceaa1d686a66d",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json": "e838f8b3a3b60d2480f8432bc7f5fc4e3795435c15bd562ea77d6cf68947c9b4",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json": "9e50bea42062127e5bd6a7ade7cf67dade11dea7aa2223754fc85f377ab9f6eb",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.splatLanes.json": "5ff292f72e8b22e6c5aefe6e2f3742eba3b225ade63b670c1519522fbc6d198f",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeMonotonic.json": "7e76e2b8eb00ce21f8c86bb3c88e5741168334c0aa7c94eadb0f2dda77164235",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeRelease.json": "a28905e42f963986447fa39e24671126a6fb17dc8cd271e5d222540e2be69cb4",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeSeqCst.json": "9b38f7b7ea1ad9a64513f8fceb2ee8d76bc4f84b5f534275346da19e8ad33d36",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeUnordered.json": "88a505d6f168e058d89dc6b6c608f5d36e9501300d079abd41ce68c90c0bf8fd",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json": "dde76edaddb3f6c79684d08d8d2e41c7b50644c130d9703bb5aa6811d669d8d1",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSat.json": "6e65ed790072397b03be546d15ce0ec477a51bb24575c2fa92eab6b461dfe67e",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json": "2f0bf0a647edae8adbf990636f69307f6446a8b0f8951c3bdb6fe5602c6526f7",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subWrap.json": "c577485f5952cc43d3ae8cb5aea5f62d50fb918cac790c89864ef344da052aa6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.swapBytes.json": "579f71bb035156846cb43698fdc79738300a0fd893728d1a6853e21afeef9ba8",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json": "5dc16b25f94c1c171ee455943869b82fb77526025ae53905c2c17879073511a1",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tailTarget.json": "7448ae61954aef3b74d489adf931db010d2f612e967021721235588eba8b78a7",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json": "f2ac7bfe68e4d131b958c2c68cb73ca8bec26400068513415a8fd145a670c510",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.toFloat.json": "7acc4778976d1ac667a0ffbbcdf48461617bf140c2a1c9cfdd25c0811b59abcf",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json": "24cfff5fbc115104451086588042d7976a2e4c9737841e78c23de14c96fbc7c1",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json": "12f2d414f1593f231ca0211e938877704d723fe4ee6f2c29d9056a3bcf2868ce",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.truncUnsafe.json": "694c7e73bf315c92633542d15d7a86e74957ca053978bda3502441e1456b6562",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json": "7ae53a3bc8008bfd51484cde9805e0ecb2b709f1216e512c5304dfa4c4360490",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json": "b907d7503b8c0a40352bd45f657d3530e684f92472cf278656b0f22298cd30f8",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.unsafeReturn.json": "841f850baeb4f53c53a7218bd4392d6b08e48b5821a4a62cdb422f93ce49ced6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.widen.json": "f01172a461b5a751e595db8e229b23a9de02cc19fb97772ddb698abf38f9784f",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.xorBits.json": "b38f175d08152190a7dfde51020792933d2bef92fbd6dbe2dc9d3ae7591a72f4",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json": "9a47c42db3995208b90e41047bc91ba4236f55604bdf988589adca31b058bef7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.advance.json": "3a9aee2e319cf83d897f13dd4f164ebdd7a9432cf281c20de4fec4518cb18efa",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json": "d32db486e51e560d4508095a38ac6c6e1ad2d487b15e972c7cc18e74feeb69c4",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json": "ad71df3c21cce02954a7464976ffd43896b01cc3b963d401def6d84258d03853",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.arraySlice.json": "5da6425f0567b1cdb9a0f53a0e0e5d4434095dff1f1b0389543026bb1bedc531",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json": "2b888d3dc3d1fe3fd6a54b1e5aae6af38f574551c8ce67cf0af33702b18619ad",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json": "8ff0cea5cbca20825bf930438218965561c595573129079719401b59ed1c45d1",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json": "89be107dc28dbcbf04c23aa2f2254eb1a379c556a715f1f101a719658c3d9103",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json": "5fcff95c5bfe9abb0584f8c8cc3d1093817031ef7dcf14bac30dae05965713cb",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json": "e0d1d8c68481bf7cef010d609b871d96fde4a00f6f04aa31a0d75ce5e2bf22c5",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json": "ab03b3fd52001a0130e380c2f07af2b807ca635d6c64686dee7828bbc7eb4e03",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json": "aac6d0ea9a6aaf2825017b9fc712e08bb858bb7f8463ef2567f31300fa2f4cdd",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json": "1ae44c4d1cbec7fa0fb1005c0487e5957d56bd3fd62db2ee4f12fad83f665646",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.divExact.json": "d1c771044bf1b7fad4e6510b20393e4e3990045909bc646e49ce2fd2dc55e225",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json": "39e6c9cf604df6720edb472908a839c6e9ef8224628ffedec638ee76307d7732",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json": "e9944380cc3028bdd27fbc67e103f29a3aea4a746e1d9ddfba258501a097a144",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json": "a6a1c4b0bc714d981986877706f5f516122dbc245f230ef21f57e9397b140d6b",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fetchAdd.json": "c080312b7a44d3d8e711231aa7903a3a4dab10ff5e5c718db22c8bdc516decf2",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json": "5f1720832aadd9d3afe759188a72dfde71fc5189565db3edb5de198a98171bfb",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.helper.json": "bafbda4071fd65f79de4e00732cc0dee85cdf2f3c21e89ef36753a3bd273acd6",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.isNull.json": "5335c8162d9a699c38dd56db529479187fd2625eeccd33fe8d26d8d68acbfff7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json": "81c06d32efc75496d8a644aff150d0c26b02e4c5ffee432d941d7d2e936970e0",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.loadAcquire.json": "9d96eca7e4a070f9aa84350a87dfdd1cdbd0b3e7433d94d7aec896b07f96a838",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json": "e70863d2e39eac201a34af7292c229f0b3ed4fcf381e7a753f6bb306d9ca9ff7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.manyElem.json": "d955174e164f85487afa82c9a9ded6798f2374930cbf3b0b4b1373d515bca1f8",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json": "daefb5a33af8efbe783a02c5504cf9fb7996cb04f1980a1fdd3466a56f952ed4",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulSat.json": "0010d8976724a2f79cc8b7a3fc23e97a38d19639c9c88b5814cd228c5b418bda",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.narrow.json": "c56e2149acfbd7f1084b7e6032d7f8a57912b08709f5bd35825b00cf2b753e58",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json": "39ac1606b1b023d8dc95f15affe873a2ef2ffd8bb880d215f8d268a3f0cb1a7c",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json": "e466aa61f4f05f8bdabc93081f6e023d4400040d3966f25fd2fe33237b5cab54",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json": "38a32297b13cb638854992b377e72b75bc49abe84880ae291a7b342a2917efa6",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json": "6479dabde7512a712b04a77f429f1aee92bb45cac46e0892c48d52e2266e9815",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.retreat.json": "0e24030f01d1fe5242aadb55d69989d42336c9a6925464b64115a1258607692e",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseBits.json": "e14818642fb77b9cca58d0bfc3e1c39e0b8a8245de45706712e0a160cd564e5f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseLanes.json": "fd32e2cdf159590d618ae61d2955af1d1369307ca938a16fd866683438c03875",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json": "92c7f34394ac2cf513f1122031690f7c2e8a73c3188a3bec55405d88f6d8735f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json": "8b29c06f658e9c750e7bfa98f367fd44f05cdbc45811ba9e30159739d7555498",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json": "20a323a52c8e02e3d13a60af4a44d08ac16b074ea9b86a3d81df7d06c8c490c7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json": "09ab04ae4a0428a87cadf9e5c5986c741a67fd32f72cc9caec262605a2bf679d",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json": "d7bd65791da2e554d058f7dc5f843c934afd9a827b1cb1080c68c6c38f33b4aa",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json": "dc7912f93dc105b27c54c89febf3ef1566f5f83cb4ad768e27a09d65b1c0e339",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json": "6ab5ed12f41d78575621306c0f38ab0d7cbf58db6e530a968f0380119a4af4cf",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json": "3fafc313bbd70d2a5a61bed285f7a87c9e95e894c23e8893435a4ee46b7a79fe",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json": "7b3ed414aa6aae7446bf0030a5d0583351ec3427cd0e481c9865835dab9bd980",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.splatLanes.json": "efe67fc80f256da396d2af4c71d040fdcc73b8739739350e0aac2d9467025fc0",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeMonotonic.json": "0ae7919e1be51669e31c10aebc3514c85c14fb6b614404e5b4da00553ecce11a",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeRelease.json": "a7ed40453bcdc0c253cfeeb5aa4248cb4f4288fa370c05aedf59bc3c8f013e01",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeSeqCst.json": "0193899524ee913b894331f0bd89476111984793c47d030b0b2c133e6fe9d34f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeUnordered.json": "f1adebf48057a8bc249f4dbe327cd2b3d0cb6b07683452753a9f2b333b3d0743",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json": "2a5fb0119e5452b56ba5cd46039bafe9c72ec94477ebf52672c6dc4e0a2364a7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSat.json": "96c4a0f51e094e0b063b2987a9cf74b7d8a7eda218afb35922e0702812a978bb",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json": "dda27fcf35a1e16596e2e5983892c03da005b8f56a5a0a662c61a08675850f15",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subWrap.json": "610d333ce988ff2aa00e4c36fa587db5b4a051e49bd11d7fdefb6689609c51c6",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.swapBytes.json": "ccd1bb88ab5209d2058dcecddc7596442468ec7d17b385eac118477d69184171",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json": "efb543aef04b8720fbb7226b8a3821ce2f3a2b9520fe46d0e8805421db9f8c82",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tailTarget.json": "45254896b47a8da58ac544b9133ef72f96ebf76322cca270fade441a2f434831",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json": "c02c87aac83dc1bab13a05d807405b2947c38bc06962121f58a84dd3ea536e9e",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.toFloat.json": "28adfcc8a00270ef529db25523547f28aad3623767321a265e93c1f4e7f29ec2",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json": "20dcdbc603c75689e36a489d83674e4c12929e2cc1a959ae6e679c8df4a65682",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json": "f5fe26b2b913dfdd24469c80f4cca9fbe34c5da26023fbdab6fb9b836fa5e973",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.truncUnsafe.json": "5dab0e440221d863646eb903d8a83581e44d53bc46a35e251e811a311c7e3fe4",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json": "686ddcef4fa8eee2e04da99e0e0888578f0ff4c7bdeff5efb0003831c33e44aa",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json": "1e528aae4484e6c6ce3f3e2f73238e207496373d5a36936e98601b965a1ee981",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.unsafeReturn.json": "836764242258c506167434c46cb56403efee37d86ffb3cab1ba9b6e9c15bad99",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.widen.json": "cbf75fa1fba6f76bd206bc6091bb3ffbf349e54a093a1d49410f093dd686fb55",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.xorBits.json": "f18cf9618f1641dba0d9c675904132d50083992f604386fe3242bc0a6f4b362e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.addOverflow.json": "8a91e5bc68814001d195181a39c753405d04d1b71fcabba644b560de305b9ba6",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.advance.json": "38c62e34a6ef1b28c1ccd192b07ce859e9706ae4ddc98dd56b819cdc8dec6d89",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.alignSlice.json": "037fe13ad71ca477bc594db6b3ea03805d4f5e6117245aef30793392662ee4cf",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.alwaysTail.json": "7bc456646d4c69516247bf05395836b5a0569b78e352f487dac13153c039c872",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.arraySlice.json": "5febc8f9db92f3b337827595c324a336e93eac67df69792769ab1ee330991d39",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.casStrong.json": "b8ca7fe2d58efc25118f628db82ffd99f3167b9b710fcbde44f5f279ba4abbd7",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.casWeak.json": "82216c1da54bf83b548d665780af2462a072bad7b0cd240f2156be35616c9a14",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.clearSafe.json": "76bb315a0d1c05355b56082417670970428f7c632e80b0d1f5a90a0784a73a50",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.clearUnsafe.json": "e31422abeb8cd29b5d828ec1cbbf39e5b66882e8cb94531e2817621c484c9380",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.coldTry.json": "40378c35e3529404b65720f88977c7731f95a37245a3795cf4cd12211b9136c2",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.colorName.json": "61632b15d3ff69c974ca1455458490399e34e2871d4da466dfb1026d9d35003f",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.copyBytes.json": "f71aeacf3389fd3791afdaafca5b5178cff5d0c8a7c2cdb225260deb17521cb9",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.dispatch.json": "720ca2a184d23436a02fd7de5e602d289a6d1e4934bff168a37896ecf9cd277e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.divExact.json": "1794a06be4c4c897d0f7b6f4b5bebe4908a0c996fd5a306c9759a2ee0a3f8f87",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.elemPtr.json": "be6e34698d3950cb4f7a297db4ad38f6e2970daf65a49f2e389d0e3933728795",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.errFromInt.json": "92fbcf294e090b94209971270b5c7d1921bfb9541cac9bbc8583a9bd03682c04",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.errorName.json": "9fdbb48da8da36dcfe5c8fab4117e2998ece15e51b9c987f25b8e3dcf0d98536",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.fetchAdd.json": "a157b6a4e79ce5ae03c2506bcb21ca5aa9e054add666baf07393e75fc6161008",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.fieldPtr.json": "ccff51dfc1f9710863878ecf7cc1fa77398c42499ed258568375217f432631b2",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.helper.json": "79ac8a1857882d6849231fb72992b8a1b6d067b7bcbdcbd7c66cf13734b868e7",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.isNull.json": "72a496eb1d8e22f3929057423927a89befe63f538ebeca326d7fc66f2cf152de",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.leading.json": "2595ab583944ee3726de2a9cacf96f0f8656c502558ac8b85506a447bc0511cb",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.loadAcquire.json": "ffe26a66c176fc37c02802d775e7ff006cb244b2d98fc1572476039674ffe0d8",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.makePair.json": "734d738d134d947018778215de1124a1f2497ef94bffb86b02a2fe1f5a65ddb5",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.manyElem.json": "35c7940a67a109698873d55a04fdaec2be8e6ff12b70951b481de9927082e4f2",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.mulOverflow.json": "54c03c4f304893c1e73cf2e19ebfab6403532b6d881921c0995a4abda8f8bdfd",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.mulSat.json": "15c4249ed5c499c51634af3f3f95e8dace24ab224ffb3e46e7fb0ee80b41852d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.narrow.json": "a81128350d8e24faea5e23f39f36a0b72ebdbe2de5708fc8fb66e13bedc60546",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.neverInline.json": "9763b89ade9f19d7d5db129e30046c0a96502007f91ec29b95de068b07cbf831",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.neverTail.json": "4659071559e5c5d705ab73295f56a6c55a1064ee0501b342fab82525dbb7282e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.nonErrPtr.json": "0e8bcaf615c237285dc4e0fbea6d6624f4a2b0036da9bf716e06996b65df556b",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.population.json": "5658ea64cd35ca13bcd37f1d665a885595a7fcd9775552eac78b4f7deddecfbe",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.retreat.json": "601cabf3400819a38481c83b3ca0d8f9f9504e71ad696777c9d353aba684ba65",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.reverseBits.json": "423f301afd26fcd22f0194d7250ac23568e45a4fa532f0e8736ac838b31de2a8",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.reverseLanes.json": "b724cf7a030f4e8fcdeeea6ec9cec64c52353cf3b22f6cc1194c78c26653c2cd",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.sentinelConst.json": "8fb621dbe08f8ad205dda1905d74514dcfc79f0b0534e4ac47dd10b1e713150d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.setLen.json": "28ad9dfebab02bf03d2b1fd7620c8c8555fafa366dd2fb8e0aed678c84a699f7",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.setPayload.json": "fef09316a658108a3015f30f676da16f1917774b7785c4c7d16b295496d055a7",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.setPtr.json": "b258fbd48081f15cd04a080a9535275c77374ae56e12a6266b3e8dfdf63d9097",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlExact.json": "594c553d5171f9533b5cd1210306def292193216908caeac41ed74eb0f80ad21",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlOverflow.json": "b4890c22770ca3f40fd5e0d00e3189443a0b0787eebf9c8189f0f65896aa92dd",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlPlain.json": "6f252a4d60c1ff45cfd12e3075d6a4d55622819a810ad5a41b4b5fd479b85607",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlSat.json": "52e244b0a24f6039fb692df5753fb0a12cc1125b7b63135c11068d6d0b23bdec",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shrExact.json": "503b1f5ca5f7b055738162e35a09dbf492064bd6a3c5d752af68e99811690915",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.splatLanes.json": "4487b06d1de058442f9b843b6f8c5c1442b3a49c854e311baa9907321b7b7216",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeMonotonic.json": "f104df13252fc7e9e881274b4ab4e36c868c3c50ebfe482976834399be16fab5",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeRelease.json": "84a2c7ca28fcd3af735443a01c40000dbd86771b804454ac1914088270376bfb",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeSeqCst.json": "0b3e075198a35d80ebb15210d0e7cc5d89d7b274bbe243358b60a0e52665a820",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeUnordered.json": "722c50149d7d7fe39dee16844b3ca6d3534fbc49a0383f1ad2c77d7f56c78798",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subOverflow.json": "fedf1c2bc1d25257d2a1c855528a5a3621370b7a2372ce9b4a9b374c6e682f59",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subSat.json": "a6566704b0c831e77efe7c5daa1b2458f9488b4d81637e21cfbee818ab2f5a6e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subSlice.json": "5629497b9aa0a6f7b6a30769a23ffd22e33ce18aa22c58207d533e4f90b551d2",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subWrap.json": "f9dea21b8f0256c3255618572164b6a3d3ec492320ce3de01e4ab72f92cc4055",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.swapBytes.json": "518c63f4cf9394a96a0293a158c82f4886a0107f008e79cd7ce1eb18d26dbff1",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.switchErrRef.json": "768120877c933020f989782c8703d28a48b519e72fe6f2aaa7d49384c61f3259",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.tailTarget.json": "ff535ad7bba384ea011321e89b29289c58363fa7094f5634d50acd5d2b6d7843",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.threeWay.json": "20e1411aff5a75c299d1299e9ee2b455e0dd72471dc3a49bb26dc41de5274e3d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.toFloat.json": "e1851c41b6855c9829b2ceddcfe7b667b052e9a6d33559e8f2ed7feb60192d08",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.trailing.json": "a404a7a08ceef69cb4e1f483854a1620139eca6b0f2f4d90b84ae27e984b0312",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.trapZero.json": "1ba8ecaa0dbb62c455acf6c09b903310e1881c1e3e5ff3c5815f14c49e17fcf6",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.truncUnsafe.json": "5130e820a2404bd8190a061a44be63f8e346981670e9603ad15e4ddc40becb84",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.tryPtr.json": "48ec3a16c9c1dce41cd1f7214ea0a83cc6225deb11f4d6183c59c7df6ed4af53",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.tryPtrCold.json": "4d6d0c864d734a6bf6023e449fa02ed3493c2fab1e1594c4581f453e616b40c6",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.unsafeReturn.json": "6251e29a7640ca4383b4da74e77f1609baf401f9ee3341ed34545ef5a213d9b0",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.widen.json": "d39ce9b392c18d39501359057e648be7e7a145d7007b156b0fc2ce5cdd25255e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.xorBits.json": "321e27a6ce85f3c66fad2b43d42fb3801cf4c2cec03f43732337501dbd18a6d3",
+      "tests/roadmap/runtime-tags/export.sh": "17725d0b1c75340c9eb5187852f66689147d597d4dbb515ce14e5494de666c15",
+      "tests/roadmap/runtime-tags/provenance.json": "5991bf7f5b5e7f2c7e811b6e5758597dcbf28244d1529451661fb268675497f1",
+      "tests/roadmap/runtime-tags/runtime_tags.zig": "3cd0561b276ecc5106f9c08195daed32f1d1ff98f8f8f5a879de0366d03192f5",
+      "tests/roadmap/runtime-tags/test_provenance.py": "e65879c921a47781dddbbdaabdf3dc9fe713a08caba358bbc275cd214a4176ec",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicShared.json": "e3cc5306e43478e87d453cebe22232643b75402153675488346305cd3311ea2b",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicWorker.json": "6b2250ab5ebf4f2cef48d46e7c09a5db7d26725f319f42b5098939421e7cddd1",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.copied.json": "80da92bfb9ff3dab7e59194d022a7b7050e85dde7fffd438e44df979e848ee05",
@@ -16373,12 +16854,12 @@
     }
   },
   "summary": {
-    "emitted-unqualified": 96,
+    "emitted-unqualified": 156,
     "rejected-fast-math": 19,
-    "emitted-unfixtured": 64,
     "rejected-compiler-state-or-effect": 7,
     "rejected-exporter-unsupported": 16,
-    "erased-at-emission": 5
+    "erased-at-emission": 5,
+    "emitted-unfixtured": 4
   },
   "category_summary": {
     "types": {

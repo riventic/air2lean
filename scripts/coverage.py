@@ -315,6 +315,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
+    'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
@@ -475,6 +476,14 @@ DISPOSITIONS = {
 FIXTURE_SOURCE = 'tests/roadmap/runtime-tags/runtime_tags.zig'
 NO_SEMA_PRODUCER = ('no Sema producer found in the 0.14.1/0.15.2/0.16.0 sources (only legalization/backend '
                     'switches name it); needs an unreachable-at-export review or a compiler-generated counterexample')
+NO_ERROR_TRACE_PRODUCER = ('0.15.2 and 0.14.1 call analyzePtrIsNonErr only from zirRetLoad under error return tracing '
+                           '(the -fno-error-tracing export profile never reaches it; a ReleaseSafe probe of a large '
+                           'error-union return emitted no ret_load); 0.16.0 emits it for a by-reference error-union '
+                           'capture with an error switch (switchErrRef, exported)')
+# Versions for which a tag has no candidate although FIXTURE_REQUESTS names one for others.
+VERSION_NO_PRODUCER = {('is_non_err_ptr', '0.15.2'): NO_ERROR_TRACE_PRODUCER,
+                       ('is_non_err_ptr', '0.14.1'): NO_ERROR_TRACE_PRODUCER}
+# Rows are kept while any inventory (0.17.0 has no runtime_tags export yet) still needs a request.
 FIXTURE_REQUESTS = {
     'add_with_overflow': 'addOverflow', 'sub_with_overflow': 'subOverflow',
     'mul_with_overflow': 'mulOverflow', 'shl_with_overflow': 'shlOverflow',
@@ -486,7 +495,7 @@ FIXTURE_REQUESTS = {
     'trap': 'trapZero', 'ret': 'unsafeReturn', 'loop_switch_br': 'dispatch', 'switch_dispatch': 'dispatch',
     'call_always_tail': 'alwaysTail', 'call_never_tail': 'neverTail', 'call_never_inline': 'neverInline',
     'try_cold': 'coldTry', 'try_ptr': 'tryPtr', 'try_ptr_cold': 'tryPtrCold', 'is_null': 'isNull',
-    'is_non_err_ptr': 'nonErrPtr', 'errunion_payload_ptr_set': 'setPayload', 'error_name': 'errorName',
+    'is_non_err_ptr': 'switchErrRef', 'errunion_payload_ptr_set': 'setPayload', 'error_name': 'errorName',
     'is_null_ptr': None, 'is_err': None, 'is_err_ptr': None,
     'bool_and': 'threeWay', 'bool_or': 'alignSlice',
     'fptrunc': 'narrow', 'fpext': 'widen', 'int_from_float': 'truncUnsafe', 'float_from_int': 'toFloat',
@@ -500,11 +509,13 @@ FIXTURE_REQUESTS = {
 }
 
 
-def fixture_request(tag, source_text):
+def fixture_request(tag, source_text, version=None):
     """The reviewed fixture request for an unfixtured tag, or None when absent or dangling."""
     if tag not in FIXTURE_REQUESTS:
         return None
     function = FIXTURE_REQUESTS[tag]
+    if (tag, version) in VERSION_NO_PRODUCER:
+        return {'source': None, 'function': None, 'reason': VERSION_NO_PRODUCER[(tag, version)]}
     if function is None:
         return {'source': None, 'function': None, 'reason': NO_SEMA_PRODUCER}
     if not re.search(r'^(?:export|pub) fn ' + re.escape(function) + r'\(', source_text, re.M):
@@ -714,7 +725,7 @@ def l14_problems(inventory):
             if not witnesses:
                 problems.append(f'{label}: emitted-unqualified without a committed compiler-generated fixture containing it')
         elif disposition == 'emitted-unfixtured':
-            request = fixture_request(tag, fixture_text)
+            request = fixture_request(tag, fixture_text, inventory.get('zig_version'))
             if paths:
                 problems.append(f'{label}: emitted-unfixtured but fixture paths are recorded')
             if request is None or row.get('fixture_request') != request:
@@ -834,7 +845,7 @@ def generate(version, source, os_name='linux'):
             disposition = 'emitted-unqualified'
         else:
             # L14: no compiler-generated fixture; honest only with a reviewed fixture request.
-            request = fixture_request(tag, fixture_text)
+            request = fixture_request(tag, fixture_text, version)
             disposition = 'emitted-unfixtured' if request else FORBIDDEN
         reached = disposition in ('emitted-unqualified', 'emitted-unfixtured', 'erased-at-emission')
         reason = (fast_guidance if disposition == 'rejected-fast-math' else rejection_reason
