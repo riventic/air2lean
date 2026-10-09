@@ -451,7 +451,7 @@ theorem hcnt_sub : hcnt.Sub (mem0 .fresh).heap := by
   · cases h
 
 theorem mem0_t0 : (mem0 .fresh).threads[0]? = some mainRec := by
-  simp [(mem0 .fresh), Mem.mainTls, Mem.setTls, Mem.ofGlobals, Mem.addGlobal, mainRec]
+  simp [mem0, Mem.mainTls, Mem.setTls, Mem.ofGlobals, Mem.addGlobal, mainRec]
 
 theorem mem0_size : (mem0 .fresh).threads.size = 1 := rfl
 

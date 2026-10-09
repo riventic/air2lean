@@ -149,7 +149,7 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
     fun h => (by rw [upd_self] at h; cases h), .inl (upd_self _ _ _), fun c hc => ?_⟩,
     fun G₁ m₃ hg₁ hi₃ => ⟨.kid none, ⟨hs0, rfl⟩, fun child m₄ hf => ?_⟩⟩)
   · rw [upd_ne _ _ hv]
-  · simp [Mem.write, Mem.recordAt, mem0_threads]
+  · simp [Mem.write, Mem.recordAt, Mem.afterAlloc, mem0_threads]
   · rw [upd_ne _ _ (by decide)] at hc; cases hc
   obtain ⟨hnone, hsz₃⟩ := hi₃.pre hg₁
   obtain ⟨hchild, hsz₄⟩ := Proto.fork_ok hf
@@ -176,7 +176,7 @@ theorem main_spec (d : Nat) : proto.WP 0 leaked QM (fun _ => .none) { (mem0 .fre
   subst ho
   have hblk5 : m₅.blocks[1]? = some blk' := hblk
   simp only [Mem.bytesOf, hblk5, Option.map_some, Option.some.injEq] at hbytes
-  rw [show Enc.size Ptr = 8 from rfl, hbytes, decode_ptr] at hdec
+  rw [show Enc.size Ptr = 8 from rfl, hbytes, decodeLoad_encode] at hdec
   simp only [pure, ExceptT.pure, ExceptT.run, ExceptT.mk, Option.some.injEq,
     Except.ok.injEq] at hdec
   subst hdec

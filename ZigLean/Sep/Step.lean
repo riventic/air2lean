@@ -389,9 +389,9 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
       if cmd.isAppOfArity ``Zig.ptrProject 2 then
         -- `&xs[i]` of an owned array `arr p xs` (`arr_ptrProject_bind`, MM-3).
         let base := cmd.getAppArgs[0]!.consumeMData
-        let T ← mkFreshTypeMVar
+        let T ← mkFreshExprMVar (mkSort levelOne)
         let inst ← mkFreshExprMVar none
-        let xs ← mkFreshExprMVar (← mkAppM ``List #[T])
+        let xs ← mkFreshExprMVar (mkApp (mkConst ``List [levelZero]) T)
         let arr := mkAppN (mkConst ``Zig.arr) #[T, inst, base, xs]
         unless ← findAtom P arr ``Zig.arr do
           throwError "sep_step: the precondition has no `arr` for{indentExpr base}"
