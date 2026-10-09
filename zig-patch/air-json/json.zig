@@ -1379,7 +1379,7 @@ const W = struct {
                         try w.externs.append(w.gpa, ip_index);
                 } else {
                     try w.field("val");
-                    try w.writeFmt(val.fmtValue(w.pt));
+                    try w.writeFmt(Compat.fmtValue(w.pt, val));
                 },
                 .err => |e| {
                     try w.field("err");
