@@ -147,7 +147,38 @@ def main : IO Unit := do
   let cyclePtr := cycleTy + 1
   let cycleTypes := types ++ #[.struct "CapabilityCycle" "auto" #[("next", cyclePtr)], .ptr "one" false cycleTy]
   let cycleLayouts := layouts ++ #[{size := some 8, align := some 8, offsets := #[0]}, pointer 8]
-  reject {base "cyclicCapabilityCast" constUnion with globals := #[], types := cycleTypes, layouts := cycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"
+  -- G2 (docs/c-frontend.md): an error-free self-referential graph has capability `false` (a
+  -- least fixpoint), so a cast into it is an ordinary numeric view.
+  accept {base "cyclicCapabilityCast" constUnion with globals := #[], types := cycleTypes, layouts := cycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]}
+  -- A cycle that reaches an error keeps the strict acyclic walk: rejected as before (L10).
+  let errCycleTypes := types ++ #[.struct "ErrorCycle" "auto" #[("next", cyclePtr), ("code", 0)], .ptr "one" false cycleTy]
+  let errCycleLayouts := layouts ++ #[{size := some 16, align := some 8, offsets := #[0, 8]}, pointer 8]
+  reject {base "cyclicErrorCapabilityCast" constUnion with globals := #[], types := errCycleTypes, layouts := errCycleLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"
+  reject {base "cyclicErrorIdentityCast" constUnion with globals := #[], types := errCycleTypes, layouts := errCycleLayouts, params := #[cyclePtr], ret := cyclePtr, body := #[{id := 0, ty := cyclePtr, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"
+  -- `*anyopaque` is an error-free opaque view: numeric storage round-trips through it, error
+  -- storage cannot enter or leave it, and neither can storage the model keeps symbolically
+  -- (`std.mem.Allocator`, `std.Thread`, `std.Io`).
+  let opaqueTy := types.size
+  let opaquePtr := opaqueTy + 1
+  let allocTy := opaqueTy + 2
+  let allocPtr := opaqueTy + 3
+  let opaqueTypes := types ++ #[.other "anyopaque", .ptr "one" false opaqueTy, .allocator, .ptr "one" false allocTy]
+  let opaqueLayouts := layouts ++ #[{}, pointer 1, scalar 16 8, pointer 8]
+  let castChain (name : String) (src dst : TyId) (via : Option TyId := some opaquePtr) : Func :=
+    let insts := match via with
+      | some v => #[{id := 0, ty := src, op := .arg 0}, {id := 1, ty := v, op := .bitcast (.inst 0)}, {id := 2, ty := dst, op := .bitcast (.inst 1)}, {id := 3, ty := 4, op := .ret (.inst 2)}]
+      | none => #[{id := 0, ty := src, op := .arg 0}, {id := 2, ty := dst, op := .bitcast (.inst 0)}, {id := 3, ty := 4, op := .ret (.inst 2)}]
+    {base name constUnion with globals := #[], types := opaqueTypes, layouts := opaqueLayouts, params := #[src], ret := dst, body := insts}
+  accept (castChain "opaqueNumericRoundTrip" 8 8)
+  accept (castChain "numericToOpaque" 8 opaquePtr none)
+  reject (castChain "opaqueFromError" 7 7) "a pointer cast exposing symbolic error storage"
+  reject (castChain "opaqueToError" opaquePtr 7 none) "a pointer cast exposing symbolic error storage"
+  reject (castChain "opaqueFromAllocator" allocPtr 8) "symbolic model encoding"
+  reject (castChain "opaqueToAllocator" opaquePtr allocPtr none) "symbolic model encoding"
+  reject (castChain "numericToAllocator" 8 allocPtr none) "symbolic model encoding"
+  accept (castChain "allocatorIdentity" allocPtr allocPtr none)
+  -- Any other opaque type stays outside the subset.
+  reject {castChain "namedOpaqueView" 8 opaquePtr none with types := opaqueTypes.set! opaqueTy (.other "opaque")} "outside the subset"
   let capBudgetTypes := types ++ #[.struct "CapabilityBudget" "auto" ((Array.range 1024).map fun k => (s!"n{k}", 1)), .ptr "one" false cycleTy]
   let capBudgetLayouts := layouts ++ #[{size := some 2048, align := some 2, offsets := (Array.range 1024).map (· * 2)}, pointer 2]
   reject {base "exhaustedCapabilityCast" constUnion with globals := #[], types := capBudgetTypes, layouts := capBudgetLayouts, params := #[8], ret := cyclePtr, body := #[{id := 0, ty := 8, op := .arg 0}, {id := 1, ty := cyclePtr, op := .bitcast (.inst 0)}, {id := 2, ty := 4, op := .ret (.inst 1)}]} "unresolved or cyclic symbolic storage provenance"

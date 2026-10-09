@@ -101,36 +101,77 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
     symbolic := symbolic || childCap
   return (remaining, symbolic)
 
-private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
-  (errorCapabilityScan types id 1024).map (·.2)
+/-- What a type graph reaches through every edge, pointer pointees included (`typeReach`). -/
+private inductive TypeReach where
+  /-- Every reachable type is known; none is an error type or a symbolic model type. -/
+  | plain
+  /-- Known and error-free, but `std.mem.Allocator`, `std.Thread` or `std.Io` is reachable:
+  the model keeps their storage symbolically (`Zig.Allocator`, `Zig.ThreadId`, `Zig.Io`), so
+  their bytes are not the program's bytes. -/
+  | symbolic
+  /-- Known, and an error set or error union is reachable. -/
+  | error
+  /-- An unknown type (an `.other` but `anyopaque`, `anyerror`, a missing id) is reachable,
+  or the walk needs more than the bounded work. -/
+  | unknown
+  deriving BEq
 
-/-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
-is used only for global aliases whose strict capability traversal could not finish;
-casts and parent recovery retain the strict cycle-rejecting traversal. -/
-private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : Bool := Id.run do
-  let mut pending : List TyId := [root, child]
+/-- Error capability as a least fixpoint (G2, `docs/c-frontend.md`): `cap t = isError t ∨
+∃ c ∈ childTys t, cap c`. On a finite graph that is reachability, so a worklist with a visited
+set computes it and stops on cycles: a self-referential struct (`struct node *next`) is
+error-free when no error type is reachable from it. `anyopaque` is a leaf, an opaque byte view
+with no storage of its own; every other `.other` is unknown. Work is bounded like
+`errorCapabilityScan`: 1 per distinct type, and a type's edge count must fit the remainder. -/
+private def typeReach (types : Array Ty) (id : TyId) : TypeReach := Id.run do
+  let mut pending : List TyId := [id]
   let mut visited : Std.HashSet TyId := {}
-  for step in [:1024] do
+  let mut budget := 1024
+  let mut found := TypeReach.plain
+  -- A step visits a type or skips a visited one. Any graph `errorCapabilityScan` accepts
+  -- has at most 1024 tree edges, so it ends well within the steps; past them, unknown.
+  for _ in [:2048] do
     match pending with
-    | [] => return true
-    | id :: rest =>
+    | [] => return found
+    | t :: rest =>
       pending := rest
-      if visited.contains id then continue
-      let some ty := types[id]? | return false
+      if visited.contains t then continue
+      visited := visited.insert t
+      let some ty := types[t]? | return .unknown
       match ty with
-      | .other _ | .errorSet _ | .errorUnion .. => return false
+      | .other "anyopaque" => continue
+      | .other _ | .errorSet none => return .unknown
+      | .errorSet _ | .errorUnion .. => found := .error
+      | .allocator | .thread | .io => if found == .plain then found := .symbolic
       | _ => pure ()
-      let count := match ty with
-        | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
-        | .struct _ _ fields => fields.size
-        | .union _ _ tag fields => tag.toArray.size + fields.size
-        | .tuple children => children.size
-        | _ => 0
-      let remaining := 1023 - step
-      if count > remaining || rest.length + count > remaining then return false
-      visited := visited.insert id
-      pending := (childTys ty).toList ++ rest
-  return pending.isEmpty
+      let children := childTys ty
+      if budget == 0 || children.size > budget - 1 then return .unknown
+      budget := budget - 1
+      pending := children.toList ++ pending
+  return .unknown
+
+/-- `some false`: no error storage is reachable (an error-free graph, cycles included).
+`some true`: error storage is reachable; such a graph keeps the strict acyclic
+`errorCapabilityScan` of the finite error-storage fragment (L10), so a cyclic error-bearing
+graph stays `none`. `none`: unknown or exhausted. -/
+private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
+  match typeReach types id with
+  | .plain | .symbolic => some false
+  | .error => (errorCapabilityScan types id 1024).map (·.2)
+  | .unknown => none
+
+/-- The item type of nested arrays (`[n][m]T` gives `T`); any other type is its own. -/
+private def arrayItemTy (types : Array Ty) (id : TyId) : TyId := Id.run do
+  let mut t := id
+  for _ in [:256] do
+    match types[t]? with
+    | some (.array _ child _) => t := child
+    | _ => return t
+  return t
+
+/-- A pointer cast that would view `Allocator`/`Thread`/`Io` storage through another type. -/
+private def symbolicViewMsg : String :=
+  "a pointer cast to or from storage with a symbolic model encoding (std.mem.Allocator, \
+    std.Thread, std.Io) is outside the subset: the model does not keep their bytes"
 
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
@@ -1149,9 +1190,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
               hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
               ((sourceCap || targetCap) && source != target) then
             cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
+          -- Array decay (`*[n]T` to `[*]T`) keeps the item type, so it keeps the decoder.
+          if arrayItemTy cx.types source != arrayItemTy cx.types target &&
+              (typeReach cx.types source == .symbolic || typeReach cx.types target == .symbolic) then
+            cx.fail line symbolicViewMsg
       | none, some target =>
         unless castCapability target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
+        if typeReach cx.types target == .symbolic then cx.fail line symbolicViewMsg
       | _, _ => pure ()
     -- Zig 0.17: an array, vector or enum on either side is a logical-bit-order cast
     -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
@@ -1860,10 +1906,7 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
         !pointerLayout.sentinel && pointerLayout.sentinelByte.isNone &&
         !pointerLayout.isVolatile && !pointerLayout.allowzero &&
         pointerLayout.hostSize == 0 && pointerLayout.bitOffset == 0 then return
-  let scanned := hasErrorCapability f.types child
-  if scanned.isNone && !hasErrorStorage f.types global.ty &&
-      closedErrorFreeAliasGraph f.types global.ty child then return
-  let some capability := scanned
+  let some capability := hasErrorCapability f.types child
     | throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
   if !hasErrorStorage f.types global.ty && !capability then return
   checkMemTy f.name f.types f.layouts 0 global.ty f.errorSetBits

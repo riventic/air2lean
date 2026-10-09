@@ -14980,7 +14980,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "8cf1ec65f928d1d1506bf7b0c57d12da912521d27ae2c52afa59130931ac35f0",
+      "scripts/coverage.py": "d4b68c5cae9fb94e49bca5f785667ff0b0da548f396becbcdeaba916c313ff48",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -14996,7 +14996,7 @@
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
       "Air2Lean/BitCast.lean": "c4ee2ca5d0b60a0a7d1251d71499e0bcd53a865fb15bb7a78ceb49c0802aadc0",
       "Air2Lean/Certificate.lean": "68b341b96966bee817670a1073550316f0f329d6d07a5947a7c5f969a9223f99",
-      "Air2Lean/Check.lean": "8fefb74ac0d20b8e62b597eb5fbac1359c012ee20d38e78001a573eb8a5afe32",
+      "Air2Lean/Check.lean": "67a90f55d7b11535a1c95ea047b256d8979e206a5dfe5e54f888d54cb00783c6",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "7a1624498896ba543671a7d66d0a35f2286e0154366922c50e4c333ce62ce484",
       "Air2Lean/Diagnostic.lean": "d60ab7ec96ff96a2a4e630cf13c4ffa01f2a585f31d58778799d3de0f8612f93",
@@ -16364,7 +16364,22 @@
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.roundTrip.json": "d0f5e3a2afd5634995491a5c1a3dd187b1a909d1eba5b66f04e13b341d86060f",
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.setMode.json": "b3c8fdd28b8eb7bbc45c87c921ce318f002e2b0b771db203ee0ebb5bf829b50f",
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vTag.json": "d2217f1b7716500cdf255bca24472244a7628e9ed90dfe9d4c5d51ceb55afb81",
-      "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vValue.json": "32964581848fe53b7e23f758919a5654dbc57ae678780df1248cc1323b3b2e04"
+      "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vValue.json": "32964581848fe53b7e23f758919a5654dbc57ae678780df1248cc1323b3b2e04",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.byteAsBool.json": "1cf59d7b9cf8852b5cf139fd64ee564162ca8063131fd1e558f9ea2644dfc7f7",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.byteView.json": "9ea88b23d17485c8933acc85f0ce7048a9f81c579b56ab029f7e6f2e1b7ae8af",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.listSum.json": "8dc0d06a3b98a2686873e25dadfc3d1e3e5677ef5a924b3a3f339507d397c707",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.misalignedChecked.json": "c19195e3acc85d5676b8b7991215f269206f1472245924c7cbe285bca5e1f6ae",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.misalignedUnchecked.json": "5c1186a5f6fd955bca627048cc3f210130e7c8ae19499c44744ba9716ee2bac5",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.opaqueContext.json": "abdb3d21198aaf9384aef4f9b974762f7bd360bc1d087120d3f644c02f483019",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.pointerAsInt.json": "5c4a2991a12c4e1a1dea5839a927449a29cf348bfcff2afa95fac604041ed3f6",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.readThrough.json": "e4f767551f3772c8d98322c498f1fb078b8572dbeee322ab0701211eae019f38",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.treeInsert.json": "c1fa23d0608c66c0ca8a2b25b75b38c5b5646be97ed8fc6c3a3eefcbc8bc1234",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.treeSum.json": "21ac19d024e237e72b813ee9552951620f114ee9269b935514532ff7b843ea3e",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.visit.json": "ace503b0f6ec328fb55574c02eceaf691fcc03b9417f1e9273b116d531ef1180",
+      "tests/roadmap/c-frontend/ptrcasts/air/0.16.0/ptrcasts.voidRoundTrip.json": "1962953284b3fe6f71477cb60dbec4711732a7dae9f1c94da342b2504e878b38",
+      "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0/reject.cyclicErrorView.json": "d8b9f3a78922b319b27742287c9abd725ef44490c618f119e30fe2b850c23b63",
+      "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0/reject.errorThroughOpaque.json": "57c575a0a994546630fb77d5b225ef4ecd57c50a4d470471299066dcdde14f83",
+      "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0/reject.launder.json": "b5f703435dbeacda7ff26a99eef2944f7c0d2733b678cf69014303345aa9d102"
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "0643758e19518dcfedb5e091372972376ec4309575e00e677758c11f8b813896",

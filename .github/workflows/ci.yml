@@ -1027,6 +1027,19 @@ jobs:
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
           done
 
+      # G2 (docs/c-frontend.md): void*/char* pointer casts and self-referential structs; the
+      # fixture's defined exports against native Zig, negatives, and error-storage rejections.
+      - name: C front-end pointer casts and self-referential structs
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean Air2Lean air2lean
+          export AIR2LEAN_LEAN=$(lake env which lean)
+          export LEAN_PATH=$(lake env printenv LEAN_PATH)
+          bash tests/roadmap/c-frontend/ptrcasts/check.sh --native
+
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}

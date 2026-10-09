@@ -159,15 +159,16 @@ parser, `varargs_sum`). Recorded in `tests/roadmap/c-frontend/record.json` with 
 0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (zig-patch tree 5715fa4a), on
 aarch64-macos.
 
-* **17 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
+* **19 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
   program on all four inputs (`#guard`). These cover integer promotions, unsigned
   wrapping, 64-bit arithmetic, floats, `_Bool` and short-circuit logic, side-effecting
   expressions, `switch` (incl. fallthrough by duplication), loops with `break`/`continue`,
   enums, unions (type punning), string literals, static locals, globals, function pointer
-  tables, recursion, macros and a pointer-walking `strlen`/`strcpy`/`strcmp`/`strrev`.
-* Of the 29 files with no libc call and no translate-c demotion, 17 pass, 1 is accepted
-  but evaluates to `.illegal` (G4), 6 are rejected by air2lean (G2, G5, G6), 4 hit the Zig
-  0.16.0 bug (G3) and 1 diverges natively (G8).
+  tables, recursion, macros, a pointer-walking `strlen`/`strcpy`/`strcmp`/`strrev`, `char *`
+  and `void *` views of objects (`casts`) and `void *` byte loops (`memcpy_loops`).
+* Of the 29 files with no libc call and no translate-c demotion, 19 pass, 1 is accepted
+  but evaluates to `.illegal` (G4), 4 are rejected by air2lean (G5, G6), 4 hit the Zig
+  0.16.0 bug (G3) and 1 (`sort_callback`, accepted by air2lean) diverges natively (G8).
 * Every C program ran cleanly under UBSan; translate-c's Zig agreed with C natively in 27
   files. The 13 others: 9 do not compile (6 demotions, 3 × G3), `hash_table` diverges
   silently (G3: a wrong value in Debug, a panic in ReleaseSafe), `libc_stdlib`/`sort_callback` panic in ReleaseSafe on the
@@ -189,7 +190,7 @@ generated headline: {"lean_ok": 30}
 | bitfield_packet | ok | demoted (entry) | demoted | compile_error | failed | – | – | – |
 | bitfields | ok | demoted (entry) | demoted | compile_error | failed | – | – | – |
 | bool_logic | ok | ok | ok | ok | ok | checked | ok | – |
-| casts | ok | ok | ok | ok | ok | rejected | – | INSTRUCTION_FAILURE×2 |
+| casts | ok | ok | ok | ok | ok | checked | ok | – |
 | enums | ok | ok | ok | ok | ok | checked | ok | – |
 | expressions | ok | ok | ok | ok | ok | checked | ok | – |
 | float_basic | ok | ok | ok | ok | ok | checked | ok | – |
@@ -202,20 +203,20 @@ generated headline: {"lean_ok": 30}
 | inline_static | ok | ok | ok | ok | ok | checked | ok | – |
 | int_promotion | ok | ok | ok | ok | ok | checked | ok | – |
 | libc_stdio | ok | ok | ok | ok | ok | rejected | – | AIR_DECODE×1, PREREQUISITE_SKIPPED×1 |
-| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | AIR_DECODE×1, INSTRUCTION_FAILURE×2, PREREQUISITE_SKIPPED×1 |
+| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | AIR_DECODE×1, PREREQUISITE_SKIPPED×1 |
 | libc_string | ok | ok | ok | ok | ok | rejected | – | AIR_DECODE×1, PREREQUISITE_SKIPPED×1 |
-| linked_list | ok | ok | ok | ok | ok | rejected | – | INSTRUCTION_FAILURE×1, PREREQUISITE_SKIPPED×1, STRUCTURE_FAILURE×1 |
+| linked_list | ok | ok | ok | ok | ok | rejected | – | PREREQUISITE_SKIPPED×1, STRUCTURE_FAILURE×1 |
 | loops | ok | ok | ok | ok | ok | checked | ok | – |
 | macros | ok | ok | ok | ok | ok | checked | ok | – |
 | malloc_vec | ok | ok | ok | ok | ok | rejected | – | AIR_DECODE×2, PREREQUISITE_SKIPPED×2 |
-| memcpy_loops | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×4, INSTRUCTION_FAILURE×12 |
+| memcpy_loops | ok | ok | ok | ok | ok | checked | ok | – |
 | ptr_arith | ok | ok | ok | ok | ok | checked | guard_failed | – |
 | ptr_int_casts | ok | ok | ok | ok | ok | rejected | – | PREREQUISITE_SKIPPED×1, STRUCTURE_FAILURE×1 |
 | recursion | ok | ok | ok | ok | ok | checked | ok | – |
 | ring_buffer | ok | ok | ok | compile_error | failed | – | – | – |
 | setjmp_longjmp | ok | ok | ok | mismatch | ok | rejected | – | AIR_DECODE×2, PREREQUISITE_SKIPPED×2 |
 | signed_ops | ok | ok | ok | ok | ok | rejected | – | CALLEE_MISSING×2, PROGRAM_FAILURE×1 |
-| sort_callback | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×1, INSTRUCTION_FAILURE×6 |
+| sort_callback | ok | ok | ok | runtime_error | ok | checked | – | – |
 | static_locals | ok | ok | ok | ok | ok | checked | ok | – |
 | string_literals | ok | ok | ok | ok | ok | checked | ok | – |
 | strings_loops | ok | ok | ok | ok | ok | checked | ok | – |
@@ -230,20 +231,19 @@ Headline outcome (first failing stage; `lean_ok` = translated and #guard-checked
 
 | outcome | files |
 |---|---|
-| air2lean | 12 |
+| air2lean | 9 |
 | air_export | 4 |
 | lean | 1 |
-| lean_ok | 17 |
+| lean_ok | 19 |
 | translate_c | 6 |
+| zig_native | 1 |
 
 Rejection histogram (files whose diagnostics contain the code):
 
 | code | files |
 |---|---|
 | AIR_DECODE | 9 |
-| CALLEE_BLOCKED | 2 |
 | CALLEE_MISSING | 2 |
-| INSTRUCTION_FAILURE | 5 |
 | PREREQUISITE_SKIPPED | 11 |
 | PROGRAM_FAILURE | 2 |
 | STRUCTURE_FAILURE | 2 |
@@ -257,10 +257,10 @@ Outcome by C construct family:
 | designated/compound initializers | air2lean: 1 |
 | enums | lean_ok: 1 |
 | floating point | lean_ok: 1 |
-| function pointers | air2lean: 2, lean_ok: 1 |
+| function pointers | air2lean: 1, lean_ok: 1, zig_native: 1 |
 | globals | lean_ok: 1 |
 | goto | translate_c: 2 |
-| integer casts | air2lean: 1 |
+| integer casts | lean_ok: 1 |
 | integer promotions | lean_ok: 1 |
 | libc stdio | air2lean: 1 |
 | libc stdlib | air2lean: 2 |
@@ -268,10 +268,10 @@ Outcome by C construct family:
 | loops/break/continue | lean_ok: 1 |
 | macros | lean_ok: 1 |
 | multi-dim arrays | air_export: 1 |
-| object-representation casts | air2lean: 1 |
+| object-representation casts | lean_ok: 1 |
 | pointer arithmetic | lean: 1, lean_ok: 1 |
 | pointer<->integer casts | air2lean: 1 |
-| realistic | air2lean: 4, air_export: 2, lean_ok: 1 |
+| realistic | air2lean: 2, air_export: 2, lean_ok: 2, zig_native: 1 |
 | recursion | lean_ok: 1 |
 | setjmp/longjmp | air2lean: 1 |
 | short-circuit/_Bool | lean_ok: 1 |
@@ -287,7 +287,7 @@ Outcome by C construct family:
 | unions | lean_ok: 1 |
 | variadic call | air2lean: 1 |
 | variadic definition | translate_c: 1 |
-| void* byte loops | air2lean: 2 |
+| void* byte loops | lean_ok: 1, zig_native: 1 |
 
 <!-- end c-frontend tables -->
 
@@ -299,7 +299,7 @@ blocked (alone or with other gaps).
 | # | gap | translate-c Zig shape | rejected by | files | size | depends on |
 |---|---|---|---|---|---|---|
 | G1 | **calls to `extern` C functions** (libc, and every function translate-c demoted) | `pub extern fn strlen([*c]const u8) usize;`, called directly; variadic `snprintf(…, ...)` | the exporter writes the callee as a constant `{"ty": <fn type>, "val": "(extern 'memset')"}` whose type is `k: other` (`"fn (…) callconv(.c) …"`); `Air2Lean/Air/Json.lean` `parseLeafVal` → `AIR_DECODE` "constant of unsupported type" | 9 (`AIR_DECODE`) | M (exporter callee/fn-type schema, decoder, checker binding to the E01 registry by exact symbol) + per-symbol models below | E01, E03, E04, L01, Q07 (schema bump), zig-patch |
-| G2 | **pointer casts through `void *`/`char *` views and self-referential structs** | `@ptrCast(@alignCast(p))` to/from `?*anyopaque`, `[*c]u8`; `struct node **link = &head` | `Air2Lean/Check.lean` `errorCapabilityScan`: an opaque child (`.other`) or a type cycle gives "unresolved or cyclic symbolic storage provenance" (`INSTRUCTION_FAILURE`), a guard of the finite error-storage fragment | 5 | S–M: prove absence of error storage for error-free type graphs (reuse `closedErrorFreeAliasGraph`, or a whole-program "no error types" fact; translated C has none) and admit `anyopaque` as an opaque byte view | L10, L07, L05 |
+| G2 | **closed** (codex/c-frontend-ptrcasts): pointer casts through `void *`/`char *` views and self-referential structs | `@ptrCast(@alignCast(p))` to/from `?*anyopaque`, `[*c]u8`; `struct node **link = &head` | was `Air2Lean/Check.lean` `errorCapabilityScan`: an opaque child (`.other`) or a type cycle gave "unresolved or cyclic symbolic storage provenance". Now the error capability is a least fixpoint over the type graph (`typeReach`, §Pointer casts below) | 0 (was 5) | done | L10, L07, L05 |
 | G3 | **Zig 0.16.0 `p.*.f[i]` through `[*c]` pointers** (compiler bug, trusted base) | `r.*.data[i]`, `o.*.in[0].a`, `row.*[2]` | stock Zig: compile error or **silent miscompile** (`&p.*.e[i]` points at item 0); patched Debug compiler: `reached unreachable` | 4 | S for a fail-closed gate (reject translated sources with the shape, or rewrite it and re-verify natively); upstream fix; 0.15.2 and 0.17.0 compile the repro correctly | Q07, T06, V03 |
 | G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | S: wrap the C-pointer offset modulo 2⁶⁴ (two's-complement index) in the `[*c]` `ptr_elem_*`/`ptr_add` emission | L05 |
 | G5 | **zero-initialised globals whose address escapes** | `pub var pool: [8]struct_node = std.mem.zeroes([8]struct_node);` with `&pool[i]` / `@intFromPtr(&data[1])` | AIR global without `init` → `STRUCTURE_FAILURE` "global has no initial value" (the same `mem.zeroes([4]c_uint)` global without escaping address exports its init) | 2 | M (exporter global-init emission; root cause not yet isolated) | L12, L06 |
@@ -308,8 +308,41 @@ blocked (alone or with other gaps).
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | ReleaseSafe `integerOverflow` panic natively where C yields −1 (the standard `qsort` comparator idiom); `setjmp` loses a `volatile` local (Zig has no `returns_twice`) | 3 | S: upstream promotion fix; reject `setjmp`/`longjmp`/`sigsetjmp` at the libc boundary | upstream translate-c; G1 |
 | G9 | **patched compiler on invalid Zig** | any compile error (G3, demotions) | the Debug-built AIR exporter reaches `unreachable` instead of exiting with the compile error | 4 | S | V03, I08 |
 
-Order of attack: G2, G4, G6 and a G3 gate unblock the libc-free kernels (Phase 1); G1 opens
+Order of attack: G4, G6 and a G3 gate (after G2) unblock the libc-free kernels (Phase 1); G1 opens
 the libc boundary (Phase 2); G7/G8 are translate-c work (Phase 3).
+
+### Pointer casts (G2)
+
+translate-c writes every C pointer conversion as `@ptrCast(@alignCast(p))`, through
+`?*anyopaque` for `void *` and `[*c]u8` for `char *`. The model already handles such casts at
+the byte level: a pointer is a block and an offset, a cast keeps both (`pure p`), an access
+decodes the bytes at the access type and checks the address against the pointer type's
+alignment (`Mem.access`: misaligned is `.illegal`), and ReleaseSafe's `@alignCast` check is a
+panic in the AIR. A type-confused access therefore never yields a silently wrong value: pointer
+bytes read as an integer and undefined bytes are `.unspecified`, a byte other than 0 or 1 read
+as `bool` is `.illegal`.
+
+What rejected these programs was the checker's guard of the finite error-storage fragment
+(L10): a pointer cast may not expose symbolic error bytes as numeric or opaque storage, so
+both pointees' *error capability* (an error set or error union is reachable, following pointer
+edges) must be known. It was computed by a tree walk that gave up on `anyopaque` and on any
+cycle. It is now a least fixpoint, `cap t = isError t ∨ ∃ child c, cap c`, computed as
+reachability with a visited set (`typeReach` in `Air2Lean/Check.lean`), so an error-free
+self-referential struct has capability `false`. `anyopaque` is an error-free leaf, so error
+storage can neither enter nor leave a `*anyopaque`. Unchanged for every graph that reaches an
+error: it keeps the strict acyclic walk, so a cyclic error-bearing graph is still rejected,
+and unknown types, `anyerror` and more than 1024 units of work stay rejected. One rule is new:
+a cast between different pointee types (array decay excepted) whose graph reaches
+`std.mem.Allocator`, `std.Thread` or `std.Io` is rejected, because the model keeps their storage
+symbolically and a byte view of it would read the model's encoding, not the program's bytes.
+
+`tests/roadmap/c-frontend/ptrcasts/` is the hand-written Zig fixture: a list with removal
+through a pointer to a link, a binary tree of C pointers to its own type, `void *` round trips,
+a `char *` view written through, and an opaque callback context, translated from patched
+0.16.0 AIR and checked against native Zig (`native.txt`); four negatives (`pointerAsInt` is
+`.unspecified`, `byteAsBool` `.illegal`, `misalignedChecked` `.panic`, `misalignedUnchecked`
+`.illegal`); and `reject.zig` (error storage through `*anyopaque`, a cyclic error-bearing
+view), which air2lean rejects. Run `tests/roadmap/c-frontend/ptrcasts/check.sh [--native]`.
 
 ## libc boundary
 
@@ -338,7 +371,7 @@ so it is not a boundary symbol of the translated Zig.
 | phase | scope | acceptance |
 |---|---|---|
 | 0 (this change) | corpus, harness, generator, committed records, CI record check | `check.sh --light` exits 0 in CI; `--heavy` reproduces `record.json` on a host with the patched 0.16.0 compiler |
-| 1: libc-free C kernels | G2, G4, G6, G9, a fail-closed G3 gate and a named gate for translate-c demotions (goto, bitfields, variadic definitions); generator gains `void *` casts and struct pointers | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or rejected by a named G3 gate (today 17 of 29); `cgen.py` seeds 0–299 all `lean_ok` |
+| 1: libc-free C kernels | G2 (done), G4, G6, G9, a fail-closed G3 gate and a named gate for translate-c demotions (goto, bitfields, variadic definitions); generator gains `void *` casts and struct pointers | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or rejected by a named G3 gate (today 19 of 29); `cgen.py` seeds 0–299 all `lean_ok` |
 | 2: libc boundary | G1; musl string/ctype/`abs`/`qsort` translated with the musl revision recorded; malloc family as trusted base with contracts in `docs/premises.md`; `setjmp` rejected by name | `libc_string`, `libc_stdlib`, `malloc_vec` `lean_ok`; every `extern_calls` symbol in the record is either a registered trusted-base row or translated AIR; a proof of one libc-using function (e.g. a `memcpy`/`strlen` specification) is kernel-checked |
 | 3: translate-c completeness | G7, G8 upstream or as a pinned, reviewed translate-c patch; move the route to the first Zig version without G3 (Q07 qualification) | `goto_*`, `bitfields`, `bitfield_packet`, `varargs_sum`, `switch_fallthrough`, `arrays_2d`, `ring_buffer`, `struct_layout`, `hash_table`, `sort_callback` `lean_ok`; the comparator idiom agrees natively |
 | 4: realistic programs and proofs | project manifests accept C sources (I01); csmith (Docker image) differential at ≥ 1000 seeds; tutorial | csmith seeds with no out-of-scope constructs are `lean_ok` or carry a typed rejection; two kernel-checked proofs over translated C (ring buffer invariant, linked-list reversal) using P01–P05 tactics |
