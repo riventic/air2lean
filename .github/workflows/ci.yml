@@ -539,6 +539,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/alloc-spec"
           lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
 
+      - name: Full-state separation logic prototype
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sep-full"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+
       - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
         if: ${{ !matrix.mutate }}
         run: |

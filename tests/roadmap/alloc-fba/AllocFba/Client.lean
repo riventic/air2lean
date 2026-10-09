@@ -78,7 +78,7 @@ theorem tc_bind {α β : Type} {Cur P F : Assn} {c : MemM α} {Q : α → Assn} 
     TotalTriple (fun h => (Cur ∗ guard A₀ g) h ∧ cov h) (c >>= f) Post := by
   refine TotalTriple.bind (TotalTriple.conseq (TotalTriple.covers (G := guard A₀ g) (b := 0)
     (S := 16) (lo := 0) (hi := 12) (TotalTriple.frame (R := F) ht)
-    (fun h hr => regionIn_pins hr rfl hg) (by decide)) (fun h ⟨hp, hc⟩ =>
+    (fun h hr => regionIn_pins hr rfl hg) (by decide) (by simp)) (fun h ⟨hp, hc⟩ =>
       ⟨sep_mono hpre (fun _ x => x) hp, hc⟩) (fun _ _ x => x)) hk
 
 theorem tc_pre {α : Type} {Cur Cur' : Assn} {c : MemM α} {Post : α → Assn}

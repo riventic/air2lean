@@ -540,7 +540,7 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                     let i124 ← pure (i65.elem 1 (0 : BitVec 64))
                     let i125 ← pure ((← get).local14)
                     let i126 ← pure (i124)
-                    let _i127 ← Zig.cmpxchgEncC (Option (Zig.Ptr)) Zig.AtomicOrder.relaxed Zig.AtomicOrder.relaxed 8 (⟨some 0, 0⟩ : Zig.Ptr) i125 i126
+                    let _i127 ← Zig.cmpxchgPtrC (α := Option (Zig.Ptr)) Zig.AtomicOrder.relaxed Zig.AtomicOrder.relaxed 8 (⟨some 0, 0⟩ : Zig.Ptr) i125 i126
                     pure .br123) : Zig.CM Tgt heap_PageAllocator_mapLocals heap_PageAllocator_mapExit) with
                   | .br123 => (do
                     let i129 ← pure (i65)
