@@ -85,10 +85,11 @@ inductive IoStep (Fx : Futex Nat Unit) {X : Type} (t : Tid) :
       Fx.resume t false f r f' → IoStep Fx t .asleep w f v .xchg (w, f') v
   | relWake {w : AWord X} {f : Fx.F} {v : X} :
       w.val = 2 → IoStep Fx t .rel w f v .wake (⟨0, v⟩, f) v
+  /-- `unlock` that reads `0` is `unreachable` in std: no step. -/
   | relDone {w : AWord X} {f : Fx.F} {v : X} :
-      w.val ≠ 2 → IoStep Fx t .rel w f v (.fin false) (⟨0, v⟩, f) v
-  | wake {w : AWord X} {f f' : Fx.F} {v : X} {k : Nat} :
-      Fx.wake t () 1 f k f' → IoStep Fx t .wake w f v (.fin false) (w, f') v
+      w.val = 1 → IoStep Fx t .rel w f v (.fin false) (⟨0, v⟩, f) v
+  | wake {w : AWord X} {f f' : Fx.F} {v : X} :
+      Fx.wake t () 1 f f' → IoStep Fx t .wake w f v (.fin false) (w, f') v
 
 /-- `std.Io.Mutex` over the futex `Fx` (module doc). -/
 abbrev ioMutex (Fx : Futex Nat Unit) : MutexImpl where
@@ -179,13 +180,16 @@ theorem exists_own (hi : IoInv s) (h : s.sh.1.val ≠ 0) : ∃ u, own (s.ctl u) 
   · rfl
   · exact absurd ⟨u, hu⟩ hn
 
-/-- A step that changes only thread `t`'s place (not asleep before), to one with the same
-ownership that is a witness if `t` was one. -/
-theorem place (hi : IoInv s) {t : Tid} {c : Ctl IL} (hok : IoPlace.ok c = true)
-    (ho : own c = own (s.ctl t)) (hq : s.ctl t ≠ .run .lock .asleep) (hw : WitOk (s.ctl t) s.sh.1.val → WitOk c s.sh.1.val) :
-    IoInv { s with ctl := tset s.ctl t c } := by
-  have hown := IoInv.own_same s ho
-  have hnt := hi.not_has hq
+/-- A step that changes only thread `t`'s place, to one with the same ownership, and the futex
+state, keeping the word and the views: the invariant holds if the new queue keeps its three
+clauses. -/
+theorem futex (hi : IoInv s) {t : Tid} {c : Ctl IL} {f' : Fx.F} (hok : IoPlace.ok c = true)
+    (ho : own c = own (s.ctl t)) (hqwf : (Fx.queue f').WF)
+    (hqloc : ∀ u a, (u, a) ∈ Fx.queue f' → tset s.ctl t c u = .run .lock .asleep)
+    (hwit : Fx.queue f' ≠ [] →
+      ∃ v, (Fx.queue f').has v = false ∧ WitOk (tset s.ctl t c v) s.sh.1.val) :
+    IoInv { s with sh := (s.sh.1, f'), ctl := tset s.ctl t c } := by
+  have hown := own_same s ho
   constructor <;> dsimp only
   · intro u
     by_cases hu : u = t
@@ -199,17 +203,72 @@ theorem place (hi : IoInv s) {t : Tid} {c : Ctl IL} (hok : IoPlace.ok c = true)
   · simp only [hown]; exact hi.word
   · intro u hu; rw [hown] at hu; exact hi.view u hu
   · intro hn; exact hi.msg fun u => by rw [← hown u]; exact hn u
+  · exact hqwf
+  · exact hqloc
+  · exact hwit
+
+/-- A step that changes only thread `t`'s place (not asleep before), to one with the same
+ownership that is a witness if `t` was one. -/
+theorem place (hi : IoInv s) {t : Tid} {c : Ctl IL} (hok : IoPlace.ok c = true)
+    (ho : own c = own (s.ctl t)) (hq : s.ctl t ≠ .run .lock .asleep)
+    (hw : WitOk (s.ctl t) s.sh.1.val → WitOk c s.sh.1.val) :
+    IoInv { s with ctl := tset s.ctl t c } := by
+  have hnt := hi.not_has hq
+  refine hi.futex hok ho hi.qwf (fun u a ha => ?_) fun hne => ?_
+  · have hut : u ≠ t := fun e => by
+      rw [e] at ha; exact absurd hnt (by rw [Queue.has_eq_true.mpr ⟨a, ha⟩]; simp)
+    rw [tset_ne _ _ hut]; exact hi.qloc u a ha
+  · obtain ⟨v, hv, hwv⟩ := hi.wit hne
+    refine ⟨v, hv, ?_⟩
+    by_cases hvt : v = t
+    · rw [hvt, tset_self]; rw [hvt] at hwv; exact hw hwv
+    · rw [tset_ne _ _ hvt]; exact hwv
+
+/-- `unlock`'s `xchg(0)` with release by the owner `t`: no thread owns the lock, and the word's
+message carries `t`'s view, the real value. `t` goes to `c` (the wake, or the return), which is
+busy if the word was `2`. -/
+theorem release (hi : IoInv s) {t : Tid} (h : s.ctl t = .run .unlock .rel) {c : Ctl IL}
+    (hok : IoPlace.ok c = true) (hc : own c = false) (hb : s.sh.1.val = 2 → busy c = true) :
+    IoInv { s with
+      sh := (⟨0, s.cur t⟩, s.sh.2)
+      ctl := tset s.ctl t c
+      cur := tset s.cur t (s.cur t) } := by
+  rw [tset_id]
+  have hot : own (s.ctl t) = true := by rw [h]; rfl
+  have hno : ∀ u, own (tset s.ctl t c u) = false := by
+    intro u
+    by_cases hu : u = t
+    · rw [hu, tset_self]; exact hc
+    · rw [tset_ne _ _ hu]
+      cases hb : own (s.ctl u)
+      · rfl
+      · exact absurd (hi.excl u t hb hot) hu
+  constructor <;> dsimp only
+  · intro u
+    by_cases hu : u = t
+    · rw [hu, tset_self]; exact hok
+    · rw [tset_ne _ _ hu]; exact hi.ok u
+  · intro a b ha; (try dsimp only at ha); rw [hno a] at ha; cases ha
+  · decide
+  · exact ⟨fun _ => hno, fun _ => rfl⟩
+  · intro u hu; rw [hno u] at hu; cases hu
+  · intro _; exact hi.view t hot
   · exact hi.qwf
   · intro u a ha
-    have hut : u ≠ t := fun e => by
-      rw [e] at ha; exact absurd hnt (by rw [Queue.has_eq_true.mpr ⟨a, ha⟩]; simp)
+    have hut : u ≠ t := fun e => by have hq := hi.qloc u a ha; rw [e, h] at hq; cases hq
     rw [tset_ne _ _ hut]; exact hi.qloc u a ha
   · intro hne
     obtain ⟨v, hv, hwv⟩ := hi.wit hne
     refine ⟨v, hv, ?_⟩
     by_cases hvt : v = t
-    · rw [hvt, tset_self]; rw [hvt] at hwv; exact hw hwv
-    · rw [tset_ne _ _ hvt]; exact hwv
+    · subst hvt; rw [h] at hwv
+      rcases hwv with ⟨-, h2⟩ | h1
+      · rw [tset_self]; exact .inr (hb h2)
+      · cases h1
+    · rw [tset_ne _ _ hvt]
+      rcases hwv with ⟨h1, -⟩ | h1
+      · exact absurd (hi.excl v t h1 hot) hvt
+      · exact .inr h1
 
 /-- `place` for a thread that was not busy. -/
 theorem place' (hi : IoInv s) {t : Tid} {c : Ctl IL} (hok : IoPlace.ok c = true)
@@ -365,26 +424,12 @@ theorem ioMutex_step {X : Type} {t : Tid} {s s' : MState (ioMutex Fx) X} (hi : I
     | sleep hfw =>
       rw [tset_id]
       cases op <;> try exact absurd hok (by decide)
-      have hown := IoInv.own_same s (t := t) (c := .run .lock .asleep) (by rw [h]; rfl)
       have hnt := hi.not_has (t := t) (by rw [h]; simp)
       have h2 : s.sh.1.val = 2 := bv_two hi.bound (hF.sleep_word hfw)
       obtain ⟨o, ho⟩ := hi.exists_own (by omega)
       have hot : o ≠ t := fun e => by rw [e, h] at ho; cases ho
       have hmem := hF.mem_wait hfw
-      constructor <;> dsimp only
-      · intro u
-        by_cases hu : u = t
-        · rw [hu, tset_self]; rfl
-        · rw [tset_ne _ _ hu]; exact hi.ok u
-      · intro a b ha hb
-        (try dsimp only at ha hb)
-        rw [hown] at ha hb
-        exact hi.excl a b ha hb
-      · exact hi.bound
-      · simp only [hown]; exact hi.word
-      · intro u hu; rw [hown] at hu; exact hi.view u hu
-      · intro hn; exact hi.msg fun u => by rw [← hown u]; exact hn u
-      · exact hF.wf_wait hi.qwf hnt hfw
+      refine hi.futex rfl (by rw [h]; rfl) (hF.wf_wait hi.qwf hnt hfw) ?_ ?_
       · intro u a ha
         rcases (hmem (u, a)).mp ha with ha | ⟨-, he⟩
         · have hut : u ≠ t := fun e => by
@@ -400,23 +445,9 @@ theorem ioMutex_step {X : Type} {t : Tid} {s s' : MState (ioMutex Fx) X} (hi : I
     | back hfw =>
       rw [tset_id]
       cases op <;> try exact absurd hok (by decide)
-      have hown := IoInv.own_same s (t := t) (c := .run .lock .xchg) (by rw [h]; rfl)
       have hnt := hi.not_has (t := t) (by rw [h]; simp)
       have hmem := hF.mem_wait hfw
-      constructor <;> dsimp only
-      · intro u
-        by_cases hu : u = t
-        · rw [hu, tset_self]; rfl
-        · rw [tset_ne _ _ hu]; exact hi.ok u
-      · intro a b ha hb
-        (try dsimp only at ha hb)
-        rw [hown] at ha hb
-        exact hi.excl a b ha hb
-      · exact hi.bound
-      · simp only [hown]; exact hi.word
-      · intro u hu; rw [hown] at hu; exact hi.view u hu
-      · intro hn; exact hi.msg fun u => by rw [← hown u]; exact hn u
-      · exact hF.wf_wait hi.qwf hnt hfw
+      refine hi.futex rfl (by rw [h]; rfl) (hF.wf_wait hi.qwf hnt hfw) ?_ ?_
       · intro u a ha
         rcases (hmem (u, a)).mp ha with ha | ⟨he, -⟩
         · have hut : u ≠ t := fun e => by
@@ -441,22 +472,8 @@ theorem ioMutex_step {X : Type} {t : Tid} {s s' : MState (ioMutex Fx) X} (hi : I
     | resume hfr =>
       rw [tset_id]
       cases op <;> try exact absurd hok (by decide)
-      have hown := IoInv.own_same s (t := t) (c := .run .lock .xchg) (by rw [h]; rfl)
       have hmem := hF.mem_resume hfr
-      constructor <;> dsimp only
-      · intro u
-        by_cases hu : u = t
-        · rw [hu, tset_self]; rfl
-        · rw [tset_ne _ _ hu]; exact hi.ok u
-      · intro a b ha hb
-        (try dsimp only at ha hb)
-        rw [hown] at ha hb
-        exact hi.excl a b ha hb
-      · exact hi.bound
-      · simp only [hown]; exact hi.word
-      · intro u hu; rw [hown] at hu; exact hi.view u hu
-      · intro hn; exact hi.msg fun u => by rw [← hown u]; exact hn u
-      · exact hF.wf_resume hi.qwf hfr
+      refine hi.futex rfl (by rw [h]; rfl) (hF.wf_resume hi.qwf hfr) ?_ ?_
       · intro u a ha
         obtain ⟨ha, hut⟩ := (hmem (u, a)).mp ha
         rw [tset_ne _ _ hut]; exact hi.qloc u a ha
@@ -473,101 +490,15 @@ theorem ioMutex_step {X : Type} {t : Tid} {s s' : MState (ioMutex Fx) X} (hi : I
           · rw [tset_ne _ _ hvt]; exact hwv
     | relWake hw =>
       cases op <;> try exact absurd hok (by decide)
-      all_goals
-        have hot : own (s.ctl t) = true := by rw [h]; rfl
-        have hno' : ∀ (c : Ctl IL), own c = false → ∀ u, own (tset s.ctl t c u) = false := by
-          intro c hc u
-          by_cases hu : u = t
-          · rw [hu, tset_self]; exact hc
-          · rw [tset_ne _ _ hu]
-            cases hb : own (s.ctl u)
-            · rfl
-            · exact absurd (hi.excl u t hb hot) hu
-        have hno := hno' (.run .unlock .wake) rfl
-        constructor <;> dsimp only
-        · intro u
-          by_cases hu : u = t
-          · rw [hu, tset_self]; rfl
-          · rw [tset_ne _ _ hu]; exact hi.ok u
-        · intro a b ha; (try dsimp only at ha); rw [hno a] at ha; cases ha
-        · decide
-        · exact ⟨fun _ => hno, fun _ => rfl⟩
-        · intro u hu; rw [hno u] at hu; cases hu
-        · intro _; exact hi.view t hot
-        · exact hi.qwf
-        · intro u a ha
-          have hut : u ≠ t := fun e => by have hq := hi.qloc u a ha; rw [e, h] at hq; cases hq
-          rw [tset_ne _ _ hut]; exact hi.qloc u a ha
-        · intro hne
-          obtain ⟨v, hv, hwv⟩ := hi.wit hne
-          refine ⟨v, hv, ?_⟩
-          by_cases hvt : v = t
-          · subst hvt; rw [h] at hwv
-            rcases hwv with ⟨-, h2⟩ | h1
-            · first | (rw [tset_self]; exact .inr rfl) | exact absurd h2 hw
-            · cases h1
-          · rw [tset_ne _ _ hvt]
-            rcases hwv with ⟨h1, -⟩ | h1
-            · exact absurd (hi.excl v t h1 hot) hvt
-            · exact .inr h1
+      exact hi.release (c := .run .unlock .wake) h rfl rfl fun _ => rfl
     | relDone hw =>
       cases op <;> try exact absurd hok (by decide)
-      all_goals
-        have hot : own (s.ctl t) = true := by rw [h]; rfl
-        have hno' : ∀ (c : Ctl IL), own c = false → ∀ u, own (tset s.ctl t c u) = false := by
-          intro c hc u
-          by_cases hu : u = t
-          · rw [hu, tset_self]; exact hc
-          · rw [tset_ne _ _ hu]
-            cases hb : own (s.ctl u)
-            · rfl
-            · exact absurd (hi.excl u t hb hot) hu
-        have hno := hno' (.run .unlock (.fin false)) rfl
-        constructor <;> dsimp only
-        · intro u
-          by_cases hu : u = t
-          · rw [hu, tset_self]; rfl
-          · rw [tset_ne _ _ hu]; exact hi.ok u
-        · intro a b ha; (try dsimp only at ha); rw [hno a] at ha; cases ha
-        · decide
-        · exact ⟨fun _ => hno, fun _ => rfl⟩
-        · intro u hu; rw [hno u] at hu; cases hu
-        · intro _; exact hi.view t hot
-        · exact hi.qwf
-        · intro u a ha
-          have hut : u ≠ t := fun e => by have hq := hi.qloc u a ha; rw [e, h] at hq; cases hq
-          rw [tset_ne _ _ hut]; exact hi.qloc u a ha
-        · intro hne
-          obtain ⟨v, hv, hwv⟩ := hi.wit hne
-          refine ⟨v, hv, ?_⟩
-          by_cases hvt : v = t
-          · subst hvt; rw [h] at hwv
-            rcases hwv with ⟨-, h2⟩ | h1
-            · first | (rw [tset_self]; exact .inr rfl) | exact absurd h2 hw
-            · cases h1
-          · rw [tset_ne _ _ hvt]
-            rcases hwv with ⟨h1, -⟩ | h1
-            · exact absurd (hi.excl v t h1 hot) hvt
-            · exact .inr h1
+      exact hi.release (c := .run .unlock (.fin false)) h rfl rfl fun h2 => absurd h2 (by omega)
     | wake hfk =>
       rw [tset_id]
       cases op <;> try exact absurd hok (by decide)
-      have hown := IoInv.own_same s (t := t) (c := .run .unlock (.fin false)) (by rw [h]; rfl)
       have hnt := hi.not_has (t := t) (by rw [h]; simp)
-      constructor <;> dsimp only
-      · intro u
-        by_cases hu : u = t
-        · rw [hu, tset_self]; rfl
-        · rw [tset_ne _ _ hu]; exact hi.ok u
-      · intro a b ha hb
-        (try dsimp only at ha hb)
-        rw [hown] at ha hb
-        exact hi.excl a b ha hb
-      · exact hi.bound
-      · simp only [hown]; exact hi.word
-      · intro u hu; rw [hown] at hu; exact hi.view u hu
-      · intro hn; exact hi.msg fun u => by rw [← hown u]; exact hn u
-      · exact hF.wf_wake hi.qwf hfk
+      refine hi.futex rfl (by rw [h]; rfl) (hF.wf_wake hi.qwf hfk) ?_ ?_
       · intro u a ha
         have ha := hF.mem_wake hi.qwf hfk ha
         have hut : u ≠ t := fun e => by
@@ -582,7 +513,7 @@ theorem ioMutex_step {X : Type} {t : Tid} {s s' : MState (ioMutex Fx) X} (hi : I
         by_cases hvt : v = t
         · -- the waker was the witness: a thread that it woke is the new one
           obtain ⟨⟨u, ⟨⟩⟩, hu⟩ := List.exists_mem_of_ne_nil _ hne'
-          obtain ⟨-, v', hv', hv'q⟩ := hF.wake_one hi.qwf hfk (Nat.le_refl 1) hu
+          obtain ⟨v', hv', hv'q⟩ := hF.wake_one hi.qwf hfk (Nat.le_refl 1) hu
           have hloc := hi.qloc v' () hv'
           have hv't : v' ≠ t := fun e => by rw [e, h] at hloc; cases hloc
           refine ⟨v', hv'q, ?_⟩
@@ -627,11 +558,17 @@ theorem ioMutex_enabled {X : Type} {s : MState (ioMutex Fx) X} (hi : IoInv s) {t
     obtain ⟨r, f', hr⟩ := hF.resume_total t false s.sh.2 hq
     exact ex (IoStep.resume hr)
   | rel =>
+    -- the thread at `unlock`'s `xchg` owns the lock, so the word is `1` or `2`
+    have hok := hi.op_ok h
+    have hown : own (s.ctl t) = true := by
+      rw [h]; cases op <;> first | rfl | exact absurd hok (by decide)
+    have h0 : s.sh.1.val ≠ 0 := fun h0 => by rw [hi.word.mp h0 t] at hown; cases hown
+    have hb := hi.bound
     by_cases h2 : s.sh.1.val = 2
     · exact ex (IoStep.relWake h2)
-    · exact ex (IoStep.relDone h2)
+    · exact ex (IoStep.relDone (by omega))
   | wake =>
-    obtain ⟨k, f', hk⟩ := hF.wake_total t () 1 s.sh.2 hi.qwf
+    obtain ⟨f', hk⟩ := hF.wake_total t () 1 s.sh.2 hi.qwf
     exact ex (IoStep.wake hk)
 
 /-- **`std.Io.Mutex` satisfies the mutex contract over every futex that satisfies the futex
@@ -701,7 +638,7 @@ theorem lazyWake_deadlock : ¬ MutexSpec (ioMutex (Futex.lazyWake wordView)) := 
   have r8 := r7.next 0 (MStep.unlock (I := ioMutex (Futex.lazyWake wordView)) (by decide))
   have r9 := r8.next 0 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .unlock) (l := IL.rel) (by decide) (IoStep.relWake (by decide)))
   have r10 := r9.next 0 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .unlock) (l := IL.wake) (by decide)
-    (IoStep.wake (k := 0) ⟨rfl, rfl⟩))
+    (IoStep.wake rfl))
   have r11 := r10.next 0 (MStep.ret (I := ioMutex (Futex.lazyWake wordView)) (op := .unlock) (l := IL.fin false) (b := false) (by decide) rfl)
   refine h.live Unit _ r11 (stuck_of_asleep (Fx := Futex.lazyWake wordView) (fun _ _ _ _ _ hr => hr.1) (t := 1) (by decide) (by decide)
     fun u hu => ?_)
@@ -727,7 +664,7 @@ theorem noRecheck_deadlock : ¬ MutexSpec (ioMutex (Futex.noRecheck wordView)) :
   have r7 := r6.next 0 (MStep.unlock (I := ioMutex (Futex.noRecheck wordView)) (by decide))
   have r8 := r7.next 0 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .unlock) (l := IL.rel) (by decide) (IoStep.relWake (by decide)))
   have r9 := r8.next 0 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .unlock) (l := IL.wake) (by decide)
-    (IoStep.wake (k := 0) ⟨rfl, rfl⟩))
+    (IoStep.wake rfl))
   have r10 := r9.next 0 (MStep.ret (I := ioMutex (Futex.noRecheck wordView)) (op := .unlock) (l := IL.fin false) (b := false) (by decide) rfl)
   have r11 := r10.next 1 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .lock) (l := IL.wait) (by decide)
     (IoStep.sleep ⟨⟨_, rfl⟩, rfl, rfl⟩))

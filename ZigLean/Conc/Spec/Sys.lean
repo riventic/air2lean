@@ -35,9 +35,6 @@ def tset {β : Type} (f : Tid → β) (t : Tid) (x : β) : Tid → β :=
 theorem tset_ne {β : Type} (f : Tid → β) {t u : Tid} (x : β) (h : u ≠ t) : tset f t x u = f u := by
   simp [tset, h]
 
-theorem tset_apply {β : Type} (f : Tid → β) (t : Tid) (x : β) (u : Tid) :
-    tset f t x u = if u = t then x else f u := rfl
-
 /-- `p` of the threads after thread `t` changed to `c` with `p c = p (f t)`. -/
 theorem tset_same {β γ : Type} (p : β → γ) (f : Tid → β) (t : Tid) (c : β) (h : p c = p (f t)) :
     (fun u => p (tset f t c u)) = fun u => p (f u) := by
@@ -86,16 +83,6 @@ theorem Inductive.reach {I : S.St → Prop} (h : S.Inductive I) {s : S.St} (hs :
 theorem Inductive.invariant {I P : S.St → Prop} (h : S.Inductive I) (hP : ∀ s, I s → P s) :
     S.Invariant P :=
   fun _ hs => hP _ (h.reach hs)
-
-theorem Invariant.mono {P Q : S.St → Prop} (h : S.Invariant P) (hPQ : ∀ s, P s → Q s) :
-    S.Invariant Q :=
-  fun s hs => hPQ s (h s hs)
-
-/-- A reachable state that violates `P` refutes `Invariant P`: the form of every negative
-result. -/
-theorem not_invariant {P : S.St → Prop} {s : S.St} (hs : S.Reach s) (hn : ¬ P s) :
-    ¬ S.Invariant P :=
-  fun h => hn (h s hs)
 
 /-- One more step of a reachable state. -/
 theorem Reach.next {s s' : S.St} (hs : S.Reach s) (t : Tid) (h : S.step t s s') : S.Reach s' :=

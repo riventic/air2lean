@@ -18,7 +18,7 @@ nondeterministic):
 * `wait t a e tm m f r f'`: the first step of `wait(a, e)` by thread `t` (`tm`: with a
   timeout) in memory `m`: `r = none`, `t` went to sleep; `r = some ret`, it returned at once.
 * `resume t tm f r f'`: a thread that went to sleep returns with `r`.
-* `wake t a n f k f'`: `wake(a, n)` woke `k` threads.
+* `wake t a n f f'`: `wake(a, n)` (std ignores the number of threads woken).
 
 None of them gets or changes `M`: a futex op **only reads the word**, and it adds no
 happens-before edge (no view moves through it; `ZigLean/Conc/Spec/Mutex.lean`).
@@ -33,7 +33,7 @@ happens-before edge (no view moves through it; `ZigLean/Conc/Spec/Mutex.lean`).
 | `wait_sleep` | a sleeping `wait` adds exactly `(t, a)` to the queue |
 | `wait_ret` | a returning `wait` leaves the queue; `timeout` only with a timeout. `woken`, `again` and `intr` are always allowed: a **spurious** return |
 | `resume` | a resumed thread leaves the queue (it may still have been in it: spurious, `EINTR`, timeout) |
-| `wake` | wakes an **arbitrary** set of exactly `min n c` distinct threads asleep at `a` (`c` of them), and returns their number |
+| `wake` | wakes an **arbitrary** set of at least `min n c` distinct threads asleep at `a` (`c` of them: Linux wakes exactly `min n c`, macOS `WAKE_ALL` wakes all) |
 | `wait_total`, `resume_total`, `wake_total` | progress: `wait` on a valid word by a thread that is not asleep can always step; a thread no longer in the queue can always resume; `wake` can always step |
 
 A thread asleep in the queue need not be able to resume: only a wake is sure to make it go on.
@@ -111,9 +111,6 @@ theorem mem_drop {q : Queue A} {ws : List Tid} {x : Tid × A} :
   unfold drop
   simp [List.mem_filter]
 
-theorem drop_nil (q : Queue A) : q.drop [] = q := by
-  unfold drop; simp
-
 /-- Dropping a thread that is not asleep changes nothing. -/
 theorem drop_of_not_has {q : Queue A} {t : Tid} (h : q.has t = false) : q.drop [t] = q := by
   unfold drop
@@ -173,8 +170,8 @@ structure Futex (M A : Type) where
   wait : Tid → A → BitVec 32 → Bool → M → F → Option WaitRet → F → Prop
   /-- A thread that went to sleep returns. -/
   resume : Tid → Bool → F → WaitRet → F → Prop
-  /-- `wake(a, n)` by `t`: the number of threads woken. -/
-  wake : Tid → A → Nat → F → Nat → F → Prop
+  /-- `wake(a, n)` by `t`. -/
+  wake : Tid → A → Nat → F → F → Prop
 
 variable {M A : Type} [DecidableEq A]
 
@@ -191,14 +188,14 @@ structure FutexSpec (W : M → A → Option (BitVec 32)) (X : Futex M A) : Prop 
     (X.queue f').Perm (X.queue f) ∧ (r = .timeout → tm = true)
   resume : ∀ t tm f r f', X.resume t tm f r f' →
     (X.queue f').Perm ((X.queue f).drop [t]) ∧ (r = .timeout → tm = true)
-  wake : ∀ t a n f k f', (X.queue f).WF → X.wake t a n f k f' →
+  wake : ∀ t a n f f', (X.queue f).WF → X.wake t a n f f' →
     ∃ ws : List Tid, ws.Nodup ∧ (∀ u ∈ ws, (u, a) ∈ X.queue f) ∧
-      ws.length = min n ((X.queue f).waitersAt a).length ∧ k = ws.length ∧
+      min n ((X.queue f).waitersAt a).length ≤ ws.length ∧
       (X.queue f').Perm ((X.queue f).drop ws)
   wait_total : ∀ t a e tm m f v, W m a = some v → (X.queue f).has t = false →
     ∃ r f', X.wait t a e tm m f r f'
   resume_total : ∀ t tm f, (X.queue f).has t = false → ∃ r f', X.resume t tm f r f'
-  wake_total : ∀ t a n f, (X.queue f).WF → ∃ k f', X.wake t a n f k f'
+  wake_total : ∀ t a n f, (X.queue f).WF → ∃ f', X.wake t a n f f'
 
 namespace FutexSpec
 
@@ -223,9 +220,9 @@ theorem wf_resume {t tm f r f'} (hq : (X.queue f).WF) (hr : X.resume t tm f r f'
     (X.queue f').WF :=
   (hq.drop _).perm (h.resume _ _ _ _ _ hr).1
 
-theorem wf_wake {t a n f k f'} (hq : (X.queue f).WF) (hw : X.wake t a n f k f') :
+theorem wf_wake {t a n f f'} (hq : (X.queue f).WF) (hw : X.wake t a n f f') :
     (X.queue f').WF := by
-  obtain ⟨ws, -, -, -, -, hp⟩ := h.wake _ _ _ _ _ _ hq hw
+  obtain ⟨ws, -, -, -, hp⟩ := h.wake _ _ _ _ _ hq hw
   exact (hq.drop _).perm hp
 
 /-- Who is asleep after a wait. -/
@@ -246,45 +243,45 @@ theorem mem_resume {t tm f r f'} (hr : X.resume t tm f r f') (x : Tid × A) :
   simp
 
 /-- A wake only removes threads. -/
-theorem mem_wake {t a n f k f'} (hq : (X.queue f).WF) (hw : X.wake t a n f k f') {x : Tid × A}
+theorem mem_wake {t a n f f'} (hq : (X.queue f).WF) (hw : X.wake t a n f f') {x : Tid × A}
     (hx : x ∈ X.queue f') : x ∈ X.queue f := by
-  obtain ⟨ws, -, -, -, -, hp⟩ := h.wake _ _ _ _ _ _ hq hw
+  obtain ⟨ws, -, -, -, hp⟩ := h.wake _ _ _ _ _ hq hw
   exact (Queue.mem_drop.mp (hp.mem_iff.mp hx)).1
 
 /-- A wake removes threads only at its address. -/
-theorem wake_keeps {t a n f k f'} (hq : (X.queue f).WF) (hw : X.wake t a n f k f') {x : Tid × A}
+theorem wake_keeps {t a n f f'} (hq : (X.queue f).WF) (hw : X.wake t a n f f') {x : Tid × A}
     (hx : x ∈ X.queue f) (hb : x.2 ≠ a) : x ∈ X.queue f' := by
-  obtain ⟨ws, -, hws, -, -, hp⟩ := h.wake _ _ _ _ _ _ hq hw
+  obtain ⟨ws, -, hws, -, hp⟩ := h.wake _ _ _ _ _ hq hw
   refine hp.mem_iff.mpr (Queue.mem_drop.mpr ⟨hx, fun hm => hb ?_⟩)
   exact hq.unique (show (x.1, x.2) ∈ X.queue f from hx) (hws _ hm)
 
 /-- **A wake of at least one thread at an address where some thread sleeps wakes one**: some
 thread asleep at `a` is no longer asleep. This is what a wake that never wakes violates. -/
-theorem wake_one {t a n f k f'} (hq : (X.queue f).WF) (hw : X.wake t a n f k f') (hn : 1 ≤ n)
+theorem wake_one {t a n f f'} (hq : (X.queue f).WF) (hw : X.wake t a n f f') (hn : 1 ≤ n)
     {u : Tid} (hu : (u, a) ∈ X.queue f) :
-    1 ≤ k ∧ ∃ v, (v, a) ∈ X.queue f ∧ (X.queue f').has v = false := by
-  obtain ⟨ws, -, hws, hlen, hk, hp⟩ := h.wake _ _ _ _ _ _ hq hw
+    ∃ v, (v, a) ∈ X.queue f ∧ (X.queue f').has v = false := by
+  obtain ⟨ws, -, hws, hlen, hp⟩ := h.wake _ _ _ _ _ hq hw
   have hpos : 0 < ((X.queue f).waitersAt a).length :=
     List.length_pos_of_mem (Queue.mem_waitersAt.mpr hu)
-  have hl : 1 ≤ ws.length := by rw [hlen]; omega
+  have hl : 1 ≤ ws.length := by omega
   obtain ⟨v, hv⟩ : ∃ v, v ∈ ws := by
     cases ws with
     | nil => simp at hl
     | cons v _ => exact ⟨v, List.mem_cons_self⟩
-  refine ⟨hk ▸ hl, v, hws v hv, Queue.has_eq_false.mpr fun b hb => ?_⟩
+  refine ⟨v, hws v hv, Queue.has_eq_false.mpr fun b hb => ?_⟩
   exact (Queue.mem_drop.mp (hp.mem_iff.mp hb)).2 hv
 
 /-- A wake of at least as many threads as sleep at `a` (`Event.set`'s `maxInt(u32)`) wakes all
 of them. -/
-theorem wake_all {t a n f k f'} (hq : (X.queue f).WF) (hw : X.wake t a n f k f')
+theorem wake_all {t a n f f'} (hq : (X.queue f).WF) (hw : X.wake t a n f f')
     (hn : ((X.queue f).waitersAt a).length ≤ n) : ∀ u, (u, a) ∉ X.queue f' := by
-  obtain ⟨ws, hnd, hws, hlen, -, hp⟩ := h.wake _ _ _ _ _ _ hq hw
+  obtain ⟨ws, hnd, hws, hlen, hp⟩ := h.wake _ _ _ _ _ hq hw
   intro u hu
   have hu0 := (Queue.mem_drop.mp (hp.mem_iff.mp hu))
-  -- `ws` is a duplicate-free sublist-sized subset of the waiters at `a`, of the same length:
-  -- it contains every waiter.
+  -- `ws` is a duplicate-free subset of the waiters at `a`, at least as long: it contains every
+  -- waiter.
   have hsub : ∀ x ∈ ws, x ∈ (X.queue f).waitersAt a := fun x hx => Queue.mem_waitersAt.mpr (hws x hx)
-  have heq : ws.length = ((X.queue f).waitersAt a).length := by rw [hlen]; omega
+  have hge : ((X.queue f).waitersAt a).length ≤ ws.length := by omega
   have hall : ∀ x ∈ (X.queue f).waitersAt a, x ∈ ws := by
     intro x hx
     refine Classical.byContradiction fun hn => ?_
@@ -314,11 +311,11 @@ theorem FutexSpec.of_abs {W : M → A → Option (BitVec 32)} {X Y : Futex M A} 
     (hloc : ∀ t a e tm m m' f r f', W m a = W m' a →
       Y.wait t a e tm m f r f' → Y.wait t a e tm m' f r f')
     (hr : ∀ t tm f r f', Y.resume t tm f r f' → X.resume t tm (abs f) r (abs f'))
-    (hk : ∀ t a n f k f', (Y.queue f).WF → Y.wake t a n f k f' → X.wake t a n (abs f) k (abs f'))
+    (hk : ∀ t a n f f', (Y.queue f).WF → Y.wake t a n f f' → X.wake t a n (abs f) (abs f'))
     (hwt : ∀ t a e tm m f v, W m a = some v → (Y.queue f).has t = false →
       ∃ r f', Y.wait t a e tm m f r f')
     (hrt : ∀ t tm f, (Y.queue f).has t = false → ∃ r f', Y.resume t tm f r f')
-    (hkt : ∀ t a n f, (Y.queue f).WF → ∃ k f', Y.wake t a n f k f') : FutexSpec W Y where
+    (hkt : ∀ t a n f, (Y.queue f).WF → ∃ f', Y.wake t a n f f') : FutexSpec W Y where
   init f h := by rw [hq]; exact hX.init _ (hi f h)
   wait_word t a e tm m f r f' h := hX.wait_word _ _ _ _ _ _ _ _ (hw _ _ _ _ _ _ _ _ h)
   wait_local := hloc
@@ -327,8 +324,8 @@ theorem FutexSpec.of_abs {W : M → A → Option (BitVec 32)} {X Y : Futex M A} 
   wait_ret t a e tm m f r f' h := by
     rw [hq, hq]; exact hX.wait_ret _ _ _ _ _ _ _ _ (hw _ _ _ _ _ _ _ _ h)
   resume t tm f r f' h := by rw [hq, hq]; exact hX.resume _ _ _ _ _ (hr _ _ _ _ _ h)
-  wake t a n f k f' hwf h := by
-    rw [hq, hq]; rw [hq] at hwf; exact hX.wake _ _ _ _ _ _ hwf (hk _ _ _ _ _ _ (by rw [hq]; exact hwf) h)
+  wake t a n f f' hwf h := by
+    rw [hq, hq]; rw [hq] at hwf; exact hX.wake _ _ _ _ _ hwf (hk _ _ _ _ _ (by rw [hq]; exact hwf) h)
   wait_total := hwt
   resume_total := hrt
   wake_total := hkt

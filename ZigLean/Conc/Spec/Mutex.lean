@@ -10,7 +10,7 @@ assume, for every implementation that is proved against it (`docs/thread-specs.m
 resource through its own **view** `cur t : X`; `val : X` (ghost) is the resource's real value.
 Views move between threads only through the implementation's shared state: an atomic word
 carries a message view (`AWord`), a release write publishes the writer's view in it, an acquire
-read adopts it (`AWord.rmw`). This is the abstraction of the RC11 happens-before order of
+read adopts it. This is the abstraction of the RC11 happens-before order of
 `ZigLean/Mem/Thread.lean` that matters for a lock: a thread that sees a stale view did not
 synchronise with the last writer. A futex op moves no view (`FutexSpec`: no happens-before
 edge).
@@ -49,23 +49,12 @@ namespace Spec
 
 /-! ## Atomic words that carry views -/
 
-/-- A 32-bit atomic word (its value as a `Nat`) and the view of its newest message. -/
+/-- A 32-bit atomic word (its value as a `Nat`) and the view of its newest message. A
+read-modify-write with acquire adopts the message's view; with release the new message carries
+the writer's view, else it keeps the old one (a release sequence goes on through an RMW). -/
 structure AWord (X : Type) where
   val : Nat
   msg : X
-
-namespace AWord
-
-variable {X : Type}
-
-/-- A read-modify-write of `w` by a thread with view `v` that writes `new`: the value read, the
-word after it, the thread's view after it. With `acq` the thread adopts the message's view;
-with `rel` the new message carries the thread's view, else it keeps the old one (a release
-sequence goes on through an RMW). -/
-def rmw (acq rel : Bool) (w : AWord X) (v : X) (new : Nat) : Nat × AWord X × X :=
-  (w.val, ⟨new, if rel then v else w.msg⟩, if acq then w.msg else v)
-
-end AWord
 
 /-! ## Implementations and the most general client -/
 

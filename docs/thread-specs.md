@@ -35,8 +35,7 @@ each thread. A proof over all schedules is an **inductive invariant** (`Sys.Indu
 holds initially, and every step of every thread keeps it. This is the rely–guarantee form of
 `ZigLean/Conc/Logic.lean`, `Proto.inv`, with the ghost values made part of the state: each
 thread's steps keep the invariant (the guarantee), and each thread relies on the others keeping it.
-A negative result is a reachable state that breaks the property (`Sys.not_invariant`), given as
-an explicit run.
+A negative result is an explicit run to a reachable state that breaks the property.
 
 The specs do not depend on `Mem`, on the scheduler or on the batch-7 changes to `Conc/Logic`.
 The futex, the memory words and the views are abstract. So the specs stay valid while the
@@ -65,7 +64,7 @@ relations, so an implementation may be nondeterministic:
 |---|---|
 | `wait t a e tm m f r f'` | the first, atomic step of `wait(a, e)` by `t` (`tm`: with a timeout) in memory `m`. `r = none`: `t` sleeps. `r = some ret`: it returns at once |
 | `resume t tm f r f'` | a thread that went to sleep returns `r` |
-| `wake t a n f k f'` | `wake(a, n)` woke `k` threads |
+| `wake t a n f f'` | `wake(a, n)` by `t`; the count it returns is not modelled, because std ignores it |
 
 No op gets or changes `M`. A futex op only reads the word, and it carries no view, so it adds no
 happens-before edge.
@@ -80,7 +79,7 @@ happens-before edge.
 | `wait_sleep` | a sleeping `wait` adds exactly `(t, a)` to the queue (up to order) |
 | `wait_ret` | a returning `wait` leaves the queue unchanged. `woken`, `again` and `intr` are always allowed (a spurious return); `timeout` only with a timeout |
 | `resume` | the resumed thread leaves the queue, which it may still be in (spurious, `EINTR`, timeout); others stay |
-| `wake` | for a well-formed queue (each thread asleep at most once), it wakes an **arbitrary** set of exactly `min n c` distinct threads asleep at `a`, where `c` is the number asleep there, and returns that number |
+| `wake` | for a well-formed queue (each thread asleep at most once), it wakes an **arbitrary** set of at least `min n c` distinct threads asleep at `a`, where `c` is the number asleep there. Linux wakes exactly `min n c`; macOS `__ulock_wake` with `WAKE_ALL` (std's `n > 1`) wakes all. The op returns nothing, because std ignores the count |
 | `wait_total` | progress: a `wait` on a valid word by a thread that is not asleep can always step |
 | `resume_total` | progress: a thread that is no longer in the queue can always resume |
 | `wake_total` | progress: a `wake` can always step |
@@ -217,8 +216,9 @@ To use these specs, T2's OS futex rows (premises OSF-01/02) provide one instance
      oracle may return `EINTR` instead of sleeping.
    * `resume`: the scheduler resuming a sleeping thread. It is woken, or returns spuriously,
      `EINTR` or `ETIMEDOUT` (timeout only with a timeout).
-   * `wake`: OSF-02 with the oracle subset (audit finding #6). It wakes `min n c` threads. On
-     macOS it returns `0` or `-ENOENT`, which std ignores.
+   * `wake`: OSF-02 with the oracle subset (audit finding #6). On Linux it wakes `min n c`
+     threads; on macOS one, or all with `WAKE_ALL`. The return value (a count, `0` or
+     `-ENOENT`) is not part of the contract, because std ignores it.
 3. `FutexSpec W thatFutex`. The route is `FutexSpec.of_abs (ref_spec W)`: map each step to a
    step of `Futex.ref W` (whose queue is the same list), and prove the three progress clauses.
    The concrete rows record a footprint for the atomic read, which the abstract `M` does not
