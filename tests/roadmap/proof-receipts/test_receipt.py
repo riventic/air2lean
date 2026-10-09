@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Offline receipt regressions. All compiler/auditor execution is mocked."""
+import rss_budget
+START_RSS = rss_budget.baseline()  # bare-interpreter peak; the suite's imports count as growth
 import copy
 import gc
 import importlib.util
 import json
 import os
 from pathlib import Path
-import resource
 import subprocess
 import sys
 import tempfile
@@ -612,10 +613,6 @@ class ReceiptTests(unittest.TestCase):
 
 if __name__ == '__main__':
     result = unittest.main(exit=False).result
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    peak_bytes = peak if sys.platform == 'darwin' else peak * 1024
-    print('offline peak RSS bytes:', peak_bytes)
-    if peak_bytes > 32 * 1024 * 1024:
-        raise SystemExit('offline test RSS exceeded 32 MiB')
+    rss_budget.enforce(START_RSS)
     if not result.wasSuccessful():
         raise SystemExit(1)
