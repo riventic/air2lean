@@ -295,9 +295,10 @@ measure. Each recursive call site discharges the decrease when it applies `ih`.
 
 `tests/roadmap/loop-tactics/Recursion.lean` uses it on committed translations: `gcd`
 (self-recursive, the second argument decreases by `a % b < b`), the mutual `isEven`/`isOdd`
-group, `fact` (a range premise carried through `ih`), and the memory-backed `Pointers.addDown`
-(`Zig.callM`). `addDown_total` is a `TotalTriple` proved through `pts_load_run`/`pts_store_run`
-without unfolding memory internals.
+group and `fact` (a range premise carried through `ih`). The memory-backed `Pointers.addDown`
+is not covered: it charges its frame to the stack budget (MM-5, `Zig.enterFrame`), and a
+`TotalTriple` over every memory does not hold under a small `Mem.stackLimit` until the
+separation layer carries the stack premise (STK-01).
 
 Build with `lake build ZigLean.Sep.LoopTemplate ZigLean.RecTemplate ZigLean.Range
 Proofs.Lists.Sep Proofs.Recursion.Gen Proofs.Pointers.Gen air2lean`, then run

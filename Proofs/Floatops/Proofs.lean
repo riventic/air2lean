@@ -407,7 +407,7 @@ def opSpec80A64 (rt : F128Rt) (sel : BitVec 8) (a b c : Zig.F80) : Zig.Result Zi
 /-- `softF80Chk` excludes a pseudo-denormal, so the legacy floor/ceil wrappers agree with the
 current ones under it. -/
 theorem softF80Chk_floorRtLegacy (a : Zig.F80) :
-    Zig.Float.softF80Chk [a] (Zig.Float.floorRtLegacyChk a) =
+    (Zig.Float.softF80Chk [a] (Zig.Float.floorRtLegacyChk a) : Zig.Result Zig.F80) =
       Zig.Float.softF80Chk [a] (Zig.Float.floorChk a) := by
   unfold Zig.Float.softF80Chk
   cases h : a.isPseudoDenormalF80
@@ -415,7 +415,7 @@ theorem softF80Chk_floorRtLegacy (a : Zig.F80) :
   · simp [Zig.Float.isNoncanonicalF80, h]
 
 theorem softF80Chk_ceilRtLegacy (a : Zig.F80) :
-    Zig.Float.softF80Chk [a] (Zig.Float.ceilRtLegacyChk a) =
+    (Zig.Float.softF80Chk [a] (Zig.Float.ceilRtLegacyChk a) : Zig.Result Zig.F80) =
       Zig.Float.softF80Chk [a] (Zig.Float.ceilChk a) := by
   unfold Zig.Float.softF80Chk
   cases h : a.isPseudoDenormalF80
@@ -424,7 +424,7 @@ theorem softF80Chk_ceilRtLegacy (a : Zig.F80) :
 
 /-- The same for 0.17.0's f80 `@trunc` (`truncRt017Chk`, group I). -/
 theorem softF80Chk_truncRt017 (a : Zig.F80) :
-    Zig.Float.softF80Chk [a] (Zig.Float.truncRt017Chk a) =
+    (Zig.Float.softF80Chk [a] (Zig.Float.truncRt017Chk a) : Zig.Result Zig.F80) =
       Zig.Float.softF80Chk [a] (Zig.Float.truncChk a) := by
   unfold Zig.Float.softF80Chk
   cases h : a.isPseudoDenormalF80

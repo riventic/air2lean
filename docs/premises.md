@@ -781,7 +781,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its stack dies on a
   signal, which no model outcome under `stackLimit = none` reflects (MM-5,
   [architecture-audit/memory-model.md](architecture-audit/memory-model.md)).
-- Derived from: tokens `partial_fixpoint`, `enterFrame`, `stackLimit`.
+- Derived from: tokens `partial_fixpoint`, `enterFrame` (a statement that bounds `Mem.stackLimit` itself does not need it).
 - Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
   `tests/roadmap/memory-hardening/README.md`.
 

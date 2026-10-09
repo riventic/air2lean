@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3037 theorems in 178 files.
+3038 theorems in 178 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -42,15 +42,15 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 133 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 134 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 70 | Opaque libm transcendentals |
-| [MTH-03](premises.md#mth-03) | 18 | Version-specific compiler-rt float semantics |
-| [MTH-04](premises.md#mth-04) | 13 | aarch64 float lowering |
+| [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
+| [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
 | [ASM-01](premises.md#asm-01) | 17 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2900 | Zig value and safety semantics |
+| [SEM-01](premises.md#sem-01) | 2903 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 2467 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1263 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 143 | Total-correctness statements |
@@ -61,7 +61,7 @@ premise was derived. This index covers the committed generated modules.
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3037 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 3038 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1487 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1487 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
@@ -563,8 +563,9 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, T
 | `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `softF80Chk_floorRtLegacy` | MTH-01, MTH-03, MTH-04, TRU-01 |
-| `softF80Chk_ceilRtLegacy` | MTH-01, MTH-03, MTH-04, TRU-01 |
+| `softF80Chk_floorRtLegacy` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
+| `softF80Chk_ceilRtLegacy` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
+| `softF80Chk_truncRt017` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
 | `op80_spec_aarch64` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |

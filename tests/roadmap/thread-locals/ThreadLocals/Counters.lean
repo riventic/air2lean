@@ -433,9 +433,9 @@ theorem cnt_hcnt : cnt 7 hcnt := by
   simp only [hcnt, enc_u32, Int.toNat_zero, Nat.zero_le, true_and, Nat.zero_add, Nat.sub_zero]
 
 theorem mem0_blocks :
-    mem0.blocks = #[Block.mk (Enc.encode (7 : BitVec 32)) 4 .global true 4096] := rfl
+    (mem0 .fresh).blocks = #[Block.mk (Enc.encode (7 : BitVec 32)) 4 .global true 4096] := rfl
 
-theorem hcnt_sub : hcnt.Sub mem0.heap := by
+theorem hcnt_sub : hcnt.Sub (mem0 .fresh).heap := by
   rintro ⟨b, x⟩ c h
   simp only [hcnt] at h
   split at h
@@ -450,16 +450,16 @@ theorem hcnt_sub : hcnt.Sub mem0.heap := by
     exact ⟨hx, by rw [getElem!_pos _ x (by rw [enc_u32]; exact hx)]⟩
   · cases h
 
-theorem mem0_t0 : mem0.threads[0]? = some mainRec := by
-  simp [mem0, Mem.mainTls, Mem.setTls, Mem.ofGlobals, Mem.addGlobal, mainRec]
+theorem mem0_t0 : (mem0 .fresh).threads[0]? = some mainRec := by
+  simp [(mem0 .fresh), Mem.mainTls, Mem.setTls, Mem.ofGlobals, Mem.addGlobal, mainRec]
 
-theorem mem0_size : mem0.threads.size = 1 := rfl
+theorem mem0_size : (mem0 .fresh).threads.size = 1 := rfl
 
-theorem ho₀ : Owned (upd (fun _ => Heap.empty) 0 hcnt) { mem0 with current := 0 } := by
-  have := Owned.add (own := fun _ => Heap.empty) (t := 0) (m := { mem0 with current := 0 })
+theorem ho₀ : Owned (upd (fun _ => Heap.empty) 0 hcnt) { (mem0 .fresh) with current := 0 } := by
+  have := Owned.add (own := fun _ => Heap.empty) (t := 0) (m := { (mem0 .fresh) with current := 0 })
     (Owned.start (by decide) (by decide)) (by decide) hcnt_sub
     (fun u => Heap.disjoint_empty _ |>.symm |> fun h => (h.symm)) (fun e he => by
-      have : ({ mem0 with current := 0 } : Mem).footprint = #[] := by decide
+      have : ({ (mem0 .fresh) with current := 0 } : Mem).footprint = #[] := by decide
       rw [this] at he; simp at he)
   simpa using this
 
@@ -486,7 +486,7 @@ theorem main_inst {m : Mem} (hc : m.current = 0) (h0 : m.threads[0]? = some main
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 4000000 in
 theorem main_spec (d : Nat) :
-    proto.WP 0 twoCounters QM (fun _ => .none) { mem0 with current := 0 } d := by
+    proto.WP 0 twoCounters QM (fun _ => .none) { (mem0 .fresh) with current := 0 } d := by
   unfold twoCounters
   -- `a`, `b`.
   refine WP.bind (WP.liftMem_upd (alloc_next (R := cnt 7) 4 4 (by decide)) ho₀ rfl (by decide)
@@ -495,7 +495,7 @@ theorem main_spec (d : Nat) :
   refine WP.bind (WP.liftMem_upd (alloc_next 4 4 (by decide)) ho₁ hc₁ (by rw [ht₁]; decide) hq₁
     fun s2 m₂ h₂ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ab, ⟨hb0, hAb⟩, hq₂⟩ := sep_ex_lift hq₂
-  have htt₂ : m₂.threads = mem0.threads := by rw [ht₂, ht₁]
+  have htt₂ : m₂.threads = (mem0 .fresh).threads := by rw [ht₂, ht₁]
   have F₂ := sep_assoc hq₂
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -508,7 +508,7 @@ theorem main_spec (d : Nat) :
   refine WP.bind (WP.liftM_upd ((TTriple.storeAt (k := 0) (a := 4) (0 : BitVec 32)
     (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hb0, hAb]) (by decide)).frameL.frameL)
     ho₃ hc₃ (by rw [ht₃, htt₂]; decide) F₃ fun _ m₄ h₄ ho₄ F₄ hc₄ ht₄ => ?_)
-  have htt₄ : m₄.threads = mem0.threads := by rw [ht₄, ht₃, htt₂]
+  have htt₄ : m₄.threads = (mem0 .fresh).threads := by rw [ht₄, ht₃, htt₂]
   rw [enc_zero] at F₄
   dsimp only at F₄ ⊢
   let B : Blks := ⟨s0, s2, Aa, Ab⟩
@@ -764,7 +764,7 @@ theorem main_spec (d : Nat) :
 /-- **`twoCounters` returns 90908 under every schedule**: each worker read 9 from its own
 `counter` and `main` read 8 from its own. -/
 theorem twoCounters_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o twoCounters mem0).run = some (.ok (v, m))) :
+    (h : (Sched.run dispatch fuel o twoCounters (mem0 .fresh)).run = some (.ok (v, m))) :
     v = .ok 90908 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) mem0_size main_spec h
@@ -773,7 +773,7 @@ theorem twoCounters_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (Bit
 /-- **No run of `twoCounters` gives an error**: the concurrent increments of the three
 instances do not race. -/
 theorem twoCounters_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o twoCounters mem0).run ≠ some (.error e) :=
+    (Sched.run dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
   proto.run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
     main_spec
 

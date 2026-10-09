@@ -25,7 +25,7 @@ example : ¬ Zig.Conc.Total.EventuallyReturns dispatch main (mem0 σ) (fun _ _ =
   not_eventuallyReturns
 
 -- P05 conditional concurrent termination: the premise is an explicit argument of the interface.
-example : Zig.Conc.Total.EventuallyReturnsUnder Cooperative dispatch main mem0 (fun _ _ => True) :=
+example : Zig.Conc.Total.EventuallyReturnsUnder Cooperative dispatch main (mem0 σ) (fun _ _ => True) :=
   idle_total_under
 example : ¬ ∀ o, Cooperative o := cooperative_not_all
 
