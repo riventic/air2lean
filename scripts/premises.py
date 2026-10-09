@@ -19,6 +19,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
+from premise_markers import GeneratedMarkers, markers as premise_markers, module_path as generated_path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path("assurance/premises.json")
@@ -50,10 +51,6 @@ DOT_CTOR_RE = re.compile(r"(?<![\w.'!?)\]}⟩])\.(" + IDENT + r")")
 BINDER_RE = re.compile(r"[(\[{⦃]\s*((?:" + IDENT + r"\s+)*" + IDENT + r")\s*:(?!=)\s*@?("
                        + IDENT + r"(?:\." + IDENT + r")*)")
 PROFILE_MARKER = "-- air2lean-profile:"
-# The translator's per-definition caller obligations (Air2Lean/Emit.lean `interfacePremiseMarker`):
-# `-- air2lean-premises: {"ALC-09":[0]}` on the line before a generated `def`.
-PREMISE_MARKER = "-- air2lean-premises:"
-PREMISE_MARKER_RE = re.compile(r"^-- air2lean-premises: (\{.*\})$")
 
 
 # ----------------------------------------------------------------------------- catalogue
@@ -289,26 +286,6 @@ def instance_type(decl: Decl) -> frozenset:
     bound = {name for name, _ in binders(decl.text)}
     names = {t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(text)}
     return frozenset(n for n in names - bound - {"Type", "Prop", "Sort"} if len(n.rstrip("'₀₁₂₃₄₅₆₇₈₉")) > 1)
-
-
-def premise_markers(raw: str, rel: str) -> tuple[dict[int, dict], list[str]]:
-    """`{line of the marked declaration: {premise: parameters}}` and malformed-marker errors."""
-    markers, errors = {}, []
-    for number, line in enumerate(raw.split("\n"), 1):
-        if not line.startswith(PREMISE_MARKER):
-            continue
-        match = PREMISE_MARKER_RE.match(line)
-        try:
-            record = json.loads(match.group(1)) if match else None
-        except json.JSONDecodeError:
-            record = None
-        if (not isinstance(record, dict) or not record or
-                not all(ID_RE.fullmatch(k) and isinstance(v, list) and v and
-                        all(type(i) is int and i >= 0 for i in v) for k, v in record.items())):
-            errors.append(f"{rel}:{number}: malformed air2lean-premises marker")
-            continue
-        markers[number + 1] = record
-    return markers, errors
 
 
 def parse_file(path: Path, root: Path) -> LeanFile:
@@ -783,52 +760,6 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
 
 
 # ----------------------------------------------------------------------------- compiled graph
-
-def generated_path(root: Path, module: str) -> Path:
-    return root / Path(*module.split(".")).with_suffix(".lean")
-
-
-class GeneratedMarkers:
-    """The `-- air2lean-premises:` markers of generated modules, read once per module."""
-
-    def __init__(self, root: Path):
-        self.root, self.errors, self.by_module = root, [], {}
-
-    def of(self, module: str, name: str) -> dict:
-        if module not in self.by_module:
-            path = generated_path(self.root, module)
-            lean = parse_file(path, self.root) if path.is_file() else None
-            self.errors.extend(lean.errors if lean else ())
-            self.by_module[module] = {d.name: d.markers for d in lean.decls if d.markers} if lean else {}
-        return self.by_module[module].get(name, {})
-
-
-def caller_obligations(report: dict, root: Path = ROOT) -> dict[str, list[str]]:
-    """W1: per audited theorem, the caller-obligation premises (ALC-09, IOM-01) of the marked
-    generated definitions its kernel dependency graph reaches. Theorems with none are omitted."""
-    nodes = {n["name"]: n for n in report["nodes"]}
-    markers = GeneratedMarkers(root)
-    reverse: dict[str, set[str]] = {}
-    pending: list[tuple[str, str]] = []
-    for name, node in nodes.items():
-        for dep in node["dependencies"]:
-            reverse.setdefault(dep, set()).add(name)
-        if node["module"].split(".")[-1] == "Gen":
-            user = node.get("user_name", name)
-            pending += [(name, premise) for premise in markers.of(node["module"], user)]
-    if markers.errors:
-        raise ValueError("; ".join(markers.errors))
-    # Propagate each marked premise backwards along dependency edges.
-    reached: dict[str, set[str]] = {}
-    while pending:
-        name, premise = pending.pop()
-        if premise in reached.setdefault(name, set()):
-            continue
-        reached[name].add(premise)
-        pending += [(user, premise) for user in reverse.get(name, ())]
-    return {t["name"]: sorted(reached[t["name"]], key=premise_key)
-            for t in report["theorems"] if reached.get(t["name"])}
-
 
 def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
     """Derive premises from the kernel dependency graph of scripts/assumptions.py."""

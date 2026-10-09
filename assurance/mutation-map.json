@@ -1770,6 +1770,10 @@
         {
           "path": "tests/roadmap/premises/test_premises.py",
           "anchor": "def test_caller_obligations_reach_users_transitively"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_misplaced_marker_fails"
         }
       ],
       "mutants": [
@@ -1805,6 +1809,11 @@
         },
         {
           "name": "premises-caller-obligations-not-transitive",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premise-markers-misplaced-accepted",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "invariant-transfer"
         }

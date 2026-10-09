@@ -139,6 +139,10 @@ The theorems of `Main.lean` hold in the model under the premises of
   a free must name the start and the whole length of a live heap block, or it is `.illegal`.
 * [ALC-02](../../docs/premises.md#alc-02): the allocation policy (`failAt`, `allocPolicy`).
   The theorems quantify over it.
+* [ALC-09](../../docs/premises.md#alc-09): the `std.mem.Allocator` parameter is the model
+  allocator, not whatever allocator a caller passes. The theorem holds for callers whose
+  allocator behaves as the model (fresh disjoint blocks; `page_allocator`'s in-place
+  `remap` and a `FixedBufferAllocator` over visible memory do not).
 * [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02): safety
   checks are `Zig.Error`s, and memory is the byte-level block model. A dead access is
   `.illegal`.

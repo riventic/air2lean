@@ -146,6 +146,11 @@ MUTANTS = {
         '    lean.errors += [f"{lean.rel}:{number - 1}: air2lean-premises marker does not precede a def"\n'
         '                    for number in markers]\n', '',
         PREMISES, 'premises', ('FixtureTests.test_interface_marker_fails_closed',)),
+    # D03 (W1): the kernel-graph reader of generated markers fails closed on a misplaced marker.
+    'premise-markers-misplaced-accepted': (
+        'scripts/premise_markers.py',
+        '            errors.append(f"{rel}:{number - 1}: air2lean-premises marker does not precede a def")\n',
+        '            pass\n', PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # D03 (W1): the kernel-graph derivation applies the same markers.
     'premises-compiled-interface-marker-dropped': (
         'scripts/premises.py', '                apply_markers(via, user(name), markers.of(module, user(name)))\n', '',
@@ -175,8 +180,8 @@ MUTANTS = {
         ('ClassifyTests.test_caller_obligations_follow_the_kernel_graph',)),
     # D03 (W1): receipts and claims derive caller obligations from the kernel graph transitively.
     'premises-caller-obligations-not-transitive': (
-        'scripts/premises.py', "        pending += [(user, premise) for user in reverse.get(name, ())]\n", '',
-        PREMISES, 'premises', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
+        'scripts/premise_markers.py', "        pending += [(user, premise) for user in reverse.get(name, ())]\n", '',
+        PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
         'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch'):\n",

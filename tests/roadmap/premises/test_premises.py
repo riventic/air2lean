@@ -17,6 +17,9 @@ SPEC = importlib.util.spec_from_file_location("premises", ROOT / "scripts/premis
 premises = importlib.util.module_from_spec(SPEC)
 sys.modules["premises"] = premises
 SPEC.loader.exec_module(premises)
+MARKERS_SPEC = importlib.util.spec_from_file_location("premise_markers", ROOT / "scripts/premise_markers.py")
+markers = importlib.util.module_from_spec(MARKERS_SPEC)
+MARKERS_SPEC.loader.exec_module(markers)
 
 CATALOG = """\
 # Fixture premises
@@ -417,17 +420,27 @@ class CompiledTests(unittest.TestCase):
         self.assertEqual(result["status"], "pass")
         self.assertIn("IOM-01", result["theorems"][0]["premises"])
 
+    def test_compiled_misplaced_marker_fails(self):
+        gen = self.fixture.root / "Proofs/Asm/Gen.lean"
+        gen.write_text(gen.read_text().replace("opaque airAsm_17", '-- air2lean-premises: {"ALC-09":[0]}\nopaque airAsm_17'))
+        result = premises.compiled(self.report(), self.fixture.root, self.config, None)
+        self.assertEqual(result["status"], "fail")
+        self.assertTrue(any("marker does not precede a def" in e for e in result["errors"]), result["errors"])
+
     def test_caller_obligations_reach_users_transitively(self):
         gen = self.fixture.root / "Proofs/Asm/Gen.lean"
         gen.write_text(gen.read_text().replace("def wrap", '-- air2lean-premises: {"ALC-09":[0],"IOM-01":[0]}\ndef wrap'))
         report = self.report()
         report["theorems"].append({"name": "other", "module": "Proofs.Asm.Proofs", "axioms": []})
         report["nodes"].append(self.node("other", "Proofs.Asm.Proofs", "theorem", ["Asm.airAsm_17"]))
-        found = premises.caller_obligations(report, self.fixture.root)
+        found = markers.caller_obligations(report, self.fixture.root)
         self.assertEqual(found, {"wrap_spec": ["ALC-09", "IOM-01"]})
         gen.write_text(gen.read_text().replace('{"ALC-09":[0],"IOM-01":[0]}', '{"ALC-09":[]}'))
         with self.assertRaisesRegex(ValueError, "malformed air2lean-premises marker"):
-            premises.caller_obligations(report, self.fixture.root)
+            markers.caller_obligations(report, self.fixture.root)
+        gen.write_text(gen.read_text().replace('{"ALC-09":[]}\ndef wrap', '{"ALC-09":[0]}\n\ndef wrap'))
+        with self.assertRaisesRegex(ValueError, "marker does not precede a def"):
+            markers.caller_obligations(report, self.fixture.root)
 
     def test_compiled_rejects_error_report(self):
         with self.assertRaises(ValueError):

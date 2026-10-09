@@ -29,7 +29,7 @@ OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
           'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
-          'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/premises.py')
+          'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/premise_markers.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 
 
@@ -461,7 +461,7 @@ def caller_obligations(audit):
     """W1: theorems whose kernel closure reaches a generated definition with a caller-supplied
     Allocator/Io parameter, with those premises (docs/premises.md ALC-09, IOM-01)."""
     try:
-        return helper('premises').caller_obligations(audit, ROOT)
+        return helper('premise_markers').caller_obligations(audit, ROOT)
     except (OSError, ValueError, KeyError) as error:
         raise ValueError('caller obligations: ' + str(error)) from error
 

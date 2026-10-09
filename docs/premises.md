@@ -43,7 +43,7 @@ the tool:
    Adds the caller obligations of every generated definition reached: the translator writes
    `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
    parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
-   in `generated_markers` are accepted, and a malformed marker or one that is not directly
+   in `generated_markers` are accepted (`scripts/premise_markers.py` reads them), and a malformed marker or one that is not directly
    above a `def` fails the check.
 5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
 

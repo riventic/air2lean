@@ -97,7 +97,7 @@ def classify(report: dict) -> dict:
     theorems = []
     # W1: a theorem over a function with a caller-supplied Allocator/Io parameter is about callers
     # that pass the model one (docs/premises.md ALC-09, IOM-01); the claim names that premise.
-    obligations = PREMISES.caller_obligations(report) if isinstance(report.get('nodes'), list) else {}
+    obligations = MARKERS.caller_obligations(report, ROOT) if isinstance(report.get('nodes'), list) else {}
     for theorem in report['theorems']:
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
@@ -152,8 +152,9 @@ def _sibling(name):
     return module
 
 
+ROOT = Path(__file__).resolve().parents[1]
 OUTCOMES = _sibling('outcomes')
-PREMISES = _sibling('premises')
+MARKERS = _sibling('premise_markers')
 
 
 def root_outcomes(project, root: dict, diffs) -> dict | None:
