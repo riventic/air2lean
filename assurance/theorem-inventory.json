@@ -598,16 +598,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "c1069df927be415d8d2406b3be007aa8de10b10e",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:47:25.819046+00:00",
-      "elapsed_seconds": 77.116,
+      "started_utc": "2026-10-09T06:37:40.185488+00:00",
+      "elapsed_seconds": 64.053,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "9842025a73580ec461d85970cf014673edde5d0d940f18092ddd6a86dbfe241d",
+      "log_sha256": "2e2b58f3757bb5cd93367478ce63ebbe99c663294fb3d618ab337424f04107d5",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -635,7 +635,7 @@
         },
         "lists": {
           "path": "tests/golden/0.15.2/lists/Gen.lean",
-          "sha256": "30f55d0d7f0be88be77a286521fe2cc132cb8fba7c5922cb6045f8d9f2213e7e"
+          "sha256": "a5a103ee71251ea2a1a497aeac69947d3df362ffc035326fbf915dbb151e1367"
         },
         "slices": {
           "path": "tests/golden/0.15.2/slices/Gen.lean",
@@ -761,16 +761,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "c1069df927be415d8d2406b3be007aa8de10b10e",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:44:30.836275+00:00",
-      "elapsed_seconds": 83.9,
+      "started_utc": "2026-10-09T06:09:04.361009+00:00",
+      "elapsed_seconds": 758.62,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "18088dbfb715181add8fed0d7c50120b2b996164b1fe1ac8e34aac6ae14acbbb",
+      "log_sha256": "cf751100fdd3c7ac8fe8fd51cfb04874c4e8482b1e5e176d9ce2202e37ca91b4",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
@@ -856,7 +856,7 @@
         },
         "iogroup": {
           "path": "Proofs/Iogroup/Gen.lean",
-          "sha256": "c1916b15976f9dc2dbc2c030490c205b5e68fc727aaaf9c8af9837caa14a2ef6"
+          "sha256": "fa734d84ca97301edad894a7616faeaedec2039b737cda5c47dd006273c9e247"
         },
         "layout": {
           "path": "Proofs/Layout/Gen.lean",
@@ -864,7 +864,7 @@
         },
         "lists": {
           "path": "Proofs/Lists/Gen.lean",
-          "sha256": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d"
+          "sha256": "847473f77157d4349cf8d47f2d914f5973e7dd431376a2fcf8918977968664c9"
         },
         "options": {
           "path": "Proofs/Options/Gen.lean",
@@ -884,7 +884,7 @@
         },
         "sync": {
           "path": "Proofs/Sync/Gen.lean",
-          "sha256": "f7437d5ec7fa357d7c298ecd457ccf0bd2831f6d9d7013dcceaa19f541386630"
+          "sha256": "3074d17ed8f1a89c4475328655d94c8c64a7a51a0fd20d052885bb745de9b702"
         },
         "threads": {
           "path": "Proofs/Threads/Gen.lean",
@@ -1042,16 +1042,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "c1069df927be415d8d2406b3be007aa8de10b10e",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:47:20.363328+00:00",
-      "elapsed_seconds": 5.333,
+      "started_utc": "2026-10-09T06:21:43.035509+00:00",
+      "elapsed_seconds": 957.087,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d57f8af79cca54b8058a4624843f51df02c86f5bd572bccad23f532ee2db2d0a",
+      "log_sha256": "55bc16827f05dd3bde0ea7aceb1ace90d5d7fed9e939184e1ae5d950a8849668",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1067,7 +1067,7 @@
       "gens": {
         "sync": {
           "path": "Proofs/Sync/Gen.lean",
-          "sha256": "f7437d5ec7fa357d7c298ecd457ccf0bd2831f6d9d7013dcceaa19f541386630"
+          "sha256": "3074d17ed8f1a89c4475328655d94c8c64a7a51a0fd20d052885bb745de9b702"
         }
       },
       "sources": {

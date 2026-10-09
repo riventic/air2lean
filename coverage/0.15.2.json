@@ -16495,7 +16495,7 @@
       "Air2Lean/SourceMap.lean": "a71d35b7edcbae8c21c8d2a6061be75df48efd974a126fd94f4e1505f3bef9a9",
       "Air2Lean/StdModels.lean": "a338d4dc26aac69f15e4dba038682725fa8b6763b0a7583b68e02e78ef8d049e",
       "Air2Lean/TimedCheck.lean": "690ac922400f0a9b888f9931a5879bbad7995ef27664ebed7fccda389aa171e5",
-      "Air2Lean/TimedEmit.lean": "69961957cca4f1280290ccd150e43880bc0a9620a3f0b9220c1dd9d108f32bce",
+      "Air2Lean/TimedEmit.lean": "c3879793e01cac59f6d91c82a378949506171ade777d49f0d45f272622c9c48c",
       "zig-patch/air-json/json.zig": "bb6d0b0c19bb94162707be9d896e8ad336ac888ef5f503418706e5b4e32601b0",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
@@ -17399,7 +17399,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "a338d4dc26aac69f15e4dba038682725fa8b6763b0a7583b68e02e78ef8d049e",
       "Air2Lean/Memory.lean": "70345d0fde16416e388a4ef89fc1be6eca172eff325c0576136608b09a1b9167",
-      "docs/std-models.md": "514c4c6ef6f1aa7c84b64b054362028d6e0cdb091dab2a9cd28ca10c660580a1"
+      "docs/std-models.md": "9bab43134a58b2c1fb567f3b140ce16a451d22c1807f44e83add1e8fd6129f2a"
     }
   },
   "summary": {
