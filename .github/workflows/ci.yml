@@ -1038,7 +1038,8 @@ jobs:
 
       # G2 (docs/c-frontend.md): void*/char* pointer casts and self-referential structs; the
       # fixture's defined exports against native Zig, negatives, and error-storage rejections.
-      - name: C front-end pointer casts and self-referential structs
+      # G5: globals with a comptime-call initial value whose address escapes keep their `init`.
+      - name: C front-end pointer casts, self-referential structs and escaped globals
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
@@ -1048,6 +1049,7 @@ jobs:
           export AIR2LEAN_LEAN=$(lake env which lean)
           export LEAN_PATH=$(lake env printenv LEAN_PATH)
           bash tests/roadmap/c-frontend/ptrcasts/check.sh --native
+          bash tests/roadmap/c-frontend/escaped-globals/check.sh --native
 
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations

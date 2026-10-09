@@ -317,6 +317,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     'tests/roadmap/c-frontend/ptrcasts/air/{version}': 'tests/roadmap/c-frontend/ptrcasts/provenance.json',
     'tests/roadmap/c-frontend/ptrcasts/air-reject/{version}': 'tests/roadmap/c-frontend/ptrcasts/provenance.json',
+    'tests/roadmap/c-frontend/escaped-globals/air/{version}': 'tests/roadmap/c-frontend/escaped-globals/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
 }
 NON_COMPILER_AIR = {

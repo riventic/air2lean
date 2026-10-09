@@ -123,7 +123,7 @@ def byteView (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
     match ← ((do
       Zig.loop (byteView.loop11 i5) byteView.again11) : Zig.MM byteViewLocals byteViewExit) with
     | .br10 => (do
-      let i30 ← Zig.callM (Zig.ptrProjectNullable i5 (·.elem 1 (1 : BitVec 64)))
+      let i30 ← Zig.callM (Zig.ptrProjectNonnull i5 (·.elem 1 (1 : BitVec 64)))
       Zig.store (α := BitVec 8) 1 i30 (171 : BitVec 8)
       let i32 ← pure ((← get).s)
       let i33 ← Zig.load (BitVec 32) 4 i2

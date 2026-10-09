@@ -15044,7 +15044,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "bc71a3a7a2c97046e3534f5a30bcd376f66c76f2e4de8345e4dee8a3d1959124",
+      "scripts/coverage.py": "5621e6aecd3d57029be2d4b0af93fe6eb23d068b272035c1c0bfa73ded656d9d",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -15060,7 +15060,7 @@
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
       "Air2Lean/BitCast.lean": "c4ee2ca5d0b60a0a7d1251d71499e0bcd53a865fb15bb7a78ceb49c0802aadc0",
       "Air2Lean/Certificate.lean": "68b341b96966bee817670a1073550316f0f329d6d07a5947a7c5f969a9223f99",
-      "Air2Lean/Check.lean": "87e188029ff0236f3c9f70fe90750e4eaba459b8c68f66626cdb49852094b360",
+      "Air2Lean/Check.lean": "a910b432d11eff6f1668a6daca781f73d08468c77222d6804a995cb3325d7d58",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "3629640607ef4b50c980dad687b2f8f9fbdb083e71fdebccfb9bf3ca6ec4cbf8",
       "Air2Lean/Diagnostic.lean": "08da1c953891a301ca3b2c5513c3f5db3758ebf0b0c6613d76c872b1e03b0458",
@@ -15077,7 +15077,7 @@
       "Air2Lean/StdModels.lean": "0643758e19518dcfedb5e091372972376ec4309575e00e677758c11f8b813896",
       "Air2Lean/TimedCheck.lean": "690ac922400f0a9b888f9931a5879bbad7995ef27664ebed7fccda389aa171e5",
       "Air2Lean/TimedEmit.lean": "35f077ba25f6153e1a4dfd96ae6094996d7f94c9fc0a3563671570b629accb86",
-      "zig-patch/air-json/json.zig": "2040ad04cee7924bec8146d6cb889d224bff3bfe11662fcdd4c2b76f50130de0",
+      "zig-patch/air-json/json.zig": "066fab374988da0aaae734830acf3a600de436621a1de2efbb3d9726d40e0e5b",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a"
     },
     "runtime-models": {
@@ -16444,6 +16444,9 @@
       "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0/reject.cyclicErrorView.json": "d8b9f3a78922b319b27742287c9abd725ef44490c618f119e30fe2b850c23b63",
       "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0/reject.errorThroughOpaque.json": "57c575a0a994546630fb77d5b225ef4ecd57c50a4d470471299066dcdde14f83",
       "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0/reject.launder.json": "b5f703435dbeacda7ff26a99eef2944f7c0d2733b678cf69014303345aa9d102",
+      "tests/roadmap/c-frontend/escaped-globals/air/0.16.0/escaped.counterBump.json": "040f16f2d6cdbab695d79f022ad2c4735f89911047b34965b399f30573b9dca1",
+      "tests/roadmap/c-frontend/escaped-globals/air/0.16.0/escaped.dataAddr.json": "76c50b86920b895160045482052f1dc48d83eefd53bafed1613b90044d131129",
+      "tests/roadmap/c-frontend/escaped-globals/air/0.16.0/escaped.poolList.json": "056497ee71224d78eb86e2d14765bcd3d4a29f89ac6324be353ffdd611d26942",
       "tests/roadmap/extern-calls/air/0.14.1/extern_calls.fillSum.json": "5a8c1c0941c845277a18cc00defdc4f0929af9cad501629d05b7d537e0e01a75",
       "tests/roadmap/extern-calls/air/0.14.1/extern_calls.greetLen.json": "2986ee061e0208293c82ce52367fad6517bbc01e80f7431a4691f9c075f075c8",
       "tests/roadmap/extern-calls/air/0.14.1/libc_ref.memset.json": "98135b157e28c92b2dad8d84a6b42713ce04e634230511a01cd0c2285f92873a",
