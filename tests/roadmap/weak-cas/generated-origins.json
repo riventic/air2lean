@@ -105,7 +105,7 @@
   "artifacts": [
     {
       "path": "Proofs/Atomics/Gen.lean",
-      "sha256": "0ef02d7aef29b77fd9c6fe74d1ed04bbbf58c9c412071b5389ea42531ed4146e",
+      "sha256": "0905f67f44c5af4f572106e4a83ea547ac12a777d57910bdf032d488ed4bf82c",
       "example": "atomics",
       "version_selection": "0.16.0",
       "host_selection": "linux",
@@ -131,7 +131,7 @@
     },
     {
       "path": "Proofs/Sync/Gen.lean",
-      "sha256": "87471deae6f5e6ea03747b8bcdc27486f96ca137259500cd7dfccc202fdd1a55",
+      "sha256": "b072ccb827d25116b2c8ea88083f8d73fc8c9d90569f81c06fb5c355fee46ad8",
       "example": "sync",
       "version_selection": "0.16.0",
       "host_selection": "linux",
@@ -172,7 +172,7 @@
     },
     {
       "path": "Proofs/Threadsync/Gen.lean",
-      "sha256": "69e4a521fc99d658ba2c4ed657b5e8eb89f2bb367e756a50fbc8def35791a56a",
+      "sha256": "049e81d15b99c2a4591667d6fced4bed0cd53af92189107b552b9303b89c86e7",
       "example": "threadsync",
       "version_selection": "0.15.2",
       "host_selection": "linux",
@@ -218,7 +218,7 @@
     },
     {
       "path": "tests/golden/0.15.2/atomics/Gen.lean",
-      "sha256": "2af830feb84051c7002b27f73568ef8ecf13318cba88a29140c275346252be3f",
+      "sha256": "c81e60473ee223627979b518dafae9d4f94ea250063a50e8cc328f144fb441ee",
       "example": "atomics",
       "version_selection": "0.15.2",
       "host_selection": "linux",
@@ -244,7 +244,7 @@
     },
     {
       "path": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
-      "sha256": "be5f7666af7feaca1523a5d4c7cd50d925fd8d9331209cd444264dd20d6e89ad",
+      "sha256": "8194cf027dd2201a6db37f2dc0f65f5bde3d347eee685e435d727bc39c4afb75",
       "example": "threadsync",
       "version_selection": "0.15.2",
       "host_selection": "darwin",

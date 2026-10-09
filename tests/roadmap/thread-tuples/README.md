@@ -47,7 +47,7 @@ both its default compiler invocation and an absolute `AIR2LEAN_LEAN` override wi
 execution of that separate source fixture.
 
 The checked `ThreadTuples/Gen.lean` has 408 lines and SHA-256
-`f22be91d3ac491009510dc3a9136e76ec0dd462d7cac79da78520daf1a474169`.
+`772e13b15dc3dc16e77e76be26d16f483a3dc9c37d710a593f948518693cc523`.
 It was regenerated from the unchanged checked AIR with the current dispatcher destructuring
 and the generated `Tgt.captures` classification. The only change from the previous
 semantic body (398 lines) is the added `Tgt.captures` definition. The validated profile
