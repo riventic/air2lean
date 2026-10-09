@@ -384,27 +384,27 @@ theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + E
   exact LawfulEnc.decode_encode v
 
 set_option maxHeartbeats 1000000 in
-theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
-    { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
+    { mem0 σ with current := 0 } d := by
   unfold disjoint
-  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { mem0 with current := 0 } := by
+  have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty) { mem0 σ with current := 0 } := by
     rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
     exact (Owned.start rfl rfl)
   -- The four blocks.
-  refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl (by decide) rfl
+  refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl (by simp [mem0, Mem.ofGlobals]) rfl
     fun s2 m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Ax, hA⟩ := hq₁
   obtain ⟨⟨hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_upd (alloc_next 4 4 (by decide)) ho₁ hc₁ (by rw [ht₁]; decide) hx
+  refine WP.bind (WP.liftMem_upd (alloc_next 4 4 (by decide)) ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
     fun s4 m₂ h₂ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ay, ⟨hy0, hAy⟩, hy⟩ := sep_ex_lift hq₂
   refine WP.bind (WP.liftMem_upd (alloc_next 16 8 (by decide)) ho₂ hc₂
-    (by rw [ht₂, ht₁]; decide) hy fun s6 m₃ h₃ ho₃ hq₃ hc₃ ht₃ => ?_)
+    (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy fun s6 m₃ h₃ ho₃ hq₃ hc₃ ht₃ => ?_)
   obtain ⟨A1, ⟨h10, hA1⟩, hc1⟩ := sep_ex_lift hq₃
   refine WP.bind (WP.liftMem_upd (alloc_next 16 8 (by decide)) ho₃ hc₃
-    (by rw [ht₃, ht₂, ht₁]; decide) hc1 fun s11 m₄ h₄ ho₄ hq₄ hc₄ ht₄ => ?_)
+    (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1 fun s11 m₄ h₄ ho₄ hq₄ hc₄ ht₄ => ?_)
   obtain ⟨A2, ⟨h20, hA2⟩, hc2⟩ := sep_ex_lift hq₄
-  have htt₄ : m₄.threads = mem0.threads := by rw [ht₄, ht₃, ht₂, ht₁]
+  have htt₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by rw [ht₄, ht₃, ht₂, ht₁] <;> rfl
   have F₄ := sep_assoc (sep_assoc hc2)
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -430,7 +430,7 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
     rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h20]; omega) (by decide)).frameL.frameL.frameL)
     ho₉ hc₉ (by rw [ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]; decide) F₉
     fun _ m₁₀ h₁₀ ho₁₀ F₁₀ hc₁₀ ht₁₀ => ?_)
-  have htt₁₀ : m₁₀.threads = mem0.threads := by rw [ht₁₀, ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]
+  have htt₁₀ : m₁₀.threads = #[{ spawner := 0, joined := true }] := by rw [ht₁₀, ht₉, ht₈, ht₇, ht₆, ht₅, htt₄]
   rw [enc_zero] at F₁₀
   dsimp only at F₁₀ ⊢
   -- The first spawn: kid 1 gets `c1` and `x`.
@@ -655,18 +655,18 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
 
 /-- **`disjoint a b` gives `a + b` (wrapping) under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem disjoint_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (disjoint a b) mem0).run = some (.ok (v, m))) :
+theorem disjoint_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o (disjoint a b) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok (a + b) := by
   obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound dispatch (fun _ => .none) dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/
-theorem disjoint_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (disjoint a b) mem0).run ≠ some (.error e) :=
+theorem disjoint_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
   (proto a b).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
-    main_spec
+    (main_spec σ)
 
 end Threads.Disjoint

@@ -3446,16 +3446,16 @@ theorem vOf_of_rdy {x : X} (h : rdyOf x = true) : vOf x = 7 := by
   simp at h
   rw [if_pos ⟨h.1, by omega⟩]
 
-theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 } d := by
+theorem main_spec (σ : Placement) (d : Nat) : proto.WP 0 handoff QM G0 { mem0 σ with current := 0 } d := by
   unfold handoff
   -- the `Box`: block 0
   refine WP.bind (WP.liftMem_owned (own := fun _ => Heap.empty) (TTriple.alloc .stack 24 4 (by decide))
-    (Owned.start rfl rfl) rfl (by decide) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
+    (Owned.start rfl rfl) rfl (by simp [mem0, Mem.ofGlobals]) rfl fun s0 m₁ h₁ hr₁ ho₁ hq₁ hs₁ hm₁ hd₁ => ?_)
   obtain ⟨rfl, -⟩ := alloc_ok hr₁
   obtain ⟨A, hA⟩ := hq₁
   obtain ⟨⟨-, hA4⟩, hb₁⟩ := sep_lift.mp hA
   have hc₁ : m₁.current = 0 := hs₁.current
-  rw [show (⟨some ({ mem0 with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
+  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl] at hb₁ ⊢
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -3464,7 +3464,7 @@ theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 
   obtain ⟨hsz, -⟩ := enc_box
   refine WP.bind (WP.liftM_owned (TTriple.storeAt' (p := bPtr) (q := bPtr) (A := A) (S := 24)
     (K := .stack) (bs := Array.replicate 24 .undef) (k := 0) (a := 4) box0 hsz rfl (by decide)
-    (by simp [Enc.size]) (by simp [bPtr]; omega) (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; decide)
+    (by simp [Enc.size]) (by simp [bPtr]; omega) (by decide)) ho₁' hc₁ (by rw [hs₁.threads]; simp [mem0, Mem.ofGlobals])
     (by rw [upd_self]; exact hb₁) fun _ m₂ h₂ hr₂ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
   rw [writeBytes_all (by rw [hsz]; simp)] at F₂
@@ -3566,17 +3566,17 @@ theorem main_spec (d : Nat) : proto.WP 0 handoff QM G0 { mem0 with current := 0 
 /-! ## The results -/
 
 /-- **`threadsync.handoff` gives 7 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem handoff_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o handoff mem0).run = some (.ok (v, m))) :
+theorem handoff_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run dispatch fuel o handoff (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 7 := by
   obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `threadsync.handoff` gives an error**: no data race, no deadlock at a futex, no
 panic, under every schedule. -/
-theorem handoff_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o handoff mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem handoff_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o handoff (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 end Threadsync.HO
