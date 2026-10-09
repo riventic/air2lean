@@ -359,6 +359,40 @@ const Compat = struct {
         };
     }
 
+    /// Resolve the value of a non-extern global that a pointer constant names, so that its
+    /// `globals` entry has an `init`. `-fno-emit-bin` never lowers the global, so without this a
+    /// `const` such as `heap.PageAllocator.vtable` can stay type-resolved only, and its function
+    /// pointers unknown. This is the analysis Sema itself runs for a global's value (it registers
+    /// any error); a global whose value is already under analysis is left as it is.
+    fn ensureNavVal(pt: Zcu.PerThread, nav_index: InternPool.Nav.Index) void {
+        const zcu = pt.zcu;
+        const unit: InternPool.AnalUnit = .wrap(.{ .nav_val = nav_index });
+        if (zcu.analysis_in_progress.contains(unit)) return;
+        if (v16) {
+            const reason: Zcu.DependencyReason = .{ .src = zcu.navSrcLoc(nav_index), .type_layout_reason = undefined };
+            pt.ensureNavValUpToDate(nav_index, &reason) catch {};
+        } else {
+            pt.ensureNavValUpToDate(nav_index) catch {};
+        }
+    }
+
+    /// 0.16.0: resolve the layout of a struct, union or enum type before it is written, as
+    /// Sema does for a type whose layout is wanted. Otherwise a container that this function
+    /// has only behind a pointer (`heap.ArenaAllocator.Node` in `ArenaAllocator.init`) is
+    /// written without fields, while another function's export of the same type has them.
+    /// Before 0.16.0 the fields are always known; the layout stays as Sema left it.
+    fn ensureLayout(pt: Zcu.PerThread, ty: Type) void {
+        if (!v16) return;
+        const zcu = pt.zcu;
+        switch (zcu.intern_pool.indexToKey(ty.toIntern())) {
+            .struct_type, .union_type, .enum_type => {},
+            else => return,
+        }
+        if (zcu.analysis_in_progress.contains(.wrap(.{ .type_layout = ty.toIntern() }))) return;
+        const reason: Zcu.DependencyReason = .{ .src = ty.srcLoc(zcu), .type_layout_reason = .field_queried };
+        pt.ensureTypeLayoutUpToDate(ty, &reason) catch {};
+    }
+
     /// The `assembly` AIR instruction, normalized. 0.16.0 has a convenience `Air.unwrapAsm`;
     /// 0.15.2 has no such helper, and its extra-data order differs (outputs, inputs, output
     /// constraint/name pairs, input constraint/name pairs, source — 0.16.0 instead puts the
@@ -1572,6 +1606,8 @@ const W = struct {
         try w.j.beginObject();
         switch (g) {
             .nav => |nav| {
+                const seen = Compat.navInfo(zcu, nav);
+                if (seen.init == null and !seen.is_extern) Compat.ensureNavVal(w.pt, nav);
                 const info = Compat.navInfo(zcu, nav);
                 try w.field("name");
                 try w.j.write(ip.getNav(nav).fqn.toSlice(ip));
@@ -1603,6 +1639,8 @@ const W = struct {
     fn typeId(w: *W, ty: Type) Error!u32 {
         const gop = try w.ids.getOrPut(w.gpa, ty.toIntern());
         if (!gop.found_existing) {
+            // Before the type's entry and any pointer to it (`ptr_align`) are written.
+            Compat.ensureLayout(w.pt, ty);
             gop.value_ptr.* = @intCast(w.queue.items.len);
             try w.queue.append(w.gpa, ty.toIntern());
         }

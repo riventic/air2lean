@@ -126,7 +126,7 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
 `load`, `store`, `struct_field_ptr`, `bitcast`, `set_union_tag`, `ret_load`, and `dbg`. -/
 def valueOperands (op : Op) : Array Val :=
   match op with
-  | .arg _ | .alloc | .runtimeNavPtr _ | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ => #[]
+  | .arg _ | .alloc | .runtimeNavPtr _ | .unreach | .trap | .line _ | .dbg _ _ | .«repeat» _ | .retAddr => #[]
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
   | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b => #[a, b]
   | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a | .floatRound _ a | .sqrt a | .libm _ a
@@ -430,22 +430,40 @@ def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
   | _ => false
 
 /-- An op that only a function that uses memory has. -/
-def memoryOp (op : Op) : Bool :=
+def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool :=
   op.isSpinHint || match op with
   | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slice .. | .slicePtr _ | .arrayToSlice _
   | .sliceFieldPtr .. | .memset .. | .memcpy .. | .tagName _ | .errorName _ => true
   | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. | .tryPtr .. => true
   | .runtimeNavPtr _ => true
-  | .call (.func name ..) _ => modelledStdFn name
+  -- `@returnAddress` reads the oracle in `Zig.Mem` (`Zig.returnAddress`).
+  | .retAddr => true
+  | .call (.func name ..) _ => modelledStdFn name mode
   | _ => false
 
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=
   match v with
-  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .sliceConst .. => true
+  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .ptrInt .. | .sliceConst .. => true
   | .agg _ elems => elems.any Val.pointsToMem
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
+
+/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
+partial def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
+  match v with
+  | .undef t => !admit t
+  | .agg _ elems => elems.any (Val.hasUndefExcept admit)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
+  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
+  | _ => false
+
+/-- `--allocator-model translated`: an `undefined` operand of type `t` is an arbitrary
+non-dereferenceable pointer (`Zig.undefPtr`, an oracle read): `t` is a single/many-item
+pointer. -/
+def Func.admitsUndefPtr (f : Func) (t : TyId) : Bool :=
+  f.allocatorModel == .translated &&
+    (match f.types[t]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false)
 
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
@@ -459,8 +477,10 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
     | .inst id => (insts.find? (·.id == id)).map (·.ty)
     | v => v.constTy?
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    insts.any fun i => memoryOp i.op || i.op.isDeviceAsm f.targetArch ||
+    insts.any fun i => memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.targetArch ||
       (valueOperands i.op).any Val.pointsToMem ||
+      -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`).
+      (valueOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
       -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
       (match i.op with
        | .bitcast a => ptrLike (some i.ty) && !ptrLike (tyOf a)

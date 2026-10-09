@@ -20,5 +20,13 @@ tests/roadmap/models/registry.json
 tests/roadmap/models/TupleGenerated.lean
 tests/roadmap/models/tuple-registry.json
 tests/roadmap/models/CollisionGenerated.lean
+<<<<<<< HEAD
 # Qualification proof-audit reports (tens of MB); the committed logs carry each result
 qualification/*.d/assumptions/
+||||||| af9ddc30
+=======
+
+# Python bytecode
+__pycache__/
+*.pyc
+>>>>>>> codex/alloc-translated-p4-fba

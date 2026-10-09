@@ -678,6 +678,10 @@ structure FCtx where
   /-- The Zig version that wrote the AIR (`Func.zigVersion`), for the float ops whose result
   differs by version (`docs/floats.md` §Per-version differences). -/
   zigVersion : String
+  /-- `Func.allocatorModel` (`--allocator-model`). -/
+  allocatorModel : AllocatorModel := .std
+  /-- `Func.targetOs`: the trusted OS model's target (`Zig.Os.Target`). -/
+  targetOs : String := ""
   /-- This function uses memory (`Air2Lean/Memory.lean`): it returns `Zig.MemM`, and its body
   runs in `Zig.MM`. -/
   mem : Bool
@@ -766,7 +770,7 @@ def FCtx.valTy (fc : FCtx) (v : Val) : Ty :=
   | .func .. => .void
   | .undef tid | .optNull tid | .optSome tid _ | .err tid _ | .errUnionErr tid _
   | .errUnionOk tid _ | .enumTag tid _ | .unionVal tid .. | .agg tid _ | .ptrConst tid ..
-  | .ptrNull tid | .ptrOther tid _ | .sliceConst tid .. => fc.tyOfId tid
+  | .ptrNull tid | .ptrOther tid _ | .ptrInt tid _ | .sliceConst tid .. => fc.tyOfId tid
 
 /-- The type ID of `v`; `none` for a constant without a type. -/
 def FCtx.valTyId? (fc : FCtx) (v : Val) : Option TyId :=
@@ -835,6 +839,10 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     match fc.tyOfId tid with
     | .int _ b => s!"(0#{b})"
     | .bool => "false"
+    -- Admitted only under `--allocator-model translated` (`checkUndefOperands`).
+    | .ptr "one" .. | .ptr "many" .. =>
+      if fc.allocatorModel == .translated then
+        s!"(← {if fc.conc then "Zig.callMC" else "Zig.callM"} Zig.undefPtr)" else "default"
     | _ => "default"
   | .func name .. => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
@@ -884,6 +892,8 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => "(panic! \"air2lean: a pointer constant without a global\")"
+  -- `--allocator-model translated` only (`admitIntPtr`): no block, every access `.illegal`.
+  | .ptrInt _ addr => s!"(⟨none, {addr}⟩ : Zig.Ptr)"
   | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : {sliceTyName fc.ptrBits})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
@@ -1032,7 +1042,14 @@ def FCtx.computePlaces (fc : FCtx) : Array (InstId × InstId × Array PathStep) 
             | some (u, f, _) => .ufield u (fc.helperName base s!"get_{f}") (fc.helperName base s!"modify_{f}")
             | none => .field s!"fld{idx}"
           | _ => .field s!"fld{idx}"
-        acc.push (i.id, root, path.push step)
+        -- A tuple is a right-nested `Prod`: field `idx` of `n` is `snd` `idx` times, then
+        -- `fst` unless it is the last (`tupleProjection`).
+        let steps := match base with
+          | .tuple fields =>
+            (Array.replicate idx (PathStep.field "snd")) ++
+              (if idx + 1 < fields.size then #[PathStep.field "fst"] else #[])
+          | _ => #[step]
+        acc.push (i.id, root, path ++ steps)
       | none => acc
     | .fieldParentPtr (.inst b) _ =>
       -- The checker proved the exact terminal struct field and result pointee type.
@@ -1319,6 +1336,18 @@ def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool)
     let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
     s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"{fc.widthFn "Zig.readSlice" "Zig.readSliceOf"} ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
   else fc.resolveVal env a
+
+/-- A call of the trusted OS model (`--allocator-model translated`, `checkOsCall`):
+`Zig.Os.<fn> <target> args…`, a packed `prot`/`flags` argument as its bits. -/
+def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args : Array Val) : String :=
+  let rv := fc.resolveVal env
+  let arg (i : Nat) : String := rv (args[i]?.getD .void)
+  let bits (i : Nat) : String := s!"(Zig.Packed.toBits {arg i})"
+  let target := if fc.targetOs == "macos" then "Zig.Os.Target.macos" else "Zig.Os.Target.linux"
+  match fn with
+  | .mmap => s!"Zig.Os.mmap {target} {arg 0} {arg 1} {bits 2} {bits 3} {arg 4} {arg 5}"
+  | .munmap => s!"Zig.Os.munmap {target} {arg 0}"
+  | .mremap => s!"Zig.Os.mremap {target} {arg 0} {arg 1} {arg 2} {bits 3} {arg 4}"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -1626,7 +1655,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .ret v => match fc.tyOfId fc.retTy with | .void => #[] | _ => #[v]
   | .unreach => #[]
   | .trap => #[]
-  | .line _ => #[]
+  | .line _ | .retAddr => #[]
   | .dbg _ _ => #[]
   -- An lvalue output's `ref` is a pointer, used as `store`'s pointer.
   | .asm _ _ _ outputs inputs =>
@@ -2384,7 +2413,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
     let o := orderTerm order
-    let expr := if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+    -- `unordered`: `--allocator-model translated` only (`Check.lean`).
+    let expr := if order == .unordered then
+        if fc.atomicPtr ptr then s!"Zig.atomicLoadUnorderedEncC ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
+        else s!"Zig.atomicLoadUnorderedC (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
+      else if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2521,9 +2554,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some l)
   | .call callee args =>
     let (isNoreturn, cexpr) := fc.resolveCallee callee
-    let allocFn := match callee with | .func name .. => allocFn? name | _ => none
+    let allocFn := match callee with | .func name .. => allocFn? name fc.allocatorModel | _ => none
     let threadFn := match callee with | .func name .. => threadFn? name | _ => none
-    if let some fn := allocFn then
+    let osFn := match callee with | .func name .. => osFn? name fc.allocatorModel | _ => none
+    if let some fn := osFn then
+      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.osCall env fn args})"
+      (env, some l)
+    else if let some fn := allocFn then
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
       (env, some l)
     else if let some fn := threadFn then
@@ -2562,6 +2599,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
+  | .retAddr =>
+    let (env, l) := bindLet fc env inst.id s!"{fc.callMName} Zig.returnAddress"
+    (env, some l)
   | .asm source _ clobbers outputs inputs =>
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
@@ -2993,7 +3033,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       allInsts, brT := brTargets allInsts, repT := repTargets allInsts,
       retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
       exitName := mangleField s!"{plain}Exit", floatSemantics, errBits := f.errorSetBits, bigEndian := f.bigEndian,
-      zigVersion := f.zigVersion, places := #[],
+      zigVersion := f.zigVersion, allocatorModel := f.allocatorModel, targetOs := f.targetOs,
+      places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,

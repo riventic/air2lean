@@ -223,7 +223,7 @@ appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
 | `inferred_alloc*`, `legalize_*`, `cmp_lt(e)_errors_len`, `error_set_has_value` | Not meaningful at the analyzed-AIR export stage (inference, legalization or finalized error universe) | Inspect the exporter/compiler stage; cast to a superset error set |
 | `*_optimized`, `int_from_float_optimized_safe` | Lower first: rebuild in strict float mode | Remove `@setFloatMode(.optimized)` |
 | `err_return_trace*`, `save_err_return_trace_index`, `runtime_nav_ptr`, `vector_store_elem` | Need new semantics (trace state, TLS/extern identity, vector-lane memory) | Keep out of translated functions until modelled |
-| `breakpoint`, `prefetch`, `ret_addr`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state | Remove, pass explicit values, or export fixed-arity functions |
+| `breakpoint`, `prefetch`, `ret_addr`, `frame_addr`, `addrspace_cast`, `c_va_*` | Need new semantics; no model of debugger, cache, machine addresses, address spaces or variadic state (`ret_addr` is an explicit oracle under `--allocator-model translated`, [allocator-model.md](allocator-model.md)) | Remove, pass explicit values, or export fixed-arity functions |
 | `wasm_memory_*`, `work_*` | Outside qualified targets | Keep out of translated functions |
 | `assembly` (0.14.1) | Exporter does not decode the 0.14.1 layout | Use 0.15.2/0.16.0 for assembly wrappers |
 

@@ -90,6 +90,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
+| OS page mapping | [OSM-01](#osm-01) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
 ## Target and build profiles
@@ -409,8 +410,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   distinct; a plain write of an equal value is its own message). The model admits more outcomes
   than RC11 (no SC order, read views not transferred through release/acquire), never fewer.
   Overlapping atomic accesses of another offset or size are `.unspecified`. Atomic pointees are
-  integers, enums, bools, packed structs or single/many pointers (ORD-05).
-- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
+  integers, enums, bools, packed structs or single/many pointers (ORD-05). Under
+  `--allocator-model translated` an `unordered` load may also read any message not older than
+  one that happened before it, ignoring and not updating the thread's own read view.
+- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
 <a id="ord-02"></a>
@@ -624,7 +627,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
   global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
-  misaligned or dead accesses are `.illegal`. Undefined bytes are explicit.
+  misaligned or dead accesses are `.illegal`. Undefined bytes are explicit. `@returnAddress()`
+  and an `undefined` pointer operand (`--allocator-model translated`) read the explicit oracle
+  `Mem.arbitrary`, so a theorem over every initial memory covers every value sequence.
 - Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
@@ -700,6 +705,21 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   allowlisted. The shipped policy allowlists none.
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
+
+## OS page mapping
+
+<a id="osm-01"></a>
+### OSM-01 — Trusted `posix.mmap`/`munmap`/`mremap` model
+
+- Kind: trusted.
+- Statement: Under `--allocator-model translated`, a call of `std.posix.mmap`, `munmap` or
+  `mremap` (Zig 0.16.0, x86_64-linux or aarch64-macos) is a call of `Zig.Os.mmap`, `munmap` or
+  `mremap`. Everything above that boundary, `std.heap.PageAllocator` and the `mem.Allocator`
+  wrappers included, is translated from its AIR; the syscall and libc layer below it is not.
+  The current definitions are stubs that throw `.unspecified`, so no successful page mapping
+  is provable; the page-mapping model that replaces them is believed to match the OS.
+- Derived from: `ZigLean.Os.Mmap`; tokens `Zig.Os`.
+- Sources: [allocator-model.md](allocator-model.md), `ZigLean/Os/Mmap.lean`.
 
 ## Compiler and tool trust
 

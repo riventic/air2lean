@@ -110,6 +110,7 @@
     "ZigLean.Conc.Detach": ["THR-08", "THR-10"],
     "ZigLean.Conc.Word": ["THR-08", "THR-05", "ORD-01"],
     "ZigLean.Conc.WeakWord": ["THR-08", "THR-05", "ORD-04"],
+    "ZigLean.Conc.AtomicWord": ["ORD-01", "THR-01"],
     "ZigLean.Conc.WeakCas": ["ORD-04"],
     "ZigLean.Conc.WeakCasLemmas": ["ORD-04"],
     "ZigLean.Mem.AtomicPtr": ["ORD-05"],
@@ -158,10 +159,19 @@
     "ZigLean.Sep.DispatchTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.Sep.Bounded": ["SEM-04", "SEM-05"],
+    "ZigLean.Sep.AllocSpec.Region": ["SEM-02", "SEM-04"],
+    "ZigLean.Sep.AllocSpec": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.AllocSpec.Wrappers": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.AllocSpec.Toy": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.AllocSpec.Wrap": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.AllocSpec.Ops": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.AllocSpec.Norm": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.AllocSpec.Dispatch": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
-    "ZigLean.VC.Result": ["SEM-03"]
+    "ZigLean.VC.Result": ["SEM-03"],
+    "ZigLean.Os.Mmap": ["OSM-01"]
   },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
@@ -196,7 +206,8 @@
     {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
     {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
     {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"},
-    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"}
+    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"},
+    {"premise": "OSM-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:mmap|munmap|mremap)$"}
   ],
   "implies": {
     "DEV-01": ["SEM-02"],
@@ -220,6 +231,7 @@
     "ORD-03": ["ORD-01"],
     "ORD-04": ["ORD-01"],
     "ORD-05": ["ORD-01"],
+    "OSM-01": ["SEM-02"],
     "MTH-02": ["MTH-01", "TRU-04"],
     "MTH-03": ["MTH-01"],
     "ASM-01": ["TRU-04"],

@@ -532,6 +532,13 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      - name: Generic allocator specification
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/alloc-spec"
+          lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
+
       - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
         if: ${{ !matrix.mutate }}
         run: |
@@ -660,6 +667,22 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
           bash tests/roadmap/undef-locals/check.sh
+      # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
+      # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
+      - name: Translated allocators
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/alloc-translated/check.sh
+      # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
+      # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
+      - name: Translated FixedBufferAllocator against AllocSpec
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch
+          bash tests/roadmap/alloc-fba/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers

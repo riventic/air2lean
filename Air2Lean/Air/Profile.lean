@@ -41,6 +41,13 @@ def bigEndianName : String := "abi64-be-v1"
 /-- The profile's byte order is big endian (`profile.endian`). -/
 def isBigEndian (p : BuildProfile) : Bool := p.endian == "big"
 
+/-- The OS name of a Zig `arch-os-abi` triple without its version suffix (`linux`, `macos`);
+empty unless the triple has exactly three components (a legacy profile). -/
+def tripleOs (triple : String) : String :=
+  match triple.splitOn "-" with
+  | [_, os, _] => (os.splitOn ".").head!
+  | _ => ""
+
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
   unless !v.isEmpty do throw s!"profile.{k}: must not be empty"
