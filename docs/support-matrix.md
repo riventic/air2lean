@@ -83,20 +83,21 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 88 requirements, 37 complete, 41 partial, 0 open, 10 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 89 requirements, 37 complete, 42 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
-| T: Targets and profiles | T01 | T02, T04, T06 | — | T03, T05 |
-| L: Language and representation | L01, L02, L11 | L03, L04, L05, L06, L07, L08, L09, L10, L12, L13, L14 | — | — |
+| T: Targets and profiles | T01 | T02, T03, T04, T06 | — | T05 |
+| L: Language and representation | L01, L02, L11, L13 | L03, L04, L05, L06, L07, L08, L09, L10, L12, L14 | — | — |
 | C: Concurrency | C02, C03, C04, C05, C06, C09, C11 | C01, C07, C08, C14 | — | C10, C12, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
 | F: Floats | F01, F05, F06 | F04 | — | F02, F03 |
-| A: Inline assembly | A01, A03 | — | — | A02 |
+| A: Inline assembly | A03 | A01 | — | A02 |
 | E: External boundaries | E01, E04 | E02, E03 | — | — |
 | P: Proof support | P01, P02 | P03, P04, P05, P06, P07, P08 | — | — |
 | I: Integration and tooling | I01, I02, I03, I04, I05, I09 | I06, I07, I08 | — | — |
 | V: Validation and trust | V04, V05 | V03, V06 | — | V01, V02 |
 | Q: Quality and testing | Q04, Q05, Q08 | Q01, Q02, Q03, Q06, Q07 | — | — |
 | D: Documentation | D01, D02, D03, D04 | — | — | — |
+| X: Other source languages | — | — | X01 | — |
 <!-- support-matrix:end matrix -->

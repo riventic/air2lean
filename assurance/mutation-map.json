@@ -563,7 +563,7 @@
       "negative_tests": [
         {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def assert_volatile"},
         {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_device"},
-        {"path": "tests/roadmap/volatile-effects/check-device.sh", "anchor": "rdtsc twice, rdrand, output-less asm, a memory clobber"},
+        {"path": "tests/roadmap/volatile-effects/check-device.sh", "anchor": "rdtsc twice, rdrand, output-less asm and non-volatile rdtsc"},
         {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_asm"}
       ],
       "mutants": [
@@ -2180,6 +2180,15 @@
           "category": "other"
         }
       ]
+    },
+    "X01": {
+      "categories": [],
+      "negative_tests": [
+        {"path": "tests/roadmap/c-frontend/run.py", "anchor": "corpus source changed since the record"},
+        {"path": "tests/roadmap/c-frontend/run.py", "anchor": "cgen.py no longer produces the recorded program"},
+        {"path": "tests/roadmap/c-frontend/cgen.py", "anchor": "a loop counter is assigned"}
+      ],
+      "mutants": []
     }
   }
 }

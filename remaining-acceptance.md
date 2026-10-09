@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All 88 IDs, order, classifications and remaining acceptance statements are retained. Counts are 36 complete, 42 partial, 0 open and 10 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All 89 IDs, order, classifications and remaining acceptance statements are retained. Counts are 37 complete, 42 partial, 1 open and 9 research. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 ## T01 — Explicit target and build profiles
 
@@ -18,9 +18,11 @@ Bounded progress ([PR126](https://github.com/riventic/air2lean/pull/126)): the p
 
 ## T03 — Endianness support
 
-Classification: research.
+Classification: partial.
 
 target-dependent integer, float, pointer-fragment, packed-field and aggregate byte encoding. Preserve rejection until a profile is qualified. Acceptance: encode/decode round trips and byte-sensitive differential fixtures pass on each supported endian profile.
+
+Bounded progress: [PRNNN](https://github.com/riventic/air2lean/pull/NNN): byte order is a parameter (`Zig.ByteOrder`, ZigLean/Endian.lean) of integer, float, slice-length, enum, packed backing-integer, bit-pointer host and whole-byte vector-lane encodings; every `.little` definition is the existing model by `rfl` (little-endian translations are byte-identical) and ZigLean/EndianLemmas.lean proves round trips at both orders. The translator accepts a schema-12 s390x-linux profile (`abi64-be-v1`, premise PRF-05, LLVM backend only) and fails closed on atomics, std models, external models, packed unions, f80, non-byte or bool/pointer vector lanes, `@tagName`/`@errorName`, inline asm and byte pointers into packed structs. One source exported for s390x-linux and x86_64-linux translates, its byte-level facts are proved for both, and the native program under qemu s390x and on x86_64 matches the model (CI). Remaining: the fail-closed list, big-endian concurrency and allocator models, other big-endian targets.
 
 ## T04 — Architecture-specific ABI qualification
 
@@ -42,7 +44,7 @@ Classification: partial.
 
 record the actual shipping compiler/backend/flags. Check ReleaseFast correspondence where claimed, and state the premise relating safe AIR behavior to that build. Acceptance: each supported mode has a qualification record; fast-math and other changed semantics require separate treatment.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): assurance/build-modes.json + scripts/build-modes.py check: a qualification record per optimize mode x backend pair; ReleaseSafe/llvm is qualified (probe profile and command evidence, analyzed-AIR claim with stated premises); ReleaseFast/llvm is unqualified pending native observations; fast-math and shipping-binary semantics are excluded with guard text checked in the sources. Remaining: native qualification of ReleaseFast and the other unqualified pairs (Debug, ReleaseSmall, stage2_x86_64).
+Bounded progress: [PR120](https://github.com/riventic/air2lean/pull/120): assurance/build-modes.json + scripts/build-modes.py check: a qualification record per optimize mode x backend pair; ReleaseSafe/llvm is qualified (probe profile and command evidence, analyzed-AIR claim with stated premises); ReleaseFast/llvm is unqualified pending native observations; fast-math and shipping-binary semantics are excluded with guard text checked in the sources. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): native differential run records (`assurance/build-mode-runs/`, `build-modes.py record`/`check`) for 0.16.0 aarch64-macos and x86_64-linux in Debug, ReleaseSafe, ReleaseFast and ReleaseSmall on LLVM: ReleaseSafe/Debug 0 mismatches; ReleaseFast/ReleaseSmall exclude the 4975 model-throwing inputs (`ub_excluded`) and are qualified for no-illegal-behaviour transfer with one stated exception, float `@divExact` with an inexact quotient (85 cases; ReleaseSafe does not detect it; reproducer committed); CI re-runs the x86_64-linux LLVM modes against the records. stage2_x86_64 stays unqualified with triaged divergences on legal inputs (float `@mod`, narrow packed-union sign extension, f80 signed-zero min/max; examples/asm does not compile). Remaining: stage2_x86_64 qualification, an aarch64-linux run, the float `@divExact` exception (a separate soundness fix), and correspondence beyond the tested inputs.
 
 ## L01 — Executable full AIR coverage inventory
 
@@ -68,7 +70,7 @@ Classification: partial.
 
 preserve their control-flow meaning, target scope and captured values. Add loop invariants and termination measures where applicable. Acceptance: nested dispatch loops and legal exits translate; malformed control-flow targets are rejected.
 
-Bounded progress ([PR124](https://github.com/riventic/air2lean/pull/124)): nested legal exits (two-level break, outer continue, inner return, inner loop result as outer selector, memory captures) translate; nested dispatches to an enclosing ordinary loop, a sibling loop-switch, itself, a non-control instruction or an absent ID, and wrong-kind/missing br/repeat targets are rejected; a loop invariant and termination measure are proved for the generated nested countdown machine (`Zig.loop_spec`). Remaining: invariants/measures are hand-written per client; unrestricted control flow is not implied.
+Bounded progress: Structured loop-switch/dispatch support and lexical rejection gates merged. [PR124](https://github.com/riventic/air2lean/pull/124): nested legal exits (two-level break, outer continue, inner return, inner loop result as outer selector, memory captures) translate; nested dispatches to an enclosing ordinary loop, a sibling loop-switch, itself, a non-control instruction or an absent ID, and wrong-kind/missing br/repeat targets are rejected; a loop invariant and termination measure are proved for the generated nested countdown machine (`Zig.loop_spec`). [PRNNN](https://github.com/riventic/air2lean/pull/NNN): `dispatch_template` (proof-only ZigLean/Sep/DispatchTemplate.lean) splits a generated labeled-switch dispatch loop into one goal per state plus entry/exit, with a state-indexed invariant and a lexicographic measure, and reports failing states by name; a real 0.16.0 export of a tokenizer state machine is proved total and correct against a Lean reference with it; negative controls reject ordinary loops, wrong invariants and flat measures. Remaining: per-client invariants and measures; C `goto` state machines (translate-c 0.16 demotes them) and unrestricted control flow.
 
 ## L04 — Pointer-form try
 
@@ -84,7 +86,7 @@ Classification: partial.
 
 explicit nullability, address-zero and access rules. Keep pointer representation distinct from the validity conditions needed for dereference. Acceptance: null tests and permitted casts translate; accesses require the right preconditions, with no invented valid allocation at address zero.
 
-Bounded progress: Nonoptional scalar C/allowzero fragment merged. [PR125](https://github.com/riventic/air2lean/pull/125): stored C/allowzero pointers use the storage dictionary `Zig.nullablePtrEnc` (null is eight zero bytes; zero bytes read back as null, other integer or undefined bytes are `.unspecified`), also as extern/auto struct fields and array items; projections from a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`) are `.illegal` at address zero and keep the base's provenance; `[*c]T`/`*allowzero T` convert to and from `?*T`/`?[*]T` by explicit null mapping. Proof-only `ZigLean.Mem.NullLemmas` (lawful storage, null round trip, projected-access block); twelve hand-written AIR cases. Remaining: fresh export and native observations of the new operations; projections from address zero (including offset 0 and allowzero bases) are `.illegal` in the model even where native Zig is defined, a deliberate over-approximation that is conservative for no-illegal proofs but wrong for outcome reports and native diffs; optionals of nullable pointers, nullable pointers in unions/tuples/error-union payloads, nullable slicing, bulk memory and parent recovery.
+Bounded progress: Nonoptional scalar C/allowzero fragment merged. [PR125](https://github.com/riventic/air2lean/pull/125): stored C/allowzero pointers use the storage dictionary `Zig.nullablePtrEnc` (null is eight zero bytes; zero bytes read back as null, other integer or undefined bytes are `.unspecified`), also as extern/auto struct fields and array items; projections from a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`) are `.illegal` at address zero and keep the base's provenance; `[*c]T`/`*allowzero T` convert to and from `?*T`/`?[*]T` by explicit null mapping. Proof-only `ZigLean.Mem.NullLemmas` (lawful storage, null round trip, projected-access block); twelve hand-written AIR cases. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): projections from address zero are precise (`Zig.ptrProjectNullable`): a zero byte offset from a null C/allowzero base is the null pointer, a nonzero offset is illegal behaviour; a 0.14.1/0.15.2 field pointer typed nonnullable (`*F`) is `Zig.ptrProjectNonnull` (illegal at address zero, conservative); native ReleaseSafe/Debug probes for all three versions match, and the null fixture covers 27 cases. Remaining: nullable pointers in optionals, unions, tuples, packed aggregates and error-union payloads, nullable slices and bit-pointers stay rejected.
 
 ## L06 — Constant pointer bases
 
@@ -146,11 +148,13 @@ Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): a poi
 
 ## L13 — Volatile and device effects
 
-Classification: partial.
+Classification: complete.
 
 audit exporter metadata for volatile accesses; define observable effects, ordering and environmental changes, or reject device-facing use explicitly. Acceptance: device reads/writes cannot be treated as pure repeatable memory operations without a stated contract.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): the exporter's per-pointer `volatile` flag is audited (present on every committed pointer type for 0.14.1/0.15.2/0.16.0); the checker rejects every volatile load/store/atomic/item/memcpy/memset/pointer-state access, qualifier-dropping derivations and volatile std-model arguments with VOLATILE_ACCESS, and canonicalization no longer forwards a copy read through a volatile pointer; a model-registry binding naming the volatile parameter in its footprint is the only declared contract. Remaining: a modelled device-effect semantics (observable effects, ordering); the real-export check needs a patched compiler.
+Completed in [PRNNN](https://github.com/riventic/air2lean/pull/NNN): opt-in device contract (`--device-contract <json>`, premise DEV-01): each volatile 8/16/32/64-bit integer load/store of a declared register is one event of `Mem.dev.trace` in program order (`Zig.vload`/`Zig.vstore`), reads answered by an oracle of the trace so far; the default still rejects every volatile access (VOLATILE_ACCESS). Inline asm is accepted only when it matches the reviewed allowlist `Air2Lean/AsmAllowlist.lean` exactly (template, constraints, clobbers, target; the `examples/asm` goldens, the C03 spin hints and A01's effect-contract fixtures and compiler barrier); any other asm, volatile or not (rdtsc, rdrand, port I/O, output-less, memory clobbers), is ASM_VOLATILE_EFFECT unless the contract declares it as a `Zig.vasm` trace event. Real 0.14.1/0.15.2/0.16.0 exports of a UART driver and an rdtsc client translate to committed Gen.lean files; proofs on the generated code (poll order, no merged/reordered/dropped reads, two distinct counter reads) reject the semantic mutants. Scope: a declared device with no DMA, interrupts or timing; no hardware correspondence.
+
+Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 
 ## L14 — Other compiler control and runtime features
 
@@ -418,7 +422,7 @@ Classification: partial.
 
 a selected environment-operation interface for handles, reads/writes, partial success, errors and cleanup. For production, start with clocks and the narrow Python/WASM boundary contracts actually used. Acceptance: environment-dependent behavior is parameterized and documented; no claim covers CPython, browser host imports or the OS without an explicit boundary.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): opt-in ZigLean.Env: `Ops` (monotonic/wall clocks, isOpen, read, write, close) over an arbitrary state with a contract for partial-write progress, enumerated errors, handle framing, close release and monotonic time (ENV-01/ENV-02); writeAllClose is proved to write all bytes or return the first error and close the handle exactly once, with a scripted-oracle instance whose wall clock runs backwards. Remaining: binding translated std I/O to the boundary; no OS/foreign interface qualification (CPython, browser host imports and the OS are not claimed).
+Bounded progress: [PR122](https://github.com/riventic/air2lean/pull/122): opt-in ZigLean.Env: `Ops` (monotonic/wall clocks, isOpen, read, write, close) over an arbitrary state with a contract for partial-write progress, enumerated errors, handle framing, close release and monotonic time (ENV-01/ENV-02); writeAllClose is proved to write all bytes or return the first error and close the handle exactly once, with a scripted-oracle instance whose wall clock runs backwards. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): translated std I/O is bound to the boundary: `std.os.linux.{read,write,close}` (x86_64-linux, no libc) bind through the E01 registry to `ZigLean/Env/Linux.lean` models over `Mem.host : Env.Host` with proved registry evidence (premise ENV-03); everything above them in std is translated from AIR; `writeAllClose_spec` (0.15.2 `fs.File.writeAll`/`close`) and `readClose_spec` (0.16.0 `posix.read`/`Io.Threaded.closeFd`) are proved on the generated code. Remaining: libc/macOS std I/O (extern calls), most of 0.16 `std.Io` (named rejections), EINTR/EBADF/blocking, and any OS/foreign interface qualification.
 
 ## E04 — Model extension API
 
@@ -494,7 +498,7 @@ Classification: partial.
 
 map failed obligations to Zig file/line, AIR instruction and contract. Export executable failure inputs or scheduler traces when available; distinguish a counterexample from an unsolved proof. Acceptance: a failed queue or concurrency check produces a reproducible case where one exists; an automation timeout is never called a program bug.
 
-Bounded progress ([PR120](https://github.com/riventic/air2lean/pull/120)): scripts/counterexample.py writes replayable counterexample bundles (input, full schedule prefix, violated contract, AIR candidate sites); only replayed failures are counterexamples, while timeouts, caps and fuel limits are unsolved and unreplayed failures stay candidates; a real-atomics relaxed message-passing race is localized end to end. Remaining: exact source maps, Lean goal-failure counterexamples, sequential replay without Zig.
+Bounded progress: Typed diagnostics and bounded Outcome witness/replay candidate. [PR120](https://github.com/riventic/air2lean/pull/120): scripts/counterexample.py writes replayable counterexample bundles (input, full schedule prefix, violated contract, AIR candidate sites); only replayed failures are counterexamples, while timeouts, caps and fuel limits are unsolved and unreplayed failures stay candidates; a real-atomics relaxed message-passing race is localized end to end. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): counterexample bundles carry I05 source spans (`source_span`, `statement`/`declaration`/`unavailable_in_AIR`); `goal-search` evaluates the generated Lean (`lake env lean --run`, no Zig) on boundary/seeded inputs against a stated postcondition and replays the first violation in a fresh Lean process (only then a counterexample; a bounded miss, timeout or fuel limit is unsolved, an exhausted finite domain is no_failure); sequential from-case bundles replay without Zig (`lean_sequential`) and schedule bundles through the Lean interpreter (`--interpret`); a seeded off-by-one loop yields its counterexample input, the correct loop none. Remaining: spans tested only on synthetic AIR with `src` (no patched-export run); the Lean replay re-evaluates the model side only; goal search covers plain `Zig.Result` functions over `BitVec`/`Bool`.
 
 ## I01 — Zig build integration and root selection
 
@@ -584,11 +588,15 @@ Classification: research.
 
 define the supported raw/canonical AIR semantics, including memory, errors and target/profile parameters. Acceptance: the formal semantics covers the operations admitted by the checker and states explicit premises for all modeled external operations.
 
+Bounded progress: [PRNNN](https://github.com/riventic/air2lean/pull/NNN): first verified slice: Air2Lean/Sem.lean is a definitional semantics of canonical AIR over `Zig.MemM` (premise SEM-06) for a scalar fragment with direct and mutual recursion; `--air-certificate` writes kernel-checked certificates (Proofs/Basic/AirCert.lean, Proofs/Recursion/AirCert.lean) that the generated definitions equal the semantics of the decoded golden AIR (9 functions), with mutation and round-trip checks in CI and Gen.lean byte-identical. Remaining: aggregates, slices, optionals, error unions, floats, vectors, pointers beyond stack locals, globals, atomics, threads, external models and indirect calls are outside the semantics; loops and locals are not certified.
+
 ## V02 — Normalization and emission preservation
 
 Classification: research.
 
 preservation proofs or kernel-checkable translation certificates for reference rewrites, read-only-copy forwarding, control flow, escaping locals, indirect calls and generated encodings. Acceptance: each accepted translation comes with a checked relation to the formal AIR model. Sampled agreement remains an additional test layer.
+
+Bounded progress: [PRNNN](https://github.com/riventic/air2lean/pull/NNN): the AIR certificates relate each emitted definition in the V01 fragment to the semantics of its canonical AIR (equality via fixpoint induction for recursive cliques). Remaining: canonicalization (`Air2Lean/Air/Canon.lean`) is not proved to preserve a raw-AIR semantics, and emission is certified per function only inside the fragment.
 
 ## V03 — Exporter and compiler correspondence
 
@@ -668,7 +676,7 @@ Classification: partial.
 
 measure parse/normalize/check/emit/proof time, peak memory, output size and warm-cache behavior on real modules. Improve lookup/indexing and modularization where measurements justify it. Acceptance: recorded workloads and budgets catch regressions; optimizations preserve definitions or carry preservation evidence.
 
-Bounded progress ([PR116](https://github.com/riventic/air2lean/pull/116)): Real-module workload suite (7 uniform golden AIR sets with reference translations), air2lean --timing-json per-phase timing, cold/warm translate/elaborate/proof recorder with peak RSS and output hash, recorded Darwin arm64 baseline and regression gate. No measurement-driven optimization yet; budgets are reference-platform specific.
+Bounded progress: [PR116](https://github.com/riventic/air2lean/pull/116) merged: Real-module workload suite (7 uniform golden AIR sets with reference translations), air2lean --timing-json per-phase timing, cold/warm translate/elaborate/proof recorder with peak RSS and output hash, recorded Darwin arm64 baseline and regression gate. No measurement-driven optimization yet; budgets are reference-platform specific. [PRNNN](https://github.com/riventic/air2lean/pull/NNN): 18 workloads with recorded reference-platform budgets and per-module proof timings; a portable gate (generous `portable_max_*` limits on any runner, CI step) catches gross regressions and any emitted-Lean change; measured hotspots documented; two optimizations: Anon renumbering skips functions without marker instances (renumber phase sync 91→73 ms, threadsync 13.9→6.8 ms; 58 AIR dirs byte-identical) and two RwLock facts lifted to standalone lemmas (module 11.3→9.4 s, same theorems). Remaining: proof-time budgets are reference-platform only; `decide +kernel` and large-context `simp_all` hotspots (Threadsync.Handoff, WaitGroup) remain.
 
 ## Q07 — Compiler and model upgrade qualification
 
@@ -719,3 +727,11 @@ Classification: complete.
 tutorials for pure arithmetic, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients and cross-target verification. Acceptance: each tutorial runs from a clean qualified environment and exposes the assumptions and remaining obligations.
 
 Completed in [PR128](https://github.com/riventic/air2lean/pull/128): Seven checked tutorials (first proof, mutable arrays, generic containers, external contracts, allocation failure, concurrent clients, cross-target verification), each with a solved exercise, a negative control that must fail with its expected error and an assumptions section matching the premise index; scripts/tutorials.py lint/check in CI and scripts/clean-env.sh runs every tutorial in a clean container. The cross-target tutorial proves Threadsync `lock_spec`/`unlock_spec` target-generically (via `mutexC`); CI's macOS golden-swap step builds Proofs.Threadsync.Lock against the darwin translation, elaborates its Main and Solution there and asserts the darwin-side negative control fails. Scope: x86_64-linux and aarch64-macos translations of one client.
+
+## X01 — C programs via translate-c
+
+Classification: open.
+
+verify C programs through stock `zig translate-c` and the existing Zig route; state the trust added by translate-c and the libc headers. Acceptance: every corpus file is translated and `#guard`-checked or rejected by a named, documented gate; every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; known compiler bugs are gated or avoided by a qualified Zig version; the heavy coverage run is reproducible and CI checks its record (docs/c-frontend.md).
+
+Baseline ([PRNNN](https://github.com/riventic/air2lean/pull/NNN)): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.

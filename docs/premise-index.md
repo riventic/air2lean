@@ -5,14 +5,15 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2787 theorems in 163 files.
+2937 theorems in 173 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 684 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 584 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 24 | Gate-time generated module |
+| [PRF-01](premises.md#prf-01) | 728 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 607 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
+| [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
 | [ALC-01](premises.md#alc-01) | 91 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 86 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
@@ -32,31 +33,33 @@ premise was derived. This index covers the committed generated modules.
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1117 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1117 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 358 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 1161 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1161 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 402 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 497 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 85 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
+| [MTH-01](premises.md#mth-01) | 130 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 68 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2649 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2264 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1132 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 108 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 2794 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2368 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1205 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
-| [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
+| [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
+| [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2787 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1292 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1292 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 40 | Reviewed opaque, extern and runtime-redirection policy |
-| [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
+| [TRU-01](premises.md#tru-01) | 2937 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1410 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1410 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
+| [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
+| [ENV-01](premises.md#env-01) | 27 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
 
@@ -879,6 +882,40 @@ File premises: PRF-02, SEM-01, TRU-01, TRU-02, TRU-03
 | `add_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `double_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 
+## `Proofs/Recursion/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Recursion.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_1` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_2` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_3` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_4` | SEM-01, TRU-01 |
+| `Recursion.AirCert.fact_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+
 ## `Proofs/Recursion/Proofs.lean`
 
 File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
@@ -1257,6 +1294,8 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.Ph.jd_setM` | TRU-01 |
 | `Sync.RwLockRead.Ph.wb_ib` | TRU-01 |
 | `Sync.RwLockRead.Ph.rb_le` | TRU-01 |
+| `Sync.RwLockRead.Ph.pw_of_mp_wait` | TRU-01 |
+| `Sync.RwLockRead.Ph.not_wait_of_mp_holds_wake` | TRU-01 |
 | `Sync.RwLockRead.sv_eq` | TRU-01 |
 | `Sync.RwLockRead.cases3` | TRU-01 |
 | `Sync.RwLockRead.sv3_mem` | TRU-01 |
@@ -2321,6 +2360,22 @@ File premises: PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, SEM-02, TRU-01, TRU-02, T
 | `incLocal_spec` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `barrier_spec` | PRF-01, ASM-01, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
+## `tests/roadmap/big-endian/BigEndian/Proofs.lean`
+
+File premises: PRF-02, PRF-05, MTH-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `BigEndianClients.u32ToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.bytesToU32_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.f32ToBytes_orders` | PRF-02, PRF-05, MTH-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.packed16ToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.externToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.setFieldBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.fieldFromBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.vecByte_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L81` | SEM-01, SEM-02, TRU-01 |
+
 ## `tests/roadmap/bitops/Bitset.lean`
 
 File premises: SEM-01, TRU-01
@@ -2632,6 +2687,49 @@ File premises: THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
 | `Detach.Runtime.transfer_double_join_illegal` | THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Detach.Runtime.join_without_transfer_illegal` | THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Detach.Runtime.transfer_obligation_illegal` | THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/dispatch-templates/Template.lean`
+
+File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L103` | SEM-01, SEM-03, TRU-01 |
+| `DispatchTemplateTest.mach_total` | SEM-01, SEM-03, TRU-01 |
+| `example@L126` | SEM-01, SEM-03, TRU-01 |
+| `example@L139` | SEM-01, SEM-03, TRU-01 |
+| `example@L162` | SEM-01, SEM-03, TRU-01 |
+| `example@L170` | SEM-01, SEM-03, TRU-01 |
+| `example@L175` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `example@L208` | SEM-01, SEM-03, TRU-01 |
+| `example@L260` | SEM-01, SEM-03, TRU-01 |
+
+## `tests/roadmap/dispatch-templates/TokenizerProof.lean`
+
+File premises: PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `example@L44` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L45` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L46` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.tokens_ident_leave` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.tokens_number_leave` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.agrees_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isAlpha_all` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isDigit_all` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isAlpha_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isDigit_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.byte_load` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.read_facts` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.one32` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_start` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_ident` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_number` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_done` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.loop_total` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L325` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.countTokens_total` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/dispatch/CountdownProof.lean`
 
