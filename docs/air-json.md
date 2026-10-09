@@ -2,6 +2,19 @@
 
 The patched compiler writes one file per function. Safe short names use `$ZIG_AIR_JSON_DIR/<fqn>.json`; long or unsafe names use a reserved SHA-256 basename while JSON retains the complete identity. See [Exported function filenames](export-names.md) for the naming and collision contract. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
+The patched compiler is not purely an exporter. It is also a trusted, minimal Sema hook
+(`zig-patch/<version>/hook.patch`): with runtime safety off, `zirForLen` inserts the `for`
+operand length check that Sema otherwise emits only with safety on, as `if (!ok) unreachable`
+(`unchecked_ib`, [illegal-behavior.md](illegal-behavior.md) row 27). Its failure is illegal
+behaviour already, so the hook only refines the stock program, and the AIR is identical to the
+stock compiler's except for that inserted check. Evidence: the committed goldens of all four
+versions compare equal to fresh patched exports (`scripts/check.sh`), and the nine committed loop
+fixtures outside the goldens (`tests/roadmap/env-boundaries/air/0.15.2/{fs.File.readAll,fs.File.writeAll,posix.read,posix.write}`,
+`env-boundaries/air/0.16.0/posix.read`, `idle-loops/air/progress.idle`,
+`loop-tactics/nested/air/nested.pairs`, `volatile-effects/air/0.16.0/device_effects.{putc,writeAll}`),
+all exported before the hook, were re-exported with it and are identical except for the
+additive `unchecked_ib`, `src` and `dbg_stmt` `column` fields.
+
 ## File
 
 ```json
