@@ -135,7 +135,7 @@ def main():
     def fixed_global(d):
         holder = len(d["types"])
         d["types"].append(dict(d["types"][11], child=11))
-        d["globals"].append({"name": "const_bases.fixed", "ty": 11, "const": True,
+        d["globals"].append({"name": "const_bases.fixed", "module": "root", "ty": 11, "const": True,
                              "threadlocal": False, "extern": False,
                              "init": {"ty": 11, "ptr": {"unsupported": "int", "off": 4096}}})
         d["ret"] = holder
