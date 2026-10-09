@@ -3,7 +3,9 @@
 # `lake build ZigLean`; runs no compiler. For each Zig version, extern_calls.zig's `memset`/
 # `strlen` calls bind to libc_ref.zig's `export fn` definitions, and the translation evaluates to
 # expected.txt (Eval.lean). trusted.zig's `extern "c" fn abs` binds to a registry model with a
-# premise. With AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also runs native.zig against expected.txt.
+# premise. abi_calls.zig declares `@export`ed abi_ref.zig symbols with other types: the calls bind
+# through C ABI conversions (AbiEval.lean). With AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also runs
+# native.zig and abi_native.zig against expected.txt and abi_expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -41,11 +43,20 @@ cmp "$work/ExternCalls/Trusted.lean" "$here/ExternCalls/Trusted.lean"
 cp "$here/Model.lean" "$work/ExternModel.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/ExternModel.olean" "$work/ExternModel.lean"
 "${lean_cmd[@]}" "$work/ExternCalls/Trusted.lean"
+# Declarations with other types than their `@export`ed definitions: C ABI conversions.
+"$translator" "$here/air/0.16.0-abi" -o "$work/ExternCalls/Abi.lean" \
+  --namespace ExternCalls.Abi --prefix abi_calls.
+cmp "$work/ExternCalls/Abi.lean" "$here/ExternCalls/Abi.lean"
+"${lean_cmd[@]}" -R "$work" -o "$work/ExternCalls/Abi.olean" "$work/ExternCalls/Abi.lean"
+"${lean_cmd[@]}" "$here/AbiEval.lean"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
-  "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
-    --global-cache-dir "$work/cache" -femit-bin="$work/native"
-  "$work/native" 2> "$work/native.txt"
+  for t in native abi_native; do
+    "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/$t.zig" --cache-dir "$work/cache" \
+      --global-cache-dir "$work/cache" -femit-bin="$work/$t"
+    "$work/$t" 2> "$work/$t.txt"
+  done
   diff "$here/expected.txt" "$work/native.txt"
+  diff "$here/abi_expected.txt" "$work/abi_native.txt"
 fi
 echo "extern-calls: ok"

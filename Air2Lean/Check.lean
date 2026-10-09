@@ -3594,7 +3594,7 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
             definition '{target.name}' has '{cc}'")
         else match abiThunk f target e with
           | .error why => unbound := reject s!"is declared with another signature than its \
-              definition '{target.name}': {why} (C ABI conversion, docs/air-json.md §Extern calls)"
+              definition '{target.name}': {why}"
           | .ok none => renames := renames.insert callee target.name
           | .ok (some thunk) =>
             renames := renames.insert callee thunk.name

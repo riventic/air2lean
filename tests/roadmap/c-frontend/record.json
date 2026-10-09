@@ -1027,12 +1027,31 @@
     },
     "air_export": {
      "status": "ok",
+     "link": "exe-lc",
      "functions": 1,
      "std_functions": [],
      "std_prefixes": [],
+     "libc_functions": [],
+     "compiler_rt_functions": [],
+     "compiler_rt_prefixes": [],
+     "bound": {
+      "snprintf": null
+     },
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).outOfBounds"
-     ]
+     ],
+     "link_census": {
+      "inputs": [
+       "crt1.o",
+       "libc.a",
+       "libcompiler_rt.a"
+      ],
+      "definitions": {
+       "snprintf": [
+        "libc.a(snprintf.o)"
+       ]
+      }
+     }
     },
     "air2lean": {
      "status": "rejected",
@@ -1110,103 +1129,459 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 68197094 panic: integer overflow\n$REPO/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:106:32: 0x102dca91b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n$REPO/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:124:10: 0x102d8cbbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n$REPO/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:545:57: 0x102d8ca8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x102dcb277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0x33391585\n"
+     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 69349119 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10469291b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:124:10: 0x104654bbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:545:57: 0x104654a8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x104693277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0x8b34b73f\n"
     },
     "air_export": {
      "status": "ok",
-     "functions": 2,
-     "std_functions": [],
-     "std_prefixes": [],
+     "link": "exe-lc",
+     "functions": 50,
+     "std_functions": [
+      "Thread.getCpuCount",
+      "atomic.Mutex.tryLock",
+      "atomic.Mutex.unlock",
+      "debug.assert",
+      "heap.PageAllocator.map",
+      "heap.PageAllocator.unmap",
+      "heap.SmpAllocator.Thread.lock",
+      "heap.SmpAllocator.Thread.unlock",
+      "heap.SmpAllocator.alloc",
+      "heap.SmpAllocator.free",
+      "heap.SmpAllocator.getCpuCount",
+      "heap.SmpAllocator.sizeClassIndex",
+      "heap.SmpAllocator.slotSize",
+      "math.cast",
+      "math.floorPowerOfTwo",
+      "math.isPowerOfTwo",
+      "math.mul",
+      "math.sub",
+      "mem.Alignment.fromByteUnits",
+      "mem.Alignment.toByteUnits",
+      "mem.alignForward",
+      "mem.alignPointer",
+      "mem.alignPointerOffset",
+      "mem.sortUnstableContext",
+      "posix.mmap",
+      "posix.munmap",
+      "sort.heapContext",
+      "sort.insertionContext",
+      "sort.pdq.breakPatterns",
+      "sort.pdq.chosePivot",
+      "sort.pdq.partialInsertionSort",
+      "sort.pdq.partition",
+      "sort.pdq.partitionEqual",
+      "sort.pdq.pdqContext",
+      "sort.pdq.reverseRange"
+     ],
+     "std_prefixes": [
+      "debug.assert",
+      "heap.SmpAllocator.alloc",
+      "heap.SmpAllocator.free",
+      "math.cast",
+      "math.mul",
+      "mem.Alignment.toByteUnits",
+      "mem.sortUnstableContext",
+      "atomic.Mutex.tryLock",
+      "heap.PageAllocator.map",
+      "heap.PageAllocator.unmap",
+      "heap.SmpAllocator.Thread.lock",
+      "heap.SmpAllocator.Thread.unlock",
+      "heap.SmpAllocator.getCpuCount",
+      "heap.SmpAllocator.sizeClassIndex",
+      "heap.SmpAllocator.slotSize",
+      "mem.Alignment.fromByteUnits",
+      "sort.pdq.pdqContext",
+      "Thread.getCpuCount",
+      "atomic.Mutex.unlock",
+      "math.floorPowerOfTwo",
+      "math.isPowerOfTwo",
+      "math.sub",
+      "mem.alignForward",
+      "mem.alignPointer",
+      "posix.mmap",
+      "posix.munmap",
+      "sort.heapContext",
+      "sort.insertionContext",
+      "sort.pdq.breakPatterns",
+      "sort.pdq.chosePivot",
+      "sort.pdq.partialInsertionSort",
+      "sort.pdq.partition",
+      "sort.pdq.partitionEqual",
+      "sort.pdq.reverseRange",
+      "Thread.PosixThreadImpl.getCpuCount",
+      "math.ceilPowerOfTwoAssert",
+      "math.log2_int",
+      "mem.alignBackward",
+      "mem.isValidAlign",
+      "mem.isValidAlignGeneric",
+      "posix.unexpectedErrno",
+      "sort.pdq.sort3",
+      "sort.siftDown"
+     ],
+     "libc_functions": [
+      "c.errno__anon_4399",
+      "c.malloc.Header.get",
+      "c.malloc.Header.set",
+      "c.malloc.calloc",
+      "c.malloc.free",
+      "c.malloc.malloc",
+      "c.malloc.nomem",
+      "c.stdlib.abs",
+      "c.stdlib.qsort",
+      "c.stdlib.qsort__struct_30094.wrap",
+      "c.stdlib.qsort_r",
+      "c.stdlib.qsort_r.Context.lessThan",
+      "c.stdlib.qsort_r.Context.swap"
+     ],
+     "compiler_rt_functions": [],
+     "compiler_rt_prefixes": [],
+     "bound": {
+      "__errno_location": null,
+      "abs": "c.stdlib.abs",
+      "calloc": "c.malloc.calloc",
+      "free": "c.malloc.free",
+      "malloc": "c.malloc.malloc",
+      "mmap": null,
+      "munmap": null,
+      "qsort": "c.stdlib.qsort"
+     },
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment"
-     ]
+      "Thread.PosixThreadImpl.getCpuCount",
+      "debug.FullPanic((function 'defaultPanic')).castToNull",
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).forLenMismatch",
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+      "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+      "math.ceilPowerOfTwoAssert__anon_9943",
+      "math.log2_int__anon_9978",
+      "mem.alignBackward__anon_7758",
+      "mem.isValidAlign",
+      "mem.isValidAlignGeneric__anon_7820",
+      "posix.unexpectedErrno",
+      "sort.pdq.sort3__anon_30154",
+      "sort.siftDown__anon_30156"
+     ],
+     "link_census": {
+      "inputs": [
+       "crt1.o",
+       "libc.a",
+       "libcompiler_rt.a"
+      ],
+      "definitions": {
+       "__errno_location": [
+        "libc.a(__errno_location.o)"
+       ],
+       "abs": [],
+       "calloc": [],
+       "free": [],
+       "malloc": [],
+       "mmap": [
+        "libc.a(mmap.o)"
+       ],
+       "munmap": [
+        "libc.a(munmap.o)"
+       ],
+       "qsort": []
+      }
+     }
     },
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_EXTERN_UNBOUND": 5,
-      "PROGRAM_FAILURE": 6
+      "CALLEE_BLOCKED": 14,
+      "CALLEE_EXTERN_UNBOUND": 7,
+      "CALLEE_MISSING": 54,
+      "CONSTANT_FAILURE": 3,
+      "INSTRUCTION_FAILURE": 3,
+      "PREREQUISITE_SKIPPED": 1,
+      "PROGRAM_FAILURE": 8,
+      "STRUCTURE_FAILURE": 1
      },
      "diagnostics": [
       {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "atomic.Mutex.unlock",
+       "message": "atomic.Mutex.unlock: near line 2: an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.free",
+       "message": "c.malloc.free: inst 18: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.malloc",
+       "message": "c.malloc.malloc: inst 11: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "STRUCTURE_FAILURE",
+       "phase": "check",
+       "category": "malformed_input",
+       "function": "c.stdlib.qsort",
+       "message": "c.stdlib.qsort: global function initializer must be its named constant function block"
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "check",
+       "category": "skipped_prerequisite",
+       "function": "c.stdlib.qsort",
+       "message": "not inspected: prerequisite failed"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.map",
+       "message": "heap.PageAllocator.map: near line 73: an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.getCpuCount",
+       "message": "heap.SmpAllocator.getCpuCount: near line 2: an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "posix.mmap",
+       "message": "posix.mmap: a pointer constant without a global (int) is outside the subset"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "c.errno__anon_1",
+       "message": "c.errno__anon_1: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.nomem",
+       "message": "c.malloc.nomem: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'malloc' has no definition in the program (an `export fn malloc` in the AIR set) and no registry model 'extern:malloc' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'qsort' has no definition in the program (a function of the AIR set that exports 'qsort' with `export fn` or `@export`) and no registry model 'extern:qsort' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'qsort' has no definition in the program (an `export fn qsort` in the AIR set) and no registry model 'extern:qsort' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is declared with another signature than its definition 'c.malloc.free': parameter 0 needs alignment 16, more than the declared 1 (C ABI conversion, docs/air-json.md \u00a7Extern calls) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' has no definition in the program (an `export fn free` in the AIR set) and no registry model 'extern:free' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function 'mmap' (library 'c') has no definition in the program (a function of the AIR set that exports 'mmap' with `export fn` or `@export`) and no registry model 'extern:mmap' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'calloc' has no definition in the program (an `export fn calloc` in the AIR set) and no registry model 'extern:calloc' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'abs' has no definition in the program (an `export fn abs` in the AIR set) and no registry model 'extern:abs' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "function": "posix.munmap",
+       "message": "posix.munmap: CALLEE_EXTERN_UNBOUND: extern function 'munmap' (library 'c') has no definition in the program (a function of the AIR set that exports 'munmap' with `export fn` or `@export`) and no registry model 'extern:munmap' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_MISSING",
        "phase": "program",
        "category": "validation_failure",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'malloc' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "Thread.getCpuCount",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_BLOCKED",
        "phase": "program",
        "category": "validation_failure",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'qsort' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "c.malloc.calloc",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_MISSING",
        "phase": "program",
        "category": "validation_failure",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "math.floorPowerOfTwo__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_MISSING",
        "phase": "program",
        "category": "validation_failure",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'calloc' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "sort.heapContext__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_MISSING",
        "phase": "program",
        "category": "validation_failure",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "sort.heapContext__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_MISSING",
        "phase": "program",
        "category": "validation_failure",
-       "function": "libc_stdlib.entry",
-       "message": "libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'abs' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "sort.pdq.breakPatterns__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "sort.pdq.chosePivot__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "sort.pdq.chosePivot__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "sort.pdq.chosePivot__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "sort.pdq.chosePivot__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.map",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignPointerOffset__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.mmap",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "Thread.getCpuCount",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.lock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.unlock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "Thread.getCpuCount",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.map",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.lock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.unlock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.alloc",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       }
      ],
-     "diagnostic_count": 11
+     "diagnostic_count": 91
     }
    },
    "c_defined_functions": [
@@ -1267,114 +1642,96 @@
     },
     "air_export": {
      "status": "ok",
-     "functions": 1,
-     "std_functions": [],
-     "std_prefixes": [],
+     "link": "exe-lc",
+     "functions": 20,
+     "std_functions": [
+      "debug.assert",
+      "math.isPowerOfTwo",
+      "math.order",
+      "mem.boundedOrderZ",
+      "mem.findScalar",
+      "mem.findScalarPos",
+      "mem.findSentinel",
+      "mem.len",
+      "simd.firstTrue",
+      "simd.firstTrue"
+     ],
+     "std_prefixes": [
+      "mem.boundedOrderZ",
+      "mem.findScalar",
+      "mem.len",
+      "math.isPowerOfTwo",
+      "math.order",
+      "mem.findSentinel",
+      "simd.firstTrue",
+      "debug.assert"
+     ],
+     "libc_functions": [
+      "c.string.strchr",
+      "c.string.strcmp",
+      "c.string.strncmp"
+     ],
+     "compiler_rt_functions": [
+      "compiler_rt.memcmp",
+      "compiler_rt.memcpy.memcpyFast",
+      "compiler_rt.memset",
+      "compiler_rt.strlen",
+      "mem.findSentinel",
+      "mem.len"
+     ],
+     "compiler_rt_prefixes": [
+      "mem.len",
+      "mem.findSentinel"
+     ],
+     "bound": {
+      "memcmp": "compiler_rt#compiler_rt.memcmp",
+      "memcpy": "compiler_rt#compiler_rt.memcpy.memcpyFast",
+      "memset": "compiler_rt#compiler_rt.memset",
+      "strchr": "c.string.strchr",
+      "strcmp": "c.string.strcmp",
+      "strlen": "compiler_rt#compiler_rt.strlen"
+     },
      "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
       "debug.FullPanic((function 'defaultPanic')).exactDivisionRemainder",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
-     ]
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+      "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
+     ],
+     "link_census": {
+      "inputs": [
+       "crt1.o",
+       "libc.a",
+       "libcompiler_rt.a"
+      ],
+      "definitions": {
+       "memcmp": [
+        "libcompiler_rt.a(libcompiler_rt_zcu.o)"
+       ],
+       "memcpy": [
+        "libcompiler_rt.a(libcompiler_rt_zcu.o)"
+       ],
+       "memset": [
+        "libcompiler_rt.a(libcompiler_rt_zcu.o)"
+       ],
+       "strchr": [],
+       "strcmp": [],
+       "strlen": [
+        "libcompiler_rt.a(libcompiler_rt_zcu.o)"
+       ]
+      }
+     }
     },
     "air2lean": {
-     "status": "rejected",
-     "codes": {
-      "CALLEE_EXTERN_UNBOUND": 6,
-      "PROGRAM_FAILURE": 7
-     },
-     "diagnostics": [
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memset' has no definition in the program (an `export fn memset` in the AIR set) and no registry model 'extern:memset' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strlen' has no definition in the program (an `export fn strlen` in the AIR set) and no registry model 'extern:strlen' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcpy' has no definition in the program (an `export fn memcpy` in the AIR set) and no registry model 'extern:memcpy' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strcmp' has no definition in the program (an `export fn strcmp` in the AIR set) and no registry model 'extern:strcmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcmp' has no definition in the program (an `export fn memcmp` in the AIR set) and no registry model 'extern:memcmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strchr' has no definition in the program (an `export fn strchr` in the AIR set) and no registry model 'extern:strchr' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memset' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strlen' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcpy' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strlen' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strcmp' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcmp' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "libc_string.entry",
-       "message": "libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strchr' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      }
-     ],
-     "diagnostic_count": 13
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 1733
     }
    },
    "c_defined_functions": [
@@ -1605,50 +1962,418 @@
     },
     "air_export": {
      "status": "ok",
-     "functions": 2,
-     "std_functions": [],
-     "std_prefixes": [],
+     "link": "exe-lc",
+     "functions": 34,
+     "std_functions": [
+      "Thread.getCpuCount",
+      "atomic.Mutex.tryLock",
+      "atomic.Mutex.unlock",
+      "debug.assert",
+      "heap.PageAllocator.map",
+      "heap.PageAllocator.realloc",
+      "heap.PageAllocator.unmap",
+      "heap.SmpAllocator.Thread.lock",
+      "heap.SmpAllocator.Thread.unlock",
+      "heap.SmpAllocator.alloc",
+      "heap.SmpAllocator.free",
+      "heap.SmpAllocator.getCpuCount",
+      "heap.SmpAllocator.remap",
+      "heap.SmpAllocator.sizeClassIndex",
+      "heap.SmpAllocator.slotSize",
+      "math.cast",
+      "math.isPowerOfTwo",
+      "mem.Alignment.fromByteUnits",
+      "mem.Alignment.toByteUnits",
+      "mem.alignForward",
+      "mem.alignPointer",
+      "mem.alignPointerOffset",
+      "posix.mmap",
+      "posix.mremap",
+      "posix.munmap"
+     ],
+     "std_prefixes": [
+      "debug.assert",
+      "heap.SmpAllocator.alloc",
+      "heap.SmpAllocator.free",
+      "heap.SmpAllocator.remap",
+      "math.cast",
+      "mem.Alignment.toByteUnits",
+      "atomic.Mutex.tryLock",
+      "heap.PageAllocator.map",
+      "heap.PageAllocator.realloc",
+      "heap.PageAllocator.unmap",
+      "heap.SmpAllocator.Thread.lock",
+      "heap.SmpAllocator.Thread.unlock",
+      "heap.SmpAllocator.getCpuCount",
+      "heap.SmpAllocator.sizeClassIndex",
+      "heap.SmpAllocator.slotSize",
+      "mem.Alignment.fromByteUnits",
+      "Thread.getCpuCount",
+      "atomic.Mutex.unlock",
+      "math.isPowerOfTwo",
+      "mem.alignForward",
+      "mem.alignPointer",
+      "posix.mmap",
+      "posix.mremap",
+      "posix.munmap",
+      "Thread.PosixThreadImpl.getCpuCount",
+      "mem.alignBackward",
+      "mem.isValidAlign",
+      "mem.isValidAlignGeneric",
+      "posix.unexpectedErrno"
+     ],
+     "libc_functions": [
+      "c.errno__anon_4399",
+      "c.malloc.Header.get",
+      "c.malloc.Header.set",
+      "c.malloc.free",
+      "c.malloc.malloc",
+      "c.malloc.nomem",
+      "c.malloc.realloc"
+     ],
+     "compiler_rt_functions": [],
+     "compiler_rt_prefixes": [],
+     "bound": {
+      "__errno_location": null,
+      "free": "c.malloc.free",
+      "mmap": null,
+      "mremap": null,
+      "munmap": null,
+      "realloc": "c.malloc.realloc"
+     },
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment"
-     ]
+      "Thread.PosixThreadImpl.getCpuCount",
+      "debug.FullPanic((function 'defaultPanic')).castToNull",
+      "debug.FullPanic((function 'defaultPanic')).copyLenMismatch",
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+      "debug.FullPanic((function 'defaultPanic')).memcpyAlias",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+      "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+      "mem.alignBackward__anon_7758",
+      "mem.isValidAlign",
+      "mem.isValidAlignGeneric__anon_7820",
+      "posix.unexpectedErrno"
+     ],
+     "link_census": {
+      "inputs": [
+       "crt1.o",
+       "libc.a",
+       "libcompiler_rt.a"
+      ],
+      "definitions": {
+       "__errno_location": [
+        "libc.a(__errno_location.o)"
+       ],
+       "free": [],
+       "mmap": [
+        "libc.a(mmap.o)"
+       ],
+       "mremap": [
+        "libc.a(mremap.o)"
+       ],
+       "munmap": [
+        "libc.a(munmap.o)"
+       ],
+       "realloc": []
+      }
+     }
     },
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_EXTERN_UNBOUND": 2,
-      "PROGRAM_FAILURE": 2
+      "CALLEE_BLOCKED": 15,
+      "CALLEE_EXTERN_UNBOUND": 9,
+      "CALLEE_MISSING": 29,
+      "CONSTANT_FAILURE": 7,
+      "INSTRUCTION_FAILURE": 3,
+      "PROGRAM_FAILURE": 9
      },
      "diagnostics": [
       {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "atomic.Mutex.unlock",
+       "message": "atomic.Mutex.unlock: near line 2: an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.free",
+       "message": "c.malloc.free: inst 18: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.malloc",
+       "message": "c.malloc.malloc: inst 11: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.realloc",
+       "message": "c.malloc.realloc: inst 37: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.realloc",
+       "message": "c.malloc.realloc: inst 55: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.realloc",
+       "message": "c.malloc.realloc: inst 112: an `undefined` operand is outside the subset (`undefined` is never read as a default; only a store or `memset` writes it, as undefined bytes)"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.map",
+       "message": "heap.PageAllocator.map: near line 73: an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.getCpuCount",
+       "message": "heap.SmpAllocator.getCpuCount: near line 2: an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "posix.mmap",
+       "message": "posix.mmap: a pointer constant without a global (int) is outside the subset"
+      },
+      {
+       "code": "CONSTANT_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "posix.mremap",
+       "message": "posix.mremap: a pointer constant without a global (int) is outside the subset"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "c.errno__anon_1",
+       "message": "c.errno__anon_1: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "c.malloc.nomem",
+       "message": "c.malloc.nomem: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "malloc_vec.entry",
-       "message": "malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' has no definition in the program (an `export fn free` in the AIR set) and no registry model 'extern:free' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "message": "malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is declared with another signature than its definition 'c.malloc.free': parameter 0 needs alignment 16, more than the declared 1 (C ABI conversion, docs/air-json.md \u00a7Extern calls) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "malloc_vec.vec_push",
-       "message": "malloc_vec.vec_push: CALLEE_EXTERN_UNBOUND: extern function 'realloc' has no definition in the program (an `export fn realloc` in the AIR set) and no registry model 'extern:realloc' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "message": "malloc_vec.vec_push: CALLEE_EXTERN_UNBOUND: extern function 'realloc' is declared with another signature than its definition 'c.malloc.realloc': parameter 0 needs alignment 16, more than the declared 1 (C ABI conversion, docs/air-json.md \u00a7Extern calls) (docs/air-json.md \u00a7Extern calls)"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
-       "category": "validation_failure",
-       "function": "malloc_vec.entry",
-       "message": "malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "category": "unsupported_semantics",
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function 'mmap' (library 'c') has no definition in the program (a function of the AIR set that exports 'mmap' with `export fn` or `@export`) and no registry model 'extern:mmap' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
-       "code": "PROGRAM_FAILURE",
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "posix.mremap",
+       "message": "posix.mremap: CALLEE_EXTERN_UNBOUND: extern function 'mremap' (library 'c') is variadic, which is outside the subset (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "posix.mremap",
+       "message": "posix.mremap: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (a function of the AIR set that exports '__errno_location' with `export fn` or `@export`) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "CALLEE_EXTERN_UNBOUND",
+       "phase": "program",
+       "category": "unsupported_semantics",
+       "function": "posix.munmap",
+       "message": "posix.munmap: CALLEE_EXTERN_UNBOUND: extern function 'munmap' (library 'c') has no definition in the program (a function of the AIR set that exports 'munmap' with `export fn` or `@export`) and no registry model 'extern:munmap' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "CALLEE_MISSING",
        "phase": "program",
        "category": "validation_failure",
-       "function": "malloc_vec.vec_push",
-       "message": "malloc_vec.vec_push: CALLEE_EXTERN_UNBOUND: extern function 'realloc' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "Thread.getCpuCount",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "c.malloc.realloc",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "c.malloc.realloc",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.map",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignPointerOffset__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.mmap",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.realloc",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.mremap",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "mem.alignForward__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "Thread.getCpuCount",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.lock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.unlock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "Thread.getCpuCount",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.PageAllocator.map",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.lock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "heap.SmpAllocator.Thread.unlock",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       }
      ],
-     "diagnostic_count": 4
+     "diagnostic_count": 72
     }
    },
    "c_defined_functions": [
@@ -1986,16 +2711,39 @@
     },
     "zig_native": {
      "status": "mismatch",
-     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0xa28c1368\n"
+     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0xa8e4b836\n"
     },
     "air_export": {
      "status": "ok",
+     "link": "exe-lc",
      "functions": 2,
      "std_functions": [],
      "std_prefixes": [],
+     "libc_functions": [],
+     "compiler_rt_functions": [],
+     "compiler_rt_prefixes": [],
+     "bound": {
+      "longjmp": null,
+      "setjmp": null
+     },
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).noreturnReturned"
-     ]
+     ],
+     "link_census": {
+      "inputs": [
+       "crt1.o",
+       "libc.a",
+       "libcompiler_rt.a"
+      ],
+      "definitions": {
+       "longjmp": [
+        "libc.a(longjmp.o)"
+       ],
+       "setjmp": [
+        "libc.a(setjmp.o)"
+       ]
+      }
+     }
     },
     "air2lean": {
      "status": "rejected",
@@ -2025,14 +2773,14 @@
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "setjmp_longjmp.check",
-       "message": "setjmp_longjmp.check: CALLEE_EXTERN_UNBOUND: extern function 'longjmp' has no definition in the program (an `export fn longjmp` in the AIR set) and no registry model 'extern:longjmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "message": "setjmp_longjmp.check: CALLEE_EXTERN_UNBOUND: extern function 'longjmp' has no definition in the program (a function of the AIR set that exports 'longjmp' with `export fn` or `@export`) and no registry model 'extern:longjmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "setjmp_longjmp.entry",
-       "message": "setjmp_longjmp.entry: CALLEE_EXTERN_UNBOUND: extern function 'setjmp' has no definition in the program (an `export fn setjmp` in the AIR set) and no registry model 'extern:setjmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
+       "message": "setjmp_longjmp.entry: CALLEE_EXTERN_UNBOUND: extern function 'setjmp' has no definition in the program (a function of the AIR set that exports 'setjmp' with `export fn` or `@export`) and no registry model 'extern:setjmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_BLOCKED",
@@ -2794,27 +3542,31 @@
     "ok": 34
    },
    "air2lean": {
-    "checked": 25,
-    "rejected": 9
+    "checked": 26,
+    "rejected": 8
    },
    "lean": {
     "guard_failed": 1,
-    "ok": 23
+    "ok": 24
    }
   },
   "headline": {
-   "air2lean": 5,
+   "air2lean": 4,
    "air_export": 4,
    "lean": 1,
-   "lean_ok": 23,
+   "lean_ok": 24,
    "translate_c": 6,
    "zig_native": 1
   },
   "rejection_codes_by_file": {
-   "CALLEE_BLOCKED": 1,
-   "CALLEE_EXTERN_UNBOUND": 9,
-   "INSTRUCTION_FAILURE": 1,
-   "PROGRAM_FAILURE": 9
+   "CALLEE_BLOCKED": 3,
+   "CALLEE_EXTERN_UNBOUND": 8,
+   "CALLEE_MISSING": 2,
+   "CONSTANT_FAILURE": 2,
+   "INSTRUCTION_FAILURE": 3,
+   "PREREQUISITE_SKIPPED": 1,
+   "PROGRAM_FAILURE": 8,
+   "STRUCTURE_FAILURE": 1
   },
   "outcome_by_construct": {
    "64-bit arithmetic": {
@@ -2856,7 +3608,7 @@
     "air2lean": 2
    },
    "libc string": {
-    "air2lean": 1,
+    "lean_ok": 1,
     "translate_c": 1
    },
    "loops/break/continue": {
