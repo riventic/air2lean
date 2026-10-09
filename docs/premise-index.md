@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3038 theorems in 178 files.
+3055 theorems in 179 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 769 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 643 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 768 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 660 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 7 | Recorded `abi64-be-v1` big-endian profile |
@@ -24,7 +24,7 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 55 | Caller-supplied `Allocator` behaves as the std model |
 | [IOM-01](premises.md#iom-01) | 361 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 1575 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1578 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 198 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 21 | `Io.Group` tasks are model threads |
@@ -35,8 +35,8 @@ premise was derived. This index covers the committed generated modules.
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1295 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1295 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1298 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1298 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 438 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 531 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
@@ -50,22 +50,22 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2903 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2467 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1263 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 143 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 2920 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2474 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1262 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 142 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2467 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 58 | The native stack holds every call chain |
+| [SEM-07](premises.md#sem-07) | 2474 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 57 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3038 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1487 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1487 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 3055 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1503 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1503 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
-| [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
@@ -3280,7 +3280,7 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, S
 
 ## `tests/roadmap/loop-tactics/Recursion.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3292,9 +3292,8 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, T
 | `RecTemplateTest.isEven_isOdd_spec` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
 | `RecTemplateTest.natFact_mono` | TRU-01 |
 | `RecTemplateTest.fact_spec` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
-| `RecTemplateTest.addDown_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, STK-01, TRU-01, TRU-02, TRU-03 |
-| `example@L172` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
-| `example@L177` | TRU-01 |
+| `example@L128` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
+| `example@L133` | TRU-01 |
 
 ## `tests/roadmap/loop-tactics/Template.lean`
 
@@ -3401,6 +3400,30 @@ File premises: SEM-01, SEM-02, SEM-07, EXT-01, TRU-01
 | `RegistryExample.evidence` | SEM-01, SEM-02, SEM-07, EXT-01, TRU-01 |
 | `RegistryExample.client_rule` | SEM-01, SEM-02, SEM-07, EXT-01, TRU-01 |
 | `RegistryExample.tupleEvidence` | SEM-01, SEM-02, SEM-07, EXT-01, TRU-01 |
+
+## `tests/roadmap/noreturn-variants/NoreturnVariants/Proofs.lean`
+
+File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `NoreturnVariantsClients.get_mk` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.roundTrip_7` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.roundTrip_255` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memRoundTrip_7` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memRoundTrip_255` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.mkV_500` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.mkV_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.vTag_x` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.vTag_y` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memV_1234` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memV_0` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.oneRoundTrip_max` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.colorOf_1` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.colorOf_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.decode_noreturn_tag` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/outcome-accounting/Check.lean`
 
@@ -4129,6 +4152,7 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, T
 | `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.data_ptr` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |

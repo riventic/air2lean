@@ -160,18 +160,19 @@ def helperLookup (ty : Ty) (reserved : Array String := #[]) : String → String 
 def helperName (ty : Ty) (raw : String) (reserved : Array String := #[]) : String := helperLookup ty reserved raw
 
 /-- Field `idx` of the tagged union `uty` gets an undefined payload when a retag activates it
-(MM-13): the union has another field, and the payload has bits (not `void`, not a struct
-without fields). `some (some names)`: the payload is a struct with the Lean member `names`; it
+(MM-13): the union has another field that can be active, and the payload has bits (not `void`,
+not `noreturn`, not a struct without fields). `idx` is the AIR field index (`noreturn` fields
+included). `some (some names)`: the payload is a struct with the Lean member `names`; it
 becomes defined once each of them is written. `some none`: only a whole-payload write defines
 it. -/
 def unionFreshPayload (types : Array Ty) (uty : Ty) (idx : Nat) (reserved : Array String := #[]) :
     Option (Option (Array String)) :=
   match uty with
   | .union _ _ (some _) fields =>
-    if fields.size ≤ 1 then none else do
+    if (inhabitedFields types fields).size ≤ 1 then none else do
     let (_, id) ← fields[idx]?
     match types[id]? with
-    | some .void | none => none
+    | some .void | some .noreturn | none => none
     | some t@(.struct _ _ sfs) =>
       if sfs.isEmpty then none else some (some (sfs.map (memberName t ·.1 reserved)))
     | some _ => some none
@@ -529,11 +530,14 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
       | none => "Unit"
     let isVoid (id : TyId) : Bool := s.srcTypes[id]! == .void
     -- A `noreturn` variant has no constructor and no accessors (`uninhabitedTy`).
+    let airFields := fields
     let fields := inhabitedFields s.srcTypes fields
     let wild := if fields.size > 1 then ["  | _ => throw .panic"] else []
     -- A retag leaves a payload with bits undefined (MM-13): `undef_f v written` holds `f`'s
     -- payload while it is not defined, `v` with the struct fields `written` (`setField_f`).
-    let fresh := (List.range fields.size).map fun i =>
+    -- `unionFreshPayload` takes the AIR index of each inhabited field.
+    let fresh := ((List.range airFields.size).filter fun i =>
+        !uninhabitedTy s.srcTypes airFields[i]!.2).map fun i =>
       unionFreshPayload s.srcTypes s.ty i (structNames.map (·.2))
     let undefCtors := (fields.toList.zip fresh).filterMap fun ((f, id), fr) =>
       fr.map fun _ => s!"  | {hn s!"undef_{f}"} (v : {tyStr id}) (written : List String)"
