@@ -133,7 +133,7 @@ class PolicyTests(unittest.TestCase):
         # The fixture reaches the float model, so it also needs a float-semantics label.
         self.assertEqual(apply_policy(raw, self.policy)["status"], "fail")
         labels = audit.float_semantics().load_registry(root=ROOT)
-        labels["theorems"]["Proofs.Fixture::fixture"] = {"semantics": "ieee", "correspondence": "model"}
+        labels["theorems"]["Proofs.Fixture::fixture"] = {"semantics": "ieee", "targets": ["aarch64-macos", "x86_64-linux"], "correspondence": "model"}
         self.assertEqual(apply_policy(raw, self.policy, labels)["status"], "pass")
         libm["implemented_by"] = "_private.ZigLean.Float.Libm.1.Zig.Float.libmImpl"
         self.assertEqual(apply_policy(raw, self.policy, labels)["status"], "fail")

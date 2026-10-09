@@ -656,8 +656,10 @@ what a proof assumes). `compilerRt`: `f128` division and `@mulAdd` instead match
 routines the reference target (`x86_64-linux -mcpu=baseline`) actually calls, bit-exact
 (`ZigLean/Float/CompilerRt.lean`) — opt-in per example (`examples/<ex>/translate.args`), since
 most examples never reach the divergence and a proof should not have to know it exists. Groups C
-(f80 invalid encodings) and D (f32/f64 mixed-sign-zero `@min`/`@max`) throw `.unspecified` in
-both modes, unconditionally: `docs/floats.md` §f80 invalid encodings, §+0 and −0 in @min/@max. -/
+(f80 invalid encodings), D (f32/f64 mixed-sign-zero `@min`/`@max`) and I (a signaling NaN in
+`@min`/`@max`) throw `.unspecified` in both modes, unconditionally: `docs/floats.md` §f80
+invalid encodings, §+0 and −0 in @min/@max. The profile's target (`FCtx.targetArch`) selects
+the aarch64 rules (`FCtx.aarch64Floats`, `docs/floats.md` §Targets) in both modes. -/
 inductive FloatSemantics where
   | ieee
   | compilerRt
@@ -892,6 +894,37 @@ def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.zigVersion == "0.14.1" || fc.zigV
 /-- `rtSuffix` for the float divisions: `divRt` before 0.16.0, `divRt016` from 0.16.0. -/
 def FCtx.divRtSuffix (fc : FCtx) : String :=
   if fc.rtSuffix == "" || fc.zigBefore016 then fc.rtSuffix else "Rt016"
+
+/-- The profile targets aarch64 (`docs/floats.md` §Targets): `f80` is soft-float
+(`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on `f16`/`f32`/`f64`
+is the fused instruction. A legacy profile (empty `targetArch`) and x86_64 keep the reference
+x86_64 rules. -/
+def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.targetArch == "aarch64"
+
+/-- Is `v` an `f80` or a vector of `f80`? -/
+def FCtx.isF80Val (fc : FCtx) (v : Val) : Bool :=
+  match fc.valTy v with
+  | .float 80 => true
+  | .vector _ c => fc.tyOfId c == .float 80
+  | _ => false
+
+/-- The `f80` operands that an op reads through a compiler_rt soft-float routine on aarch64:
+every float op except the sign-bit ops (`neg`, `abs`) and the bit reinterpretations. Empty off
+aarch64. -/
+def FCtx.softF80Reads (fc : FCtx) (op : Op) : Array Val :=
+  if !fc.aarch64Floats then #[] else
+  let vals := match op with
+    | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .cmp _ a b => #[a, b]
+    | .floatRound _ a | .sqrt a | .libm _ a | .floatConv a | .intFromFloat _ a | .reduce _ a => #[a]
+    | .mulAdd a b c => #[a, b, c]
+    | _ => #[]
+  vals.filter fc.isF80Val
+
+/-- `divRtSuffix` for a division of `a`: aarch64 `f80` in `compiler-rt` mode is `__divxf3`
+(`Zig.Float.divXf3`, all versions). -/
+def FCtx.floatDivSuffix (fc : FCtx) (a : Val) : String :=
+  if fc.aarch64Floats && fc.rtSuffix != "" && fc.valTy a == .float 80 then "Xf3"
+  else fc.divRtSuffix
 
 /-- The `FloatFmt` term (`.f16` … `.f128`) for the type at `tid`, for the ops whose target format
 is not otherwise inferable (`Zig.Float.conv`/`Zig.Float.ofInt`'s explicit `fmt` argument). -/
@@ -1971,7 +2004,8 @@ def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : S
   (env.push (id, name), s!"let {name} ← {expr}")
 
 /-- A straight-line (non-terminator, non-`block`/`loop`) instruction on scalars: at most one
-output line. `emitSimple` lifts it to vectors. -/
+output line. `emitSimple` lifts it to vectors; `emitScalarGuarded` adds the aarch64 `f80`
+guard. -/
 def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   let rv := fc.resolveVal env
@@ -2024,19 +2058,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .divTrunc =>
           if fc.exactFloatDivs.contains inst.id then
             -- `@divExact` with safety: an inexact non-NaN quotient is `.illegal`.
-            s!"Zig.Float.divExactTrunc {rv a} {rv b} (Zig.Float.div{fc.divRtSuffix} {rv a} {rv b})"
+            s!"Zig.Float.divExactTrunc {rv a} {rv b} (Zig.Float.div{fc.floatDivSuffix a} {rv a} {rv b})"
           else
-            let f := s!"Zig.Float.divTrunc{fc.divRtSuffix}"
+            let f := s!"Zig.Float.divTrunc{fc.floatDivSuffix a}"
             s!"pure ({f} {rv a} {rv b})"
         | .divFloor =>
-          let f := s!"Zig.Float.divFloor{fc.divRtSuffix}"
+          let f := s!"Zig.Float.divFloor{fc.floatDivSuffix a}"
           s!"pure ({f} {rv a} {rv b})"
         | .divCeil =>
-          let f := s!"Zig.Float.divCeil{fc.divRtSuffix}"
+          let f := s!"Zig.Float.divCeil{fc.floatDivSuffix a}"
           s!"pure ({f} {rv a} {rv b})"
         | .divExact =>
           -- `div_exact` (no safety): every inexact quotient, NaN included, is `.illegal`.
-          s!"Zig.Float.divExactChk {rv a} {rv b} (Zig.Float.div{fc.divRtSuffix} {rv a} {rv b})"
+          s!"Zig.Float.divExactChk {rv a} {rv b} (Zig.Float.div{fc.floatDivSuffix a} {rv a} {rv b})"
         | .rem => s!"Zig.Float.rem{fc.rtSuffix}Chk {rv a} {rv b}"
         | .mod => s!"Zig.Float.mod{fc.rtSuffix}Chk {rv a} {rv b}"
       else
@@ -2049,7 +2083,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .divFloat a b =>
     -- `div_float` (plain `/` on floats): group A's guard, the same divide as `.divExact`.
-    let f := s!"Zig.Float.div{fc.divRtSuffix}"
+    let f := s!"Zig.Float.div{fc.floatDivSuffix a}"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a} {rv b})"; (env, some l)
   | .minMax isMax a b =>
     let expr :=
@@ -2330,6 +2364,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"{f} {rv a}"; (env, some l)
   | .sqrt a =>
     let f := if fc.zigBefore016 && fc.valTy a == .float 128 then "Zig.Float.sqrtF128ViaF64"
+      else if fc.zigBefore016 && fc.aarch64Floats && fc.valTy a == .float 80 then
+        "Zig.Float.sqrtF80ViaF64"
       else "Zig.Float.sqrt"
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {rv a})"; (env, some l)
   | .libm op a =>
@@ -2339,8 +2375,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.libm {opName} {rv a})"; (env, some l)
   | .mulAdd a b c =>
     -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
-    let f := s!"Zig.Float.fma{fc.rtSuffix}Chk"
-    let (env, l) := bindLet fc env inst.id s!"{f} {rv a} {rv b} {rv c}"; (env, some l)
+    -- aarch64: a fused instruction; its f80 operands are guarded by `softF80Chk` instead.
+    let expr := if fc.aarch64Floats then s!"pure (Zig.Float.fma{fc.rtSuffix}Fused {rv a} {rv b} {rv c})"
+      else s!"Zig.Float.fma{fc.rtSuffix}Chk {rv a} {rv b} {rv c}"
+    let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatConv a =>
     let fmt := fc.floatFmtTerm inst.ty
     let (env, l) := bindLet fc env inst.id s!"Zig.Float.conv{fc.rtSuffix}Chk {fmt} {rv a}"
@@ -2876,6 +2914,23 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
 
 
+/-- `emitScalar`; on aarch64 an op that reads `f80` operands (`FCtx.softF80Reads`) is wrapped
+in `Zig.Float.softF80Chk`, over every lane of a vector. -/
+def emitScalarGuarded (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    Array (InstId × String) × Option String :=
+  let (env', line?) := emitScalar fc env inst
+  let reads := fc.softF80Reads inst.op
+  match line?, (line?.getD "").splitOn " ← " with
+  | some _, binder :: rest@(_ :: _) =>
+    if reads.isEmpty then (env', line?) else
+    let rv := fc.resolveVal env
+    let lanes := reads.toList.map fun v =>
+      match fc.valTy v with | .vector .. => s!"({rv v}).lanes.toList" | _ => s!"[{rv v}]"
+    let xs := if reads.all (fun v => match fc.valTy v with | .vector .. => false | _ => true)
+      then s!"[{", ".intercalate (reads.toList.map rv)}]" else " ++ ".intercalate lanes
+    (env', some s!"{binder} ← Zig.Float.softF80Chk {xs} ({" ← ".intercalate rest})")
+  | _, _ => (env', line?)
+
 /-- A lane-wise op on vectors: its operands, and the same op with other operands. `arith`,
 `splat`, `select`, `reduce` and `shuffle` have their own vector cases in `emitScalar`. -/
 def laneOp? : Op → Option (Array Val × (Array Val → Op))
@@ -2932,7 +2987,7 @@ def emitLaneWise (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   -- signedness and width lookups, which read the operands.
   let scalarTy := match tupleTys with | some cs => cs[0]! | none => resTy
   let scalar : Inst := { id := inst.id, ty := scalarTy, op := rebuild (fakes.map (.inst ·.id)) }
-  let (_, line?) := emitScalar fc' env' scalar
+  let (_, line?) := emitScalarGuarded fc' env' scalar
   let line ← line?
   let expr := (line.splitOn " ← ").drop 1 |> " ← ".intercalate
   let params := String.intercalate " " ((List.range vals.size).map (s!"x{·}"))
@@ -2945,7 +3000,7 @@ def emitLaneWise (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
 /-- A straight-line (non-terminator, non-`block`/`loop`) instruction: at most one output line. -/
 def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
-  (emitLaneWise fc env inst).getD (emitScalar fc env inst)
+  (emitLaneWise fc env inst).getD (emitScalarGuarded fc env inst)
 
 mutual
 

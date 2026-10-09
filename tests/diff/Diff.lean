@@ -191,10 +191,28 @@ def errStr {n : Nat} (v : Except Zig.ErrName (BitVec n)) (wide : Bool) : String 
   | .error name => "{\"err\":\"" ++ name ++ "\"}"
   | .ok x => natStr x wide
 
-/-- A float leaf: `"nan"` (any NaN bit pattern) or `"0x"` + zero-padded lowercase hex of its
-bits (docs/floats.md; common.zig's `renderPayload` mirrors this). -/
+/-- The harness tests a float for NaN with `v != v` (common.zig's `renderPayload`). On an
+aarch64 host an `f80` `!=` is compiler_rt's `__nexf2`, which reads a NaN only off the maximum
+exponent (`comparef.cmp_f80`): an unnormal or pseudo-denormal renders as its bits there. x87
+reads every invalid encoding as a NaN (`Float.isNaN`). The model makes every soft-float `f80` op
+on these encodings `.unspecified` (`Zig.Float.softF80Chk`); only a sign-bit op returns one. -/
+def softF80Host : Bool :=
+  System.Platform.target.startsWith "arm64" || System.Platform.target.startsWith "aarch64"
+
+def renderedNaN {fmt : Zig.FloatFmt} (v : Zig.Float fmt) : Bool :=
+  match fmt with
+  | .f80 =>
+    if softF80Host then
+      let n := v.bits.toNat
+      (n >>> 64) % 2 ^ 15 == 2 ^ 15 - 1 && n % 2 ^ 64 != 2 ^ 63
+    else v.isNaN
+  | _ => v.isNaN
+
+/-- A float leaf: `"nan"` (a NaN to the harness's `v != v`, `renderedNaN`) or `"0x"` +
+zero-padded lowercase hex of its bits (docs/floats.md; common.zig's `renderPayload` mirrors
+this). -/
 def floatStr {fmt : Zig.FloatFmt} (v : Zig.Float fmt) : String :=
-  if v.isNaN then "\"nan\"" else "\"0x" ++ natToHex v.bits.toNat (fmt.width / 4) ++ "\""
+  if renderedNaN v then "\"nan\"" else "\"0x" ++ natToHex v.bits.toNat (fmt.width / 4) ++ "\""
 
 /-- `?T` for a float `T`: `null` or the payload's own float rendering. -/
 def optFloatStr {fmt : Zig.FloatFmt} (v : Option (Zig.Float fmt)) : String :=

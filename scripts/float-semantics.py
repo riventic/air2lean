@@ -5,8 +5,10 @@ Every user-stated theorem whose checked dependency closure reaches `ZigLean.Floa
 which semantics it concerns: `ieee` (the model's IEEE 754 operation semantics),
 `compiler-rt@<zig versions>` (the ported compiler_rt helpers of those Zig versions) or
 `abstract-spec` (format, rounding and value facts that select no operation semantics).
-Labels live in `assurance/float-semantics.json`. Every label concerns the Lean model only:
-a binary, native or shipped-compiler correspondence claim is rejected.
+Every label also lists the target profiles (`targets`: `x86_64-linux`, `aarch64-macos`) whose
+float rules it holds for (docs/floats.md §Targets). Labels live in
+`assurance/float-semantics.json`. Every label concerns the Lean model only: a binary, native or
+shipped-compiler correspondence claim is rejected.
 
 `check` is the light source-level gate (no Lean build). `scripts/assumptions.py` applies
 the same registry to the compiled declaration graph, and `check-report` rejects reports
@@ -25,6 +27,14 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = Path('assurance/float-semantics.json')
 SEMANTICS = ('ieee', 'compiler-rt', 'abstract-spec')
+TARGETS = ('aarch64-macos', 'x86_64-linux')
+AARCH64 = 'aarch64-macos'
+# The model functions that only an aarch64 translation calls (docs/floats.md §Targets). A
+# theorem that names one concerns aarch64 rules, so its label must list aarch64-macos. This is a
+# source check: a theorem stated for one target reaches both targets' rules through the target
+# detection (`floatopsTarget`) in its premise, so the dependency closure cannot decide it.
+AARCH64_ONLY = frozenset('Zig.Float.' + n for n in (
+    'softF80Chk', 'divXf3', 'divTruncXf3', 'divFloorXf3', 'fmaFused', 'fmaRtFused', 'sqrtF80ViaF64'))
 CORRESPONDENCE = 'model'
 NOT_CLAIMED = 'not_claimed'
 FLOAT_MODULE = 'ZigLean.Float'
@@ -42,6 +52,7 @@ AUXILIARY = re.compile(r'(^|\.)(eq_\d+|eq_def|inj|injEq|sizeOf_spec|else_eq|ofNa
 FLOAT_WORDS = re.compile(r'\bZig\.F(?:16|32|64|80|128)\b|\bF(?:16|32|64|80|128)\b|\bFloat\b|'
                          r'\bFloatFmt\b|\bisNaN\b|\bisInf\b|\bisFinite\b|\btoRat\?')
 RT_WORDS = re.compile(r'\b\w+Rt(?:016)?(?:Chk|LegacyChk)?\b')
+A64_WORDS = re.compile(r'\b(?:' + '|'.join(n.removeprefix('Zig.Float.') for n in sorted(AARCH64_ONLY)) + r')\b')
 DECLARATION = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:(?:private|protected|noncomputable|nonrec)\s+)*"
                          r"(theorem|lemma|example)\b\s*([^\s:({\[]*)")
 # A claim witness command (`ZigLean/Witness.lean`) declares the theorem `T.nonvacuous` or `T.returns`.
@@ -89,15 +100,18 @@ def label_entry(key, entry, versions):
            'unsupported binary-correspondence claim: ' + key + ' (labels concern the Lean model only)')
     semantics = entry.get('semantics')
     demand(semantics in SEMANTICS, 'unknown float semantics for ' + key + ': ' + repr(semantics))
+    targets = entry.get('targets')
+    demand(isinstance(targets, list) and targets and targets == sorted(set(targets))
+           and set(targets) <= set(TARGETS), 'label needs sorted unique targets of ' + ', '.join(TARGETS) + ': ' + key)
     if semantics == 'compiler-rt':
-        demand(set(entry) == {'semantics', 'zig_versions', 'correspondence'}, 'invalid label fields: ' + key)
+        demand(set(entry) == {'semantics', 'zig_versions', 'targets', 'correspondence'}, 'invalid label fields: ' + key)
         chosen = entry['zig_versions']
         demand(isinstance(chosen, list) and chosen and all(isinstance(v, str) for v in chosen)
                and chosen == sorted(set(chosen), key=lambda v: tuple(map(int, v.split('.')))),
                'compiler-rt label needs sorted unique Zig versions: ' + key)
         demand(set(chosen) <= versions, 'compiler-rt label names an unsupported Zig version: ' + key)
     else:
-        demand(set(entry) == {'semantics', 'correspondence'}, 'invalid label fields: ' + key)
+        demand(set(entry) == {'semantics', 'targets', 'correspondence'}, 'invalid label fields: ' + key)
     return entry
 
 
@@ -128,7 +142,7 @@ def load_registry(path=None, root=ROOT):
         demand(isinstance(labels, list) and labels and labels == sorted(set(labels)), 'invalid check labels: ' + check)
         for label in labels:
             semantics, _, chosen = label.partition('@') if isinstance(label, str) else ('', '', '')
-            body = {'semantics': semantics, 'correspondence': CORRESPONDENCE}
+            body = {'semantics': semantics, 'targets': list(TARGETS), 'correspondence': CORRESPONDENCE}
             if chosen:
                 body['zig_versions'] = chosen.split(',')
             demand(label_text(label_entry(check, body, versions)) == label, 'invalid check label: ' + repr(label))
@@ -259,7 +273,7 @@ def label_theorems(nodes, theorems, modules, registry):
             issue(name, module, 'float-semantics-mismatch', 'abstract-spec label but depends on float operation semantics')
         text = label_text(entry)
         labels[text] = labels.get(text, 0) + 1
-        record = {'scope': 'stated', 'label': text, 'semantics': semantics}
+        record = {'scope': 'stated', 'label': text, 'semantics': semantics, 'targets': entry['targets']}
         if semantics == 'compiler-rt':
             record['zig_versions'] = entry['zig_versions']
         records[name] = dict(record, correspondence=CORRESPONDENCE, binary_correspondence=NOT_CLAIMED)
@@ -383,6 +397,9 @@ def check_sources(root=ROOT, registry=None):
             declared.add(key)
             if candidate and key not in labeled:
                 problems.append(f'{key}: numerical theorem lacks a float-semantics label')
+            entry = registry['theorems'].get(key)
+            if entry and A64_WORDS.search(body) and AARCH64 not in entry['targets']:
+                problems.append(f'{key}: uses an aarch64-only float rule but its label omits {AARCH64}')
     for key in sorted(labeled - declared):
         problems.append(f'{key}: registry names no declared theorem')
     for check in sorted(registry['checks']):

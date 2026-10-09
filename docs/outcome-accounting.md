@@ -13,7 +13,7 @@ The Lean producer classifies `Zig.Result` and `Zig.Sched.Out` directly. Source `
 | `unspecified_timer_exclusion` | The model threw `Zig.Error.unsupportedTimer` (a clock it lacks); the native value is excluded from semantic agreement. |
 | `search_cap` | The schedule search reached its run cap. |
 | `bounded_no_result` | A run returned no result, or an unmatched search contained such a branch. |
-| `host_difference` | Outside the reference Linux x86_64 host, two returned values differ only in float leaves, and each differing leaf pair satisfies a kind listed for the function in `tests/diff/<ex>/host.txt` (`<fn> <kind>[,<kind>]`): `nan_payload` (both NaN of one format), `zero_sign` (both zero, opposite signs), `f80_precision` (both finite f80, at most one ulp apart), `libm_ulp` (both finite of one format, at most one ulp apart). The case row records `host_kinds`. A panic, error, exclusion or untyped value difference is a `mismatch` (F3). |
+| `host_difference` | Outside the reference Linux x86_64 host, two returned values differ only in float leaves, and each differing leaf pair satisfies a kind listed for the function in `tests/diff/<ex>/host.txt` (`<fn> <kind>[,<kind>]`): `nan_payload` (both NaN of one format), `zero_sign` (both zero, opposite signs), `libm_ulp` (both finite of one format, at most one ulp apart). The case row records `host_kinds`. A panic, error, exclusion or untyped value difference is a `mismatch` (F3). |
 | `mismatch` | Comparable typed outcomes disagree. |
 | `input_failure`, `native_harness_failure` | An input or harness failure prevents comparison. |
 | `skipped` | An example was not selected; the selection record explains host, version or explicit selection constraints. |

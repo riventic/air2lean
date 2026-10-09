@@ -14,7 +14,8 @@ proof needs to show that a property holds for every one of them (`docs/floats.md
   `x` NaN: any NaN — sign, payload and, for f80, encoding (incl. unnormals and pseudo-NaNs)
   are unconstrained.
 * `Float.MinAllowed`/`Float.MaxAllowed`: f32/f64 `@min`/`@max` of `+0` and `−0` (group D)
-  may give either zero; otherwise `Float.Allowed` of the model's result.
+  may give either zero; a signaling NaN and a non-NaN (group I) may give the non-NaN operand
+  or a NaN; otherwise `Float.Allowed` of the model's result.
 * `Float.AllowedSpec c P`: `c` succeeds, and `P` holds for every allowed result.
 
 Errors are not variation. An illegal input (`@intFromFloat` out of range: `.overflow` with the
@@ -137,30 +138,43 @@ def Float.zeroSignVaries (a b : Float fmt) : Bool :=
     | .f16 | .f80 | .f128 => false
   | _, _ => false
 
-/-- The results the target may give for `@min(a, b)`: either zero in the group D case,
-otherwise the allowed results of `Float.min a b`. -/
+/-- The results the target may give for `@min(a, b)`: either zero in the group D case; in the
+group I case (`Float.snanVaries`), the non-NaN operand (`Float.min a b`) or any NaN; otherwise
+the allowed results of `Float.min a b`. -/
 def Float.MinAllowed (a b r : Float fmt) : Prop :=
   if Float.zeroSignVaries a b then r = Float.zero false ∨ r = Float.zero true
+  else if Float.snanVaries a b then Float.Allowed (Float.min a b) r ∨ r.isNaN = true
   else Float.Allowed (Float.min a b) r
 
 /-- `@max`'s allowed results: as `Float.MinAllowed`. -/
 def Float.MaxAllowed (a b r : Float fmt) : Prop :=
   if Float.zeroSignVaries a b then r = Float.zero false ∨ r = Float.zero true
+  else if Float.snanVaries a b then Float.Allowed (Float.max a b) r ∨ r.isNaN = true
   else Float.Allowed (Float.max a b) r
 
 theorem Float.minChk_eq (a b : Float fmt) : Float.minChk a b =
-    if Float.zeroSignVaries a b then throw .unspecified else pure (Float.min a b) := by
-  unfold Float.minChk Float.zeroSignVaries
-  generalize a.classify = ca; generalize b.classify = cb
-  rcases ca with _ | _ | ⟨sa, _ | _, _⟩ <;> rcases cb with _ | _ | ⟨sb, _ | _, _⟩ <;>
-    cases fmt <;> simp
+    if Float.zeroSignVaries a b || Float.snanVaries a b then throw .unspecified
+    else pure (Float.min a b) := by
+  unfold Float.minChk
+  by_cases hs : Float.snanVaries a b = true
+  · simp [hs]
+  · simp only [hs, Bool.false_eq_true, ↓reduceIte, Bool.or_false]
+    unfold Float.zeroSignVaries
+    generalize a.classify = ca; generalize b.classify = cb
+    rcases ca with _ | _ | ⟨sa, _ | _, _⟩ <;> rcases cb with _ | _ | ⟨sb, _ | _, _⟩ <;>
+      cases fmt <;> simp
 
 theorem Float.maxChk_eq (a b : Float fmt) : Float.maxChk a b =
-    if Float.zeroSignVaries a b then throw .unspecified else pure (Float.max a b) := by
-  unfold Float.maxChk Float.zeroSignVaries
-  generalize a.classify = ca; generalize b.classify = cb
-  rcases ca with _ | _ | ⟨sa, _ | _, _⟩ <;> rcases cb with _ | _ | ⟨sb, _ | _, _⟩ <;>
-    cases fmt <;> simp
+    if Float.zeroSignVaries a b || Float.snanVaries a b then throw .unspecified
+    else pure (Float.max a b) := by
+  unfold Float.maxChk
+  by_cases hs : Float.snanVaries a b = true
+  · simp [hs]
+  · simp only [hs, Bool.false_eq_true, ↓reduceIte, Bool.or_false]
+    unfold Float.zeroSignVaries
+    generalize a.classify = ca; generalize b.classify = cb
+    rcases ca with _ | _ | ⟨sa, _ | _, _⟩ <;> rcases cb with _ | _ | ⟨sb, _ | _, _⟩ <;>
+      cases fmt <;> simp
 
 /-- The group D operands are two zeros, and `Float.min`/`Float.max` return a zero for them. -/
 private theorem zeroSignVaries_spec {a b : Float fmt} (h : Float.zeroSignVaries a b = true) :
@@ -181,7 +195,9 @@ theorem Float.minChk_allowed {a b v : Float fmt} (h : Float.minChk a b = pure v)
   unfold Float.MinAllowed
   split at h
   · cases h
-  · rename_i hv; simp only [hv]
+  · rename_i hv
+    simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
+    simp only [hv.1, hv.2, Bool.false_eq_true, ↓reduceIte]
     have : v = Float.min a b := by injection h with h; injection h with h; exact h.symm
     subst this; exact Float.Allowed.refl _
 
@@ -191,7 +207,9 @@ theorem Float.maxChk_allowed {a b v : Float fmt} (h : Float.maxChk a b = pure v)
   unfold Float.MaxAllowed
   split at h
   · cases h
-  · rename_i hv; simp only [hv]
+  · rename_i hv
+    simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hv
+    simp only [hv.1, hv.2, Bool.false_eq_true, ↓reduceIte]
     have : v = Float.max a b := by injection h with h; injection h with h; exact h.symm
     subst this; exact Float.Allowed.refl _
 
@@ -201,13 +219,17 @@ theorem Float.min_allowed (a b : Float fmt) : Float.MinAllowed a b (Float.min a 
   unfold Float.MinAllowed
   split
   · rename_i h; exact (zeroSignVaries_spec h).1
-  · exact Float.Allowed.refl _
+  · split
+    · exact .inl (Float.Allowed.refl _)
+    · exact Float.Allowed.refl _
 
 theorem Float.max_allowed (a b : Float fmt) : Float.MaxAllowed a b (Float.max a b) := by
   unfold Float.MaxAllowed
   split
   · rename_i h; exact (zeroSignVaries_spec h).2
-  · exact Float.Allowed.refl _
+  · split
+    · exact .inl (Float.Allowed.refl _)
+    · exact Float.Allowed.refl _
 
 /-- A signed zero classifies as a finite value with mantissa 0. -/
 theorem Float.classify_zero (neg : Bool) :

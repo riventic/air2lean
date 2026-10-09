@@ -30,10 +30,12 @@
 # `Zig.Error.capped` (the search stopped at its cap without Zig's line) is the same kind of
 # legacy exclusion, counted separately against tests/diff/<ex>/capped.txt; typed evidence is inconclusive.
 #
-# The float model follows x86_64-linux (docs/floats.md). On another host the compiled Zig gives
-# other bits for some float results (NaN bits, f80, the sign of a zero). tests/diff/<ex>/host.txt
+# The float model follows the translation's target profile (docs/floats.md §Targets): on
+# aarch64-macos run that host's translation (scripts/check.sh), whose exclusion pins are
+# tests/diff/<ex>/unspecified.<uname -s>-<uname -m>.txt (`pin_file` below). The compiled Zig can
+# still give other bits for some float results (NaN bits, the sign of a zero). tests/diff/<ex>/host.txt
 # lists the functions whose results depend on the target, each with the kinds of difference it
-# may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, f80_precision, libm_ulp). Only on a
+# may show ("<fn> <kind>[,<kind>...]": nan_payload, zero_sign, libm_ulp). Only on a
 # host that is not x86_64-linux, and only when both sides returned a value, a disagreement of such
 # a function counts as "host" here; scripts/diff-report.py then checks each differing float
 # against the listed kinds and fails the run on any other difference (F3). A panic, error or
@@ -328,6 +330,14 @@ pin_of() {
     END { printf "%d-%d\n", lo, hi }' "$2"
 }
 
+# The pin file of bucket `$2` (unspecified, capped) of example `$1`: `<bucket>.<host>.txt` on that
+# host if present (host: `uname -s`-`uname -m`; scripts/diff-report.py's pin_file), else
+# `<bucket>.txt`.
+pin_file() {
+  local own="tests/diff/$1/$2.$(uname -s)-$(uname -m).txt"
+  if [ -f "$own" ]; then echo "$own"; else echo "tests/diff/$1/$2.txt"; fi
+}
+
 # The pin of function `$1` in the pin file `$2` allows the count `$3`.
 pin_ok() {
   local spec lo hi
@@ -446,16 +456,18 @@ for ex in $examples; do
       exit 1
     }
 
-    if ! pin_ok "$fn" "tests/diff/$ex/unspecified.txt" "$fn_unspecified"; then
+    unspecified_pins=$(pin_file "$ex" unspecified)
+    if ! pin_ok "$fn" "$unspecified_pins" "$fn_unspecified"; then
       mismatch_found=1
       echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected" \
-        "$(pin_of "$fn" "tests/diff/$ex/unspecified.txt") (tests/diff/$ex/unspecified.txt)" >&2
+        "$(pin_of "$fn" "$unspecified_pins") ($unspecified_pins)" >&2
     fi
 
-    if ! pin_ok "$fn" "tests/diff/$ex/capped.txt" "$fn_capped"; then
+    capped_pins=$(pin_file "$ex" capped)
+    if ! pin_ok "$fn" "$capped_pins" "$fn_capped"; then
       mismatch_found=1
       echo "CAPPED COUNT $ex.$fn: $fn_capped, expected" \
-        "$(pin_of "$fn" "tests/diff/$ex/capped.txt") (tests/diff/$ex/capped.txt)" >&2
+        "$(pin_of "$fn" "$capped_pins") ($capped_pins)" >&2
     fi
 
     host_str=""
