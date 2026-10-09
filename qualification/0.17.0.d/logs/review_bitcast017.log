@@ -1,0 +1,11 @@
+real 0.17.0 AIR bitcast translations passed
+'Zig.BitCast.encode_array_eq_intBytes_ofLanes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zig.BitCast.encode_vec_eq_intBytes_ofLanes' depends on axioms: [propext, Quot.sound]
+'Zig.BitCast.encode_ofLanes_eq_encode_array' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zig.BitCast.toLanes_ofLanes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zig.BitCast.ofLanes_toLanes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zig.BitCast.toBools_ofBools' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zig.BitCast.ofBools_toBools' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zig.BitCast.getLsbD_ofLanes' depends on axioms: [propext, Quot.sound]
+0.17 bitcast checker/emitter regressions passed
+0.17 bitcast emitted runtime values passed
