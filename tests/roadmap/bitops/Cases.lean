@@ -24,6 +24,7 @@ private def nrTy : Json := obj [("k", .str "noreturn")]
 private def file (name : String) (types : Array Json) (params : Array Nat) (ret : Nat)
     (body : Array Json) : Json :=
   obj [("schema", num 11), ("zig_version", .str "0.16.0"), ("name", .str name),
+    ("unchecked_ib", .arr #[.str "for_len"]),
     ("types", .arr types), ("params", toJson params), ("ret", num ret), ("body", .arr body)]
 private def process (j : Json) : Except String Func := do
   let f ← normalize (← Raw.parseFunc j)

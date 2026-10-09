@@ -7,6 +7,9 @@ zig-out/
 # cache and other artifacts produced by Lean's Lake build tool
 .lake/
 
+# Python bytecode (scripts run without -B)
+__pycache__/
+
 # air2lean
 tests/diff/out/
 zig-air-*/

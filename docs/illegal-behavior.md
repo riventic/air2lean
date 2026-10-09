@@ -43,7 +43,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 11 | Exact division remainder (floats) | `exactDivisionRemainder`, catches a NaN quotient only | NaN: `.panic`. Any other inexact quotient: `Zig.Float.divExactTrunc`, `.illegal` (**fixed**, was the truncated quotient) | `div_exact`: `Zig.Float.divExactChk`, `.illegal`, NaN included (**fixed**, was the quotient) |
 | 12 | Exact left shift overflow (`@shlExact`) | `shlOverflow` (Sema emits `shl_with_overflow`) | `.overflow` | `shl_exact`: `Zig.shlExact`, `.illegal` (**fixed**, was `.overflow`) |
 | 13 | Exact right shift overflow (`@shrExact`) | `shrOverflow`, after the `shr_exact` | `Zig.shrExact`: `.overflow` | `.overflow` |
-| 14 | Shift amount ≥ bit width (`<<`, `>>`, `@shlExact`, `@shrExact`), width not a power of two | `shiftRhsTooBig` | *rejected* (handler outside the table) | `Zig.shlChk`/`Zig.shrChk`/`Zig.shlExact`/`Zig.shrExact`: `.illegal` (**fixed**, was `0` or the shifted bits) |
+| 14 | Shift amount ≥ bit width (`<<`, `>>`, `@shlExact`, `@shrExact`), width not a power of two | `shiftRhsTooBig` | `.overflow` (the constructor of `shlOverflow`/`shrOverflow`, [generated-code.md](generated-code.md)) | `Zig.shlChk`/`Zig.shrChk`/`Zig.shlExact`/`Zig.shrExact`: `.illegal` (**fixed**, was `0` or the shifted bits) |
 | 15 | Attempt to unwrap null | `unwrapNull` | `.panic` | `Zig.optPayload`, `Zig.optPtrUnwrap`: `.panic` |
 | 16 | Attempt to unwrap error | `unwrapError` | `.panic` | `Zig.unwrapPayload`: `.panic` |
 | 17 | Invalid error code (`@errorFromInt`) | `cmp_lte_errors_len` | *rejected* (normalizer) | *rejected*: raw error representation casts |
