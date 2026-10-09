@@ -285,6 +285,9 @@ private def run (args : List String) : IO UInt32 := do
       times := { times with read := (← IO.monoNanosNow) - readStart }
       -- Preserve the historical <full name>.json emission order even when storage
       -- uses hashes or project staging names. Cache before anonymous renumbering.
+      let texts ← match Anon.qualifyLinkUnits texts with
+        | .ok texts => pure texts
+        | .error e => throw (IO.userError e)
       let ((originalNames, rewrittenTexts), renumberNs) ← timed fun _ => Anon.renumberAllWithNames texts
       times := { times with renumber := renumberNs }
       let emissionKeys := originalNames.map (· ++ ".json")
@@ -318,7 +321,7 @@ private def run (args : List String) : IO UInt32 := do
         -- A template lists the extern calls that bind to no definition as model symbols.
         if a.registryTemplate then return (← resolveExternsCollect funcs models).1
         let resolved ← resolveExterns funcs models
-        checkProgram resolved models profiles[0]?
+        checkProgram resolved models (profiles.find? (·.linkUnit.isNone) <|> profiles[0]?)
         if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
         return resolved
         : Except String (Array Func))

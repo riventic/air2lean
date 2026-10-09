@@ -27,6 +27,9 @@ structure BuildProfile where
   errorLayout : String := "reference-model"
   errorTracing : Option Bool := none
   exportStage : String := "unverified"
+  /-- The label of a separately compiled library linked into the program (`link_unit`,
+  `docs/air-json.md` §Link units); `none` for the program's own compilation. -/
+  linkUnit : Option String := none
   deriving BEq, Repr
 
 namespace BuildProfile
@@ -97,7 +100,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   let some fields ← take? (p.getObj? |>.mapError fun e => s!"profile: {e}") | return none
   let allowed := ["name", "target_triple", "pointer_bits", "endian", "abi", "zig_version",
     "backend", "cpu", "features", "build_mode", "float_mode", "error_set_bits",
-    "error_layout", "error_tracing", "export_stage"]
+    "error_layout", "error_tracing", "export_stage", "link_unit"]
   for (key, _) in fields.toArray do
     unless allowed.contains key do report s!"unsupported profile field '{key}'"
   let name ← take? (strField p "name")
@@ -178,6 +181,13 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   if let some exportStage := exportStage then
     unless exportStage == "analyzed-air" do
       report "profile.export_stage: only 'analyzed-air' is supported; binary correspondence is unqualified"
+  let linkUnit ← match p.getObjVal? "link_unit" with
+    | .error _ => pure none
+    | .ok v => do
+      let some unit ← take? (v.getStr?.mapError fun e => s!"profile.link_unit: {e}") | pure none
+      unless !unit.isEmpty && unit.all (fun c => c.isAlphanum || c == '_') do
+        report s!"profile.link_unit '{unit}' is not a nonempty [A-Za-z0-9_] label"
+      pure (some unit)
   let base : BuildProfile := { name := legacyName, schema, zigVersion }
   return some {
     name := if endian == some "big" then bigEndianName else name.getD base.name
@@ -196,6 +206,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
     errorLayout := errorLayout.getD base.errorLayout
     errorTracing
     exportStage := exportStage.getD base.exportStage
+    linkUnit
   }
 
 /-- Fail-fast form of `collect`: its first violation. -/
@@ -212,31 +223,48 @@ def toJson (p : BuildProfile) : Json :=
     ("abi", .str p.abi), ("backend", .str p.backend), ("cpu", .str p.cpu),
     ("features", .arr (p.features.map Json.str)), ("build_mode", .str p.buildMode),
     ("float_mode", .str p.floatMode), ("error_set_bits", Lean.toJson p.errorSetBits),
-    ("error_layout", .str p.errorLayout), ("error_tracing", Lean.toJson p.errorTracing), ("export_stage", .str p.exportStage)]
+    ("error_layout", .str p.errorLayout), ("error_tracing", Lean.toJson p.errorTracing), ("export_stage", .str p.exportStage)] |>.mergeObj
+    (match p.linkUnit with
+      | some u => Json.mkObj [("link_unit", .str u)]
+      | none => Json.mkObj [])
 
 /-- Exact agreement includes schema, Zig version, CPU feature order, and all build facts.
-Every differing field of every profile is a separate violation, after a selected-name
-mismatch; their order matches the fail-fast `checkProgram`. -/
+A separately compiled library (`linkUnit`) agrees exactly within itself, and with the rest of
+the program in everything but its build mode (`docs/air-json.md` §Link units). Every differing
+field of every profile is a separate violation, after a selected-name mismatch; their order
+matches the fail-fast `checkProgram`. -/
 def programViolations (profiles : Array BuildProfile) (expected : Option String := none) :
     Array String := Id.run do
-  let some first := profiles[0]? | return #["no AIR profiles supplied"]
+  let some first := (profiles.find? (·.linkUnit.isNone)) <|> profiles[0]?
+    | return #["no AIR profiles supplied"]
   let mut errors := #[]
   if let some expected := expected then
     unless first.name == expected do
       errors := errors.push s!"selected profile '{expected}' differs from input profile '{first.name}'"
   let fields := (first.toJson.getObj?).toOption.getD {}
+  let mut unitModes : Std.HashMap String String := {}
   for p in profiles do
     unless p == first do
       let current := p.toJson
+      let otherUnit := p.linkUnit != first.linkUnit
       for (key, value) in fields.toArray do
+        if otherUnit && (key == "build_mode" || key == "link_unit") then continue
         let other := current.getObjValD key
         unless value == other do
           errors := errors.push s!"mixed AIR profiles: field '{key}' differs ({value.compress} vs {other.compress})"
+    let unit := p.linkUnit.getD ""
+    match unitModes[unit]? with
+    | some mode =>
+      unless mode == p.buildMode do
+        errors := errors.push s!"mixed AIR profiles: field 'build_mode' differs within link unit \
+          '{p.linkUnit.getD "program"}' ({mode} vs {p.buildMode})"
+    | none => unitModes := unitModes.insert unit p.buildMode
   return errors
 
 def checkProgram (profiles : Array BuildProfile) (expected : Option String := none) :
     Except String BuildProfile := do
-  let some first := profiles[0]? | throw "no AIR profiles supplied"
+  let some first := (profiles.find? (·.linkUnit.isNone)) <|> profiles[0]?
+    | throw "no AIR profiles supplied"
   if let some error := (programViolations profiles expected)[0]? then throw error
   pure first
 

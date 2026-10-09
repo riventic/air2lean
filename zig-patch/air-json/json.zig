@@ -554,17 +554,19 @@ fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []
 
 /// The symbols a function defines (0.16.0 and later). Both `export fn` and `@export` add an
 /// entry to the compilation's export tables (`Zcu.single_exports`, `Zcu.multi_exports`). An
-/// `@export` is registered when the `comptime` block that makes it is analysed, which is
-/// normally, but not provably, before the exported function's body is analysed and dumped. So
-/// every dump records how many symbols it reported, and `checkExports` (called once analysis
-/// is complete) fails the compilation if a dumped function has gained an export since: its
-/// file would miss a definition, and a call could bind to another one (docs/air-json.md
-/// §Extern calls).
+/// `@export` is registered when the analysis of the `comptime` block that makes it completes,
+/// which can be after the exported function's body was analysed and dumped (compiler_rt's
+/// `clear_cache`). So every dump records the symbols it reported, and `checkExports` (called
+/// once the compilation's analysis is complete) rewrites the `export` of every dumped function
+/// whose symbols have changed since; if it cannot, the compilation fails. Otherwise a file
+/// would miss a definition, and a call could bind to another one (docs/air-json.md §Extern
+/// calls).
 const Exports = struct {
     const Key = struct { zcu: usize, nav: u32 };
+    const Dumped = struct { count: usize, cc: []const u8, fqn: []const u8 };
 
     var lock: std.atomic.Mutex = .unlocked;
-    var dumped: std.AutoHashMapUnmanaged(Key, usize) = .empty;
+    var dumped: std.AutoHashMapUnmanaged(Key, Dumped) = .empty;
 
     fn acquire() void {
         while (!lock.tryLock()) std.atomic.spinLoopHint();
@@ -596,18 +598,72 @@ const Exports = struct {
         try list.insert(gpa, at, e.opts);
     }
 
-    fn recordDumped(zcu: *Zcu, nav: InternPool.Nav.Index, count: usize) void {
+    fn recordDumped(zcu: *Zcu, nav: InternPool.Nav.Index, count: usize, cc: []const u8, fqn: []const u8) void {
         acquire();
         defer lock.unlock();
-        dumped.put(std.heap.page_allocator, .{ .zcu = @intFromPtr(zcu), .nav = @intFromEnum(nav) }, count) catch {
-            std.log.err("air2lean: out of memory while recording an exported function", .{});
-            std.process.exit(1);
-        };
+        const a = std.heap.page_allocator;
+        const owned = a.dupe(u8, fqn) catch fatalOom();
+        const gop = dumped.getOrPut(a, .{ .zcu = @intFromPtr(zcu), .nav = @intFromEnum(nav) }) catch fatalOom();
+        if (gop.found_existing) a.free(gop.value_ptr.fqn);
+        gop.value_ptr.* = .{ .count = count, .cc = cc, .fqn = owned };
+    }
+
+    fn fatalOom() noreturn {
+        std.log.err("air2lean: out of memory while recording an exported function", .{});
+        std.process.exit(1);
+    }
+
+    /// One symbol as a JSON object (`W.writeExportSymbol`'s fields).
+    fn symbolValue(a: Allocator, ip: *const InternPool, s: Zcu.Export.Options) !std.json.ObjectMap {
+        var o: std.json.ObjectMap = .empty;
+        try o.put(a, "name", .{ .string = s.name.toSlice(ip) });
+        try o.put(a, "linkage", .{ .string = @tagName(s.linkage) });
+        try o.put(a, "visibility", .{ .string = @tagName(s.visibility) });
+        return o;
+    }
+
+    /// Replace the `export` of `d`'s dumped file with `symbols` (none: remove it).
+    fn rewrite(pt: Zcu.PerThread, a: Allocator, d: Dumped, symbols: []const Zcu.Export.Options) !void {
+        const ip = &pt.zcu.intern_pool;
+        const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return error.NoOutputDirectory;
+        var dir = try Compat.openDir(pt, dir_path);
+        defer Compat.closeDir(pt, &dir);
+        var name_buf: [output_name_capacity]u8 = undefined;
+        const name = outputFileName(d.fqn, &name_buf);
+        if ((try Compat.statPath(pt, dir, name)).kind != .file) return error.ExistingOutputNotRegular;
+        const file = try Compat.openExistingFile(pt, dir, name);
+        defer Compat.closeFile(pt, file);
+        const stat = try Compat.statFile(pt, file);
+        const bytes = try a.alloc(u8, @intCast(stat.size));
+        if (try Compat.readFile(pt, file, bytes) != bytes.len) return error.ExistingOutputChanged;
+        var root = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{ .duplicate_field_behavior = .@"error" });
+        if (root != .object) return error.OutputIdentityCollision;
+        const identity = root.object.get("name") orelse return error.OutputIdentityCollision;
+        if (identity != .string or !std.mem.eql(u8, identity.string, d.fqn)) return error.OutputIdentityCollision;
+        if (symbols.len == 0) {
+            _ = root.object.orderedRemove("export");
+        } else {
+            var e = try symbolValue(a, ip, symbols[0]);
+            try e.put(a, "cc", .{ .string = d.cc });
+            if (symbols.len > 1) {
+                var aliases: std.json.Array = .init(a);
+                for (symbols[1..]) |s| try aliases.append(.{ .object = try symbolValue(a, ip, s) });
+                try e.put(a, "aliases", .{ .array = aliases });
+            }
+            try root.object.put(a, "export", .{ .object = e });
+        }
+        const text = try std.json.Stringify.valueAlloc(a, root, .{ .whitespace = .indent_1 });
+        try Compat.truncateFile(pt, file);
+        var sink: Compat.Sink = undefined;
+        sink.init(pt, file);
+        try sink.fw.interface.writeAll(text);
+        try sink.flush();
     }
 };
 
-/// Called once a compilation's analysis is complete (after `processExports`): every function
-/// dumped by this compilation must have been dumped with all of its exports.
+/// Called once a compilation's analysis is complete (after `processExports`, 0.16.0 and later):
+/// every function this compilation dumped gets the symbols it is exported with now
+/// (`Exports`).
 pub fn checkExports(pt: Zcu.PerThread) void {
     if (Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") == null) return;
     const zcu = pt.zcu;
@@ -620,14 +676,14 @@ pub fn checkExports(pt: Zcu.PerThread) void {
     while (it.next()) |entry| {
         if (entry.key_ptr.zcu != @intFromPtr(zcu)) continue;
         const nav: InternPool.Nav.Index = @enumFromInt(entry.key_ptr.nav);
-        const now = Exports.ofNav(zcu, arena.allocator(), nav) catch {
-            std.log.err("air2lean: out of memory while checking exported functions", .{});
+        const now = Exports.ofNav(zcu, arena.allocator(), nav) catch Exports.fatalOom();
+        if (now.len == entry.value_ptr.count) continue;
+        Exports.rewrite(pt, arena.allocator(), entry.value_ptr.*, now) catch |err| {
+            std.log.err("air2lean: '{s}' was dumped with {d} exported symbol(s), but the compilation exports it " ++
+                "as {d}, and its file cannot be updated: {s} (docs/air-json.md §Extern calls)", .{ ip.getNav(nav).fqn.toSlice(ip), entry.value_ptr.count, now.len, @errorName(err) });
             std.process.exit(1);
         };
-        if (now.len == entry.value_ptr.*) continue;
-        std.log.err("air2lean: '{s}' was exported with {d} symbol(s), but the compilation exports it as {d} " ++
-            "(an @export analysed after the function; docs/air-json.md §Extern calls)", .{ ip.getNav(nav).fqn.toSlice(ip), entry.value_ptr.*, now.len });
-        std.process.exit(1);
+        entry.value_ptr.count = now.len;
     }
 }
 
@@ -637,6 +693,15 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     const ip = &zcu.intern_pool;
     const func = zcu.funcInfo(func_index);
     const fqn = ip.getNav(func.owner_nav).fqn.toSlice(ip);
+
+    if (Compat.getEnv(pt, "ZIG_AIR_JSON_UNIT")) |unit| {
+        var valid = unit.len > 0;
+        for (unit) |byte| valid = valid and (std.ascii.isAlphanumeric(byte) or byte == '_');
+        if (!valid) {
+            std.log.err("air2lean: ZIG_AIR_JSON_UNIT must be a nonempty [A-Za-z0-9_] label, not '{s}'", .{unit});
+            std.process.exit(1);
+        }
+    }
 
     if (Compat.getEnv(pt, "ZIG_AIR_JSON_FILTER")) |prefixes| {
         var it = std.mem.splitScalar(u8, prefixes, ',');
@@ -746,6 +811,12 @@ const W = struct {
         try w.j.write(mod.error_tracing);
         try w.field("export_stage");
         try w.j.write("analyzed-air");
+        // A separately compiled library linked into the program (compiler_rt): its label, from
+        // `ZIG_AIR_JSON_UNIT` (docs/air-json.md §Link units).
+        if (Compat.getEnv(w.pt, "ZIG_AIR_JSON_UNIT")) |unit| {
+            try w.field("link_unit");
+            try w.j.write(unit);
+        }
         try w.j.endObject();
     }
 
@@ -794,7 +865,7 @@ const W = struct {
         // an extern call elsewhere in the program can resolve to (docs/air-json.md §Extern calls).
         if (Compat.v16) {
             const symbols = try Exports.ofNav(zcu, w.gpa, owner_nav);
-            Exports.recordDumped(zcu, owner_nav, symbols.len);
+            Exports.recordDumped(zcu, owner_nav, symbols.len, @tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc), fqn);
             if (symbols.len > 0) {
                 try w.field("export");
                 try w.j.beginObject();

@@ -215,6 +215,46 @@ def renumberAllWithNames (texts : Array String) : Array String × Array String :
     (j.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
   (names, renumberAllParsed texts parsed)
 
+/-- The `profile.link_unit` of a function's JSON, if any (`docs/air-json.md` §Link units). -/
+def linkUnit? (j : Lean.Json) : Option String :=
+  ((j.getObjVal? "profile").bind (·.getObjValAs? String "link_unit")).toOption
+
+/-- The names of `j`'s `globals` entries. -/
+private def globalNames (j : Lean.Json) : Array String :=
+  match (j.getObjVal? "globals").bind (·.getArr?) with
+  | .ok gs => gs.filterMap fun g => (g.getObjValAs? String "name").toOption
+  | .error _ => #[]
+
+/-- A separately compiled library linked into the program (a link unit) has its own `root`,
+`std` and every other declaration, compiled with its own build mode: its `std.mem.len` is not
+the program's. So each identity of a link unit's function (its name, the functions it names,
+its types and globals) is qualified with the unit's label, `<unit>#<name>`, before anything
+else reads it. No identity of the program's own functions may start with `<unit>#` for a unit
+of the input. Extern calls cross units by linker symbol only (`docs/air-json.md` §Link units). -/
+def qualifyLinkUnits (texts : Array String) : Except String (Array String) := do
+  let parsed := texts.map fun text => (StrictJson.parse text).toOption
+  let units := parsed.filterMap fun j => j.bind linkUnit?
+  if units.isEmpty then return texts
+  let mut out := #[]
+  for (text, j) in texts.zip parsed do
+    let some j := j | out := out.push text; continue
+    match linkUnit? j with
+    | some unit =>
+      let q := mapIdentities (s!"{unit}#" ++ ·) j
+      let q := match (q.getObjVal? "globals").bind (·.getArr?) with
+        | .ok gs => q.setObjVal! "globals" (.arr (gs.map fun (g : Lean.Json) =>
+            match g.getObjValAs? String "name" with
+            | .ok n => g.setObjVal! "name" (.str s!"{unit}#{n}")
+            | .error _ => g))
+        | .error _ => q
+      out := out.push q.compress
+    | none =>
+      for n in identityNames j ++ globalNames j do
+        if let some unit := units.find? (fun u => n.startsWith s!"{u}#") then
+          throw s!"{fnName text}: the identity '{n}' has the form of link unit '{unit}'s"
+      out := out.push text
+  return out
+
 /-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
 def renumberAll (texts : Array String) : Array String :=
   let (texts, parsed) := parseInstances texts

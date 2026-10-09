@@ -517,6 +517,13 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     | .ok contents =>
       files := files.push path.toString
       texts := texts.push contents
+  -- Link-unit identities are qualified first (`docs/air-json.md` §Link units).
+  match Anon.qualifyLinkUnits texts with
+  | .ok qualified => texts := qualified
+  | .error message =>
+    log := log.add { code := .programFailure, phase := .program, category := .validationFailure, message }
+    texts := #[]
+    files := #[]
   let renamed := Anon.renumberAll texts
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do

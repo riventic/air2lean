@@ -38,6 +38,7 @@ Every schema-12 function has a mandatory `profile` object:
 | `error_layout` | `"type-table"`; each exported type's ABI size/alignment remains checked against the model |
 | `error_tracing` | Boolean from the owning module |
 | `export_stage` | `"analyzed-air"`; a shipping-binary correspondence claim is rejected |
+| `link_unit` | Optional. The label (`[A-Za-z0-9_]+`) of a separately compiled library linked into the program, set by `ZIG_AIR_JSON_UNIT` at export (Zig's compiler_rt for a C program, [air-json.md §Link units](air-json.md#link-units)); absent for the program's own compilation |
 
 Unknown profile fields are rejected. A schema-12 file with absent, null, malformed
 or contradictory required metadata fails before emission. A supplied top-level
@@ -54,7 +55,11 @@ rejected even for legacy exports. No flag is required for existing translation
 scripts or old fixtures.
 
 One translation must use identical profiles, including schema, Zig version,
-CPU/features (including their array order), build mode and error tracing. Legacy
+CPU/features (including their array order), build mode and error tracing. The one
+exception is a link unit: its files agree exactly among themselves, and with the
+program in everything but `build_mode` (compiler_rt is built `ReleaseFast` under a
+`ReleaseSafe` program). The program profile reported in the generated header is the
+program's own. Legacy
 and schema-12 files cannot be mixed. A mismatch or any checked-program failure
 leaves an existing output file untouched. This policy complements structural,
 reference, layout, global and call checks; profile agreement alone establishes
