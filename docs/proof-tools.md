@@ -239,3 +239,46 @@ to CPU time, cache behavior, instruction counts, or a native allocator's memory 
 Such a claim needs a separate calibration argument, which this layer does not
 provide. The counts cover only successful runs: a panic or divergence has no
 `LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
+
+## Concrete runs of programs with loops (`unroll_sched`)
+
+`Zig.loop` is a `partial_fixpoint`: the least fixpoint of its unfolding, which the kernel does
+not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. Import
+`ZigLean.Conc.Unroll` (an optional module) for a kernel-checked run of a concurrent program
+with loops under one schedule:
+
+```lean
+theorem parallelCounter_completes :
+    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (parallelCounter 1) mem0) = some 4 := by
+  unroll_sched 10
+```
+
+`unroll_sched k` accepts a goal `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v`
+with concrete arguments. It:
+
+1. unfolds every definition reachable from `dispatch` and `main` that runs a `Zig.loop`
+   (`Unroll.expand`), and replaces each `Zig.loop body again` by
+   `Unroll.loopSel k s body again`. At `s = exact` this is the loop; at `s = approx` it is
+   `loopN body again k`, the loop cut after `k` runs of its body, which is `⊥` (no result)
+   where the loop would go on;
+2. proves the expanded program monotone in `s` with core's `monotonicity` machinery
+   (`monotone_loopSel` and the `partial_fixpoint_monotone` lemmas of the generated code),
+   using `loopN_le_loop : loopN body again k ⊑ loop body again`;
+3. applies `Sched.okVal_le` (from `Sched.run_le`): if every thread of one program is below the
+   corresponding thread of another, a run of the first with a result is a run of the second
+   with the same result (a simulation of `Sched.go` that keeps the memory, the oracle step and
+   each thread's op);
+4. closes the goal about the cut program with `decide +kernel`.
+
+The proof uses only the standard axioms; nothing is evaluated outside the kernel. A wrong
+value, a run out of fuel, an error, or a loop that needs more than `k` runs of its body leaves
+the goal unproved, with the message `unroll_sched: the kernel does not compute the run …`.
+`k` bounds each loop's body runs per entry, so a loop entered again gets `k` more. A
+definition defined by `partial_fixpoint` itself (a recursive function) is rejected, not cut.
+
+The `completes` companions of the concurrent all-schedules theorems
+([theorem-inventory.md](theorem-inventory.md)) use it: one concrete schedule (the oracle that
+always picks option 0), fuel 1000, `mem0`. `tests/roadmap/proof-tools/Unroll.lean` checks a
+run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
+goal without a run. Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run
+`lake env lean tests/roadmap/proof-tools/Unroll.lean`.

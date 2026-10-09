@@ -1,3 +1,4 @@
+import ZigLean.Conc.Unroll
 import Proofs.Threads.Gen
 import ZigLean.Conc.Lemmas
 import ZigLean.Mem.Witness
@@ -2277,6 +2278,13 @@ theorem parallelCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
   (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
     (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n)
+
+/-- One schedule completes: under the oracle that always picks option 0, `parallelCounter 1` returns 4 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+theorem parallelCounter_completes :
+    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (parallelCounter 1) mem0) = some 4 := by
+  unroll_sched 10
 
 /-! ## Non-vacuity witnesses -/
 

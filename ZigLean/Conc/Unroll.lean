@@ -6,17 +6,18 @@ import ZigLean.Conc.Witness
 # Runs of programs with loops, by the kernel
 
 `Zig.loop` is a `partial_fixpoint`: the least fixpoint of its unfolding, which the kernel does
-not compute. `loopN k body again` is the loop cut after `k` iterations: it runs at most `k`
-iterations and is `⊥` (no result) if the loop would go on. It is below the loop
-(`loopN_le_loop`), so a result of the cut loop is the loop's result.
+not compute. `loopN body again k` is the loop cut after `k` runs of its body: `⊥` (no result)
+where the loop would go on. It is below the loop (`loopN_le_loop`), so a result of the cut loop
+is the loop's result.
 
-`unroll_sched k` closes a goal `okVal (Sched.run dispatch fuel o main m₀) = some v` (or
-`(Sched.run …).run = some r`) about a program with loops: it builds the program and every thread
-with each `Zig.loop` cut after `k` iterations (`Unroll.expand`), proves the cut program below the
-program (`monotonicity`), and lets the kernel compute the cut run (`decide +kernel`). A run of the
-cut program that has a result is a run of the program (`Sched.run_le`), so a goal that the
-kernel decides is proved for the program; a cut loop that would need more than `k` iterations
-leaves the run without a result and the goal fails.
+`unroll_sched k` closes a goal `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v`
+about a program with loops: it builds the program and every thread with each `Zig.loop` cut
+after `k` iterations (`Unroll.expand`), proves the cut program below the program
+(`monotonicity`), and lets the kernel compute the cut run (`decide +kernel`). A run of the cut
+program that has a result is a run of the program (`Sched.run_le`), so a goal that the kernel
+decides is proved for the program; a cut loop that would need more than `k` iterations leaves
+the run without a result and the goal fails. Not imported by `ZigLean.lean`; see
+docs/proof-tools.md.
 -/
 
 namespace Zig
@@ -185,6 +186,27 @@ partial def expandCore (k s : Expr) (e : Expr) : ExpandM Expr := do
   modify fun st => { st with done := st.done.insert e e' }
   return e'
 
+/-- `monotone (fun s => c a₁ … aₙ)` with `c` unfolded: for a definition that takes a program as
+an argument (a dispatcher with its std ops) and has no monotonicity lemma of its own. -/
+def unfoldHead? (goal : MVarId) : MetaM (Option MVarId) := do
+  let ty ← goal.getType
+  let_expr monotone α instα β instβ f := ty | return none
+  let .lam n d body bi := f | return none
+  let .const c ls := body.getAppFn | return none
+  let some (.defnInfo info) := (← getEnv).find? c | return none
+  if c.getRoot == `Lean then return none
+  let body' := (info.value.instantiateLevelParams info.levelParams ls).beta body.getAppArgs
+  let goal' ← goal.replaceTargetDefEq (mkApp5 (.const ``monotone ty.getAppFn.constLevels!) α instα β instβ
+    (.lam n d body' bi))
+  return some goal'
+
+/-- `Lean.Meta.Monotonicity.solveMono`, unfolding a definition where no rule applies. -/
+partial def solveMono (goal : MVarId) : MetaM Unit := do
+  let goals ← try Monotonicity.solveMonoStep (goal := goal) catch ex => do
+    let some goal' ← unfoldHead? goal | throw ex
+    pure [goal']
+  goals.forM solveMono
+
 /-- `fun s => e'` where `e'` is `e` with its loops cut after `k` iterations at `s = approx`
 (`expandCore`), and a proof that it is monotone. At `exact` it is `e` (by unfolding). -/
 def expand (k : Nat) (e : Expr) : MetaM (Expr × Expr) := do
@@ -195,7 +217,7 @@ def expand (k : Nat) (e : Expr) : MetaM (Expr × Expr) := do
   let inst ← synthInstance (← mkAppM ``PartialOrder #[ty])
   let goal ← mkFreshExprMVar
     (← mkAppOptM ``monotone #[mkConst ``Sel, mkConst ``instPartialOrderSel, ty, inst, f])
-  Monotonicity.solveMono (goal := goal.mvarId!)
+  solveMono goal.mvarId!
   return (f, ← instantiateMVars goal)
 
 end Unroll
@@ -352,9 +374,9 @@ theorem turnTrace_le {β : Type} {D₁ D₂ : Tgt → ConcM Tgt Unit}
       refine fun _ _ _ _ => ⟨hm, by simp [hsz], fun i h₁ h₂ => ?_, rfl, rfl⟩
       simp only [Array.getElem_push]
       by_cases hi : i < kids₁.size
-      · rw [dif_pos hi, dif_pos (hsz ▸ hi)]
+      · simp only [hi, hsz ▸ hi, ↓reduceDIte]
         exact hk i _ _
-      · rw [dif_neg hi, dif_neg (hsz ▸ hi)]
+      · simp only [hi, hsz ▸ hi, ↓reduceDIte]
         exact .paused (.mk _ _ _ _ fun _ m => hD tgt fuel m)
     simp only [turnTrace, State.onMem]
     split
@@ -404,10 +426,10 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
     rw [hr, ha] at h
     split at h
     · rename_i hne
-      rw [if_pos hne]
+      simp only [hne, ↓reduceIte]
       exact h
     rename_i hne
-    rw [if_neg hne]
+    simp only [hne, ↓reduceIte]
     revert h hc hs'
     generalize s₁.choose o s₂.ready.size = c₁
     generalize s₂.choose o s₂.ready.size = c₂
@@ -417,7 +439,7 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
     simp only at hc hs' h ⊢
     subst hc
     split at h
-    · rw [if_pos ‹_›]
+    · simp only [‹_ = 0›, ↓reduceIte]
       have hm := hs'.main
       revert h hm
       generalize s₁'.main = m₁
@@ -448,7 +470,7 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
             subst hv
             simp only [← hst.mem]
             exact h
-    · rw [if_neg ‹_›]
+    · simp only [‹¬_ = 0›, ↓reduceIte]
       rename_i t0
       obtain ⟨p₁, p₂, hk₁, hk₂, hp⟩ : ∃ p₁ p₂, s₁'.kids[s₂.ready[i]! - 1]? = some (.paused p₁) ∧
           s₂'.kids[s₂.ready[i]! - 1]? = some (.paused p₂) ∧ PausedLe p₁ p₂ := by
@@ -540,33 +562,33 @@ namespace Zig.Unroll
 
 open Lean Meta Elab Tactic
 
-/-- `unroll_sched k` proves `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v` or
-`(Sched.run dispatch fuel o main m₀).run = some r`: it cuts every loop of `dispatch` and `main`
-after `k` iterations (`expand`), reduces the goal to the run of the cut program
-(`Sched.okVal_le`, `Sched.run_le`) and lets the kernel decide it (`decide +kernel`). -/
+/-- `unroll_sched k` proves `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v`: it cuts
+every loop of `dispatch` and `main` after `k` iterations (`expand`), reduces the goal to the run
+of the cut program (`Sched.okVal_le`) and lets the kernel decide it (`decide +kernel`). -/
 elab "unroll_sched " k:num : tactic => withMainContext do
   let goal ← getMainGoal
   let ty ← instantiateMVars (← goal.getType)
   let some run := ty.find? (·.isAppOfArity ``Sched.run 7)
     | throwError "unroll_sched: the goal has no `Sched.run dispatch fuel o main m₀`"
   let args := run.getAppArgs
-  let lemma ← match_expr ty with
-    | Eq _ lhs _ =>
-      if lhs.isAppOfArity ``Witness.okVal 1 then pure ``Sched.okVal_le
-      else if lhs.isAppOf ``ExceptT.run then pure ``Sched.run_le
-      else throwError "unroll_sched: expected `okVal (Sched.run …) = _` or `(Sched.run …).run = _`"
-    | _ => throwError "unroll_sched: the goal is not an equation"
+  let_expr Eq _ lhs _ := ty | throwError "unroll_sched: the goal is not an equation"
+  unless lhs.isAppOfArity ``Witness.okVal 1 && lhs.appArg! == run do
+    throwError "unroll_sched: expected `Witness.okVal (Sched.run …) = _`"
   let (fD, hD) ← expand k.getNat args[2]!
   let (fP, hP) ← expand k.getNat args[5]!
   let approx := mkConst ``Sel.approx
   let le (f h : Expr) := mkApp3 h approx (mkConst ``Sel.exact) (mkConst ``approx_le)
   let cut := mkAppN run.getAppFn (args.set! 2 (mkApp fD approx) |>.set! 5 (mkApp fP approx))
   let sub ← mkFreshExprSyntheticOpaqueMVar (ty.replace fun e => if e == run then some cut else none)
-  let pf ← mkAppM lemma #[le fD hD, le fP hP, sub]
+  let pf ← mkAppM ``Sched.okVal_le #[le fD hD, le fP hP, sub]
   unless ← isDefEq (← inferType pf) ty do
     throwError "unroll_sched: the cut program does not unfold to the program"
   goal.assign pf
   replaceMainGoal [sub.mvarId!]
-  evalTactic (← `(tactic| decide +kernel))
+  try evalTactic (← `(tactic| decide +kernel)) catch _ =>
+    throwError "unroll_sched: the kernel does not compute the run with loops cut after {k.getNat} \
+      iterations to the goal's value (another result or error, out of fuel, or a loop that needs \
+      more iterations)"
+
 
 end Zig.Unroll

@@ -230,6 +230,7 @@
       "module": "Proofs.Threads.Counter",
       "example": "threads",
       "scope": "all-schedules",
+      "completes": "Threads.Counter.parallelCounter_completes",
       "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): every completed run returns `4 * n` (wrapping `u32`); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -237,7 +238,15 @@
       "module": "Proofs.Threads.Counter",
       "example": "threads",
       "scope": "all-schedules",
+      "completes": "Threads.Counter.parallelCounter_completes",
       "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threads.Counter.parallelCounter_completes",
+      "module": "Proofs.Threads.Counter",
+      "example": "threads",
+      "scope": "single-schedule",
+      "domain": "`parallelCounter 1` returns 4 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Threads.Disjoint.disjoint_spec",
@@ -267,6 +276,7 @@
       "module": "Proofs.Sync.Mutex",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.MutexCounter.mutexCounter_completes",
       "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -274,13 +284,22 @@
       "module": "Proofs.Sync.Mutex",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.MutexCounter.mutexCounter_completes",
       "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.MutexCounter.mutexCounter_completes",
+      "module": "Proofs.Sync.Mutex",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`mutexCounter` returns 4 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Iogroup.GroupCounter.groupCounter_spec",
       "module": "Proofs.Iogroup.Counter",
       "example": "iogroup",
       "scope": "all-schedules",
+      "completes": "Iogroup.GroupCounter.groupCounter_completes",
       "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): every completed run returns 3; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -288,6 +307,7 @@
       "module": "Proofs.Iogroup.Counter",
       "example": "iogroup",
       "scope": "all-schedules",
+      "completes": "Iogroup.GroupCounter.groupCounter_completes",
       "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
@@ -295,13 +315,22 @@
       "module": "Proofs.Iogroup.Counter",
       "example": "iogroup",
       "scope": "all-schedules",
+      "completes": "Iogroup.GroupCounter.groupCounter_completes",
       "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), a completed run ends with every task joined (`joinedAll 0`) and the three read shares of `io` returned before its free (`Reclaimed`); partial correctness, no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_completes",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "single-schedule",
+      "domain": "`groupCounter` returns 3 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Threadsync.MutexCounter.mutexCounter_spec",
       "module": "Proofs.Threadsync.Mutex",
       "example": "threadsync",
       "scope": "all-schedules",
+      "completes": "Threadsync.MutexCounter.mutexCounter_completes",
       "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -309,13 +338,22 @@
       "module": "Proofs.Threadsync.Mutex",
       "example": "threadsync",
       "scope": "all-schedules",
+      "completes": "Threadsync.MutexCounter.mutexCounter_completes",
       "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.MutexCounter.mutexCounter_completes",
+      "module": "Proofs.Threadsync.Mutex",
+      "example": "threadsync",
+      "scope": "single-schedule",
+      "domain": "`mutexCounter` returns 4 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Threadsync.WG.waitGroup_spec",
       "module": "Proofs.Threadsync.WaitGroup",
       "example": "threadsync",
       "scope": "all-schedules",
+      "completes": "Threadsync.WG.waitGroup_completes",
       "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: every completed run returns 2; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -323,13 +361,22 @@
       "module": "Proofs.Threadsync.WaitGroup",
       "example": "threadsync",
       "scope": "all-schedules",
+      "completes": "Threadsync.WG.waitGroup_completes",
       "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.WG.waitGroup_completes",
+      "module": "Proofs.Threadsync.WaitGroup",
+      "example": "threadsync",
+      "scope": "single-schedule",
+      "domain": "`waitGroup` returns 2 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Threadsync.HO.handoff_spec",
       "module": "Proofs.Threadsync.Handoff",
       "example": "threadsync",
       "scope": "all-schedules",
+      "completes": "Threadsync.HO.handoff_completes",
       "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -337,13 +384,22 @@
       "module": "Proofs.Threadsync.Handoff",
       "example": "threadsync",
       "scope": "all-schedules",
+      "completes": "Threadsync.HO.handoff_completes",
       "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.HO.handoff_completes",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "single-schedule",
+      "domain": "`handoff` returns 7 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.Handoff.handoff_spec",
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.Handoff.handoff_completes",
       "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -351,13 +407,22 @@
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.Handoff.handoff_completes",
       "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.Handoff.handoff_completes",
+      "module": "Proofs.Sync.Handoff",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`handoff` returns 7 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.SemCounter.semaphoreCounter_spec",
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.SemCounter.semaphoreCounter_completes",
       "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -365,13 +430,22 @@
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.SemCounter.semaphoreCounter_completes",
       "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.SemCounter.semaphoreCounter_completes",
+      "module": "Proofs.Sync.SemCounter",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`semaphoreCounter` returns 4 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.RwLockRead.rwLockRead_spec",
       "module": "Proofs.Sync.RwLock",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.RwLockRead.rwLockRead_completes",
       "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -379,13 +453,22 @@
       "module": "Proofs.Sync.RwLock",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.RwLockRead.rwLockRead_completes",
       "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockRead.rwLockRead_completes",
+      "module": "Proofs.Sync.RwLock",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`rwLockRead` returns 2 (the reader reads before the writer) under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
       "module": "Proofs.Sync.RwLockSnapshotPair",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.RwLockSnapshotPair.snapshotPair_completes",
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -393,7 +476,15 @@
       "module": "Proofs.Sync.RwLockSnapshotPair",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.RwLockSnapshotPair.snapshotPair_completes",
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.snapshotPair_completes",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`rwLockSnapshotPair` returns 0 (both reads before the writer) under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Atomics.MP.mpRelAcq_spec",
@@ -431,6 +522,7 @@
       "module": "Proofs.Atomics.Stack",
       "example": "atomics",
       "scope": "all-schedules",
+      "completes": "Atomics.Stack.stackPush_completes",
       "domain": "`stackPush` (two `cmpxchgWeak` pushers): every completed run returns 120 or 210; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -438,7 +530,15 @@
       "module": "Proofs.Atomics.Stack",
       "example": "atomics",
       "scope": "all-schedules",
+      "completes": "Atomics.Stack.stackPush_completes",
       "domain": "`stackPush` (two `cmpxchgWeak` pushers): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Atomics.Stack.stackPush_completes",
+      "module": "Proofs.Atomics.Stack",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`stackPush` returns 210 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.RwLockContract.held_pair_wp",
@@ -587,6 +687,7 @@
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.Mailbox.mailbox_completes",
       "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -594,7 +695,15 @@
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.Mailbox.mailbox_completes",
       "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.Mailbox.mailbox_completes",
+      "module": "Proofs.Sync.Mailbox",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "the mailbox client (`stdMain`) returns 34 under one schedule: the oracle that always picks option 0, fuel 1000, from `mem0`; each loop cut after 10 iterations (`unroll_sched`), the cut run computed by the kernel (`decide +kernel`); says nothing about other schedules"
     }
   ],
   "runs": {

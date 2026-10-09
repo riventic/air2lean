@@ -430,6 +430,13 @@ jobs:
           set -euo pipefail
           lake env lean tests/roadmap/proof-tools/Total.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Total.log"
 
+      - name: Concrete runs of programs with loops (unroll_sched)
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean.Conc.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
+          lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
+
       - name: Loop template and range-conversion regressions
         if: ${{ !matrix.mutate }}
         run: |
