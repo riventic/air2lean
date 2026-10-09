@@ -19471,7 +19471,7 @@
       "tests/golden/0.17.0/floatops/air-linux/floatops.op128.json": "60d0c8d60123e7e4d58caf9c88b162316cf9d9f21cd9569f6e9533cf03a8c730",
       "tests/golden/0.17.0/floatops/air-linux/floatops.op80.json": "960f9fb124087180e6917b205189bd89ab9bf388877d2b3689f628ce7b40daa2",
       "tests/golden/0.17.0/floats/air/floats.dot.json": "89e6bc194637bbb156c821dbf3ec564c22e15bf060a49579305a9a7898dc4eae",
-      "tests/golden/0.17.0/floats/air/floats.fitness.json": "ef2a3e2aa16cfef68cbb87df4873a47991c492f4d3e03165be8338de8d897cb4",
+      "tests/golden/0.17.0/floats/air/floats.fitness.json": "e2006dce6515cff3757d253ac65026e431f3601d6b3a53bb14aa18e149d008f2",
       "tests/golden/0.17.0/iogroup/air/Io.Mutex.lock.json": "352fdd39cd02e5bc54dbd3535c01159671bc7f2d2c656cf5b722bd7ca74a0dca",
       "tests/golden/0.17.0/iogroup/air/Io.Mutex.lockUncancelable.json": "899fb1951eff8b461fab3712564a82d29ac3d729a997b48f4e2f74ca5e0e5eef",
       "tests/golden/0.17.0/iogroup/air/Io.Mutex.tryLock.json": "304d2ba9e522c0ca1eef02d8bab2a1c00e95c3e4faf6ef1ff5efeadbc8c8d6ea",
