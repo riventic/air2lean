@@ -41,7 +41,7 @@ an added or removed file also counts), and its `cases_sha256` must equal the cas
 it. Stale, unbound or tampered evidence is an input error (exit 2), never a pass.
 
 Sampled evidence only refuses. Without a theorem a claim is `not_proved`, however clean the
-tests. In coverage reports, a refused claim blocks `functionally_verified_*`. In claim checks,
+tests. In coverage reports, a refused claim blocks `correct_if_returns` and `functionally_verified_total`. In claim checks,
 it rejects the goal. An observed panic is a refusal even if the theorem's precondition
 excludes that input: domains are not machine-checked.
 

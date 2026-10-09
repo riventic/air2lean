@@ -151,6 +151,8 @@
     "ZigLean.Sep.ArenaClient": ["ALC-07"],
     "ZigLean.Sep.AddrReuse": ["ALC-08"],
     "ZigLean.Sep.Total": ["SEM-04"],
+    "ZigLean.Sep.Witness": ["SEM-02"],
+    "ZigLean.Witness": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Step": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.DispatchTemplate": ["SEM-03", "SEM-04"],

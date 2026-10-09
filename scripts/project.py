@@ -44,6 +44,7 @@ def _export_module():
 
 claims = _sibling('claims')
 ARTIFACT_MANIFEST = Path(__file__).resolve().with_name('artifact-manifest.py')
+CLAIM_HEADS = claims.load_heads()
 
 SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
@@ -727,8 +728,10 @@ def verify(path, artifact):
 # source can raise a root to functional verification on its own.
 
 FUNCTIONAL = ('partial_correctness', 'total_correctness')
+# `correct_if_returns` (formerly functionally_verified_partial): correct whenever the root
+# returns, with a liveness witness that some admissible run returns; termination not proved.
 LEVELS = ('none', 'translated', 'compiled', 'tested_sampled', 'proved_scoped',
-          'functionally_verified_partial', 'functionally_verified_total')
+          'correct_if_returns', 'functionally_verified_total')
 EVIDENCE_JSON = dict(LIMITS, max_file_bytes=64 * 1024 * 1024)
 DIFF_FAILURES = ('mismatch', 'host_difference', 'input_failure', 'native_harness_failure')
 DIFF_EXCLUSIONS = ('illegal_exclusion', 'unspecified_exclusion', 'unspecified_timer_exclusion', 'search_cap',
@@ -853,19 +856,6 @@ def module_of(relative):
     return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
 
 
-def statement_reference(theorem, definition):
-    """A goal theorem must state its claim about the root: the generated definition must occur
-    in the conclusion of its kernel type, not only in hypotheses or the proof term.
-
-    The audit's declaration edges include the proof, so a wrapper-statement or `True`
-    theorem whose proof mentions the root would otherwise bind. Audits from extractors
-    without statement dependencies fail closed."""
-    deps = theorem.get('conclusion_dependencies')
-    if not isinstance(deps, list) or not isinstance(theorem.get('statement_dependencies'), list):
-        return None
-    return definition in deps
-
-
 def compiled_olean(bundle, module):
     suffix = '/.lake/build/lib/lean/' + module.replace('.', '/') + '.olean'
     return any(path.endswith(suffix) for path in bundle['compiled'])
@@ -920,7 +910,7 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
         return stage('failed', reason), goal_rows(root, 'unbound', reason)
     compiled = stage('passed', 'current receipt compiled byte-identical generated Lean and declared contracts',
                      generated_modules=gen_modules, generated_paths=matches, receipt=bundle['attempt'])
-    definition = root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
+    definition = claims.root_definition(root)
     contract_modules = set(contracts.values())
     goals = []
     for goal in root['goals']:
@@ -933,26 +923,42 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
             row.update(binding='outside_contracts', reason='theorem module is not a declared contract file')
         elif theorem.get('allowed') is not True or theorem.get('violations'):
             row.update(binding='policy_violation', reason='audited theorem violates dependency policy')
-        elif (states := statement_reference(theorem, definition)) is None:
-            row.update(binding='unbound', reason='receipt audit lacks statement dependencies; regenerate it with the current extractor')
-        elif not states or bundle['nodes'].get(definition, {}).get('module') not in gen_modules:
-            row.update(binding='wrapper_or_unrelated',
-                       reason=f'theorem conclusion does not reference generated root definition {definition} in {gen_modules}')
         else:
-            row.update(binding='direct', reason='audited theorem states its conclusion about the hash-bound generated root definition',
-                       audited_assumptions={k: sorted(theorem.get(k) or []) for k in
-                                            ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
-                       **derived_claim(theorem))
+            found = assess_goal(theorem, root, definition, bundle['nodes'], gen_modules, bundle['theorems'])
+            binding, reason = goal_binding(found, definition, bundle['nodes'], gen_modules)
+            row.update(binding=binding, reason=reason)
+            if binding == 'direct':
+                row.update(audited_assumptions={k: sorted(theorem.get(k) or []) for k in
+                                                ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
+                           derived_strength=found['strength'], claim_class=found['claim_class'],
+                           derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
+                           witnesses=found['witnesses'])
         goals.append(row)
     return compiled, goals
 
 
-def derived_claim(theorem):
-    """scripts/claims.py's strength derived from the audited kernel conclusion shape.
+def assess_goal(theorem, root, definition, nodes, gen_modules, theorems):
+    """scripts/claims.py's assessment of a goal theorem against the root's generated definition."""
+    return claims.assess(theorem, CLAIM_HEADS, definition,
+                         generated=claims.generated_definitions(nodes, set(gen_modules)),
+                         allowed=root['assumptions'], audited=theorems, nodes=nodes)
 
-    An audit without a conclusion shape (older extractor) derives no strength."""
-    found = claims.claims_of(theorem['conclusion']) if 'conclusion' in theorem else frozenset()
-    return {'derived_strength': claims.derived_strength(found), 'claim_class': claims.claim_class(found)}
+
+def goal_binding(found, definition, nodes, gen_modules):
+    """(binding, reason) of an assessed goal theorem: `direct` only when its conclusion is about
+    the generated root definition (from a generated module) applied to its parameters, under a
+    registered claim head, with no hypothesis about generated code or claim heads."""
+    if found['binding'] == 'no_statement':
+        return 'unbound', 'audit lacks the statement structure; regenerate it with the current extractor'
+    if found['head_problem']:
+        return 'spoofed_head', found['head_problem']
+    module = nodes.get(definition, {}).get('module')
+    if found['binding'] != 'direct' or module not in gen_modules:
+        return 'wrapper_or_unrelated', (f'theorem conclusion is about {found["subject"] or "no recognised computation"} '
+                                        f'({found["binding"]}), not generated root definition {definition} in {gen_modules}')
+    if found['rejected_hypotheses']:
+        return 'rejected_hypothesis', next(c for c in found['caps'] if c.startswith('a hypothesis'))
+    return 'direct', 'audited theorem states its conclusion about the hash-bound generated root definition'
 
 
 def strength_supported(goal):
@@ -1067,8 +1073,17 @@ def coverage_level(record, require_export=False):
             blockers.append(f'goal {goal["theorem"]}: {goal["binding"]} ({goal["reason"]})')
     for goal in direct:
         if not strength_supported(goal):
+            caps = '; '.join(goal.get('caps') or [])
             blockers.append(f'goal {goal["theorem"]}: declared {goal["strength"]} exceeds type-derived '
-                            f'{goal.get("derived_strength") or "no claim"} ({goal.get("claim_class") or "unclassified"} conclusion)')
+                            f'{goal.get("derived_strength") or "no claim"} ({goal.get("claim_class") or "unclassified"} conclusion'
+                            + (f'; {caps})' if caps else ')'))
+        elif goal['strength'] in FUNCTIONAL and goal.get('scope') != 'universal':
+            blockers.append(f'goal {goal["theorem"]}: derived domain is scoped '
+                            f'({json.dumps(goal.get("derived_domain"), sort_keys=True)}; non-vacuity '
+                            f'{(goal.get("witnesses") or {}).get("nonvacuity")})')
+        if goal.get('scope') != 'universal' and not claims.declares_scoped(goal['domain']):
+            blockers.append(f'goal {goal["theorem"]}: declared domain {goal["domain"]!r} is not marked scoped, '
+                            'but the derived domain is scoped')
     strengths = {g['strength'] for g in direct if strength_supported(g)}
     if not strengths & set(FUNCTIONAL):
         blockers.append('no direct theorem has functional strength (partial/total correctness)')
@@ -1080,7 +1095,7 @@ def coverage_level(record, require_export=False):
     if record['input_validation']['status'] != 'passed' or not ok['translated']:
         level = 'none'
     elif functional:
-        level = 'functionally_verified_total' if total else 'functionally_verified_partial'
+        level = 'functionally_verified_total' if total else 'correct_if_returns'
     elif not ok['compiled']:
         level = 'translated'
     elif direct:
@@ -1165,7 +1180,10 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
             exclusions += [f'proof receipt {k}: {v}' for k, v in bundle['trust'].items() if v and v != 'selected compiled Lean theorem dependency policy only']
         record = {'id': root['id'], 'function': root['function'], 'input_validation': evidence['input_validation'],
                   'stages': stages, 'goals': goals,
-                  'contract_domain': [{'theorem': g['theorem'], 'domain': g['domain'], 'review': 'declared_not_checked'} for g in root['goals']],
+                  'contract_domain': [{'theorem': g['theorem'], 'domain': g['domain'], 'scope': g.get('scope'),
+                                       'derived': g.get('derived_domain'),
+                                       'review': 'derived_from_kernel_type' if g['binding'] == 'direct' else 'unbound'}
+                                      for g in goals],
                   'theorem_strength': {'declared': sorted({g['strength'] for g in root['goals']}),
                                        'direct': sorted({g['strength'] for g in goals if g['binding'] == 'direct'}),
                                        'derived': sorted({g['derived_strength'] for g in goals
@@ -1180,15 +1198,23 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
     return {'schema': SCHEMA, 'kind': 'air2lean-coverage-report', 'manifest_sha256': report['manifest_sha256'],
             'levels': list(LEVELS), 'roots': roots, 'diagnostics': report['diagnostics'],
             'rules': ['Sampled differential tests never raise a root above tested_sampled.',
-                      'A theorem counts only when the conclusion of its audited statement (kernel type, not hypotheses '
-                      'or proof term) references the generated root definition in a module byte-identical to the verified '
-                      'translation artifact; wrapper or True statements do not count even when their proofs mention the root. '
+                      'A theorem counts only when the computation its audited conclusion is about (kernel type: the '
+                      'left side of an equation, the program of a registered triple head) is the generated root '
+                      'definition, from a module byte-identical to the verified translation artifact; a root that occurs '
+                      'only in a postcondition, a hypothesis or an ignored argument does not count. Claim heads count '
+                      'only as the registered declarations (assurance/claim-heads.json: module and fingerprint). A '
+                      'hypothesis mentioning a generated definition or claim head rejects the goal unless the definition '
+                      'is a root assumption.',
                       'A declared safety/partial/total strength counts only up to the strength scripts/claims.py derives '
-                      'from the audited conclusion head (Zig triples, Returns, exact-success equations); an unclassified '
-                      'conclusion such as `root x = root x` derives none. Domains and preconditions are not interpreted '
-                      'and remain review obligations.',
+                      'from the audited conclusion head (Zig triples, Returns, exact-success equations), capped at safety '
+                      'without a non-vacuity witness and, for partial correctness, without a liveness witness '
+                      '(ZigLean/Witness.lean); an unclassified conclusion such as `root x = root x` derives none.',
+                      'The domain is derived from the kernel type: a fixed or derived root argument or initial state, a '
+                      'repeated variable or a hypothesis over a quantified argument makes it scoped, which caps the root at '
+                      'proved_scoped; a scoped goal must declare its domain as `scoped: ...`.',
                       'Functional verification requires every declared goal to be direct and at least one '
-                      'partial/total correctness goal; full verification requires total_correctness.',
+                      'partial/total correctness goal over a universal domain; correct_if_returns needs a partial goal '
+                      'with a liveness witness, full verification requires total_correctness.',
                       'Stale receipts, source hash mismatches and stale differential evidence fail their stages.',
                       'analyzed and exported pass only from an I07 artifact manifest whose source, compiler_patch, air and '
                       'profile links recompute to the recorded digests and whose air/source files include this root\'s '
@@ -1377,21 +1403,24 @@ def audit_goal(root, goal, theorems, nodes, modules):
                             'policy_key': f'{node["module"]}::{node.get("user_name", dep)}' if node else None})
     declared = set(root['assumptions'])
     unallowed = [p['name'] for p in project if not {p['name'], p['policy_key']} & declared]
-    definition = root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
-    row.update(standard_assumptions=standard, project_assumptions=project,
-               references_root=statement_reference(theorem, definition),
+    definition = claims.root_definition(root)
+    found = assess_goal(theorem, root, definition, nodes, [modules['generated']], theorems)
+    row.update(standard_assumptions=standard, project_assumptions=project, subject=found['subject'],
+               claim_binding=found['binding'], derived_strength=found['strength'], derived_domain=found['domain'],
+               scope=found['scope'], caps=found['caps'], witnesses=found['witnesses'],
                root_definition_module=nodes.get(definition, {}).get('module'))
     if unallowed:
         return dict(row, status='unallowed_assumption', unallowed=unallowed,
                     reason='project assumptions absent from the root assumptions (and allowlist)')
-    if row['references_root'] is None:
-        return dict(row, status='unbound', reason='audit lacks statement dependencies; regenerate it with the current extractor')
-    if not row['references_root']:
-        return dict(row, status='wrapper_or_unrelated',
-                    reason=f'theorem conclusion does not reference generated root definition {definition}')
-    if row['root_definition_module'] != modules['generated']:
+    binding, reason = goal_binding(found, definition, nodes, [modules['generated']])
+    if binding == 'wrapper_or_unrelated' and found['binding'] == 'direct':
         return dict(row, status='unbound_generated',
                     reason=f'audited {definition} is not defined in the committed generated module {modules["generated"]}')
+    if binding != 'direct':
+        return dict(row, status=binding, reason=reason)
+    if found['scope'] != 'universal' and not claims.declares_scoped(goal['domain']):
+        return dict(row, status='domain_mismatch',
+                    reason=f'declared domain {goal["domain"]!r} is not marked scoped, but the derived domain is scoped')
     return dict(row, status='allowed', reason=None)
 
 

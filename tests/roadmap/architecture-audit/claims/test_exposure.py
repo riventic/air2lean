@@ -5,10 +5,12 @@ Each case feeds kernel-extracted theorem entries (exposure-report.json, regenera
 compared by check.sh) or a minimal evidence fixture through the shipped claim tooling
 (scripts/claims.py, scripts/project.py, scripts/diff-report.py) and records the verdict.
 
-Default mode pins the *current* verdicts: every case is EXPOSED (the tooling reports a claim it
-should not). A fix flips its case; update EXPECTED_EXPOSED together with the fix so the
-regression then guards the secure verdict. `--require-fixed` fails on any exposure (use it to
-gate a hardening branch); `--finding ID` (repeatable) restricts the run to those findings' cases.
+Default mode pins the *current* verdicts: a case in EXPECTED_EXPOSED must still be exposed (the
+tooling reports a claim it should not), every other case must be fixed. A fix flips its case;
+update EXPECTED_EXPOSED together with the fix so the regression then guards the secure verdict.
+`--require-fixed` fails on any exposure; `--require-fixed=S2,S3` only on exposures of those
+findings (use it to gate a hardening branch); `--finding ID` (repeatable) restricts the run to
+those findings' cases.
 """
 from __future__ import annotations
 
@@ -39,11 +41,14 @@ diff_report = load('diff_report', 'diff-report.py')
 SNAPSHOT = json.loads((HERE / 'exposure-report.json').read_text())
 THEOREMS = {t['name']: t for t in SNAPSHOT['theorems']}
 NODES = SNAPSHOT['generated_nodes']
+HEADS = claims.load_heads()
 
 # Lean counterexamples: theorem -> (root definition, declared strength, finding id).
 LEAN_CASES = {
-    'AuditClaims.unchecked_total': ('AuditClaims.root', 'total_correctness', 'S1'),
-    'AuditClaims.spoofed_total': ('AuditClaims.root', 'total_correctness', 'S2'),
+    # S1/S7 originals fix a root argument (255, divisor 0): the derived domain (S4) now scopes them.
+    'AuditClaims.unchecked_total': ('AuditClaims.root', 'total_correctness', 'S4'),
+    'AuditClaims.unchecked_universal': ('AuditClaims.root', 'total_correctness', 'S1'),
+    'AuditClaims.spoofed_within': ('AuditClaims.root', 'total_correctness', 'S2'),
     'AuditClaims.hyp_is_claim': ('AuditClaims.root', 'total_correctness', 'S3'),
     'AuditClaims.unsat_pre': ('AuditClaims.root', 'total_correctness', 'S3'),
     'AuditClaims.total_false_pre': ('AuditClaims.spin', 'total_correctness', 'S3'),
@@ -51,11 +56,17 @@ LEAN_CASES = {
     'AuditClaims.root_in_post': ('AuditClaims.root', 'total_correctness', 'S5'),
     'AuditClaims.root_ignored': ('AuditClaims.root', 'total_correctness', 'S5'),
     'AuditClaims.spin_partial': ('AuditClaims.spin', 'partial_correctness', 'S6'),
-    'AuditClaims.asm_divmod_total': ('Asm.divmod', 'total_correctness', 'S7'),
+    'AuditClaims.asm_divmod_total': ('Asm.divmod', 'total_correctness', 'S4'),
+    'AuditClaims.asm_divmod_universal': ('Asm.divmod', 'total_correctness', 'S7'),
 }
-# S1 is fixed: kernel replay rejects AuditClaims.Unchecked, so its theorem is not `allowed`.
-EXPECTED_EXPOSED = (set(LEAN_CASES) - {'AuditClaims.unchecked_total'}) | {
-    'receipt-schema-skew', 'host-allowlist-masks-panic', 'model-illegal-masks-native-value'}
+FINDINGS = {name: finding for name, (_, _, finding) in LEAN_CASES.items()}
+FINDINGS.update({'spoofed-total-head': 'S2', 'spoofed-registered-head': 'S2', 'receipt-schema-skew': 'F1',
+                 'host-allowlist-masks-panic': 'F3', 'model-illegal-masks-native-value': 'F3',
+                 'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1'})
+# Fixed: S1 (kernel replay rejects AuditClaims.Unchecked), F2, H1 (codex/fix-evidence-integrity),
+# S2-S6 (codex/fix-claim-binding). Open: S7 (asm opaques), F1, F3.
+EXPECTED_EXPOSED = {'AuditClaims.asm_divmod_universal', 'receipt-schema-skew',
+                    'host-allowlist-masks-panic', 'model-illegal-masks-native-value'}
 
 
 def coverage_level(theorem_name, definition, strength):
@@ -70,12 +81,13 @@ def coverage_level(theorem_name, definition, strength):
         generated = NODES[definition]['module'].replace('.', '/')
         lib = str(base / '.lake/build/lib/lean')
         bundle = {'attempt': str(base / 'attempt'), 'root': base,
-                  'nodes': NODES, 'theorems': {theorem_name: theorem},
+                  'nodes': NODES, 'theorems': THEOREMS,
                   'sources': {str(base / contract): 'contract-sha'},
                   'compiled': {f'{lib}/{generated}.olean', f'{lib}/{contract[:-5]}.olean'},
                   'profiles': {f'{generated}.lean': {'sha256': generated_sha}}}
         root = {'id': 'r', 'function': f'example.{function}', 'prefix': 'example.', 'namespace': namespace,
-                'contracts': [contract], 'goals': [{'theorem': theorem_name, 'strength': strength, 'domain': 'all inputs'}]}
+                'contracts': [contract], 'assumptions': [],
+                'goals': [{'theorem': theorem_name, 'strength': strength, 'domain': 'all inputs'}]}
         compiled, goals = project.bind_receipt(root, base, generated_sha, bundle, {contract: 'contract-sha'})
     passed = {'status': 'passed'}
     record = {'stages': {'translated': passed, 'compiled': compiled, 'tested': {'status': 'not_run'}},
@@ -84,17 +96,38 @@ def coverage_level(theorem_name, definition, strength):
     return level, goals[0]
 
 
-def lean_case(name):
-    definition, strength, _ = LEAN_CASES[name]
+def verdict(name, definition, strength, heads=HEADS):
     theorem = THEOREMS[name]
-    report = {'schema_version': 1, 'status': 'pass', 'theorems': [theorem]}
-    classified = {t['name']: t for t in claims.classify(report)['theorems']}
-    goal = claims.check_goal({'theorem': name, 'strength': strength, 'domain': 'all inputs'}, classified)
+    module = NODES[definition]['module']
+    goal = claims.check_goal({'theorem': name, 'strength': strength, 'domain': 'all inputs'}, THEOREMS,
+                             definition=definition, heads=heads,
+                             generated=claims.generated_definitions(NODES, {module}), nodes=NODES)
     level, row = coverage_level(name, definition, strength)
     nonstandard = [a for a in theorem['axioms'] if a not in ('propext', 'Classical.choice', 'Quot.sound')]
     exposed = (theorem['allowed'] and not nonstandard and goal['status'] == 'accepted'
                and row['binding'] == 'direct' and level.startswith('functionally_verified'))
-    return exposed, f'claims={goal["status"]}/{goal["derived_strength"]} binding={row["binding"]} level={level}'
+    detail = f'claims={goal["status"]}/{goal["derived_strength"]} binding={row["binding"]} level={level}'
+    return exposed, detail + ('' if exposed or goal['status'] == 'accepted' else f' ({goal["reason"]})')
+
+
+def lean_case(name):
+    definition, strength, _ = LEAN_CASES[name]
+    return verdict(name, definition, strength)
+
+
+def spoofed_total_head():
+    """A contract that defines its own `Zig.TotalTriple := True` cannot be audited next to the
+    registered head that the extractor imports: the name clashes and the audit errors."""
+    shadow = SNAPSHOT['shadow_audit']
+    return shadow['status'] == 'pass', f'Shadow audit status={shadow["status"]} name_clash={shadow["name_clash"]}'
+
+
+def spoofed_registered_head():
+    """Once a head such as `Zig.TotalTripleWithin` is registered (codex/roadmap-batch8), a contract's
+    same-named declaration (not imported by the audit, so no clash) is still not the pinned one."""
+    heads = dict(HEADS, **{'Zig.TotalTripleWithin': {'module': 'ZigLean.Sep.Bounded', 'fingerprint': '0' * 32,
+                                                      'claims': list(claims.CLAIMS), 'program': 3, 'state': []}})
+    return verdict('AuditClaims.spoofed_within', 'AuditClaims.root', 'total_correctness', heads)
 
 
 def receipt_schema_skew():
@@ -185,26 +218,30 @@ def stale_report_accepted():
     return 'stale' not in result.stderr, f'claims.py check on a stale report exits {result.returncode}: {result.stderr.strip()[-120:]}'
 
 
-# name -> (finding, case)
-PY_CASES = {'receipt-schema-skew': ('F1', receipt_schema_skew),
-            'host-allowlist-masks-panic': ('F3', host_allowlist_masks_panic),
-            'model-illegal-masks-native-value': ('F3', model_illegal_masks_native_value),
-            'indexed-theorems-unaudited': ('F2', indexed_theorems_unaudited),
-            'stale-report-accepted': ('H1', stale_report_accepted)}
+PY_CASES = {'spoofed-total-head': spoofed_total_head, 'spoofed-registered-head': spoofed_registered_head,
+            'receipt-schema-skew': receipt_schema_skew, 'host-allowlist-masks-panic': host_allowlist_masks_panic,
+            'model-illegal-masks-native-value': model_illegal_masks_native_value,
+            'indexed-theorems-unaudited': indexed_theorems_unaudited, 'stale-report-accepted': stale_report_accepted}
 
 
 def main(argv):
-    require_fixed = '--require-fixed' in argv
+    required = None
     findings = {argv[i + 1] for i, arg in enumerate(argv) if arg == '--finding'}
-    selected = lambda finding: not findings or finding in findings
+    for arg in argv:
+        if arg == '--require-fixed':
+            required = set(FINDINGS.values())
+        elif arg.startswith('--require-fixed='):
+            required = set(arg.split('=', 1)[1].split(','))
+    selected = lambda name: not findings or FINDINGS[name] in findings
     failures = []
-    results = {name: lean_case(name) for name, (_, _, finding) in LEAN_CASES.items() if selected(finding)}
-    results.update({name: case() for name, (finding, case) in PY_CASES.items() if selected(finding)})
+    results = {name: lean_case(name) for name in LEAN_CASES if selected(name)}
+    results.update({name: case() for name, case in PY_CASES.items() if selected(name)})
     for name, (exposed, detail) in results.items():
-        print(f'{"EXPOSED" if exposed else "fixed  "} {name}: {detail}')
-        if require_fixed and exposed:
-            failures.append(f'{name} is still exposed')
-        elif not require_fixed and exposed != (name in EXPECTED_EXPOSED):
+        print(f'{"EXPOSED" if exposed else "fixed  "} [{FINDINGS[name]}] {name}: {detail}')
+        if required is not None:
+            if exposed and FINDINGS[name] in required:
+                failures.append(f'{name} ({FINDINGS[name]}) is still exposed')
+        elif exposed != (name in EXPECTED_EXPOSED):
             failures.append(f'{name}: exposure changed (now {"exposed" if exposed else "fixed"}); '
                             'update EXPECTED_EXPOSED and docs/architecture-audit/claims.md')
     for failure in failures:

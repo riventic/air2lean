@@ -17,4 +17,12 @@ theorem asm_divmod_total (a : BitVec 32) :
   unfold Asm.divmod
   simp [zig_unfold, Zig.shl]
 
+/-- S7: the register-only asm opaque is total, so `divl` provably returns for every divisor,
+including 0 (which traps natively). -/
+theorem asm_divmod_universal (a b : BitVec 32) :
+    Asm.divmod a b = pure (((Asm.airAsm_3653072158 a b).2.setWidth 64 <<< 32) |||
+      (Asm.airAsm_3653072158 a b).1.setWidth 64) := by
+  unfold Asm.divmod
+  simp [zig_unfold, Zig.shl]
+
 end AuditClaims

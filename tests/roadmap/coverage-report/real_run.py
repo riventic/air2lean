@@ -26,7 +26,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[3]
 PROJECT = ROOT / 'example-project.json'
 VERIFIER = ROOT / 'scripts/proof-receipt.py'
-FUNCTIONAL = ('functionally_verified_partial', 'functionally_verified_total')
+FUNCTIONAL = ('correct_if_returns', 'functionally_verified_total')
 
 
 def load(name):

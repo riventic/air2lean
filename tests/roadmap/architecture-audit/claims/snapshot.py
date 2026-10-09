@@ -10,27 +10,35 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-REPORTS = [ROOT / '.lake/architecture-audit/claims' / f'assurance-{name}.json' for name in ('Vacuous', 'Shadow', 'Unchecked')]
+OUT = ROOT / '.lake/architecture-audit/claims'
 GENERATED = ('AuditClaims.root', 'AuditClaims.spin', 'Asm.divmod')
 SNAPSHOT = HERE / 'exposure-report.json'
 FIELDS = ('name', 'module', 'axioms', 'conclusion', 'statement_dependencies', 'conclusion_dependencies',
-          'opaque_dependencies', 'extern_dependencies', 'compiler_redirections', 'violations', 'allowed')
+          'opaque_dependencies', 'extern_dependencies', 'compiler_redirections', 'violations', 'allowed', 'statement')
+# The Shadow contract redefines Zig.TotalTriple; the audit environment imports the real one.
+CLASH = "environment already contains 'Zig.TotalTriple'"
 
 
 def extract():
     theorems, nodes = [], {}
-    for path in REPORTS:
+    for name in ('Vacuous', 'Unchecked'):
+        path = OUT / f'assurance-{name}.json'
         report = json.loads(path.read_text())
         # Kernel replay rejects AuditClaims.Unchecked (S1 fixed): its report fails on exactly that.
         violations = report.get('violations') or []
         replay_only = bool(violations) and all(v['trust_class'] == 'kernel-replay-rejected' for v in violations)
-        if report.get('status') != 'pass' and not (report.get('status') == 'fail' and replay_only):
+        if report.get('status') != 'pass' and not (name == 'Unchecked' and report.get('status') == 'fail'
+                                                   and replay_only):
             raise SystemExit(f'{path}: assurance audit did not pass: {report.get("violations") or report.get("error")}')
         theorems += [{k: t[k] for k in FIELDS} for t in report['theorems'] if '._proof' not in t['name']]
         nodes.update({n['name']: {'module': n['module'], 'kind': n['kind']} for n in report['nodes']
                       if n['name'] in GENERATED})
-    return {'schema_version': 1, 'source': 'tests/roadmap/architecture-audit/claims/build.sh',
-            'theorems': sorted(theorems, key=lambda t: t['name']), 'generated_nodes': dict(sorted(nodes.items()))}
+    shadow = json.loads((OUT / 'assurance-Shadow.json').read_text())
+    shadow_audit = {'status': shadow.get('status'),
+                    'name_clash': CLASH in (OUT / 'assurance-Shadow.stderr').read_text()}
+    return {'schema_version': 2, 'source': 'tests/roadmap/architecture-audit/claims/build.sh',
+            'theorems': sorted(theorems, key=lambda t: t['name']), 'generated_nodes': dict(sorted(nodes.items())),
+            'shadow_audit': shadow_audit}
 
 
 def main(argv):
