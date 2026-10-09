@@ -24,6 +24,26 @@ With `--require-fixed`, a fix agent's regression fails while its case is still v
 Lean files state wrong model facts as checked theorems, with the expected Zig result in their
 comments. All seven cases were `vulnerable` with the translator built from `af9ddc30`.
 
+## Fix status (soundness batch)
+
+`tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed` gates every fixed case in CI.
+
+| # | Status | Fix |
+|---|---|---|
+| 1, 9 | fixed | module identity (B1): the exporter writes the module of every function, type and global; std models and special std types match only the `std` module (`std-name-spoof`, `std-type-spoof`) |
+| 2 | fixed | the exporter writes `address_space`; a used non-generic pointer is rejected (`addrspace`) |
+| 3 | fixed, one gap | every op checks its own illegal-behaviour precondition (`.illegal`): `memcpy` counts and overlap, slice ends and sentinels, float/int `@divExact`, `@ptrFromInt`, `@alignCast`, bare `unreach`, `for` lengths, memory `@fieldParentPtr` (`unchecked-memcpy`, `docs/illegal-behavior.md`). Remaining: a `for` loop with safety off whose second operand is a range or array has no length in AIR |
+| 4 | fixed | reviewed asm allowlist; other asm is a declared device event or rejected (`volatile-asm`) |
+| 5 | fixed | comptime fields are exported (`comptime: true`) and rejected when used (`comptime-field`) |
+| 6 | open | emitter placeholders (`reduce-bool-handedit`): memory-model fix MM-6 |
+| 7 | fixed | claim goals bind to the root's generated definition (`claims-unbound`) |
+| 8, 10 | fixed | admission: only ReleaseSafe/stage2_llvm by default, legacy schemas only with `--profile legacy-abi64-le` (`build-mode`, `legacy-default`) |
+| 11 | fixed | schema-12 deny-by-default schema table (`unknown-key`, `missing-flag`) |
+| 12 | partly | the `call*` prefix rule is gone and `memcpy`/`memmove` are distinct ops; safe/unsafe arithmetic tags still share a model (each throws) |
+| 13 | open | Gen.lean header revision/digest binding |
+| 14 | fixed | panic handlers resolve only in the `std` module (B1) |
+| 15 | fixed | integer, enum and packed constants are range-checked at decode |
+
 ## Ranked findings
 
 | # | Severity | Finding | Counterexample |

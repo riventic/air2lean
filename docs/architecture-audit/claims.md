@@ -41,6 +41,28 @@ flips its row. `test_exposure.py --require-fixed` is the gate for a hardening br
 `unchecked_total` and re-checks the honest fixtures.
 `assurance/premises.json` excludes the fixture directory, as it does `tests/roadmap/assurance/`.
 
+## Fix status (soundness batch)
+
+`tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1`
+gates every finding below in CI.
+
+| Finding | Status | Fix |
+|---|---|---|
+| S1 | fixed | leanchecker kernel replay of every audited module (receipts record it) |
+| S2 | fixed | registered claim heads (module + kernel fingerprint, `assurance/claim-heads.json`); the extractor imports them, so a same-named contract fails to load |
+| S3 | fixed | hypotheses about generated code or claim heads reject a goal; functional strength needs a non-vacuity witness |
+| S4 | fixed | derived domain: a fixed or constrained root argument scopes the claim |
+| S5 | fixed | the conclusion's subject must be the root definition |
+| S6 | fixed | partial correctness needs a liveness witness (`correct_if_returns`) |
+| S7 | fixed | allowlisted asm carries its fault condition (`Zig.asmTrap`, premise ASM-04) |
+| F1 | fixed | coverage accepts exactly the receipt schema proof-receipt seals and verifies (3) |
+| F2 | fixed | one theorem universe: every indexed theorem file is compiled and audited |
+| F3 | fixed | typed host differences; model exclusions pinned per input (SHA-256) |
+| F4 | partly | caller obligations (ALC-09, IOM-01) and asm premises are surfaced per goal |
+| H1 | fixed | reports and diff summaries are bound to the tree (freshness, `--allow-dirty` recorded) |
+| H2 | fixed | batch-8 heads are registered with fingerprints, bounds and the conditional-return claim |
+| H3, H4 | open | hardening |
+
 ## Ranked findings
 
 Severity order: SOUNDNESS (a false or irrelevant claim reported as verified), then FAIL-OPEN /

@@ -35,6 +35,14 @@ maintenance cost only. Costs are rough agent-days (d) or weeks (w).
 | The same closure in `--diagnostics-json` | Only the first 256 files are inspected (`Diagnose.maxFiles`). Of those, 146 pass and 110 are rejected or blocked; 624 diagnostics are "named dependency absent/blocked" | translator from main lineage |
 | Generated output | Largest Gen.lean 1543 lines. Elaboration takes 0.6–2.2 s per example; the cold threadsync proof takes 30 s | `assurance/perf-budgets.json` |
 
+## Fix status (soundness batch)
+
+| Risk | Status | Fix |
+|---|---|---|
+| B1 | fixed | module identity: exporter `module` fields, `Air2Lean/Air/Identity.lean` keys, required in schema 12 |
+| S2 | fixed | `Op.effects` is the exhaustive classifier (no wildcard arm); `air2lean --print-op-table` feeds `scripts/coverage.py`; unknown and unlisted `call*` tags are rejected |
+| B2, B3, B4, S1, S3, S4, C1, C2 | open | content-addressed instances and later structure work |
+
 ## Ranked risks
 
 ### B1 — BLOCKER (D1, D2, D4; soundness today): a function's or type's identity is its module-less fqn
