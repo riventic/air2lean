@@ -32,12 +32,12 @@ def unfoldHead? (e : Expr) : MetaM (Option Expr) := do
   return some (← Core.betaReduce e)
 
 /-- Run `k` on the premise telescope (theorem binders, then the unfolded head's binders) and the
-remaining body. `k` also receives how many binders belong to the theorem itself. -/
-def withPremises {β : Type} (type : Expr) (k : Array Expr → Nat → Expr → MetaM β) : MetaM β :=
+remaining body. -/
+def withPremises {β : Type} (type : Expr) (k : Array Expr → Expr → MetaM β) : MetaM β :=
   forallTelescope type fun xs body => do
     match ← unfoldHead? body with
-    | some unfolded => forallTelescope unfolded fun ys inner => k (xs ++ ys) xs.size inner.consumeMData
-    | none => k xs xs.size body.consumeMData
+    | some unfolded => forallTelescope unfolded fun ys inner => k (xs ++ ys) inner.consumeMData
+    | none => k xs body.consumeMData
 
 /-- `∃ x₁, … ∃ xₙ, body` over the given free variables (Prop binders included). -/
 def existsOver (xs : Array Expr) (body : Expr) : MetaM Expr := do
@@ -48,7 +48,7 @@ def existsOver (xs : Array Expr) (body : Expr) : MetaM Expr := do
 
 /-- The non-vacuity statement of a claim with kernel type `type`. -/
 def nonvacuityType (type : Expr) : MetaM Expr :=
-  withPremises type fun xs _ _ => existsOver xs (mkConst ``True)
+  withPremises type fun xs _ => existsOver xs (mkConst ``True)
 
 /-- `∃ r, d = some (.ok r)` for the discriminant `d : Option (Except ε β)` of the match that
 ends the unfolded conclusion head; `none` if there is no such match. -/
@@ -66,14 +66,14 @@ def returnsBody? (body : Expr) : MetaM (Option Expr) := do
 
 /-- The liveness statement of a partial claim, or `none` when its head needs none. -/
 def livenessType? (type : Expr) : MetaM (Option Expr) :=
-  withPremises type fun xs _ body => do
+  withPremises type fun xs body => do
     let some returns ← returnsBody? body | return none
     some <$> existsOver xs returns
 
 /-- Whether the telescope has no Prop binder and every binder type has a `Nonempty` instance
 (given arbitrary earlier binders), so it is inhabited without a companion theorem. -/
 def triviallyInhabited (type : Expr) : MetaM Bool :=
-  withPremises type fun xs _ _ => xs.allM fun x => do
+  withPremises type fun xs _ => xs.allM fun x => do
     let ty ← inferType x
     if ← isProp ty then return false
     let u ← getLevel ty

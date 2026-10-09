@@ -156,8 +156,9 @@ def _subject(statement, entry):
 
 def _domain(statement, entry, subject):
     """Which root parameters (and initial state) are universally quantified, from the kernel
-    type: a fixed or derived argument, a repeated variable, a fixed initial state or a
-    hypothesis over a quantified argument makes the domain scoped."""
+    type: a fixed or derived argument, a repeated variable, a fixed initial state or any other
+    binder over a quantified argument (a hypothesis, also one wrapped in a non-Prop type such as
+    `PLift`) makes the domain scoped. `variables` are the telescope indices of the arguments."""
     binders = _list(statement.get('binders'))
     name = lambda i: binders[i].get('name') if 0 <= i < len(binders) and isinstance(binders[i], dict) else f'#{i}'
     kinds, args = _list(subject.get('params')), _list(subject.get('args'))
@@ -176,11 +177,11 @@ def _domain(statement, entry, subject):
         rows.append({'state': position, 'argument': name(var) if var is not None else 'fixed'})
         (used.append(var) if var is not None else fixed.append(f'initial state {position}'))
     repeated = sorted({name(v) for v in used if used.count(v) > 1})
-    constrained = [b.get('name') for b in binders if isinstance(b, dict) and b.get('prop') is True
+    constrained = [b.get('name') for i, b in enumerate(binders) if isinstance(b, dict) and i not in used
                    and set(_list(b.get('uses'))) & set(used)]
     scoped = bool(fixed or repeated or constrained)
     return {'scope': 'scoped' if scoped else 'universal', 'arguments': rows, 'fixed': fixed,
-            'repeated': repeated, 'constrained_by': constrained}
+            'repeated': repeated, 'constrained_by': constrained, 'variables': sorted(set(used))}
 
 
 def _witness(statement, kind, audited):
@@ -222,9 +223,13 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     else:
         mentioned = definition in _list(theorem.get('conclusion_dependencies'))
         result['binding'] = 'mentions' if mentioned else 'unrelated'
+    domain = _domain(statement, entry, subject) if subject is not None else None
+    variables = set(domain.pop('variables')) if domain else set()
+    # Every binder other than the root's own arguments is a premise, whether a Prop or a
+    # proposition wrapped in a type (`PLift`, a structure of proofs).
     blocked = set(generated) | set(heads) | ({definition} if definition else set())
-    for binder in _list(statement.get('binders')):
-        if isinstance(binder, dict) and binder.get('prop') is True:
+    for index, binder in enumerate(_list(statement.get('binders'))):
+        if isinstance(binder, dict) and index not in variables:
             bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
@@ -247,8 +252,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
                     '(liveness_witness, ZigLean/Witness.lean)')
         strength = 'safety'
     result['strength'] = strength
-    if subject is not None:
-        domain = _domain(statement, entry, subject)
+    if domain is not None:
         # Unwitnessed premises may be unsatisfiable: the domain may be empty.
         domain['nonvacuity'] = witnesses['nonvacuity']
         if not nonvacuous:
@@ -257,20 +261,30 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     return result
 
 
-def classify(report: dict, heads: dict | None = None) -> dict:
+def audited_theorems(report: dict) -> dict:
+    """The report's theorem entries by name, after validating the report's shape."""
     if not isinstance(report, dict) or report.get('schema_version') != 1:
         raise ValueError('unsupported assurance report schema')
     if report.get('status') not in ('pass', 'fail') or not isinstance(report.get('theorems'), list):
         raise ValueError('assurance report is not a completed audit')
-    heads = load_heads() if heads is None else heads
-    nodes = nodes_of(report)
-    audited = {t['name']: t for t in report['theorems'] if isinstance(t, dict) and isinstance(t.get('name'), str)}
-    theorems = []
+    audited = {}
     for theorem in report['theorems']:
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
         if 'conclusion' not in theorem or 'statement' not in theorem:
             raise ValueError(f'assurance report lacks a conclusion structure for {theorem["name"]}; regenerate it')
+        if theorem['name'] in audited:
+            raise ValueError('duplicate theorem in assurance report')
+        audited[theorem['name']] = theorem
+    return audited
+
+
+def classify(report: dict, heads: dict | None = None) -> dict:
+    audited = audited_theorems(report)
+    heads = load_heads() if heads is None else heads
+    nodes = nodes_of(report)
+    theorems = []
+    for theorem in audited.values():
         found = assess(theorem, heads, audited=audited, nodes=nodes)
         theorems.append({'name': theorem['name'], 'module': theorem.get('module', ''),
                          'conclusion_head': found['head'], 'head_problem': found['head_problem'],
@@ -278,9 +292,6 @@ def classify(report: dict, heads: dict | None = None) -> dict:
                          'claim_class': found['claim_class'], 'derived_strength': found['strength'],
                          'type_strength': found['type_strength'], 'witnesses': found['witnesses'],
                          'caps': found['caps'], 'allowed': theorem.get('allowed') is True})
-    names = [t['name'] for t in theorems]
-    if len(set(names)) != len(names):
-        raise ValueError('duplicate theorem in assurance report')
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
 
@@ -373,9 +384,8 @@ def root_definition(root: dict) -> str:
 def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     project = _sibling('project')
     manifest = project.load_manifest(manifest_path)[0]
-    classify(report)  # validates the report
+    theorems = audited_theorems(report)
     heads = load_heads()
-    theorems = {t['name']: t for t in report['theorems']}
     nodes = nodes_of(report)
     roots = []
     for root in manifest['roots']:

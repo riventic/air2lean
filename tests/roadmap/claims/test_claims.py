@@ -198,6 +198,12 @@ class AssessTests(unittest.TestCase):
         goal = self.goal('ClaimFixture.premise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
         self.assertEqual(goal['status'], 'rejected')
         self.assertIn('_h mentions ClaimFixture.ret', goal['reason'])
+        # A proposition wrapped in a non-Prop type (`PLift (ret v = ...)`) is still a premise.
+        theorem['statement']['binders'][2]['prop'] = False
+        goal = self.goal('ClaimFixture.premise_total', 'safety', 'ClaimFixture.ret', 'scoped: v > 0', report=report)
+        self.assertIn('_h mentions ClaimFixture.ret', goal['reason'] or '')
+        self.assertEqual(goal['derived_domain']['constrained_by'], ['_h'])
+        theorem['statement']['binders'][2]['prop'] = True
         # Allowed only as a declared root assumption; claim heads are never allowed.
         goal = self.goal('ClaimFixture.premise_total', 'total_correctness', 'ClaimFixture.ret', 'scoped: v > 0',
                          report=report, allowed=['ClaimFixture.ret'])
