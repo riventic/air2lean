@@ -106,6 +106,11 @@ theorem Triple.arr_store_bind [LawfulEnc T] {xs : List T} {i : BitVec 64} {w : T
     Triple (arr p xs ∗ R) (Zig.store a (p.elem (Enc.size T) i) w >>= f) Q :=
   Triple.spec_bind (TotalTriple.arr_store hn ha hs hi w).toPartial fun () => k
 
+theorem Triple.arr_ptrProject_bind {xs : List T} {i : BitVec 64} {f : Ptr → MemM β}
+    (hi : i.toNat ≤ xs.length) (k : Triple (arr p xs ∗ R) (f (p.elem (Enc.size T) i)) Q) :
+    Triple (arr p xs ∗ R) (ptrProject p (·.elem (Enc.size T) i) >>= f) Q :=
+  Triple.spec_bind_eq (Triple.arr_ptrProject hi) k
+
 theorem Triple.arr_split_pre {xs : List T} {k : Nat} {c : MemM β} (hs : Enc.align T ∣ Enc.size T)
     (hk : k ≤ xs.length)
     (t : Triple ((arr p (xs.take k) ∗ arr (p.add (Enc.size T * k)) (xs.drop k)) ∗ R) c Q) : Triple (arr p xs ∗ R) c Q :=
@@ -185,6 +190,11 @@ theorem arr_store_bind [LawfulEnc T] {xs : List T} {i : BitVec 64} {w : T}
     (k : TotalTriple (arr p (xs.set i.toNat w) ∗ R) (f ()) Q) :
     TotalTriple (arr p xs ∗ R) (Zig.store a (p.elem (Enc.size T) i) w >>= f) Q :=
   spec_bind (arr_store hn ha hs hi w) fun () => k
+
+theorem arr_ptrProject_bind {xs : List T} {i : BitVec 64} {f : Ptr → MemM β}
+    (hi : i.toNat ≤ xs.length) (k : TotalTriple (arr p xs ∗ R) (f (p.elem (Enc.size T) i)) Q) :
+    TotalTriple (arr p xs ∗ R) (ptrProject p (·.elem (Enc.size T) i) >>= f) Q :=
+  spec_bind_eq (arr_ptrProject hi) k
 
 theorem arr_split_pre {xs : List T} {k : Nat} {c : MemM β} (hs : Enc.align T ∣ Enc.size T)
     (hk : k ≤ xs.length)
@@ -376,6 +386,26 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
     | none => do
       let isLoad := cmd.isAppOfArity ``Zig.load 4
       let isStore := cmd.isAppOfArity ``Zig.store 5
+      if cmd.isAppOfArity ``Zig.ptrProject 2 then
+        -- `&xs[i]` of an owned array `arr p xs` (`arr_ptrProject_bind`, MM-3).
+        let base := cmd.getAppArgs[0]!.consumeMData
+        let T ← mkFreshTypeMVar
+        let inst ← mkFreshExprMVar none
+        let xs ← mkFreshExprMVar (← mkAppM ``List #[T])
+        let arr := mkAppN (mkConst ``Zig.arr) #[T, inst, base, xs]
+        unless ← findAtom P arr ``Zig.arr do
+          throwError "sep_step: the precondition has no `arr` for{indentExpr base}"
+        focus kind P #[← instantiateMVars arr]
+        let goals ← evalTacticAt (← `(tactic| refine $(lemmaId kind "arr_ptrProject_bind") ?_ ?_))
+          (← getMainGoal)
+        let side ← match goals with
+          | [hi, k] => do setGoals [k]; tryBound hi
+          | _ => throwError "sep_step: unexpected goals after the pointer rule"
+        let main :: rest ← getGoals | return
+        setGoals [main]
+        cont facts
+        setGoals ((← getGoals) ++ side ++ rest)
+        return
       unless isLoad || isStore do
         throwError "sep_step: no built-in rule for{indentExpr cmd}\nuse `sep_step using rule`"
       let args := cmd.getAppArgs

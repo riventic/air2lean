@@ -828,12 +828,18 @@ field, an error union's payload). Zig's LLVM backend (0.14.1, 0.15.2, 0.16.0) lo
 are in bounds of the base's allocation (`Mem.inBounds`, one past the end included), and to no
 instruction for a constant offset 0. `@fieldParentPtr` (`ptrtoint`/`sub nuw`/`inttoptr`) is
 illegal behaviour unless its operand is that field of a parent; the same rule rejects the
-out-of-allocation part of that, not a wrong field of an in-bounds parent. So the same pointer is always allowed, also without a block (address zero, a
-`@ptrFromInt` address); any other result throws `.illegal` unless both lie in `[0, size]` of
-`p`'s block (`docs/architecture-audit/memory-model.md`, MM-3). The address is not observed. -/
+out-of-allocation part of that, not a wrong field of an in-bounds parent. So the same pointer is
+always allowed, also without a block (address zero, a `@ptrFromInt` address). A block pointer's
+other results throw `.illegal` unless both lie in `[0, size]` of `p`'s block
+(`docs/architecture-audit/memory-model.md`, MM-3). A block-less pointer at a positive address
+(`@ptrFromInt`, a device register window) has no allocation in the model: LLVM takes such an
+address to lie in an allocation made outside it, and the offsets that stay block-less at a
+positive address are formed under that premise (DEV-01, `ptrProject_external_run`). Offsets of
+address zero stay illegal. The address is not observed. -/
 def ptrProject (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := fun m =>
   let q := project p
-  if q = p ∨ (q.block = p.block ∧ m.inBounds p ∧ m.inBounds q) then pure (q, m)
+  if q = p ∨ (q.block = p.block ∧ m.inBounds p ∧ m.inBounds q) ∨
+      (p.block = none ∧ q.block = none ∧ 0 < p.off ∧ 0 < q.off) then pure (q, m)
   else throw .illegal
 
 /-! ## Globals -/

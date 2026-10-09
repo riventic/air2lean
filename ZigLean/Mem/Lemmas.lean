@@ -154,6 +154,15 @@ theorem ptrProject_run {m : Mem} {p : Ptr} (project : Ptr → Ptr)
     (ptrProject p project).run m = pure (project p, m) := by
   simp [ptrProject, StateT.run, hb, hp, hq]
 
+/-- An offset of a block-less pointer at a positive address that stays block-less at a positive
+address is formed (premise DEV-01: the address range is an allocation outside the model, such as
+a device register window); memory is unchanged. -/
+theorem ptrProject_external_run {m : Mem} {p : Ptr} (project : Ptr → Ptr)
+    (hp : p.block = none) (hq : (project p).block = none) (h0 : 0 < p.off)
+    (hq0 : 0 < (project p).off) :
+    (ptrProject p project).run m = pure (project p, m) := by
+  simp [ptrProject, StateT.run, hp, hq, h0, hq0]
+
 /-- The identity projection (a zero offset after simplification) is the base. -/
 @[simp] theorem ptrProject_id (p : Ptr) (m : Mem) : ptrProject p (fun x => x) m = pure (p, m) := by
   simp [ptrProject]
@@ -171,12 +180,22 @@ theorem ptrProject_block_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.block
   ptrProject_add_run (inBounds_of hp hb h0 (by omega))
     (inBounds_of hp hb (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
 
-/-- Any other derived pointer is illegal behaviour (`getelementptr inbounds` poison). -/
+/-- Any other derived pointer of a block pointer is illegal behaviour (`getelementptr inbounds`
+poison). -/
 theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : project p ≠ p)
-    (hout : ¬ ((project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true)) :
+    (hout : ¬ ((project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true))
+    (hb : p.block ≠ none) :
     (ptrProject p project).run m = throw .illegal := by
   simp only [ptrProject, StateT.run]
-  rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
+  rw [if_neg (by simp only [not_or]; exact ⟨h, hout, fun hc => hb hc.1⟩)]
+
+/-- A pointer that formation returned is the projection; memory is unchanged. -/
+theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
+    (h : (ptrProject p project).run m = pure (q, m')) : q = project p ∧ m' = m := by
+  simp only [ptrProject, StateT.run] at h
+  split at h
+  · cases h; exact ⟨rfl, rfl⟩
+  · cases h
 
 /-- Pointer formation never changes memory and keeps the base's block. -/
 theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
@@ -184,11 +203,15 @@ theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
   by_cases hs : project p = p
   · rw [ptrProject_same project hs] at h
     simp [pure, StateT.pure, ExceptT.pure, ExceptT.mk] at h; obtain ⟨rfl, rfl⟩ := h; simp
-  · by_cases hc : (project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true
-    · rw [ptrProject_run project hc.1 hc.2.1 hc.2.2] at h
-      simp [pure, StateT.pure, ExceptT.pure, ExceptT.mk] at h; obtain ⟨rfl, rfl⟩ := h
-      exact ⟨hc.1, rfl⟩
-    · rw [ptrProject_illegal project hs hc] at h; cases h
+  · obtain ⟨rfl, rfl⟩ := ptrProject_ok h
+    simp only [ptrProject, StateT.run] at h
+    split at h
+    · rename_i hc
+      rcases hc with hc | hc | hc
+      · exact ⟨by rw [hc], rfl⟩
+      · exact ⟨hc.1, rfl⟩
+      · exact ⟨by rw [hc.2.1, hc.1], rfl⟩
+    · cases h
 
 /-- Pointer formation either succeeds without a change to memory or is illegal behaviour. -/
 theorem ptrProject_cases (p : Ptr) (project : Ptr → Ptr) (m : Mem) :
@@ -198,14 +221,6 @@ theorem ptrProject_cases (p : Ptr) (project : Ptr → Ptr) (m : Mem) :
   split
   · exact .inl rfl
   · exact .inr rfl
-
-/-- A pointer that formation returned is the projection; memory is unchanged. -/
-theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
-    (h : (ptrProject p project).run m = pure (q, m')) : q = project p ∧ m' = m := by
-  simp only [ptrProject, StateT.run] at h
-  split at h
-  · cases h; exact ⟨rfl, rfl⟩
-  · cases h
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by

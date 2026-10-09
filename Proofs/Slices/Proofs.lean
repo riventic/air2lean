@@ -82,11 +82,11 @@ theorem subZ_start (s : Slice) (a b : BitVec 64) (h : b.toNat < a.toNat) (m : Me
 /-- `s[a..b :0]` with a start `a > 0` outside the allocation is illegal behaviour (`ptrProject`,
 MM-3), whatever `b` is: forming `s.ptr + a` comes first. -/
 theorem subZ_oob (s : Slice) (a b : BitVec 64) (ha0 : a.toNat ≠ 0) (m : Mem)
-    (ha : m.inBounds (s.ptr.elem 1 a) = false) :
+    (hs : s.ptr.block ≠ none) (ha : m.inBounds (s.ptr.elem 1 a) = false) :
     (subZ s a b).run m = throw .illegal := by
   have hne : s.ptr.elem 1 a ≠ s.ptr := by
     intro he; have := congrArg Ptr.off he; simp [Ptr.elem, Ptr.add_off] at this; omega
-  have hp := ptrProject_illegal (m := m) (·.elem 1 a) hne (by simp [ha])
+  have hp := ptrProject_illegal (m := m) (·.elem 1 a) hne (by simp [ha]) hs
   simp only [StateT.run] at hp
   simp [subZ, zig_unfold, hp]
 
