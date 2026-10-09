@@ -232,13 +232,17 @@ def buffer_match(native, model):
     if not re.fullmatch(r'[0-9a-f]*',native) or not re.fullmatch(r'[0-9a-f?]*',model):return False
     return all(y=='?' or x==y for x,y in zip(native,model))
 
-def same_value(native, model):
-    if 'ok' not in native or 'ok' not in model or not json_equal(normalized(native['ok']),normalized(model['ok'])):
-        return False
+def same_extras(native, model):
+    """The live allocation counts and the buffers after the call agree."""
     if native.get('live') != model.get('live') or ('bufs' in native) != ('bufs' in model):
         return False
     return len(native.get('bufs', [])) == len(model.get('bufs', [])) and all(
         buffer_match(z,l) for z,l in zip(native.get('bufs', []), model.get('bufs', [])))
+
+def same_value(native, model):
+    if 'ok' not in native or 'ok' not in model or not json_equal(normalized(native['ok']),normalized(model['ok'])):
+        return False
+    return same_extras(native, model)
 
 MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH, Status.TRAP_MATCH)
 
@@ -318,12 +322,7 @@ def differing_leaves(native, model):
 def host_difference(native, model, allowed):
     """The sorted typed kinds that explain a native/model disagreement off the reference host,
     or None. Only two returned values with the same buffers and live count can differ by host."""
-    if not allowed or 'ok' not in native or 'ok' not in model:
-        return None
-    if native.get('live') != model.get('live') or ('bufs' in native) != ('bufs' in model):
-        return None
-    if len(native.get('bufs', [])) != len(model.get('bufs', [])) or not all(
-            buffer_match(z, l) for z, l in zip(native.get('bufs', []), model.get('bufs', []))):
+    if not allowed or 'ok' not in native or 'ok' not in model or not same_extras(native, model):
         return None
     pairs = differing_leaves(native['ok'], model['ok'])
     if not pairs:
@@ -487,38 +486,39 @@ def headline(summary):
             f" | correspondence_scopes={x['correspondence_scopes']} capped_scopes={x['capped_scopes']}"
             f" reduction={x['reduction']['technique']} qualified=false")
 
+def config_rows(path):
+    """The non-empty lines of an optional per-example config file, `#` comments removed."""
+    if path.exists():
+        for raw in path.read_text().splitlines():
+            raw = raw.split('#',1)[0].strip()
+            if raw: yield raw
+
 def pins(path):
     """Per-input exclusion pins (F3): `<fn> <input_sha256> <count>|<min>-<max> <reason>` lines,
     `#` comments. The number of the function's cases on inputs with that SHA-256 (of the input
     line, newline included) in the pinned bucket must lie in the range; any other input expects
     0. Returns {fn: {sha256: (min, max, reason)}}."""
     result = {}
-    if path.exists():
-        for raw in path.read_text().splitlines():
-            raw = raw.split('#',1)[0].strip()
-            if not raw: continue
-            parts = raw.split(None, 3)
-            if (len(parts) != 4 or not IDENT.fullmatch(parts[0]) or not SHA256.fullmatch(parts[1])
-                    or parts[1] in result.get(parts[0], {}) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?',parts[2])):
-                raise Invalid('invalid exclusion pin')
-            vals = list(map(int,parts[2].split('-')))
-            lo,hi = vals[0],vals[-1]
-            if lo > hi: raise Invalid('reversed exclusion pin')
-            result.setdefault(parts[0], {})[parts[1]] = (lo,hi,parts[3])
+    for raw in config_rows(path):
+        parts = raw.split(None, 3)
+        if (len(parts) != 4 or not IDENT.fullmatch(parts[0]) or not SHA256.fullmatch(parts[1])
+                or parts[1] in result.get(parts[0], {}) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?',parts[2])):
+            raise Invalid('invalid exclusion pin')
+        vals = list(map(int,parts[2].split('-')))
+        lo,hi = vals[0],vals[-1]
+        if lo > hi: raise Invalid('reversed exclusion pin')
+        result.setdefault(parts[0], {})[parts[1]] = (lo,hi,parts[3])
     return result
 
 def host_allowances(path):
     """tests/diff/<ex>/host.txt: `<fn> <kind>[,<kind>...]` lines (HOST_KINDS), `#` comments."""
     result = {}
-    if path.exists():
-        for raw in path.read_text().splitlines():
-            raw = raw.split('#',1)[0].strip()
-            if not raw: continue
-            parts = raw.split()
-            kinds = frozenset(parts[1].split(',')) if len(parts) == 2 else frozenset()
-            if not kinds or not IDENT.fullmatch(parts[0]) or parts[0] in result or not kinds <= set(HOST_KINDS):
-                raise Invalid('invalid host allowance')
-            result[parts[0]] = kinds
+    for raw in config_rows(path):
+        parts = raw.split()
+        kinds = frozenset(parts[1].split(',')) if len(parts) == 2 else frozenset()
+        if not kinds or not IDENT.fullmatch(parts[0]) or parts[0] in result or not kinds <= set(HOST_KINDS):
+            raise Invalid('invalid host allowance')
+        result[parts[0]] = kinds
     return result
 
 def atomic_json(path, value):
