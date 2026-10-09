@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # `--allocator-model translated` (P1): std.heap.page_allocator and FixedBufferAllocator clients
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
-# Needs a built translator and `lake build ZigLean`; runs no compiler. With AIR2LEAN_NATIVE_ZIG
-# (a stock Zig 0.16.0), also builds and runs native.zig and compares it with expected.txt.
+# Needs a built translator and `lake build ZigLean ZigLean.Sep.AllocSpec`; runs no compiler. With
+# AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
+# expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
+# recorded on x86_64-linux): the output depends on the page size only, not on the OS.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -38,11 +40,19 @@ for prog in page fba; do
   done
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
+# P4b: the translated PageAllocator cannot satisfy AllocSpec (docs/alloc-page.md).
+"${lean_cmd[@]}" "$here/PageObstruction.lean"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
     --global-cache-dir "$work/cache" -femit-bin="$work/native"
   "$work/native" 2> "$work/native.txt"
-  diff "$here/expected.txt" "$work/native.txt"
+  page_size=$(getconf PAGESIZE)
+  case "$page_size" in
+    16384) expected=$here/expected.txt ;;
+    4096) expected=$here/expected-linux.txt ;;
+    *) echo "alloc-translated: no native expectation for $page_size-byte pages" >&2; exit 1 ;;
+  esac
+  diff "$expected" "$work/native.txt"
 fi
 echo "alloc-translated: ok"

@@ -65,7 +65,8 @@ open AllocTranslated.PageLinux
   first (page_sum 10000) dispatch mem0] = ["ok 0", "ok 10", "ok 10000"]
 #guard first (page_create 7) dispatch mem0 = "ok 7"
 -- `resize` within a page; across pages it fails (x86_64 stacks grow down, so a `resize`, which
--- may not move, does not call `mremap`); a shrink unmaps the tail page.
+-- may not move, does not call `mremap`); a shrink unmaps the tail page. The native x86_64-linux run
+-- agrees (`expected-linux.txt`).
 #guard [first (page_resize 10 20) dispatch mem0, first (page_resize 10 5000) dispatch mem0,
   first (page_resize 8192 10) dispatch mem0] = ["ok true", "ok false", "ok true"]
 -- Every mapping fails: the allocator's `OutOfMemory` path, no illegal behaviour.

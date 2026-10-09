@@ -678,9 +678,12 @@ jobs:
       # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
       - name: Translated allocators
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
+          AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean
+          lake build ZigLean ZigLean.Sep.AllocSpec
           bash tests/roadmap/alloc-translated/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
