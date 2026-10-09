@@ -100,6 +100,38 @@ theorem ptsR_load {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.s
     hd, ?_, sep_lift.mpr ⟨rfl, hp⟩, hst.recordAt _ _ _ _⟩
   funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
+/-- `pts` with the block's address `A`, size `S` and kind `K` explicit, so that adjacent values
+of one block rejoin into its bytes (`bytesAt_append`). -/
+def ptsM {T : Type} [Enc T] (p : Ptr) (A S : Nat) (K : BlockKind) (a : Nat) (v : T) : Assn :=
+  fun h => (A + p.off.toNat) % a = 0 ∧ K ≠ .constGlobal ∧
+    ∃ bs, bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧ bytesAt p A S K bs h
+
+theorem ptsM_pts {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {v : T}
+    {h : Heap} (hp : ptsM p A S K a v h) : pts p a v h := by
+  obtain ⟨ha, hK, bs, hs, hv, hb⟩ := hp
+  exact ⟨A, S, K, bs, ha, hs, hv, hb, hK⟩
+
+theorem ptsM_load {T : Type} [Enc T] {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {v : T}
+    (hn : 0 < Enc.size T) :
+    TotalTriple (ptsM p A S K a v) (load T a p) (fun r => ⌜r = v⌝ ∗ ptsM p A S K a v) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨m', hr, hheap, hs'⟩ := pts_load_run (ptsM_pts hp) hm hn hst
+  exact ⟨v, m', hP, hr, hd, hheap, sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
+
+theorem ptsM_store {T : Type} [Enc T] [LawfulEnc T] {p : Ptr} {A S : Nat} {K : BlockKind}
+    {a : Nat} {v : T} (hn : 0 < Enc.size T) (w : T) :
+    TotalTriple (ptsM p A S K a v) (store a p w) (fun _ => ptsM p A S K a w) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨ha, hK, bs, hs, -, hb⟩ := hp
+  have hw := LawfulEnc.size_encode w
+  obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
+    bytesAt_store (q := p) (k := 0) (a := a) (bs' := Enc.encode w) hb hm hd (by simp [Ptr.add])
+      (by omega) (by omega) (by simpa using ha) hst hK
+  refine ⟨(), m', h', hrun, hd', hm', ⟨ha, hK, _, ?_, ?_, hb'⟩, hst'⟩ <;>
+    rw [writeBytes_all (by omega)]
+  · exact hw
+  · exact LawfulEnc.decode_encode w
+
 /-- Use a pure fact that the precondition implies. -/
 theorem TotalTriple.of_pure {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} {φ : Prop}
     (hφ : ∀ h, P h → φ) (ht : φ → TotalTriple P c Q) : TotalTriple P c Q := by

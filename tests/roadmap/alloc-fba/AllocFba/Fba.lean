@@ -35,7 +35,8 @@ namespace FBA
 /-! ## The invariant -/
 
 /-- The buffer: its pointer and length, the address, size and kind of its block, and one byte
-`pin` of that block outside the buffer. -/
+`pin` of that block outside the buffer; and the address, size and kind of the block of the
+allocator struct (so that a stack-allocated struct can be freed). -/
 structure Buf where
   ptr : Ptr
   cap : Nat
@@ -43,17 +44,23 @@ structure Buf where
   S : Nat
   K : BlockKind
   pin : Ptr
+  cA : Nat
+  cS : Nat
+  cK : BlockKind
 
 /-- Bytes that the allocator has given up: padding, and the bytes of non-last frees. -/
 def junk : Assn := fun _ => True
 
 /-- The `FixedBufferAllocator` struct at `ctx`: `end_index = e` and the buffer slice. -/
 def state (ctx : Ptr) (B : Buf) (e : Nat) : Assn :=
-  pts ctx 8 (BitVec.ofNat 64 e) ∗ pts (ctx.add 8) 8 (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice)
+  ptsM ctx B.cA B.cS B.cK 8 (BitVec.ofNat 64 e) ∗
+    ptsM (ctx.add 8) B.cA B.cS B.cK 8 (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice)
 
 def Ok (B : Buf) (e : Nat) (tail pb : Array Byte) : Prop :=
   e ≤ B.cap ∧ tail.size = B.cap - e ∧ 0 < pb.size ∧ B.A + B.ptr.off.toNat + B.cap < 2 ^ 64 ∧
-    0 ≤ B.ptr.off ∧ B.pin.block = B.ptr.block
+    0 ≤ B.ptr.off ∧ B.pin.block = B.ptr.block ∧
+    (B.pin.off + pb.size ≤ B.ptr.off ∨ B.ptr.off + B.cap ≤ B.pin.off) ∧
+    B.ptr.off.toNat + B.cap ≤ B.S
 
 /-- The state, the free bytes from `e` on, the pin, and junk. -/
 def body (ctx : Ptr) (B : Buf) (e : Nat) (tail pb : Array Byte) : Assn :=
@@ -224,13 +231,13 @@ theorem pts_slice_parts {q : Ptr} {s : Slice} {h : Heap} (hp : pts q 8 s h) :
 
 /-- A load of a field of a slice that `pts` describes. -/
 theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} {v : T}
-    (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
+    {A₀ S₀ : Nat} {K₀ : BlockKind} (hsz : Enc.size T = 8) (ho : o = 0 ∨ o = 8)
     (hv : ∀ bs : Array Byte, Enc.decode (bs.extract 0 8) = (pure s.ptr : Result Ptr) →
       Enc.decode (bs.extract 8 16) = (pure s.len : Result (BitVec 64)) →
       Enc.decode (bs.extract o (o + 8)) = (pure v : Result T)) :
-    TotalTriple (pts q 8 s) (load T 8 (q.add o)) (fun r => ⌜r = v⌝ ∗ pts q 8 s) := by
+    TotalTriple (ptsM q A₀ S₀ K₀ 8 s) (load T 8 (q.add o)) (fun r => ⌜r = v⌝ ∗ ptsM q A₀ S₀ K₀ 8 s) := by
   intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩ := pts_slice_parts hp
+  obtain ⟨A, S, K, bs, ha, hs, h1, h2, hb⟩ := pts_slice_parts (ptsM_pts hp)
   have hao : (A + q.off.toNat + o) % 8 = 0 := by rcases ho with rfl | rfl <;> omega
   obtain ⟨b, blk, hacc, -, -, -, hx⟩ :=
     bytesAt_access (q := q.add o) (k := o) (n := Enc.size T) (a := 8) hb hm rfl
@@ -244,57 +251,57 @@ theorem pts_slice_field_load {T : Type} [Enc T] {q : Ptr} {s : Slice} {o : Nat} 
 theorem load_end : TotalTriple (state ctx B e ∗ R) (load (BitVec 64) 8 ctx)
     (fun r => ⌜r = BitVec.ofNat 64 e⌝ ∗ (state ctx B e ∗ R)) := by
   unfold state
-  exact TotalTriple.conseq (TotalTriple.frame (R := pts (ctx.add 8) 8
-      (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice) ∗ R) (TotalTriple.load (by decide)))
+  exact TotalTriple.conseq (TotalTriple.frame (R := ptsM (ctx.add 8) B.cA B.cS B.cK 8
+      (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice) ∗ R) (ptsM_load (by decide)))
     (fun h hp => by sep_from hp) (fun _ h hp => by sep_from hp)
 
 theorem load_ptr : TotalTriple (state ctx B e ∗ R) (load Ptr 8 (ctx.add 8))
     (fun r => ⌜r = B.ptr⌝ ∗ (state ctx B e ∗ R)) := by
   unfold state
-  have t := pts_slice_field_load (T := Ptr) (q := ctx.add 8) (s := ⟨B.ptr, BitVec.ofNat 64 B.cap⟩)
+  have t := pts_slice_field_load (T := Ptr) (q := ctx.add 8) (A₀ := B.cA) (S₀ := B.cS) (K₀ := B.cK) (s := ⟨B.ptr, BitVec.ofNat 64 B.cap⟩)
     (o := 0) (v := B.ptr) rfl (Or.inl rfl) (fun bs h1 _ => by simpa using h1)
   push_cast at t
   simp only [Norm.add_zero_ptr] at t
-  exact TotalTriple.conseq (TotalTriple.frame (R := pts ctx 8 (BitVec.ofNat 64 e) ∗ R) t)
+  exact TotalTriple.conseq (TotalTriple.frame (R := ptsM ctx B.cA B.cS B.cK 8 (BitVec.ofNat 64 e) ∗ R) t)
     (fun h hp => by sep_from hp) (fun _ h hp => by sep_from hp)
 
 theorem load_len : TotalTriple (state ctx B e ∗ R) (load (BitVec 64) 8 ((ctx.add 8).add 8))
     (fun r => ⌜r = BitVec.ofNat 64 B.cap⌝ ∗ (state ctx B e ∗ R)) := by
   unfold state
-  have t := pts_slice_field_load (T := BitVec 64) (q := ctx.add 8)
+  have t := pts_slice_field_load (T := BitVec 64) (q := ctx.add 8) (A₀ := B.cA) (S₀ := B.cS) (K₀ := B.cK)
     (s := ⟨B.ptr, BitVec.ofNat 64 B.cap⟩) (o := 8) (v := BitVec.ofNat 64 B.cap) rfl (Or.inr rfl)
     (fun bs _ h2 => h2)
   push_cast at t
-  exact TotalTriple.conseq (TotalTriple.frame (R := pts ctx 8 (BitVec.ofNat 64 e) ∗ R) t)
+  exact TotalTriple.conseq (TotalTriple.frame (R := ptsM ctx B.cA B.cS B.cK 8 (BitVec.ofNat 64 e) ∗ R) t)
     (fun h hp => by sep_from hp) (fun _ h hp => by sep_from hp)
 
 theorem load_slice : TotalTriple (state ctx B e ∗ R) (load Slice 8 (ctx.add 8))
     (fun r => ⌜r = ⟨B.ptr, BitVec.ofNat 64 B.cap⟩⌝ ∗ (state ctx B e ∗ R)) := by
   unfold state
-  exact TotalTriple.conseq (TotalTriple.frame (R := pts ctx 8 (BitVec.ofNat 64 e) ∗ R)
-      (TotalTriple.load (by decide)))
+  exact TotalTriple.conseq (TotalTriple.frame (R := ptsM ctx B.cA B.cS B.cK 8 (BitVec.ofNat 64 e) ∗ R)
+      (ptsM_load (by decide)))
     (fun h hp => by sep_from hp) (fun _ h hp => by sep_from hp)
 
 theorem store_end (e' : Nat) : TotalTriple (state ctx B e ∗ R)
     (store 8 ctx (BitVec.ofNat 64 e')) (fun _ => state ctx B e' ∗ R) := by
   unfold state
-  exact TotalTriple.conseq (TotalTriple.frame (R := pts (ctx.add 8) 8
-      (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice) ∗ R) (TotalTriple.store (by decide) _))
+  exact TotalTriple.conseq (TotalTriple.frame (R := ptsM (ctx.add 8) B.cA B.cS B.cK 8
+      (⟨B.ptr, BitVec.ofNat 64 B.cap⟩ : Slice) ∗ R) (ptsM_store (by decide) _))
     (fun h hp => by sep_from hp) (fun _ h hp => by sep_from hp)
 
 /-- The `@alignCast` of the context pointer (`*FixedBufferAllocator`, alignment 8) passes. -/
 theorem ptrAddr_ctx : TotalTriple (state ctx B e ∗ R) (ptrAddr ctx)
     (fun r => ⌜(BitVec.ofInt 64 r &&& 7) = 0⌝ ∗ (state ctx B e ∗ R)) := by
   intro m hP hF hd hm hp hst
-  obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨g₁, g₂, -, rfl, ⟨A, S, K, bs, ha, hs, -, hb, -⟩, -⟩, -⟩ := id hp
+  obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨g₁, g₂, -, rfl, ⟨ha, -, bs, hs, -, hb⟩, -⟩, -⟩ := id hp
   obtain ⟨b, hpb, ho⟩ := bytesAt_ownsIn hb (by rw [hs]; decide)
-  have hown : OwnsIn b A ((g₁ ∪ g₂) ∪ h₂) := ho.union_left.union_left
+  have hown : OwnsIn b B.cA ((g₁ ∪ g₂) ∪ h₂) := ho.union_left.union_left
   obtain ⟨blk, hblk, hA⟩ := hown.block hm
   refine ⟨(blk.addr : Int) + ctx.off, m, _, ?_, hd, hm, sep_lift.mpr ⟨?_, hp⟩, hst⟩
   · simp [ptrAddr, hpb, hblk, zig_unfold, get, getThe, MonadStateOf.get, StateT.get]
   · rw [hA]
-    have hx : ((A : Int) + ctx.off) % 2 ^ 3 = 0 := by
-      have : ((A + ctx.off.toNat : Nat) : Int) % ((2 ^ 3 : Nat) : Int) = 0 := by exact_mod_cast ha
+    have hx : ((B.cA : Int) + ctx.off) % 2 ^ 3 = 0 := by
+      have : ((B.cA + ctx.off.toNat : Nat) : Int) % ((2 ^ 3 : Nat) : Int) = 0 := by exact_mod_cast ha
       rw [Int.natCast_add, Int.toNat_of_nonneg (Region.bytesAt_pos_off hb)] at this
       exact_mod_cast this
     have h0 := Region.bytesAt_pos_off hb
@@ -442,7 +449,7 @@ theorem carve_grant {ctx : Ptr} {B : Buf} {e d n k : Nat} {tail pb : Array Byte}
       (regionIn B.pin B.A B.S B.K 1 pb ∗ junk))) h) :
     ((inv ctx B).own ∗ Assn.ex fun bs => ⌜bs.size = n⌝ ∗
       granted (inv ctx B) (B.ptr.add ((e + d : Nat) : Int)) k bs) h := by
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   have hq0 : (B.ptr.add (e : Int)).off.toNat = B.ptr.off.toNat + e := off_add_nat h0
   have hcarve : ∀ h', regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 tail h' →
       (regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 (tail.extract 0 d) ∗
@@ -467,7 +474,7 @@ theorem carve_grant {ctx : Ptr} {B : Buf} {e d n k : Nat} {tail pb : Array Byte}
     sep_from hh2
   refine sep_mono (fun _ x => own_intro (e := e + d + n)
       (tail := (tail.extract d tail.size).extract n (tail.extract d tail.size).size) (pb := pb)
-      ⟨(by omega), (by simp only [Array.size_extract]; omega), hpb, hA, h0, hpin⟩ ?_)
+      ⟨(by omega), (by simp only [Array.size_extract]; omega), hpb, hA, h0, hpin, hpo, hS⟩ ?_)
     (fun _ x => ⟨(tail.extract d tail.size).extract 0 n, sep_lift.mpr
       ⟨(by simp only [Array.size_extract]; omega), grant_intro x ⟨rfl, rfl, rfl, rfl,
         (by simp [Ptr.add]; omega), (by simp [Ptr.add, Array.size_extract]; omega)⟩⟩⟩) hh3
@@ -490,14 +497,14 @@ theorem pin_ownsIn {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {R : A
     ∀ h, (body ctx B e tail pb ∗ R) h → OwnsIn b B.A h := by
   rintro h ⟨h₁, h₂, hd, rfl, ⟨g₁, g₂, hdg, rfl, -, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩⟩, -⟩
   obtain ⟨b', hb', ho⟩ := regionIn_ownsIn hpin hok.2.2.1
-  rw [hok.2.2.2.2.2, hb] at hb'; cases hb'
+  rw [hok.2.2.2.2.2.1, hb] at hb'; cases hb'
   exact ((ho.union_left).union_right hd34 |>.union_right hdg).union_left
 
 theorem pin_block {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {R : Assn} {h : Heap}
     (hok : Ok B e tail pb) (hh : (body ctx B e tail pb ∗ R) h) : ∃ b, B.ptr.block = some b := by
   obtain ⟨h₁, h₂, hd, rfl, ⟨g₁, g₂, hdg, rfl, -, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩⟩, -⟩ := hh
   have := (regionIn_facts hpin).2.2.2
-  rw [hok.2.2.2.2.2] at this
+  rw [hok.2.2.2.2.2.1] at this
   exact Option.isSome_iff_exists.mp this
 
 theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 64)
@@ -506,7 +513,7 @@ theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 
   refine TotalTriple.conseq (P := own ctx B ∗ emp) ?_ (fun h hp => sep_emp.mpr hp) (fun _ _ h => h)
   refine own_open fun e tail pb hok => ?_
   have hok' := hok
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   refine TotalTriple.conseq (P := body ctx B e tail pb) ?_ (fun h hp => sep_emp.mp hp)
     (fun _ _ h => h)
   refine TotalTriple.of_pure (fun h hp => pin_block (R := emp) hok' (sep_emp.mpr hp))
@@ -682,7 +689,7 @@ theorem during_ownsIn {ctx : Ptr} {B : Buf} {e₀ e : Nat} {tail pb : Array Byte
     ∀ h, during ctx B e₀ e tail pb s k bs h → OwnsIn b B.A h := by
   rintro h ⟨h₁, h₂, hd, rfl, -, ⟨g₁, g₂, hdg, rfl, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩, -⟩⟩
   obtain ⟨b', hb', ho⟩ := regionIn_ownsIn hpin hok.2.2.1
-  rw [hok.2.2.2.2.2, hb] at hb'; cases hb'
+  rw [hok.2.2.2.2.2.1, hb] at hb'; cases hb'
   exact (((ho.union_left).union_right hd34).union_left).union_right hd
 
 /-- Nothing changed: the invariant and the grant. -/
@@ -724,7 +731,7 @@ theorem post_last_shrink {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} 
       granted (inv ctx B) s k bs') h := by
   have hin' := hin
   obtain ⟨hib, hlo, hhi⟩ := hin'
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   unfold during at hh
   have h2 := sep_mono (fun _ x => x) (fun _ x => sep_mono (fun _ y => y)
       (fun _ y => Region.regionIn_split y (k := n) (a' := 1) hn (Nat.mod_one _)) x) hh
@@ -740,7 +747,7 @@ theorem post_last_shrink {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} 
     ptr_ext (by simp [Ptr.add, hin.1]) (by simp [Ptr.add]; omega)
   refine sep_mono (fun _ x => own_intro (e := e - (bs.size - n))
       (tail := bs.extract n bs.size ++ tail) (pb := pb)
-      ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin⟩ ?_)
+      ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin, hpo, hS⟩ ?_)
     (fun _ x => ⟨bs.extract 0 n, sep_lift.mpr ⟨⟨(by simp <;> omega), (keepsPrefix_extract hn)⟩,
       grant_intro x ⟨hin.1, rfl, rfl, rfl, hin.2.1, (by simp <;> omega)⟩⟩⟩) h3
   unfold body
@@ -758,7 +765,7 @@ theorem post_last_grow {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s
       granted (inv ctx B) s k bs') h := by
   have hin' := hin
   obtain ⟨hib, hlo, hhi⟩ := hin'
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   unfold during at hh
   have h2 := sep_mono (fun _ x => x) (fun _ x => sep_mono (fun _ y => sep_mono
       (fun _ z => Region.regionIn_split z (k := n - bs.size) (a' := 1) (by omega) (Nat.mod_one _))
@@ -779,7 +786,7 @@ theorem post_last_grow {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s
   rw [hq] at h3
   refine sep_mono (fun _ x => own_intro (e := e + (n - bs.size))
       (tail := tail.extract (n - bs.size) tail.size) (pb := pb)
-      ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin⟩ x)
+      ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin, hpo, hS⟩ x)
     (fun _ x => ⟨bs ++ tail.extract 0 (n - bs.size), sep_lift.mpr ⟨⟨(by simp <;> omega), ?_⟩,
       grant_intro (Region.regionIn_join x) ⟨hin.1, rfl, rfl, rfl, hin.2.1, (by simp <;> omega)⟩⟩⟩) h3
   unfold keepsPrefix
@@ -792,7 +799,7 @@ theorem post_free_last {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s
     (inv ctx B).own h := by
   have hin' := hin
   obtain ⟨hib, hlo, hhi⟩ := hin'
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   unfold during at hh
   have hs0 : 0 ≤ s.off := by omega
   have hq : (B.ptr.add (e : Int)) = s.add (bs.size : Nat) :=
@@ -804,7 +811,7 @@ theorem post_free_last {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s
       (regionIn B.pin B.A B.S B.K 1 pb ∗ junk))) h := by sep_from hh
   rw [hq] at h3
   refine own_intro (e := e - bs.size) (tail := bs ++ tail) (pb := pb)
-    ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin⟩ ?_
+    ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin, hpo, hS⟩ ?_
   unfold body
   rw [← hnew]
   exact sep_mono (fun _ y => y) (fun _ y => sep_mono (fun _ z => Region.regionIn_weaken
@@ -836,7 +843,7 @@ theorem prologue {α : Type} {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array By
         heap_FixedBufferAllocator_isLastAllocation ctx s >>= c
       else throw .panic) Q := by
   have hok' := hok
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   obtain ⟨hib, hlo, hhi⟩ := hin
   refine TotalTriple.of_pure (fun h hp => pin_block (R := regionIn s.ptr B.A B.S B.K (2 ^ k) bs)
     hok' (during_body hp)) fun ⟨b, hb⟩ => ?_
@@ -858,7 +865,7 @@ theorem resize_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (n ra : BitVec 6
       (resizePost (inv ctx B) s.ptr k bs n.toNat) := by
   refine open_grant fun e tail pb hok hin => ?_
   have hok' := hok
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   have hin' := hin
   obtain ⟨hib, hlo, hhi⟩ := hin'
   have hcap : B.cap < 2 ^ 64 := by omega
@@ -945,7 +952,7 @@ theorem free_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (ra : BitVec 64) (
       (fun _ => (inv ctx B).own) := by
   refine open_grant fun e tail pb hok hin => ?_
   have hok' := hok
-  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
   have hin' := hin
   obtain ⟨hib, hlo, hhi⟩ := hin'
   have heN : (BitVec.ofNat 64 e).toNat = e := toNat_ofNat_lt (by omega)
