@@ -1,5 +1,6 @@
 import Proofs.Layout.Gen
 import ZigLean.Sep.Triple
+import ZigLean.Sep.Witness
 import ZigLean.Simp
 
 /-!
@@ -261,3 +262,32 @@ theorem writeTable_illegal (i : BitVec 64) (v : BitVec 32) (h : i.toNat < 3) :
   have hst := store_constGlobal v hacc rfl
   simp only [StateT.run] at hst
   simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst]
+
+/-! ## Non-vacuity and liveness witnesses: one value in one block -/
+
+nonvacuity_witness Num.decode_int := ⟨Enc.encode (Num.int 0), 0, LawfulEnc.decode_encode _, trivial⟩
+nonvacuity_witness Num.decode_of_int :=
+  ⟨Enc.encode (Num.int 0), 0, by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+
+theorem numInt_pre : pts Witness.p0 4 (Num.int 0) (Witness.mem1 (Enc.encode (Num.int 0))).heap :=
+  Witness.mem1_pts' _ (by decide)
+
+nonvacuity_witness numInt_spec := ⟨Witness.p0, 0, Witness.Admit.of_heap numInt_pre (Witness.mem1_seq _ _)⟩
+liveness_witness numInt_spec :=
+  ⟨Witness.p0, 0,
+    Witness.Live.of_heap numInt_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+nonvacuity_witness setNum_spec :=
+  ⟨Witness.p0, Num.int 0, 1, Witness.Admit.of_heap numInt_pre (Witness.mem1_seq _ _)⟩
+liveness_witness setNum_spec :=
+  ⟨Witness.p0, Num.int 0, 1,
+    Witness.Live.of_heap numInt_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+theorem bump_pre : pts Witness.p0 2 (Except.ok 0 : Except ErrName (BitVec 8))
+    (Witness.mem1 (Enc.encode (Except.ok 0 : Except ErrName (BitVec 8)))).heap :=
+  Witness.mem1_pts' _ (by decide)
+
+nonvacuity_witness bump_ok_spec := ⟨Witness.p0, 0, Witness.Admit.of_heap bump_pre (Witness.mem1_seq _ _)⟩
+liveness_witness bump_ok_spec :=
+  ⟨Witness.p0, 0,
+    Witness.Live.of_heap bump_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
