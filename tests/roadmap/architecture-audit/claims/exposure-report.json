@@ -3,7 +3,7 @@
  "source": "tests/roadmap/architecture-audit/claims/build.sh",
  "theorems": [
   {
-   "name": "AuditClaims.asm_divmod_total",
+   "name": "AuditClaims.asm_divmod_nonzero",
    "module": "AuditClaims.AsmTotal",
    "axioms": [
     "propext",
@@ -29,6 +29,7 @@
     "BitVec",
     "Eq",
     "Nat",
+    "Ne",
     "Option",
     "instHOrOfOrOp",
     "instMonadOption",
@@ -38,253 +39,6 @@
     "Asm.divmod",
     "BitVec.instHShiftLeftNat",
     "BitVec.instOfNat",
-    "BitVec.instOrOp",
-    "BitVec.setWidth",
-    "ExceptT.instMonad",
-    "HOr.hOr",
-    "HShiftLeft.hShiftLeft",
-    "Monad.toApplicative",
-    "OfNat.ofNat",
-    "Prod.fst",
-    "Prod.snd",
-    "Pure.pure",
-    "Zig.Error",
-    "Zig.Result"
-   ],
-   "conclusion_dependencies": [
-    "BitVec",
-    "Eq",
-    "Nat",
-    "Option",
-    "instHOrOfOrOp",
-    "instMonadOption",
-    "instOfNatNat",
-    "Applicative.toPure",
-    "Asm.airAsm_3653072158",
-    "Asm.divmod",
-    "BitVec.instHShiftLeftNat",
-    "BitVec.instOfNat",
-    "BitVec.instOrOp",
-    "BitVec.setWidth",
-    "ExceptT.instMonad",
-    "HOr.hOr",
-    "HShiftLeft.hShiftLeft",
-    "Monad.toApplicative",
-    "OfNat.ofNat",
-    "Prod.fst",
-    "Prod.snd",
-    "Pure.pure",
-    "Zig.Error",
-    "Zig.Result"
-   ],
-   "opaque_dependencies": [
-    "Asm.airAsm_3653072158",
-    "String.Internal.append"
-   ],
-   "extern_dependencies": [
-    "Array.emptyWithCapacity",
-    "Array.mk",
-    "Array.push",
-    "Array.size",
-    "Array.toList",
-    "ByteArray.emptyWithCapacity",
-    "ByteArray.mk",
-    "ByteArray.push",
-    "ByteArray.size",
-    "Char.ofNatAux",
-    "Int.add",
-    "Int.decEq",
-    "Int.decLe",
-    "Int.decLt",
-    "Int.decNonneg",
-    "Int.ediv",
-    "Int.emod",
-    "Int.mul",
-    "Int.natAbs",
-    "Int.neg",
-    "Int.negSucc",
-    "Int.ofNat",
-    "Int.sub",
-    "Nat.add",
-    "Nat.beq",
-    "Nat.ble",
-    "Nat.decEq",
-    "Nat.decLe",
-    "Nat.decLt",
-    "Nat.div",
-    "Nat.gcd",
-    "Nat.gcd._unary",
-    "Nat.land",
-    "Nat.lor",
-    "Nat.mod",
-    "Nat.modCore",
-    "Nat.mul",
-    "Nat.pow",
-    "Nat.pred",
-    "Nat.shiftLeft",
-    "Nat.shiftRight",
-    "Nat.sub",
-    "String.Internal.append",
-    "String.ofByteArray",
-    "String.ofList",
-    "String.toByteArray",
-    "String.utf8ByteSize",
-    "UInt32.ofBitVec",
-    "UInt32.toBitVec",
-    "UInt32.toNat",
-    "UInt8.ofBitVec",
-    "UInt8.ofNat",
-    "panicCore"
-   ],
-   "compiler_redirections": [
-    "Lean.Name.anonymous",
-    "Lean.Name.num",
-    "Lean.Name.str",
-    "Nat.repr"
-   ],
-   "violations": [],
-   "allowed": true,
-   "statement": {
-    "args": [
-     {
-      "args": [
-       {
-        "closed": "BitVec"
-       }
-      ],
-      "atom": {
-       "closed": "Zig.Result"
-      },
-      "extra": [],
-      "fn": "Zig.Result",
-      "fn_module": "ZigLean.Basic",
-      "params": [
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       },
-       {
-        "closed": "OfNat.ofNat"
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "Asm.divmod"
-      },
-      "extra": [],
-      "fn": "Asm.divmod",
-      "fn_module": "Proofs.Asm.Gen",
-      "params": [
-       "default",
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "Zig.Result"
-       },
-       {
-        "closed": "Applicative.toPure"
-       },
-       {
-        "closed": "BitVec"
-       },
-       {
-        "bvars": [
-         0
-        ],
-        "open": "HOr.hOr"
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "Pure.pure"
-      },
-      "extra": [],
-      "fn": "Pure.pure",
-      "fn_module": "Init.Prelude",
-      "params": [
-       "implicit",
-       "inst_implicit",
-       "implicit",
-       "default"
-      ],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "a",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
-   "name": "AuditClaims.asm_divmod_universal",
-   "module": "AuditClaims.Universal",
-   "axioms": [
-    "propext",
-    "Quot.sound"
-   ],
-   "conclusion": {
-    "args": [
-     {
-      "args": [
-       {
-        "head": "Zig.Result"
-       },
-       {
-        "head": "HOr.hOr"
-       }
-      ],
-      "head": "Pure.pure"
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement_dependencies": [
-    "BitVec",
-    "Eq",
-    "Nat",
-    "Option",
-    "instHOrOfOrOp",
-    "instMonadOption",
-    "instOfNatNat",
-    "Applicative.toPure",
-    "Asm.airAsm_3653072158",
-    "Asm.divmod",
-    "BitVec.instHShiftLeftNat",
     "BitVec.instOrOp",
     "BitVec.setWidth",
     "ExceptT.instMonad",
@@ -484,6 +238,332 @@
       "binder": "default",
       "defs": [],
       "name": "b",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [
+       "Ne"
+      ],
+      "name": "hb",
+      "prop": true,
+      "uses": [
+       1
+      ]
+     }
+    ],
+    "head": {
+     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "kind": "inductive",
+     "module": "Init.Prelude",
+     "name": "Eq"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "verified",
+      "theorem": "AuditClaims.asm_divmod_nonzero.nonvacuous"
+     }
+    }
+   }
+  },
+  {
+   "name": "AuditClaims.asm_divmod_nonzero.nonvacuous",
+   "module": "AuditClaims.AsmTotal",
+   "axioms": [],
+   "conclusion": {
+    "head": "Exists"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Exists",
+    "Nat",
+    "Ne",
+    "True",
+    "instOfNatNat",
+    "BitVec.instOfNat",
+    "OfNat.ofNat"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Exists",
+    "Nat",
+    "Ne",
+    "True",
+    "instOfNatNat",
+    "BitVec.instOfNat",
+    "OfNat.ofNat"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true,
+   "statement": {
+    "args": [
+     {
+      "args": [
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "closed": "BitVec"
+      },
+      "extra": [],
+      "fn": "BitVec",
+      "fn_module": "Init.Prelude",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [],
+    "head": {
+     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "kind": "inductive",
+     "module": "Init.Core",
+     "name": "Exists"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   }
+  },
+  {
+   "name": "AuditClaims.asm_divmod_total",
+   "module": "AuditClaims.AsmTotal",
+   "axioms": [
+    "propext",
+    "Quot.sound"
+   ],
+   "conclusion": {
+    "args": [
+     {
+      "head": "MonadExcept.throw"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadOption",
+    "instOfNatNat",
+    "Asm.divmod",
+    "BitVec.instOfNat",
+    "MonadExcept.throw",
+    "OfNat.ofNat",
+    "Zig.Error",
+    "Zig.Result",
+    "Zig.Error.trap"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadOption",
+    "instOfNatNat",
+    "Asm.divmod",
+    "BitVec.instOfNat",
+    "MonadExcept.throw",
+    "OfNat.ofNat",
+    "Zig.Error",
+    "Zig.Result",
+    "Zig.Error.trap"
+   ],
+   "opaque_dependencies": [
+    "Asm.airAsm_3653072158",
+    "String.Internal.append"
+   ],
+   "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.mk",
+    "Array.push",
+    "Array.size",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
+    "Nat.land",
+    "Nat.lor",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.shiftLeft",
+    "Nat.shiftRight",
+    "Nat.sub",
+    "String.Internal.append",
+    "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat",
+    "panicCore"
+   ],
+   "compiler_redirections": [
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str",
+    "Nat.repr"
+   ],
+   "violations": [],
+   "allowed": true,
+   "statement": {
+    "args": [
+     {
+      "args": [
+       {
+        "closed": "BitVec"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Result"
+      },
+      "extra": [],
+      "fn": "Zig.Result",
+      "fn_module": "ZigLean.Basic",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 0
+       },
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": "Asm.divmod"
+      },
+      "extra": [],
+      "fn": "Asm.divmod",
+      "fn_module": "Proofs.Asm.Gen",
+      "params": [
+       "default",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Zig.Error"
+       },
+       {
+        "closed": "Zig.Result"
+       },
+       {
+        "closed": "instMonadExceptOfMonadExceptOf"
+       },
+       {
+        "closed": "BitVec"
+       },
+       {
+        "closed": "Zig.Error.trap"
+       }
+      ],
+      "atom": {
+       "closed": "MonadExcept.throw"
+      },
+      "extra": [],
+      "fn": "MonadExcept.throw",
+      "fn_module": "Init.Prelude",
+      "params": [
+       "implicit",
+       "implicit",
+       "inst_implicit",
+       "implicit",
+       "default"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "a",
       "prop": false,
       "uses": []
      }
@@ -1571,174 +1651,6 @@
    }
   },
   {
-   "name": "AuditClaims.spoofed_within",
-   "module": "AuditClaims.ShadowWithin",
-   "axioms": [],
-   "conclusion": {
-    "head": "Zig.TotalTripleWithin"
-   },
-   "statement_dependencies": [
-    "BitVec",
-    "False",
-    "Nat",
-    "True",
-    "instOfNatNat",
-    "AuditClaims.root",
-    "OfNat.ofNat",
-    "Zig.TotalTripleWithin"
-   ],
-   "conclusion_dependencies": [
-    "BitVec",
-    "False",
-    "Nat",
-    "True",
-    "instOfNatNat",
-    "AuditClaims.root",
-    "OfNat.ofNat",
-    "Zig.TotalTripleWithin"
-   ],
-   "opaque_dependencies": [],
-   "extern_dependencies": [
-    "Int.add",
-    "Int.decLe",
-    "Int.decLt",
-    "Int.decNonneg",
-    "Int.natAbs",
-    "Int.neg",
-    "Int.negSucc",
-    "Int.ofNat",
-    "Int.sub",
-    "Nat.add",
-    "Nat.beq",
-    "Nat.ble",
-    "Nat.decEq",
-    "Nat.decLe",
-    "Nat.decLt",
-    "Nat.mod",
-    "Nat.modCore",
-    "Nat.mul",
-    "Nat.pow",
-    "Nat.pred",
-    "Nat.sub"
-   ],
-   "compiler_redirections": [],
-   "violations": [],
-   "allowed": true,
-   "statement": {
-    "args": [
-     {
-      "args": [
-       {
-        "closed": "OfNat.ofNat"
-       }
-      ],
-      "atom": {
-       "closed": "BitVec"
-      },
-      "extra": [],
-      "fn": "BitVec",
-      "fn_module": "Init.Prelude",
-      "params": [
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": null
-       },
-       {
-        "closed": "instOfNatNat"
-       }
-      ],
-      "atom": {
-       "closed": "OfNat.ofNat"
-      },
-      "extra": [],
-      "fn": "OfNat.ofNat",
-      "fn_module": "Init.Prelude",
-      "params": [
-       "implicit",
-       "default",
-       "inst_implicit"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": "True"
-      },
-      "extra": [],
-      "fn": "True",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "AuditClaims.root"
-      },
-      "extra": [],
-      "fn": "AuditClaims.root",
-      "fn_module": "AuditClaims.Gen",
-      "params": [
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "x",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "ff61493c5fa3e34659f6ca00880fd831",
-     "kind": "definition",
-     "module": "AuditClaims.ShadowWithin",
-     "name": "Zig.TotalTripleWithin"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
    "name": "AuditClaims.total_false_pre",
    "module": "AuditClaims.Vacuous",
    "axioms": [
@@ -1986,8 +1898,10 @@
     "Nat.sub"
    ],
    "compiler_redirections": [],
-   "violations": [],
-   "allowed": true,
+   "violations": [
+    "AuditClaims.unchecked_total"
+   ],
+   "allowed": false,
    "statement": {
     "args": [
      {
@@ -2158,8 +2072,10 @@
     "Nat.sub"
    ],
    "compiler_redirections": [],
-   "violations": [],
-   "allowed": true,
+   "violations": [
+    "AuditClaims.unchecked_universal"
+   ],
+   "allowed": false,
    "statement": {
     "args": [
      {
@@ -2910,410 +2826,6 @@
      }
     }
    }
-  },
-  {
-   "name": "_private.AuditClaims.Universal.0.ExceptT.bindCont.match_1.eq_1",
-   "module": "AuditClaims.Universal",
-   "axioms": [],
-   "conclusion": {
-    "args": [
-     {
-      "head": null
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement_dependencies": [
-    "Eq",
-    "Except",
-    "Except.error",
-    "Except.ok",
-    "ExceptT.bindCont.match_1"
-   ],
-   "conclusion_dependencies": [
-    "Eq",
-    "Except.ok",
-    "ExceptT.bindCont.match_1"
-   ],
-   "opaque_dependencies": [],
-   "extern_dependencies": [],
-   "compiler_redirections": [],
-   "violations": [],
-   "allowed": true,
-   "statement": {
-    "args": [
-     {
-      "args": [
-       {
-        "bvars": [
-         0,
-         1,
-         3
-        ],
-        "open": "Except.ok"
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0,
-        1,
-        2,
-        3
-       ],
-       "open": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       },
-       {
-        "bvar": 1
-       },
-       {
-        "bvar": 2
-       },
-       {
-        "bvars": [
-         0,
-         1,
-         3
-        ],
-        "open": "Except.ok"
-       },
-       {
-        "bvar": 4
-       },
-       {
-        "bvar": 5
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5
-       ],
-       "open": "ExceptT.bindCont.match_1"
-      },
-      "extra": [],
-      "fn": "ExceptT.bindCont.match_1",
-      "fn_module": "Init.Control.Except",
-      "params": [
-       "implicit",
-       "implicit",
-       "default",
-       "default",
-       "default",
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 3
-       }
-      ],
-      "atom": {
-       "bvars": [
-        3,
-        4
-       ],
-       "open": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "implicit",
-      "defs": [],
-      "name": "\u03b5",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "implicit",
-      "defs": [],
-      "name": "\u03b1",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "motive",
-      "prop": false,
-      "uses": [
-       0,
-       1
-      ]
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "a",
-      "prop": false,
-      "uses": [
-       1
-      ]
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "h_1",
-      "prop": false,
-      "uses": [
-       0,
-       1,
-       2
-      ]
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "h_2",
-      "prop": false,
-      "uses": [
-       0,
-       1,
-       2
-      ]
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "absent",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
-   "name": "_private.AuditClaims.Universal.0.ExceptT.bindCont.match_1.eq_2",
-   "module": "AuditClaims.Universal",
-   "axioms": [],
-   "conclusion": {
-    "args": [
-     {
-      "head": null
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement_dependencies": [
-    "Eq",
-    "Except",
-    "Except.error",
-    "Except.ok",
-    "ExceptT.bindCont.match_1"
-   ],
-   "conclusion_dependencies": [
-    "Eq",
-    "Except.error",
-    "ExceptT.bindCont.match_1"
-   ],
-   "opaque_dependencies": [],
-   "extern_dependencies": [],
-   "compiler_redirections": [],
-   "violations": [],
-   "allowed": true,
-   "statement": {
-    "args": [
-     {
-      "args": [
-       {
-        "bvars": [
-         0,
-         1,
-         3
-        ],
-        "open": "Except.error"
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0,
-        1,
-        2,
-        3
-       ],
-       "open": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       },
-       {
-        "bvar": 1
-       },
-       {
-        "bvar": 2
-       },
-       {
-        "bvars": [
-         0,
-         1,
-         3
-        ],
-        "open": "Except.error"
-       },
-       {
-        "bvar": 4
-       },
-       {
-        "bvar": 5
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5
-       ],
-       "open": "ExceptT.bindCont.match_1"
-      },
-      "extra": [],
-      "fn": "ExceptT.bindCont.match_1",
-      "fn_module": "Init.Control.Except",
-      "params": [
-       "implicit",
-       "implicit",
-       "default",
-       "default",
-       "default",
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 3
-       }
-      ],
-      "atom": {
-       "bvars": [
-        3,
-        5
-       ],
-       "open": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "implicit",
-      "defs": [],
-      "name": "\u03b5",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "implicit",
-      "defs": [],
-      "name": "\u03b1",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "motive",
-      "prop": false,
-      "uses": [
-       0,
-       1
-      ]
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "e",
-      "prop": false,
-      "uses": [
-       0
-      ]
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "h_1",
-      "prop": false,
-      "uses": [
-       0,
-       1,
-       2
-      ]
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "h_2",
-      "prop": false,
-      "uses": [
-       0,
-       1,
-       2
-      ]
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "absent",
-      "theorem": null
-     }
-    }
-   }
   }
  ],
  "generated_nodes": {
@@ -3331,6 +2843,10 @@
   }
  },
  "shadow_audit": {
+  "status": "error",
+  "name_clash": true
+ },
+ "shadow_within_audit": {
   "status": "error",
   "name_clash": true
  }

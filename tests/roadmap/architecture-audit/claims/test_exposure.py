@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -63,8 +64,9 @@ FINDINGS.update({'spoofed-total-head': 'S2', 'spoofed-registered-head': 'S2', 'r
                  'host-allowlist-masks-panic': 'F3', 'model-illegal-masks-native-value': 'F3',
                  'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1'})
 # Fixed: S1 (kernel replay rejects AuditClaims.Unchecked), F2, H1 (codex/fix-evidence-integrity),
-# S2-S6 (codex/fix-claim-binding), S7 and F3 (codex/fix-asm-faults-hostdiff). Open: F1.
-EXPECTED_EXPOSED = {'receipt-schema-skew'}
+# S2-S6 (codex/fix-claim-binding), S7 and F3 (codex/fix-asm-faults-hostdiff), F1 (batch 8's I06
+# coverage binding, kept in step with the schema-3 receipt of codex/fix-model-premises).
+EXPECTED_EXPOSED = set()
 
 
 def coverage_level(theorem_name, definition, strength):
@@ -86,9 +88,12 @@ def coverage_level(theorem_name, definition, strength):
         root = {'id': 'r', 'function': f'example.{function}', 'prefix': 'example.', 'namespace': namespace,
                 'contracts': [contract], 'assumptions': [],
                 'goals': [{'theorem': theorem_name, 'strength': strength, 'domain': 'all inputs'}]}
-        compiled, goals = project.bind_receipt(root, base, generated_sha, bundle, {contract: 'contract-sha'})
+        # (whole file, body without the profile record): batch 8's generated binding (I06).
+        compiled, goals = project.bind_receipt(root, base, (generated_sha, generated_sha), bundle,
+                                               {contract: 'contract-sha'})
     passed = {'status': 'passed'}
-    record = {'stages': {'translated': passed, 'compiled': compiled, 'tested': {'status': 'not_run'}},
+    record = {'stages': {'analyzed': passed, 'exported': passed, 'translated': passed, 'compiled': compiled,
+                         'tested': {'status': 'not_run'}},
               'goals': goals, 'input_validation': passed, 'absence_claims': project.absence_claims(goals, {})}
     level, _ = project.coverage_level(record)
     return level, goals[0]
@@ -142,20 +147,14 @@ def spoofed_registered_head():
     return shadow['status'] == 'pass', f'ShadowWithin audit status={shadow["status"]} name_clash={shadow["name_clash"]}'
 
 def receipt_schema_skew():
-    """proof-receipt.py seals schema 2 and its verifier demands 2; project.py coverage demands 1.
-    A genuine current receipt therefore never binds: coverage cannot pass `compiled` end to end,
-    while its unit tests use a schema-1 fake and a stub verifier."""
+    """F1: the receipt schema project.py coverage accepts must be the one proof-receipt.py seals
+    and verifies; a skew means a genuine current receipt never binds end to end."""
     source = (ROOT / 'scripts/proof-receipt.py').read_text()
-    sealed_two = "{'schema': 2, 'status': 'audited'" in source and "receipt['schema'] == 2" in source
-    with tempfile.TemporaryDirectory() as temp:
-        attempt = Path(temp).resolve()
-        (attempt / 'receipt.json').write_text(json.dumps({'schema': 2, 'status': 'audited'}))
-        (attempt / 'plan.json').write_text(json.dumps({'modules': [], 'root': temp}))
-        (attempt / 'audit.json').write_text(json.dumps({'status': 'pass', 'theorems': [], 'nodes': []}))
-        (attempt / 'after.json').write_text(json.dumps({'profiles': {}, 'compiled': [], 'context': {'sources': []}}))
-        bundle, reason = project.load_receipt(attempt, Path(temp) / 'unused-verifier.py', project.LIMITS)
-    return sealed_two and bundle is None and 'schema-1' in (reason or ''), f'sealed schema 2; coverage: {reason}'
-
+    sealed = re.findall(r"\{'schema': ([0-9]+), 'status': 'audited'", source)
+    verified = re.findall(r"receipt\['schema'\] == ([0-9]+)", source)
+    accepted = project.RECEIPT_SCHEMA if hasattr(project, 'RECEIPT_SCHEMA') else 1
+    exposed = sealed != [str(accepted)] or verified != [str(accepted)]
+    return exposed, f'sealed schema {sealed}, verified {verified}; coverage accepts {accepted}'
 
 def host_allowlist_masks_panic():
     """Off Linux-x86_64 a function listed in tests/diff/<ex>/host.txt turned *any* disagreement,

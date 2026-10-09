@@ -1304,13 +1304,19 @@ jobs:
           time python3 -B scripts/theorem_universe.py audit --output-dir "$RUNNER_TEMP/theorem-universe" \
             --shipped "$RUNNER_TEMP/air2lean-assumptions.json" --replay-cache "$RUNNER_TEMP/kernel-replay-cache.json"
 
-      # Architecture audit 4/6 counterexamples: S1 (kernel bypass), F2 and H1 must stay fixed.
+      # Architecture audit 4/6 counterexamples (docs/architecture-audit/claims.md): every finding
+      # stays fixed: kernel bypass (S1), spoofed heads (S2), vacuous or circular hypotheses (S3),
+      # ground instances (S4), roots outside the subject (S5), non-returning programs (S6), total
+      # asm opaques (S7), receipt schema skew (F1), unaudited theorem files (F2), untyped host
+      # differences and unpinned exclusions (F3), stale evidence (H1).
       - name: Architecture-audit claim fixtures
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
-        run: tests/roadmap/architecture-audit/claims/check.sh --require-fixed --finding S1 --finding F2 --finding H1
+        run: |
+          lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness
+          tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
 
       # Same premise tables over the kernel dependency graph of the audited translation.
       # --strict: the committed source index must cover every kernel-derived premise (D03).
@@ -1359,17 +1365,6 @@ jobs:
           LEAN_NUM_THREADS: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: tests/roadmap/claims/check.sh
-
-      # Architecture audit 4 counterexamples: spoofed heads, vacuous or circular hypotheses,
-      # ground instances, roots outside the subject and non-returning programs stay unverified.
-      - name: Claim binding counterexamples (S2-S6)
-        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
-        env:
-          LEAN_NUM_THREADS: "1"
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: |
-          lake build ZigLean AssuranceTools Proofs.Asm.Gen
-          tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S2,S3,S4,S5,S6
 
       # Error returns satisfy a partial triple; every model failure constructor falsifies it.
       - name: Outcome taxonomy Lean fixture

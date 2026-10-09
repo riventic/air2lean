@@ -820,15 +820,19 @@ def export_stages(root, links, profile, file_hashes, source_closure):
                  'compiler analysis itself is trusted', **common), exported
 
 
+# The receipt schema scripts/proof-receipt.py seals and verifies (schema 3: caller obligations).
+RECEIPT_SCHEMA = 3
+
+
 def load_receipt(attempt, verifier, limits):
     """Return (bundle, None) or (None, reason). The format is consumed, never extended."""
     try:
         attempt = attempt.resolve(strict=True)
         receipt, plan, audit, after = (load_evidence(path_under(attempt, name)) for name in
                                        ('receipt.json', 'plan.json', 'audit.json', 'after.json'))
-        if (not isinstance(receipt, dict) or receipt.get('schema') != 2 or receipt.get('status') != 'audited'
+        if (not isinstance(receipt, dict) or receipt.get('schema') != RECEIPT_SCHEMA or receipt.get('status') != 'audited'
                 or not all(isinstance(x, dict) for x in (plan, audit, after))):
-            return None, 'receipt is not a sealed audited schema-2 receipt'
+            return None, f'receipt is not a sealed audited schema-{RECEIPT_SCHEMA} receipt'
         if audit.get('status') != 'pass' or not isinstance(audit.get('theorems'), list) or not isinstance(audit.get('nodes'), list):
             return None, 'receipt audit did not pass or lacks theorem/declaration inventory'
         if not isinstance(plan.get('modules'), list) or not isinstance(plan.get('root'), str):
