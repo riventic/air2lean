@@ -1,6 +1,7 @@
 import Air2Lean.Check
 import Air2Lean.Air.Normalize
 import Air2Lean.Air.Anon
+import Air2Lean.Device
 
 /-! Check-only diagnostic collection. No emitter, compiler or proof checker runs here. -/
 namespace Air2Lean.Diagnostics
@@ -15,6 +16,8 @@ structure CheckArgs where
   limit : Nat := 256
   unitLimit : Nat := 64
   spawnPolicy : SpawnSemantics := .available
+  /-- `--device-contract <json>` (L13): check volatile integer accesses as device events. -/
+  deviceContract : Option String := none
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -37,7 +40,11 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     let spawnPolicy ← parseSpawnPolicy value
     parseOptions rest { out with spawnPolicy } true
   | ["--spawn-policy"] => throw "missing value for --spawn-policy"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --unit-diagnostic-limit and --spawn-policy; emission flags are incompatible"
+  | "--device-contract" :: path :: rest =>
+    if out.deviceContract.isSome then throw "duplicate --device-contract"
+    parseOptions rest { out with deviceContract := some path } spawnPolicySeen
+  | ["--device-contract"] => throw "missing value for --device-contract"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy and --device-contract; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -45,7 +52,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
 
 structure FileResult where
   file : String
@@ -210,7 +217,8 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
 /-- Pure per-file boundary used by both the CLI and kernel-checked regressions. Fatal
 malformed input (JSON syntax, undecodable AIR, a structurally unusable profile, invalid
 references) stops the unit; within each phase, independent findings are all reported. -/
-def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.run do
+def inspect (file contents : String) (initial : Log) (device : Option DeviceContract := none) :
+    FileResult × Log := Id.run do
   let mut log := initial
   let empty : FileResult := { file }
   let parsed := StrictJson.parse contents
@@ -280,12 +288,12 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
     | let (blockedCalls, collected) := collectNormalization file canonical hasMarkers normalized log
       return ({ unit with blockedCalls }, collected.add (skipped file name .check "fully_normalized_function"))
   let before := log.observed
-  let checked := collectFunctionChecksDetailed file f log
+  let checked := collectFunctionChecksDetailed file f log device
   log := checked.log
   -- A final compatibility check catches any checks not decomposed above. It is
   -- skipped only when rejection is already established, never when accepting.
   if log.observed == before then
-    log := log.record (boundary file name .instructionFailure .check .validationFailure) (check f)
+    log := log.record (boundary file name .instructionFailure .check .validationFailure) (check f device)
   return ({ unit with
     normalized := some f
     index := some checked.index
@@ -447,6 +455,12 @@ private def readInput (path : System.FilePath) (charged : IO.Ref Nat) : IO (Exce
 
 private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
   let mut log : Log := { limit := a.limit, unitLimit := a.unitLimit }
+  let device ← match a.deviceContract with
+    | none => pure none
+    | some path =>
+      match DeviceContract.parse (← StrictJson.readFile path) with
+      | .ok contract => pure (some contract)
+      | .error message => throw (IO.userError s!"{path}: {message}")
   let entries ← a.directory.readDir
   let paths := ((entries.filter fun e => e.fileName.endsWith ".json").qsort
     (fun x y => decide (x.fileName < y.fileName))).map (·.path)
@@ -480,7 +494,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
   let renamed := Anon.renumberAll texts
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do
-    let result := inspect file contents log
+    let result := inspect file contents log device
     log := result.2
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile

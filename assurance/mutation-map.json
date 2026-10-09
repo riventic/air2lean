@@ -222,6 +222,18 @@
         {
           "path": "tests/roadmap/dispatch/Proofs.lean",
           "anchor": "next (.foreign n) = none"
+        },
+        {
+          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "anchor": "dispatch_template (badInv N) μ (post N) using mach_step"
+        },
+        {
+          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "anchor": "dispatch_template (inv N) flatμ (post N) using mach_step"
+        },
+        {
+          "path": "tests/roadmap/dispatch-templates/check.sh",
+          "anchor": "is not an enclosing loop-switch"
         }
       ],
       "mutants": [
@@ -547,9 +559,21 @@
       ]
     },
     "L13": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": ["forwarding", "operand-order"],
+      "negative_tests": [
+        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def assert_volatile"},
+        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_device"},
+        {"path": "tests/roadmap/volatile-effects/check-device.sh", "anchor": "rdtsc twice, rdrand, output-less asm and non-volatile rdtsc"},
+        {"path": "tests/roadmap/volatile-effects/test_cli.py", "anchor": "def check_asm"}
+      ],
+      "mutants": [
+        {"name": "merge_reads", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "reorder_write_read", "category": "operand-order", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "drop_unused_read", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "ordinary_load", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "merge_asm", "category": "forwarding", "path": "tests/roadmap/volatile-effects/device-mutants.py"},
+        {"name": "repeatable_asm", "category": "other", "path": "tests/roadmap/volatile-effects/device-mutants.py"}
+      ]
     },
     "L14": {
       "categories": [],
@@ -1569,6 +1593,14 @@
         {
           "path": "tests/roadmap/counterexamples/test_counterexample.py",
           "anchor": "def test_capped_case_is_unsolved_and_stale_case_rejected"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_limits_are_unsolved_never_program_bugs"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_correct_loop_has_no_counterexample"
         }
       ],
       "mutants": [
@@ -2148,6 +2180,15 @@
           "category": "other"
         }
       ]
+    },
+    "X01": {
+      "categories": [],
+      "negative_tests": [
+        {"path": "tests/roadmap/c-frontend/run.py", "anchor": "corpus source changed since the record"},
+        {"path": "tests/roadmap/c-frontend/run.py", "anchor": "cgen.py no longer produces the recorded program"},
+        {"path": "tests/roadmap/c-frontend/cgen.py", "anchor": "a loop counter is assigned"}
+      ],
+      "mutants": []
     }
   }
 }

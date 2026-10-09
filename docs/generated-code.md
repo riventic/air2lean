@@ -79,6 +79,8 @@ A `switch` on an exhaustive enum that names every value becomes a `match` with o
 
 A bare union has a hidden tag in `ReleaseSafe` (the exporter's `safety_tag`): it is a tagged union, and a read of a field that is not active panics (`inactiveUnionField`). An `extern` or `packed` union is its bytes (§Casts, layout and function pointers).
 
+A `noreturn` field (`std.Io.Terminal.Mode.windows_api` off Windows) is never active: it has no constructor and no accessors, adds no payload bytes, and its tag value stays in the tag enum. An instruction that activates, reads or points to it, and a constant with it active, are rejected; in memory its tag throws `.illegal` (`tests/roadmap/noreturn-variants`).
+
 ### Vectors
 
 The checked vector subset has integer, float, or bool lanes. Vectors of pointers and bitcasts
@@ -140,7 +142,7 @@ modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i
 
 ## Memory
 
-`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers, or 32-bit pointers for a wasm32 profile (§Pointer width). The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects an explicit non-little-endian value or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices (4 and 8 bytes for a 32-bit profile). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
+`ZigLean/Mem/` models memory as blocks of bytes (CompCert style), using a little-endian ABI with 64-bit pointers, or 32-bit pointers for a wasm32 profile (§Pointer width); a qualified big-endian profile selects the big-endian encodings (§Byte order). The optional AIR field `target_endian` records `"little"` or `"big"`; the parser rejects a value that differs from the schema-12 profile's `endian`, big endian without such a profile, or a malformed field. This additive schema-11 field is optional for older exports: if absent, little-endian is assumed, not verified. The memory layout checker compares exported sizes and alignments with the model, including its 8-byte pointers and 16-byte slices (4 and 8 bytes for a 32-bit profile). A block has its bytes, an alignment, a kind (`stack`, `heap`, `global`), a live flag and an address. A byte is `undef`, `int b`, `ptrFrag p i` (byte `i` of the pointer `p`, so a pointer in memory keeps its block), `errFrag e i` (byte `i` of the code of the error `e`, §Casts, layout and function pointers), or `part m b` (only the low `m` bits of `b` are defined). A `Zig.Ptr` is a block and a byte offset.
 
 ### Pointer width
 
@@ -172,11 +174,12 @@ A function **uses memory** if a parameter or the return type contains a pointer 
 | call of a function that uses memory | — | `Zig.callM` |
 | call of a pure function | `Zig.call` | `Zig.callR`; a `[]const T` argument is `Zig.readSlice T align s` |
 
-Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragment](null-pointers.md): address null tests, casts and direct accesses under the existing live-block rule. Nullable pointer temporaries classify a function as using memory even when its inputs/output are integers or bools, because address observations read the block-address state. A stored C/allowzero pointer (a `*[*c]T` target, struct field, array item or global) binds the storage dictionary `Zig.nullablePtrEnc` (null is eight zero bytes), and a projection from a C/allowzero base is `Zig.ptrProjectNullable` (illegal at address zero). Optionals of nullable pointers, nullable pointers in unions/tuples/error-union payloads, and nullable slicing/bulk memory/parent recovery remain rejected.
+Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragment](null-pointers.md): address null tests, casts and direct accesses under the existing live-block rule. Nullable pointer temporaries classify a function as using memory even when its inputs/output are integers or bools, because address observations read the block-address state. A stored C/allowzero pointer (a `*[*c]T` target, struct field, array item or global) binds the storage dictionary `Zig.nullablePtrEnc` (null is eight zero bytes), and a projection from a C/allowzero base is `Zig.ptrProjectNullable` (a zero offset is the base, also at address zero; a nonzero offset from address zero is illegal), or `Zig.ptrProjectNonnull` (illegal at address zero) when the compiler types the result as a nonnullable pointer. Optionals of nullable pointers, nullable pointers in unions/tuples/error-union payloads, and nullable slicing/bulk memory/parent recovery remain rejected.
 
 | AIR, through a pointer to memory | Lean |
 |---|---|
 | `load` | `Zig.load T align p` |
+| `load`, `store`, `ptr_elem_val`, `slice_elem_val` through a volatile pointer (only with `--device-contract`; rejected otherwise) | `Zig.vload air2lean_device bits align p`, `Zig.vstore air2lean_device bits align p v`: one event of the device trace ([volatile-effects.md](volatile-effects.md#device-contract)) |
 | `store` | `Zig.store (α := T) align p v`; a store of `undefined` is `Zig.storeUndef T align p`; a partly `undefined` array, struct or tuple constant is `Zig.storeBytes p align (Zig.writeBytes (Zig.Enc.encode (v : T)) off (Array.replicate len .undef))`, one `writeBytes` per `undefined` item or field (below) |
 | `struct_field_ptr*` | `p.add <offset>` (the exporter's field offset) |
 | `is_null_ptr`, `is_non_null_ptr` | `?*T`: a load of the pointer (`null` is address 0). `?T`: `Zig.optIsSome T p`, the flag byte after the payload |
@@ -204,6 +207,10 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 `Zig.ptrFromAddr` recovers a block's provenance for addresses inside it or exactly one byte past its last byte, including dead blocks. The one-past pointer can be moved back into the block; it cannot be dereferenced, and recovering provenance does not revive a freed block. Addresses in allocation gaps retain no block. Under the opt-in address-reuse policy (`AllocPolicy.reuseAddr`), a freed block and a later block can cover the same address; then the recovery throws `.unspecified` unless the program declares the address-sensitive contract `ProvenanceMode.liveBlock` ([address-reuse.md](address-reuse.md)).
 
 Two pointers into different blocks have the order of the model's addresses, which can differ from the compiled code. The `@memcpy` overlap check of `ReleaseSafe` compares pointers: for two blocks, the model and the compiled code both find no overlap.
+
+### Byte order
+
+A big-endian profile (`profile.endian = "big"`, s390x-linux, [profiles.md](profiles.md#byte-order-big-endian)) generates the same terms as a little-endian one, with two differences. The file opens `Zig.BigEndian` after its `namespace`: its scoped `Zig.Enc` instances for `BitVec n`, `Zig.Float fmt`, `Zig.Slice`, `Option Zig.Slice` and the vectors of integer or float lanes (`ZigLean/Endian.lean`) take priority over the global little-endian ones, so every struct, enum, optional, array, error-union and `extern` union encoding that the file builds from them stores integers most significant byte first. Bit-pointer accesses are `Zig.loadBitsOf .big`, `Zig.storeBitsOf .big` and `Zig.storeUndefBitsOf .big`: the host bytes in little-endian order, then the field's bits as in `ZigLean/Packed.lean`. A little-endian profile emits neither, so its output is unchanged. Each `…Of .little` definition is the little-endian one by `rfl` (`intEncOf_little`, `loadBitsOf_little`, …).
 
 ### Globals
 
@@ -522,7 +529,14 @@ Zig source names a variable as an output operand, so real `=m`/`+m` refs are loc
 
 Register-only support does not make arbitrary asm safe: ASM-03 is the premise that the instructions behave like the wrapper (read only the declared inputs and read-write locations, write every declared output and nothing else, including through an integer input that holds an address).
 
-`volatile` and register/flag `clobbers` (`docs/air-json.md`) do not change the translation: an opaque's correctness comes only from what a proof states about it, so nothing represents "this may have effects a proof cannot see." In particular a volatile asm (port I/O, counters) is modelled as a repeatable function of its inputs; see [volatile-effects.md](volatile-effects.md) §Residuals. Volatile *memory* accesses are rejected there.
+Every accepted asm op matches the reviewed allowlist `Air2Lean/AsmAllowlist.lean`: template,
+constraints, clobbers and target (L13, A01). An opaque is a repeatable function of its inputs,
+which is sound only for input-determined instructions. Any other asm, `volatile` or not, is
+`ASM_VOLATILE_EFFECT`. This covers `rdtsc`, `rdrand`, port I/O, output-less asm and `memory`
+clobbers. With `--device-contract`, a declared `asm volatile` is instead `Zig.vasm`, one event of
+the device trace. See [volatile-effects.md](volatile-effects.md#inline-asm), which also explains
+why non-volatile asm needs the list. `volatile` and `clobbers` do not change the translation of an
+allowlisted op.
 
 ### Differential-test implementation
 
@@ -555,6 +569,15 @@ One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>
 `tests/diff/common.zig` holds everything shared across examples: the fork-per-input child, the panic override, `renderPayload` (the protocol below, generic over `@typeInfo(T)`, so one function serializes ints, `bool`, and nested `?T`/`E!T`), and the JSONL read/write loop. A harness only lists its example's functions.
 
 `scripts/check.sh`, `scripts/diff.sh`, and `scripts/mutate.sh` loop over `AIR2LEAN_EXAMPLES` (default: every dir in `examples/`).
+
+### Generated-module integrity
+
+A generated module holds translator output only, so a theorem about it is a theorem about generated code. Never edit one by hand: put a hand-written definition or lemma in a separate module that imports it. `scripts/gen-integrity.py check` (CI, after the translator is built and before `scripts/check.sh` rewrites `Proofs/<Ex>/Gen.lean`) retranslates every tracked generated module (a `Gen.lean`/`Gen-<os>.lean`, or any `.lean` file whose first line is an `-- air2lean-profile:` record) from its committed AIR with the arguments of its own check, and fails on any difference:
+
+- an example's file, for each Zig version of `examples/<ex>/zig-versions` (else every version of `compatibility.json`) and Linux, plus each other OS with its own `air-<os>/` or `Gen-<os>.lean`: the overlays `tests/golden/<ex>/air`, `tests/golden/<v>/<ex>/air`, `tests/golden/<v>/<ex>/air-<os>`, composed as `scripts/check.sh` composes them, translated with `--namespace <Ex> --prefix <ex>.` and `examples/<ex>/translate.args`, must equal the file that `check.sh` compares (above) after its first line. Goldens recorded by several versions/schemas carry no single profile record; `check.sh` validates that line against fresh AIR, and the gate requires it to be a valid record;
+- a roadmap fixture or case study (`FIXTURES` in the script): byte-identical, or after the profile line where its committed AIR predates schema 12 or its own check compares only the body.
+
+A tracked generated module that no rule covers fails. `EXCEPTIONS` lists each reviewed exception with its reason (only the historical `tests/roadmap/try-pointers/origin/TryPointers/Gen.lean`); no Lean module may import one. `scripts/gen-integrity.py attest [PATH ...]` accepts `Proofs/<Ex>/Gen.lean` as the translation of any version/OS of `<ex>`, for consumers that run after `check.sh` has swapped in one version's translation; proof receipts (`tests/roadmap/proof-receipts/check.sh`) and `scripts/theorem-inventory.py record` refuse to run unless it passes.
 
 ### Protocol
 

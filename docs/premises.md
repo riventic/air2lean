@@ -38,8 +38,8 @@ the tool:
    applies the token rules to every identifier and resolved name in the closure. `statement`
    rules see only the theorem's own hypotheses and conclusion.
 4. Adds the profile of every generated module reached. Its first-line
-   `-- air2lean-profile:` header selects PRF-02; no header or `legacy-abi64-le` selects
-   PRF-01. A generated import absent from the repository uses PRF-03.
+   `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
+   header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
 5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
 
 The check fails if a runtime module with declarations has no mapping, if any ID is not
@@ -79,15 +79,16 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 | Category | IDs |
 |---|---|
-| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) |
+| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) [PRF-05](#prf-05) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
-| Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
+| Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
+| Device effects | [DEV-01](#dev-01) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
-| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
+| Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
@@ -137,6 +138,19 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: the runtime module `ZigLean.Mem.Width` or its width names (`PtrWidth`,
   `Slice32`, `SliceOf`, `Wasm32`).
 - Sources: [generated-code.md](generated-code.md#pointer-width), `ZigLean/Mem/Width.lean`.
+
+<a id="prf-05"></a>
+### PRF-05 — Recorded `abi64-be-v1` big-endian profile
+
+- Kind: environment.
+- Statement: As PRF-02, for a big-endian target (s390x-linux): the theorem concerns the
+  analyzed AIR of the recorded profile under the big-endian encodings of `Zig.BigEndian`
+  (`ZigLean/Endian.lean`): integers, floats, slice lengths, packed backing integers,
+  bit-pointer hosts and whole-byte vector lanes most significant byte first. Pointer and error
+  bytes stay symbolic. The operations of the fail-closed list are absent. No shipping-binary
+  claim; the native observations of `tests/roadmap/big-endian` are bounded evidence.
+- Derived from: a reached generated module whose header names `abi64-be-v1`.
+- Sources: [profiles.md](profiles.md#byte-order-big-endian), `ZigLean/Endian.lean`.
 
 ## Allocator policies
 
@@ -486,6 +500,44 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: tokens `monotonicNow`, `wallNow`.
 - Sources: [env-boundaries.md](env-boundaries.md#operations).
 
+<a id="env-03"></a>
+### ENV-03 — Linux raw read/write/close are the bound models
+
+- Kind: environment.
+- Statement: On `x86_64-linux` without libc, each call of `std.os.linux.read`, `write` or
+  `close` (one `syscall` instruction each) behaves as `Zig.Env.Linux.read`/`write`/`close` over
+  the `Zig.Env.Host` installed in `Zig.Mem`: the raw `usize` result is the byte count or
+  `-errno` for the six modelled errors (EAGAIN, EPIPE, ENOSPC, EACCES, EIO, ECONNRESET), `write`
+  offers exactly the `count` bytes at `buf` and `read` stores the received bytes there. The
+  models are stricter than the kernel: a descriptor that is negative or not open is `.illegal`
+  (no `EBADF`, no reuse), and `EINTR`, other errnos, signals and blocking are not modelled.
+  Everything above these three functions in std is translated from AIR, not assumed.
+- Derived from: `ZigLean.Env.Linux` (with ENV-01 for the operations' contract).
+- Sources: [env-boundaries.md](env-boundaries.md#bound-primitives),
+  `tests/roadmap/env-boundaries/StdIo.lean`.
+
+## Device effects
+
+<a id="dev-01"></a>
+### DEV-01 — Declared device: trace and read oracle
+
+- Kind: environment.
+- Statement: With `--device-contract`, every executed volatile load or store of an 8/16/32/64-bit
+  integer is one event in `Mem.dev.trace`, in program order (`Zig.vload`/`Zig.vstore`). A read's
+  value is `Mem.dev.oracle` applied to the whole trace so far, the address and the width; theorems
+  quantify over the oracle or state which answers they need. Device registers are the declared
+  addresses of the generated `air2lean_device`, reached through block-less pointers. The device
+  neither observes nor changes model memory (no DMA, no aliasing of model blocks), so ordinary
+  memory accesses are not events and their order relative to events is not claimed. Interrupts,
+  other bus masters, timing, side effects of a read beyond the trace, and multi-threaded device
+  access are outside the model. A declared `asm volatile` (`Zig.vasm`/`vasmEffect`) is an `asm`
+  event of the same trace, with outputs from `Mem.dev.asmOracle`; a `memory` clobber is never
+  declared. No correspondence with real hardware is claimed: the compiled
+  program's volatile order is trusted to match the AIR order (TRU-03).
+- Derived from: `ZigLean.Mem.Device`; tokens `vload`, `vstore`, `vasm`, `vasmEffect`, `DevOracle`, `AsmOracle`, `Device`,
+  `DevState.oracle`, `DevState.asmOracle`. The `Mem.dev` field alone (for example in a struct update) does not select it.
+- Sources: [volatile-effects.md](volatile-effects.md#device-contract), `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`.
+
 ## Opaque math and floats
 
 <a id="mth-01"></a>
@@ -573,7 +625,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
   global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
   misaligned or dead accesses are `.illegal`. Undefined bytes are explicit.
-- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
+- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
 <a id="sem-03"></a>
@@ -610,6 +662,19 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   memory use. Relating one to those needs a separate calibration argument.
 - Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
+
+<a id="sem-06"></a>
+### SEM-06 — Canonical AIR fragment semantics
+
+- Kind: meaning.
+- Statement: `Air2Lean.Sem` (`Air2Lean/Sem.lean`) is the meaning of a canonical AIR function in
+  its fragment: an interpreter over the decoded `Air2Lean.Func`, over ZigLean's primitive
+  operations and `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment
+  and ill-typed steps are `⊥`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`) relates the
+  generated definition to this meaning; it does not relate the meaning to Zig, the exporter
+  or canonicalization (TRU-02).
+- Derived from: `Air2Lean.Sem`.
+- Sources: [air-semantics.md](air-semantics.md).
 
 ## External models
 

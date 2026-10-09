@@ -23,6 +23,10 @@ REGISTRY = json.loads((ROOT / bm.REGISTRY).read_text())
 FILES = {'docs/premises.md', 'compatibility.json', 'README.md', 'docs/build-modes.md'}
 for record in REGISTRY['records']:
     FILES.update(item['path'] for item in record['evidence'])
+    for item in record['evidence']:
+        if item['kind'] == 'run':
+            run = json.loads((ROOT / item['path']).read_text())
+            FILES.update(e['reproducer'] for e in run['triage'] + run['excluded_examples'])
 for part in REGISTRY['shipping'].values():
     if isinstance(part, dict):
         FILES.update(part['sources'])
@@ -62,15 +66,26 @@ class CommittedRecord(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(bm.main(['check']), 0)
-        self.assertIn('8 records, 1 qualified', out.getvalue())
+        self.assertIn('8 records, 4 qualified', out.getvalue())
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(bm.main(['commands']), 0)
-        self.assertIn('ReleaseFast.json', out.getvalue())
+        self.assertIn('stage2_x86_64', out.getvalue())
 
-    def test_reference_build_is_the_only_qualified_pair(self):
+    def test_qualified_pairs_are_the_llvm_builds(self):
         qualified = [(r['mode'], r['backend']) for r in REGISTRY['records'] if r['status'] == 'qualified']
-        self.assertEqual(qualified, [('ReleaseSafe', 'llvm')])
+        self.assertEqual(sorted(qualified), sorted((m, 'llvm') for m in bm.MODES))
+
+    def test_every_pair_with_a_run_cites_each_target(self):
+        for r in REGISTRY['records']:
+            cited = sorted(Path(e['path']).name.split('--')[1] for e in r['evidence'] if e['kind'] == 'run')
+            self.assertEqual(cited, sorted(r.get('targets', [])), r['mode'])
+
+    def test_unqualified_backend_records_state_findings(self):
+        for mode in ('Debug', 'ReleaseSafe', 'ReleaseFast'):
+            stage2 = record(REGISTRY, mode, 'stage2_x86_64')
+            self.assertEqual(stage2['status'], 'unqualified')
+            self.assertIn('stage2-x86_64-narrow-int-extension', stage2['findings'])
 
     def test_release_fast_claim_states_premise(self):
         fast = record(REGISTRY, 'ReleaseFast', 'llvm')
@@ -99,15 +114,18 @@ class NegativeControls(Fixture):
         self.assertRejects('claim must be one of')
 
     def test_qualified_without_evidence(self):
-        record(self.data, 'ReleaseSafe', 'llvm')['evidence'] = []
+        reference = record(self.data, 'ReleaseSafe', 'llvm')
+        reference['evidence'] = []
+        self.assertRejects('must cite a run for target aarch64-macos')
+        reference['targets'] = []
         self.assertRejects('must cite profile evidence')
         self.assertRejects('must cite command evidence')
 
     def test_qualifying_without_evidence_or_claim(self):
-        debug = record(self.data, 'Debug', 'llvm')
-        debug['status'] = 'qualified'
-        self.assertRejects('Debug/llvm: a qualified record must state its claim')
-        self.assertRejects('Debug/llvm: a qualified record must cite profile evidence')
+        small = record(self.data, 'ReleaseSmall', 'stage2_x86_64')
+        small['status'] = 'qualified'
+        self.assertRejects('ReleaseSmall/stage2_x86_64: a qualified record must state its claim')
+        self.assertRejects('ReleaseSmall/stage2_x86_64: a qualified record must cite profile evidence')
 
     def test_missing_evidence_file(self):
         record(self.data, 'ReleaseSafe', 'llvm')['evidence'][0]['path'] = 'tests/golden/none.json'
@@ -159,11 +177,14 @@ class NegativeControls(Fixture):
         self.assertRejects("claim 'no-illegal-behaviour-transfer' must cite the premises")
 
     def test_unqualified_claim_needs_commands(self):
-        del record(self.data, 'ReleaseFast', 'llvm')['commands']
+        stage2 = record(self.data, 'Debug', 'stage2_x86_64')
+        stage2.update(claim='tested-input-agreement', premises=['TRU-03'])
+        del stage2['commands']
         self.assertRejects('must list the commands')
 
     def test_excluded_cannot_claim(self):
-        record(self.data, 'ReleaseFast', 'stage2_x86_64')['claim'] = 'no-illegal-behaviour-transfer'
+        record(self.data, 'ReleaseSmall', 'stage2_x86_64').update(
+            status='excluded', claim='no-illegal-behaviour-transfer', premises=['TRU-03'])
         self.assertRejects('an excluded record cannot support a claim')
 
     def test_fast_math_must_be_excluded(self):
@@ -187,6 +208,7 @@ class NegativeControls(Fixture):
         compat = json.loads(path.read_text())
         compat['translation']['optimize'] = 'ReleaseFast'
         path.write_text(json.dumps(compat))
+        record(self.data, 'ReleaseFast', 'llvm')['status'] = 'unqualified'
         self.assertRejects("translation.optimize is 'ReleaseFast'")
         self.assertRejects('reference build ReleaseFast/llvm is not qualified')
 
@@ -204,6 +226,111 @@ class NegativeControls(Fixture):
         (self.root / 'docs/extra.md').write_text(
             'ReleaseSmall is unqualified ([build-modes.md](build-modes.md)).\n')
         self.assertEqual(self.errors(), [])
+
+
+dspec = importlib.util.spec_from_file_location('diff_report', ROOT / 'scripts/diff-report.py')
+dr = importlib.util.module_from_spec(dspec)
+dspec.loader.exec_module(dr)
+
+
+class UnsafeModes(unittest.TestCase):
+    """scripts/diff-report.py: what ReleaseFast and ReleaseSmall may exclude."""
+
+    def classify(self, native, model, nkind, mkind, exclude_ub):
+        return dr.classify(native, model, nkind, mkind, None, False, None, exclude_ub)
+
+    def test_model_throw_is_excluded_only_without_safety_checks(self):
+        args = ({'ok': 1}, {'fail': 'Zig.Error.overflow'}, dr.Kind.VALUE, dr.Kind.MODEL_PANIC)
+        self.assertEqual(self.classify(*args, True), dr.Status.UB_EXCLUDED)
+        self.assertEqual(self.classify(*args, False), dr.Status.MISMATCH)
+
+    def test_value_difference_without_a_model_throw_stays_a_mismatch(self):
+        args = ({'ok': 1}, {'ok': 2}, dr.Kind.VALUE, dr.Kind.VALUE)
+        self.assertEqual(self.classify(*args, True), dr.Status.MISMATCH)
+
+    def test_unrenderable_result_of_an_illegal_call(self):
+        args = ({'fail': 'unknown'}, {'fail': 'Zig.Error.panic'},
+                dr.Kind.NATIVE_HARNESS_FAILURE, dr.Kind.MODEL_PANIC)
+        self.assertEqual(self.classify(*args, True), dr.Status.UB_EXCLUDED)
+        self.assertEqual(self.classify(*args, False), dr.Status.NATIVE_HARNESS_FAILURE)
+
+    def test_harness_failure_with_a_value_model_is_never_excluded(self):
+        args = ({'fail': 'unknown'}, {'ok': 1}, dr.Kind.NATIVE_HARNESS_FAILURE, dr.Kind.VALUE)
+        self.assertEqual(self.classify(*args, True), dr.Status.NATIVE_HARNESS_FAILURE)
+
+    def test_legacy_bucket(self):
+        self.assertEqual(dr.legacy_bucket({'ok': 1}, {'fail': 'Zig.Error.overflow'}, False, None, None, True),
+                         'ub_excluded')
+        self.assertEqual(dr.legacy_bucket({'ok': 1}, {'fail': 'Zig.Error.overflow'}, False), 'mismatch')
+
+
+class RunControls(Fixture):
+    """Negative controls for the native run records."""
+
+    def run_path(self, mode, backend, target='x86_64-linux'):
+        return self.root / bm.RUN_DIR / f'0.16.0--{target}--{mode}--{backend}.json'
+
+    def edit(self, mode, backend, change, target='x86_64-linux'):
+        path = self.run_path(mode, backend, target)
+        run = json.loads(path.read_text())
+        change(run)
+        path.write_text(json.dumps(run))
+
+    def test_counts_must_add_up(self):
+        self.edit('Debug', 'llvm', lambda r: r['counts'].update(value_match=r['counts']['value_match'] + 1))
+        self.assertRejects('counts do not add up to cases')
+
+    def test_safety_checked_mode_cannot_exclude_model_throws(self):
+        def change(run):
+            run['counts']['value_match'] -= 1
+            run['counts']['ub_excluded'] = 1
+        self.edit('Debug', 'llvm', change)
+        self.assertRejects('Debug keeps safety checks')
+
+    def test_mismatch_needs_triage(self):
+        def change(run):
+            run['counts']['value_match'] -= 1
+            run['counts']['mismatch'] = 1
+        self.edit('Debug', 'llvm', change)
+        self.assertRejects('mismatches that the triage entries do not cover')
+
+    def test_triage_needs_reproducer_and_stated_exception(self):
+        (self.root / 'tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig').unlink()
+        self.assertRejects('needs a note and an existing reproducer file')
+        record(self.data, 'ReleaseFast', 'llvm')['exceptions'] = []
+        self.assertRejects('is not a stated exception of the record')
+
+    def test_qualified_record_needs_every_target(self):
+        record(self.data, 'ReleaseSafe', 'llvm')['evidence'] = [
+            e for e in record(self.data, 'ReleaseSafe', 'llvm')['evidence']
+            if 'aarch64-macos--ReleaseSafe' not in e['path']]
+        self.assertRejects('must cite a run for target aarch64-macos')
+
+    def test_run_for_another_pair(self):
+        record(self.data, 'ReleaseSafe', 'llvm')['evidence'][-1]['path'] = \
+            f'{bm.RUN_DIR}/0.16.0--x86_64-linux--Debug--llvm.json'
+        self.assertRejects("records mode 'Debug', not 'ReleaseSafe'")
+
+    def test_flags_must_select_backend(self):
+        self.edit('Debug', 'stage2_x86_64', lambda r: r.update(flags='-ODebug -mcpu=baseline'))
+        self.assertRejects('do not select -ODebug and the stage2_x86_64 backend')
+
+    def test_stage2_only_on_x86_64(self):
+        self.edit('Debug', 'stage2_x86_64', lambda r: r.update(target='aarch64-macos'))
+        self.assertRejects('only generates x86_64 code')
+
+    def test_unexplained_skipped_example(self):
+        self.edit('Debug', 'stage2_x86_64', lambda r: r.update(excluded_examples=[]))
+        self.assertRejects('every example left out of the run must be listed')
+
+    def test_fast_math_in_tested_sources(self):
+        (self.root / 'examples').mkdir(exist_ok=True)
+        (self.root / 'examples/fm.zig').write_text('comptime { @setFloatMode(.optimized); }\n')
+        self.assertRejects('fast-math needs separate treatment')
+
+    def test_pin_violations_and_incomplete_runs(self):
+        self.edit('Debug', 'llvm', lambda r: r.update(pin_violations=1))
+        self.assertRejects('has pin violations')
 
 
 if __name__ == '__main__':

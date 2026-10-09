@@ -16,9 +16,12 @@ runtime umbrella (as `ZigLean.VecMem`). The runtime operations are in `ZigLean/M
 * `nullablePtrEnc_decode_zero`: zero bytes read as `Ptr.null` (no allocation is invented).
 * `load_store_null`: storing null and loading it back gives null; the access premises are the
   usual ones for the *storage* location, never for address zero.
-* `ptrProjectNullable_ok`/`projected_access_block`: a projection from a nonnull base is the
-  plain offset; an access through any projection succeeds only inside a live block of the
-  base's own provenance, so a projection never acquires an allocation.
+* `ptrProjectNullable_same`/`ptrProjectNullable_ok`/`ptrProjectNullable_zero_illegal`: a
+  zero-offset projection is the base itself (also at address zero); a projection from a nonnull
+  base is the plain offset; a nonzero offset from address zero is illegal behaviour.
+* `projected_access_block`: an access through any projection succeeds only inside a live block
+  of the base's own provenance, so a projection never acquires an allocation (in particular the
+  zero-offset projection of address zero cannot be dereferenced).
 -/
 
 namespace Zig
@@ -85,15 +88,42 @@ theorem ptrIsNull_nonzero {m : Mem} {p : Ptr} {addr : Int}
   simp [hz, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     StateT.pure]
 
+/-- A zero-offset projection (`project p = p`) is the base itself, for every base including
+address zero; memory is unchanged and no null test is made. -/
+theorem ptrProjectNullable_same {m : Mem} {p : Ptr} (project : Ptr → Ptr)
+    (h : project p = p) : (ptrProjectNullable p project).run m = pure (project p, m) := by
+  simp only [ptrProjectNullable, h]; rfl
+
 /-- A projection whose base address is nonzero is exactly the projected pointer; memory is
 unchanged. -/
 theorem ptrProjectNullable_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr → Ptr)
     (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
     (ptrProjectNullable p project).run m = pure (project p, m) := by
+  by_cases hp : project p = p
+  · exact ptrProjectNullable_same project hp
   have hn := ptrIsNull_nonzero ha hz
-  simp only [ptrProjectNullable, StateT.run_bind, hn]
+  simp only [ptrProjectNullable, hp, ite_false, StateT.run_bind, hn]
   simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     StateT.pure]
+
+/-- A nonnullable-typed projection whose base address is nonzero is exactly the projected
+pointer; memory is unchanged. -/
+theorem ptrProjectNonnull_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr → Ptr)
+    (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
+    (ptrProjectNonnull p project).run m = pure (project p, m) := by
+  have hn := ptrIsNull_nonzero ha hz
+  simp only [ptrProjectNonnull, StateT.run_bind, hn]
+  simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
+    StateT.pure]
+
+/-- A nonzero-offset projection whose base is at address zero (`Ptr.null`, or a pointer that
+reaches address zero by arithmetic on its provenance) is illegal behaviour. -/
+theorem ptrProjectNullable_zero_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr)
+    (ha : (ptrAddr p).run m = pure (0, m)) (hp : project p ≠ p) :
+    (ptrProjectNullable p project).run m = throw .illegal := by
+  simp only [ptrProjectNullable, hp, ite_false, ptrIsNull, StateT.run_bind, ha]
+  simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
+    StateT.pure, throw, throwThe, MonadExceptOf.throw, StateT.lift]
 
 /-- An access through any offset of `p` succeeds only inside a live block that is `p`'s own
 provenance: a projection never acquires an allocation, in particular not at address zero. -/

@@ -37,6 +37,12 @@ if sys.argv[1] == 'prepare':
     root.joinpath('prepare-argv.json').write_text(json.dumps(sys.argv[1:]))
 else: raise SystemExit('unexpected seal/verify/worker call')
 """)
+        (scripts / 'gen-integrity.py').write_text("""
+import os, sys
+from pathlib import Path
+with (Path(__file__).parent.parent / 'calls').open('a') as out: print('gen-integrity', *sys.argv[1:], file=out)
+raise SystemExit(int(os.environ.get('STUB_GEN_STATUS', '0')))
+""")
         (scripts / 'build-guard.py').write_text("""
 import os, sys
 from pathlib import Path
@@ -75,7 +81,7 @@ raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
                   '; retaining ' + str(attempt) + '\n').encode()
         self.assertEqual(result.returncode, status, result.stderr.decode(errors='replace'))
         self.assertEqual(result.stdout, b'')
-        self.assertEqual((self.root / 'calls').read_text().splitlines(), ['prepare'])
+        self.assertEqual((self.root / 'calls').read_text().splitlines(), ['gen-integrity attest', 'prepare'])
         expected = ['prepare', str(attempt), '--toolchain', str(self.base / 'mock-toolchain'),
                     '--profile', 'mock-failed-audit', '--lock', str(self.base / 'mock-lock')]
         for module in modules: expected += ['--module', module]
@@ -104,6 +110,16 @@ raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
                     self.assertTrue((attempt / 'guard.log').is_symlink())
                     self.assertEqual((attempt / 'secret').read_bytes(), b'not diagnostic log')
 
+    def test_stale_generated_module_refuses_before_prepare(self):
+        attempt = self.base / 'attempt-stale'
+        environment = dict(os.environ, STUB_GEN_STATUS='1', STUB_LOG_KIND='regular', STUB_GUARD_STATUS='0',
+                           PATH=str(Path(sys.executable).parent) + os.pathsep + os.defpath,
+                           AIR2LEAN_BUILD_LOCK=str(self.base / 'mock-lock'), PYTHONDONTWRITEBYTECODE='1')
+        result = subprocess.run(['/bin/bash', str(self.check), str(attempt), str(self.base / 'mock-toolchain'),
+                                 'mock-stale-generated'], env=environment, capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 1, result.stderr.decode(errors='replace'))
+        self.assertEqual((self.root / 'calls').read_text().splitlines(), ['gen-integrity attest'])
+        self.assertFalse(attempt.exists())
 
     def test_wrapper_empty_arrays_and_quoted_arguments_across_bash(self):
         shells = ['/bin/bash']

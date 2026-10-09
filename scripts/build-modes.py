@@ -8,17 +8,24 @@ source-level gate (no Zig or Lean):
 
 * every mode/backend pair has exactly one record;
 * cited evidence exists and its contents match the record's mode and backend;
-* a `qualified` record cites a profile and a build command;
+* a `qualified` record cites a profile and a build command, or one native differential run for
+  each target it lists (`assurance/build-mode-runs/`; see `record`);
+* a run record is internally consistent: counts add up, only the release modes without safety
+  checks may exclude model-throwing inputs, fast-math is absent from the tested sources, and any
+  mismatch is triaged with a reproducer and falls under an exception the record states;
 * premise IDs exist in docs/premises.md;
 * the shipping export/native flags appear in their sources and match compatibility.json;
 * fast-math and other changed semantics are excluded, with guard text present in the source;
 * every README.md or docs/*.md paragraph that names ReleaseFast or ReleaseSmall links the record.
 
-`commands` prints the heavy commands that unqualified records still need.
+`record` turns one scripts/diff.sh summary into a run record. `commands` prints the heavy commands
+that unqualified records still need.
 """
 from __future__ import annotations
 
 import argparse
+import functools
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -30,8 +37,20 @@ SCHEMA = 'air2lean-build-modes/1'
 MODES = ('Debug', 'ReleaseSafe', 'ReleaseFast', 'ReleaseSmall')
 BACKENDS = {'llvm': 'stage2_llvm', 'stage2_x86_64': 'stage2_x86_64'}
 STATUSES = ('qualified', 'unqualified', 'excluded')
-CLAIMS = ('analyzed-air-model', 'no-illegal-behaviour-transfer', 'none')
-EVIDENCE = ('profile', 'command', 'literal')
+CLAIMS = ('analyzed-air-model', 'no-illegal-behaviour-transfer', 'tested-input-agreement', 'none')
+EVIDENCE = ('profile', 'command', 'literal', 'run')
+TARGETS = ('aarch64-macos', 'x86_64-linux', 'aarch64-linux')
+RUN_SCHEMA = 'air2lean-build-mode-run/1'
+RUN_DIR = 'assurance/build-mode-runs'
+# Release modes that remove safety checks: model-throwing inputs are illegal behaviour there.
+UNCHECKED = ('ReleaseFast', 'ReleaseSmall')
+BACKEND_FLAG = {'llvm': '-fllvm', 'stage2_x86_64': '-fno-llvm'}
+# Differential statuses (scripts/diff-report.py) that are not an exact match.
+EXCLUSIONS = ('ub_excluded', 'illegal_exclusion', 'unspecified_exclusion', 'search_cap',
+              'bounded_no_result', 'host_difference')
+MATCHES = ('value_match', 'error_return_match', 'panic_match')
+RUN_COUNTS = MATCHES + EXCLUSIONS + ('mismatch', 'input_failure', 'native_harness_failure')
+FLOAT_MODE_SOURCES = ('examples', 'tests/diff')
 REQUIRED_CHANGED = ('fast-math',)
 # Paragraphs naming an unchecked release mode must link the record.
 UNCHECKED_MODE = re.compile(r'\bRelease(?:Fast|Small)\b')
@@ -63,6 +82,9 @@ def check_evidence(root, record, item, errors, where):
     if text is None:
         return
     mode, backend = record['mode'], record['backend']
+    if item['kind'] == 'run':
+        check_run(root, record, item, text, errors, where)
+        return
     if item['kind'] == 'profile':
         try:
             data = json.loads(text)
@@ -96,6 +118,92 @@ def check_evidence(root, record, item, errors, where):
             errors.append(f'{where}: command {needle!r} does not select a non-LLVM backend (-fno-llvm)')
 
 
+@functools.lru_cache(maxsize=None)
+def float_mode_sources(root):
+    """The tested sources that use @setFloatMode (fast-math), relative to `root`."""
+    return tuple(str(p.relative_to(root)) for rel in FLOAT_MODE_SOURCES
+                 for p in sorted((root / rel).rglob('*.zig'))
+                 if 'setFloatMode' in p.read_text(encoding='utf-8'))
+
+
+def check_run(root, record, item, text, errors, where):
+    """One differential run record: consistent with its pair, its counts and the sources."""
+    mode, backend, path = record['mode'], record['backend'], item['path']
+    try:
+        run = json.loads(text)
+    except json.JSONDecodeError as error:
+        errors.append(f'{where}: {path} is not JSON ({error})')
+        return
+    if not isinstance(run, dict) or run.get('schema') != RUN_SCHEMA:
+        errors.append(f'{where}: {path} schema must be {RUN_SCHEMA!r}')
+        return
+    for field, want in (('mode', mode), ('backend', backend)):
+        if run.get(field) != want:
+            errors.append(f'{where}: {path} records {field} {run.get(field)!r}, not {want!r}')
+    if run.get('target') not in TARGETS:
+        errors.append(f'{where}: {path} target must be one of {", ".join(TARGETS)}')
+    if not isinstance(run.get('zig_version'), str) or not run['zig_version']:
+        errors.append(f'{where}: {path} needs a zig_version')
+    expected = Path(path).name
+    if expected != f'{run.get("zig_version")}--{run.get("target")}--{mode}--{backend}.json':
+        errors.append(f'{where}: {path} is not named <version>--<target>--<mode>--<backend>.json')
+    flags = run.get('flags')
+    if (not isinstance(flags, str) or '-O' + mode not in flags.split()
+            or ('-fno-llvm' in flags.split()) != (backend != 'llvm')):
+        errors.append(f'{where}: {path} flags {flags!r} do not select -O{mode} and the {backend} backend')
+    if backend == 'stage2_x86_64' and run.get('target') != 'x86_64-linux':
+        errors.append(f'{where}: {path} the stage2_x86_64 backend only generates x86_64 code')
+    counts = run.get('counts')
+    if (not isinstance(counts, dict) or not all(isinstance(v, int) and v >= 0 for v in counts.values())
+            or not set(counts) <= set(RUN_COUNTS)):
+        errors.append(f'{where}: {path} counts must map known statuses to non-negative integers')
+        return
+    cases = run.get('cases')
+    if not isinstance(cases, int) or cases <= 0 or sum(counts.values()) != cases:
+        errors.append(f'{where}: {path} counts do not add up to cases ({cases!r})')
+    if counts.get('ub_excluded', 0) and mode not in UNCHECKED:
+        errors.append(f'{where}: {path} excludes model-throwing inputs, but {mode} keeps safety checks')
+    for bad in ('input_failure', 'native_harness_failure'):
+        if counts.get(bad, 0):
+            errors.append(f'{where}: {path} has {bad} rows, so the run did not complete')
+    if run.get('pin_violations') != 0:
+        errors.append(f'{where}: {path} has pin violations')
+    mismatches = counts.get('mismatch', 0)
+    triage = run.get('triage')
+    if not isinstance(triage, list):
+        errors.append(f'{where}: {path} triage must be a list')
+        triage = []
+    if sum(e.get('cases', 0) for e in triage if isinstance(e, dict)) != mismatches:
+        errors.append(f'{where}: {path} has {mismatches} mismatches that the triage entries do not cover')
+    for entry in triage + (run.get('excluded_examples') or []):
+        reproducer = entry.get('reproducer') if isinstance(entry, dict) else None
+        if not isinstance(reproducer, str) or not (root / reproducer).is_file() or not entry.get('note'):
+            errors.append(f'{where}: {path} every triaged mismatch or excluded example needs a note '
+                          f'and an existing reproducer file')
+    skipped = run.get('skipped_examples')
+    listed = {e.get('example') for e in run.get('excluded_examples') or [] if isinstance(e, dict)}
+    if not isinstance(skipped, dict) or {k for k, v in skipped.items() if v == 'not_requested'} != listed:
+        errors.append(f'{where}: {path} every example left out of the run must be listed in excluded_examples')
+    # A qualified record may carry only exceptions (illegal behaviour its premise leaves out);
+    # an unqualified one lists its open findings.
+    declared = (record.get('exceptions') or []) + (
+        record.get('findings') or [] if record.get('status') != 'qualified' else [])
+    for entry in triage:
+        if isinstance(entry, dict) and entry.get('classification') not in declared:
+            errors.append(f'{where}: {path} triage class {entry.get("classification")!r} is not a stated '
+                          f'exception of the record')
+    exclusions = run.get('exclusions')
+    if not isinstance(exclusions, list) or sum(
+            e.get('cases', 0) for e in exclusions if isinstance(e, dict)) != sum(
+            counts.get(k, 0) for k in EXCLUSIONS):
+        errors.append(f'{where}: {path} exclusions must list every excluded case by function')
+    if run.get('float_mode_optimized_sources') != []:
+        errors.append(f'{where}: {path} fast-math (@setFloatMode) appears in the tested sources')
+    else:
+        for source in float_mode_sources(root):
+            errors.append(f'{where}: {source} uses @setFloatMode; fast-math needs separate treatment')
+
+
 def check_record(root, record, known, errors):
     where = f'{record.get("mode")}/{record.get("backend")}'
     if record.get('status') not in STATUSES:
@@ -122,12 +230,27 @@ def check_record(root, record, known, errors):
     status, claim = record.get('status'), record.get('claim')
     if claim not in (None, 'none') and not premises:
         errors.append(f'{where}: claim {claim!r} must cite the premises it rests on')
+    targets = record.get('targets', [])
+    if not isinstance(targets, list) or not set(targets) <= set(TARGETS):
+        errors.append(f'{where}: targets must be a list of {", ".join(TARGETS)}')
+        targets = []
+    run_targets = set()
+    for item in evidence:
+        if isinstance(item, dict) and item.get('kind') == 'run':
+            parts = Path(str(item.get('path'))).name.split('--')
+            if len(parts) == 4:
+                run_targets.add(parts[1])
     if status == 'qualified':
         if claim == 'none':
             errors.append(f'{where}: a qualified record must state its claim')
-        for kind in ('profile', 'command'):
-            if kind not in kinds:
-                errors.append(f'{where}: a qualified record must cite {kind} evidence')
+        if targets:
+            for target in targets:
+                if target not in run_targets:
+                    errors.append(f'{where}: a qualified record must cite a run for target {target}')
+        else:
+            for kind in ('profile', 'command'):
+                if kind not in kinds:
+                    errors.append(f'{where}: a qualified record must cite {kind} evidence')
     elif status == 'unqualified':
         if not isinstance(record.get('missing'), str) or not record['missing'].strip():
             errors.append(f'{where}: an unqualified record must state the missing evidence')
@@ -258,18 +381,117 @@ def validate(data, root=ROOT):
     return errors
 
 
+def build_run(summary, cases, args, root):
+    """The run record for one completed scripts/diff.sh summary and its per-case rows."""
+    if summary.get('complete') is not True or summary.get('setup_failures') != 0:
+        raise ValueError('the differential summary is not a completed run')
+    profile = summary.get('profile', {})
+    if (profile.get('optimize'), profile.get('backend')) != (args.mode, args.backend):
+        raise ValueError(f'summary was made for {profile.get("optimize")}/{profile.get("backend")}')
+    excluded = {}
+    examples = {}
+    cases_rows = list(cases)
+    for line in cases_rows:
+        row = json.loads(line)
+        if 'function' not in row:
+            continue
+        examples[row['example']] = examples.get(row['example'], 0) + 1
+        if row['status'] in EXCLUSIONS:
+            key = (row['example'], row['function'], row['status'])
+            excluded[key] = excluded.get(key, 0) + 1
+    flags = f'-O{args.mode} -mcpu=baseline'
+    if args.explicit_backend or args.backend != 'llvm':
+        flags += ' ' + BACKEND_FLAG[args.backend]
+    if args.link_flags:
+        flags += ' ' + args.link_flags
+    skipped = {row['example']: row['reason'] for row in map(json.loads, cases_rows)
+               if row.get('status') == 'skipped'}
+    float_mode = list(float_mode_sources(root))
+    return {
+        'schema': RUN_SCHEMA,
+        'zig_version': args.zig_version,
+        'target': args.target,
+        'host': profile.get('host'),
+        'emulated': args.emulated,
+        'mode': args.mode,
+        'backend': args.backend,
+        'flags': flags,
+        'stock_zig_sha256': args.zig_sha256 or hashlib.sha256(args.zig.read_bytes()).hexdigest(),
+        'sources_sha256': hashlib.sha256(
+            json.dumps(summary['runner_runtime_sources'], sort_keys=True).encode()).hexdigest(),
+        'examples': dict(sorted(examples.items())),
+        'skipped_examples': dict(sorted(skipped.items())),
+        'excluded_examples': json.loads(args.excluded_examples.read_text()) if args.excluded_examples else [],
+        'cases': summary['case_count'],
+        'counts': {k: v for k, v in sorted(summary['counts'].items()) if v},
+        'exclusions': [{'example': e, 'function': f, 'status': st, 'cases': n}
+                       for (e, f, st), n in sorted(excluded.items())],
+        'pin_violations': len(summary['pin_violations']),
+        'float_mode_optimized_sources': float_mode,
+        'triage': [entry for path in args.triage for entry in json.loads(path.read_text())],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--root', type=Path, default=ROOT)
     sub = parser.add_subparsers(dest='action', required=True)
     sub.add_parser('check', help='light record, evidence and documentation check')
     sub.add_parser('commands', help='print commands that unqualified claims still need')
+    rec = sub.add_parser('record', help='write a run record from a scripts/diff.sh summary')
+    rec.add_argument('--summary', type=Path, required=True)
+    rec.add_argument('--zig', type=Path, help='the stock zig binary that built the harness')
+    rec.add_argument('--zig-sha256', help='its digest, when the binary is not on this host')
+    rec.add_argument('--zig-version', required=True)
+    rec.add_argument('--target', choices=TARGETS, required=True)
+    rec.add_argument('--mode', choices=MODES, required=True)
+    rec.add_argument('--backend', choices=sorted(BACKENDS), required=True)
+    rec.add_argument('--emulated', action='store_true')
+    rec.add_argument('--explicit-backend', action='store_true', help='-fllvm was passed')
+    rec.add_argument('--triage', type=Path, action='append', default=[], help='JSON list of triaged mismatches')
+    rec.add_argument('--verify', action='store_true', help='compare with the committed record instead of writing')
+    rec.add_argument('--link-flags', default='', help='extra linker flags the run passed')
+    rec.add_argument('--excluded-examples', type=Path,
+                     help='JSON list of {example, reason, reproducer} for examples left out of the run')
     args = parser.parse_args(argv)
     try:
         data = json.loads((args.root / REGISTRY).read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError) as error:
         print(f'build-modes: cannot read {REGISTRY}: {error}', file=sys.stderr)
         return 1
+    if args.action == 'record':
+        if bool(args.zig) == bool(args.zig_sha256):
+            parser.error('record needs exactly one of --zig and --zig-sha256')
+        try:
+            summary = json.loads(args.summary.read_text(encoding='utf-8'))
+            with open(str(args.summary) + '.jsonl', encoding='utf-8') as cases:
+                run = build_run(summary, cases, args, args.root)
+        except (OSError, ValueError, KeyError) as error:
+            print(f'build-modes: cannot record {args.summary}: {error}', file=sys.stderr)
+            return 1
+        name = f'{args.zig_version}--{args.target}--{args.mode}--{args.backend}.json'
+        out = args.root / RUN_DIR / name
+        if args.verify:
+            # A fresh run must agree with the committed record on everything that is not
+            # schedule- or hash-dependent: the case count and the mismatches.
+            try:
+                committed = json.loads(out.read_text(encoding='utf-8'))
+            except (OSError, json.JSONDecodeError) as error:
+                print(f'build-modes: no committed record {out}: {error}', file=sys.stderr)
+                return 1
+            problems = [key for key in ('cases', 'examples', 'triage', 'pin_violations')
+                        if committed.get(key) != run.get(key)]
+            problems += [f'counts.{key}' for key in ('mismatch', 'ub_excluded')
+                         if committed['counts'].get(key, 0) != run['counts'].get(key, 0)]
+            for problem in problems:
+                print(f'build-modes: {out.name}: {problem} differs from the committed record', file=sys.stderr)
+            if not problems:
+                print(f'build-modes: {out.name} verified ({run["cases"]} cases)')
+            return 1 if problems else 0
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(run, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+        print(f'build-modes: wrote {out.relative_to(args.root)} ({run["cases"]} cases)')
+        return 0
     if args.action == 'commands':
         for record in data.get('records', []):
             for command in record.get('commands', []):

@@ -5,14 +5,15 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2807 theorems in 165 files.
+2974 theorems in 176 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 697 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 595 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 24 | Gate-time generated module |
+| [PRF-01](premises.md#prf-01) | 741 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 635 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
+| [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
 | [ALC-01](premises.md#alc-01) | 91 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 86 | Allocation failure and request-cap policy |
 | [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
@@ -32,32 +33,35 @@ premise was derived. This index covers the committed generated modules.
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1126 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1126 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 368 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 1170 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1170 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 412 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 507 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 85 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
+| [MTH-01](premises.md#mth-01) | 130 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 68 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2668 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2283 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1141 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 126 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 2840 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2409 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1214 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
-| [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
+| [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
+| [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2807 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1316 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1316 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 40 | Reviewed opaque, extern and runtime-redirection policy |
-| [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
+| [TRU-01](premises.md#tru-01) | 2974 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1451 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1451 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
+| [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
+| [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
+| [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
 
 ## `Proofs/Asm/Effects.lean`
 
@@ -317,6 +321,35 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.main_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+
+## `Proofs/Basic/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Basic.AirCert.absDiff_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.absDiff_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.absDiff_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.absDiff_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.clampAdd_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.classify_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.scale_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_run` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Basic.AirCert.tardiness_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Basic/Arith.lean`
 
@@ -857,6 +890,40 @@ File premises: PRF-02, SEM-01, TRU-01, TRU-02, TRU-03
 | `add_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `double_eq` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 
+## `Proofs/Recursion/AirCert.lean`
+
+File premises: PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Recursion.AirCert.callee_0` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_1` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_2` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_3` | SEM-01, TRU-01 |
+| `Recursion.AirCert.callee_4` | SEM-01, TRU-01 |
+| `Recursion.AirCert.fact_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_step` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_fix` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gen_fixpoint` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.run_le_gen` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.fact_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.gcd_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_sound` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_complete` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isOdd_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `Recursion.AirCert.isEven_eq` | PRF-01, ORD-01, ORD-02, ORD-03, MTH-01, MTH-02, SEM-01, SEM-02, SEM-03, SEM-06, TRU-01, TRU-02, TRU-03, TRU-04 |
+
 ## `Proofs/Recursion/Proofs.lean`
 
 File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
@@ -1239,6 +1306,8 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.Ph.jd_setM` | TRU-01 |
 | `Sync.RwLockRead.Ph.wb_ib` | TRU-01 |
 | `Sync.RwLockRead.Ph.rb_le` | TRU-01 |
+| `Sync.RwLockRead.Ph.pw_of_mp_wait` | TRU-01 |
+| `Sync.RwLockRead.Ph.not_wait_of_mp_holds_wake` | TRU-01 |
 | `Sync.RwLockRead.sv_eq` | TRU-01 |
 | `Sync.RwLockRead.cases3` | TRU-01 |
 | `Sync.RwLockRead.sv3_mem` | TRU-01 |
@@ -2307,6 +2376,22 @@ File premises: PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, SEM-02, TRU-01, TRU-02, T
 | `incLocal_spec` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `barrier_spec` | PRF-01, ASM-01, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
+## `tests/roadmap/big-endian/BigEndian/Proofs.lean`
+
+File premises: PRF-02, PRF-05, MTH-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `BigEndianClients.u32ToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.bytesToU32_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.f32ToBytes_orders` | PRF-02, PRF-05, MTH-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.packed16ToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.externToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.setFieldBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.fieldFromBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `BigEndianClients.vecByte_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L81` | SEM-01, SEM-02, TRU-01 |
+
 ## `tests/roadmap/bitcast-017/BitCastReal/Runtime.lean`
 
 File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
@@ -2637,6 +2722,49 @@ File premises: THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01
 | `Detach.Runtime.join_without_transfer_illegal` | THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Detach.Runtime.transfer_obligation_illegal` | THR-01, THR-02, THR-10, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
+## `tests/roadmap/dispatch-templates/Template.lean`
+
+File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L103` | SEM-01, SEM-03, TRU-01 |
+| `DispatchTemplateTest.mach_total` | SEM-01, SEM-03, TRU-01 |
+| `example@L126` | SEM-01, SEM-03, TRU-01 |
+| `example@L139` | SEM-01, SEM-03, TRU-01 |
+| `example@L162` | SEM-01, SEM-03, TRU-01 |
+| `example@L170` | SEM-01, SEM-03, TRU-01 |
+| `example@L175` | SEM-01, SEM-02, SEM-04, TRU-01 |
+| `example@L208` | SEM-01, SEM-03, TRU-01 |
+| `example@L260` | SEM-01, SEM-03, TRU-01 |
+
+## `tests/roadmap/dispatch-templates/TokenizerProof.lean`
+
+File premises: PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `example@L44` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L45` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L46` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.tokens_ident_leave` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.tokens_number_leave` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.agrees_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isAlpha_all` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isDigit_all` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isAlpha_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.isDigit_eq` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.byte_load` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.read_facts` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.one32` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_start` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_ident` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_number` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.step_done` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.loop_total` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L325` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Tok.Proof.countTokens_total` | PRF-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+
 ## `tests/roadmap/dispatch/CountdownProof.lean`
 
 File premises: PRF-03, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
@@ -2657,22 +2785,79 @@ File premises: SEM-01, SEM-03, TRU-01
 | `example@L55` | TRU-01 |
 | `example@L56` | TRU-01 |
 
-## `tests/roadmap/env-boundaries/WriteAll.lean`
+## `tests/roadmap/env-boundaries/StdIo.lean`
 
-File premises: TRU-01, ENV-01, ENV-02
+File premises: PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03
 
 | Theorem | Premises |
 |---|---|
-| `Zig.Env.Client.OnlyWrites.cons` | TRU-01, ENV-01 |
-| `Zig.Env.Client.OnlyWrites.not_closed` | TRU-01, ENV-01 |
-| `Zig.Env.Client.writeAll_spec` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.writeAllClose_spec` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.mem_allErrors` | TRU-01, ENV-01 |
-| `Zig.Env.Client.scripted_contract` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.scripted_wall_runs_backwards` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.demo_partial` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.demo_error` | TRU-01, ENV-01, ENV-02 |
-| `Zig.Env.Client.demo_closed` | TRU-01, ENV-01, ENV-02 |
+| `EnvStdIo.intCast31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.setWidth31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.intCast64of31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.intCast64` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.min_cap` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.add_ofNat` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.OnlyWrites.append` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStdIo.written_append` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01 |
+| `EnvStdIo.OnlyWrites.not_closed` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.errno_err` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.errno_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.write_loop_body` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.posix_write_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.fs_File_write_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAll_body_done` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.bodyFacts` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.writeAll_body_err` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.writeAll_body_ok` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `EnvStd15.Proofs.writeAll_step` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAll_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.fs_File_close_run` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAllClose_spec` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.errno_err` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.errno_ok` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd16.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd16.Proofs.read_loop_body` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.posix_read_run` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.closeFd_run` | PRF-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd16.Proofs.readClose_spec` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+| `EnvStd15.Proofs.writeAllClose_spec_replay` | PRF-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, ENV-01, ENV-03 |
+
+## `tests/roadmap/env-boundaries/WriteAll.lean`
+
+File premises: SEM-01, SEM-02, TRU-01, ENV-01, ENV-02
+
+| Theorem | Premises |
+|---|---|
+| `Zig.Env.Client.OnlyWrites.cons` | SEM-01, SEM-02, TRU-01 |
+| `Zig.Env.Client.OnlyWrites.not_closed` | SEM-01, SEM-02, TRU-01 |
+| `Zig.Env.Client.writeAll_spec` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.writeAllClose_spec` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.mem_allErrors` | SEM-01, SEM-02, TRU-01 |
+| `Zig.Env.Client.scripted_contract` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.scripted_wall_runs_backwards` | SEM-01, SEM-02, TRU-01, ENV-02 |
+| `Zig.Env.Client.demo_partial` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_error` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+| `Zig.Env.Client.demo_closed` | SEM-01, SEM-02, TRU-01, ENV-01, ENV-02 |
+
+## `tests/roadmap/env-boundaries/expected/EnvStd15.lean`
+
+File premises: SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd15.air2lean_model_0_evidence` | SEM-01, EXT-01, TRU-01 |
+| `EnvStd15.air2lean_model_1_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+| `EnvStd15.air2lean_model_2_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+
+## `tests/roadmap/env-boundaries/expected/EnvStd16.lean`
+
+File premises: SEM-01, SEM-02, EXT-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd16.air2lean_model_0_evidence` | SEM-01, EXT-01, TRU-01 |
+| `EnvStd16.air2lean_model_1_evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
 
 ## `tests/roadmap/error-storage/Runtime.lean`
 
@@ -3122,6 +3307,30 @@ File premises: SEM-01, SEM-02, EXT-01, TRU-01
 | `RegistryExample.evidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
 | `RegistryExample.client_rule` | SEM-01, SEM-02, EXT-01, TRU-01 |
 | `RegistryExample.tupleEvidence` | SEM-01, SEM-02, EXT-01, TRU-01 |
+
+## `tests/roadmap/noreturn-variants/NoreturnVariants/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `NoreturnVariantsClients.get_mk` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.roundTrip_7` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.roundTrip_255` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memRoundTrip_7` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memRoundTrip_255` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.mkV_500` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.mkV_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.vTag_x` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.vTag_y` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memV_1234` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.memV_0` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.oneRoundTrip_max` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.colorOf_1` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.colorOf_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.decode_noreturn_tag` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/outcome-accounting/Check.lean`
 
@@ -3809,6 +4018,45 @@ File premises: MTH-01, SEM-01, SEM-02, TRU-01
 | `example@L23` | SEM-01, SEM-02, TRU-01 |
 | `example@L24` | MTH-01, SEM-01, SEM-02, TRU-01 |
 | `example@L25` | SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01
+
+| Theorem | Premises |
+|---|---|
+| `DeviceAsmProofs.after_append` | SEM-01, SEM-02, TRU-01 |
+| `DeviceAsmProofs.declared` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.tsc_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.elapsed_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.elapsed_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceAsmProofs.merged_is_zero` | TRU-01 |
+
+## `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`
+
+File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01
+
+| Theorem | Premises |
+|---|---|
+| `DeviceEffectsProofs.widen_toNat` | TRU-01 |
+| `DeviceEffectsProofs.after_nil` | SEM-01, SEM-02, TRU-01 |
+| `DeviceEffectsProofs.after_append` | SEM-01, SEM-02, TRU-01 |
+| `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.loop_ready` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.poll_run` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_trace` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.answers_of_ready` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.putc_eventually` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.statusTwice_ne_merged` | TRU-01 |
+| `DeviceEffectsProofs.clearStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 
 ## `tests/roadmap/weak-cas/Messages.lean`
 

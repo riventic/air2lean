@@ -93,7 +93,7 @@ def run(binary):
         branch = function("branchy", [inst(0, "arg", 3, param=0),
             inst(1, "cond_br", 2, [dict(ty=4, val="true")], **{"then": [
                 inst(10, "atomic_load", 0, [dict(inst=0)], order="unordered")], "else": [
-                inst(20, "assembly", 1, source="", volatile=False, clobbers=["memory"], outputs=[], inputs=[])]}),
+                inst(20, "assembly", 1, source="mfence", volatile=False, clobbers=[], outputs=[], inputs=[])]}),
             inst(30, "ret", 2, [dict(ty=1, val="{}")])])
         branch.update(types=[cli.INT, cli.VOID, cli.NORETURN, cli.PTR, dict(k="bool", abi_size=1, abi_align=1)],
                       params=[3], ret=1)
@@ -108,7 +108,9 @@ def run(binary):
         assert files["ok.json"]["local_check"] == "passed" and files["main.json"]["local_check"] == "passed"
         assert len(blockers(report, "NORMALIZATION_FAILURE", "traced.json")) == 1
         assert len(blockers(report, "NORMALIZATION_FAILURE", "unknown.json")) == 2
-        assert len(blockers(report, "INSTRUCTION_FAILURE")) == 2
+        # The output-less `mfence` is off the reviewed allowlist (L13): its own stable code.
+        assert len(blockers(report, "INSTRUCTION_FAILURE")) == 1
+        assert len(blockers(report, "ASM_VOLATILE_EFFECT")) == 1
         chains = sorted(d["dependency_chain"] for d in blockers(report, "CALLEE_BLOCKED"))
         assert ["main", "traced"] in chains and ["main", "unknown"] in chains, chains
         assert ["main", "ok"] not in chains

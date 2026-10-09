@@ -236,13 +236,14 @@ def run(binary, baseline=None):
         branch = function("branches", [inst(0, "arg", 3, param=0), inst(7, "dbg_stmt", 1, line=42),
             inst(1, "cond_br", 2, [dict(ty=4, val="true")], **{"then": [
                 inst(10, "atomic_load", 0, [dict(inst=0)], order="unordered")], "else": [
-                inst(20, "assembly", 1, source="", volatile=False, clobbers=["memory"], outputs=[], inputs=[])]}),
+                inst(20, "assembly", 1, source="mfence", volatile=False, clobbers=[], outputs=[], inputs=[])]}),
             inst(30, "ret", 2, [dict(ty=1, val="{}")])])
         branch.update(types=[INT, VOID, NORETURN, PTR, dict(k="bool", abi_size=1, abi_align=1)], params=[3], ret=1)
         write(air, {"branches.json": branch})
         report = decode(invoke(binary, air), "rejected")
-        failures = [d for d in report["diagnostics"] if d["code"] == "INSTRUCTION_FAILURE"]
-        assert len(failures) == 2, report
+        # The output-less `mfence` is off the reviewed allowlist (L13): ASM_VOLATILE_EFFECT.
+        failures = [d for d in report["diagnostics"] if d["code"] in ("INSTRUCTION_FAILURE", "ASM_VOLATILE_EFFECT")]
+        assert sorted(d["code"] for d in failures) == ["ASM_VOLATILE_EFFECT", "INSTRUCTION_FAILURE"], report
         assert all(d["anchor"]["id_space"] == "canonical" and d["anchor"]["nearest_dbg_line"] == 42 for d in failures)
         assert not report["complete"] and not report["truncated"]
         default = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Diagnostics"],
@@ -263,7 +264,7 @@ def run(binary, baseline=None):
         assert len([d for d in report["diagnostics"] if d["message_truncated"]]) >= 2
         assert len([d for d in report["diagnostics"] if d["code"] == "PREREQUISITE_SKIPPED" and
                     d["prerequisites"] == ["instruction_result_type"]]) == 2
-        assert len([d for d in report["diagnostics"] if d["code"] == "INSTRUCTION_FAILURE"]) == 1
+        assert len([d for d in report["diagnostics"] if d["code"] in ("INSTRUCTION_FAILURE", "ASM_VOLATILE_EFFECT")]) == 1
         checks += 1
 
         write(air, {"root.json": calls("root", "mid", "missing_a", "missing_b"),

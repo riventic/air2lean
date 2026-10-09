@@ -1,12 +1,13 @@
 # Target and build profiles
 
 The current runtime models a little-endian ABI with 64-bit pointers, or 32-bit pointers
-for wasm32 ([generated-code.md](generated-code.md#pointer-width)). Profile metadata
+for wasm32 ([generated-code.md](generated-code.md#pointer-width)), and a big-endian ABI with
+64-bit pointers for the qualified s390x-linux profile ([§Byte order](#byte-order-big-endian)). Profile metadata
 makes the source assumptions visible; it does not prove correspondence with a
 shipping executable. Existing type, pointer, layout, and unsupported-instruction
-checks still apply. Endian generalization remains separate work. Schema 12 retains
-the existing Linux x86_64 reference and macOS aarch64 model workflows, and admits
-wasm32-freestanding and wasm32-wasi with the 32-bit pointer model. These are
+checks still apply. Schema 12 retains the existing Linux x86_64 reference and macOS aarch64
+model workflows, and admits wasm32-freestanding and wasm32-wasi with the 32-bit pointer
+model and s390x-linux with the big-endian model. These are
 accepted model ABI scopes with per-type layout checks, not hardware or binary
 qualification claims.
 
@@ -22,10 +23,10 @@ Every schema-12 function has a mandatory `profile` object:
 
 | Field | Accepted value or meaning |
 | --- | --- |
-| `name` | `"abi64-le-v1"` (the exporter's profile name, also for a 32-bit target) |
-| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
-| `pointer_bits` | `64` for x86_64/aarch64, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
-| `endian` | `"little"`; big endian is rejected |
+| `name` | `"abi64-le-v1"` (the exporter's profile name for every target, also a 32-bit one; the translator names a big-endian profile `"abi64-be-v1"`) |
+| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `s390x-linux-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
+| `pointer_bits` | `64` for x86_64/aarch64/s390x, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
+| `endian` | The triple's byte order: `"little"` for x86_64/aarch64/wasm32, `"big"` for s390x; any other value or a mismatch is rejected |
 | `abi` | Target ABI tag; must equal the triple's ABI component before a version suffix |
 | `zig_version` | Must equal the file's top-level `zig_version`; normal supported-version checks still apply |
 | `backend` | Actual configured compiler backend, such as `stage2_llvm`; recorded for provenance |
@@ -40,7 +41,7 @@ Every schema-12 function has a mandatory `profile` object:
 
 Unknown profile fields are rejected. A schema-12 file with absent, null, malformed
 or contradictory required metadata fails before emission. A supplied top-level
-`target_endian` still must be little endian. Supported schemas are explicitly
+`target_endian` must equal `profile.endian`; outside a schema-12 profile it must be little endian. Supported schemas are explicitly
 **1–12**; schema 0 and future schemas fail closed. Schema 1–11 cannot carry a
 schema-12 profile object.
 
@@ -64,6 +65,9 @@ The optional flag asserts the expected input profile:
 ```sh
 air2lean AIR_DIR -o Gen.lean --namespace My.Program --profile abi64-le-v1
 ```
+
+`--profile abi64-be-v1` selects the big-endian model profile; little-endian and big-endian
+inputs cannot be mixed in one translation.
 
 `--float-semantics ieee|compiler-rt` selects the numerical model as before, with
 `ieee` the default. The output records the selected choice explicitly. `ieee`
@@ -271,3 +275,41 @@ and atomic results with it. Four declared divergences are reported and not count
 matches: soft-float f80 unnormal and pseudo-denormal handling, and padding-sensitive `u24`/`u40`
 cmpxchg. These are ABI-only profiles. aarch64-linux AIR is still rejected by
 `BuildProfile.parse`.
+
+## Byte order (big endian)
+
+T03 parameterizes the byte order (`Zig.ByteOrder`, `ZigLean/Endian.lean`). A big-endian `uN`
+stores the little-endian value bytes in reverse order: most significant byte first, so the
+partly used byte of a `uN` with `N % 8 ≠ 0` comes first; padding up to the ABI size follows the
+value bytes at both orders. Floats, enums, a slice's length, a packed struct's backing integer and
+a whole-byte vector lane are stored as such integers; a vector's lane 0 comes first. A bit-pointer
+reads and writes its host integer at the profile's order, with the exporter's bit offset counted
+from the least significant bit. Pointer and error-code bytes are symbolic and the same at both
+orders. Each `.little` definition is the existing model by `rfl`, so little-endian translations
+and proofs are unchanged; `ZigLean/EndianLemmas.lean` (proof-only) proves the round trips at both
+orders.
+
+A big-endian profile is accepted for `s390x-linux-<abi>` with 64-bit pointers and the
+`stage2_llvm` backend (its bit-pointer host is the `(bits + 7) / 8`-byte integer). Generated code
+opens `Zig.BigEndian` and uses `Zig.loadBitsOf .big`/`storeBitsOf .big`/`storeUndefBitsOf .big`
+for bit-pointers ([generated-code.md](generated-code.md#byte-order)). Exported sizes and
+alignments are still checked against the model, so s390x types whose layout differs from the
+model (`u128`, `i128` and `f128` are 8-byte aligned there) are rejected. Outside the qualified
+big-endian subset, the translator rejects (fails closed):
+
+| Rejected on a big-endian profile | Reason |
+| --- | --- |
+| Atomic load/store/RMW/cmpxchg, std thread/futex/`Io` models | The concurrency model's messages are little-endian bytes (`ZigLean/Mem/Thread.lean`) |
+| Allocator and other std model calls; external model bindings | No big-endian qualification of their contracts |
+| `packed union` | Its fields sit at the low bits, the end of its bytes, at big endian |
+| Vectors of `bool`, pointer or non-byte-multiple lanes | Bit-packed lane order is unqualified at big endian |
+| `f80` | Software format on s390x, unqualified |
+| `error_set_bits` other than 16 | No big-endian error-width evidence |
+| `@tagName`, `@errorName`, inline assembly | Unqualified |
+| Byte pointers into packed structs, `@fieldParentPtr` from them | The model's byte offset is the little-endian one (Zig 0.16 exports bit-pointers here) |
+
+Evidence: `tests/roadmap/big-endian` exports one source with the patched Zig 0.16.0 for
+s390x-linux and x86_64-linux (the AIR differs only in the profile), keeps both translations,
+proves byte-level facts of both, and compares the model of each with the native program run
+on s390x-linux-musl (under qemu emulation) and x86_64-linux-musl. These are bounded
+observations for that target, backend and mode; they are not a binary correspondence claim.

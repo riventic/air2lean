@@ -1,0 +1,8 @@
+[
+  {
+    "example": "asm",
+    "reason": "compile error",
+    "reproducer": "examples/asm/asm.zig",
+    "note": "zig build-obj -fno-llvm -mcpu=baseline examples/asm/asm.zig fails on 0.16.0 with 'emit MIR failed: InvalidInstruction (Zig compiler bug)' for the lzcnt and popcnt inline asm: the self-hosted x86_64 backend cannot encode them at the baseline CPU. No code is generated, so there is no behaviour to compare."
+  }
+]

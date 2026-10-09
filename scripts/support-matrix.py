@@ -35,7 +35,7 @@ AREAS = collections.OrderedDict([
     ('C', 'Concurrency'), ('M', 'Memory and allocation'), ('F', 'Floats'),
     ('A', 'Inline assembly'), ('E', 'External boundaries'), ('P', 'Proof support'),
     ('I', 'Integration and tooling'), ('V', 'Validation and trust'),
-    ('Q', 'Quality and testing'), ('D', 'Documentation'),
+    ('Q', 'Quality and testing'), ('D', 'Documentation'), ('X', 'Other source languages'),
 ])
 REGIONS = {
     'docs/support-matrix.md': ['matrix'],

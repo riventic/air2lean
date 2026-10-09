@@ -29,7 +29,7 @@ OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
           'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
-          'assurance/float-semantics.json', 'scripts/float-semantics.py')
+          'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 
 

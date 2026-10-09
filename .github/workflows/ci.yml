@@ -16,7 +16,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The 0.16.0 full job also runs the three T06 build-mode differential runs (~15 min).
+    timeout-minutes: 90
     env:
       AIR2LEAN_EXAMPLES: ${{ matrix.examples }}
     strategy:
@@ -280,6 +281,12 @@ jobs:
       - name: Fuzz generator and shrinker regressions
         run: tests/roadmap/fuzz/check.sh --light
 
+      # X01 (docs/c-frontend.md): the committed C front-end coverage record matches the
+      # corpus, its summary and the doc's generated tables; C generator invariants. The heavy
+      # translate-c/AIR/Lean run is local: tests/roadmap/c-frontend/check.sh --heavy OUT_DIR.
+      - name: C front-end coverage record check
+        run: tests/roadmap/c-frontend/check.sh --light
+
       - name: Performance budget gate regressions
         run: |
           set -euo pipefail
@@ -395,10 +402,29 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
+      # Before check.sh rewrites Proofs/<Ex>/Gen.lean: every tracked generated module must be
+      # the current translator's output for its committed AIR (docs/generated-code.md).
+      - name: Generated modules are fresh translations of committed AIR
+        run: |
+          python3 -B tests/roadmap/gen-integrity/test_gen_integrity.py
+          python3 -B scripts/gen-integrity.py check
+
       # --timing-json observes translator phases only: emitted Lean must stay byte-identical.
       - name: Translator timing flag preservation
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
+
+      # Q06 (docs/perf-budgets.md): translate + elaborate every budgeted golden workload and fail
+      # on a gross time/memory regression or any change of emitted Lean. Portable limits are
+      # generous multiples of the recorded baseline so runner noise does not trip them.
+      - name: Performance budget regression gate (portable)
+        if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          export LEAN_NUM_THREADS=1
+          python3 -I -B scripts/perf-budgets.py record --no-build --skip-proof --out "$RUNNER_TEMP/perf.json"
+          python3 -I -B scripts/perf-budgets.py gate --portable --measurement "$RUNNER_TEMP/perf.json" \
+            --json "$RUNNER_TEMP/perf-findings.json"
 
       # Before check.sh rewrites Proofs/<Ex>/Gen.lean: the sidecar flag must leave them byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
@@ -410,6 +436,17 @@ jobs:
         run: |
           python3 -I -B tests/roadmap/modular-output/test_cli.py "$PWD/.lake/build/bin/air2lean"
           lake env lean tests/roadmap/modular-output/Split.lean
+
+      # V01 slice (docs/air-semantics.md): the certificate flag leaves Gen.lean byte-identical, the
+      # committed Proofs/{Basic,Recursion}/AirCert.lean are current and kernel-check, their AIR is
+      # the decoded golden AIR, and a one-operator AIR mutation breaks that function's theorem.
+      - name: AIR semantics certificates
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main
+          python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
 
       - name: Stable scalar proof API regressions
         if: ${{ matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
@@ -577,14 +614,26 @@ jobs:
           bash tests/roadmap/diagnostics-complete/export.sh "$PWD/zig-air-${{ matrix.zig }}/bin/zig" "$diagnostics_evidence_dir/air"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/diagnostics-complete/test_cli.py "$PWD/.lake/build/bin/air2lean" \
             --export-air "$diagnostics_evidence_dir/air" 2>&1 | tee "$diagnostics_evidence_dir/complete.log"
-      # L13: synthetic exporter-schema fixtures only; the real export check needs a patched
-      # compiler (docs/volatile-effects.md §Commands).
-      - name: Reject volatile and device effects
+      # L13: exporter-schema fixtures, the default rejection, the reviewed asm allowlist
+      # (ASM_VOLATILE_EFFECT) and the opt-in device contract; fresh real exports of the fixtures
+      # with the patched compiler; device-trace proofs on the generated UART driver and rdtsc
+      # client and their semantic mutants (docs/volatile-effects.md).
+      - name: Volatile rejection and device effects
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py --self-test
-          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 tests/roadmap/volatile-effects/test_cli.py --self-test
+          python3 tests/roadmap/volatile-effects/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          volatile_air=$(mktemp -d "$RUNNER_TEMP/volatile-export.XXXXXX")
+          ZIG_AIR_JSON_DIR="$volatile_air" ZIG_AIR_JSON_FILTER=volatile_effects. "$AIR2LEAN_ZIG_AIR" \
+            build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline \
+            tests/roadmap/volatile-effects/volatile_effects.zig
+          python3 tests/roadmap/volatile-effects/test_cli.py --export-dir "$volatile_air" "$PWD/.lake/build/bin/air2lean"
+          bash tests/roadmap/volatile-effects/check-device.sh
+          bash tests/roadmap/volatile-effects/check-device.sh --export "$(mktemp -d "$RUNNER_TEMP/device-export.XXXXXX")"
       # A cmpxchg or RMW .Max/.Min on a padded integer width compares the whole ABI cell
       # natively: rejected with PADDED_ATOMIC (docs/diagnostics.md). Hand-written AIR only.
       - name: Reject padded-width atomic comparisons
@@ -619,6 +668,14 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
+      # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
+      # proofs of the native values and fail-closed rejections. Runs no compiler.
+      - name: Noreturn union variants
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/noreturn-variants/check.sh
       - name: First-use CLI diagnostics
         run: python3 tests/usability/cli.py
 
@@ -655,13 +712,15 @@ jobs:
 
       # E03: selected environment-operation contract and its write-all client; the
       # documentation check requires an operation-to-premise row and the not-claimed list.
+      # check.sh also translates the committed std I/O AIR (0.15.2 fs.File/posix, 0.16.0
+      # posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
+      # proofs about the generated code. Fresh export: tests/roadmap/env-boundaries/export.sh.
       - name: Environment-operation boundary
         if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -B tests/roadmap/env-boundaries/test_env_boundaries.py -v
-          lake build ZigLean.Env
-          lake env lean tests/roadmap/env-boundaries/WriteAll.lean
+          lake build ZigLean ZigLean.Env ZigLean.Env.Linux air2lean
+          bash tests/roadmap/env-boundaries/check.sh
 
       # This checks committed Flow artifacts only: no production checkout, Zig export,
       # native reproduction, or claim about compiler preservation is part of this CI gate.
@@ -1051,6 +1110,34 @@ jobs:
           bash tests/roadmap/pointer-width/check.sh
           bash tests/roadmap/pointer-width/check.sh --native
 
+      # T03: s390x (big endian) and x86_64 translations of one source, both-order proofs, the
+      # big-endian rejections, and the native program on s390x under qemu-user and on the host.
+      - name: Byte order (s390x big endian, x86_64)
+        if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          AIR2LEAN_S390X_RUN: qemu-s390x-static
+          AIR2LEAN_X86_64_RUN: ""
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user-static
+          lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
+          bash tests/roadmap/big-endian/check.sh --native
+          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-big-endian-source.XXXXXX")
+          trap 'rm -rf "$fresh"' EXIT
+          bash tests/roadmap/big-endian/check.sh --export "$fresh"
+          # A fresh export translates to the retained Gen.lean files byte for byte.
+          for pair in S390x:s390x-linux X64:x86_64-linux; do
+            "$AIR2LEAN_TRANSLATOR" "$fresh/${pair#*:}" -o "$fresh/${pair%%:*}.lean" \
+              --namespace "BigEndian.${pair%%:*}" --prefix big_endian.
+            cmp "$fresh/${pair%%:*}.lean" "tests/roadmap/big-endian/BigEndian/${pair%%:*}/Gen.lean"
+          done
+          diff <(ls "$fresh/s390x-reject") <(ls tests/roadmap/big-endian/air/0.16.0/s390x-reject)
+
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
@@ -1059,6 +1146,44 @@ jobs:
           AIR2LEAN_DIFF: ${{ matrix.full && '1' || '0' }}
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
         run: scripts/check.sh
+
+      # T06: the same differential examples in the other optimize modes on LLVM, checked against
+      # the committed x86_64-linux run records (docs/build-modes.md). ReleaseFast and
+      # ReleaseSmall exclude the inputs on which the model throws (illegal behaviour there).
+      - name: Native build-mode differential runs (Debug, ReleaseFast, ReleaseSmall on LLVM)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build-modes"
+          failed=0
+          for mode in Debug ReleaseFast ReleaseSmall; do
+            summary="$RUNNER_TEMP/build-modes/$mode.json"
+            # ReleaseFast/ReleaseSmall have triaged mismatches (float @divExact), so diff.sh exits 1
+            # there; `record --verify` then requires exactly the committed counts and triage.
+            status=0
+            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
+            [ "$status" -eq 0 ] || [ "$mode" != Debug ]
+            python3 scripts/build-modes.py record --verify --summary "$summary" \
+              --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
+              --mode "$mode" --backend llvm --explicit-backend \
+              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json) \
+              || failed=1
+          done
+          [ "$failed" -eq 0 ]
+
+      # The summaries behind the build-mode check, so that a changed example set can be
+      # re-recorded (`build-modes.py record --summary ... --zig-sha256 ...`, docs/build-modes.md).
+      - name: Upload the build-mode differential summaries
+        if: ${{ !cancelled() && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/build-modes/
+          if-no-files-found: warn
+          retention-days: 30
 
       # A failed check hands out the AIR that this host dumped: the golden files of this OS
       # (tests/golden/<version>/<ex>/air-linux/) come from here (docs/generated-code.md).
@@ -1318,6 +1443,21 @@ jobs:
             tests/roadmap/dispatch/check.sh
           else
             tests/roadmap/dispatch/check.sh --native-only
+          fi
+
+      # Dispatch-loop template tactic; the generated tokenizer proof names 0.16.0 loop IDs.
+      - name: Dispatch-loop template regressions
+        if: ${{ !matrix.mutate }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_DISPATCH_ZIG_STOCK: zig
+        run: |
+          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
+            tests/roadmap/dispatch-templates/check.sh
+          else
+            tests/roadmap/dispatch-templates/check.sh --template-only
           fi
 
       - name: Local-place parent pointer regressions

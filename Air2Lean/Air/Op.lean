@@ -85,6 +85,15 @@ def childTys (ty : Ty) : Array TyId :=
   | .tuple fs => fs
   | _ => #[]
 
+/-- A type without values (`noreturn`). A union field of this type can never be active: it
+adds no payload bytes, has no constructor in the translation, and every instruction or constant
+that activates or reads it is rejected (`Check.lean`'s `uninhabitedUnionField?`). -/
+def uninhabitedTy (types : Array Ty) (id : TyId) : Bool := types[id]? == some .noreturn
+
+/-- The fields of a union that can be active (`uninhabitedTy`). -/
+def inhabitedFields (types : Array Ty) (fields : Array (String × TyId)) : Array (String × TyId) :=
+  fields.filter fun (_, t) => !uninhabitedTy types t
+
 /-- Children traversed through values; a pointer ends a value-type path. -/
 def valueChildTys (ty : Ty) : Array TyId :=
   match ty with
@@ -659,5 +668,11 @@ structure Func where
   schemas and constructed functions are `unverified`. Backend-specific constant lowering
   checks (`Check.lean`) read it. -/
   backend : String := "unverified"
+  /-- The profile's target architecture (`x86_64`, `aarch64`); empty for a legacy profile, whose
+  reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
+  targetArch : String := ""
+  /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
+  (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
+  bigEndian : Bool := false
 
 end Air2Lean

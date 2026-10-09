@@ -83,7 +83,8 @@ class ReceiptTests(unittest.TestCase):
         for name in ('scripts/assumptions.py', 'scripts/normalize-generated.py', 'scripts/build-guard.py',
                      'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh', 'assurance/policy.json',
                      'tools/Assurance.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain',
-                     'zig-patch/versions.toml', 'assurance/float-semantics.json', 'scripts/float-semantics.py'):
+                     'zig-patch/versions.toml', 'assurance/float-semantics.json', 'scripts/float-semantics.py',
+                     'scripts/gen-integrity.py'):
             self.source(name, (ROOT / name).read_bytes())
         self.source('ZigLean.lean', b'import ZigLean.Basic\n')
         self.source('ZigLean/Basic.lean', b'def trivial := 0\n')

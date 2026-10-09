@@ -20,6 +20,7 @@
   "generated_imports": {
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Calls": "tests/roadmap/indirect-calls/check.sh compiles the fresh Pipeline.lean translation into Calls.olean at gate time.",
+    "DispatchTokenizer": "tests/roadmap/dispatch-templates/check.sh translates a fresh export of source.zig into DispatchTokenizer.olean at gate time.",
     "Gen": "tests/roadmap/global-payload-pointers/check.sh writes Gen.lean at gate time from a fresh export.",
     "DeadlineActual.Gen": "tests/roadmap/deadline-futex/root-selected.sh translates the selected fresh export into DeadlineActual/Gen.lean.",
     "ErrorWidth16.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 16-bit fixtures into ErrorWidth16/Gen.lean.",
@@ -27,13 +28,16 @@
     "ErrorWidth10.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 10-bit fixtures into ErrorWidth10/Gen.lean.",
     "ErrorWidth17.Gen": "tests/roadmap/error-width/check.sh translates the hand-written 17-bit fixtures into ErrorWidth17/Gen.lean.",
     "FuturesFallible.Gen": "tests/roadmap/futures/check.sh translates the committed AIR with --spawn-policy fallible into FuturesFallible/Gen.lean at gate time.",
-    "ThreadTuplesFallible.Gen": "tests/roadmap/thread-tuples/check.sh translates the committed AIR with --spawn-policy fallible into ThreadTuplesFallible/Gen.lean at gate time."
+    "ThreadTuplesFallible.Gen": "tests/roadmap/thread-tuples/check.sh translates the committed AIR with --spawn-policy fallible into ThreadTuplesFallible/Gen.lean at gate time.",
+    "EnvStd15.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.15.2 std I/O AIR into EnvStd15/Gen.lean with the ENV-03 registry.",
+    "EnvStd16.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.16.0 std I/O AIR into EnvStd16/Gen.lean with the ENV-03 registry."
   },
   "generated_premises": ["TRU-02"],
   "profiles": {
     "absent": "PRF-01",
     "legacy-abi64-le": "PRF-01",
     "abi64-le-v1": "PRF-02",
+    "abi64-be-v1": "PRF-05",
     "gate-time": "PRF-03"
   },
   "float_semantics": {
@@ -47,6 +51,8 @@
     "ZigLean.Permutation": ["SEM-01"],
     "ZigLean.BitCast": ["SEM-01", "SEM-02"],
     "ZigLean.Packed": ["SEM-01", "SEM-02"],
+    "ZigLean.Endian": ["SEM-02"],
+    "ZigLean.EndianLemmas": ["SEM-02"],
     "ZigLean.Union": ["SEM-01", "SEM-02"],
     "ZigLean.Vec": ["SEM-01"],
     "ZigLean.VecMem": ["SEM-01", "SEM-02"],
@@ -64,6 +70,8 @@
     "ZigLean.Asm": ["ASM-03"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Env": ["ENV-01"],
+    "ZigLean.Env.Host": ["SEM-02"],
+    "ZigLean.Env.Linux": ["ENV-01", "ENV-03"],
     "ZigLean.Mem.Basic": ["SEM-02"],
     "ZigLean.Mem.Enc": ["SEM-02"],
     "ZigLean.Mem.ErrWidth": ["SEM-02"],
@@ -74,6 +82,7 @@
     "ZigLean.Mem.Repr": ["SEM-01", "SEM-02"],
     "ZigLean.Mem.NullLemmas": ["SEM-02"],
     "ZigLean.Mem.Parent": ["SEM-02"],
+    "ZigLean.Mem.Device": ["DEV-01"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
     "ZigLean.Mem.Owned": ["ALC-07"],
     "ZigLean.Mem.Width": ["SEM-02"],
@@ -146,6 +155,7 @@
     "ZigLean.Sep.Total": ["SEM-04"],
     "ZigLean.Sep.LoopTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Step": ["SEM-02", "SEM-03", "SEM-04"],
+    "ZigLean.Sep.DispatchTemplate": ["SEM-03", "SEM-04"],
     "ZigLean.Sep.Cost": ["SEM-02", "SEM-03", "SEM-05"],
     "ZigLean.Sep.Bounded": ["SEM-04", "SEM-05"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
@@ -184,9 +194,12 @@
     {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm(?:Fx)?_[0-9]+$"},
     {"premise": "ASM-03", "scope": "closure", "pattern": "(?:^|\\.)airAsmFx_[0-9]+$"},
     {"premise": "PRF-04", "scope": "closure", "pattern": "(?:^|\\.)(?:PtrWidth|Slice32|SliceOf)(?:\\.|$)"},
-    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
+    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
+    {"premise": "DEV-01", "scope": "closure", "pattern": "(?:^|\\.)(?:vload|vstore|vasm|vasmEffect|DevOracle|AsmOracle|Device)$|(?:^|\\.)DevState\\.(?:oracle|asmOracle)$"},
+    {"premise": "SEM-06", "scope": "closure", "pattern": "(?:^|\\.)Sem\\.(?:execFunc|run|Oracle|Table)$"}
   ],
   "implies": {
+    "DEV-01": ["SEM-02"],
     "ALC-02": ["ALC-01"],
     "ALC-03": ["ALC-01"],
     "ALC-04": ["ALC-01"],
@@ -215,6 +228,7 @@
     "EXT-02": ["EXT-01"],
     "SEM-02": ["SEM-01"],
     "SEM-03": ["SEM-01"],
+    "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],
     "THR-01": ["SEM-02"],
     "TRU-02": ["TRU-03", "SEM-01"]
   }

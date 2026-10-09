@@ -12,12 +12,20 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[3]
 ENV = ROOT / "ZigLean/Env.lean"
+# `Ops` and the installed host are in the premise-free data module the runtime imports.
+ENV_HOST = ROOT / "ZigLean/Env/Host.lean"
+REGISTRY_FILL = ROOT / "tests/roadmap/env-boundaries/fill_registry.py"
 DOC = ROOT / "docs/env-boundaries.md"
 CATALOG = ROOT / "docs/premises.md"
 CONFIG = ROOT / "assurance/premises.json"
 
 NOT_CLAIMED = ("CPython", "Browser host imports", "The operating system")
 PREMISE_RE = re.compile(r"\b[A-Z]{3}-\d{2}\b")
+
+
+def bound_symbols() -> list[str]:
+    """The registry symbols fill_registry.py binds (its BINDINGS keys)."""
+    return re.findall(r'^    "([a-z.]+)": \(', REGISTRY_FILL.read_text(), re.M)
 
 
 def structure_fields(lean: str, name: str) -> list[str]:
@@ -73,6 +81,18 @@ def check(lean: str, doc: str, catalog: str, config: dict) -> list[str]:
         errors.append("assurance/premises.json: ZigLean.Env must map to ENV-01")
     if not any(rule.get("premise") == "ENV-02" for rule in config.get("rules", [])):
         errors.append("assurance/premises.json: no ENV-02 rule")
+    if "ENV-03" not in config.get("runtime_modules", {}).get("ZigLean.Env.Linux", []):
+        errors.append("assurance/premises.json: ZigLean.Env.Linux must map to ENV-03")
+    primitives = {}
+    for line in (section(doc, "Bound primitives") or "").splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) == 6 and cells[0].startswith("`"):
+            primitives[cells[0].strip("`")] = cells[5]
+    for symbol in bound_symbols():
+        if symbol not in primitives:
+            errors.append(f"bound primitive {symbol}: no row in docs/env-boundaries.md#bound-primitives")
+        elif "ENV-03" not in PREMISE_RE.findall(primitives[symbol]):
+            errors.append(f"bound primitive {symbol}: row does not name ENV-03")
     claims = section(doc, "Not claimed")
     if claims is None:
         errors.append("docs/env-boundaries.md: no '## Not claimed' section")
@@ -84,7 +104,7 @@ def check(lean: str, doc: str, catalog: str, config: dict) -> list[str]:
 
 class EnvBoundaryTests(unittest.TestCase):
     def setUp(self):
-        self.lean = ENV.read_text()
+        self.lean = ENV_HOST.read_text() + "\n" + ENV.read_text()
         self.doc = DOC.read_text()
         self.catalog = CATALOG.read_text()
         self.config = json.loads(CONFIG.read_text())
@@ -130,6 +150,16 @@ class EnvBoundaryTests(unittest.TestCase):
         lean = self.lean.replace("  closeMonotone :", "  closeMonotone' : True\n  closeMonotone :")
         self.assertIn("Contract field closeMonotone': not documented in any operation row",
                       self.run_check(lean=lean))
+
+    def test_bound_primitive_rows_are_required(self):
+        self.assertEqual(bound_symbols(), ["os.linux.close", "os.linux.write", "os.linux.read"])
+        doc = self.doc.replace("| `os.linux.read` |", "| `os.linux.pread` |")
+        self.assertIn("bound primitive os.linux.read: no row in docs/env-boundaries.md#bound-primitives",
+                      self.run_check(doc=doc))
+        config = dict(self.config, runtime_modules=dict(self.config["runtime_modules"],
+                                                        **{"ZigLean.Env.Linux": ["ENV-01"]}))
+        self.assertIn("assurance/premises.json: ZigLean.Env.Linux must map to ENV-03",
+                      self.run_check(config=config))
 
     def test_premise_mapping_is_required(self):
         config = dict(self.config, runtime_modules={})

@@ -67,17 +67,24 @@ def fnName (text : String) : String :=
 
 /-- Only compiler identities are renamed. Field/error names and asm/string data can contain
 the same markers, but their spelling is observable (for example through `@tagName`). -/
-partial def identityNames (j : Lean.Json) (root : Bool := true) (typeEntry : Bool := false) :
-    Array String :=
+partial def identityNamesAux (acc : Array String) (j : Lean.Json) (root : Bool)
+    (typeEntry : Bool) : Array String :=
   match j with
-  | .arr vs => vs.flatMap fun v => identityNames v false typeEntry
-  | .obj fields => fields.foldl (init := #[]) fun acc k v =>
+  | .arr vs => vs.foldl (fun acc v => identityNamesAux acc v false typeEntry) acc
+  | .obj fields => fields.foldl (init := acc) fun acc k v =>
     let isIdentity := k == "func" || k == "comptime_fn" ||
       (k == "name" && (root || typeEntry))
     if isIdentity then
-      acc ++ (v.getStr?.toOption.toArray)
-    else acc ++ identityNames v false (root && k == "types")
-  | _ => #[]
+      match v.getStr? with
+      | .ok s => acc.push s
+      | .error _ => acc
+    else identityNamesAux acc v false (root && k == "types")
+  | _ => acc
+
+/-- The strings under compiler-identity keys, in document order. -/
+def identityNames (j : Lean.Json) (root : Bool := true) (typeEntry : Bool := false) :
+    Array String :=
+  identityNamesAux #[] j root typeEntry
 
 /-- `j` with `f` applied to each compiler identity string (`identityNames`). -/
 partial def mapIdentities (f : String → String) (j : Lean.Json) (root : Bool := true)
@@ -112,10 +119,11 @@ def funcInstances017 (j : Lean.Json) : Lean.Json :=
       out := out ++ (if digits.isEmpty then "__func_" else "__anon_") ++ p
     out) j
 
-/-- `texts`: the JSON text of each function. The same texts, with the numbers after `marker`
-renamed. -/
-def renumberParsed (texts : Array String) (parsed : Array (Option Lean.Json))
-    (marker : String) : Array (Option Lean.Json) := Id.run do
+/-- `texts`: the JSON text of each function. The same functions, with the numbers after `marker`
+renamed, and for each whether any identity of it contains a `marker` instance (otherwise its
+JSON is returned unchanged, without being rebuilt). -/
+def renumberParsedChanged (texts : Array String) (parsed : Array (Option Lean.Json))
+    (marker : String) : Array (Option Lean.Json) × Array Bool := Id.run do
   let names := parsed.map fun j => (j.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
   let identities := parsed.map fun j =>
     let ns := (j.map identityNames).getD #[]
@@ -144,6 +152,8 @@ def renumberParsed (texts : Array String) (parsed : Array (Option Lean.Json))
     while h : qi < queue.size do
       let i := queue[qi]
       qi := qi + 1
+      -- No identity of this function contains the marker: the filter below drops every hit.
+      if identities[i]!.isEmpty then continue
       for n in anonInsts texts[i]! marker do
         unless identities[i]!.contains n do continue
         if !map.contains n then
@@ -154,7 +164,15 @@ def renumberParsed (texts : Array String) (parsed : Array (Option Lean.Json))
             if !seen.contains j then
               seen := seen.insert j
               queue := queue.push j
-  return parsed.map fun j => j.map (renameIdentities map marker ·)
+  let changed := identities.map (!·.isEmpty)
+  return (parsed.zipIdx.map fun (j, i) =>
+    if changed[i]! then j.map (renameIdentities map marker ·) else j, changed)
+
+/-- `texts`: the JSON text of each function. The same texts, with the numbers after `marker`
+renamed. -/
+def renumberParsed (texts : Array String) (parsed : Array (Option Lean.Json))
+    (marker : String) : Array (Option Lean.Json) :=
+  (renumberParsedChanged texts parsed marker).1
 
 def compressParsed (texts : Array String) (parsed : Array (Option Lean.Json)) : Array String :=
   (texts.zip parsed).map fun (text, j) => (j.map (·.compress)).getD text
@@ -167,9 +185,16 @@ private def renumberAllParsed (texts : Array String)
     (initialParsed : Array (Option Lean.Json)) : Array String := Id.run do
   let mut parsed := initialParsed
   let mut current := texts
+  let mut first := true
   for marker in ["__anon_", "__struct_", "__enum_", "__union_", "__opaque_"] do
-    parsed := renumberParsed current parsed marker
-    current := compressParsed current parsed
+    let (next, changed) := renumberParsedChanged current parsed marker
+    parsed := next
+    -- The first pass compresses every text. After that a text equals the compressed form of
+    -- its JSON, so only a function whose JSON changed needs compressing again.
+    current := if first then compressParsed current parsed else
+      (current.zip (parsed.zip changed)).map fun (text, j, c) =>
+        if c then (j.map (·.compress)).getD text else text
+    first := false
   return current
 
 /-- Each text parsed, with 0.17.0 instance names in the older spelling (`funcInstances017`);
