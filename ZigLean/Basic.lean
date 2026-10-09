@@ -29,6 +29,10 @@ inductive Error where
   /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
   a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/
   | deadlock
+  /-- The call stack is exhausted: a frame does not fit in the stack budget that the
+  environment selected (`Mem.stackLimit`, `Zig.enterFrame`, MM-5). Native code overflows its
+  stack (a signal, not a panic); the model makes it an outcome of its own. -/
+  | stackOverflow
   deriving Repr, DecidableEq, Inhabited
 
 /-- `none` = the computation does not terminate. `some (.error e)` = safety panic. -/

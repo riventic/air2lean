@@ -15,6 +15,37 @@ namespace Zig
 
 attribute [zig_unfold] callM callR
 
+/-! ## Stack budget (MM-5) -/
+
+/-- Without a stack budget (`stackLimit = none`, every generated `mem0`), a frame is charged
+and never overflows. A statement over such a memory carries premise STK-01. -/
+theorem enterFrame_run_none {m : Mem} (h : m.stackLimit = none) (bytes : Nat) :
+    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+  simp [enterFrame, h, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+    set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind,
+    ExceptT.bindCont]
+
+/-- A frame that fits in the budget is charged. -/
+theorem enterFrame_run_fits {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
+    (hfit : m.stackUsed + (frameBase + bytes) ≤ limit) :
+    (enterFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed + (frameBase + bytes) }) := by
+  have : ¬ limit < m.stackUsed + (frameBase + bytes) := by omega
+  simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, set, StateT.set, MonadStateOf.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk,
+    ExceptT.bind, ExceptT.bindCont]
+
+/-- A frame that does not fit in the budget overflows the stack. -/
+theorem enterFrame_overflow {m : Mem} {limit bytes : Nat} (h : m.stackLimit = some limit)
+    (hover : limit < m.stackUsed + (frameBase + bytes)) :
+    ((enterFrame bytes).run m).run = some (.error .stackOverflow) := by
+  simp [enterFrame, h, hover, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+    StateT.get, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.bind, ExceptT.bindCont,
+    pure, ExceptT.pure, StateT.lift, ExceptT.run]
+
+/-- Releasing a frame restores the bytes that `enterFrame` charged. -/
+theorem leaveFrame_run (m : Mem) (bytes : Nat) :
+    (leaveFrame bytes).run m = pure ((), { m with stackUsed := m.stackUsed - (frameBase + bytes) }) := rfl
+
 /-- An access that succeeds: its block is live, the bytes are in the block, and the address is
 aligned. -/
 theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}

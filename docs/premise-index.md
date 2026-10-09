@@ -44,6 +44,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
+| [STK-01](premises.md#stk-01) | 8 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
@@ -633,23 +634,23 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Recursion/Proofs.lean`
 
-File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `succ_parity0` | TRU-01 |
 | `succ_parity1` | TRU-01 |
-| `isEven_isOdd_aux` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isEven_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `isOdd_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `isEven_isOdd_aux` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
+| `isEven_spec` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
+| `isOdd_spec` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
 | `natFact_mono` | TRU-01 |
-| `fact_ok_aux` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `fact_ok` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `fact_13_panics` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `fact_ok_aux` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
+| `fact_ok` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
+| `fact_13_panics` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
 | `rem_unsigned` | SEM-01, TRU-01 |
 | `gcd_step` | TRU-01 |
-| `gcd_spec_aux` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `gcd_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `gcd_spec_aux` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
+| `gcd_spec` | PRF-01, SEM-01, STK-01, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Slices/Proofs.lean`
 

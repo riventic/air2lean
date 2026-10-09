@@ -33,6 +33,7 @@ class Kind(str, Enum):
     ILLEGAL = 'illegal'
     UNSPECIFIED = 'unspecified'
     DEADLOCK = 'deadlock'
+    STACK_OVERFLOW = 'stack_overflow'
     BOUNDED_NO_RESULT = 'bounded_no_result'
     SEARCH_CAP = 'search_cap'
     INPUT_FAILURE = 'input_failure'
@@ -44,6 +45,7 @@ class Status(str, Enum):
     PANIC_MATCH = 'panic_match'
     ILLEGAL = 'illegal_exclusion'
     UNSPECIFIED = 'unspecified_exclusion'
+    STACK_OVERFLOW = 'stack_overflow_exclusion'
     SEARCH_CAP = 'search_cap'
     BOUNDED_NO_RESULT = 'bounded_no_result'
     HOST = 'host_difference'
@@ -52,7 +54,7 @@ class Status(str, Enum):
     NATIVE_HARNESS_FAILURE = 'native_harness_failure'
     SKIPPED = 'skipped'
 
-ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock'}
+ERRORS = {'overflow', 'outOfBounds', 'divByZero', 'unreachable', 'panic', 'illegal', 'unspecified', 'deadlock', 'stackOverflow'}
 IDENT = re.compile(r'[a-zA-Z0-9_-]+\Z')
 
 class Invalid(ValueError):
@@ -188,7 +190,7 @@ def observation(line, legacy, side):
             raise Invalid('invalid reported native panic tag')
     elif kind != Kind.INPUT_FAILURE:
         error = legacy.get('fail', '').removeprefix('Zig.Error.')
-        expected = {'illegal': Kind.ILLEGAL, 'unspecified': Kind.UNSPECIFIED, 'deadlock': Kind.DEADLOCK}.get(error, Kind.MODEL_PANIC)
+        expected = {'illegal': Kind.ILLEGAL, 'unspecified': Kind.UNSPECIFIED, 'deadlock': Kind.DEADLOCK, 'stackOverflow': Kind.STACK_OVERFLOW}.get(error, Kind.MODEL_PANIC)
         if error not in ERRORS or legacy.get('fail') != 'Zig.Error.' + error or kind != expected:
             raise Invalid('model error tag disagrees with constructor')
     search = record.get('search')
@@ -246,7 +248,7 @@ def legacy_bucket(native, model, host, values_match=None, search=None):
 def _legacy_bucket(native, model, host, values_match=None):
     if values_match is None:values_match=same_value(native,model)
     if values_match: return 'ok'
-    if model.get('fail') in {'Zig.Error.illegal','Zig.Error.unspecified'}: return 'unspecified'
+    if model.get('fail') in {'Zig.Error.illegal','Zig.Error.unspecified','Zig.Error.stackOverflow'}: return 'unspecified'
     if model.get('fail') == 'Zig.Error.capped': return 'capped'
     if 'fail' in native and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return 'fail_match'
     return 'host' if host else 'mismatch'
@@ -265,6 +267,8 @@ def _classify(native, model, nkind, mkind, search, host=False, values_match=None
         return Status.ERROR_RETURN_MATCH if mkind == Kind.ERROR_RETURN else Status.VALUE_MATCH
     if mkind == Kind.ILLEGAL: return Status.ILLEGAL
     if mkind == Kind.UNSPECIFIED: return Status.UNSPECIFIED
+    # The model's stack budget is chosen by the environment (MM-5), not the native stack size.
+    if mkind == Kind.STACK_OVERFLOW: return Status.STACK_OVERFLOW
     if mkind == Kind.SEARCH_CAP: return Status.SEARCH_CAP
     if nkind == Kind.NATIVE_PANIC and mkind == Kind.MODEL_PANIC and PANICS.get(native['fail']) is not None and model.get('fail') == 'Zig.Error.' + PANICS[native['fail']]: return Status.PANIC_MATCH
     if mkind == Kind.BOUNDED_NO_RESULT or (search and search['saw_no_result']): return Status.BOUNDED_NO_RESULT

@@ -439,6 +439,16 @@ jobs:
           lake env lean tests/roadmap/loop-tactics/Template.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Template.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
 
+      - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/memory-hardening"
+          lake build ZigLean.Mem.Lemmas 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
+          for test in tests/roadmap/memory-hardening/*.lean; do
+            lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
+          done
+
       - name: Validate AIR input and whole-program signatures
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |

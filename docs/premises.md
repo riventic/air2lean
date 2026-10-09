@@ -509,6 +509,24 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Sep.Cost`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
 
+<a id="stk-01"></a>
+### STK-01 — The native stack holds every call chain
+
+- Kind: environment.
+- Statement: A statement about a function that recursion reaches (a `partial_fixpoint`
+  definition, or a call of `Zig.enterFrame`) assumes that the native stack does not overflow
+  on the runs it covers, unless it bounds `Mem.stackLimit` itself. The generated `mem0` has
+  no stack budget (`stackLimit = none`); a recursive function that uses memory charges an
+  estimated frame (`Zig.frameBase` plus its escaping locals) to `Mem.stackUsed` and, under a
+  selected budget, throws `.stackOverflow` when it does not fit. The estimate is not a bound
+  on the native frame (spills, saved registers, inlining), and pure recursive functions
+  (`Zig.Result`) charge nothing. Native ReleaseSafe code that overflows its stack dies on a
+  signal, which no model outcome under `stackLimit = none` reflects (MM-5,
+  [architecture-audit/memory-model.md](architecture-audit/memory-model.md)).
+- Derived from: tokens `partial_fixpoint`, `enterFrame`, `stackLimit`.
+- Sources: `ZigLean/Mem/Basic.lean`, [generated-code.md](generated-code.md#memory),
+  `tests/roadmap/memory-hardening/README.md`.
+
 ## External models
 
 <a id="ext-01"></a>

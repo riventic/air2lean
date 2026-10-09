@@ -27,6 +27,8 @@ class Outcome(str, Enum):
     UNSPECIFIED = 'unspecified_behavior'
     UNSUPPORTED = 'unsupported_semantics'
     DEADLOCK = 'deadlock'
+    # The selected stack budget ran out (`Zig.Error.stackOverflow`, MM-5).
+    STACK_OVERFLOW = 'stack_overflow'
     # Tests only observe scheduler fuel exhaustion (`bounded_no_result`); it is not divergence.
     DIVERGENCE = 'divergence'
     SEARCH_CAP = 'search_cap'
@@ -34,7 +36,8 @@ class Outcome(str, Enum):
 
 # Model failures. A partial or total triple rules out each of them (`Zig.Error`); a Zig error
 # union value is an ordinary returned value and is not among them.
-SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.DEADLOCK})
+SAFETY_FAILURES = frozenset({Outcome.PANIC, Outcome.ILLEGAL, Outcome.UNSPECIFIED, Outcome.DEADLOCK,
+                             Outcome.STACK_OVERFLOW})
 # Evidence that cannot show a failure is absent, whatever was observed elsewhere.
 INCOMPLETE = frozenset({Outcome.SEARCH_CAP, Outcome.DIVERGENCE, Outcome.UNSPECIFIED, Outcome.UNSUPPORTED})
 # Absence claims (scripts/claims.py names) and the outcomes each one denies.
@@ -55,6 +58,7 @@ DIFF_KINDS = {
     'illegal': Outcome.ILLEGAL,
     'unspecified': Outcome.UNSPECIFIED,
     'deadlock': Outcome.DEADLOCK,
+    'stack_overflow': Outcome.STACK_OVERFLOW,
     'bounded_no_result': Outcome.DIVERGENCE,
     'search_cap': Outcome.SEARCH_CAP,
     'native_panic': None,
@@ -69,6 +73,7 @@ DIFF_STATUSES = {
     'panic_match': Outcome.PANIC,
     'illegal_exclusion': Outcome.ILLEGAL,
     'unspecified_exclusion': Outcome.UNSPECIFIED,
+    'stack_overflow_exclusion': Outcome.STACK_OVERFLOW,
     'search_cap': Outcome.SEARCH_CAP,
     'bounded_no_result': Outcome.DIVERGENCE,
 }

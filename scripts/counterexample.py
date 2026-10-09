@@ -41,6 +41,7 @@ CONTRACTS = {
     'illegal': ('no_illegal_behaviour', 'No illegal behaviour that ReleaseSafe does not check: data race, dead, '
                 'out-of-bounds or misaligned access, double free, minInt @rem/@mod -1.'),
     'deadlock': ('no_deadlock', 'While a thread is unfinished, some thread can make progress.'),
+    'stack_overflow': ('stack_sufficient', 'Every call chain fits in the selected stack budget (STK-01).'),
     'model_panic': ('no_safety_panic', 'No ReleaseSafe safety check or explicit panic trips.'),
     'mismatch': ('native_correspondence', 'The model outcome equals the native Zig outcome on this input.'),
 }
@@ -82,13 +83,14 @@ def verdict(*, kind=None, status=None, automation=None, replay=None, tree=None):
         if status in unsolved: return UNSOLVED, unsolved[status], None
         if status == S.MISMATCH: failure = 'mismatch'
         elif status == S.ILLEGAL: failure = 'illegal'
+        elif status == S.STACK_OVERFLOW: failure = 'stack_overflow'
         else: return NO_FAILURE, status.value, None
     elif kind is not None:
         kind = K(kind)
         unsolved = {K.SEARCH_CAP: 'search_cap', K.BOUNDED_NO_RESULT: 'bounded_no_result', K.UNSPECIFIED: 'unspecified_result'}
         if kind in unsolved: return UNSOLVED, unsolved[kind], None
         if kind in (K.INPUT_FAILURE, K.NATIVE_HARNESS_FAILURE): return SETUP, kind.value, None
-        if kind in (K.ILLEGAL, K.DEADLOCK, K.MODEL_PANIC): failure = kind.value
+        if kind in (K.ILLEGAL, K.DEADLOCK, K.MODEL_PANIC, K.STACK_OVERFLOW): failure = kind.value
         else: return NO_FAILURE, kind.value, None
     else:
         raise Invalid('verdict needs an outcome')

@@ -37,7 +37,7 @@ SCHEMA = 1
 STAGES = ('analyzed', 'exported', 'translated', 'compiled', 'tested', 'proved')
 OUTCOMES = ('exact_match', 'host_difference', 'undefined_behavior', 'unspecified_behavior',
             'nondeterministic_valid', 'unsupported_semantics', 'panic', 'error_return',
-            'illegal_behavior', 'deadlock', 'divergence', 'search_cap', 'skipped', 'proof_exclusion')
+            'illegal_behavior', 'deadlock', 'stack_overflow', 'divergence', 'search_cap', 'skipped', 'proof_exclusion')
 LIMITS = {'max_file_bytes': 8 * 1024 * 1024, 'max_total_bytes': 64 * 1024 * 1024,
           'max_json_depth': 128, 'max_files': 4096, 'max_roots': 256, 'max_total_output_bytes': 64 * 1024 * 1024, 'timeout_seconds': 60, 'max_output_bytes': 8 * 1024 * 1024}
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\Z')

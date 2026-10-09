@@ -670,6 +670,10 @@ structure FCtx where
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
   rawRet : Bool := false
+  /-- This function is in a recursive call group (`callGroups`): its call depth is not bounded
+  by the call graph, so a function that uses memory charges its frame to the stack budget
+  (`Zig.enterFrame`, MM-5). -/
+  recursive : Bool := false
 
 private def prepareSpawnFallbackMap (fallbacks : Array (String × String)) : Std.HashMap String String :=
   let empty : Std.HashMap String String := {}
@@ -2687,6 +2691,13 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let init := if sets.isEmpty then s!"(default : {localsName})"
     else s!"\{ (default : {localsName}) with {String.intercalate ", " sets.toList} }"
   let freeLines := (stack.map fun (aid, _, _, _) => s!"  Zig.free s{aid}").toList
+  -- A recursive function that uses memory charges its frame against the stack budget
+  -- (`Zig.enterFrame`, MM-5): the bytes of its escaping locals, each rounded up to its
+  -- alignment; `Zig.enterFrame` adds the fixed per-call part (`Zig.frameBase`).
+  let (enterLines, leaveLines) := if fc.recursive && fc.mem && !fc.conc then
+      let bytes := stack.foldl (fun acc (_, _, size, align) => acc + Zig.alignUp size align) 0
+      ([s!"  Zig.enterFrame {bytes}"], [s!"  Zig.leaveFrame {bytes}"])
+    else ([], [])
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
     | _ => "| .ret v => pure v"
@@ -2696,8 +2707,8 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let matchLines :=
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
   String.intercalate "\n"
-    (["do"] ++ allocLines ++
-     [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
+    (["do"] ++ enterLines ++ allocLines ++
+     [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++ leaveLines ++
      ["  match e with"] ++ matchLines)
 
 def emitFunctionHeader (fc : FCtx) (leanName : String) (paramTys : Array TyId)
@@ -2761,11 +2772,11 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
-    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[]) :
-    FuncParts :=
+    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
+    (recursive : Bool := false) : FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
-  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap }.prepareInstUses
+  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
@@ -3451,7 +3462,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive
     if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

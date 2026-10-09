@@ -63,6 +63,7 @@ class TaxonomyTests(unittest.TestCase):
             (case('illegal_exclusion', 'illegal'), {O.ILLEGAL}),
             (case('unspecified_exclusion', 'unspecified'), {O.UNSPECIFIED}),
             (case('mismatch', 'deadlock'), {O.DEADLOCK}),
+            (case('stack_overflow_exclusion', 'stack_overflow'), {O.STACK_OVERFLOW}),
             (case('search_cap', 'value', search('capped')), {O.NONDETERMINISTIC_VALID, O.SEARCH_CAP}),
             (case('value_match', 'value', search('witness', True)), {O.NONDETERMINISTIC_VALID, O.DIVERGENCE}),
             (case('bounded_no_result', 'bounded_no_result', search('bounded', True)), {O.DIVERGENCE}),
@@ -91,6 +92,7 @@ class TaxonomyTests(unittest.TestCase):
             'panic': case('panic_match', 'model_panic'),
             'illegal': case('illegal_exclusion', 'illegal'),
             'deadlock': case('mismatch', 'deadlock'),
+            'stack overflow': case('stack_overflow_exclusion', 'stack_overflow'),
         }
         for name, row in refusing.items():
             for claim in outcomes.ABSENCE_CLAIMS:

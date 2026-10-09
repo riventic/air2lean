@@ -311,6 +311,26 @@ def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   match e with ...
 ```
 
+**Stack budget (MM-5).** A function of a recursive call group (`callGroups`) that uses memory
+charges its frame to the stack budget: `Zig.enterFrame b` first and `Zig.leaveFrame b` after
+the frees, where `b` is the bytes of its escaping locals, each rounded up to its alignment, and
+`Zig.enterFrame` adds `Zig.frameBase` (16) for the return address and frame pointer. Under a
+budget (`Mem.stackLimit = some n`) a frame that does not fit throws `.stackOverflow`; the
+generated `mem0` has none, and its statements carry premise
+[STK-01](premises.md#stk-01). Non-recursive and pure functions charge nothing (their depth is
+bounded by the call graph, or they have no memory state); STK-01 covers them too. AIR has no
+frame size, so the charge is an estimate, not the native frame:
+
+```lean
+def depth (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
+  Zig.enterFrame 64
+  let s1 ← Zig.allocStack 64 1
+  ...
+  Zig.free s1
+  Zig.leaveFrame 64
+  match e with ...
+```
+
 `ZigLean/Sep/` (separation logic, [proofs.md](proofs.md)) and `ZigLean/Mem/Lemmas.lean` (generated code imports neither) have the lemmas for proofs: a load after a store at the same pointer, a load of bytes that a store does not touch, and `LawfulEnc` (`u32`). It adds `Zig.callM` and `Zig.callR` to the `zig_unfold` simp set.
 
 ## Signature

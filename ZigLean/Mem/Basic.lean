@@ -293,6 +293,13 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
+  /-- The stack budget in bytes (MM-5): a call whose frame (`Zig.enterFrame`) would take
+  `stackUsed` above it throws `.stackOverflow`. `none` (the default, and every generated
+  `mem0`) sets no budget: a statement about such a memory assumes that the native stack holds
+  every call chain it reaches (premise STK-01, `docs/premises.md`). -/
+  stackLimit : Option Nat := none
+  /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
+  stackUsed : Nat := 0
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -408,6 +415,33 @@ def free (p : Ptr) : MemM Unit := do
 
 /-- The stack block of a local whose address escapes: made at function entry. -/
 @[inline] def allocStack (size align : Nat) : MemM Ptr := alloc .stack size align
+
+/-! ## Stack budget (MM-5)
+
+A function of a recursive call group that uses memory charges its frame when it is entered
+(`enterFrame`) and releases it when it returns (`leaveFrame`). The frame is `frameBase` bytes
+plus the bytes of the function's escaping locals (each rounded up to its alignment), written by
+the translator. AIR has no frame size: native frames also hold spill slots, saved registers
+and locals that the model keeps as values, and inlining or tail calls can merge frames. So the
+figure is an estimate that ties a model overflow to the depth of the recursion; it is not a
+bound on the native frame (`docs/premises.md` STK-01). -/
+
+/-- The fixed part of every charged frame: a return address and a saved frame pointer. -/
+def frameBase : Nat := 16
+
+/-- Charge a frame of `frameBase + bytes` bytes: `.stackOverflow` if it takes `stackUsed`
+above `stackLimit`. -/
+def enterFrame (bytes : Nat) : MemM Unit := do
+  let m ← get
+  let used := m.stackUsed + (frameBase + bytes)
+  match m.stackLimit with
+  | some limit => if limit < used then throw .stackOverflow
+  | none => pure ()
+  set { m with stackUsed := used }
+
+/-- Release the frame that `enterFrame bytes` charged. -/
+def leaveFrame (bytes : Nat) : MemM Unit :=
+  modify fun m => { m with stackUsed := m.stackUsed - (frameBase + bytes) }
 
 /-! ## Typed access -/
 
