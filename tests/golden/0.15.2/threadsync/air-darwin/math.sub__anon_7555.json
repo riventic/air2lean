@@ -1,0 +1,339 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "none",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "apple_m1",
+  "features": [
+   "aes",
+   "aggressive_fma",
+   "alternate_sextload_cvt_f32_pattern",
+   "altnzcv",
+   "am",
+   "arith_bcc_fusion",
+   "arith_cbz_fusion",
+   "ccdp",
+   "ccidx",
+   "ccpp",
+   "complxnum",
+   "contextidr_el2",
+   "crc",
+   "disable_latency_sched_heuristic",
+   "dit",
+   "dotprod",
+   "el2vmsa",
+   "el3",
+   "flagm",
+   "fp16fml",
+   "fp_armv8",
+   "fptoint",
+   "fullfp16",
+   "fuse_address",
+   "fuse_aes",
+   "fuse_arith_logic",
+   "fuse_crypto_eor",
+   "fuse_csel",
+   "fuse_literals",
+   "jsconv",
+   "lor",
+   "lse",
+   "lse2",
+   "mpam",
+   "neon",
+   "nv",
+   "pan",
+   "pan_rwv",
+   "pauth",
+   "perfmon",
+   "predres",
+   "ras",
+   "rcpc",
+   "rcpc_immo",
+   "rdm",
+   "sb",
+   "sel2",
+   "sha2",
+   "sha3",
+   "specrestrict",
+   "ssbs",
+   "store_pair_suppress",
+   "tlb_rmi",
+   "tracev8_4",
+   "uaops",
+   "v8_1a",
+   "v8_2a",
+   "v8_3a",
+   "v8_4a",
+   "v8a",
+   "vh",
+   "zcm",
+   "zcz",
+   "zcz_gp"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "math.sub__anon_7555",
+ "module": "std",
+ "src": {
+  "file": "math.zig",
+  "module": "std",
+  "decl_line": 575
+ },
+ "instance_key": "b9091a243743726ce0e028f69c483423e76d596102578a97ba4d48c3847721d4",
+ "params": [
+  0,
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 5,
+   "tag": "sub_with_overflow",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 5
+    }
+   ],
+   "name": "ov"
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4,
+   "column": 9
+  },
+  {
+   "id": 8,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 9,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 4,
+     "column": 11
+    },
+    {
+     "id": 10,
+     "tag": "struct_field_val",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 5
+      }
+     ],
+     "index": 1
+    },
+    {
+     "id": 11,
+     "tag": "cmp_neq",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 10
+      },
+      {
+       "ty": 4,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 15,
+     "tag": "cond_br",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 11
+      }
+     ],
+     "then": [
+      {
+       "id": 12,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 4,
+       "column": 21
+      },
+      {
+       "id": 13,
+       "tag": "ret_safe",
+       "ty": 6,
+       "args": [
+        {
+         "ty": 1,
+         "err": "Overflow"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 14,
+       "tag": "br",
+       "ty": 6,
+       "target": 8,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 14
+  },
+  {
+   "id": 17,
+   "tag": "struct_field_val",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 5
+    }
+   ],
+   "index": 0
+  },
+  {
+   "id": 18,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 5
+  },
+  {
+   "id": 19,
+   "tag": "wrap_errunion_payload",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 17
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 19
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 7,
+   "payload": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "tuple",
+   "fields": [
+    {
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "ty": 4,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 1,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Overflow"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}
