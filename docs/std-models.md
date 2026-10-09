@@ -60,10 +60,23 @@ The model's outcomes do not include every real std implementation. For the alloc
 examples, `tests/roadmap/model-inclusion` runs the same functions natively with
 `std.heap.page_allocator`, `FixedBufferAllocator`, `ArenaAllocator` and `DebugAllocator`,
 and the `Io` examples with `Io.Threaded` (multi- and single-threaded), and requires each native
-result to be one of the model's outcomes over the allocation policies (or schedules). The
-known divergences of the [models audit](architecture-audit/models.md) (D-ALLOC-ALIAS,
-D-ALLOC-REMAP, D-IO-INLINE, D-IO-CANCEL) are listed there as expected failures with their
-reason; any other native result outside the model fails the gate.
+result to be one of the model's outcomes over the allocation policies (or schedules; a native
+hang must be a model deadlock). The known divergences of the
+[models audit](architecture-audit/models.md) (D-ALLOC-ALIAS, D-ALLOC-REMAP, D-IO-INLINE,
+D-IO-CANCEL, and D-IO-CONCURRENT, which this gate found: `global_single_threaded` makes
+`Group.concurrent` return `error.ConcurrencyUnavailable`, outside the default `available`
+policy) are listed in its `expected.json` as expected failures with reason and link; any other
+native result outside the model fails the gate, and so does a known divergence that no longer
+diverges. The model outcomes are a subset of the policies and schedules (the harness's 1 MiB
+request cap and the first four failing attempts), so an inclusion is real; a native result of
+an input above the cap is reported as unevaluated. `evidence.json` records each row (example,
+implementation, function): runs, included, the native results, and its status.
+
+```sh
+AIR2LEAN_EXAMPLES="lists sync iogroup" AIR2LEAN_ZIG=<stock 0.16.0> scripts/diff.sh  # builds difftest
+bash tests/roadmap/model-inclusion/check.sh      # writes evidence.json
+python3 -B tests/roadmap/model-inclusion/inclusion.py validate   # CI: no toolchain
+```
 
 ## `examples/<ex>/filter`
 

@@ -135,10 +135,14 @@ boundaries and allowed assumptions remain in `audit.json`. Ordinary theorem hypo
 and property domains require reading the theorem and its reviewed documentation.
 
 This is evidence about generated Lean and its checked environment. The receipt states
-`source_correspondence: not_attested` and `native_adequacy: not_attested`. Receipt schema 2
+`source_correspondence: not_attested` and `native_adequacy: not_attested`. Receipt schema 3
 also carries `float_semantics`: the audit's label summary plus each stated numerical theorem's
 label (`ieee`, `compiler-rt@<versions>` or `abstract-spec`), with
-`binary_correspondence: not_claimed` (`docs/float-semantics.md`). It does not
+`binary_correspondence: not_claimed` (`docs/float-semantics.md`), and `caller_obligations`:
+each audited theorem whose kernel dependency graph reaches a generated definition with a
+caller-supplied `std.mem.Allocator` or `std.Io` parameter, with the premises it then rests on
+([ALC-09](premises.md#alc-09), [IOM-01](premises.md#iom-01); the `-- air2lean-premises:`
+markers). Such a theorem is about callers that pass the model allocator or `Io`. It does not
 prove original Zig export, normalization/emission preservation, backend lowering,
 shipping native binaries, foreign behavior, fairness, termination or exhaustive testing.
 A scoped audit is not an all-shipped audit, and one selected translation does not qualify

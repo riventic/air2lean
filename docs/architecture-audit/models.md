@@ -171,6 +171,7 @@ handoffProbe=5 (or out of fuel)            handoffProbe(single_threaded)=hang (t
 | D-ALLOC-REMAP | S08: `Allocator.remap` returns `none` when `size ≠ 1`, regardless of policy; byte remap also needs alignment 1 | "`remap` of a non-byte slice never succeeds". False for `page_allocator`, `c_allocator` and `smp_allocator` shrinks. | `remapProbe` |
 | D-IO-CANCEL | S15, S29: never cancels; `cancel = await` | "the task's `futexWait` never fails", "`cancelProbe` never returns 1" | `io_probe.zig` `cancelProbe` |
 | D-IO-INLINE | T03 + THR-02 default `available` | "the hand-off never deadlocks" (`run_safe`). False for an Io whose `async` runs inline (`global_single_threaded`, a saturated `async_limit`). `--spawn-policy fallible` includes the inline fallback, but it is opt-in. | `handoffProbe` |
+| D-IO-CONCURRENT | T03 + THR-02 default `available` | "`Group.concurrent` never fails". `global_single_threaded` returns `error.ConcurrencyUnavailable` (`examples/iogroup` `groupConcurrent`). Found by the step 0c gate; `--spawn-policy fallible` includes it. | `tests/roadmap/model-inclusion` |
 | D5 futex spurious | S15–S19 | "a wait returns only after a wake". The std doc says spurious wakeups are possible (`Io.zig:1541-1549`, and the same for `Thread.Futex`). No fixture, because forcing one natively needs signal injection. | — |
 | D6 os_unfair_lock | S20–S22 | Non-owner unlock succeeds in the model. Natively, libplatform aborts ("Unlock of an os_unfair_lock not owned by current thread"). Recursive lock is a model deadlock but a native abort. Zig documents non-owner unlock as illegal behavior, so the model misses illegal behavior. Overlaps the unchecked-IB inventory. | — |
 | D7 float default | Z10 | The default `ieee` mode differs from the reference target for f128 `*` and `/`, `@mulAdd`, f80→f16, and f80 rem/floor (groups A, B, E–H). Documented and labeled, so not hidden. | `docs/floats.md` |
@@ -201,6 +202,26 @@ handoffProbe=5 (or out of fuel)            handoffProbe(single_threaded)=hang (t
   as the primitive, because the exporter does not name `extern` calls. The trusted base
   would be smaller if the cut moved to `system.mmap` / the `extern` symbol. The io-boundary
   branch already translates `posix.read` and its errno mapping.
+
+## Interim steps 0a-0d (done)
+
+`codex/fix-model-premises` implements the four interim steps below:
+
+- 0a: every generated `def` with a parameter that contains a `std.mem.Allocator` or `std.Io`
+  carries `-- air2lean-premises: {"ALC-09":[i]}` / `{"IOM-01":[i]}`. `scripts/premises.py`
+  adds ALC-09 / IOM-01 to every theorem that reaches it (source index and kernel graph), and
+  proof receipts (schema 3) and `scripts/claims.py` list them per theorem as
+  `caller_obligations`.
+- 0b: every modelled `stdModels` row lists its reviewed Zig versions with the std file and
+  its SHA-256; an unlisted version (0.17) is rejected; `Thread.spinLoopHint` (not a std
+  declaration) is a rejected row.
+- 0c: `tests/roadmap/model-inclusion` runs `lists`, `sync`, `iogroup` and the probes above
+  natively with `page_allocator`, `FixedBufferAllocator`, `ArenaAllocator`,
+  `DebugAllocator`, `Io.Threaded` and `global_single_threaded`, and requires outcome-set
+  inclusion. D-ALLOC-ALIAS, D-ALLOC-REMAP (page and arena), D-IO-CANCEL, D-IO-INLINE and
+  D-IO-CONCURRENT are its expected failures; any other divergence fails it.
+- 0d: a project registry binding in a std namespace is rejected unless it is an OS
+  primitive (`osPrimitiveBindings`); matched by name until B1 lands.
 
 ## Migration plan (ordered by risk × reach)
 

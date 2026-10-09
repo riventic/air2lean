@@ -95,6 +95,9 @@ def classify(report: dict) -> dict:
     if report.get('status') not in ('pass', 'fail') or not isinstance(report.get('theorems'), list):
         raise ValueError('assurance report is not a completed audit')
     theorems = []
+    # W1: a theorem over a function with a caller-supplied Allocator/Io parameter is about callers
+    # that pass the model one (docs/premises.md ALC-09, IOM-01); the claim names that premise.
+    obligations = PREMISES.caller_obligations(report) if isinstance(report.get('nodes'), list) else {}
     for theorem in report['theorems']:
         if not isinstance(theorem, dict) or not isinstance(theorem.get('name'), str):
             raise ValueError('invalid theorem entry in assurance report')
@@ -106,6 +109,7 @@ def classify(report: dict) -> dict:
                          'claims': [c for c in CLAIMS if c in claims],
                          'claim_class': claim_class(claims),
                          'derived_strength': derived_strength(claims),
+                         'caller_obligations': obligations.get(theorem['name'], []),
                          'allowed': theorem.get('allowed') is True})
     names = [t['name'] for t in theorems]
     if len(set(names)) != len(names):
@@ -120,7 +124,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None) -
     if theorem is None:
         return {**result, 'status': 'rejected',
                 'reason': 'theorem absent from the audited report (names are exact, not namespace-resolved)'}
-    result.update(derived_strength=theorem['derived_strength'], claim_class=theorem['claim_class'])
+    result.update(derived_strength=theorem['derived_strength'], claim_class=theorem['claim_class'],
+                  caller_obligations=theorem['caller_obligations'])
     if not theorem['allowed']:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
     declared = goal['strength']
@@ -139,14 +144,16 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None) -
 
 
 def _sibling(name):
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f'{name}.py')
+    spec = importlib.util.spec_from_file_location('claims_' + name, Path(__file__).resolve().parent / f'{name}.py')
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
+    sys.modules[spec.name] = module  # dataclasses resolve annotations through sys.modules
     spec.loader.exec_module(module)
     return module
 
 
 OUTCOMES = _sibling('outcomes')
+PREMISES = _sibling('premises')
 
 
 def root_outcomes(project, root: dict, diffs) -> dict | None:
@@ -174,6 +181,8 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
             'scope': 'Strength is derived from conclusion head constants only. Preconditions and '
                      'domains are not checked: an unsatisfiable precondition remains vacuous. '
+                     'caller_obligations lists the premises (ALC-09, IOM-01) under which a claim about '
+                     'a function with an Allocator or Io parameter holds: the caller passes the model one. '
                      'Differential outcomes (when supplied) can only refuse absence claims: capped, '
                      'fuel-bounded, unsupported or unspecified/timer outcomes and observed failures '
                      'reject a goal; error returns do not. outcomes is null for roots without evidence.'}

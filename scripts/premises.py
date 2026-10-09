@@ -784,6 +784,52 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
 
 # ----------------------------------------------------------------------------- compiled graph
 
+def generated_path(root: Path, module: str) -> Path:
+    return root / Path(*module.split(".")).with_suffix(".lean")
+
+
+class GeneratedMarkers:
+    """The `-- air2lean-premises:` markers of generated modules, read once per module."""
+
+    def __init__(self, root: Path):
+        self.root, self.errors, self.by_module = root, [], {}
+
+    def of(self, module: str, name: str) -> dict:
+        if module not in self.by_module:
+            path = generated_path(self.root, module)
+            lean = parse_file(path, self.root) if path.is_file() else None
+            self.errors.extend(lean.errors if lean else ())
+            self.by_module[module] = {d.name: d.markers for d in lean.decls if d.markers} if lean else {}
+        return self.by_module[module].get(name, {})
+
+
+def caller_obligations(report: dict, root: Path = ROOT) -> dict[str, list[str]]:
+    """W1: per audited theorem, the caller-obligation premises (ALC-09, IOM-01) of the marked
+    generated definitions its kernel dependency graph reaches. Theorems with none are omitted."""
+    nodes = {n["name"]: n for n in report["nodes"]}
+    markers = GeneratedMarkers(root)
+    reverse: dict[str, set[str]] = {}
+    pending: list[tuple[str, str]] = []
+    for name, node in nodes.items():
+        for dep in node["dependencies"]:
+            reverse.setdefault(dep, set()).add(name)
+        if node["module"].split(".")[-1] == "Gen":
+            user = node.get("user_name", name)
+            pending += [(name, premise) for premise in markers.of(node["module"], user)]
+    if markers.errors:
+        raise ValueError("; ".join(markers.errors))
+    # Propagate each marked premise backwards along dependency edges.
+    reached: dict[str, set[str]] = {}
+    while pending:
+        name, premise = pending.pop()
+        if premise in reached.setdefault(name, set()):
+            continue
+        reached[name].add(premise)
+        pending += [(user, premise) for user in reverse.get(name, ())]
+    return {t["name"]: sorted(reached[t["name"]], key=premise_key)
+            for t in report["theorems"] if reached.get(t["name"])}
+
+
 def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
     """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
     if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
@@ -791,18 +837,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
     nodes = {n["name"]: n for n in report["nodes"]}
     errors, theorems, skipped = [], [], 0
     profiles: dict[str, tuple[list[str], str]] = {}
-    markers: dict[str, dict[str, dict]] = {}  # generated module -> declaration -> marker
-
-    def generated_path(module: str) -> Path:
-        return root / Path(*module.split(".")).with_suffix(".lean")
-
-    def marker_of(module: str, name: str) -> dict:
-        if module not in markers:
-            path = generated_path(module)
-            lean = parse_file(path, root) if path.is_file() else None
-            errors.extend(lean.errors if lean else ())
-            markers[module] = {d.name: d.markers for d in lean.decls if d.markers} if lean else {}
-        return markers[module].get(name, {})
+    markers = GeneratedMarkers(root)
     # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
     # source comparison use the user-facing name so module paths cannot trigger token rules.
     def user(name: str) -> str:
@@ -845,7 +880,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                     via.setdefault(premise, []).append(f"axiom {name}")
             if module.split(".")[-1] == "Gen":
                 generated.add(module)
-                apply_markers(via, user(name), marker_of(module, user(name)))
+                apply_markers(via, user(name), markers.of(module, user(name)))
             pending.extend(node["dependencies"])
         for axiom in theorem.get("axioms", ()):
             if axiom not in STANDARD_AXIOMS:
@@ -861,7 +896,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         apply_rules(config, via, {user(n) for n in nodes[theorem["name"]]["dependencies"]}, "statement")
         for module in sorted(generated):
             if module not in profiles:
-                path = generated_path(module)
+                path = generated_path(root, module)
                 if path.is_file():
                     header = profile_header(path.read_text())
                     profiles[module] = profile_premises(config, LeanFile(path, module, module, [], header))
@@ -880,6 +915,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                 if entry["source_gaps"]:
                     entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
         theorems.append(entry)
+    errors += markers.errors
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,

@@ -417,6 +417,18 @@ class CompiledTests(unittest.TestCase):
         self.assertEqual(result["status"], "pass")
         self.assertIn("IOM-01", result["theorems"][0]["premises"])
 
+    def test_caller_obligations_reach_users_transitively(self):
+        gen = self.fixture.root / "Proofs/Asm/Gen.lean"
+        gen.write_text(gen.read_text().replace("def wrap", '-- air2lean-premises: {"ALC-09":[0],"IOM-01":[0]}\ndef wrap'))
+        report = self.report()
+        report["theorems"].append({"name": "other", "module": "Proofs.Asm.Proofs", "axioms": []})
+        report["nodes"].append(self.node("other", "Proofs.Asm.Proofs", "theorem", ["Asm.airAsm_17"]))
+        found = premises.caller_obligations(report, self.fixture.root)
+        self.assertEqual(found, {"wrap_spec": ["ALC-09", "IOM-01"]})
+        gen.write_text(gen.read_text().replace('{"ALC-09":[0],"IOM-01":[0]}', '{"ALC-09":[]}'))
+        with self.assertRaisesRegex(ValueError, "malformed air2lean-premises marker"):
+            premises.caller_obligations(report, self.fixture.root)
+
     def test_compiled_rejects_error_report(self):
         with self.assertRaises(ValueError):
             premises.compiled({"schema_version": 1, "status": "error"}, self.fixture.root, self.config, None)

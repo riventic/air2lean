@@ -70,6 +70,22 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(theorems['ClaimFixture.total_correctness_guaranteed_return']['derived_strength'],
                          'partial_correctness')
 
+    def test_caller_obligations_follow_the_kernel_graph(self):
+        """W1: a claim about a function with an Allocator parameter names ALC-09 (and only then)."""
+        report = copy.deepcopy(FIXTURE)
+        first, second = report['theorems'][0]['name'], report['theorems'][1]['name']
+        # `Lists.push` carries `-- air2lean-premises: {"ALC-09":[0]}` in Proofs/Lists/Gen.lean.
+        report['nodes'] = [{'name': first, 'module': 'Proofs.Lists.Proofs', 'kind': 'theorem',
+                            'dependencies': ['Lists.push']},
+                           {'name': 'Lists.push', 'module': 'Proofs.Lists.Gen', 'kind': 'definition',
+                            'dependencies': []},
+                           {'name': second, 'module': 'Proofs.Lists.Proofs', 'kind': 'theorem',
+                            'dependencies': []}]
+        theorems = classified(report)
+        self.assertEqual(theorems[first]['caller_obligations'], ['ALC-09'])
+        self.assertEqual(theorems[second]['caller_obligations'], [])
+        self.assertEqual(classified(FIXTURE)[first]['caller_obligations'], [])
+
     def test_only_exact_kernel_names(self):
         for head in ('TotalTriple', 'Foo.TotalTriple', 'Zig.TotalTriple.toPartial', 'Zig.Conc.Total.EventuallyReturns'):
             self.assertEqual(claims.claims_of({'head': head}), frozenset(), head)
