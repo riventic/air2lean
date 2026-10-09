@@ -49,9 +49,10 @@ import json, sys
 from pathlib import Path
 registry = json.loads(Path('assurance/float-semantics.json').read_text())
 key = 'tests.roadmap.assurance.FloatLabels::AssuranceFixture.float_add_self'
-for name, entry in [('ieee', {'semantics': 'ieee', 'correspondence': 'model'}),
-                    ('abstract', {'semantics': 'abstract-spec', 'correspondence': 'model'}),
-                    ('binary', {'semantics': 'ieee', 'correspondence': 'binary'})]:
+T = ['aarch64-macos', 'x86_64-linux']
+for name, entry in [('ieee', {'semantics': 'ieee', 'targets': T, 'correspondence': 'model'}),
+                    ('abstract', {'semantics': 'abstract-spec', 'targets': T, 'correspondence': 'model'}),
+                    ('binary', {'semantics': 'ieee', 'targets': T, 'correspondence': 'binary'})]:
     Path(sys.argv[1], 'float-' + name + '.json').write_text(json.dumps(dict(registry, theorems=dict(registry['theorems'], **{key: entry}))))
 PY
 float_status() {

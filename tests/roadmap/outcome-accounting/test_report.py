@@ -368,8 +368,8 @@ class Outcomes(unittest.TestCase):
 
     def test_stack_overflow_is_a_pinned_exclusion(self):
         # MM-5: the model's stack budget is an environment choice, never an exact match.
-        self.seed({'fail':'unknown'},{'fail':'Zig.Error.stackOverflow'},K.NATIVE_SIGNAL,K.STACK_OVERFLOW)
-        (self.root/'tests/diff/basic/unspecified.txt').write_text('foo 1\n')
+        self.seed({'fail':'SIGSEGV'},{'fail':'Zig.Error.stackOverflow'},K.NATIVE_SIGNAL,K.STACK_OVERFLOW)
+        (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         code,data=self.compare()
         self.assertEqual(code,0)
         self.assertEqual(data['counts'],{'stack_overflow_exclusion':1})
