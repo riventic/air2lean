@@ -661,5 +661,81 @@ theorem ioMutex_spec : MutexSpec (ioMutex Fx) where
 
 end
 
+/-! ## The futex clauses are needed: two deadlocks -/
+
+/-- A thread asleep in `lock` whose futex lets it resume only after a wake, with every other
+thread idle, is a deadlock. -/
+theorem stuck_of_asleep {Fx : Futex Nat Unit}
+    (hres : ∀ t tm f r f', Fx.resume t tm f r f' → (Fx.queue f).has t = false) {X : Type}
+    {s : MState (ioMutex Fx) X} {t : Tid} (ht : s.ctl t = .run .lock .asleep)
+    (hq : (Fx.queue s.sh.2).has t = true) (hidle : ∀ u, u ≠ t → s.ctl u = .idle) :
+    Stuck (ioMutex Fx) s := by
+  refine ⟨⟨t, _, _, ht⟩, fun u hu => ?_, fun u op l hu ⟨s', hs⟩ => ?_⟩
+  · by_cases hut : u = t
+    · rw [hut, ht] at hu; cases hu
+    · rw [hidle u hut] at hu; cases hu
+  · have hut : u = t := Classical.byContradiction fun hut => by rw [hidle u hut] at hu; cases hu
+    subst hut
+    rw [ht] at hu; cases hu
+    rcases MStep.run_cases ht hs with ⟨l', sh', v', hstep, -⟩ | ⟨b, hd, -⟩
+    · cases hstep with
+      | resume hr => rw [hres _ _ _ _ _ hr] at hq; cases hq
+    · cases hd
+
+/-- With a futex whose wake never wakes, `Io.Mutex` deadlocks: thread 0 locks; thread 1 finds
+the lock taken, sets the word to `2` and sleeps; thread 0 unlocks and its wake wakes nobody. -/
+theorem lazyWake_deadlock : ¬ MutexSpec (ioMutex (Futex.lazyWake wordView)) := by
+  intro h
+  have r0 : (mgc (ioMutex (Futex.lazyWake wordView)) Unit).Reach
+      (⟨(⟨0, ()⟩, []), fun _ => .idle, fun _ => (), ()⟩ : MState (ioMutex (Futex.lazyWake wordView)) Unit) :=
+    .init ⟨(), ⟨rfl, rfl⟩, fun _ => rfl, fun _ => rfl, rfl⟩
+  have r1 := r0.next 0 (MStep.call (I := ioMutex (Futex.lazyWake wordView)) .lock (by decide) (by decide))
+  have r2 := r1.next 0 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .lock) (l := IL.cas) (by decide) (IoStep.casOk (by decide)))
+  have r3 := r2.next 0 (MStep.ret (I := ioMutex (Futex.lazyWake wordView)) (op := .lock) (l := IL.fin true) (b := true) (by decide) rfl)
+  have r4 := r3.next 1 (MStep.call (I := ioMutex (Futex.lazyWake wordView)) .lock (by decide) (by decide))
+  have r5 := r4.next 1 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .lock) (l := IL.cas) (by decide)
+    (IoStep.casSpin (by decide) (by decide)))
+  have r6 := r5.next 1 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .lock) (l := IL.xchg) (by decide) (IoStep.xchgWait (by decide)))
+  have r7 := r6.next 1 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .lock) (l := IL.wait) (by decide)
+    (IoStep.sleep ⟨_, rfl, .inl ⟨by decide, rfl, rfl⟩⟩))
+  have r8 := r7.next 0 (MStep.unlock (I := ioMutex (Futex.lazyWake wordView)) (by decide))
+  have r9 := r8.next 0 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .unlock) (l := IL.rel) (by decide) (IoStep.relWake (by decide)))
+  have r10 := r9.next 0 (MStep.exec (I := ioMutex (Futex.lazyWake wordView)) (op := .unlock) (l := IL.wake) (by decide)
+    (IoStep.wake (k := 0) ⟨rfl, rfl⟩))
+  have r11 := r10.next 0 (MStep.ret (I := ioMutex (Futex.lazyWake wordView)) (op := .unlock) (l := IL.fin false) (b := false) (by decide) rfl)
+  refine h.live Unit _ r11 (stuck_of_asleep (Fx := Futex.lazyWake wordView) (fun _ _ _ _ _ hr => hr.1) (t := 1) (by decide) (by decide)
+    fun u hu => ?_)
+  by_cases hu0 : u = 0
+  · subst hu0; decide
+  · simp [tset, hu, hu0]
+
+/-- With a futex whose wait sleeps without comparing the word, `Io.Mutex` deadlocks: thread 1
+reaches its futex wait while thread 0 holds the lock; thread 0 unlocks (nobody to wake); thread
+1's wait sleeps on the word `0`. -/
+theorem noRecheck_deadlock : ¬ MutexSpec (ioMutex (Futex.noRecheck wordView)) := by
+  intro h
+  have r0 : (mgc (ioMutex (Futex.noRecheck wordView)) Unit).Reach
+      (⟨(⟨0, ()⟩, []), fun _ => .idle, fun _ => (), ()⟩ : MState (ioMutex (Futex.noRecheck wordView)) Unit) :=
+    .init ⟨(), ⟨rfl, rfl⟩, fun _ => rfl, fun _ => rfl, rfl⟩
+  have r1 := r0.next 0 (MStep.call (I := ioMutex (Futex.noRecheck wordView)) .lock (by decide) (by decide))
+  have r2 := r1.next 0 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .lock) (l := IL.cas) (by decide) (IoStep.casOk (by decide)))
+  have r3 := r2.next 0 (MStep.ret (I := ioMutex (Futex.noRecheck wordView)) (op := .lock) (l := IL.fin true) (b := true) (by decide) rfl)
+  have r4 := r3.next 1 (MStep.call (I := ioMutex (Futex.noRecheck wordView)) .lock (by decide) (by decide))
+  have r5 := r4.next 1 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .lock) (l := IL.cas) (by decide)
+    (IoStep.casSpin (by decide) (by decide)))
+  have r6 := r5.next 1 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .lock) (l := IL.xchg) (by decide) (IoStep.xchgWait (by decide)))
+  have r7 := r6.next 0 (MStep.unlock (I := ioMutex (Futex.noRecheck wordView)) (by decide))
+  have r8 := r7.next 0 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .unlock) (l := IL.rel) (by decide) (IoStep.relWake (by decide)))
+  have r9 := r8.next 0 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .unlock) (l := IL.wake) (by decide)
+    (IoStep.wake (k := 0) ⟨rfl, rfl⟩))
+  have r10 := r9.next 0 (MStep.ret (I := ioMutex (Futex.noRecheck wordView)) (op := .unlock) (l := IL.fin false) (b := false) (by decide) rfl)
+  have r11 := r10.next 1 (MStep.exec (I := ioMutex (Futex.noRecheck wordView)) (op := .lock) (l := IL.wait) (by decide)
+    (IoStep.sleep ⟨⟨_, rfl⟩, rfl, rfl⟩))
+  refine h.live Unit _ r11 (stuck_of_asleep (Fx := Futex.noRecheck wordView) (fun _ _ _ _ _ hr => hr.1) (t := 1) (by decide) (by decide)
+    fun u hu => ?_)
+  by_cases hu0 : u = 0
+  · subst hu0; decide
+  · simp [tset, hu, hu0]
+
 end Spec
 end Zig
