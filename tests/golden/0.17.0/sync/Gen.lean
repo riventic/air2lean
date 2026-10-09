@@ -248,14 +248,14 @@ def Io_Condition_signal.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Cond
     let i17 ← pure (Zig.gt false i14 i16)
     if i17 then (do
       match ← ((do
-        let i20 ← pure (p0.add 0)
+        let i20 ← pure p0
         let i21 ← pure ((← get).prev_state)
         let i23 ← pure (((← get).prev_state).waiters)
         let i25 ← pure (((← get).prev_state).signals)
         let i26 ← Zig.add false i25 (1 : BitVec 16)
         let i27 ← pure { waiters := i23, signals := i26 : Io_Condition_State }
         match ← ((do
-          let i29 ← pure (i20.add 0)
+          let i29 ← pure i20
           let i30 ← Zig.cmpxchgWeakAsC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i21 i27
           pure (.br28 i30)) : Zig.CM Tgt Io_Condition_signalLocals Io_Condition_signalExit) with
         | .br28 v28 => (do
@@ -264,14 +264,14 @@ def Io_Condition_signal.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Cond
             let i34 ← Zig.optPayload v28
             pure (.br19 i34))
           else (do
-            let i36 ← pure (p0.add 4)
+            let i36 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
             match ← ((do
-              let i38 ← pure (i36.add 0)
+              let i38 ← pure i36
               let i39 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.release 4 i38 (1 : BitVec 32)
               pure (.br37 i39)) : Zig.CM Tgt Io_Condition_signalLocals Io_Condition_signalExit) with
             | .br37 _v37 => (do
-              let i41 ← pure (p0.add 4)
-              let i42 ← pure (i41.add 0)
+              let i41 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
+              let i42 ← pure i41
               let i43 ← pure (i42)
               let _i44 ← Zig.futexWakeC p1 i43 (1 : BitVec 32)
               pure .ret)
@@ -289,10 +289,10 @@ def Io_Condition_signal.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Cond
 
 def Io_Condition_signal (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i3 ← pure (p0.add 0)
+    let i3 ← pure p0
     let i4 ← pure (i3)
     match ← ((do
-      let i6 ← pure (i4.add 0)
+      let i6 ← pure i4
       let i7 ← Zig.atomicLoadAsC (Io_Condition_State) Zig.AtomicOrder.relaxed 4 i6
       pure (.br5 i7)) : Zig.CM Tgt Io_Condition_signalLocals Io_Condition_signalExit) with
     | .br5 v5 => (do
@@ -339,9 +339,9 @@ inductive Io_Mutex_unlockExit where
 
 def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     match ← ((do
-      let i4 ← pure (i2.add 0)
+      let i4 ← pure i2
       let i5 ← Zig.atomicRmwAsC Zig.RmwOp.xchg Zig.AtomicOrder.release 4 i4 Io_Mutex_State.unlocked
       pure (.br3 i5)) : Zig.CM Tgt Io_Mutex_unlockLocals Io_Mutex_unlockExit) with
     | .br3 v3 => (do
@@ -352,8 +352,8 @@ def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
         | .locked_once => (do
           pure .br7)
         | .contended => (do
-          let i14 ← pure (p0.add 0)
-          let i15 ← pure (i14.add 0)
+          let i14 ← pure p0
+          let i15 ← pure i14
           let i16 ← pure (i15)
           let _i17 ← Zig.futexWakeC p1 i16 (1 : BitVec 32)
           pure .br7)) : Zig.CM Tgt Io_Mutex_unlockLocals Io_Mutex_unlockExit) with
@@ -384,16 +384,16 @@ def Io_Mutex_lockUncancelable.again23 : Io_Mutex_lockUncancelableExit → Bool
 
 def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit := do
   match ← ((do
-    let i25 ← pure (p0.add 0)
+    let i25 ← pure p0
     match ← ((do
-      let i27 ← pure (i25.add 0)
+      let i27 ← pure i25
       let i28 ← Zig.atomicRmwAsC Zig.RmwOp.xchg Zig.AtomicOrder.acquire 4 i27 Io_Mutex_State.contended
       pure (.br26 i28)) : Zig.CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit) with
     | .br26 v26 => (do
       let i30 ← pure (v26 != Io_Mutex_State.unlocked)
       if i30 then (do
-        let i32 ← pure (p0.add 0)
-        let i33 ← pure (i32.add 0)
+        let i32 ← pure p0
+        let i33 ← pure i32
         let i34 ← pure (i33)
         let _i35 ← Zig.futexWaitC p1 i34 Io_Mutex_State.contended
         pure .br24)
@@ -407,9 +407,9 @@ def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt I
 def Io_Mutex_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     match ← ((do
-      let i3 ← pure (p0.add 0)
+      let i3 ← pure p0
       match ← ((do
-        let i5 ← pure (i3.add 0)
+        let i5 ← pure i3
         let i6 ← Zig.cmpxchgAsC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i5 Io_Mutex_State.unlocked Io_Mutex_State.locked_once
         pure (.br4 i6)) : Zig.CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit) with
       | .br4 v4 => (do
@@ -424,8 +424,8 @@ def Io_Mutex_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit
       match ← ((do
         let i14 ← pure (v2 == Io_Mutex_State.contended)
         if i14 then (do
-          let i16 ← pure (p0.add 0)
-          let i17 ← pure (i16.add 0)
+          let i16 ← pure p0
+          let i17 ← pure i16
           let i18 ← pure (i17)
           let _i19 ← Zig.futexWaitC p1 i18 Io_Mutex_State.contended
           pure .br13)
@@ -477,7 +477,7 @@ def Io_Condition_waitUncancelable.loop45 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.
     let i49 ← pure (Zig.gt false i48 (0 : BitVec 16))
     if i49 then (do
       match ← ((do
-        let i52 ← pure (p0.add 0)
+        let i52 ← pure p0
         let i53 ← pure ((← get).prev_state)
         let i55 ← pure (((← get).prev_state).waiters)
         let i56 ← Zig.sub false i55 (1 : BitVec 16)
@@ -485,7 +485,7 @@ def Io_Condition_waitUncancelable.loop45 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.
         let i59 ← Zig.sub false i58 (1 : BitVec 16)
         let i60 ← pure { waiters := i56, signals := i59 : Io_Condition_State }
         match ← ((do
-          let i62 ← pure (i52.add 0)
+          let i62 ← pure i52
           let i63 ← Zig.cmpxchgWeakAsC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i62 i53 i60
           pure (.br61 i63)) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit) with
         | .br61 v61 => (do
@@ -508,24 +508,24 @@ def Io_Condition_waitUncancelable.loop45 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.
   | e => pure e
 
 def Io_Condition_waitUncancelable.loop22 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.Ptr) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit := do
-  let i23 ← pure (p0.add 4)
-  let i24 ← pure (i23.add 0)
+  let i23 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
+  let i24 ← pure i23
   let i25 ← pure (i24)
   let i26 ← pure ((← get).epoch)
   let _i27 ← Zig.futexWaitC p1 i25 i26
-  let i28 ← pure (p0.add 4)
+  let i28 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
   let i29 ← pure (i28)
   match ← ((do
-    let i31 ← pure (i29.add 0)
+    let i31 ← pure i29
     let i32 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i31
     pure (.br30 i32)) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit) with
   | .br30 v30 => (do
     modify (fun s => { s with epoch := v30 })
     match ← ((do
-      let i37 ← pure (p0.add 0)
+      let i37 ← pure p0
       let i38 ← pure (i37)
       match ← ((do
-        let i40 ← pure (i38.add 0)
+        let i40 ← pure i38
         let i41 ← Zig.atomicLoadAsC (Io_Condition_State) Zig.AtomicOrder.relaxed 4 i40
         pure (.br39 i41)) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit) with
       | .br39 v39 => (do
@@ -543,18 +543,18 @@ def Io_Condition_waitUncancelable.loop22 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.
 
 def Io_Condition_waitUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i4 ← pure (p0.add 4)
+    let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
     let i5 ← pure (i4)
     match ← ((do
-      let i7 ← pure (i5.add 0)
+      let i7 ← pure i5
       let i8 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i7
       pure (.br6 i8)) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit) with
     | .br6 v6 => (do
       modify (fun s => { s with epoch := v6 })
       match ← ((do
-        let i12 ← pure (p0.add 0)
+        let i12 ← pure p0
         match ← ((do
-          let i14 ← pure (i12.add 0)
+          let i14 ← pure i12
           let i15 ← Zig.atomicRmwAsC Zig.RmwOp.add Zig.AtomicOrder.relaxed 4 i14 (Zig.Packed.ofBits (1 : BitVec 32) : Io_Condition_State)
           pure (.br13 i15)) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit) with
         | .br13 v13 => (do
@@ -674,16 +674,16 @@ def Io_Mutex_lock.again27 : Io_Mutex_lockExit → Bool
 
 def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockLocals Io_Mutex_lockExit := do
   match ← ((do
-    let i29 ← pure (p0.add 0)
+    let i29 ← pure p0
     match ← ((do
-      let i31 ← pure (i29.add 0)
+      let i31 ← pure i29
       let i32 ← Zig.atomicRmwAsC Zig.RmwOp.xchg Zig.AtomicOrder.acquire 4 i31 Io_Mutex_State.contended
       pure (.br30 i32)) : Zig.CM Tgt Io_Mutex_lockLocals Io_Mutex_lockExit) with
     | .br30 v30 => (do
       let i34 ← pure (v30 != Io_Mutex_State.unlocked)
       if i34 then (do
-        let i36 ← pure (p0.add 0)
-        let i37 ← pure (i36.add 0)
+        let i36 ← pure p0
+        let i37 ← pure i36
         let i38 ← pure (i37)
         let i39 ← Zig.futexWaitCancelableC p1 i38 Io_Mutex_State.contended
         match i39 with
@@ -703,9 +703,9 @@ def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lock
 def Io_Mutex_lock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
-      let i3 ← pure (p0.add 0)
+      let i3 ← pure p0
       match ← ((do
-        let i5 ← pure (i3.add 0)
+        let i5 ← pure i3
         let i6 ← Zig.cmpxchgAsC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i5 Io_Mutex_State.unlocked Io_Mutex_State.locked_once
         pure (.br4 i6)) : Zig.CM Tgt Io_Mutex_lockLocals Io_Mutex_lockExit) with
       | .br4 v4 => (do
@@ -720,8 +720,8 @@ def Io_Mutex_lock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrNa
       match ← ((do
         let i14 ← pure (v2 == Io_Mutex_State.contended)
         if i14 then (do
-          let i16 ← pure (p0.add 0)
-          let i17 ← pure (i16.add 0)
+          let i16 ← pure p0
+          let i17 ← pure i16
           let i18 ← pure (i17)
           let i19 ← Zig.futexWaitCancelableC p1 i18 Io_Mutex_State.contended
           match i19 with
@@ -754,9 +754,9 @@ inductive Io_Mutex_tryLockExit where
 
 def Io_Mutex_tryLock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     match ← ((do
-      let i3 ← pure (i1.add 0)
+      let i3 ← pure i1
       let i4 ← Zig.cmpxchgAsC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i3 Io_Mutex_State.unlocked Io_Mutex_State.locked_once
       pure (.br2 i4)) : Zig.CM Tgt Io_Mutex_tryLockLocals Io_Mutex_tryLockExit) with
     | .br2 v2 => (do
@@ -790,7 +790,7 @@ def Io_RwLock_lockSharedUncancelable.loop8 (p0 : Zig.Ptr) : Zig.CM Tgt Io_RwLock
     let i13 ← pure (i12 == (0 : BitVec 64))
     if i13 then (do
       match ← ((do
-        let i16 ← pure (p0.add 0)
+        let i16 ← pure p0
         let i17 ← pure ((← get).state)
         let i18 ← pure ((← get).state)
         let i19 ← Zig.add false i18 (4294967296 : BitVec 64)
@@ -813,18 +813,18 @@ def Io_RwLock_lockSharedUncancelable.loop8 (p0 : Zig.Ptr) : Zig.CM Tgt Io_RwLock
 
 def Io_RwLock_lockSharedUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i3 ← pure (p0.add 0)
+    let i3 ← pure p0
     let i4 ← pure (i3)
     let i5 ← Zig.atomicLoadC (n := 64) Zig.AtomicOrder.seqCst 8 i4
     modify (fun s => { s with state := i5 })
     match ← ((do
       Zig.loop (Io_RwLock_lockSharedUncancelable.loop8 p0) Io_RwLock_lockSharedUncancelable.again8) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit) with
     | .br7 => (do
-      let i30 ← pure (p0.add 32)
+      let i30 ← Zig.callMC (Zig.ptrProject p0 (·.add 32))
       let _i31 ← Zig.callC (Io_Mutex_lockUncancelable i30 p1)
-      let i32 ← pure (p0.add 0)
+      let i32 ← pure p0
       let _i33 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 8 i32 (4294967296 : BitVec 64)
-      let i34 ← pure (p0.add 32)
+      let i34 ← Zig.callMC (Zig.ptrProject p0 (·.add 32))
       let _i35 ← Zig.callC (Io_Mutex_unlock i34 p1)
       pure .ret)
     | e => pure e) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit).run' (default : Io_RwLock_lockSharedUncancelableLocals)
@@ -848,13 +848,13 @@ def Io_Semaphore_waitUncancelable.again5 : Io_Semaphore_waitUncancelableExit →
 
 def Io_Semaphore_waitUncancelable.loop5 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit := do
   match ← ((do
-    let i7 ← pure (p0.add 0)
+    let i7 ← pure p0
     let i8 ← Zig.load (BitVec 64) 8 i7
     let i9 ← pure (i8)
     let i10 ← pure (i9 == (0 : BitVec 64))
     if i10 then (do
-      let i12 ← pure (p0.add 12)
-      let i13 ← pure (p0.add 8)
+      let i12 ← Zig.callMC (Zig.ptrProject p0 (·.add 12))
+      let i13 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
       let _i14 ← Zig.callC (Io_Condition_waitUncancelable i12 p1 i13)
       pure .br6)
     else (do
@@ -865,28 +865,28 @@ def Io_Semaphore_waitUncancelable.loop5 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tg
 
 def Io_Semaphore_waitUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 8)
+    let i2 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
     let _i3 ← Zig.callC (Io_Mutex_lockUncancelable i2 p1)
     match ← ((do
       Zig.loop (Io_Semaphore_waitUncancelable.loop5 p0 p1) Io_Semaphore_waitUncancelable.again5) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit) with
     | .br4 => (do
-      let i18 ← pure (p0.add 0)
+      let i18 ← pure p0
       let i19 ← Zig.load (BitVec 64) 8 i18
       let i20 ← Zig.sub false i19 (1 : BitVec 64)
       Zig.store (α := BitVec 64) 8 i18 i20
       match ← ((do
-        let i23 ← pure (p0.add 0)
+        let i23 ← pure p0
         let i24 ← Zig.load (BitVec 64) 8 i23
         let i25 ← pure (i24)
         let i26 ← pure (Zig.gt false i25 (0 : BitVec 64))
         if i26 then (do
-          let i28 ← pure (p0.add 12)
+          let i28 ← Zig.callMC (Zig.ptrProject p0 (·.add 12))
           let _i29 ← Zig.callC (Io_Condition_signal i28 p1)
           pure .br22)
         else (do
           pure .br22)) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit) with
       | .br22 => (do
-        let i32 ← pure (p0.add 8)
+        let i32 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
         let _i33 ← Zig.callC (Io_Mutex_unlock i32 p1)
         pure .ret)
       | e => pure e)
@@ -904,18 +904,18 @@ inductive Io_RwLock_lockUncancelableExit where
 
 def Io_RwLock_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let _i3 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 8 i2 (2 : BitVec 64)
-    let i4 ← pure (p0.add 32)
+    let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 32))
     let _i5 ← Zig.callC (Io_Mutex_lockUncancelable i4 p1)
-    let i6 ← pure (p0.add 0)
+    let i6 ← pure p0
     let i7 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 8 i6 (18446744073709551615 : BitVec 64)
     match ← ((do
       let i9 ← pure (i7 &&& (9223372032559808512 : BitVec 64))
       let i10 ← pure (i9)
       let i11 ← pure (i10 != (0 : BitVec 64))
       if i11 then (do
-        let i13 ← pure (p0.add 8)
+        let i13 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
         let _i14 ← Zig.callC (Io_Semaphore_waitUncancelable i13 p1)
         pure .br8)
       else (do
@@ -935,9 +935,9 @@ inductive Io_RwLock_unlockExit where
 
 def Io_RwLock_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let _i3 ← Zig.atomicRmwC Zig.RmwOp.and false Zig.AtomicOrder.seqCst 8 i2 (18446744073709551614 : BitVec 64)
-    let i4 ← pure (p0.add 32)
+    let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 32))
     let _i5 ← Zig.callC (Io_Mutex_unlock i4 p1)
     pure .ret) : Zig.CM Tgt Io_RwLock_unlockLocals Io_RwLock_unlockExit).run' (default : Io_RwLock_unlockLocals)
   match e with
@@ -951,15 +951,15 @@ inductive Io_Semaphore_postExit where
 
 def Io_Semaphore_post (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 8)
+    let i2 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
     let _i3 ← Zig.callC (Io_Mutex_lockUncancelable i2 p1)
-    let i4 ← pure (p0.add 0)
+    let i4 ← pure p0
     let i5 ← Zig.load (BitVec 64) 8 i4
     let i6 ← Zig.add false i5 (1 : BitVec 64)
     Zig.store (α := BitVec 64) 8 i4 i6
-    let i8 ← pure (p0.add 12)
+    let i8 ← Zig.callMC (Zig.ptrProject p0 (·.add 12))
     let _i9 ← Zig.callC (Io_Condition_signal i8 p1)
-    let i10 ← pure (p0.add 8)
+    let i10 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
     let _i11 ← Zig.callC (Io_Mutex_unlock i10 p1)
     pure .ret) : Zig.CM Tgt Io_Semaphore_postLocals Io_Semaphore_postExit).run' (default : Io_Semaphore_postLocals)
   match e with
@@ -975,7 +975,7 @@ inductive Io_RwLock_unlockSharedExit where
 
 def Io_RwLock_unlockShared (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.atomicRmwC Zig.RmwOp.sub false Zig.AtomicOrder.seqCst 8 i2 (4294967296 : BitVec 64)
     match ← ((do
       let i5 ← pure (i3 &&& (9223372032559808512 : BitVec 64))
@@ -991,7 +991,7 @@ def Io_RwLock_unlockShared (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) :
           pure (.br8 false))) : Zig.CM Tgt Io_RwLock_unlockSharedLocals Io_RwLock_unlockSharedExit) with
       | .br8 v8 => (do
         if v8 then (do
-          let i16 ← pure (p0.add 8)
+          let i16 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
           let _i17 ← Zig.callC (Io_Semaphore_post i16 p1)
           pure .br4)
         else (do
@@ -1012,24 +1012,24 @@ inductive producerExit where
 
 def producer (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 16)
-    let i2 ← pure (p0.add 0)
+    let i1 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+    let i2 ← pure p0
     let i3 ← Zig.load (Zig.Io) 8 i2
     let _i4 ← Zig.callC (Io_Mutex_lockUncancelable i1 i3)
-    let i5 ← pure (p0.add 32)
+    let i5 ← Zig.callMC (Zig.ptrProject p0 (·.add 32))
     Zig.store (α := BitVec 32) 4 i5 (7 : BitVec 32)
-    let i7 ← pure (p0.add 36)
+    let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 36))
     Zig.store (α := Bool) 1 i7 true
-    let i9 ← pure (p0.add 16)
-    let i10 ← pure (p0.add 0)
+    let i9 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+    let i10 ← pure p0
     let i11 ← Zig.load (Zig.Io) 8 i10
     let _i12 ← Zig.callC (Io_Mutex_unlock i9 i11)
-    let i13 ← pure (p0.add 20)
-    let i14 ← pure (p0.add 0)
+    let i13 ← Zig.callMC (Zig.ptrProject p0 (·.add 20))
+    let i14 ← pure p0
     let i15 ← Zig.load (Zig.Io) 8 i14
     let _i16 ← Zig.callC (Io_Condition_signal i13 i15)
-    let i17 ← pure (p0.add 28)
-    let i18 ← pure (p0.add 0)
+    let i17 ← Zig.callMC (Zig.ptrProject p0 (·.add 28))
+    let i18 ← pure p0
     let i19 ← Zig.load (Zig.Io) 8 i18
     let _i20 ← Zig.callC (Io_Event_set i17 i19)
     pure .ret) : Zig.CM Tgt producerLocals producerExit).run' (default : producerLocals)
@@ -1052,12 +1052,12 @@ def handoff.again24 : handoffExit → Bool
 
 def handoff.loop24 (p0 : Zig.Io) (i1 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
   match ← ((do
-    let i26 ← pure (i1.add 36)
+    let i26 ← Zig.callMC (Zig.ptrProject i1 (·.add 36))
     let i27 ← Zig.load (Bool) 1 i26
     let i28 ← pure (!i27)
     if i28 then (do
-      let i30 ← pure (i1.add 20)
-      let i31 ← pure (i1.add 16)
+      let i30 ← Zig.callMC (Zig.ptrProject i1 (·.add 20))
+      let i31 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
       let _i32 ← Zig.callC (Io_Condition_waitUncancelable i30 p0 i31)
       pure .br25)
     else (do
@@ -1070,17 +1070,17 @@ def handoff (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 40 8
   let e ← ((do
     let i1 ← pure (← get).b
-    let i2 ← pure (i1.add 0)
+    let i2 ← pure i1
     Zig.store (α := Zig.Io) 8 i2 p0
-    let i4 ← pure (i1.add 16)
+    let i4 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
     Zig.store (α := Io_Mutex) 4 i4 ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex)
-    let i6 ← pure (i1.add 20)
+    let i6 ← Zig.callMC (Zig.ptrProject i1 (·.add 20))
     Zig.store (α := Io_Condition) 4 i6 ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition)
-    let i8 ← pure (i1.add 36)
+    let i8 ← Zig.callMC (Zig.ptrProject i1 (·.add 36))
     Zig.store (α := Bool) 1 i8 false
-    let i10 ← pure (i1.add 28)
+    let i10 ← Zig.callMC (Zig.ptrProject i1 (·.add 28))
     Zig.store (α := Io_Event) 4 i10 Io_Event.unset
-    let i12 ← pure (i1.add 32)
+    let i12 ← Zig.callMC (Zig.ptrProject i1 (·.add 32))
     Zig.store (α := BitVec 32) 4 i12 (0 : BitVec 32)
     let i14 ← pure (i1)
     let i15 ← Zig.spawnC (Tgt.producer i14)
@@ -1091,16 +1091,16 @@ def handoff (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       let i19 ← pure ((.error i18) : Except Zig.ErrName (BitVec 32))
       pure (.ret i19))
     | .ok v16 => (do
-      let i21 ← pure (i1.add 16)
+      let i21 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
       let _i22 ← Zig.callC (Io_Mutex_lockUncancelable i21 p0)
       match ← ((do
         Zig.loop (handoff.loop24 p0 i1) handoff.again24) : Zig.CM Tgt handoffLocals handoffExit) with
       | .br23 => (do
-        let i36 ← pure (i1.add 32)
+        let i36 ← Zig.callMC (Zig.ptrProject i1 (·.add 32))
         let i37 ← Zig.load (BitVec 32) 4 i36
-        let i38 ← pure (i1.add 16)
+        let i38 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
         let _i39 ← Zig.callC (Io_Mutex_unlock i38 p0)
-        let i40 ← pure (i1.add 28)
+        let i40 ← Zig.callMC (Zig.ptrProject i1 (·.add 28))
         let _i41 ← Zig.callC (Io_Event_waitUncancelable i40 p0)
         let _i42 ← Zig.joinC v16
         let i43 ← pure ((.ok i37) : Except Zig.ErrName (BitVec 32))
@@ -1131,16 +1131,16 @@ def work.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt workLocals workExit := do
     let i7 ← pure (i5)
     let i8 ← pure (Zig.lt false i7 (2 : BitVec 64))
     if i8 then (do
-      let i10 ← pure (p0.add 16)
-      let i11 ← pure (p0.add 0)
+      let i10 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+      let i11 ← pure p0
       let i12 ← Zig.load (Zig.Io) 8 i11
       let _i13 ← Zig.callC (Io_Mutex_lockUncancelable i10 i12)
-      let i14 ← pure (p0.add 20)
+      let i14 ← Zig.callMC (Zig.ptrProject p0 (·.add 20))
       let i15 ← Zig.load (BitVec 32) 4 i14
       let i16 ← Zig.add false i15 (1 : BitVec 32)
       Zig.store (α := BitVec 32) 4 i14 i16
-      let i18 ← pure (p0.add 16)
-      let i19 ← pure (p0.add 0)
+      let i18 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+      let i19 ← pure p0
       let i20 ← Zig.load (Zig.Io) 8 i19
       let _i21 ← Zig.callC (Io_Mutex_unlock i18 i20)
       pure .br6)
@@ -1175,11 +1175,11 @@ def mutexCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
   let s1 ← Zig.allocStack 24 8
   let e ← ((do
     let i1 ← pure (← get).c
-    let i2 ← pure (i1.add 0)
+    let i2 ← pure i1
     Zig.store (α := Zig.Io) 8 i2 p0
-    let i4 ← pure (i1.add 16)
+    let i4 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
     Zig.store (α := Io_Mutex) 4 i4 ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex)
-    let i6 ← pure (i1.add 20)
+    let i6 ← Zig.callMC (Zig.ptrProject i1 (·.add 20))
     Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
     let i8 ← pure (i1)
     let i9 ← Zig.spawnC (Tgt.work i8)
@@ -1192,7 +1192,7 @@ def mutexCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
     | .ok v10 => (do
       let _i15 ← Zig.callC (work i1)
       let _i16 ← Zig.joinC v10
-      let i17 ← pure (i1.add 20)
+      let i17 ← Zig.callMC (Zig.ptrProject i1 (·.add 20))
       let i18 ← Zig.load (BitVec 32) 4 i17
       let i19 ← pure ((.ok i18) : Except Zig.ErrName (BitVec 32))
       pure (.ret i19))) : Zig.CM Tgt mutexCounterLocals mutexCounterExit).run' { (default : mutexCounterLocals) with c := s1 }
@@ -1208,14 +1208,14 @@ inductive readSharedExit where
 
 def readShared (p0 : Zig.Ptr) : Zig.ConcM Tgt (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (p0.add 16)
-    let i2 ← pure (p0.add 0)
+    let i1 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+    let i2 ← pure p0
     let i3 ← Zig.load (Zig.Io) 8 i2
     let _i4 ← Zig.callC (Io_RwLock_lockSharedUncancelable i1 i3)
-    let i5 ← pure (p0.add 56)
+    let i5 ← Zig.callMC (Zig.ptrProject p0 (·.add 56))
     let i6 ← Zig.load (BitVec 32) 4 i5
-    let i7 ← pure (p0.add 16)
-    let i8 ← pure (p0.add 0)
+    let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+    let i8 ← pure p0
     let i9 ← Zig.load (Zig.Io) 8 i8
     let _i10 ← Zig.callC (Io_RwLock_unlockShared i7 i9)
     pure (.ret i6)) : Zig.CM Tgt readSharedLocals readSharedExit).run' (default : readSharedLocals)
@@ -1242,16 +1242,16 @@ def writer.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt writerLocals writerExit := do
     let i7 ← pure (i5)
     let i8 ← pure (Zig.lt false i7 (2 : BitVec 64))
     if i8 then (do
-      let i10 ← pure (p0.add 16)
-      let i11 ← pure (p0.add 0)
+      let i10 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+      let i11 ← pure p0
       let i12 ← Zig.load (Zig.Io) 8 i11
       let _i13 ← Zig.callC (Io_RwLock_lockUncancelable i10 i12)
-      let i14 ← pure (p0.add 56)
+      let i14 ← Zig.callMC (Zig.ptrProject p0 (·.add 56))
       let i15 ← Zig.load (BitVec 32) 4 i14
       let i16 ← Zig.add false i15 (1 : BitVec 32)
       Zig.store (α := BitVec 32) 4 i14 i16
-      let i18 ← pure (p0.add 16)
-      let i19 ← pure (p0.add 0)
+      let i18 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+      let i19 ← pure p0
       let i20 ← Zig.load (Zig.Io) 8 i19
       let _i21 ← Zig.callC (Io_RwLock_unlock i18 i20)
       pure .br6)
@@ -1286,11 +1286,11 @@ def rwLockRead (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) :=
   let s1 ← Zig.allocStack 64 8
   let e ← ((do
     let i1 ← pure (← get).sh
-    let i2 ← pure (i1.add 0)
+    let i2 ← pure i1
     Zig.store (α := Zig.Io) 8 i2 p0
-    let i4 ← pure (i1.add 16)
+    let i4 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
     Zig.store (α := Io_RwLock) 8 i4 ({ state := (0 : BitVec 64), mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), semaphore := ({ mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), cond := ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition), permits := (0 : BitVec 64) } : Io_Semaphore) } : Io_RwLock)
-    let i6 ← pure (i1.add 56)
+    let i6 ← Zig.callMC (Zig.ptrProject i1 (·.add 56))
     Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
     let i8 ← pure (i1)
     let i9 ← Zig.spawnC (Tgt.writer i8)
@@ -1323,11 +1323,11 @@ def rwLockSnapshotPair (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
   let s1 ← Zig.allocStack 64 8
   let e ← ((do
     let i1 ← pure (← get).sh
-    let i2 ← pure (i1.add 0)
+    let i2 ← pure i1
     Zig.store (α := Zig.Io) 8 i2 p0
-    let i4 ← pure (i1.add 16)
+    let i4 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
     Zig.store (α := Io_RwLock) 8 i4 ({ state := (0 : BitVec 64), mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), semaphore := ({ mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), cond := ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition), permits := (0 : BitVec 64) } : Io_Semaphore) } : Io_RwLock)
-    let i6 ← pure (i1.add 56)
+    let i6 ← Zig.callMC (Zig.ptrProject i1 (·.add 56))
     Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
     let i8 ← pure (i1)
     let i9 ← Zig.spawnC (Tgt.writer i8)
@@ -1338,13 +1338,13 @@ def rwLockSnapshotPair (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
       let i13 ← pure ((.error i12) : Except Zig.ErrName (BitVec 32))
       pure (.ret i13))
     | .ok v10 => (do
-      let i15 ← pure (i1.add 16)
+      let i15 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
       let _i16 ← Zig.callC (Io_RwLock_lockSharedUncancelable i15 p0)
-      let i17 ← pure (i1.add 56)
+      let i17 ← Zig.callMC (Zig.ptrProject i1 (·.add 56))
       let i18 ← Zig.load (BitVec 32) 4 i17
-      let i19 ← pure (i1.add 56)
+      let i19 ← Zig.callMC (Zig.ptrProject i1 (·.add 56))
       let i20 ← Zig.load (BitVec 32) 4 i19
-      let i21 ← pure (i1.add 16)
+      let i21 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
       let _i22 ← Zig.callC (Io_RwLock_unlockShared i21 p0)
       let _i23 ← Zig.joinC v10
       let i24 ← Zig.mul false (10 : BitVec 32) i18
@@ -1375,16 +1375,16 @@ def semWork.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt semWorkLocals semWorkExit := do
     let i7 ← pure (i5)
     let i8 ← pure (Zig.lt false i7 (2 : BitVec 64))
     if i8 then (do
-      let i10 ← pure (p0.add 16)
-      let i11 ← pure (p0.add 0)
+      let i10 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+      let i11 ← pure p0
       let i12 ← Zig.load (Zig.Io) 8 i11
       let _i13 ← Zig.callC (Io_Semaphore_waitUncancelable i10 i12)
-      let i14 ← pure (p0.add 40)
+      let i14 ← Zig.callMC (Zig.ptrProject p0 (·.add 40))
       let i15 ← Zig.load (BitVec 32) 4 i14
       let i16 ← Zig.add false i15 (1 : BitVec 32)
       Zig.store (α := BitVec 32) 4 i14 i16
-      let i18 ← pure (p0.add 16)
-      let i19 ← pure (p0.add 0)
+      let i18 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+      let i19 ← pure p0
       let i20 ← Zig.load (Zig.Io) 8 i19
       let _i21 ← Zig.callC (Io_Semaphore_post i18 i20)
       pure .br6)
@@ -1419,11 +1419,11 @@ def semaphoreCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 3
   let s1 ← Zig.allocStack 48 8
   let e ← ((do
     let i1 ← pure (← get).c
-    let i2 ← pure (i1.add 0)
+    let i2 ← pure i1
     Zig.store (α := Zig.Io) 8 i2 p0
-    let i4 ← pure (i1.add 16)
+    let i4 ← Zig.callMC (Zig.ptrProject i1 (·.add 16))
     Zig.store (α := Io_Semaphore) 8 i4 ({ mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex), cond := ({ state := ({ raw := (Zig.Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } : atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Io_Condition), permits := (1 : BitVec 64) } : Io_Semaphore)
-    let i6 ← pure (i1.add 40)
+    let i6 ← Zig.callMC (Zig.ptrProject i1 (·.add 40))
     Zig.store (α := BitVec 32) 4 i6 (0 : BitVec 32)
     let i8 ← pure (i1)
     let i9 ← Zig.spawnC (Tgt.semWork i8)
@@ -1436,7 +1436,7 @@ def semaphoreCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 3
     | .ok v10 => (do
       let _i15 ← Zig.callC (semWork i1)
       let _i16 ← Zig.joinC v10
-      let i17 ← pure (i1.add 40)
+      let i17 ← Zig.callMC (Zig.ptrProject i1 (·.add 40))
       let i18 ← Zig.load (BitVec 32) 4 i17
       let i19 ← pure ((.ok i18) : Except Zig.ErrName (BitVec 32))
       pure (.ret i19))) : Zig.CM Tgt semaphoreCounterLocals semaphoreCounterExit).run' { (default : semaphoreCounterLocals) with c := s1 }

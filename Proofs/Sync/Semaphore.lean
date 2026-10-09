@@ -2474,9 +2474,17 @@ theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   subst ep
   unfold Io_Condition_waitUncancelable.loop22
   simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
-  rw [ptr_epoch]
+  first
+  | rw [ptr_epoch]
+  | refine WP.bind (WP.callMC_ptrProject (hP.projCE hi) ?_)
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [ptr_epoch]
   refine WP.bind (wp_ewait hP hinS hi fun k hk G₁ m₁ hc₁ hi₁ => ?_)
   dsimp only
+  -- Zig 0.17.0 forms the epoch pointer again before the load.
+  try (refine WP.bind (WP.callMC_ptrProject (hP.projCE hi₁) ?_)
+       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+       rw [ptr_epoch])
   refine WP.bind (WP.bind (wp_load hP (.inr rfl) (g := gw pa x i jr e false) (fun h => by cases h) hi₁
     fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL hU => ?_))
   obtain ⟨-, hs₂, -⟩ := hP.split hi₂
@@ -2550,7 +2558,11 @@ theorem condWait_spec_v017 (hP : S.Fits P U) (t : ThreadId) (pa hL : Heap) (x : 
   refine WP.map ?_
   simp only [StateT.run_bind]
   simp only [StateT.run_pure, pure_bind]
-  rw [ptr_epoch]
+  first
+  | rw [ptr_epoch]
+  | refine WP.bind (WP.callMC_ptrProject (hP.projCE hi) ?_)
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [ptr_epoch]
   refine WP.bind (WP.bind (wp_ldE hP rfl hwx hinS hi fun k₁ hk₁ G₁ m₁ i ev hc₁ hi₁ => ?_))
   refine WP.pure' ?_
   dsimp only

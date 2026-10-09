@@ -32,7 +32,7 @@ inductive clearStatusExit where
 
 def clearStatus (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let _i2 ← Zig.vload air2lean_device 32 4 i1
     pure .ret) : Zig.MM clearStatusLocals clearStatusExit).run' (default : clearStatusLocals)
   match e with
@@ -53,7 +53,7 @@ def putc.again3 : putcExit → Bool
 
 def putc.loop3 (p0 : Zig.Ptr) : Zig.MM putcLocals putcExit := do
   match ← ((do
-    let i5 ← pure (p0.add 0)
+    let i5 ← pure p0
     let i6 ← Zig.vload air2lean_device 32 4 i5
     let i7 ← pure (i6 &&& (1 : BitVec 32))
     let i8 ← pure (i7 == (0 : BitVec 32))
@@ -70,7 +70,7 @@ def putc (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Unit) := do
     match ← ((do
       Zig.loop (putc.loop3 p0) putc.again3) : Zig.MM putcLocals putcExit) with
     | .br2 => (do
-      let i13 ← pure (p0.add 4)
+      let i13 ← Zig.callM (Zig.ptrProjectDevice air2lean_device p0 (·.add 4))
       let i14 ← Zig.intCast false false 32 p1
       Zig.vstore air2lean_device 32 4 i13 i14
       pure .ret)
@@ -87,10 +87,10 @@ inductive sendThenStatusExit where
 
 def sendThenStatus (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i2 ← pure (p0.add 4)
+    let i2 ← Zig.callM (Zig.ptrProjectDevice air2lean_device p0 (·.add 4))
     let i3 ← Zig.intCast false false 32 p1
     Zig.vstore air2lean_device 32 4 i2 i3
-    let i5 ← pure (p0.add 0)
+    let i5 ← pure p0
     let i6 ← Zig.vload air2lean_device 32 4 i5
     pure (.ret i6)) : Zig.MM sendThenStatusLocals sendThenStatusExit).run' (default : sendThenStatusLocals)
   match e with
@@ -104,9 +104,9 @@ inductive statusTwiceExit where
 
 def statusTwice (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.vload air2lean_device 32 4 i1
-    let i3 ← pure (p0.add 0)
+    let i3 ← pure p0
     let i4 ← Zig.vload air2lean_device 32 4 i3
     let i5 ← pure (i2 ^^^ i4)
     pure (.ret i5)) : Zig.MM statusTwiceLocals statusTwiceExit).run' (default : statusTwiceLocals)

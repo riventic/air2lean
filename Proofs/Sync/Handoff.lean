@@ -1959,7 +1959,9 @@ theorem loop45_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals
       change (sub false _ 1).run = _ at hb; rw [sub_s] at hb; cases hb; rfl
     subst hb'
     dsimp only
-    rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+    first
+    | rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+    | rw [show (bPtr.add 20 : Ptr) = WS.ptr from rfl]
     refine WP.bind (WP.bind (wp_weakCasAs (.inl rfl) (g := gP x) hi (fun _ _ _ hi₁ => main_alive hi₁)
       (fun _ _ _ _ _ _ b _ => ⟨_, ofBits_cst b⟩) fun k hk G₁ m₁ m' hg₁ hi₁ hw' hop hL =>
         ⟨fun hv hU hh hacq => ?_, fun j b r hd hj hv hfl hacq hh => ?_⟩))
@@ -2037,7 +2039,11 @@ theorem loop22_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals
   subst he
   unfold Io_Condition_waitUncancelable.loop22
   simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
-  rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  first
+  | rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  | refine WP.bind (WP.callMC_ptrProject (projE hi) ?_)
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [show (bPtr.add 20).add 4 = WE.ptr from rfl]
   refine WP.bind (wp_mwait (.inr (.inl rfl)) (by decide) hi (fun G₁ m₁ hg₁ hi₁ hU => ?_)
     fun k hk G₁ m₁ hc₁ hi₁ => ?_)
   · -- it sleeps: `QOk` with `main` at the epoch
@@ -2046,6 +2052,10 @@ theorem loop22_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals
     · exact hi₁.2.q w hw
     · exact .inr (.inl ⟨rfl, rfl, by rw [hg₁]; rfl, wt_sleep hi₁ hg₁ hU⟩)
   dsimp only
+  -- Zig 0.17.0 forms the epoch pointer again before the load.
+  try (refine WP.bind (WP.callMC_ptrProject (projE hi₁) ?_)
+       simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+       rw [show (bPtr.add 20).add 4 = WE.ptr from rfl])
   refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gP { ph := .wt, cw := true }) hi₁
     (fun _ _ _ h => main_alive h) fun k₂ hk₂ G₂ m₂ m₃ v j hg₂ hi₂ hj hv hfl hacq hh hw' hop hL => ?_))
   have hcase := inv_seen (G := G₂) (by rw [upd_g hg₂]; exact hi₂) hw' hop (by rw [upd_g hg₂]; exact hL)
@@ -2054,7 +2064,9 @@ theorem loop22_body (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals
   dsimp only
   simp only [StateT.run_bind, StateT.run_modify]
   simp only [pure_bind]
-  rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  first
+  | rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  | rw [show (bPtr.add 20 : Ptr) = WS.ptr from rfl]
   -- the state's load, then the inner loop
   obtain ⟨x, hx, hcwx, hvwx, hpx, hi₃⟩ : ∃ x : X, (x.ph = .wt ∧ v = 0 ∨ x.ph = .seen ∧ v = 1) ∧
       x.cw = true ∧ x.vw = false ∧ x.ph.post = false ∧ proto.inv (upd G₂ 0 (gP x)) m₃ := by
@@ -2109,7 +2121,11 @@ theorem condWait_spec_v017 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (
   refine WP.map ?_
   simp only [StateT.run_bind]
   simp only [StateT.run_pure, pure_bind]
-  rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  first
+  | rw [show ((bPtr.add 20).add 4).add 0 = WE.ptr from rfl]
+  | refine WP.bind (WP.callMC_ptrProject (projE hi) ?_)
+    simp only [StateT.run_bind, StateT.run_pure, pure_bind]
+    rw [show (bPtr.add 20).add 4 = WE.ptr from rfl]
   refine WP.bind (WP.bind (wp_load (.inr (.inl rfl)) (g := gH { ph := .run } hL) hi
     (fun _ _ _ h => main_alive h) fun k₁ hk₁ G₁ m₁ m₂ v j hg₁ hi₁ hj hv _ _ hh hw' hop hL₁ => ?_))
   have hrd := rdy_now hi₁ hg₁ hR hY
@@ -2119,7 +2135,9 @@ theorem condWait_spec_v017 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (
   dsimp only
   simp only [StateT.run_bind, StateT.run_modify]
   simp only [pure_bind]
-  rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  first
+  | rw [show ((bPtr.add 20).add 0).add 0 = WS.ptr from rfl]
+  | rw [show (bPtr.add 20 : Ptr) = WS.ptr from rfl]
   refine WP.bind (WP.bind (WP.bind (wp_rmwAs (.inl rfl) (g := gH { ph := .ep } hL) hi₂
     (fun _ _ _ h => main_alive h) (fun _ _ _ _ b _ => ⟨_, ofBits_cst b⟩)
     fun k₂ hk₂ G₂ m₃ m₄ old r hg₂ hi₃ hd hv₂ _ hh₂ _ hw₂ hop₂ hL₂ => ?_)))

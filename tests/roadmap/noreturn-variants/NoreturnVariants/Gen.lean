@@ -324,7 +324,7 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     let i2 ← Zig.callR (get_air2lean1 i1)
     let i3 ← Zig.add false i2 (1 : BitVec 32)
     Zig.store (α := UTag) 1 (p0.add 4) UTag.c
-    let i5 ← pure (p0.add 0)
+    let i5 ← pure p0
     Zig.store (α := BitVec 32) 4 i5 i3
     pure .ret) : Zig.MM bumpLocals bumpExit).run' (default : bumpLocals)
   match e with
@@ -392,7 +392,7 @@ inductive holderColorExit where
 
 def holderColor (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
   let e ← ((do
-    let i1 ← pure (p0.add 4)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
     let i2 ← Zig.load (Io_Terminal_Mode) 1 i1
     let i3 ← Zig.callR (isColor i2)
     pure (.ret i3)) : Zig.MM holderColorLocals holderColorExit).run' (default : holderColorLocals)
@@ -408,7 +408,7 @@ inductive setModeExit where
 
 def setMode (p0 : Zig.Ptr) (p1 : Bool) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 4)
+    let i2 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
     match ← ((do
       if p1 then (do
         pure (.br3 Io_Terminal_Mode.escape_codes))
@@ -434,21 +434,21 @@ def holderRoundTrip (p0 : Bool) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let s2 ← Zig.allocStack 8 4
   let e ← ((do
     let i2 ← pure (← get).h
-    let i3 ← pure (i2.add 4)
+    let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 4))
     Zig.store (α := Io_Terminal_Mode) 1 i3 Io_Terminal_Mode.no_color
-    let i5 ← pure (i2.add 0)
+    let i5 ← pure i2
     Zig.store (α := BitVec 32) 4 i5 p1
     let _i7 ← Zig.callM (setMode i2 p0)
     match ← ((do
       let i9 ← pure (i2)
       let i10 ← Zig.callM (holderColor i9)
       if i10 then (do
-        let i12 ← pure (i2.add 0)
+        let i12 ← pure i2
         let i13 ← Zig.load (BitVec 32) 4 i12
         let i14 ← Zig.add false i13 (1 : BitVec 32)
         pure (.br8 i14))
       else (do
-        let i16 ← pure (i2.add 0)
+        let i16 ← pure i2
         let i17 ← Zig.load (BitVec 32) 4 i16
         pure (.br8 i17))) : Zig.MM holderRoundTripLocals holderRoundTripExit) with
     | .br8 v8 => (do

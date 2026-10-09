@@ -229,7 +229,7 @@ inductive Thread_Mutex_unlockExit where
 
 def Thread_Mutex_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let _i2 ← Zig.osUnfairUnlockC i1
     pure .ret) : Zig.CM Tgt Thread_Mutex_unlockLocals Thread_Mutex_unlockExit).run' (default : Thread_Mutex_unlockLocals)
   match e with
@@ -314,7 +314,7 @@ inductive Thread_Futex_Deadline_waitExit where
 def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
-      let i4 ← pure (p0.add 0)
+      let i4 ← pure p0
       let i5 ← Zig.load (Option (BitVec 64)) 8 i4
       let i6 ← pure ((i5).isSome)
       if i6 then (do
@@ -324,7 +324,7 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
         let _i10 ← Zig.threadFutexWaitC p1 p2
         pure (.ret (.ok () : Except Zig.ErrName (Unit))))) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit) with
     | .br3 v3 => (do
-      let i12 ← pure (p0.add 16)
+      let i12 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
       let i13 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
       match ← ((do
         let i15 ← Zig.callRC (math_sub__anon_1 v3 i13)
@@ -352,7 +352,7 @@ inductive Thread_Mutex_lockExit where
 
 def Thread_Mutex_lock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let _i2 ← Zig.osUnfairLockC i1
     pure .ret) : Zig.CM Tgt Thread_Mutex_lockLocals Thread_Mutex_lockExit).run' (default : Thread_Mutex_lockLocals)
   match e with
@@ -416,10 +416,10 @@ def Thread_Condition_FutexImpl_wait.loop107 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.
         let i115 ← Zig.sub false i114 (1 : BitVec 32)
         let i116 ← Zig.sub false i115 (65536 : BitVec 32)
         match ← ((do
-          let i118 ← pure (p0.add 0)
+          let i118 ← pure p0
           let i119 ← pure ((← get).state)
           match ← ((do
-            let i121 ← pure (i118.add 0)
+            let i121 ← pure i118
             let i122 ← Zig.cmpxchgWeakC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i121 i119 i116
             pure (.br120 i122)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
           | .br120 v120 => (do
@@ -455,10 +455,10 @@ def Thread_Condition_FutexImpl_wait.loop45 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.C
         let i53 ← Zig.sub false i52 (1 : BitVec 32)
         let i54 ← Zig.sub false i53 (65536 : BitVec 32)
         match ← ((do
-          let i56 ← pure (p0.add 0)
+          let i56 ← pure p0
           let i57 ← pure ((← get).state)
           match ← ((do
-            let i59 ← pure (i56.add 0)
+            let i59 ← pure i56
             let i60 ← Zig.cmpxchgWeakC Zig.AtomicOrder.acquire Zig.AtomicOrder.relaxed 4 i59 i57 i54
             pure (.br58 i60)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
           | .br58 v58 => (do
@@ -491,10 +491,10 @@ def Thread_Condition_FutexImpl_wait.loop42 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : 
       let i73 ← pure ((← get).state)
       let i74 ← Zig.sub false i73 (1 : BitVec 32)
       match ← ((do
-        let i76 ← pure (p0.add 0)
+        let i76 ← pure p0
         let i77 ← pure ((← get).state)
         match ← ((do
-          let i79 ← pure (i76.add 0)
+          let i79 ← pure i76
           let i80 ← Zig.cmpxchgWeakC Zig.AtomicOrder.relaxed Zig.AtomicOrder.relaxed 4 i79 i77 i74
           pure (.br78 i80)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
         | .br78 v78 => (do
@@ -517,7 +517,7 @@ def Thread_Condition_FutexImpl_wait.loop42 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : 
   | e => pure e
 
 def Thread_Condition_FutexImpl_wait.loop29 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
-  let i30 ← pure (p0.add 4)
+  let i30 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
   let i31 ← pure (i30)
   let i32 ← pure ((← get).epoch)
   let i33 ← Zig.callC (Thread_Futex_Deadline_wait i26 i31 i32)
@@ -532,18 +532,18 @@ def Thread_Condition_FutexImpl_wait.loop29 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : 
       else (do
         throw .panic))) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
   | .br35 => (do
-    let i92 ← pure (p0.add 4)
+    let i92 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
     let i93 ← pure (i92)
     match ← ((do
-      let i95 ← pure (i93.add 0)
+      let i95 ← pure i93
       let i96 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i95
       pure (.br94 i96)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
     | .br94 v94 => (do
       modify (fun s => { s with epoch := v94 })
-      let i99 ← pure (p0.add 0)
+      let i99 ← pure p0
       let i100 ← pure (i99)
       match ← ((do
-        let i102 ← pure (i100.add 0)
+        let i102 ← pure i100
         let i103 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i102
         pure (.br101 i103)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
       | .br101 v101 => (do
@@ -560,17 +560,17 @@ def Thread_Condition_FutexImpl_wait.loop29 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : 
 def Thread_Condition_FutexImpl_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let s26 ← Zig.allocStack 48 8
   let e ← ((do
-    let i4 ← pure (p0.add 4)
+    let i4 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
     let i5 ← pure (i4)
     match ← ((do
-      let i7 ← pure (i5.add 0)
+      let i7 ← pure i5
       let i8 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i7
       pure (.br6 i8)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
     | .br6 v6 => (do
       modify (fun s => { s with epoch := v6 })
-      let i12 ← pure (p0.add 0)
+      let i12 ← pure p0
       match ← ((do
-        let i14 ← pure (i12.add 0)
+        let i14 ← pure i12
         let i15 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.relaxed 4 i14 (1 : BitVec 32)
         pure (.br13 i15)) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
       | .br13 v13 => (do
@@ -631,10 +631,10 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
       let i23 ← pure ((← get).state)
       let i24 ← Zig.add false i23 (65536 : BitVec 32)
       match ← ((do
-        let i26 ← pure (p0.add 0)
+        let i26 ← pure p0
         let i27 ← pure ((← get).state)
         match ← ((do
-          let i29 ← pure (i26.add 0)
+          let i29 ← pure i26
           let i30 ← Zig.cmpxchgWeakC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i27 i24
           pure (.br28 i30)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
         | .br28 v28 => (do
@@ -643,13 +643,13 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
             let i34 ← Zig.optPayload v28
             pure (.br25 i34))
           else (do
-            let i36 ← pure (p0.add 4)
+            let i36 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
             match ← ((do
-              let i38 ← pure (i36.add 0)
+              let i38 ← pure i36
               let i39 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.release 4 i38 (1 : BitVec 32)
               pure (.br37 i39)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
             | .br37 _v37 => (do
-              let i41 ← pure (p0.add 4)
+              let i41 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
               let i42 ← pure (i41)
               let _i43 ← Zig.threadFutexWakeC i42 (1 : BitVec 32)
               pure .ret)
@@ -666,10 +666,10 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
 
 def Thread_Condition_FutexImpl_wake__anon_1 (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← pure (i2)
     match ← ((do
-      let i5 ← pure (i3.add 0)
+      let i5 ← pure i3
       let i6 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i5
       pure (.br4 i6)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
     | .br4 v4 => (do
@@ -688,7 +688,7 @@ inductive Thread_Condition_signalExit where
 
 def Thread_Condition_signal (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let _i2 ← Zig.callC (Thread_Condition_FutexImpl_wake__anon_1 i1)
     pure .ret) : Zig.CM Tgt Thread_Condition_signalLocals Thread_Condition_signalExit).run' (default : Thread_Condition_signalLocals)
   match e with
@@ -703,7 +703,7 @@ inductive Thread_Condition_waitExit where
 
 def Thread_Condition_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.callC (Thread_Condition_FutexImpl_wait i2 p1 none)
     let i4 ← pure (Zig.isNonErr i3)
     match ← ((do
@@ -732,9 +732,9 @@ inductive Thread_ResetEvent_FutexImpl_isSetExit where
 
 def Thread_ResetEvent_FutexImpl_isSet (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     match ← ((do
-      let i3 ← pure (i1.add 0)
+      let i3 ← pure i1
       let i4 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i3
       pure (.br2 i4)) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_isSetLocals Thread_ResetEvent_FutexImpl_isSetExit) with
     | .br2 v2 => (do
@@ -758,10 +758,10 @@ inductive Thread_ResetEvent_FutexImpl_setExit where
 def Thread_ResetEvent_FutexImpl_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     match ← ((do
-      let i2 ← pure (p0.add 0)
+      let i2 ← pure p0
       let i3 ← pure (i2)
       match ← ((do
-        let i5 ← pure (i3.add 0)
+        let i5 ← pure i3
         let i6 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i5
         pure (.br4 i6)) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_setLocals Thread_ResetEvent_FutexImpl_setExit) with
       | .br4 v4 => (do
@@ -773,15 +773,15 @@ def Thread_ResetEvent_FutexImpl_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
       | e => pure e) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_setLocals Thread_ResetEvent_FutexImpl_setExit) with
     | .br1 => (do
       match ← ((do
-        let i13 ← pure (p0.add 0)
+        let i13 ← pure p0
         match ← ((do
-          let i15 ← pure (i13.add 0)
+          let i15 ← pure i13
           let i16 ← Zig.atomicRmwC Zig.RmwOp.xchg false Zig.AtomicOrder.release 4 i15 (2 : BitVec 32)
           pure (.br14 i16)) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_setLocals Thread_ResetEvent_FutexImpl_setExit) with
         | .br14 v14 => (do
           let i18 ← pure (v14 == (1 : BitVec 32))
           if i18 then (do
-            let i20 ← pure (p0.add 0)
+            let i20 ← pure p0
             let i21 ← pure (i20)
             let _i22 ← Zig.threadFutexWakeC i21 (4294967295 : BitVec 32)
             pure .br12)
@@ -820,13 +820,13 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet.again37 : Thread_ResetEvent_FutexIm
 
 def Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 (p0 : Zig.Ptr) (i33 : Zig.Ptr) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit := do
   match ← ((do
-    let i39 ← pure (p0.add 0)
+    let i39 ← pure p0
     let i40 ← pure (i39)
     let i41 ← Zig.callC (Thread_Futex_Deadline_wait i33 i40 (1 : BitVec 32))
-    let i42 ← pure (p0.add 0)
+    let i42 ← pure p0
     let i43 ← pure (i42)
     match ← ((do
-      let i45 ← pure (i43.add 0)
+      let i45 ← pure i43
       let i46 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i45
       pure (.br44 i46)) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit) with
     | .br44 v44 => (do
@@ -855,10 +855,10 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 (p0 : Zig.Ptr) (i33 : Zig.Pt
 def Thread_ResetEvent_FutexImpl_waitUntilSet (p0 : Zig.Ptr) (p1 : Option (BitVec 64)) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let s33 ← Zig.allocStack 48 8
   let e ← ((do
-    let i3 ← pure (p0.add 0)
+    let i3 ← pure p0
     let i4 ← pure (i3)
     match ← ((do
-      let i6 ← pure (i4.add 0)
+      let i6 ← pure i4
       let i7 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 i6
       pure (.br5 i7)) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit) with
     | .br5 v5 => (do
@@ -868,10 +868,10 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet (p0 : Zig.Ptr) (p1 : Option (BitVec
         let i12 ← pure (i11 == (0 : BitVec 32))
         if i12 then (do
           match ← ((do
-            let i15 ← pure (p0.add 0)
+            let i15 ← pure p0
             let i16 ← pure ((← get).state)
             match ← ((do
-              let i18 ← pure (i15.add 0)
+              let i18 ← pure i15
               let i19 ← Zig.cmpxchgC Zig.AtomicOrder.acquire Zig.AtomicOrder.acquire 4 i18 i16 (1 : BitVec 32)
               pure (.br17 i19)) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit) with
             | .br17 v17 => (do
@@ -949,7 +949,7 @@ inductive Thread_ResetEvent_setExit where
 
 def Thread_ResetEvent_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let _i2 ← Zig.callC (Thread_ResetEvent_FutexImpl_set i1)
     pure .ret) : Zig.CM Tgt Thread_ResetEvent_setLocals Thread_ResetEvent_setExit).run' (default : Thread_ResetEvent_setLocals)
   match e with
@@ -964,7 +964,7 @@ inductive Thread_ResetEvent_waitExit where
 
 def Thread_ResetEvent_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.callC (Thread_ResetEvent_FutexImpl_wait i1 none)
     let i3 ← pure (Zig.isNonErr i2)
     match ← ((do
@@ -994,9 +994,9 @@ inductive Thread_WaitGroup_finishExit where
 
 def Thread_WaitGroup_finish (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     match ← ((do
-      let i3 ← pure (i1.add 0)
+      let i3 ← pure i1
       let i4 ← Zig.atomicRmwC Zig.RmwOp.sub false Zig.AtomicOrder.acqRel 8 i3 (2 : BitVec 64)
       pure (.br2 i4)) : Zig.CM Tgt Thread_WaitGroup_finishLocals Thread_WaitGroup_finishExit) with
     | .br2 v2 => (do
@@ -1008,7 +1008,7 @@ def Thread_WaitGroup_finish (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
         let i11 ← pure (v2)
         let i12 ← pure (i11 == (3 : BitVec 64))
         if i12 then (do
-          let i14 ← pure (p0.add 8)
+          let i14 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
           let _i15 ← Zig.callC (Thread_ResetEvent_set i14)
           pure .br10)
         else (do
@@ -1030,10 +1030,10 @@ inductive Thread_WaitGroup_startManyExit where
 
 def Thread_WaitGroup_startMany (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.mul false (2 : BitVec 64) p1
     match ← ((do
-      let i5 ← pure (i2.add 0)
+      let i5 ← pure i2
       let i6 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.relaxed 8 i5 i3
       pure (.br4 i6)) : Zig.CM Tgt Thread_WaitGroup_startManyLocals Thread_WaitGroup_startManyExit) with
     | .br4 v4 => (do
@@ -1057,9 +1057,9 @@ inductive Thread_WaitGroup_waitExit where
 
 def Thread_WaitGroup_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     match ← ((do
-      let i3 ← pure (i1.add 0)
+      let i3 ← pure i1
       let i4 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.acquire 8 i3 (1 : BitVec 64)
       pure (.br2 i4)) : Zig.CM Tgt Thread_WaitGroup_waitLocals Thread_WaitGroup_waitExit) with
     | .br2 v2 => (do
@@ -1072,7 +1072,7 @@ def Thread_WaitGroup_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
         let i12 ← pure (i11)
         let i13 ← pure (Zig.gt false i12 (0 : BitVec 64))
         if i13 then (do
-          let i15 ← pure (p0.add 8)
+          let i15 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
           let _i16 ← Zig.callC (Thread_ResetEvent_wait i15)
           pure .br10)
         else (do
@@ -1171,17 +1171,17 @@ inductive producerExit where
 
 def producer (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let _i2 ← Zig.callC (Thread_Mutex_lock i1)
-    let i3 ← pure (p0.add 16)
+    let i3 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
     Zig.store (α := BitVec 32) 4 i3 (7 : BitVec 32)
-    let i5 ← pure (p0.add 20)
+    let i5 ← Zig.callMC (Zig.ptrProject p0 (·.add 20))
     Zig.store (α := Bool) 1 i5 true
-    let i7 ← pure (p0.add 0)
+    let i7 ← pure p0
     let _i8 ← Zig.callC (Thread_Mutex_unlock i7)
-    let i9 ← pure (p0.add 4)
+    let i9 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
     let _i10 ← Zig.callC (Thread_Condition_signal i9)
-    let i11 ← pure (p0.add 12)
+    let i11 ← Zig.callMC (Zig.ptrProject p0 (·.add 12))
     let _i12 ← Zig.callC (Thread_ResetEvent_set i11)
     pure .ret) : Zig.CM Tgt producerLocals producerExit).run' (default : producerLocals)
   match e with
@@ -1203,12 +1203,12 @@ def handoff.again12 : handoffExit → Bool
 
 def handoff.loop12 (i0 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
   match ← ((do
-    let i14 ← pure (i0.add 20)
+    let i14 ← Zig.callMC (Zig.ptrProject i0 (·.add 20))
     let i15 ← Zig.load (Bool) 1 i14
     let i16 ← pure (!i15)
     if i16 then (do
-      let i18 ← pure (i0.add 4)
-      let i19 ← pure (i0.add 0)
+      let i18 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+      let i19 ← pure i0
       let _i20 ← Zig.callC (Thread_Condition_wait i18 i19)
       pure .br13)
     else (do
@@ -1231,16 +1231,16 @@ def handoff  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
       let i7 ← pure ((.error i6) : Except Zig.ErrName (BitVec 32))
       pure (.ret i7))
     | .ok v4 => (do
-      let i9 ← pure (i0.add 0)
+      let i9 ← pure i0
       let _i10 ← Zig.callC (Thread_Mutex_lock i9)
       match ← ((do
         Zig.loop (handoff.loop12 i0) handoff.again12) : Zig.CM Tgt handoffLocals handoffExit) with
       | .br11 => (do
-        let i24 ← pure (i0.add 16)
+        let i24 ← Zig.callMC (Zig.ptrProject i0 (·.add 16))
         let i25 ← Zig.load (BitVec 32) 4 i24
-        let i26 ← pure (i0.add 0)
+        let i26 ← pure i0
         let _i27 ← Zig.callC (Thread_Mutex_unlock i26)
-        let i28 ← pure (i0.add 12)
+        let i28 ← Zig.callMC (Zig.ptrProject i0 (·.add 12))
         let _i29 ← Zig.callC (Thread_ResetEvent_wait i28)
         let _i30 ← Zig.joinC v4
         let i31 ← pure ((.ok i25) : Except Zig.ErrName (BitVec 32))
@@ -1271,13 +1271,13 @@ def work.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt workLocals workExit := do
     let i7 ← pure (i5)
     let i8 ← pure (Zig.lt false i7 (2 : BitVec 64))
     if i8 then (do
-      let i10 ← pure (p0.add 0)
+      let i10 ← pure p0
       let _i11 ← Zig.callC (Thread_Mutex_lock i10)
-      let i12 ← pure (p0.add 4)
+      let i12 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
       let i13 ← Zig.load (BitVec 32) 4 i12
       let i14 ← Zig.add false i13 (1 : BitVec 32)
       Zig.store (α := BitVec 32) 4 i12 i14
-      let i16 ← pure (p0.add 0)
+      let i16 ← pure p0
       let _i17 ← Zig.callC (Thread_Mutex_unlock i16)
       pure .br6)
     else (do
@@ -1339,15 +1339,15 @@ inductive taskExit where
 
 def task (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 16)
+    let i1 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
     let _i2 ← Zig.callC (Thread_Mutex_lock i1)
-    let i3 ← pure (p0.add 20)
+    let i3 ← Zig.callMC (Zig.ptrProject p0 (·.add 20))
     let i4 ← Zig.load (BitVec 32) 4 i3
     let i5 ← Zig.add false i4 (1 : BitVec 32)
     Zig.store (α := BitVec 32) 4 i3 i5
-    let i7 ← pure (p0.add 16)
+    let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
     let _i8 ← Zig.callC (Thread_Mutex_unlock i7)
-    let i9 ← pure (p0.add 0)
+    let i9 ← pure p0
     let _i10 ← Zig.callC (Thread_WaitGroup_finish i9)
     pure .ret) : Zig.CM Tgt taskLocals taskExit).run' (default : taskLocals)
   match e with
@@ -1365,7 +1365,7 @@ def waitGroup  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let e ← ((do
     let i0 ← pure (← get).s
     Zig.store (α := Tally) 8 i0 ({ wg := ({ state := ({ raw := (0 : BitVec 64) } : atomic_Value_usize), event := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_ResetEvent_FutexImpl) } : Thread_ResetEvent) } : Thread_WaitGroup), m := ({ impl := ({ oul := ({ _os_unfair_lock_opaque := (0 : BitVec 32) } : c_darwin_os_unfair_lock) } : Thread_Mutex_DarwinImpl) } : Thread_Mutex), n := (0 : BitVec 32) } : Tally)
-    let i2 ← pure (i0.add 0)
+    let i2 ← pure i0
     let _i3 ← Zig.callC (Thread_WaitGroup_startMany i2 (2 : BitVec 64))
     let i4 ← pure (i0)
     let i5 ← Zig.spawnC (Tgt.task i4)
@@ -1386,7 +1386,7 @@ def waitGroup  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
         let i17 ← pure ((.error i16) : Except Zig.ErrName (BitVec 32))
         pure (.ret i17))
       | .ok v13 => (do
-        let i19 ← pure (i0.add 0)
+        let i19 ← pure i0
         let _i20 ← Zig.callC (Thread_WaitGroup_wait i19)
         let i21 ← Zig.load (Tally) 8 i0
         let i22 ← pure ((i21).n)

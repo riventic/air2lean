@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2974 theorems in 176 files.
+3011 theorems in 179 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 741 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 635 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 744 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 649 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
@@ -22,21 +22,21 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
-| [THR-01](premises.md#thr-01) | 1444 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1549 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 179 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 20 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 841 | Futex model |
+| [THR-05](premises.md#thr-05) | 856 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 84 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1191 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1209 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1170 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1170 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 412 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 507 | Weak CAS spurious failure |
+| [ORD-01](premises.md#ord-01) | 1274 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1274 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 425 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 519 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
@@ -46,19 +46,19 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2840 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2409 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1214 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2873 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2440 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1234 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2974 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1451 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1451 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 3011 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1468 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1468 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
-| [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
@@ -765,14 +765,14 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, S
 
 ## `Proofs/Lists/Bounded.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.sum_loop_within` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_loop_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_loop_not_within` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_loop_within` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_loop_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_loop_not_within` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Container.lean`
 
@@ -839,8 +839,8 @@ File premises: PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, S
 | `Lists.reverse_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `Lists.push_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `Lists.push_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_spec` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
@@ -2381,6 +2381,38 @@ File premises: ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01
 | `example@L15` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
 | `example@L19` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
 
+## `tests/roadmap/architecture-audit/memory-model/PanicDefault.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `panic_is_default` | SEM-01, SEM-02, TRU-01 |
+| `default_memM_succeeds` | SEM-01, SEM-02, TRU-01 |
+| `panic_memM_succeeds` | SEM-01, SEM-02, TRU-01 |
+| `default_result_is_overflow` | SEM-01, TRU-01 |
+| `panic_ptr_is_null` | SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/architecture-audit/memory-model/Theorems.lean`
+
+File premises: TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `addrOfLocal_is_4096` | TRU-01 |
+| `eqVsAddr_is_1` | TRU-01 |
+| `crossDistance_is_9` | TRU-01 |
+| `overAlign_never_panics` | TRU-01 |
+
+## `tests/roadmap/architecture-audit/trust-chain/reduce-bool-handedit/PanicDefault.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L9` | SEM-01, TRU-01 |
+| `example@L14` | SEM-01, SEM-02, TRU-01 |
+
 ## `tests/roadmap/asm-effects/AsmEffects/Proofs.lean`
 
 File premises: PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, TRU-04
@@ -2615,7 +2647,7 @@ File premises: THR-01, THR-07, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01
 
 ## `tests/roadmap/const-bases/ConstBases/Proofs.lean`
 
-File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -2628,8 +2660,9 @@ File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `ConstBasesClients.maybeSlice_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `ConstBasesClients.resElem_runtime` | SEM-01, SEM-02, TRU-01 |
 | `ConstBasesClients.maybeElem_runtime` | SEM-01, SEM-02, TRU-01 |
-| `ConstBasesClients.projectRes_identity` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `ConstBasesClients.projectMaybe_identity` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.table_inBounds` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.projectRes_identity` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `ConstBasesClients.projectMaybe_identity` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `ConstBasesClients.maybeByte_alias` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `ConstBasesClients.maybeByte_alias_model` | SEM-01, SEM-02, TRU-01 |
 | `ConstBasesClients.resElem_code_disjoint` | SEM-01, SEM-02, TRU-01 |
@@ -3205,13 +3238,13 @@ File premises: SEM-01, SEM-02, TRU-01
 
 ## `tests/roadmap/loop-tactics/Infer.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `InferTest.vacuous` | SEM-01, SEM-02, SEM-04, TRU-01 |
 | `example@L34` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `example@L47` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L47` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `example@L94` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `example@L107` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `example@L119` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
@@ -3334,7 +3367,7 @@ File premises: SEM-01, SEM-02, EXT-01, TRU-01
 
 ## `tests/roadmap/noreturn-variants/NoreturnVariants/Proofs.lean`
 
-File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3352,8 +3385,8 @@ File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `NoreturnVariantsClients.oneRoundTrip_max` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `NoreturnVariantsClients.colorOf_1` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `NoreturnVariantsClients.colorOf_0` | PRF-02, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_color` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `NoreturnVariantsClients.holderRoundTrip_plain` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `NoreturnVariantsClients.decode_noreturn_tag` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/outcome-accounting/Check.lean`
@@ -3417,7 +3450,7 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, T
 
 ## `tests/roadmap/pointer-width/PointerWidth/Proofs.lean`
 
-File premises: PRF-02, PRF-04, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, PRF-04, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -3434,8 +3467,8 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, T
 | `PointerWidth.Proofs.zeros_overflow_x64` | PRF-02, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.zeros_boundary` | PRF-02, PRF-04, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.view_layout` | PRF-02, PRF-04, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `PointerWidth.Proofs.restLen_w32` | PRF-02, PRF-04, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `PointerWidth.Proofs.restLen_x64` | PRF-02, PRF-04, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PointerWidth.Proofs.restLen_w32` | PRF-02, PRF-04, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PointerWidth.Proofs.restLen_x64` | PRF-02, PRF-04, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.setFirst_w32` | PRF-02, PRF-04, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PointerWidth.Proofs.setFirst_x64` | PRF-02, PRF-04, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
@@ -4058,7 +4091,7 @@ File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01
 
 ## `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`
 
-File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01
+File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01
 
 | Theorem | Premises |
 |---|---|
@@ -4068,19 +4101,20 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01
 | `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.data_ptr` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.loop_ready` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.poll_run` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
-| `DeviceEffectsProofs.putc_trace` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_trace` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.answers_of_ready` | SEM-01, SEM-02, TRU-01, DEV-01 |
-| `DeviceEffectsProofs.putc_eventually` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.putc_eventually` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.statusTwice_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.statusTwice_not_merged` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.statusTwice_ne_merged` | TRU-01 |
 | `DeviceEffectsProofs.clearStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
-| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
+| `DeviceEffectsProofs.sendThenStatus_trace` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03, DEV-01 |
 
 ## `tests/roadmap/weak-cas/Messages.lean`
 
@@ -4231,7 +4265,7 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, S
 
 ## `tutorials/memory-safety/Controls.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-08, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -4241,11 +4275,11 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, T
 | `MemorySafety.Controls.access_dead` | SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.loop_throw` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.doubleFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.forgetFree_leaks` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.default_seq` | SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
@@ -4254,19 +4288,19 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, T
 
 ## `tutorials/memory-safety/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-08, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `MemorySafety.emp_sep` | SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.pushAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.build_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_memory_safe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_no_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_no_leak` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_every_policy` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.buildThenFree_address_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.pushAll_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.build_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_memory_safe` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_no_illegal` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_no_leak` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_every_policy` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.buildThenFree_address_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Solution.lean`
 

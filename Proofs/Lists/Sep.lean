@@ -119,13 +119,13 @@ end Node
 /-! The node operations as total triples, the rules `sep_step using` applies. -/
 
 theorem node_next_total {p : Ptr} {v : BitVec 32} {q : Option Ptr} :
-    TotalTriple (node p v q) (load (Option Ptr) 8 (p.add 0)) (fun r => ⌜r = q⌝ ∗ node p v q) :=
+    TotalTriple (node p v q) (load (Option Ptr) 8 p) (fun r => ⌜r = q⌝ ∗ node p v q) :=
   fun _ h _ hd hm hn hst => by
     obtain ⟨m', hr, hm', hst'⟩ := node_next_run hn hm hst
     exact ⟨q, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hn⟩, hst'⟩
 
 theorem node_set_next_total {p : Ptr} {v : BitVec 32} {q q' : Option Ptr} :
-    TotalTriple (node p v q) (store 8 (p.add 0) q') (fun _ => node p v q') :=
+    TotalTriple (node p v q) (store 8 p q') (fun _ => node p v q') :=
   fun _ _ _ hd hm hn hst => by
     obtain ⟨m', hr, hst', h', hd', hm', hn'⟩ := node_set_next_run hn hm hd hst q'
     exact ⟨(), m', h', hr, hd', hm', hn', hst'⟩

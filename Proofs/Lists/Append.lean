@@ -530,6 +530,15 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
   have hz : m.blocks.size ≤ m₃.blocks.size := hz₂ ▸ hz₃
   have f₀ : ptrProject p (·.add 16) m = pure (p.add 16, m) := by
     simpa [StateT.run] using bytesAt_ptrProject_run hb hmH (k := 16) (by omega) (by omega)
+  -- Zig 0.17.0's ArrayList checks its debug safety lock (the header's field at 24).
+  have f₂₄ : ptrProject p (·.add 24) m = pure (p.add 24, m) := by
+    have := hdr_size_ge
+    simpa [StateT.run] using bytesAt_ptrProject_run hb hmH (k := 24) (by omega) (by omega)
+  -- Its capacity pointer is then formed after the lock load, on `m₀` (0.16.0: `m₀` is `m`).
+  first
+  | have f₁₆ : ptrProject p (·.add 16) m₀ = pure (p.add 16, m₀) := by
+      simpa [StateT.run] using bytesAt_ptrProject_run hb hm₀ (k := 16) (by omega) (by omega)
+  | have f₁₆ : True := trivial
   simp only [StateT.run] at l₁ l₂ ha₃
   cases r with
   | error e =>
@@ -537,7 +546,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
     refine ⟨.error "OutOfMemory", m₃, ?_, hs₃, hz, hH, hB, dHB, hd, hm₃, rfl, ⟨A, S, K, hA, hK, hb⟩,
       hbf, ptrOk_mono hok hz⟩
     simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₀, hun, l₁, l₂, hdrVal, hge,
-      array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, Zig.unwrapErr, f₀]
+      array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, Zig.unwrapErr, f₀, f₂₄, f₁₆]
   | ok sl =>
     obtain ⟨hsl, hoff, hg4, hN, dN, hm₃, dHBN, A', hA', hbN, habove⟩ := hpost
     obtain ⟨dHN, dBN⟩ := Heap.disjoint_union_left.mp dHBN
@@ -619,7 +628,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
         simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₀, hun, l₁, l₂, hdrVal, hge,
           array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
           r₁, r₂, hor, memmove, Allocator.free, hc0, s₆, s₇, Zig.le, BitVec.ule, f₀, f₃, f₆,
-          ptrProject_id]
+          ptrProject_id, f₂₄, f₁₆]
       · simp only [buf, hg0, ↓reduceIte]
         exact ⟨hoff, A', _, hA', by simp, fun i hi => absurd hi (by simp), hbN⟩
       · intro b hb'; rw [hpN] at hb'; cases hb'; rw [hz₇, hz₆]; exact hbN5
@@ -697,7 +706,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
         simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₀, hun, l₁, l₂, hdrVal, hge,
           array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
           r₁, r₂, hle1, mv, fr, s₈, s₉, Zig.le, BitVec.ule, show len.toNat ≤ g.toNat by omega,
-          f₀, f₃, f₈, fO, fN]
+          f₀, f₃, f₈, fO, fN, f₂₄, f₁₆]
       · simp only [buf, hg0, ↓reduceIte]
         refine ⟨hoff, A', _, hA', ?_, ?_, hbN'⟩
         · rw [writeBytes_size _ _ _ (by simp; omega)]; simp

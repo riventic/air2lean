@@ -55,14 +55,31 @@ theorem maybeSlice_run (m : Mem) :
 theorem resElem_runtime : runtime root resElemPath.projs = ⟨some 0, 24⟩ := rfl
 theorem maybeElem_runtime : runtime root maybeElemPath.projs = ⟨some 0, 15⟩ := rfl
 
+/-- Every offset in `[0, 32]` of the table's block (its 32 bytes) is in bounds of the
+program-start memory. -/
+theorem table_inBounds (o : Int) (h0 : 0 ≤ o) (h1 : o ≤ 32) :
+    ConstBases.mem0.inBounds ⟨some 0, o⟩ = true := by
+  obtain ⟨blk, hb, hs⟩ : ∃ blk, ConstBases.mem0.blocks[0]? = some blk ∧ blk.bytes.size = 32 :=
+    ⟨_, rfl, by decide +kernel⟩
+  exact inBounds_of rfl hb h0 (by simp only [hs]; omega)
+
 /-- The generated runtime projections (`struct_field_ptr`, `unwrap_errunion_payload_ptr`,
-`ptr_elem_ptr`) from the global's address give the generated constant. -/
-theorem projectRes_identity (m : Mem) :
-    (ConstBases.projectRes root |>.run m).run = (ConstBases.resElemPtr.run m).run := rfl
+`ptr_elem_ptr`) from the global's address give the generated constant: each is in bounds of the
+table's block at program start (checked pointer formation, MM-3). -/
+theorem projectRes_identity :
+    (ConstBases.projectRes root |>.run ConstBases.mem0).run =
+      (ConstBases.resElemPtr.run ConstBases.mem0).run := by
+  have o : (errUnionOffsets (Enc.size (Vector (BitVec 8) 3)) (Enc.align (Vector (BitVec 8) 3))).snd = 2 := by
+    decide +kernel
+  simp [ConstBases.projectRes, ConstBases.resElemPtr, root, ptrProject, Ptr.add, Ptr.elem,
+    errPayloadPtr, table_inBounds, zig_unfold, o]
 
 /-- The same for `struct_field_ptr`, `optional_payload_ptr`, `struct_field_ptr`, `ptr_elem_ptr`. -/
-theorem projectMaybe_identity (m : Mem) :
-    (ConstBases.projectMaybe root |>.run m).run = (ConstBases.maybeElemPtr.run m).run := rfl
+theorem projectMaybe_identity :
+    (ConstBases.projectMaybe root |>.run ConstBases.mem0).run =
+      (ConstBases.maybeElemPtr.run ConstBases.mem0).run := by
+  simp [ConstBases.projectMaybe, ConstBases.maybeElemPtr, root, ptrProject, Ptr.add, Ptr.elem,
+    table_inBounds, zig_unfold]
 
 /-! ## Aliasing -/
 

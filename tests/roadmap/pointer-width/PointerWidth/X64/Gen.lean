@@ -91,8 +91,8 @@ def copy4 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
       let i11 ← pure (i10)
       let i12 ← pure (i11)
       let i13 ← pure (p1)
-      let i14 ← pure (i13.elem 1 (4 : BitVec 64))
-      let i15 ← pure (i12.elem 1 (4 : BitVec 64))
+      let i14 ← Zig.callM (Zig.ptrProject i13 (·.elem 1 (4 : BitVec 64)))
+      let i15 ← Zig.callM (Zig.ptrProject i12 (·.elem 1 (4 : BitVec 64)))
       let i16 ← Zig.callM (Zig.ptrLe i14 i12)
       let i17 ← Zig.callM (Zig.ptrLe i15 p1)
       let i18 ← pure (i16 || i17)
@@ -130,7 +130,7 @@ def offsetOf (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (BitVec 64) := do
       else (do
         throw .outOfBounds)) : Zig.MM offsetOfLocals offsetOfExit) with
     | .br8 => (do
-      let i13 ← pure (i5.ptr.elem 4 p1)
+      let i13 ← Zig.callM (Zig.ptrProject i5.ptr (·.elem 4 p1))
       let i14 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i13)))
       let i16 ← pure (((← get).local2).ptr)
       let i17 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i16)))
@@ -162,8 +162,8 @@ inductive restLenExit where
 
 def restLen (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
   let e ← ((do
-    let i1 ← pure (p0.add 8)
-    let i2 ← pure (i1.add 8)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 8))
+    let i2 ← Zig.callM (Zig.ptrProject i1 (·.add 8))
     let i3 ← Zig.load (BitVec 64) 8 i2
     pure (.ret i3)) : Zig.MM restLenLocals restLenExit).run' (default : restLenLocals)
   match e with
@@ -177,7 +177,7 @@ inductive setFirstExit where
 
 def setFirst (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.load (Zig.Ptr) 8 i2
     Zig.store (α := BitVec 32) 4 i3 p1
     pure .ret) : Zig.MM setFirstLocals setFirstExit).run' (default : setFirstLocals)
