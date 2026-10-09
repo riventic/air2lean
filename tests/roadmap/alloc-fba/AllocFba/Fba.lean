@@ -573,6 +573,249 @@ theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 
       rw [this] at hal; omega
     exact carve_grant hok' (by omega) hal' hp
 
+/-! ## `ownsSlice` and `isLastAllocation` -/
+
+theorem ptr_ext {p q : Ptr} (h1 : p.block = q.block) (h2 : p.off = q.off) : p = q := by
+  cases p; cases q; simp_all
+
+theorem ofInt_toNat_lt {x : Int} (h0 : 0 ≤ x) (h : x.toNat < 2 ^ 64) :
+    (BitVec.ofInt 64 x).toNat = x.toNat := by
+  rw [ofInt_toNat h0, Nat.mod_eq_of_lt h]
+
+/-- `ownsSlice(s)` of a slice inside the buffer is `true` (the `assert` passes). -/
+theorem ownsSlice_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice} {b : BlockId}
+    (hb : B.ptr.block = some b) (hown : ∀ h, (state ctx B e ∗ R) h → OwnsIn b B.A h)
+    (hsb : s.ptr.block = B.ptr.block) (h0 : 0 ≤ B.ptr.off) (hlo : B.ptr.off ≤ s.ptr.off)
+    (hhi : s.ptr.off + s.len.toNat ≤ B.ptr.off + B.cap) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64) :
+    TotalTriple (state ctx B e ∗ R) (heap_FixedBufferAllocator_ownsSlice ctx s)
+      (fun r => ⌜r = true⌝ ∗ (state ctx B e ∗ R)) := by
+  simp only [heap_FixedBufferAllocator_ownsSlice, heap_FixedBufferAllocator_sliceContainsSlice]
+  fba_norm
+  have hcap : B.cap < 2 ^ 64 := by omega
+  refine TotalTriple.bind load_slice fun x => TotalTriple.lift fun hx => ?_
+  subst hx
+  have hsb' : s.ptr.block = some b := by rw [hsb, hb]
+  refine TotalTriple.bind (ptrAddr_owned hsb' hown) fun x₁ => TotalTriple.lift fun hx₁ => ?_
+  subst hx₁
+  refine TotalTriple.bind (ptrAddr_owned hb hown) fun x₂ => TotalTriple.lift fun hx₂ => ?_
+  subst hx₂
+  have e1 : (BitVec.ofInt 64 ((B.A : Int) + s.ptr.off)).toNat = B.A + s.ptr.off.toNat := by
+    rw [ofInt_toNat_lt (by omega) (by omega)]; omega
+  have e2 : (BitVec.ofInt 64 ((B.A : Int) + B.ptr.off)).toNat = B.A + B.ptr.off.toNat := by
+    rw [ofInt_toNat_lt (by omega) (by omega)]; omega
+  have hge : Zig.ge false (BitVec.ofInt 64 ((B.A : Int) + s.ptr.off))
+      (BitVec.ofInt 64 ((B.A : Int) + B.ptr.off)) = true := by
+    simp only [Zig.ge, le_eq, e1, e2, decide_eq_true_eq]; omega
+  rw [if_pos hge]
+  refine TotalTriple.bind (ptrAddr_owned hsb' hown) fun x₃ => TotalTriple.lift fun hx₃ => ?_
+  subst hx₃
+  rw [add_ok (by rw [e1]; omega), Norm.lift_pure, pure_bind]
+  refine TotalTriple.bind (ptrAddr_owned hb hown) fun x₅ => TotalTriple.lift fun hx₅ => ?_
+  subst hx₅
+  rw [add_ok (by rw [e2, toNat_ofNat_lt hcap]; omega), Norm.lift_pure, pure_bind]
+  refine TotalTriple.conseq (TotalTriple.ret (Q := fun r => ⌜r = true⌝ ∗ (state ctx B e ∗ R)) _)
+    (fun h hp => sep_lift.mpr ⟨?_, hp⟩) (fun _ _ h => h)
+  rw [le_eq, toNat_add_ok (by rw [e1]; omega), toNat_add_ok (by rw [e2, toNat_ofNat_lt hcap]; omega),
+    e1, e2, toNat_ofNat_lt hcap]
+  simp only [decide_eq_true_eq]; omega
+
+/-- `isLastAllocation(s)`: does `s` end at `end_index`? -/
+theorem isLast_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice}
+    (hsb : s.ptr.block = B.ptr.block) (he : e < 2 ^ 64) :
+    TotalTriple (state ctx B e ∗ R) (heap_FixedBufferAllocator_isLastAllocation ctx s)
+      (fun r => ⌜r = decide (s.ptr.off + s.len.toNat = B.ptr.off + e)⌝ ∗ (state ctx B e ∗ R)) := by
+  simp only [heap_FixedBufferAllocator_isLastAllocation]
+  fba_norm
+  refine TotalTriple.bind load_ptr fun x => TotalTriple.lift fun hx => ?_
+  subst hx
+  refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
+  subst hx
+  refine TotalTriple.conseq (TotalTriple.ret (Q := fun r =>
+      ⌜r = decide (s.ptr.off + s.len.toNat = B.ptr.off + e)⌝ ∗ (state ctx B e ∗ R)) _)
+    (fun h hp => sep_lift.mpr ⟨?_, hp⟩) (fun _ _ h => h)
+  simp only [Ptr.elem_eq, toNat_ofNat_lt he, Nat.one_mul]
+  by_cases hc : s.ptr.off + s.len.toNat = B.ptr.off + e
+  · simp only [hc, decide_true]
+    exact beq_iff_eq.mpr (ptr_ext (by simp [Ptr.add, hsb]) (by simp [Ptr.add]; omega))
+  · simp only [hc, decide_false]
+    apply beq_eq_false_iff_ne.mpr
+    intro heq
+    have := congrArg Ptr.off heq
+    simp [Ptr.add] at this; omega
+
+/-! ## `resize`, `remap`, `free` -/
+
+/-- The heap of `resize`/`free` while it runs: the struct (with `end_index = e₀`), the tail at
+`e`, the pin and junk, and the region `bs` of the slice. -/
+def during (ctx : Ptr) (B : Buf) (e₀ e : Nat) (tail pb : Array Byte) (s : Ptr) (k : Nat)
+    (bs : Array Byte) : Assn :=
+  state ctx B e₀ ∗ ((regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 tail ∗
+    (regionIn B.pin B.A B.S B.K 1 pb ∗ junk)) ∗ regionIn s B.A B.S B.K (2 ^ k) bs)
+
+/-- The facts that the token of a grant gives. -/
+def InBuf (B : Buf) (s : Ptr) (n : Nat) : Prop :=
+  s.block = B.ptr.block ∧ B.ptr.off ≤ s.off ∧ s.off + n ≤ B.ptr.off + B.cap
+
+/-- Open the invariant and the grant. -/
+theorem open_grant {α : Type} {ctx : Ptr} {B : Buf} {s : Ptr} {k : Nat} {bs : Array Byte}
+    {c : MemM α} {Q : α → Assn}
+    (ht : ∀ e tail pb, Ok B e tail pb → InBuf B s bs.size →
+      TotalTriple (during ctx B e e tail pb s k bs) c Q) :
+    TotalTriple ((inv ctx B).own ∗ granted (inv ctx B) s k bs) c Q := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨e, tail, pb, hb⟩, A, S, K, hg⟩ := hp
+  obtain ⟨hok, hb⟩ := sep_lift.mp hb
+  obtain ⟨g₁, g₂, hdg, rfl, hr, ⟨⟨hblk, rfl, rfl, rfl, hlo, hhi⟩, rfl⟩⟩ := hg
+  refine ht e tail pb hok ⟨hblk, hlo, hhi⟩ m _ hF hd hm ?_ hst
+  have : (body ctx B e tail pb ∗ regionIn s B.A B.S B.K (2 ^ k) bs) (h₁ ∪ (g₁ ∪ Heap.empty)) := by
+    simp only [Heap.union_empty] at hd₁₂ ⊢
+    exact ⟨h₁, g₁, by simpa using hd₁₂, rfl, hb, hr⟩
+  unfold during; unfold body at this; sep_from this
+
+theorem during_body {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {h : Heap} (hh : during ctx B e e tail pb s k bs h) :
+    (body ctx B e tail pb ∗ regionIn s B.A B.S B.K (2 ^ k) bs) h := by
+  unfold during at hh; unfold body; sep_from hh
+
+theorem during_ownsIn {ctx : Ptr} {B : Buf} {e₀ e : Nat} {tail pb : Array Byte} {s : Ptr}
+    {k : Nat} {bs : Array Byte} {b : BlockId} (hb : B.ptr.block = some b) (hok : Ok B e tail pb) :
+    ∀ h, during ctx B e₀ e tail pb s k bs h → OwnsIn b B.A h := by
+  rintro h ⟨h₁, h₂, hd, rfl, -, ⟨g₁, g₂, hdg, rfl, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩, -⟩⟩
+  obtain ⟨b', hb', ho⟩ := regionIn_ownsIn hpin hok.2.2.1
+  rw [hok.2.2.2.2.2, hb] at hb'; cases hb'
+  exact (((ho.union_left).union_right hd34).union_left).union_right hd
+
+/-- Nothing changed: the invariant and the grant. -/
+theorem post_same {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {h : Heap} (hok : Ok B e tail pb) (hin : InBuf B s bs.size)
+    (hh : during ctx B e e tail pb s k bs h) :
+    ((inv ctx B).own ∗ granted (inv ctx B) s k bs) h :=
+  sep_mono (fun _ x => own_intro hok x) (fun _ x => grant_intro x
+    ⟨hin.1, rfl, rfl, rfl, hin.2.1, hin.2.2⟩) (during_body hh)
+
+theorem keepsPrefix_extract {bs : Array Byte} {n : Nat} (hn : n ≤ bs.size) :
+    keepsPrefix bs (bs.extract 0 n) := by
+  unfold keepsPrefix
+  rw [Array.extract_extract, Array.size_extract]
+  simp [Nat.min_eq_left hn, Nat.min_eq_right hn]
+
+/-- The grant shrinks in place to `n` bytes; the rest is junk. -/
+theorem post_shrink {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {n : Nat} {h : Heap} (hok : Ok B e tail pb) (hin : InBuf B s bs.size)
+    (hn : n ≤ bs.size) (hh : during ctx B e e tail pb s k bs h) :
+    ((inv ctx B).own ∗ Assn.ex fun bs' => ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗
+      granted (inv ctx B) s k bs') h := by
+  have hin' := hin
+  obtain ⟨hib, hlo, hhi⟩ := hin'
+  have h2 := sep_mono (fun _ x => x)
+    (fun _ y => Region.regionIn_split y (k := n) (a' := 1) hn (Nat.mod_one _)) (during_body hh)
+  have h3 : ((body ctx B e tail pb ∗ regionIn (s.add n) B.A B.S B.K 1 (bs.extract n bs.size)) ∗
+      regionIn s B.A B.S B.K (2 ^ k) (bs.extract 0 n)) h := by sep_from h2
+  refine sep_mono (fun _ x => own_intro hok (body_absorb x)) (fun _ x => ⟨bs.extract 0 n,
+    sep_lift.mpr ⟨⟨(by simp <;> omega), (keepsPrefix_extract hn)⟩, grant_intro x
+      ⟨hin.1, rfl, rfl, rfl, hin.2.1, (by simp <;> omega)⟩⟩⟩) h3
+
+/-- `end_index` moved back by `len - n`: the end of the last grant rejoins the tail. -/
+theorem post_last_shrink {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {n : Nat} {h : Heap} (hok : Ok B e tail pb) (hin : InBuf B s bs.size)
+    (hlast : s.off + bs.size = B.ptr.off + e) (hn : n ≤ bs.size)
+    (hh : during ctx B (e - (bs.size - n)) e tail pb s k bs h) :
+    ((inv ctx B).own ∗ Assn.ex fun bs' => ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗
+      granted (inv ctx B) s k bs') h := by
+  have hin' := hin
+  obtain ⟨hib, hlo, hhi⟩ := hin'
+  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  unfold during at hh
+  have h2 := sep_mono (fun _ x => x) (fun _ x => sep_mono (fun _ y => y)
+      (fun _ y => Region.regionIn_split y (k := n) (a' := 1) hn (Nat.mod_one _)) x) hh
+  have h3 : ((state ctx B (e - (bs.size - n)) ∗
+      ((regionIn (s.add n) B.A B.S B.K 1 (bs.extract n bs.size) ∗
+        regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 tail) ∗
+        (regionIn B.pin B.A B.S B.K 1 pb ∗ junk))) ∗
+      regionIn s B.A B.S B.K (2 ^ k) (bs.extract 0 n)) h := by sep_from h2
+  have hs0 : 0 ≤ s.off := by omega
+  have hq : B.ptr.add (e : Int) = (s.add n).add ((bs.extract n bs.size).size : Nat) :=
+    ptr_ext (by simp [Ptr.add, hin.1]) (by simp [Ptr.add]; omega)
+  have hnew : s.add n = B.ptr.add ((e - (bs.size - n) : Nat) : Int) :=
+    ptr_ext (by simp [Ptr.add, hin.1]) (by simp [Ptr.add]; omega)
+  refine sep_mono (fun _ x => own_intro (e := e - (bs.size - n))
+      (tail := bs.extract n bs.size ++ tail) (pb := pb)
+      ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin⟩ ?_)
+    (fun _ x => ⟨bs.extract 0 n, sep_lift.mpr ⟨⟨(by simp <;> omega), (keepsPrefix_extract hn)⟩,
+      grant_intro x ⟨hin.1, rfl, rfl, rfl, hin.2.1, (by simp <;> omega)⟩⟩⟩) h3
+  unfold body
+  rw [← hnew]
+  refine sep_mono (fun _ y => y) (fun _ y => sep_mono (fun _ z => ?_) (fun _ z => z) y) x
+  rw [hq] at z
+  exact Region.regionIn_join z
+
+/-- `end_index` moved forward by `n - len`: the last grant takes the start of the tail. -/
+theorem post_last_grow {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {n : Nat} {h : Heap} (hok : Ok B e tail pb) (hin : InBuf B s bs.size)
+    (hlast : s.off + bs.size = B.ptr.off + e) (hn : bs.size ≤ n) (hroom : e + (n - bs.size) ≤ B.cap)
+    (hh : during ctx B (e + (n - bs.size)) e tail pb s k bs h) :
+    ((inv ctx B).own ∗ Assn.ex fun bs' => ⌜bs'.size = n ∧ keepsPrefix bs bs'⌝ ∗
+      granted (inv ctx B) s k bs') h := by
+  have hin' := hin
+  obtain ⟨hib, hlo, hhi⟩ := hin'
+  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  unfold during at hh
+  have h2 := sep_mono (fun _ x => x) (fun _ x => sep_mono (fun _ y => sep_mono
+      (fun _ z => Region.regionIn_split z (k := n - bs.size) (a' := 1) (by omega) (Nat.mod_one _))
+      (fun _ z => z) y) (fun _ y => y) x) hh
+  have hs0 : 0 ≤ s.off := by omega
+  have hq : (B.ptr.add (e : Int)) = s.add (bs.size : Nat) :=
+    ptr_ext (by simp [Ptr.add, hin.1]) (by simp [Ptr.add]; omega)
+  have hq2 : (B.ptr.add (e : Int)).add ((n - bs.size : Nat) : Int) =
+      B.ptr.add ((e + (n - bs.size) : Nat) : Int) := Region.Ptr.add_add_nat _ _ _
+  rw [hq2] at h2
+  have h3 : ((state ctx B (e + (n - bs.size)) ∗
+      (regionIn (B.ptr.add ((e + (n - bs.size) : Nat) : Int)) B.A B.S B.K 1
+          (tail.extract (n - bs.size) tail.size) ∗
+        (regionIn B.pin B.A B.S B.K 1 pb ∗ junk))) ∗
+      (regionIn s B.A B.S B.K (2 ^ k) bs ∗
+        regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 (tail.extract 0 (n - bs.size)))) h := by
+    sep_from h2
+  rw [hq] at h3
+  refine sep_mono (fun _ x => own_intro (e := e + (n - bs.size))
+      (tail := tail.extract (n - bs.size) tail.size) (pb := pb)
+      ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin⟩ x)
+    (fun _ x => ⟨bs ++ tail.extract 0 (n - bs.size), sep_lift.mpr ⟨⟨(by simp <;> omega), ?_⟩,
+      grant_intro (Region.regionIn_join x) ⟨hin.1, rfl, rfl, rfl, hin.2.1, (by simp <;> omega)⟩⟩⟩) h3
+  unfold keepsPrefix
+  rw [Region.extract_append_left, Array.extract_eq_self_of_le (by simp <;> omega)]
+
+/-- `free` of the last grant: it rejoins the tail. -/
+theorem post_free_last {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {h : Heap} (hok : Ok B e tail pb) (hin : InBuf B s bs.size)
+    (hlast : s.off + bs.size = B.ptr.off + e) (hh : during ctx B (e - bs.size) e tail pb s k bs h) :
+    (inv ctx B).own h := by
+  have hin' := hin
+  obtain ⟨hib, hlo, hhi⟩ := hin'
+  obtain ⟨he, hts, hpb, hA, h0, hpin⟩ := hok
+  unfold during at hh
+  have hs0 : 0 ≤ s.off := by omega
+  have hq : (B.ptr.add (e : Int)) = s.add (bs.size : Nat) :=
+    ptr_ext (by simp [Ptr.add, hin.1]) (by simp [Ptr.add]; omega)
+  have hnew : s = B.ptr.add ((e - bs.size : Nat) : Int) :=
+    ptr_ext (by simp [Ptr.add, hin.1]) (by simp [Ptr.add]; omega)
+  have h3 : (state ctx B (e - bs.size) ∗ ((regionIn s B.A B.S B.K (2 ^ k) bs ∗
+      regionIn (B.ptr.add (e : Int)) B.A B.S B.K 1 tail) ∗
+      (regionIn B.pin B.A B.S B.K 1 pb ∗ junk))) h := by sep_from hh
+  rw [hq] at h3
+  refine own_intro (e := e - bs.size) (tail := bs ++ tail) (pb := pb)
+    ⟨(by omega), (by simp <;> omega), hpb, hA, h0, hpin⟩ ?_
+  unfold body
+  rw [← hnew]
+  exact sep_mono (fun _ y => y) (fun _ y => sep_mono (fun _ z => Region.regionIn_weaken
+    (Region.regionIn_join z) (Nat.one_dvd _)) (fun _ z => z) y) h3
+
+/-- `free` of a grant that is not the last: its bytes are junk. -/
+theorem post_free_leak {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {s : Ptr} {k : Nat}
+    {bs : Array Byte} {h : Heap} (hok : Ok B e tail pb) (hh : during ctx B e e tail pb s k bs h) :
+    (inv ctx B).own h :=
+  own_intro hok (body_absorb (during_body hh))
+
 end FBA
 
 end AllocFba
