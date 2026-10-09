@@ -2045,5 +2045,164 @@ theorem swake (hF : FutexSafe condView Fx) (hi : CInv N s) {t : Tid} {op : COp} 
 
 end CInv
 
+/-! ### The invariant is inductive -/
+
+theorem preRel_wu {e : Nat} {l : IL} (h : l ≠ .rel) : preRel (.run .wait (.wu e l)) = false := by
+  cases l <;> first | rfl | exact absurd rfl h
+
+theorem done_cases {l : CL} {b : Bool} (h : (ioCond Fx).done l = some b) :
+    l = .m (.fin b) ∨ (l = .wl (.fin true) ∧ b = true) ∨ (l = .fin ∧ b = false) := by
+  cases l with
+  | m l0 => cases l0 <;> (try rename_i b0; cases b0) <;> simp_all
+  | wl l0 => cases l0 <;> (try rename_i b0; cases b0) <;> simp_all
+  | fin => simp_all
+  | _ => simp_all
+
+section
+variable (hF : FutexSafe condView Fx)
+include hF
+
+theorem ioCond_init {X : Type} {N : Nat} {s : CState (ioCond Fx) X} (h : (cmgc (ioCond Fx) X N).init s) :
+    CInv N s := by
+  obtain ⟨x₀, ⟨hm, hw, hsg, hep, hf⟩, hctl, hcur, hval, hgen, hseen, hwgen, hO, hcalls⟩ := h
+  have hq := hF.init _ hf
+  have hz : ∀ (g : CCtl CL → Nat), g .idle = 0 → tsum N (fun u => g (s.ctl u)) = 0 :=
+    fun g hg => tsum_eq_zero fun u _ => by rw [hctl]; exact hg
+  have hqi : tsum N s.qi = 0 := tsum_eq_zero fun u _ => by unfold CState.qi; rw [hq]; simp
+  have hmtx : IoInv s.proj :=
+    ioMutex_init hF.atMtx ⟨x₀, ⟨hm, hf⟩, fun u => by show projCtl (s.ctl u) = _; rw [hctl]; rfl, hcur, hval⟩
+  refine ⟨hmtx, fun t => (by rw [hctl]; rfl), fun t _ => hctl t, (by rw [hq]; exact Queue.WF.nil),
+    fun u hu => (by rw [hq] at hu; cases hu), fun u => (by rw [hctl, hep]; exact Nat.le_refl _), ?_, ?_, ?_,
+    fun t => (by rw [hseen, hgen]; exact Nat.le_refl _), fun u hu => (by rw [hctl] at hu; cases hu), ?_,
+    fun _ => ?_, fun _ => ?_⟩
+  · rw [hep, hz nb rfl, hcalls]; exact Nat.le_refl _
+  · rw [hw, hz reg rfl]
+  · rw [hsg, hw]; exact Nat.le_refl _
+  · rw [hO]; exact Nat.zero_le _
+  · rw [hO]; exact Nat.zero_le _
+  · rw [hsg, hqi]; exact Nat.zero_le _
+
+theorem ioCond_step {X : Type} {N : Nat} {t : Tid} {s s' : CState (ioCond Fx) X} (hi : CInv N s)
+    (ht : t < N) (hs : CStep (ioCond Fx) N t s s') : CInv N s' := by
+  cases hs with
+  | call op hop h => exact hi.call hF ht hop h
+  | unlock h => exact hi.unlock hF ht h
+  | wait h => exact hi.wait ht h
+  | notify op hop hc => exact hi.notify ht hop hc
+  | write x h => exact hi.write hF ht x h
+  | ret h hd =>
+    rename_i op l b
+    have hok := hi.ok t
+    rw [h] at hok
+    rcases done_cases hd with rfl | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hi.retM hF h
+    · cases op <;> simp [CPlace.ok] at hok
+      exact hi.retW hF h
+    · cases op with
+      | signal hh => exact hi.retF h (.inl rfl)
+      | broadcast hh => exact hi.retF h (.inr rfl)
+      | _ => simp [CPlace.ok] at hok
+  | exec h hstep =>
+    rename_i op l l' sh' v'
+    have hok := hi.ok t
+    rw [h] at hok
+    have he := hi.eload t
+    rw [h] at he
+    cases hstep with
+    | mtx hio =>
+      obtain ⟨mop, -, hokm, hpm, -, -, -, hop⟩ := CInv.m_place hok
+      rcases hop with rfl | rfl | rfl <;>
+        exact hi.mstep hF (c0 := CL.m) h rfl hpm hokm (fun _ _ he => by cases he) hio
+          (fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) (fun _ => rfl)
+    | wum hio =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.mstep hF h rfl (mop := .unlock) (fun _ => rfl) (fun l => unlL_eq l)
+        (fun _ _ he => by cases he) hio (fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+        (fun hl => preRel_wu hl)
+    | wlm hio =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.mstep hF h rfl (mop := .lock) (fun _ => rfl) (fun l => lockL_eq l)
+        (fun _ _ he => by cases he) hio (fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+        (fun _ => rfl)
+    | le0 =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.le0 h
+    | add _ =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.add hF h
+    | wuDone =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.wuDone hF h
+    | fwSleep hw =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.fwSleep hF h hw
+    | fwRet hw =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.fwRet hF h hw
+    | resume hr =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.resume hF h hr
+    | le =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.stut h (c := .ls s.sh.ep) rfl rfl (fun _ he => by cases he)
+        ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.le_refl _) rfl
+    | lsPos _ =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.stut h (c := .cx _ _ _) rfl rfl (fun _ he => by cases he)
+        ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ he rfl
+    | lsZero h0 =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.toFw h (.inl rfl) h0
+    | cxOk hw hs =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.cxOk hF h hw hs
+    | cxSpur _ _ =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.stut h (c := .cx _ _ _) rfl rfl (fun _ he => by cases he)
+        ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ he rfl
+    | cxFailPos _ _ =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.stut h (c := .cx _ _ _) rfl rfl (fun _ he => by cases he)
+        ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ he rfl
+    | cxFailZero _ h0 =>
+      cases op <;> simp [CPlace.ok] at hok
+      exact hi.toFw h (.inr ⟨_, _, rfl⟩) h0
+    | @sldGo bc _ _ hlt =>
+      cases op <;> cases bc <;> simp [CPlace.ok] at hok
+      · exact hi.stut h (c := .scx false s.sh.w s.sh.sg) rfl (by simp [CPlace.ok]; omega) (fun _ he => by cases he)
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.zero_le _) rfl
+      · exact hi.stut h (c := .scx true s.sh.w s.sh.sg) rfl (by simp [CPlace.ok]; omega) (fun _ he => by cases he)
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.zero_le _) rfl
+    | sldDone hle =>
+      cases op <;> simp [CPlace.ok] at hok
+      · exact hi.sigDone h (.inl rfl) (.inl ⟨_, rfl⟩) hle
+      · exact hi.sigDone h (.inr rfl) (.inl ⟨_, rfl⟩) hle
+    | scxOk hw hs => exact hi.scxOk h hw hs
+    | @scxSpur bc w s0 _ _ _ _ =>
+      cases op <;> cases bc <;> simp [CPlace.ok] at hok
+      · exact hi.stut h (c := .scx false w s0) rfl (by simp [CPlace.ok]; omega) (fun _ he => by cases he)
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.zero_le _) rfl
+      · exact hi.stut h (c := .scx true w s0) rfl (by simp [CPlace.ok]; omega) (fun _ he => by cases he)
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.zero_le _) rfl
+    | @scxFailGo bc w s0 _ _ _ hlt =>
+      cases op <;> cases bc <;> simp [CPlace.ok] at hok
+      · exact hi.stut h (c := .scx false s.sh.w s.sh.sg) rfl (by simp [CPlace.ok]; omega) (fun _ he => by cases he)
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.zero_le _) rfl
+      · exact hi.stut h (c := .scx true s.sh.w s.sh.sg) rfl (by simp [CPlace.ok]; omega) (fun _ he => by cases he)
+          ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ (Nat.zero_le _) rfl
+    | scxFailDone _ hle =>
+      cases op <;> simp [CPlace.ok] at hok
+      · exact hi.sigDone h (.inl rfl) (.inr ⟨_, _, _, rfl⟩) hle
+      · exact hi.sigDone h (.inr rfl) (.inr ⟨_, _, _, rfl⟩) hle
+    | bump => exact hi.bump h
+    | swake hk => exact hi.swake hF h hk
+
+/-- The invariant of `Io.Condition` with `Io.Mutex` is inductive over every futex that satisfies
+the safety part of the contract. -/
+theorem ioCond_inductive (X : Type) (N : Nat) : (cmgc (ioCond Fx) X N).Inductive (CInv N) :=
+  ⟨fun _ h => ioCond_init hF h, fun _ _ _ hi hs => ioCond_step hF hi hs.1 hs.2⟩
+
+end
+
 end Spec
 end Zig
