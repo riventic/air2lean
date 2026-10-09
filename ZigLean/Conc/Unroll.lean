@@ -374,13 +374,20 @@ theorem turnTrace_le {β : Type} {D₁ D₂ : Tgt → ConcM Tgt Unit}
     · trivial
   | wait ptr e =>
     simp only [turnTrace, State.onMem]
-    split
-    · rename_i b _ _
-      cases b
-      · exact settle_le t (hs _ _ _ _) (h _ _)
-      · exact ⟨.paused (.mk _ _ _ _ h), rfl, hs _ _ _ _⟩
-    · rfl
-    · trivial
+    cases hr : (StateT.run (Thread.futexWait ptr e) { mem with current := t }).run with
+    | none => trivial
+    | some r =>
+      rcases r with e' | ⟨b, m'⟩
+      · rfl
+      · cases b
+        · exact settle_le t (hs _ _ _ _) (h _ _)
+        · -- A spurious return (C05) goes on with the memory before the wait; else the thread waits.
+          simp only [State.choose, show ((2 : Nat) = 0) = False from by decide, ↓reduceIte]
+          by_cases hc : o step % 2 = spuriousWake
+          · simp only [hc, ↓reduceIte]
+            exact settle_le t (hs _ _ _ _) (h _ _)
+          · simp only [hc, ↓reduceIte]
+            exact ⟨.paused (.mk _ _ _ _ h), rfl, hs _ _ _ _⟩
   | wake ptr n =>
     simp only [turnTrace, State.onMem]
     split

@@ -280,12 +280,12 @@ theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h :
 
 /-! ## Non-vacuity and liveness witnesses: one value in one block -/
 
-nonvacuity_witness Num.decode_int := ⟨Enc.encode (Num.int 0), 0, LawfulEnc.decode_encode _, trivial⟩
+nonvacuity_witness Num.decode_int := ⟨Enc.encode (Num.int 0), 0, Num.decode_encode_int 0, trivial⟩
 nonvacuity_witness Num.decode_of_int :=
   ⟨Enc.encode (Num.int 0), 0, by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
 
 theorem numInt_pre : pts Witness.p0 4 (Num.int 0) (Witness.mem1 (Enc.encode (Num.int 0))).heap :=
-  Witness.mem1_pts' _ (by decide)
+  Witness.mem1_pts (Num.size_encode _) (Num.decode_encode_int 0) (by decide) (by decide)
 
 nonvacuity_witness numInt_spec := ⟨Witness.p0, 0, Witness.Admit.of_heap numInt_pre (Witness.mem1_seq _ _)⟩
 liveness_witness numInt_spec :=
