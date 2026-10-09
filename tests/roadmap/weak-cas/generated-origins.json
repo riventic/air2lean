@@ -131,7 +131,7 @@
     },
     {
       "path": "Proofs/Sync/Gen.lean",
-      "sha256": "b072ccb827d25116b2c8ea88083f8d73fc8c9d90569f81c06fb5c355fee46ad8",
+      "sha256": "af9dccb4334837871f71520fbba43b3f42768d03d92c6439bccf05510b585715",
       "example": "sync",
       "version_selection": "0.16.0",
       "host_selection": "linux",
