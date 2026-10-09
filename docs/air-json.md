@@ -27,6 +27,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
     "export_stage": "analyzed-air"
   },
   "name": "basic.scale",
+  "module": "root",
   "src": { "file": "basic.zig", "module": "root", "decl_line": 14 },
   "params": [0, 1],
   "ret": 3,
@@ -41,7 +42,9 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata; schema 1–11 select the named `legacy-abi64-le` assumptions. Unsupported/future schemas fail closed. |
 | `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
 | `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The translator accepts `"big"` only with a schema-12 big-endian profile of the same byte order (`docs/profiles.md` §Byte order) and rejects any other non-little-endian value. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
-| `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name, e.g. `root` or `std`) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
+| `name` | the function's fully qualified name: its path inside its module (`basic.scale`) |
+| `module` | the function's module (§Identity): `root` for the main module, `std` for the standard library, else the module's name. Additive (no schema change); older exports omit it. |
+| `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name as the compiler spells it, e.g. `root` or `std`; not the §Identity key) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
@@ -70,10 +73,10 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `optional` | `child: id` |
 | `error_union` | `error: id` (the error set type), `payload: id` |
 | `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |
-| `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id, offset: int}]` (`offset`: the field's byte offset; missing for a packed struct, and if the layout is not known; schema 5) |
+| `struct` | `name: string`, `module: string` (§Identity), `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id, offset: int}]` (`offset`: the field's byte offset; missing for a packed struct, and if the layout is not known; schema 5) |
 | `tuple` | `fields: [{ty: id, offset: int}]` |
-| `enum` | `name: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
-| `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `safety_tag: id` (the hidden tag enum of a bare union in a safe build; schema 11), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
+| `enum` | `name: string`, `module: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
+| `union` | `name: string`, `module: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `safety_tag: id` (the hidden tag enum of a bare union in a safe build; schema 11), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
 | `struct`, `union` without known fields | `name`, `layout`, `no_fields: true` in place of the fields (schema 7). 0.16.0 knows the fields of a container only when its layout is wanted; a container that is only behind a pointer (`mem.Allocator.VTable`) can have none. The reader makes it `other`. |
 | `other` | `name: string` (printed type; not in the subset). A function type (`fn (u32) u32`) is `other`; a pointer to it is a function pointer (M20). `anyopaque` is `other`; a pointer to it is a value only (Zig cannot load through it), so it is in the subset. |
 
@@ -140,7 +143,7 @@ One of:
 | `{"ty": 3, "val": "42"}` | constant, printed by Zig (`fmtValue`): integers in decimal, `true`/`false`, `void`. |
 | `{"ty": 3, "fbits": "0x40490fdb"}` | float constant. `fbits`: the value `@bitCast` to an unsigned int of the same width, lowercase hex, zero-padded to `width/4` digits (`f80`: 20 digits). Read from the `InternPool` storage, not `fmtValue`. |
 | `{"ty": 3, "undef": true}` | `undefined` |
-| `{"ty": 9, "func": "basic.tardiness", "noreturn": false}` | function. `noreturn: true` when the return type is `noreturn` (panic handlers). |
+| `{"ty": 9, "func": "basic.tardiness", "module": "root", "noreturn": false}` | function and its module (§Identity). `noreturn: true` when the return type is `noreturn` (panic handlers). A generic instance with a function as a comptime argument (`Thread.spawn`'s) also has `comptime_fn` and `comptime_fn_module`: that function and its module. |
 | `{"ty": 1, "err": "NotDigit"}` | error value, or an error union constant in the error state. `ty`'s `k` (`error_set` vs `error_union`) disambiguates. |
 | `{"ty": 1, "payload": Ref}` | error union constant holding a payload (nested `Ref`, recursively). |
 | `{"ty": 2, "some": Ref}` | optional constant holding a payload (nested `Ref`, recursively). |
@@ -163,7 +166,7 @@ Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` po
 
 | Field | Meaning |
 |---|---|
-| `name` | fully qualified name of a container-level `var` or `const`. Missing for an unnamed constant (a string literal, the value behind `&.{…}`). |
+| `name`, `module` | fully qualified name of a container-level `var` or `const`, and its module (§Identity). Missing for an unnamed constant (a string literal, the value behind `&.{…}`). |
 | `ty` | type ID of the value |
 | `const` | `false` only for a `var` |
 | `threadlocal`, `extern` | a named global only. A `threadlocal` global is also listed when a `runtime_nav_ptr` names it. |
@@ -180,6 +183,54 @@ writes `"unsupported": true`) stays rejected. 0.14.1 has no such tag: it writes 
 `try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On
 success they return that payload's address without reading or copying its bytes.
+
+## Identity
+
+A fully qualified name (`util.helper`) is the declaration's path inside its module. Two modules
+can each have a `util.zig` with a `helper`, and a user `Thread.zig` declares `Thread` and
+`Thread.spawn` like the standard library, so the name alone does not identify a function, a
+type or a global (tests/roadmap/module-identity). The identity is the pair (module, name).
+
+**Module.** The exporter writes the module next to every identity: the function's top-level
+`module`, a function reference's `module` and `comptime_fn_module`, and the `module` of a
+struct, enum or union type and of a named global. It is `root` for the compilation's main
+module and `std` for the standard library, whatever the compiler calls them (0.16.0 names the
+main module of `zig build-obj x.zig` `x`), and the module's `fully_qualified_name` otherwise
+(the `-M<name>` of `zig build-obj`, the import name of `zig build`). The fields are additive:
+older exports omit them, and `scripts/normalize-air.py` drops them from golden comparisons
+(the generated Lean, which depends on them, is compared instead).
+
+**Fail closed in the exporter.** One compilation never writes two different declarations under
+one identity (`zig-patch/air-json/identity.zig`). The first declaration that writes an identity
+claims it: a module name, an output file, a (module, name) of a struct, enum or union, or of a
+named global. If a different declaration writes it later, the exporter reports
+`two different declarations export the <kind> identity '<name>'` and the compiler exits with
+status 1. Re-analysis of the same declaration may write its identity again. A function of the
+`root` or `std` module keeps its historical file name, so a root and a std function with one
+name (a user `ascii.zig` with `isDigit`, both exported) stop the export; a function of any
+other module is stored under the SHA-256 of `<module>:<name>` ([filenames](export-names.md)).
+
+**Keys in the translator.** Before parsing, `Air2Lean/Air/Identity.lean` replaces every
+identity by its key, and every lookup uses the key: callee resolution, shared types and
+globals, std models (`StdModels.lean`), the special std types (`mem.Allocator`, `Thread`,
+`Io`), panic handlers and the Lean names.
+
+| Module | Key |
+|---|---|
+| `std` | the name |
+| `root` | the name (historical Lean names are unchanged), but `root:<name>` if the name's first component is a std namespace that the translator interprets by name: `mem`, `Thread`, `Io`, `atomic`, `time`, `debug` |
+| other `m` | `m:<name>` (Lean name `m_<name>`) |
+
+So only the std module can name a std model or a special std type. A user `Thread.zig` is
+translated as user code (`root_Thread`, `root_Thread_spawn`); without its AIR, a call to it
+has no target and is rejected. The translator rejects a key that two different (module, name)
+pairs share (a root and a std declaration with one name), two input files with one function
+key (`duplicate function name`), and a program that mixes files with and without `module`.
+
+**Legacy exports.** AIR without a top-level `module` (an exporter before this field) is read
+with its names as keys, as before. Such an export cannot tell modules apart: a name in a
+dependency or a user file named like a std namespace is taken as the std name. Re-export with
+the current exporter.
 
 ## Independent validation (V03)
 

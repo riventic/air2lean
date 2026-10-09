@@ -24,7 +24,7 @@ SHA = re.compile(r'^[0-9a-f]{64}$')
 # Files whose bytes determine a patched compiler (same set as scripts/local-ci.sh's cache key).
 EXPORTER_FILES = ('zig-patch/versions.toml', 'zig-patch/toml-get.sh', 'zig-patch/build.sh',
                   'zig-patch/lock.sh', 'zig-patch/air-json/json.zig',
-                  'zig-patch/air-json/pointer-offset.zig')
+                  'zig-patch/air-json/pointer-offset.zig', 'zig-patch/air-json/identity.zig')
 
 
 def read_versions_toml(path):

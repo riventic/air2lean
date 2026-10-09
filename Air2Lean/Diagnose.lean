@@ -225,13 +225,17 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
   let .ok json := parsed
     | log := log.record { boundary file none .jsonSyntax .decode .malformedInput with fatal := true } parsed
       return (empty, log.add (skipped file none .normalize "decoded_AIR"))
-  let name := (json.getObjValAs? String "name").toOption
+  let name := (json.getObjValAs? String "name").toOption.map fun _ => Identity.fileKey json
   if (name.map (fun n => decide (n.length > 1024))).getD false then
     log := log.add { (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters") with
       fatal := true }
     return (empty, log.add (skipped file none .normalize "bounded_function_identity"))
   let unit := { empty with function := name }
   let decodeFailure := { boundary file name .airDecode .decode .validationFailure with fatal := true }
+  let identified := Raw.identify json
+  let .ok (json, identities) := identified
+    | log := log.record decodeFailure identified
+      return (unit, log.add (skipped file name .normalize "decoded_AIR"))
   let header := Raw.parseHeader json
   let .ok (fnName, schema, zigVersion) := header
     | log := log.record decodeFailure header
@@ -247,7 +251,7 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
       fatal := profile?.isNone }
   let some profile := profile?
     | return (unit, log.add (skipped file name .normalize "decoded_AIR_profile"))
-  let decoded := Raw.parseFuncWith json profile
+  let decoded := (Raw.parseFuncWith json profile).map ({ · with identities })
   let .ok raw := decoded
     | log := log.record decodeFailure decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))

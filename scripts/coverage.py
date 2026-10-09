@@ -311,6 +311,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',
     'tests/roadmap/air-semantics/fixtures': 'hand-written caller of the golden basic.scale (docs/air-semantics.md)',
+    'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
 }
 
 

@@ -48,7 +48,7 @@ Every shipped theorem about the generated Lean module, and every runtime lemma i
 
 The exported structure is re-checked outside the Lean decoder: instruction ids, operand scoping, block/loop/dispatch targets, terminators, type-table/global references and the per-version tag set and unsupported markers of coverage/<version>.json. Operand values and the meaning of each tag remain trusted.
 
-- Components: `zig-patch/air-json/json.zig`, `zig-patch/air-json/pointer-offset.zig`
+- Components: `zig-patch/air-json/json.zig`, `zig-patch/air-json/pointer-offset.zig`, `zig-patch/air-json/identity.zig`
 - Premises: [TRU-02](premises.md#tru-02)
 - Check: independent structural validation of every committed golden AIR file: `scripts/validate-air.py`, tested by `tests/roadmap/export-validation/test_validate_air.py` (CI: `python3 -B scripts/validate-air.py`, `tests/roadmap/export-validation/test_validate_air.py`)
 - Check: compiler-derived AIR tag/type inventory against checksum-pinned compiler sources: `scripts/coverage.py`, tested by `tests/roadmap/inventory/test_inventory.py` (CI: `scripts/coverage.py check`, `tests/roadmap/inventory/test_inventory.py`)

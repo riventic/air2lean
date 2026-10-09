@@ -18,6 +18,7 @@ spec.loader.exec_module(compat)
 FILES = ('compatibility.json', 'lean-toolchain', 'tests/diff/lean-toolchain', 'lakefile.toml',
          'lake-manifest.json', 'zig-patch/versions.toml', 'zig-patch/toml-get.sh', 'zig-patch/build.sh',
          'zig-patch/lock.sh', 'zig-patch/air-json/json.zig', 'zig-patch/air-json/pointer-offset.zig',
+         'zig-patch/air-json/identity.zig',
          'zig-patch/0.16.0/hook.patch', 'zig-patch/0.15.2/hook.patch', 'zig-patch/0.14.1/hook.patch',
          'scripts/workflow-common.sh', 'scripts/translate.sh', 'scripts/local-ci.sh',
          'scripts/clean-env.sh', '.github/workflows/ci.yml', 'Air2Lean/Air/Profile.lean',

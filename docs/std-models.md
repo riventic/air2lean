@@ -10,6 +10,11 @@ A std function that an example calls is one of these:
 
 `Check.lean` rejects a call to a function that has no AIR file and no model.
 
+A model or panic handler matches only a function of the `std` module, and the special std
+types (`mem.Allocator`, `Thread`, `Io`) only std types: the translator looks them up by a
+module-qualified key ([AIR JSON §Identity](air-json.md#identity)). A user `Thread.zig` with a
+`spawn` is user code (`root:Thread.spawn`), never the `Thread.spawn` model.
+
 ## `examples/<ex>/filter`
 
 One name prefix per line. `scripts/check.sh` writes the AIR of every function whose name starts with `<ex>.` or with one of these prefixes (`ZIG_AIR_JSON_FILTER`, a comma list). A prefix names the instance: `array_list.Aligned(u32,null).` translates the `ArrayListUnmanaged(u32)` methods, and not the instances that std's own debug code uses.

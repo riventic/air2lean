@@ -3093,6 +3093,9 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     (profile : Option BuildProfile := none)
     (selectedCallees : Array String := #[]) : Array ProgramIssue := Id.run do
   let mut issues : Array ProgramIssue := #[]
+  -- Every later lookup uses module-qualified keys: an ambiguous key stops collection.
+  if let .error message := Identity.checkProgram (funcs.map (·.identities)) then
+    return #[{ kind := .structure, message }]
   unless models.isEmpty do
     let some profile := profile
       | return #[{ kind := .model, message := "external model bindings require a checked program profile" }]

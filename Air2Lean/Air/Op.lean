@@ -1,4 +1,5 @@
 import Std.Data.HashSet
+import Air2Lean.Air.Identity
 
 /-!
 # Internal IR
@@ -648,5 +649,8 @@ structure Func where
   /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
   (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
   bigEndian : Bool := false
+  /-- The identities of the AIR file (`Identity.rewrite`), its own first; `checkProgram`
+  checks them across the program. Hand-built functions have none. -/
+  identities : Array Identity.Record := #[]
 
 end Air2Lean
