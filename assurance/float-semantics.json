@@ -105,12 +105,7 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op128_other.nonvacuous": {
-      "semantics": "compiler-rt",
-      "zig_versions": [
-        "0.14.1",
-        "0.15.2",
-        "0.16.0"
-      ],
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op128_spec": {
@@ -141,12 +136,7 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op16_other.nonvacuous": {
-      "semantics": "compiler-rt",
-      "zig_versions": [
-        "0.14.1",
-        "0.15.2",
-        "0.16.0"
-      ],
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op16_spec": {
@@ -168,12 +158,7 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op32_other.nonvacuous": {
-      "semantics": "compiler-rt",
-      "zig_versions": [
-        "0.14.1",
-        "0.15.2",
-        "0.16.0"
-      ],
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op32_spec": {
@@ -195,12 +180,7 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op64_other.nonvacuous": {
-      "semantics": "compiler-rt",
-      "zig_versions": [
-        "0.14.1",
-        "0.15.2",
-        "0.16.0"
-      ],
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op64_spec": {
@@ -222,12 +202,7 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op80_other.nonvacuous": {
-      "semantics": "compiler-rt",
-      "zig_versions": [
-        "0.14.1",
-        "0.15.2",
-        "0.16.0"
-      ],
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op80_spec": {
@@ -258,12 +233,7 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::opSpec_other.nonvacuous": {
-      "semantics": "compiler-rt",
-      "zig_versions": [
-        "0.14.1",
-        "0.15.2",
-        "0.16.0"
-      ],
+      "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floats.Dot::dotTerm_error": {
