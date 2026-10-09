@@ -1,4 +1,5 @@
 import Proofs.Sync.RwLock
+import ZigLean.Conc.Witness
 
 /-!
 # Restricted shared-lock contract boundary
@@ -93,6 +94,22 @@ theorem load_pair_frame {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} {F : Assn
           pure (first, second))
       (fun pair => ⌜pair = (v, v)⌝ ∗ (pts p a v ∗ F)) :=
   (load_pair_owned hn).frame_eq
+
+/-- `p0` of `mem1` holds the `u32` `0`. -/
+theorem pts_w32 : pts Witness.p0 4 (0 : BitVec 32) (Witness.mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  Witness.mem1_pts' 0 (by decide)
+
+nonvacuity_witness load_pair_owned :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, by decide +kernel, Witness.TAdmit.mem1 pts_w32⟩
+liveness_witness load_pair_owned :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, by decide +kernel,
+    Witness.TLive.mem1 pts_w32 (Witness.ok_of_okb (by decide +kernel))⟩
+nonvacuity_witness load_pair_frame :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, emp, by decide +kernel,
+    Witness.TAdmit.mem1 (sep_emp.mpr pts_w32)⟩
+liveness_witness load_pair_frame :=
+  ⟨BitVec 32, inferInstance, Witness.p0, 4, 0, emp, by decide +kernel,
+    Witness.TLive.mem1 (sep_emp.mpr pts_w32) (Witness.ok_of_okb (by decide +kernel))⟩
 
 /-- A single optimized snapshot load remains owned at the shared-held phase.
 This is the bridge for an export that merges the source's two identical reads. -/

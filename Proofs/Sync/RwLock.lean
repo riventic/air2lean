@@ -599,6 +599,8 @@ theorem sVals_addR {v : BitVec 64} (hv : v ∈ sVals) :
   simp only [sVals, List.mem_cons, List.not_mem_nil, or_false] at hv
   rcases hv with rfl | rfl | rfl | rfl | rfl | rfl <;> rfl
 
+nonvacuity_witness sVals_addR := ⟨0, by simp [sVals], trivial⟩
+
 /-- The state of the threads' places, as `sv3`: the fields. -/
 theorem sv3_inj {w i r w' i' r' : Nat} (h1 : w + i ≤ 1) (h2 : r ≤ 1) (h1' : w' + i' ≤ 1)
     (h2' : r' ≤ 1) (h : sv3 w i r = sv3 w' i' r') : w = w' ∧ i = i' ∧ r = r' := by

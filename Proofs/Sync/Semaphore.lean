@@ -1,4 +1,5 @@
 import Proofs.Sync.Lock
+import ZigLean.Witness
 import ZigLean.Conc.Word
 import ZigLean.Conc.WeakWord
 
@@ -2293,6 +2294,9 @@ theorem add1_run {a : BitVec 64} (h : a.toNat + 1 < 2 ^ 64) : (add false a 1).ru
   split
   · rename_i ho; simp [BitVec.uaddOverflow] at ho; try omega
   · rfl
+
+nonvacuity_witness sub1_run := ⟨1, by decide, trivial⟩
+nonvacuity_witness add1_run := ⟨0, by decide, trivial⟩
 
 /-- The ghost values without the semaphore's part, after a change of `t`'s value. -/
 theorem xs_upd (G : ThreadId → SGh X) (t : ThreadId) (g g' : SGh X) :
