@@ -104,6 +104,16 @@ class ClassTests(unittest.TestCase):
                       air('proj.apply', [indirect])], ['proj.root'])
         self.assertEqual([m['fqn'] for m in result['missing']], ['proj.double'])
         self.assertEqual(result['missing'][0]['references'][0]['edge'], 'global_function_reference')
+        # L11: a constant callee address dispatches over the same table as an instruction callee.
+        constant = {'id': 6, 'tag': 'call', 'ty': U32, 'callee': {'ty': FN_PTR, 'ptr': {'global': 0, 'off': 0}},
+                    'args': []}
+        result = run([air('proj.root', [constant], [fn_global('proj.double')]), air('proj.double', [])],
+                     ['proj.root'])
+        self.assertEqual(result['indirect_calls'], [{'function': 'proj.root', 'instruction': 6, 'fn_type': 'fn (u32) u32',
+            'targets': [{'name': 'proj.double', 'class': 'exported'}], 'class': 'qualified'}])
+        result = run([air('proj.root', [constant])], ['proj.root'])
+        self.assertEqual([(b['kind'], b['instruction']) for b in result['unresolvable']],
+                         [('runtime_function_pointer', 6)])
 
     def test_unresolvable_boundaries(self):
         indirect = {'id': 5, 'tag': 'call', 'ty': U32, 'callee': {'inst': 0}, 'args': []}

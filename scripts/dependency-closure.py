@@ -142,7 +142,10 @@ def scan(air):
             calls.append({'target': callee['func'], 'instruction': iid, 'noreturn': callee.get('noreturn') is True,
                           'comptime_fn': callee.get('comptime_fn')})
         elif isinstance(callee, dict) and 'inst' in callee:
-            indirect.append({'instruction': iid, 'operand': callee['inst']})
+            indirect.append({'instruction': iid, 'fn_type': None, 'operand': callee['inst']})
+        elif isinstance(callee, dict) and isinstance(callee.get('ptr'), dict):
+            # L11: a constant callee address (`ptrConst`) dispatches over the same table.
+            indirect.append({'instruction': iid, 'fn_type': fn_type(types, callee.get('ty'))})
         for key, value in item.items():
             if key in ('callee', 'id', 'tag', 'ty'):
                 continue
@@ -156,7 +159,8 @@ def scan(air):
             else:
                 refs(value, iid, values)
     for site in indirect:
-        site['fn_type'] = fn_type(types, insts.get(site['operand']))
+        if 'operand' in site:
+            site['fn_type'] = fn_type(types, insts.get(site.pop('operand')))
     globals_ = []
     for index, entry in enumerate(air.get('globals') or []):
         if not isinstance(entry, dict):
