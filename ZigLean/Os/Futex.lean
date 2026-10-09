@@ -56,7 +56,7 @@ def negErrno (e : Nat) : BitVec 64 := -(BitVec.ofNat 64 e)
 /-- `-e` as a `c_int` (`__ulock_*` with `NO_ERRNO`). -/
 def negErrno32 (e : Nat) : BitVec 32 := -(BitVec.ofNat 32 e)
 
-/-- `std.os.linux.E` (x86_64). -/
+-- `std.os.linux.E` (x86_64).
 namespace Linux.E
 def SRCH : Nat := 3
 def INTR : Nat := 4
@@ -66,7 +66,7 @@ def INVAL : Nat := 22
 def TIMEDOUT : Nat := 110
 end Linux.E
 
-/-- `std.c.E` on macOS. -/
+-- `std.c.E` on macOS.
 namespace Darwin.E
 def NOENT : Nat := 2
 def SRCH : Nat := 3
@@ -77,6 +77,9 @@ def TIMEDOUT : Nat := 60
 end Darwin.E
 
 /-! ## The kernel's part -/
+
+/-- A choice of the oracle among `count m` options (`SyncOp.pick`). -/
+def pick (count : Mem → Nat) : ConcM Tgt Nat := ConcM.sync (.pick count)
 
 /-- How a futex wait returned. -/
 inductive WaitResult where
@@ -126,7 +129,7 @@ def timedResume : MemM WaitResult := do
 before it (the signal handler ran first). -/
 def futexWait (p : Ptr) (e : BitVec 32) (timed : Bool) : ConcM Tgt WaitResult := do
   let _ ← ConcM.liftMem takeInterrupt
-  let c ← ConcM.sync (.pick (waitCount p e timed))
+  let c ← pick (waitCount p e timed)
   let v ← ConcM.liftMem (futexWord p)
   if v ≠ e then return .mismatch
   match c with
@@ -148,7 +151,7 @@ def sublistsLen {α : Type} : Nat → List α → List (List α)
   | k + 1, x :: xs => (sublistsLen k xs).map (x :: ·) ++ sublistsLen (k + 1) xs
 
 /-- The threads queued at `p`, in queue order. -/
-def Mem.waitersAt (m : Mem) (p : Ptr) : List ThreadId :=
+def _root_.Zig.Mem.waitersAt (m : Mem) (p : Ptr) : List ThreadId :=
   (m.waiters.toList.filter (·.2 == p)).map (·.1)
 
 /-- The sets of threads that a wake of up to `n` waiters at `p` (`none`: all) can wake: every
@@ -173,8 +176,8 @@ def wakeAt (c : Nat) (p : Ptr) (n : Option Nat) : MemM Nat := do
 /-- A futex wake of up to `n` waiters at `p` (`none`: all of them; module doc). With `spurious`,
 the last option is `none`: `EINTR`, nobody woken. -/
 def futexWake (p : Ptr) (n : Option Nat) (spurious : Bool := false) : ConcM Tgt (Option Nat) := do
-  let c ← ConcM.sync (.pick fun m => wakeCount p n m + (if spurious then 1 else 0))
-  if spurious ∧ c = wakeCount p n (← ConcM.liftMem get) then return none
+  let c ← pick fun m => wakeCount p n m + (if spurious then 1 else 0)
+  if spurious && c == wakeCount p n (← ConcM.liftMem get) then return none
   some <$> ConcM.liftMem (wakeAt c p n)
 
 /-- Wake every thread queued at `p` (the kernel's wake after `CHILD_CLEARTID`): no choice. -/
