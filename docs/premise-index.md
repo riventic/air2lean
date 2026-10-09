@@ -5,13 +5,13 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2937 theorems in 173 files.
+2701 theorems in 156 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 728 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 607 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
+| [PRF-01](premises.md#prf-01) | 682 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 522 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-03](premises.md#prf-03) | 24 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
 | [ALC-01](premises.md#alc-01) | 91 | Single modelled allocator |
@@ -22,21 +22,21 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
-| [THR-01](premises.md#thr-01) | 1435 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1442 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 179 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 20 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 832 | Futex model |
+| [THR-05](premises.md#thr-05) | 839 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 84 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1183 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1189 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1161 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1161 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 402 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 497 | Weak CAS spurious failure |
+| [ORD-01](premises.md#ord-01) | 1124 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1124 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 368 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 505 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
@@ -46,26 +46,30 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 2804 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2383 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1205 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
-=======
 | [SEM-01](premises.md#sem-01) | 2649 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 2264 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1132 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 126 | Total-correctness statements |
->>>>>>> origin/codex/roadmap-batch8
+||||||| merged common ancestors
+| [SEM-01](premises.md#sem-01) | 2548 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2177 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1111 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 110 | Total-correctness statements |
+=======
+| [SEM-01](premises.md#sem-01) | 2567 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2196 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1120 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 110 | Total-correctness statements |
+>>>>>>> origin/main
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2937 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1410 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1410 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
-| [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
-| [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
+| [TRU-01](premises.md#tru-01) | 2701 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1228 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1228 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 40 | Reviewed opaque, extern and runtime-redirection policy |
+| [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
 
@@ -726,16 +730,24 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, T
 | `Lists.enc_ptr_all` | SEM-01, SEM-02, TRU-01 |
 | `Lists.enc_u64_all` | SEM-01, SEM-02, TRU-01 |
 | `Lists.extract_none` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdrBytes_size` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdr_ptr` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdr_len` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdr_cap` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdr_slice` | SEM-01, SEM-02, TRU-01 |
+| `Lists.extract_past` | SEM-01, SEM-02, TRU-01 |
+| `Lists.extract_full` | SEM-01, SEM-02, TRU-01 |
+| `Lists.add24_sub` | TRU-01 |
+| `Lists.hdr_size_ge` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_size_le` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.lockBytes_size` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdrBytes_size` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_ptr` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_len` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_cap` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_slice` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Lists.decode_slice` | SEM-01, SEM-02, TRU-01 |
+| `Lists.hdr_tail` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.decode_lockBytes` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Lists.decode_hdr` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `Lists.hdr_set_ptr` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdr_set_len` | SEM-01, SEM-02, TRU-01 |
-| `Lists.hdr_set_cap` | SEM-01, SEM-02, TRU-01 |
+| `Lists.hdr_set_ptr` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_set_len` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Lists.hdr_set_cap` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Lists.bytesAt_load_run` | SEM-01, SEM-02, TRU-01 |
 | `Lists.bytesAt_storeBytes_run` | SEM-01, SEM-02, TRU-01 |
 | `Lists.bytesAt_store_run` | SEM-01, SEM-02, TRU-01 |
@@ -1086,12 +1098,16 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.state_read` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.wt_sleep` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.sig_pos` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.loop56_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Sync.Handoff.loop23_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.rdy_now` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.reg_x0` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `Sync.Handoff.lt_w` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.lt_w` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop56_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop23_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.waitInner_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.condWait_spec_v016` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop45_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.loop22_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.condWait_spec_v017` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.condWait_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.ofBits_ev0` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.ofBits_ev1` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
@@ -1665,9 +1681,13 @@ File premises: PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, S
 | `Sync.Sem.out_notQ` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.wp_ldE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.wp_regS` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Sync.Sem.Inv.see` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Sem.Inv.see` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.loop56_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.loop23_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.condWait_spec_v016` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.loop45_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.loop22_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.condWait_spec_v017` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.condWait_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.ptr0` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Sync.Sem.sub1_run` | SEM-01, TRU-01 |
@@ -2366,21 +2386,23 @@ File premises: PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, SEM-02, TRU-01, TRU-02, T
 | `incLocal_spec` | PRF-01, ASM-01, ASM-02, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `barrier_spec` | PRF-01, ASM-01, ASM-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
-## `tests/roadmap/big-endian/BigEndian/Proofs.lean`
+## `tests/roadmap/bitcast-017/BitCastReal/Runtime.lean`
 
-File premises: PRF-02, PRF-05, MTH-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `BigEndianClients.u32ToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.bytesToU32_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.f32ToBytes_orders` | PRF-02, PRF-05, MTH-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.packed16ToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.externToBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.setFieldBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.fieldFromBytes_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `BigEndianClients.vecByte_orders` | PRF-02, PRF-05, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L81` | SEM-01, SEM-02, TRU-01 |
+| `bytesToInt_eq` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L16` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+
+## `tests/roadmap/bitcast-017/Semantics.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L36` | SEM-01, SEM-02, TRU-01 |
+| `example@L37` | SEM-01, SEM-02, TRU-01 |
 
 ## `tests/roadmap/bitops/Bitset.lean`
 

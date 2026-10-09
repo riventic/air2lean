@@ -86,20 +86,38 @@ def identityNames (j : Lean.Json) (root : Bool := true) (typeEntry : Bool := fal
     Array String :=
   identityNamesAux #[] j root typeEntry
 
-partial def renameIdentities (map : Std.HashMap Inst Nat) (marker : String) (j : Lean.Json)
-    (root : Bool := true) (typeEntry : Bool := false) : Lean.Json :=
+/-- `j` with `f` applied to each compiler identity string (`identityNames`). -/
+partial def mapIdentities (f : String → String) (j : Lean.Json) (root : Bool := true)
+    (typeEntry : Bool := false) : Lean.Json :=
   match j with
-  | .arr vs => .arr (vs.map fun v => renameIdentities map marker v false typeEntry)
+  | .arr vs => .arr (vs.map fun v => mapIdentities f v false typeEntry)
   | .obj fields => Lean.Json.mkObj (fields.foldl (init := []) fun acc k v =>
     let isIdentity := k == "func" || k == "comptime_fn" ||
       (k == "name" && (root || typeEntry))
     let v := if isIdentity then
         match v with
-        | .str s => .str (rename map s marker)
+        | .str s => .str (f s)
         | v => v
-      else renameIdentities map marker v false (root && k == "types")
+      else mapIdentities f v false (root && k == "types")
     (k, v) :: acc)
   | j => j
+
+def renameIdentities (map : Std.HashMap Inst Nat) (marker : String) (j : Lean.Json) : Lean.Json :=
+  mapIdentities (rename map · marker) j
+
+/-- Zig 0.17.0 names a generic function instance `<name>__func_<n>` where 0.16.0 and older
+write `<name>__anon_<n>` (`InternPool.zig`'s instance naming). A 0.17.0 file's instance names
+are read in the older spelling, so the renumbering below, the std models and the panic table
+see one spelling in every version. -/
+def funcInstances017 (j : Lean.Json) : Lean.Json :=
+  if (j.getObjValAs? String "zig_version").toOption != some "0.17.0" then j else
+  mapIdentities (fun s => Id.run do
+    let parts := s.splitOn "__func_"
+    let mut out := parts.head!
+    for p in parts.drop 1 do
+      let digits := p.takeWhile Char.isDigit
+      out := out ++ (if digits.isEmpty then "__func_" else "__anon_") ++ p
+    out) j
 
 /-- `texts`: the JSON text of each function. The same functions, with the numbers after `marker`
 renamed, and for each whether any identity of it contains a `marker` instance (otherwise its
@@ -179,17 +197,27 @@ private def renumberAllParsed (texts : Array String)
     first := false
   return current
 
+/-- Each text parsed, with 0.17.0 instance names in the older spelling (`funcInstances017`);
+a text with a `__func_` marker is re-serialized so the marker scan reads the same names. -/
+private def parseInstances (texts : Array String) : Array String × Array (Option Lean.Json) :=
+  let pairs := texts.map fun text =>
+    let j := (StrictJson.parse text).toOption
+    if (text.splitOn "__func_").length == 1 then (text, j) else
+    let k := j.map funcInstances017
+    ((k.map (·.compress)).getD text, k)
+  (pairs.map (·.1), pairs.map (·.2))
+
 /-- Internal pipeline result: original full names and all rewritten texts, sharing the
 initial parse. Names are captured before any identity marker is renumbered. -/
 def renumberAllWithNames (texts : Array String) : Array String × Array String :=
-  let parsed := texts.map fun text => (StrictJson.parse text).toOption
+  let (texts, parsed) := parseInstances texts
   let names := parsed.map fun j =>
     (j.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
   (names, renumberAllParsed texts parsed)
 
 /-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
 def renumberAll (texts : Array String) : Array String :=
-  let parsed := texts.map fun text => (StrictJson.parse text).toOption
+  let (texts, parsed) := parseInstances texts
   renumberAllParsed texts parsed
 
 end Air2Lean.Anon

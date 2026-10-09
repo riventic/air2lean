@@ -316,6 +316,9 @@ def Float.divTrunc {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.trunc
 /-- `@divFloor`: division, rounded once, then floored. -/
 def Float.divFloor {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.div a b)
 
+/-- `@divCeil` (Zig 0.17.0): division, rounded once, then ceiled (LLVM backend: `fdiv`, `ceil`). -/
+def Float.divCeil {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.ceil (Float.div a b)
+
 /-! ## `.unspecified` guards (`docs/floats.md` §Semantics groups C and D; both modes, always)
 
 The reference target (`x86_64-linux -mcpu=baseline`)'s compiler_rt routines diverge from the

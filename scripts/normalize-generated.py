@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 PREFIX = b"-- air2lean-profile: "
-VERSIONS = {"0.14.1", "0.15.2", "0.16.0"}
+VERSIONS = {"0.14.1", "0.15.2", "0.16.0", "0.17.0"}
 RAW_FIELDS = {"name", "target_triple", "pointer_bits", "endian", "abi", "zig_version",
               "backend", "cpu", "features", "build_mode", "float_mode", "error_set_bits",
               "error_layout", "error_tracing", "export_stage"}

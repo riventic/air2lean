@@ -496,6 +496,13 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.Float.CompilerRt::Zig.Float.truncRt017Chk_eq": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.17.0"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.Float.CompilerRt::Zig.Float.divRt016_eq_div_of_exp": {
       "semantics": "compiler-rt",
       "zig_versions": [

@@ -1,0 +1,22 @@
+{
+  "fixture": "Zig 0.17.0 @divCeil, compiler-exported AIR (support:tags:div_ceil)",
+  "source": {"path": "tests/roadmap/zig017/divceil/divceil.zig", "sha256": "8ca8cf69957a7d14f843a78f42126fe4b1b4c007e795528acd9c9f61eea7129b"},
+  "export": {
+    "command": "AIR2LEAN_ZIG_AIR=zig-air-0.17.0/bin/zig tests/roadmap/zig017/divceil/check.sh --export DIR",
+    "flags": "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline",
+    "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+    "exporter_json_zig_sha256": "38b83e6a15ac83cb72499107bff5ca8f903e9bc7d41dddf2b8b81083a65f5840",
+    "export_host": "aarch64-macos",
+    "air_shape": "each function: arg, arg, the signed minInt/-1 overflow check (signed types), the divide-by-zero check, div_ceil, ret_safe"
+  },
+  "inputs": {"path": "tests/roadmap/zig017/divceil/inputs.txt", "generator": "gen_inputs.py (seed 17)", "count": 1652,
+             "sha256": "4d6075619f2dcfdfd8102c697cc40967f49f174fef03b9a74fa089812064f569"},
+  "differential": [
+    {"host": "aarch64-macos (native)", "stock_zig_sha256": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523",
+     "result": "1562 values equal, 90 safety panics agree"},
+    {"host": "aarch64-linux (docker linux/arm64)", "stock_zig": "zig-aarch64-linux-0.17.0.tar.xz sha256 9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8",
+     "result": "1562 values equal, 90 safety panics agree"},
+    {"host": "x86_64-linux (docker linux/amd64, Rosetta)", "stock_zig": "zig-x86_64-linux-0.17.0.tar.xz sha256 1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026",
+     "result": "1562 values equal, 90 safety panics agree"}
+  ]
+}
