@@ -281,27 +281,14 @@
      ]
     },
     "air2lean": {
-     "status": "rejected",
-     "codes": {
-      "INSTRUCTION_FAILURE": 2
-     },
-     "diagnostics": [
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "casts.entry",
-       "message": "casts.entry: near line 29: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "casts.entry",
-       "message": "casts.entry: near line 31: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      }
-     ],
-     "diagnostic_count": 2
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 142
     }
    },
    "c_defined_functions": [
@@ -1218,7 +1205,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 51136316 panic: integer overflow\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10252a91b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:124:10: 0x1024ecbbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:545:57: 0x1024eca8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$HOME/.cache/air2lean/host-0.16.0/lib/compiler/test_runner.zig:291:25: 0x10252b277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0xa7a3e560\n"
+     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 59693348 panic: integer overflow\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:106:32: 0x100a2a91b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:124:10: 0x1009ecbbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:545:57: 0x1009eca8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x100a2b277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0x3af06540\n"
     },
     "air_export": {
      "status": "ok",
@@ -1232,24 +1219,9 @@
      "status": "rejected",
      "codes": {
       "AIR_DECODE": 1,
-      "INSTRUCTION_FAILURE": 2,
       "PREREQUISITE_SKIPPED": 1
      },
      "diagnostics": [
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "libc_stdlib.cmp",
-       "message": "libc_stdlib.cmp: near line 6: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "libc_stdlib.cmp",
-       "message": "libc_stdlib.cmp: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
       {
        "code": "AIR_DECODE",
        "phase": "decode",
@@ -1265,7 +1237,7 @@
        "message": "not inspected: prerequisite failed"
       }
      ],
-     "diagnostic_count": 4
+     "diagnostic_count": 2
     }
    },
    "c_defined_functions": [
@@ -1284,7 +1256,6 @@
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": [
-     "__ctype_get_mb_cur_max",
      "abs",
      "calloc",
      "free",
@@ -1422,7 +1393,6 @@
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "INSTRUCTION_FAILURE": 1,
       "PREREQUISITE_SKIPPED": 1,
       "STRUCTURE_FAILURE": 1
      },
@@ -1440,16 +1410,9 @@
        "category": "skipped_prerequisite",
        "function": "linked_list.entry",
        "message": "not inspected: prerequisite failed"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "linked_list.remove_if_odd",
-       "message": "linked_list.remove_if_odd: near line 4: a pointer cast has unresolved or cyclic symbolic storage provenance"
       }
      ],
-     "diagnostic_count": 3
+     "diagnostic_count": 2
     }
    },
    "c_defined_functions": [
@@ -1707,126 +1670,14 @@
      ]
     },
     "air2lean": {
-     "status": "rejected",
-     "codes": {
-      "CALLEE_BLOCKED": 4,
-      "INSTRUCTION_FAILURE": 12
-     },
-     "diagnostics": [
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 14: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 14: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 15: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 15: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 16: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "memcpy_loops.entry: near line 16: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.my_memcpy",
-       "message": "memcpy_loops.my_memcpy: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.my_memcpy",
-       "message": "memcpy_loops.my_memcpy: near line 10: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.my_memmove",
-       "message": "memcpy_loops.my_memmove: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.my_memmove",
-       "message": "memcpy_loops.my_memmove: near line 10: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "memcpy_loops.my_memset",
-       "message": "memcpy_loops.my_memset: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "memcpy_loops.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      }
-     ],
-     "diagnostic_count": 16
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 419
     }
    },
    "c_defined_functions": [
@@ -2285,7 +2136,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 sort_callback_native.test.c_frontend_native...thread 51152718 panic: integer overflow\n$REPO/.scratch/heavy/sort_callback/sort_callback_native.zig:72:32: 0x10271f097 in by_value (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n$REPO/.scratch/heavy/sort_callback/sort_callback_native.zig:57:50: 0x1026e0dd3 in isort (test)\n            while ((j > @as(usize, 0)) and (cmp.?(@ptrCast(@alignCast(b + ((j -% @as(usize, 1)) *% size))), @ptrCast(@alignCast(b + (j *% size)))) > @as(c_int, 0))) : (j -%= 1) {\n                                                 ^\n$HOME/.cache/air2lean/host-0.16.0/lib/compiler/test_runner.zig:291:25: 0x10271fca3 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/e3b87d06e8052d9ef4d921354089aa53/test --seed=0xe293cd1c\n"
+     "log": "1/1 sort_callback_native.test.c_frontend_native...thread 59702975 panic: integer overflow\n$REPO/.scratch/heavy/sort_callback/sort_callback_native.zig:72:32: 0x104d6f097 in by_value (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n$REPO/.scratch/heavy/sort_callback/sort_callback_native.zig:57:50: 0x104d30dd3 in isort (test)\n            while ((j > @as(usize, 0)) and (cmp.?(@ptrCast(@alignCast(b + ((j -% @as(usize, 1)) *% size))), @ptrCast(@alignCast(b + (j *% size)))) > @as(c_int, 0))) : (j -%= 1) {\n                                                 ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x104d6fca3 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/e3b87d06e8052d9ef4d921354089aa53/test --seed=0x725b70b1\n"
     },
     "air_export": {
      "status": "ok",
@@ -2298,63 +2149,10 @@
      ]
     },
     "air2lean": {
-     "status": "rejected",
-     "codes": {
-      "CALLEE_BLOCKED": 1,
-      "INSTRUCTION_FAILURE": 6
-     },
-     "diagnostics": [
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "sort_callback.by_value",
-       "message": "sort_callback.by_value: near line 6: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "sort_callback.by_value",
-       "message": "sort_callback.by_value: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "sort_callback.entry",
-       "message": "sort_callback.entry: near line 15: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "sort_callback.isort",
-       "message": "sort_callback.isort: near line 10: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "sort_callback.isort",
-       "message": "sort_callback.isort: near line 18: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "sort_callback.isort",
-       "message": "sort_callback.isort: near line 18: a pointer cast has unresolved or cyclic symbolic storage provenance"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "sort_callback.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      }
-     ],
-     "diagnostic_count": 7
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
     }
    },
    "c_defined_functions": [
@@ -2947,26 +2745,25 @@
     "ok": 34
    },
    "air2lean": {
-    "checked": 18,
-    "rejected": 16
+    "checked": 21,
+    "rejected": 13
    },
    "lean": {
     "guard_failed": 1,
-    "ok": 17
+    "ok": 19
    }
   },
   "headline": {
-   "air2lean": 12,
+   "air2lean": 9,
    "air_export": 4,
    "lean": 1,
-   "lean_ok": 17,
-   "translate_c": 6
+   "lean_ok": 19,
+   "translate_c": 6,
+   "zig_native": 1
   },
   "rejection_codes_by_file": {
    "AIR_DECODE": 9,
-   "CALLEE_BLOCKED": 2,
    "CALLEE_MISSING": 2,
-   "INSTRUCTION_FAILURE": 5,
    "PREREQUISITE_SKIPPED": 11,
    "PROGRAM_FAILURE": 2,
    "STRUCTURE_FAILURE": 2
@@ -2988,8 +2785,9 @@
     "lean_ok": 1
    },
    "function pointers": {
-    "air2lean": 2,
-    "lean_ok": 1
+    "air2lean": 1,
+    "lean_ok": 1,
+    "zig_native": 1
    },
    "globals": {
     "lean_ok": 1
@@ -2998,7 +2796,7 @@
     "translate_c": 2
    },
    "integer casts": {
-    "air2lean": 1
+    "lean_ok": 1
    },
    "integer promotions": {
     "lean_ok": 1
@@ -3023,7 +2821,7 @@
     "air_export": 1
    },
    "object-representation casts": {
-    "air2lean": 1
+    "lean_ok": 1
    },
    "pointer arithmetic": {
     "lean": 1,
@@ -3033,9 +2831,10 @@
     "air2lean": 1
    },
    "realistic": {
-    "air2lean": 4,
+    "air2lean": 2,
     "air_export": 2,
-    "lean_ok": 1
+    "lean_ok": 2,
+    "zig_native": 1
    },
    "recursion": {
     "lean_ok": 1
@@ -3084,7 +2883,8 @@
     "translate_c": 1
    },
    "void* byte loops": {
-    "air2lean": 2
+    "lean_ok": 1,
+    "zig_native": 1
    }
   },
   "libc_symbols": {

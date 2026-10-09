@@ -297,6 +297,8 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
+    'tests/roadmap/c-frontend/ptrcasts/air/{version}': 'tests/roadmap/c-frontend/ptrcasts/provenance.json',
+    'tests/roadmap/c-frontend/ptrcasts/air-reject/{version}': 'tests/roadmap/c-frontend/ptrcasts/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
