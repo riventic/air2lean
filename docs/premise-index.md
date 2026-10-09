@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2338 theorems in 133 files.
+2351 theorems in 135 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 648 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 437 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 656 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 440 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
@@ -39,17 +39,17 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2209 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1865 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2222 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1869 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
-| [STK-01](premises.md#stk-01) | 8 | The native stack holds every call chain |
+| [STK-01](premises.md#stk-01) | 9 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2351 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1114 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1114 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -455,6 +455,9 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 | Theorem | Premises |
 |---|---|
 | `fields_num` | SEM-01, SEM-02, TRU-01 |
+| `Num.size_encode` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Num.decode_encode_int` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Num.decode_encode_small` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Num.decode_int` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `numInt_spec` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Num.decode_of_int` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
@@ -1921,6 +1924,7 @@ File premises: PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 | `Variants.prioValue_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Variants.isUrgent_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Variants.area_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `Variants.area_undef` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Variants.radius_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Variants.isRound_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `Variants.scale_spec` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
@@ -2614,6 +2618,29 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `example@L99` | SEM-01, TRU-01 |
 | `example@L104` | TRU-01 |
 | `example@L109` | SEM-01, TRU-01 |
+
+## `tests/roadmap/memory-hardening/Stack.lean`
+
+File premises: SEM-01, SEM-02, STK-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L27` | SEM-01, SEM-02, STK-01, TRU-01 |
+| `example@L31` | SEM-01, TRU-01 |
+
+## `tests/roadmap/memory-hardening/Union.lean`
+
+File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `example@L12` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L14` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L16` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L20` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L25` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L27` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `example@L28` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/models/Callback.lean`
 

@@ -70,8 +70,11 @@ Each tagged union `U` with tag enum `UTag` also gets, per field `f`:
 |---|---|
 | `U.tag : U → UTag` | `get_union_tag` |
 | `U.get_f : U → Zig.Result T` | the payload of `f` (`struct_field_val`); throws `.panic` if `f` is not active. Sema checks the tag first (`inactiveUnionField`), so the throw is not reached. |
-| `U.modify_f : (T → T) → U → U` | a store into the payload of `f`: `f` becomes active with `g` applied to its payload, or to `default` if another field was active |
-| `U.setTag_f : U → U` | `set_union_tag`: `f` becomes active; its payload stays if `f` was active, else it is `default` (Zig: undefined) |
+| `U.modify_f : (T → T) → U → U` | a store into part of the payload of `f`: `g` applied to the payload; if another field was active, `f` becomes active with an undefined payload (`undef_f`) |
+| `U.setTag_f : U → U` | `set_union_tag`: `f` becomes active; its payload stays if `f` was active, else it is undefined (`undef_f default []`, MM-13) |
+| `U.undef_f (v : T) (written : List String)` | a constructor: `f` is active and its payload is not defined yet; `v` holds the struct fields named in `written`. `get_f` of it throws `.unspecified`; its `Zig.Enc` encoding has undefined payload bytes. Only for a union with another field and a payload with bits |
+| `U.set_f : T → U → U` | a store of the whole payload of `f`: `f` becomes active with a defined payload |
+| `U.setField_f : String → (T → T) → U → U` | a store of the whole struct field `k` of the payload of `f`: once every field is written, the payload is defined (`.f v`) |
 
 Zig keeps the payload bytes when the tag changes, and the Zig versions write a union result in different orders: 0.15.2 and 0.16.0 set the tag first, then store the payload; 0.14.1 stores the payload first. `modify_f` and `setTag_f` give the same value for both orders.
 
@@ -128,8 +131,8 @@ pointer type's `vector_index`).
 A pointer into a local is a **place**: an `alloc` (a `var`, or `ret_ptr`, the local the result is built in), a field pointer of a place (`struct_field_ptr*`; `ptr_slice_len_ptr`, `ptr_slice_ptr_ptr` of a slice), or a `bitcast` of a place. If every place of an `alloc` is used only as the pointer operand of `load`, `store`, a field pointer, `bitcast`, `set_union_tag` and `ret_load` (`Air2Lean/Memory.lean`), the local is a `Locals` field plus a path of struct fields and union payloads. Any other use (a call argument, a stored value, a returned pointer, `optional_payload_ptr`, an item pointer of a local array) makes the address escape: the local is then a stack block in memory (§Memory).
 
 ```lean
--- store to rect.w in the result local (a union): change the payload of `rect`
-modify (fun s => { s with local2 := (Shape.modify_rect (fun x => { x with w := i19 }) s.local2) })
+-- store to rect.w in the result local (a union): write the field `w` of the payload of `rect`
+modify (fun s => { s with local2 := (Shape.setField_rect "w" (fun x => { x with w := i19 }) s.local2) })
 ```
 
 ## Memory

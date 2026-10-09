@@ -264,6 +264,12 @@ found, but this is the one remaining `undefined → 0` default in the value repr
 **Fix:** the value union constructor takes `Bytes` for a fresh payload (undefined), as byte
 locals do.
 
+**Status: fixed on `codex/fix-mm-hardening`.** A retag from another field gives `undef_f`, a
+payload that is not defined: a read is `.unspecified`, its memory encoding is undefined bytes,
+and it becomes defined by a whole-payload write (`set_f`) or a write of every field of a struct
+payload (`setField_f`). A partial write deeper than one struct field leaves it undefined
+(conservative). Regression: `tests/roadmap/memory-hardening/Union.lean`.
+
 ### MM-14. Unbounded footprint and block arrays
 
 `recordAccess` appends every access to `Mem.footprint`, also with one thread, and `raceAt`

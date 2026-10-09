@@ -6,7 +6,9 @@ import ZigLean.Simp
 # Unions and error unions in memory (`examples/layout/layout.zig`)
 
 `Num` is a bare union: in `ReleaseSafe` it has a hidden tag, so the translator makes it a tagged
-union. Its encoding reads back as itself (`LawfulEnc Num`), `setNum` writes a value and
+union. A defined value's encoding reads back as itself (`Num.decode_encode_int`/`_small`; a
+payload that a retag left undefined, `undef_*`, encodes as undefined bytes, so `Num` is not
+`LawfulEnc`, MM-13), `setNum` writes a value and
 `numInt` reads it back. `bump` adds 1 to the payload of an error union in memory
 (`LawfulEnc (Except ErrName α)`, `ZigLean/Mem/Lemmas.lean`). A write to the `const` global
 `table` throws `.illegal`. The `extern` union facts are general: `Zig.Raw.get_init`,
@@ -43,38 +45,50 @@ theorem fields_num {t x : Array Byte} (ht : t.size = 1) (hx : x.size ≤ 4) :
     exact extract_writeBytes _ 4 t (by simp; omega)
   · exact extract_writeBytes _ 0 x (by omega)
 
-/-- The bare union `Num` in memory: the hidden tag at byte 4, the payload at byte 0. -/
-instance : LawfulEnc Num where
-  size_encode v := by
-    cases v with
-    | int x => exact (fields_num (LawfulEnc.size_encode (α := NumTag) _)
-        (by rw [LawfulEnc.size_encode x]; decide)).1
-    | small x => exact (fields_num (LawfulEnc.size_encode (α := NumTag) _)
-        (by rw [LawfulEnc.size_encode x]; decide)).1
-  decode_encode v := by
-    cases v with
-    | int x =>
-      obtain ⟨-, ht, hx⟩ := fields_num (LawfulEnc.size_encode (α := NumTag) .int)
-        (by rw [LawfulEnc.size_encode x]; decide)
-      rw [LawfulEnc.size_encode (α := NumTag), LawfulEnc.size_encode x] at *
-      show (do
-        let t : NumTag ← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 4
-        match t with
-        | .int => pure (Num.int (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 0))
-        | .small => pure (Num.small (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 0)) : Result Num) = pure (Num.int x)
-      simp only [Enc.decodeAt]
-      rw [ht, hx, LawfulEnc.decode_encode (α := NumTag), LawfulEnc.decode_encode x]; rfl
-    | small x =>
-      obtain ⟨-, ht, hx⟩ := fields_num (LawfulEnc.size_encode (α := NumTag) .small)
-        (by rw [LawfulEnc.size_encode x]; decide)
-      rw [LawfulEnc.size_encode (α := NumTag), LawfulEnc.size_encode x] at *
-      show (do
-        let t : NumTag ← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 4
-        match t with
-        | .int => pure (Num.int (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 0))
-        | .small => pure (Num.small (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 0)) : Result Num) = pure (Num.small x)
-      simp only [Enc.decodeAt]
-      rw [ht, hx, LawfulEnc.decode_encode (α := NumTag), LawfulEnc.decode_encode x]; rfl
+/-- The bare union `Num` in memory: the hidden tag at byte 4, the payload at byte 0. Every
+value, also one whose payload a retag left undefined, has the size of `Num`. -/
+theorem Num.size_encode (v : Num) : (Enc.encode v).size = Enc.size Num := by
+  cases v with
+  | int x => exact (fields_num (LawfulEnc.size_encode (α := NumTag) _)
+      (by rw [LawfulEnc.size_encode x]; decide)).1
+  | small x => exact (fields_num (LawfulEnc.size_encode (α := NumTag) _)
+      (by rw [LawfulEnc.size_encode x]; decide)).1
+  | undef_int _ _ =>
+    show (Enc.fields 8 [(4, Enc.encode NumTag.int)]).size = 8
+    simp only [Enc.fields, List.foldl]
+    rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode (α := NumTag)]; simp; decide)]; simp
+  | undef_small _ _ =>
+    show (Enc.fields 8 [(4, Enc.encode NumTag.small)]).size = 8
+    simp only [Enc.fields, List.foldl]
+    rw [writeBytes_size _ _ _ (by rw [LawfulEnc.size_encode (α := NumTag)]; simp; decide)]; simp
+
+/-- A `Num` that holds `int` reads back as itself. -/
+theorem Num.decode_encode_int (x : BitVec 32) :
+    Enc.decode (Enc.encode (Num.int x)) = pure (Num.int x) := by
+  obtain ⟨-, ht, hx⟩ := fields_num (LawfulEnc.size_encode (α := NumTag) .int)
+    (by rw [LawfulEnc.size_encode x]; decide)
+  rw [LawfulEnc.size_encode (α := NumTag), LawfulEnc.size_encode x] at *
+  show (do
+    let t : NumTag ← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 4
+    match t with
+    | .int => pure (Num.int (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 0))
+    | .small => pure (Num.small (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.int), (0, Enc.encode x)]) 0)) : Result Num) = pure (Num.int x)
+  simp only [Enc.decodeAt]
+  rw [ht, hx, LawfulEnc.decode_encode (α := NumTag), LawfulEnc.decode_encode x]; rfl
+
+/-- A `Num` that holds `small` reads back as itself. -/
+theorem Num.decode_encode_small (x : BitVec 8) :
+    Enc.decode (Enc.encode (Num.small x)) = pure (Num.small x) := by
+  obtain ⟨-, ht, hx⟩ := fields_num (LawfulEnc.size_encode (α := NumTag) .small)
+    (by rw [LawfulEnc.size_encode x]; decide)
+  rw [LawfulEnc.size_encode (α := NumTag), LawfulEnc.size_encode x] at *
+  show (do
+    let t : NumTag ← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 4
+    match t with
+    | .int => pure (Num.int (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 0))
+    | .small => pure (Num.small (← Enc.decodeAt (Enc.fields 8 [(4, Enc.encode NumTag.small), (0, Enc.encode x)]) 0)) : Result Num) = pure (Num.small x)
+  simp only [Enc.decodeAt]
+  rw [ht, hx, LawfulEnc.decode_encode (α := NumTag), LawfulEnc.decode_encode x]; rfl
 
 /-- The payload of a `Num` that holds `int`. -/
 theorem Num.decode_int {bs : Array Byte} {x : BitVec 32} (h : (Enc.decode bs : Result Num) = pure (Num.int x)) :

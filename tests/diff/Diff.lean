@@ -648,6 +648,8 @@ def shapeStr : Variants.Shape → String
   | .rect r => s!"\{\"rect\":\{\"w\":{r.w.toNat},\"h\":{r.h.toNat}}}"
   | .square a => s!"\{\"square\":{a.toNat}}"
   | .empty => "{\"empty\":null}"
+  -- A payload that a retag left undefined (MM-13) is no Zig value: it never matches native.
+  | .undef_circle .. | .undef_rect .. | .undef_square .. => "{\"undefined_payload\":null}"
 
 def runVariants : IO Unit := do
   processFile "variants" "next" fun j => do
