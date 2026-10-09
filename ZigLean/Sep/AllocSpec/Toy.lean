@@ -71,7 +71,7 @@ def Ok (cap : Nat) (buf : Ptr) (e : Nat) (tail : Array Byte) : Prop :=
 def inv (cap : Nat) (ctx buf : Ptr) : AllocInv where
   own := Assn.ex fun e => Assn.ex fun A => Assn.ex fun S => Assn.ex fun K => Assn.ex fun tail =>
     ⌜Ok cap buf e tail⌝ ∗ state ctx buf e A S K tail
-  tok _ _ _ := emp
+  tok _ _ _ _ _ _ := emp
 
 theorem own_intro {cap : Nat} {ctx buf : Ptr} {e A S : Nat} {K : BlockKind} {tail : Array Byte}
     {h : Heap} (hok : Ok cap buf e tail) (hs : state ctx buf e A S K tail h) :
@@ -182,8 +182,7 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
       (tail := (tail.extract pad tail.size).extract len.toNat (tail.extract pad tail.size).size)
       ?_ ?_)
     (fun _ x => ⟨(tail.extract pad tail.size).extract 0 len.toNat,
-      sep_lift.mpr ⟨by simp only [Array.size_extract]; omega,
-        sep_emp.mpr (Region.region_of_regionIn x)⟩⟩) hp3
+      sep_lift.mpr ⟨by simp only [Array.size_extract]; omega, A, S, K, sep_emp.mpr x⟩⟩) hp3
   · exact ⟨by omega, by simp only [Array.size_extract]; omega, hcap, hoff⟩
   · unfold state
     exact sep_mono (fun _ y => y) (fun _ y => sep_mono (fun _ z => z)
@@ -191,19 +190,17 @@ theorem alloc_spec (cap : Nat) (ctx buf : Ptr) (len : BitVec 64) (k : Nat) (ra :
 
 theorem allocSpec (cap : Nat) (ctx buf : Ptr) :
     AllocSpec Logic.total (vtable cap) ctx (inv cap ctx buf) where
-  alloc len k ra hl _ := alloc_spec cap ctx buf len k ra hl
-  resize _ _ _ _ _ _ _ _ _ := Logic.ret' Logic.total _ fun _ hp => hp
-  remap _ _ _ _ _ _ _ _ _ := Logic.ret' Logic.total _ fun _ hp => hp
+  alloc len k ra hl _ _ := alloc_spec cap ctx buf len k ra hl
+  resize _ _ _ _ _ _ _ _ _ _ := Logic.ret' Logic.total _ fun _ hp => hp
+  remap _ _ _ _ _ _ _ _ _ _ := Logic.ret' Logic.total _ fun _ hp => hp
   free _ _ _ _ _ _ _ := Logic.ret' Logic.total _ fun _ hp => own_absorb hp
 
-/-- So every wrapper contract holds for the bump allocator, e.g. `realloc`. -/
-example (cap : Nat) (ctx buf : Ptr) (size k : Nat) (old : Slice) (newN ra : BitVec 64)
-    (bs : Array Byte) (hk : k < 64) (hsize : 0 < size) (hsz : bs.size = old.len.toNat * size)
-    (hs : bs.size < 2 ^ 64) :
-    TotalTriple ((inv cap ctx buf).own ∗ Wrap.owned (inv cap ctx buf) k old.ptr bs)
-      (Wrap.realloc (vtable cap) ctx size k old newN ra)
-      (Wrap.reallocResult (inv cap ctx buf) k size old newN bs) :=
-  Wrap.realloc_spec (allocSpec cap ctx buf) size k old newN ra bs hk hsize hsz hs
+/-- So every wrapper contract holds for the bump allocator, e.g. `alloc`. -/
+example (cap : Nat) (ctx buf : Ptr) (size k : Nat) (n : BitVec 64) (hk : k < 64)
+    (hs : size < 2 ^ 64) :
+    TotalTriple (inv cap ctx buf).own (Wrap.allocSlice (vtable cap) ctx size k n)
+      (Wrap.sliceResult (inv cap ctx buf) k n (size * n.toNat)) :=
+  Wrap.allocSlice_spec (allocSpec cap ctx buf) size k n hk hs fun _ _ => trivial
 
 end Bump
 
@@ -223,7 +220,7 @@ theorem granted_cell {I : AllocInv} {p : Ptr} {k n : Nat} {bs : Array Byte} {h :
     (hg : (⌜bs.size = n⌝ ∗ granted I p k bs) h) (hn : 0 < n) :
     ∃ b, p.block = some b ∧ h (b, p.off.toNat) ≠ none := by
   obtain ⟨hs, hg⟩ := sep_lift.mp hg
-  obtain ⟨h₁, h₂, -, rfl, ⟨A, S, K, -, -, b, hpb, -, hl⟩, -⟩ := hg
+  obtain ⟨A, S, K, h₁, h₂, -, rfl, ⟨-, -, b, hpb, -, hl⟩, -⟩ := hg
   refine ⟨b, hpb, ?_⟩
   have hpos : 0 < bs.size := by omega
   rw [Heap.union_apply, hl]
@@ -231,12 +228,12 @@ theorem granted_cell {I : AllocInv} {p : Ptr} {k n : Nat} {bs : Array Byte} {h :
 
 /-- No invariant that holds in some memory makes the static allocator satisfy `AllocSpec`:
 the second `alloc` would grant bytes that the first grant still owns. -/
-theorem not_allocSpec (p ctx : Ptr) (I : AllocInv)
+theorem not_allocSpec (p ctx : Ptr) (I : AllocInv) (hfit : I.fits 1 0)
     (hsat : ∃ (m : Mem) (hP hF : Heap), Heap.Disjoint hP hF ∧ m.heap = hP ∪ hF ∧ I.own hP ∧ m.Seq) :
     ¬ AllocSpec Logic.partial (vtable p) ctx I := by
   intro hs
   obtain ⟨m, hP, hF, hd, hm, hI, hst⟩ := hsat
-  have t := hs.alloc 1 0 0 (by decide) (by decide)
+  have t := hs.alloc 1 0 0 (by decide) (by decide) hfit
   have r1 : ∃ hQ, Heap.Disjoint hQ hF ∧ m.heap = hQ ∪ hF ∧
       allocPost I (1 : BitVec 64).toNat 0 (some p) hQ ∧ m.Seq := t m hP hF hd hm hI hst
   obtain ⟨hQ, hd₁, hm₁, ⟨hI₁, hG₁, hdIG, rfl, hI₁', bs₁, hg₁⟩, -⟩ := r1
@@ -262,9 +259,9 @@ theorem trapFree_alloc_none {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
     (hfree : ∀ s k ra m, (vt.free ctx s k ra).run m = throw .illegal)
     (hs : AllocSpec Logic.partial vt ctx I) {m m' : Mem} {hP hF : Heap} {len : BitVec 64}
     {k : Nat} {ra : BitVec 64} {p : Ptr} (hd : Heap.Disjoint hP hF) (hm : m.heap = hP ∪ hF)
-    (hI : I.own hP) (hst : m.Seq) (hl : 0 < len.toNat) (hk : k < 64)
+    (hI : I.own hP) (hst : m.Seq) (hl : 0 < len.toNat) (hk : k < 64) (hfit : I.fits len.toNat k)
     (hrun : (vt.alloc ctx len k ra).run m = pure (some p, m')) : False := by
-  have r := hs.alloc len k ra hl hk m hP hF hd hm hI hst
+  have r := hs.alloc len k ra hl hk hfit m hP hF hd hm hI hst
   rw [hrun] at r
   obtain ⟨hQ, hd', hm', ⟨hI', hG, hdd, rfl, hI'', bs, hg⟩, hst'⟩ := r
   obtain ⟨hsz, hg⟩ := sep_lift.mp hg
