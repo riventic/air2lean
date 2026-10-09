@@ -381,6 +381,76 @@ theorem inv_no_lost {hint last : Ptr} {m : Mem} {lb b : BlockId} (hlb : last.blo
   obtain ⟨blk, h⟩ := hblk b (by rw [← e])
   rw [hnone] at h; cases h
 
+/-! ## Nonvacuity: a memory that holds `inv` -/
+
+/-- The hint word's initial bytes: the end of a (non-existent) mapping at address 0. -/
+def enc0 : Array Byte := Enc.encode (BitVec.ofInt 64 ((0 : Int) + 4096))
+
+/-- `last` holds a pointer without a block (no mapping yet). -/
+def enc1 : Array Byte := Enc.encode (⟨none, 0⟩ : Ptr)
+
+theorem enc0_size : enc0.size = 8 := LawfulEnc.size_encode (α := BitVec 64) _
+theorem enc1_size : enc1.size = 8 := LawfulEnc.size_encode (α := Ptr) _
+
+/-- The two globals at program start: the hint (block 0) and `last` (block 1); no atomic
+location. -/
+def start : Mem :=
+  { blocks := #[⟨enc0, 8, .global, true, 4096⟩, ⟨enc1, 8, .global, true, 4112⟩], nextAddr := 4121 }
+
+def hintP : Ptr := ⟨some 0, 0⟩
+def lastP : Ptr := ⟨some 1, 0⟩
+
+/-- The owned bytes of block `b` (address `A`, 8 bytes, a `var` global), with no atomic tag. -/
+def glob (b A : Nat) (bs : Array Byte) : FHeap := fun l =>
+  if l.1 = b ∧ l.2 < 8 then some ⟨⟨bs[l.2]!, A, 8, .global⟩, none⟩ else none
+
+theorem start_fheap : start.fheap = glob 0 4096 enc0 ∪ glob 1 4112 enc1 := by
+  funext ⟨b, o⟩
+  simp only [Mem.fheap, FHeap.union_apply, glob]
+  rcases b with _ | _ | b
+  · by_cases ho : o < 8
+    · simp [Mem.heap, start, enc0_size, ho, getElem!_pos, shapes, tagOf]
+    · simp [Mem.heap, start, enc0_size, ho]
+  · by_cases ho : o < 8
+    · simp [Mem.heap, start, enc1_size, ho, getElem!_pos, shapes, tagOf]
+    · simp [Mem.heap, start, enc1_size, ho]
+  · simp [Mem.heap, start]
+
+theorem glob_abytes {b A : Nat} {bs : Array Byte} (hs : bs.size = 8) :
+    abytesAt ⟨some b, 0⟩ A 8 .global bs none ⟨glob b A bs, Know.none⟩ := by
+  refine ⟨rfl, b, rfl, Int.le_refl 0, fun ⟨x, y⟩ => ?_⟩
+  simp [glob, hs]
+
+theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none⟩ ∧ inv hintP lastP r ∧ start.FSeq := by
+  have hd : FHeap.Disjoint (glob 0 4096 enc0) (glob 1 4112 enc1) := by
+    intro ⟨b, o⟩; by_cases hb : b = 0 <;> simp [glob, hb]
+  refine ⟨⟨glob 0 4096 enc0 ∪ (glob 1 4112 enc1 ∪ FHeap.empty),
+    Know.none.union (Know.none.union Know.none)⟩, ⟨fun _ => .inr rfl, ?_, ?_, Know.sub_none _⟩,
+    ⟨⟨none, 0⟩, 0, ?_⟩, ?_⟩
+  · simp [start_fheap]
+  · simp [Know.union_none]; exact Know.sub_none _
+  · refine ⟨⟨glob 0 4096 enc0, Know.none⟩, ⟨glob 1 4112 enc1 ∪ FHeap.empty, Know.none.union Know.none⟩,
+      by simpa using hd, rfl, ?_, ⟨glob 1 4112 enc1, Know.none⟩, ⟨FHeap.empty, Know.none⟩,
+      FHeap.disjoint_empty _, rfl, ?_, ⟨rfl, rfl, rfl⟩⟩
+    · exact ⟨4096, 8, .global, enc0, none, rfl, by decide, enc0_size,
+        LawfulEnc.decode_encode (α := BitVec 64) _, .inl rfl, glob_abytes enc0_size⟩
+    · refine ⟨⟨4112, 8, .global, enc1, rfl, enc1_size, LawfulEnc.decode_encode (α := Ptr) _,
+        abytesAt_bytesAt (glob_abytes enc1_size), by decide⟩, rfl⟩
+  · refine ⟨⟨singleThread_empty rfl (by decide), fun l c hc => ?_⟩, ⟨by simp [shapes, start],
+      by simp [shapes, start]⟩⟩
+    obtain ⟨blk, hb, -, -, rfl⟩ := Mem.heap_some hc
+    rcases l with ⟨_ | _ | b, o⟩ <;> simp [start] at hb <;> subst hb <;> simp [enc0_size, enc1_size, start]
+
+/-- So the specs are not vacuous: at program start the allocator invariant holds, and
+`cycle_spec` applies to the real run (alloc, free, alloc). -/
+theorem cycle_from_start {p : Ptr} {m' : Mem}
+    (h : ((cycle hintP lastP).run start).run = some (.ok (p, m'))) :
+    ∃ r', Holds m' r' ⟨FHeap.empty, Know.none⟩ ∧ (inv hintP lastP ⋆ newMap p) r' ∧ m'.FSeq := by
+  obtain ⟨r, hh, hi, hs⟩ := start_inv
+  have := cycle_spec hintP lastP start r _ hh hi hs
+  rw [h] at this
+  exact this
+
 end Toy
 
 end Full
