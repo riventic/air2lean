@@ -140,6 +140,10 @@ among the rows active under `mode` (`StdModel.activeIn`). -/
 def stdModel? (name : String) (mode : AllocatorModel := .std) : Option StdModel :=
   (stdModelIndex[stdModelBase name]?).filter (·.activeIn mode)
 
+/-- The built-in std model row of `name` in any `--allocator-model`: the names that a project
+binding (`ModelRegistry`) can never claim, the OS boundary included. -/
+def anyStdModel? (name : String) : Option StdModel := stdModelIndex[stdModelBase name]?
+
 private def stdKind? (name : String) (mode : AllocatorModel := .std) : Option StdModelKind :=
   (stdModel? name mode).map (·.kind)
 

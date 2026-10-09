@@ -340,7 +340,7 @@ def checkDependencies (models : Array ModelBinding) : Except String Unit := do
       if seen.contains d then throw s!"model '{m.symbol}': duplicate semantic dependency '{d}'"
       seen := seen.insert d
       if bindings.contains d then continue
-      match stdModel? d with
+      match anyStdModel? d with
       | some std =>
         if let .rejected reason := std.kind then
           throw s!"model '{m.symbol}': semantic dependency '{d}' is outside the subset: {reason}"
@@ -378,8 +378,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     seen := seen.insert m.symbol
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
     -- Any mode's row: a project binding never shadows a built-in model, the OS boundary included.
-    if functionNames.contains m.symbol || (stdModel? m.symbol).isSome ||
-        (stdModel? m.symbol .translated).isSome then
+    if functionNames.contains m.symbol || (anyStdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
@@ -424,7 +423,7 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name false none) args := i.op then
-        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
+        unless names.contains name || funcs.any (·.name == name) || (anyStdModel? name).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
           entries := entries.push <| Json.mkObj [("symbol", .str name),

@@ -32,6 +32,13 @@ namespace BuildProfile
 def legacyName : String := "legacy-abi64-le"
 def currentName : String := "abi64-le-v1"
 
+/-- The OS name of a Zig `arch-os-abi` triple without its version suffix (`linux`, `macos`);
+empty unless the triple has exactly three components (a legacy profile). -/
+def tripleOs (triple : String) : String :=
+  match triple.splitOn "-" with
+  | [_, os, _] => (os.splitOn ".").head!
+  | _ => ""
+
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
   unless !v.isEmpty do throw s!"profile.{k}: must not be empty"
@@ -74,7 +81,7 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
     | throw "profile.target_triple: expected arch-os-abi"
   unless !arch.isEmpty && !os.isEmpty && (tripleAbi.splitOn ".").head! == abi do
     throw "profile.target_triple: empty component or ABI differs from profile.abi"
-  let osName := (os.splitOn ".").head!
+  let osName := tripleOs targetTriple
   unless (arch == "x86_64" && osName == "linux") ||
       (arch == "aarch64" && osName == "macos") do
     throw "profile.target_triple: outside the x86_64-linux/aarch64-macos model ABI scope"

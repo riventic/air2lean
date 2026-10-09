@@ -429,10 +429,28 @@ partial def Val.pointsToMem (v : Val) : Bool :=
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
 
+/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
+partial def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
+  match v with
+  | .undef t => !admit t
+  | .agg _ elems => elems.any (Val.hasUndefExcept admit)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
+  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
+  | _ => false
+
+/-- `--allocator-model translated`: an `undefined` operand of type `t` is an arbitrary
+non-dereferenceable pointer (`Zig.undefPtr`, an oracle read): `t` is a single/many-item
+pointer. -/
+def Func.admitsUndefPtr (f : Func) (t : TyId) : Bool :=
+  f.allocatorModel == .translated &&
+    (match f.types[t]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false)
+
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
   !f.params.all (pureParam f.types) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
     f.allInsts.any fun i => memoryOp i.op f.allocatorModel || (valueOperands i.op).any Val.pointsToMem ||
+      -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`).
+      (valueOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
       -- Nullable pointer temporaries need address observations even with no pointer
       -- parameters, no dereference and an integer/bool return.
       nullablePtrTy f.types f.layouts i.ty ||

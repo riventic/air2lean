@@ -918,7 +918,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       let toOpaque := cx.allocatorModel == .translated &&
         ((pointerChild ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
         ((pointerChild aty).bind (hasErrorCapability cx.types)) == some false
-      if fromOpaque then
+      -- A qualifier-only or optional-wrap cast of `*anyopaque` keeps its pointee: no recovery.
+      if fromOpaque && !qualifierOnly && !optionalWrapOnly then
         if let some target := pointerChild ty then
           unless hasErrorCapability cx.types target == some false do
             cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
@@ -1258,15 +1259,6 @@ def ptrOperands (op : Op) : Array Val :=
   | .cmpxchg _ p .. => #[p]
   | _ => #[]
 
-/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
-partial def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
-  match v with
-  | .undef t => !admit t
-  | .agg _ elems => elems.any (Val.hasUndefExcept admit)
-  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
-  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
-  | _ => false
-
 /-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
 later read could observe. A store writes undefined bytes: a wholly `undefined` value
 (`Zig.storeUndef`) and a partly `undefined` one, whose undefined items and fields at any depth
@@ -1282,9 +1274,7 @@ def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Exce
       a default; only a store or `memset` writes it, as undefined bytes)"
   -- `--allocator-model translated`: an `undefined` single/many-item pointer operand is an
   -- arbitrary non-dereferenceable pointer (`Zig.undefPtr`), e.g. `page_allocator.ptr`.
-  let undefPtr (t : TyId) : Bool := f.allocatorModel == .translated &&
-    (match f.types[t]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false)
-  let hasUndef (v : Val) : Bool := v.hasUndefExcept undefPtr
+  let hasUndef (v : Val) : Bool := v.hasUndefExcept f.admitsUndefPtr
   let (written, rest) : Option Val × Array Val := match i.op with
     | .store p v => (some v, #[p])
     | .memset p v => (some v, #[p])

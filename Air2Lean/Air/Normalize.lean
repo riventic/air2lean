@@ -416,9 +416,7 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,
            errorSetBits := raw.profile.errorSetBits, allocatorModel := raw.allocatorModel,
-           targetOs := match raw.profile.targetTriple.splitOn "-" with
-             | [_, os, _] => (os.splitOn ".").head!
-             | _ => "" }
+           targetOs := BuildProfile.tripleOs raw.profile.targetTriple }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do

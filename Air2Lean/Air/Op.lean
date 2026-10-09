@@ -289,10 +289,11 @@ inductive Val where
   its base. `Check.lean` rejects it. -/
   | ptrOther (ty : TyId) (kind : String)
   /-- A comptime integer pointer constant (`@ptrFromInt(addr)`, the exporter's `{"unsupported":
-  "int", "off": addr}`), parsed only under `--allocator-model translated`: a pointer without a
-  block at address `addr` (`⟨none, addr⟩`), so every access through it throws `.illegal`. The
-  zero-length allocation sentinel of `mem.Allocator.allocBytesWithAlignment` is one. Std mode
-  keeps it a `ptrOther` (rejected). -/
+  "int", "off": addr}`): a pointer without a block at address `addr` (`⟨none, addr⟩`), so every
+  access through it throws `.illegal`. The zero-length allocation sentinel of
+  `mem.Allocator.allocBytesWithAlignment` is one. Parsed in every mode; only
+  `--allocator-model translated` admits it (`Check.lean`'s `admitIntPtr`), std mode rejects it
+  as a `ptrOther`. -/
   | ptrInt (ty : TyId) (addr : Nat)
   /-- A slice constant. -/
   | sliceConst (ty : TyId) (ptr : Val) (len : Val)

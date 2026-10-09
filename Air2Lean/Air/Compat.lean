@@ -73,6 +73,7 @@ def compatibleGlobalCached (a b : Func) (x y : Nat)
       | .ptrNull i, .ptrNull j => unless ty i j do return none
       | .err i v, .err j w | .errUnionErr i v, .errUnionErr j w
       | .ptrOther i v, .ptrOther j w => unless v == w && ty i j do return none
+      | .ptrInt i v, .ptrInt j w => unless v == w && ty i j do return none
       | .func v n s, .func w m t => unless v == w && n == m && s == t do return none
       | .optSome i v, .optSome j w | .errUnionOk i v, .errUnionOk j w =>
         unless ty i j do return none
