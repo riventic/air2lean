@@ -1402,6 +1402,9 @@ jobs:
           set -euo pipefail
           repo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')
           cd "$repo_root"
+          # check.sh left this host's profile-headed translations in Proofs/<Ex>/Gen.lean (equal to the
+          # committed modules up to the header, AIR2LEAN_CI=1). The receipt binds the committed ones.
+          git checkout -- Proofs
           temp_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")
           lean_executable=$(elan which lean)
           lean_toolchain=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True).parent.parent)' "$lean_executable")
