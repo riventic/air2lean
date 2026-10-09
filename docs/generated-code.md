@@ -430,6 +430,15 @@ One example directory `examples/<ex>/` = one namespace `<Ex>` = one prefix `<ex>
 
 `scripts/check.sh`, `scripts/diff.sh`, and `scripts/mutate.sh` loop over `AIR2LEAN_EXAMPLES` (default: every dir in `examples/`).
 
+### Generated-module integrity
+
+A generated module holds translator output only, so a theorem about it is a theorem about generated code. Never edit one by hand: put a hand-written definition or lemma in a separate module that imports it. `scripts/gen-integrity.py check` (CI, after the translator is built and before `scripts/check.sh` rewrites `Proofs/<Ex>/Gen.lean`) retranslates every tracked generated module (a `Gen.lean`/`Gen-<os>.lean`, or any `.lean` file whose first line is an `-- air2lean-profile:` record) from its committed AIR with the arguments of its own check, and fails on any difference:
+
+- an example's file, for each Zig version of `examples/<ex>/zig-versions` (else every version of `compatibility.json`) and Linux, plus each other OS with its own `air-<os>/` or `Gen-<os>.lean`: the overlays `tests/golden/<ex>/air`, `tests/golden/<v>/<ex>/air`, `tests/golden/<v>/<ex>/air-<os>`, composed as `scripts/check.sh` composes them, translated with `--namespace <Ex> --prefix <ex>.` and `examples/<ex>/translate.args`, must equal the file that `check.sh` compares (above) after its first line. Goldens recorded by several versions/schemas carry no single profile record; `check.sh` validates that line against fresh AIR, and the gate requires it to be a valid record;
+- a roadmap fixture or case study (`FIXTURES` in the script): byte-identical, or after the profile line where its committed AIR predates schema 12 or its own check compares only the body.
+
+A tracked generated module that no rule covers fails. `EXCEPTIONS` lists each reviewed exception with its reason (only the historical `tests/roadmap/try-pointers/origin/TryPointers/Gen.lean`); no Lean module may import one. `scripts/gen-integrity.py attest [PATH ...]` accepts `Proofs/<Ex>/Gen.lean` as the translation of any version/OS of `<ex>`, for consumers that run after `check.sh` has swapped in one version's translation; proof receipts (`tests/roadmap/proof-receipts/check.sh`) and `scripts/theorem-inventory.py record` refuse to run unless it passes.
+
 ### Protocol
 
 One JSONL line per input, `{"ok": v}` / `{"fail": "<kind>"}` / `{"diverge": true}` (`Zig.Result`'s `none` — non-termination), `v` per Zig type:

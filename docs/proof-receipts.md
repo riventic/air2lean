@@ -51,7 +51,11 @@ bash tests/roadmap/proof-receipts/check.sh \
 
 The final argument before the modules is a run-context label, not proof of a target
 profile. Select the intended generated translation before running. A fresh receipt
-always uses the auditor's build path; it does not accept `--no-build`.
+always uses the auditor's build path; it does not accept `--no-build`. Before preparing
+the attempt, `check.sh` runs `scripts/gen-integrity.py attest` (built translator required)
+and stops if a tracked generated module is not a fresh translation of its committed AIR
+([generated-code.md](generated-code.md#generated-module-integrity)); the guarded worker
+binds that script's identity as an input.
 
 Tool, artifact, lock, attempt and receipt paths must be absolute and physical, with no
 symlink components. Every tracked source file is fingerprinted, including dirty/staged

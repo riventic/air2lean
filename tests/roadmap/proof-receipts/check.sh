@@ -29,13 +29,16 @@ case "${AIR2LEAN_RECEIPT_ALLOW_DIRTY:-0}" in
   1) prepare_args+=(--allow-dirty) ;;
   *) echo 'AIR2LEAN_RECEIPT_ALLOW_DIRTY must be 0 or 1' >&2; exit 2 ;;
 esac
+# Refuse to audit generated modules that are not fresh translations of their committed AIR
+# (docs/generated-code.md); the guarded worker binds this script's identity as an input.
+"$python" "$repo_root/scripts/gen-integrity.py" attest > /dev/null
 "$python" "$helper" prepare "$attempt" --toolchain "$toolchain" --profile "$profile" --lock "$lock" ${prepare_args[@]+"${prepare_args[@]}"} --guard "$guard" ${guard_pin[@]+"${guard_pin[@]}"}
 # Preparation has no compiler commands. Guarded worker snapshots again after locking.
 # Absolute physical paths are required by prepare; reuse exactly its recorded values.
 inputs=(--input "$attempt/plan.json")
 for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean \
             scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh \
-            assurance/float-semantics.json scripts/float-semantics.py; do
+            assurance/float-semantics.json scripts/float-semantics.py scripts/gen-integrity.py; do
   inputs+=(--input "$repo_root/$path")
 done
 inputs+=(--input "$guard")
