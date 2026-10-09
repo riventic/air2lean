@@ -195,6 +195,12 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   allocator's state; every wrapper contract then follows. For the page allocator this is
   impossible as stated (atomic locations and dead blocks are outside the heap, and `granted`
   hides the mapping's size): [alloc-page.md](alloc-page.md).
+* Full-state restatement: `FAllocSpec` (`ZigLean/Sep/Full/AllocSpec.lean`,
+  [sep-full-state.md](sep-full-state.md)) has the same entries and conditions over full-state
+  assertions. `FAllocSpec.ofTotal` lifts a total `AllocSpec` of a vtable whose entries are `Tame`
+  (the FixedBufferAllocator: `FBA.fallocSpec`). The page allocator's `free`, `resize` and `remap`
+  are proved against it; its `alloc` is blocked by O4 ([alloc-page.md](alloc-page.md)). The
+  wrapper contracts are still stated over `AllocSpec`.
 
 ## Relation to the legacy models it replaces
 

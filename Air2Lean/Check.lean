@@ -1273,6 +1273,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     unless cx.allocatorModel == .translated do
       cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
     cx.memAccess line ptr
+    -- The pointer checks of every atomic op (vector lanes, C/allowzero pointees), then the
+    -- narrower pointee set of `unordered`.
+    cx.atomicChild line ptr
     let some c := (cx.valTy? ptr).bind (ptrChild cx.types)
       | cx.fail line "an atomic op through a value that is not a pointer"
     unless atomicPtrPointee cx.types cx.layouts c ||
@@ -1561,14 +1564,6 @@ def admitIntPtr (f : Func) (ty : TyId) (addr : Nat) : Bool :=
     | some l => l.hostSize == 0 && !l.isVolatile && !l.sentinel &&
         (match l.ptrAlign with | some a => a != 0 && addr % a == 0 | none => false)
     | none => false)
-
-/-- The pointer operands that `valueOperands` leaves out. -/
-def ptrOperands (op : Op) : Array Val :=
-  match op with
-  | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
-  | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
-  | .cmpxchg _ p .. => #[p]
-  | _ => #[]
 
 /-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
 later read could observe. A store writes undefined bytes: a wholly `undefined` value

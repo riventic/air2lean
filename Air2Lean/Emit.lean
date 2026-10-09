@@ -821,6 +821,9 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
   | some (_, t) => fc.tyOfId t
   | none => .void
 
+/-- The lift of a call to a function that uses memory (`Zig.MemM`). -/
+def FCtx.callMName (fc : FCtx) : String := if fc.conc then "Zig.callMC" else "Zig.callM"
+
 partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : String :=
   match v with
   | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD s!"(panic! \"air2lean: unbound inst {id}\")"
@@ -842,7 +845,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     -- Admitted only under `--allocator-model translated` (`checkUndefOperands`).
     | .ptr "one" .. | .ptr "many" .. =>
       if fc.allocatorModel == .translated then
-        s!"(← {if fc.conc then "Zig.callMC" else "Zig.callM"} Zig.undefPtr)" else "default"
+        s!"(← {fc.callMName} Zig.undefPtr)" else "default"
     | _ => "default"
   | .func name .. => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
@@ -1110,9 +1113,6 @@ def FCtx.instLeanTy (fc : FCtx) (id : InstId) : String :=
 /-- The body monad: `Zig.M` (pure) or `Zig.MM` (uses memory). -/
 def FCtx.monad (fc : FCtx) : String :=
   if fc.conc then "Zig.CM Tgt" else if fc.mem then "Zig.MM" else "Zig.M"
-
-/-- The lift of a call to a function that uses memory (`Zig.MemM`). -/
-def FCtx.callMName (fc : FCtx) : String := if fc.conc then "Zig.callMC" else "Zig.callM"
 
 /-- The lift of a call to a pure function (`Zig.Result`). -/
 def FCtx.callRName (fc : FCtx) : String :=

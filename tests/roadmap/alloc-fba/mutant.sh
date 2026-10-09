@@ -33,4 +33,9 @@ if "${lean_cmd[@]}" -R "$work" "$work/AllocFba/Fba.lean" > "$work/fba.log" 2>&1;
   exit 1
 fi
 grep -q "error" "$work/fba.log"
+# A missing import (an unbuilt prerequisite) is not a rejection of the mutant.
+if grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/fba.log"; then
+  cat "$work/fba.log" >&2; echo "alloc-fba mutant: Fba.lean failed to import, not on the proof" >&2
+  exit 1
+fi
 echo "alloc-fba mutant: rejected (the AllocSpec proof fails for the non-advancing alloc)"

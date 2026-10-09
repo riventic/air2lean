@@ -4,8 +4,8 @@
 # full-state specification: PageSpec.lean, rechecked against the mutated translation, fails. The
 # mutant runs without an error (it only leaks pages), so the token that pins the mapping's size
 # (`PageSpec.tok`) is what rejects it.
-# Needs `lake build ZigLean ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.Full.AllocSpec
-# ZigLean.Sep.Full.Tame`; run from anywhere.
+# Needs `lake build ZigLean ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm
+# ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame`; run from anywhere.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -34,4 +34,9 @@ if "${lean_cmd[@]}" -R "$work" "$work/PageSpec.lean" > "$work/spec.log" 2>&1; th
   exit 1
 fi
 grep -q "error" "$work/spec.log"
+# A missing import (an unbuilt prerequisite) is not a rejection of the mutant.
+if grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/spec.log"; then
+  cat "$work/spec.log" >&2; echo "alloc-translated mutant: PageSpec failed to import, not on the proof" >&2
+  exit 1
+fi
 echo "alloc-translated mutant: rejected (the resize proof fails for the leaking shrink)"

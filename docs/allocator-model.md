@@ -78,10 +78,12 @@ plain global alias), and a field pointer into a tuple-typed local uses the `Prod
 
 ## Exporter requirement
 
-The 0.16.0 exporter on `main` writes `heap.*.vtable` without its initializer and
+Earlier 0.16.0 exporters wrote `heap.*.vtable` without its initializer and
 `mem.Allocator.VTable` as `no_fields` in some files, which the translator rejects
-(`global has no initial value`, `inconsistent shared type 'mem.Allocator'`). The regression
-fixtures were exported with the fix of `codex/alloc-translated-p0` (`provenance.json`).
+(`global has no initial value`, `inconsistent shared type 'mem.Allocator'`). The current
+exporter resolves both (`Compat.ensureNavVal`, `Compat.ensureLayout` in
+`zig-patch/air-json/json.zig`, [air-json.md](air-json.md)); the regression fixtures were
+exported with it (`provenance.json`).
 
 ## Regression and scope
 

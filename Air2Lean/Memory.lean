@@ -171,6 +171,14 @@ def valueOperands (op : Op) : Array Val :=
       | some v => acc.push v
       | none => acc
 
+/-- The pointer operands that `valueOperands` leaves out. -/
+def ptrOperands (op : Op) : Array Val :=
+  match op with
+  | .load p | .store p _ | .fieldPtr p _ | .fieldParentPtr p _ | .retLoad p | .sliceFieldPtr _ p
+  | .bitcast p | .setUnionTag p _ | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _
+  | .cmpxchg _ p .. => #[p]
+  | _ => #[]
+
 /-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
 default (`0`, `false`), so a partly undefined global initializer fails closed. -/
 partial def Val.hasNestedUndef (v : Val) : Bool :=
@@ -477,10 +485,13 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
     | .inst id => (insts.find? (·.id == id)).map (·.ty)
     | v => v.constTy?
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    insts.any fun i => memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.targetArch ||
-      (valueOperands i.op).any Val.pointsToMem ||
-      -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`).
-      (valueOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
+    insts.any fun i =>
+      let values := valueOperands i.op
+      memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.targetArch ||
+      values.any Val.pointsToMem ||
+      -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`);
+      -- `checkUndefOperands` admits it as a pointer operand too.
+      (values ++ ptrOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
       -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
       (match i.op with
        | .bitcast a => ptrLike (some i.ty) && !ptrLike (tyOf a)
