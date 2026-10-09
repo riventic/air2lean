@@ -444,7 +444,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/memory-hardening"
-          lake build ZigLean.Mem.Lemmas 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
+          lake build ZigLean.Mem.Lemmas Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
           for test in tests/roadmap/memory-hardening/*.lean; do
             lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
           done

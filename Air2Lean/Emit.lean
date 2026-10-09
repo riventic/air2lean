@@ -1098,19 +1098,17 @@ def setPath (path : List PathStep) (new : String → String) (base : String) : S
   | .ufield u _ m fresh :: rest =>
     let inner := setPath rest new "x"
     let whole := inner == setPath rest new "y"
+    let modify := s!"({u}.{m} (fun {if whole then "_" else "x"} => {inner}) {base})"
     -- A write that defines the whole payload, or one whole field of a struct payload, of a
     -- union whose retag leaves the payload undefined (MM-13).
     match fresh, rest with
+    | none, _ => modify
     | some (set, _), _ =>
       if whole then s!"({u}.{set} ({inner}) {base})" else
       match fresh, rest with
       | some (_, some setField), [.field k] =>
-        if new "a" == new "b" then s!"({u}.{setField} \"{k}\" (fun x => {inner}) {base})"
-        else s!"({u}.{m} (fun x => {inner}) {base})"
-      | _, _ => s!"({u}.{m} (fun x => {inner}) {base})"
-    | none, _ =>
-      let x := if whole then "_" else "x"
-      s!"({u}.{m} (fun {x} => {inner}) {base})"
+        if new "a" == new "b" then s!"({u}.{setField} \"{k}\" (fun x => {inner}) {base})" else modify
+      | _, _ => modify
 
 /-- The statement that replaces the value `old` at a place by `new old`. -/
 def FCtx.modifyPlace (fc : FCtx) (ptr : Val) (new : String → String) : String :=
