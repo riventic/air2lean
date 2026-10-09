@@ -733,16 +733,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "8ae63117e0c873d2d359b83aa73b7ee6b6611bbf",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:49:57.984663+00:00",
-      "elapsed_seconds": 120.414,
+      "started_utc": "2026-10-09T11:23:21.776244+00:00",
+      "elapsed_seconds": 443.475,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "61d8643dae1d411f68285788ad9a5a9abb656f4f36f1164e1df1d680db90f459",
+      "log_sha256": "46752dd18a49f9417741e1cb09a5cad512c6ea6ae893fae5eba65ae7a2490e47",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -754,7 +754,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811"
+        "Proofs.Floatops.Proofs": "00bba494b4dbd9ee4d9fba8a7244424fc8ec998def4c60932d0c29457683b9c8"
       }
     },
     "committed-linux-all": {
@@ -975,16 +975,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
+        "head": "8ae63117e0c873d2d359b83aa73b7ee6b6611bbf",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-08T11:45:54.829892+00:00",
-      "elapsed_seconds": 85.343,
+      "started_utc": "2026-10-09T11:19:30.692990+00:00",
+      "elapsed_seconds": 159.846,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "03c70400cdd891c3d5233c0f4558239dfa0f2e9a3391c8264b4645d7607a42f2",
+      "log_sha256": "2ba9eb475937acd796be3094a118de19101f023c0692b7809ced5b74e9c3bbce",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -996,7 +996,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811"
+        "Proofs.Floatops.Proofs": "00bba494b4dbd9ee4d9fba8a7244424fc8ec998def4c60932d0c29457683b9c8"
       }
     },
     "0.15.2-linux-floatops": {
@@ -1014,16 +1014,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "8ae63117e0c873d2d359b83aa73b7ee6b6611bbf",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:51:58.602474+00:00",
-      "elapsed_seconds": 0.743,
+      "started_utc": "2026-10-09T11:22:16.213165+00:00",
+      "elapsed_seconds": 6.8,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1da3d4b5d1490b1f93d33eaf23cfbc54e3d75898f4cd2487824e5881ddc9fa3d",
+      "log_sha256": "b0cdda7108e721adaa37ee78302fcbc877678b84633a1360d6346b0eceff1d5a",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1035,7 +1035,7 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811"
+        "Proofs.Floatops.Proofs": "00bba494b4dbd9ee4d9fba8a7244424fc8ec998def4c60932d0c29457683b9c8"
       }
     },
     "c14-sync-contracts-linux": {
@@ -1087,6 +1087,84 @@
         "Proofs.Sync.RwLockSnapshotPair": "cad91260a85215ef4d65b9a2977e68b6dcc5b5f65310c379fe5cc06a4b732cd7",
         "Proofs.Sync.Semaphore": "82ef144eb2b14f8baf55d839b672a4ae76f846e6b096e364731efe7520366fc3",
         "Proofs.Sync.SnapshotCache": "16b259e8d3550da86ef3a3a20331beddb40e53bb517ace02c6b8f914ffa01af9"
+      }
+    },
+    "0.16.0-darwin-floatops": {
+      "zig": "0.16.0",
+      "target": "darwin",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.16.0/floatops/Gen-darwin.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "8ae63117e0c873d2d359b83aa73b7ee6b6611bbf",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-09T11:22:10.691111+00:00",
+      "elapsed_seconds": 5.385,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "b32b15d00690341ebf37fffa53a93ece338929f5481335a4c54cbe067d2e827b",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.16.0/floatops/Gen-darwin.lean",
+          "sha256": "fd3657d7a146571e775b01203e2fb1051121fa67d384b7a2d8226c75418ad586"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "00bba494b4dbd9ee4d9fba8a7244424fc8ec998def4c60932d0c29457683b9c8"
+      }
+    },
+    "0.15.2-darwin-floatops": {
+      "zig": "0.15.2",
+      "target": "darwin",
+      "command": [
+        "python3",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--swap",
+        "floatops=tests/golden/0.15.2/floatops/Gen-darwin.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "8ae63117e0c873d2d359b83aa73b7ee6b6611bbf",
+        "tracked_dirty": true
+      },
+      "started_utc": "2026-10-09T11:22:23.124883+00:00",
+      "elapsed_seconds": 58.524,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "7353e5cd48b6c32c206db2b824b913d1ed37b6aa226037577fd7c16cf5c0af65",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.15.2/floatops/Gen-darwin.lean",
+          "sha256": "0cb16d4f8c73f39e1dd5a6e3d0501bf8029cd32732c5e24af61b29055efb8261"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "00bba494b4dbd9ee4d9fba8a7244424fc8ec998def4c60932d0c29457683b9c8"
       }
     }
   }
