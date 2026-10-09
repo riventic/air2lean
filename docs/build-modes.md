@@ -79,11 +79,9 @@ lands.
 **Fixed.** Forming a pointer outside its allocation (MM-3): LLVM lowers `ptr_add`, `ptr_sub`,
 element, field and `@fieldParentPtr` pointers to `getelementptr inbounds`, and a result outside
 `[base, base+size]` of the allocation is poison. Generated code now forms these pointers with
-`Zig.ptrProject`, which throws `.illegal` there (offset 0 is always allowed). Residual: the
-payload pointer of a pointer-form `try` and of `errunion_payload_ptr_set`
-(`Zig.tryPayloadPtr`, `Zig.errSetOk`) is formed after a checked access to the error code but
-not bounds-checked itself; it leaves the allocation only for an error union pointer that
-addresses a truncated object (a pointer cast), and every access through it is still checked.
+`Zig.ptrProject`, which throws `.illegal` there (offset 0 is always allowed). This includes
+the payload pointer of a pointer-form `try` and of `errunion_payload_ptr_set`
+(`Zig.tryPayloadPtr`, `Zig.errSetOk`).
 
 `scripts/diff.sh` also builds its libm and asm helper archives with `-OReleaseFast`,
 as Zig builds compiler_rt. These are test oracles, not a claimed program build.

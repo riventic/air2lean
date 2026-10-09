@@ -147,6 +147,32 @@ theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
   · cases h; exact ⟨rfl, rfl⟩
   · cases h
 
+/-- An error union's payload is first (offset 0) or follows the 2-byte error code at offset 0. -/
+theorem errUnionOffsets_payload (size align : Nat) :
+    (errUnionOffsets size align).2 = 0 ∨ errUnionOffsets size align = (0, 2) := by
+  unfold errUnionOffsets
+  split
+  · simp
+  · split
+    · simp
+    · have : align = 0 ∨ align = 1 := by omega
+      rcases this with h | h <;> simp [h, alignUp]
+
+/-- Once an access reached the error code of the error union at `p`, its payload pointer is
+formed (`tryPayloadPtr`, `errSetOk`): it is the base, or one past the 2-byte code at the base,
+so it lies in bounds of the code's block. -/
+theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
+    {r : BlockId × Block × Nat}
+    (h : m.access (p.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 a = pure r) :
+    (ptrProject p (errPayloadPtr α)).run m = pure (errPayloadPtr α p, m) := by
+  rcases errUnionOffsets_payload (Enc.size α) (Enc.align α) with h0 | he
+  · have hp : errPayloadPtr α p = p := by simp [errPayloadPtr, h0]
+    rw [hp]; exact ptrProject_same _ hp
+  · obtain ⟨b, blk, o⟩ := r
+    have h' : m.access p 2 a = pure (b, blk, o) := by simpa [he] using h
+    exact ptrProject_run _ rfl (by simpa using inBounds_of_access h' 0 (by omega))
+      (by simpa [errPayloadPtr, he] using inBounds_of_access h' 2 (by omega))
+
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
   simp [writeBytes]; omega

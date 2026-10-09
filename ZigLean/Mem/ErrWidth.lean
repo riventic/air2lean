@@ -172,12 +172,12 @@ def tryPayloadPtrW (bits : Nat) (α : Type) [Enc α] (align : Nat) (p : Ptr) :
     MemM (Except ErrName Ptr) := do
   match ← errCodeBytesAt bits α align p with
   | some e => pure (.error e)
-  | none => pure (.ok (errPayloadPtrW bits α p))
+  | none => .ok <$> ptrProject p (errPayloadPtrW bits α)
 
 def errSetOkW (bits : Nat) (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM Ptr := do
-  let (eo, po) := errUnionOffsetsW bits (Enc.size α) (Enc.align α)
+  let (eo, _) := errUnionOffsetsW bits (Enc.size α) (Enc.align α)
   storeBytes (p.add eo) (Nat.min align (errCodeAlign bits)) (errBytesW bits none)
-  pure (p.add po)
+  ptrProject p (errPayloadPtrW bits α)
 
 def finiteErrIsErrAtW (bits : Nat) (d : ErrorDomain) (α : Type) [Enc α] (align : Nat) (p : Ptr) :
     MemM Bool := do

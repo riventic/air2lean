@@ -149,8 +149,13 @@ provenance-free address, including address zero, is now `.illegal`. Slicing form
 before Sema's `start <= end` check, so an out-of-allocation start is `.illegal` in the model
 where native ReleaseSafe panics (conservative). The audit fixture is an agreement test:
 `oobCompare(1)` is `1` in both, and `oobCompare(2^63)`, `oobPtrCompare(2^63)` are `.illegal`.
-Residual: `Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer after a checked access
-to the error code, without a bounds check of their own (`docs/build-modes.md`).
+`Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer with `ptrProject` too
+(`codex/fix-try-payload-bounds`). For the compiler's layouts the error code access already
+puts it in bounds: the payload is at offset 0 or right after the 2-byte code at offset 0
+(`errPayloadPtr_formed`, `ZigLean/Mem/Lemmas.lean`), so a truncated object reached through a
+pointer cast fails at the code or payload access. The check matters for any other layout, such as
+`errUnionOffsetsW` with a payload alignment that does not divide the code size
+(`tests/roadmap/try-pointers/TryPointers/Runtime.lean`).
 
 Deliberate over-approximations (each `.illegal` where native Zig may be defined; conservative
 for no-illegal proofs, wrong for outcome reports and native diffs): an out-of-allocation result is
@@ -237,7 +242,7 @@ a model change.
 
 **Status: qualified** (`codex/fix-mm-failclosed`). `docs/build-modes.md` lists the open
 exceptions (MM-1/MM-2, MM-5, float `@divExact`) under the premise, and the README sentence
-names them. MM-3 is fixed on the same branch and listed there as fixed, with its residual.
+names them. MM-3 is fixed on the same branch and listed there as fixed.
 
 ### MM-8. Sep exports allocation-order address facts
 
