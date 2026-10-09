@@ -6,7 +6,7 @@ import ExternCalls.Gen
 namespace ExternCalls.Eval
 
 private def successful {α : Type} (r : Zig.Result α) : Option α := Option.bind r Except.toOption
-private def run {α : Type} (m : Zig.MemM α) : Option α := successful (m.run' ExternCalls.mem0)
+private def run {α : Type} (m : Zig.MemM α) : Option α := successful (m.run' (ExternCalls.mem0 .fresh))
 
 -- fillSum 0 7, 4 0, 16 255, 20 -1, 3 258
 #guard run (ExternCalls.fillSum 0#64 7#32) == some 16#32

@@ -46,7 +46,7 @@ CLASSIFIER_DEFS = [
     ('Air2Lean/Memory.lean', 'memoryOp', 'no-op-match'),
     ('Air2Lean/Memory.lean', 'Func.syncLocally', 'no-op-match'),
     ('Air2Lean/Emit.lean', 'emitScalar', 'no-wildcard'),
-    ('Air2Lean/Emit.lean', 'isTerminating', 'no-op-match'),
+    ('Air2Lean/Check.lean', 'isTerminating', 'no-op-match'),
 ]
 
 

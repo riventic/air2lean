@@ -33,7 +33,7 @@ structure Impl where
   unionByte : BitVec 32 → BitVec 64 → MemM (BitVec 8)
 
 def s390x : Impl where
-  mem0 := BigEndian.S390x.mem0
+  mem0 := BigEndian.S390x.mem0 .fresh
   u32ToBytes := BigEndian.S390x.u32ToBytes
   bytesToU32 := BigEndian.S390x.bytesToU32
   i16ToBytes := BigEndian.S390x.i16ToBytes
@@ -53,7 +53,7 @@ def s390x : Impl where
   unionByte := BigEndian.S390x.unionByte
 
 def x86_64 : Impl where
-  mem0 := BigEndian.X64.mem0
+  mem0 := BigEndian.X64.mem0 .fresh
   u32ToBytes := BigEndian.X64.u32ToBytes
   bytesToU32 := BigEndian.X64.bytesToU32
   i16ToBytes := BigEndian.X64.i16ToBytes

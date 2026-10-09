@@ -35,28 +35,19 @@
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 0
   },
   {
    "id": 1,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 1
   },
   {
    "id": 2,
    "tag": "div_ceil_optimized",
    "ty": 0,
-   "args": [
-    {
-     "inst": 0
-    },
-    {
-     "inst": 1
-    }
-   ]
+   "unsupported": true
   },
   {
    "id": 3,

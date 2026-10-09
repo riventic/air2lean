@@ -25,7 +25,7 @@ MUTANTS = {
     'slice-end-unchecked': (r'Zig\.checkSliceEnd \S+ \S+ \S+ \d+ >>= fun _ => ', ''),
     'sentinel-unchecked': (r'Zig\.checkSentinelByte \S+ \S+ \(\d+ : BitVec 8\) >>= fun _ => ', ''),
     'for-length-unchecked': (r'Zig\.call[RM]? \(Zig\.forLen (\(Zig\.len \S+\)|\S+) \S+\)', r'pure \1'),
-    'parent-unchecked': (r'Zig\.checkParent \d+ \d+ \(.*?\) >>= fun _ => ', ''),
+    'parent-unchecked': (r'Zig\.checkParent \d+ \d+ q >>= fun _ => ', ''),
 }
 
 

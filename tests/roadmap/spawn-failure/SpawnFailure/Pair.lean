@@ -336,21 +336,21 @@ theorem joined_of {m : Mem} (h0 : m.threads[0]? = some { spawner := 0, joined :=
 set_option maxHeartbeats 4000000 in
 /-- **`threadPair` meets its contract from any initial budget**, for every resource outcome of
 both spawns. -/
-theorem main_spec (lim : Option Nat) (d : Nat) :
+theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     (proto v).WP 0 (threadPair v) (QM v) (fun _ => .none)
-      { ({ mem0 with spawnLimit := lim } : Mem) with current := 0 } d := by
+      { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } d := by
   unfold threadPair
   have ho₀ : Owned (upd (fun _ => Heap.empty) 0 Heap.empty)
-      { ({ mem0 with spawnLimit := lim } : Mem) with current := 0 } := by
+      { ({ mem0 σ with spawnLimit := lim } : Mem) with current := 0 } := by
     rw [show upd (fun _ => Heap.empty) 0 Heap.empty = (fun _ => Heap.empty) from upd_same _ _]
     exact Owned.start rfl rfl
   -- `left` and `right`.
   refine WP.bind (WP.liftMem_upd (TTriple.alloc .stack 4 4 (by decide)) ho₀ rfl
-    (by show 0 < mem0.threads.size; decide) rfl fun s1 m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)
+    (by show 0 < (mem0 σ).threads.size; simp [mem0, Mem.ofGlobals]) rfl fun s1 m₁ h₁ ho₁ hq₁ hc₁ ht₁ => ?_)
   obtain ⟨Al, hA⟩ := hq₁
   obtain ⟨⟨hl0, hAl⟩, hl⟩ := sep_lift.mp hA
   refine WP.bind (WP.liftMem_upd (alloc_next 4 4 (by decide)) ho₁ hc₁
-    (by rw [ht₁]; show 0 < mem0.threads.size; decide) hl fun s3 m₂ h₂ ho₂ hq₂ hc₂ ht₂ => ?_)
+    (by rw [ht₁]; show 0 < (mem0 σ).threads.size; simp [mem0, Mem.ofGlobals]) hl fun s3 m₂ h₂ ho₂ hq₂ hc₂ ht₂ => ?_)
   obtain ⟨Ar, ⟨hr0, hAr⟩, F₂⟩ := sep_ex_lift hq₂
   have htt₂ : m₂.threads = #[{ spawner := 0, joined := true }] := by rw [ht₂, ht₁]; rfl
   refine WP.bind ?_
@@ -686,21 +686,21 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
 /-- **`threadPair v` meets its declared contract under every schedule, every resource outcome
 and every initial budget**: it returns `v +% (v +% 1)` or a declared spawn error, and every
 child is joined. -/
-theorem threadPair_spec {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
+theorem threadPair_spec {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
     {r : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (threadPair v) { mem0 with spawnLimit := lim }).run =
+    (h : (Sched.run dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run =
       some (.ok (r, m))) :
     (r = .ok (addWrap v (addWrap v 1)) ∨ ∃ e ∈ spawnErrors, r = .error e) ∧ joinedAll 0 m := by
   obtain ⟨_, _, hq⟩ := (proto v).run_sound dispatch (fun _ => .none) dispatch_spec
-    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec lim) h
+    (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ lim) h
   exact hq
 
 /-- **No run of `threadPair v` gives an error**: a refused capture is freed by `main` with no
 race, the errdefer join is valid, and no child outlives the stack it captured. -/
-theorem threadPair_safe {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (threadPair v) { mem0 with spawnLimit := lim }).run ≠
+theorem threadPair_safe {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run dispatch fuel o (threadPair v) { mem0 σ with spawnLimit := lim }).run ≠
       some (.error e) :=
   (proto v).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
-    (main_spec lim)
+    (main_spec σ lim)
 
 end SpawnFailure.Pair

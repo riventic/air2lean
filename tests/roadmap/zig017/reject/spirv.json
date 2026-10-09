@@ -34,19 +34,13 @@
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 0
   },
   {
    "id": 1,
    "tag": "spirv_runtime_array_len",
    "ty": 0,
-   "args": [
-    {
-     "inst": 0
-    }
-   ],
-   "index": 0
+   "unsupported": true
   },
   {
    "id": 2,

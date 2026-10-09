@@ -415,6 +415,18 @@ theorem BytesAt.drop {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf
   have := h.sub i (buf.length - i) (by omega) hi64
   rwa [List.take_of_length_le (by simp)] at this
 
+/-- Forming the pointer to byte `i ≤ buf.length` of `buf` (`ptr_add`, `slice_elem_ptr`; one past
+the end included) succeeds and leaves memory as it is (`ptrProject`, MM-3). -/
+theorem BytesAt.ptrProject_run {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (i : Nat)
+    (hi : i ≤ buf.length) (hi64 : i < 2 ^ 64) :
+    (ptrProject p (·.elem 1 (BitVec.ofNat 64 i))).run m = pure (p.elem 1 (BitVec.ofNat 64 i), m) := by
+  obtain ⟨b, blk, hb, hblk, -, h0, hn, -⟩ := h
+  have hi' : (BitVec.ofNat 64 i).toNat = i := by simp; omega
+  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by simp [Ptr.elem, Ptr.add, hi']
+  have hblock : (p.elem 1 (BitVec.ofNat 64 i)).block = p.block := rfl
+  exact Zig.ptrProject_run (·.elem 1 (BitVec.ofNat 64 i)) hblock (inBounds_of hb hblk h0 (by omega))
+    (inBounds_of (hblock.trans hb) hblk (by rw [hoff]; omega) (by rw [hoff]; omega))
+
 theorem BytesAt.access {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) :
     ∃ b blk, m.access p buf.length 1 = pure (b, blk, p.off.toNat) ∧
       blk.bytes.extract p.off.toNat (p.off.toNat + buf.length) = received buf := by

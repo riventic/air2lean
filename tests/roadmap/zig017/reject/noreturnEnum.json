@@ -34,14 +34,12 @@
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 0
   },
   {
    "id": 1,
    "tag": "unreach",
-   "ty": 1,
-   "args": []
+   "ty": 1
   }
  ],
  "types": [

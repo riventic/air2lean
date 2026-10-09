@@ -15,7 +15,7 @@ def errOf {α : Type} (r : Result α) : Option Error :=
   | some (.error e) => some e
   | _ => none
 
-def memErr {α : Type} (x : MemM α) : Option Error := errOf ((x.run mem0).map Prod.fst)
+def memErr {α : Type} (x : MemM α) : Option Error := errOf ((x.run (mem0 .fresh)).map Prod.fst)
 
 def f64 (bits : Nat) : F64 := Zig.Float.ofBits (BitVec.ofNat 64 bits)
 def one : F64 := f64 0x3FF0000000000000

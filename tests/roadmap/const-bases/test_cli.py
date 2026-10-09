@@ -119,7 +119,7 @@ def main():
                             ("resCodePtr", "(⟨some 0, 20⟩ : Zig.Ptr)")]:
         assert f"def {function}  : Zig.MemM" in text and f"pure (.ret {value})" in text, function
     assert "Zig.load (BitVec 8) 1 (⟨some 0, 24⟩ : Zig.Ptr)" in text
-    assert text.count("Zig.Mem.ofGlobals [") == 1 and "-- 1:" not in text, "a block was invented"
+    assert text.count("Zig.Mem.ofGlobals σ [") == 1 and "-- 1:" not in text, "a block was invented"
     checks += 1
 
     # Unbacked: `@ptrFromInt(0x1000)` as a direct pointer, nested in a constant slice, and as

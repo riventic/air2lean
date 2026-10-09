@@ -123,7 +123,7 @@ theorem readScratch_undefined (σ : Placement) (ext : ExternInit) :
   rw [he]
   simp [h₂, readScratch, load, loadBytes, recordAccess, Mem.access, raceCheck, Mem.solo, raceAt, Enc.decode, Enc.size,
     intSize, intAlign, alignUp, intOfBytes, byteBits, set, MonadStateOf.set, StateT.set,
-    zig_unfold]
+    zig_unfold, decodeLoad, Byte.isPtrFrag]
   rfl
 
 end GlobalInitClients

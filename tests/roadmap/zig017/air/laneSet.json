@@ -35,14 +35,12 @@
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "args": [],
    "param": 0
   },
   {
    "id": 1,
    "tag": "arg",
    "ty": 1,
-   "args": [],
    "param": 1
   },
   {

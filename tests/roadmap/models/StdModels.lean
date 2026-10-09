@@ -86,9 +86,9 @@ def main : IO Unit := do
   -- Version qualification is table data, checked before the typed signature.
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.allocSentinel__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.allocSentinel qualified Zig 0.16.0"
-  -- A row without versions covers only `baseZigVersions`: a newer Zig is listed per row.
+  -- A row qualifies exactly its reviewed versions: a newer Zig is listed per row.
   let qualifies (symbol version : String) : Bool := ((stdModel? symbol).map (·.qualifies version)).getD false
-  for v in baseZigVersions do
+  for v in #["0.14.1", "0.15.2", "0.16.0"] do
     require (qualifies "Thread.Futex.wait" v && qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do

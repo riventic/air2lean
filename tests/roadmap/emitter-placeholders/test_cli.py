@@ -26,7 +26,7 @@ BASE = json.loads((REDUCE / "red.anyLane.json").read_text())
 
 def ptr(child, size="one", align=4):
     return {"k": "ptr", "size": size, "const": False, "child": child, "ptr_align": align,
-            "volatile": False, "allowzero": False, "sentinel": False, "host_size": 0,
+            "volatile": False, "allowzero": False, "address_space": "generic", "sentinel": False, "host_size": 0,
             "abi_size": 8, "abi_align": 8}
 
 
@@ -40,13 +40,13 @@ COMMON = [U32, BOOL, VOID, NORET]
 F32X4 = {"k": "vector", "len": 4, "child": 5, "abi_size": 16, "abi_align": 16}
 F32 = {"k": "float", "bits": 32, "abi_size": 4, "abi_align": 4}
 U32X2 = {"k": "vector", "len": 2, "child": 0, "abi_size": 8, "abi_align": 8}
-STRUCT = {"k": "struct", "name": "probe.S", "layout": "auto",
+STRUCT = {"k": "struct", "name": "probe.S", "module": "root", "layout": "auto",
           "fields": [{"name": "x", "ty": 0, "offset": 0}], "abi_size": 4, "abi_align": 4}
-UNION = {"k": "union", "name": "probe.U", "layout": "extern", "fields": [{"name": "x", "ty": 0}],
+UNION = {"k": "union", "name": "probe.U", "module": "root", "layout": "extern", "fields": [{"name": "x", "ty": 0}],
          "abi_size": 4, "abi_align": 4}
-TAGGED = {"k": "union", "name": "probe.TU", "layout": "auto", "tag": 6,
+TAGGED = {"k": "union", "name": "probe.TU", "module": "root", "layout": "auto", "tag": 6,
           "fields": [{"name": "x", "ty": 0}, {"name": "y", "ty": 0}], "abi_size": 8, "abi_align": 4}
-TAG = {"k": "enum", "name": "probe.T", "tag": 7, "exhaustive": True,
+TAG = {"k": "enum", "name": "probe.T", "module": "root", "tag": 7, "exhaustive": True,
        "fields": [{"name": "x", "value": "0"}, {"name": "y", "value": "1"}], "abi_size": 1, "abi_align": 1}
 U1 = {"k": "int", "signed": False, "bits": 1, "abi_size": 1, "abi_align": 1}
 
@@ -132,7 +132,7 @@ CASES = [
          {"id": 2, "tag": "memset", "ty": 2, "args": [{"inst": 0}, {"inst": 1}]},
          ret(3, VOID_VAL)],
          [ptr(5, size="many", align=1),
-          {"k": "array", "len": 4, "child": 6, "abi_size": 4, "abi_align": 1}, U8]),
+          {"k": "array", "len": 4, "child": 6, "sentinel": False, "abi_size": 4, "abi_align": 1}, U8]),
      "`memset` destination is not a slice or a pointer to an array"),
     ("struct_field_ptr with a field index out of range (offset `getD 0`: the base itself)",
      one_op("fieldPtrIndex", [4], 6, {"tag": "struct_field_ptr", "ty": 6, "args": [{"inst": 0}],
