@@ -1,4 +1,5 @@
 import ZigLean.Sep.AllocSpec.Region
+import ZigLean.Sep.Block
 
 /-!
 # Triples for the other operations of translated allocators and wrappers
@@ -189,5 +190,59 @@ theorem toNat_mul_ofNat {size : Nat} (hs : size < 2 ^ 64) {n : BitVec 64}
   simp [BitVec.toNat_mul, Nat.mod_eq_of_lt hs, Nat.mod_eq_of_lt h]
 
 end Ops
+
+
+/-! ## Coverage of a byte range of a block -/
+
+/-- `h` has every byte `[lo, hi)` of block `b`. -/
+def Covers (b : BlockId) (lo hi : Nat) (h : Heap) : Prop := ∀ i, lo ≤ i → i < hi → h (b, i) ≠ none
+
+/-- `h` owns a byte of block `b`, whose size is `S`. -/
+def Pins (b : BlockId) (S : Nat) (h : Heap) : Prop := ∃ o c, h (b, o) = some c ∧ c.size = S
+
+theorem Pins.union_left {b : BlockId} {S : Nat} {h₁ h₂ : Heap} (h : Pins b S h₁) :
+    Pins b S (h₁ ∪ h₂) := by
+  obtain ⟨o, c, hc, hS⟩ := h; exact ⟨o, c, by simp [hc], hS⟩
+
+theorem regionIn_pins {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {h : Heap}
+    {b : BlockId} (hr : regionIn p A S K a bs h) (hb : p.block = some b) (hpos : 0 < bs.size) :
+    Pins b S h := by
+  obtain ⟨-, -, b', hb', -, hl⟩ := hr
+  rw [hb] at hb'; cases hb'
+  refine ⟨p.off.toNat, ⟨bs[0]!, A, S, K⟩, ?_, rfl⟩
+  rw [hl]; simp [hpos]
+
+/-- Coverage survives a command whose frame keeps a byte `G` of the block: the block stays live
+with its size, so its bytes that the frame does not have are still owned. -/
+theorem TotalTriple.covers {α : Type} {P G : Assn} {c : MemM α} {Q : α → Assn} {b : BlockId}
+    {S lo hi : Nat} (ht : TotalTriple P c Q) (hG : ∀ h, G h → Pins b S h) (hhi : hi ≤ S) :
+    TotalTriple (fun h => (P ∗ G) h ∧ Covers b lo hi h) c
+      (fun v h => (Q v ∗ G) h ∧ Covers b lo hi h) := by
+  intro m hP hF hd hm ⟨hp, hcov⟩ hst
+  obtain ⟨v, m', hQ, hr, hd', hm', hq, hst'⟩ := (TotalTriple.frame (R := G) ht) m hP hF hd hm hp hst
+  refine ⟨v, m', hQ, hr, hd', hm', ⟨hq, ?_⟩, hst'⟩
+  intro i hlo hlt
+  obtain ⟨hq₁, hq₂, hd₁₂, rfl, -, hg⟩ := hq
+  obtain ⟨o, c', hc', hcS⟩ := hG _ hg
+  have hpin : m'.heap (b, o) = some c' := by rw [hm']; simp [Heap.union_of_right (hd₁₂ (b, o) |>.resolve_right (by simp [hc'])), hc']
+  obtain ⟨blk, hblk, hlive, ho, hc⟩ := Mem.heap_some hpin
+  have hsz : blk.bytes.size = S := by rw [← hcS, hc]
+  have hin : m'.heap (b, i) ≠ none := by
+    simp [Mem.heap, hblk, hlive, hsz]; omega
+  have hFi : hF (b, i) = none := (hd (b, i)).resolve_left (hcov i hlo hlt)
+  rw [hm', Heap.union_apply, hFi, Option.or_none] at hin
+  exact hin
+
+/-- `free` of a whole block: its bytes go. -/
+theorem free_whole {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {R : Assn}
+    (hS : bs.size = S) (h0 : p.off = 0) (hpos : 0 < S) :
+    TotalTriple (bytesAt p A S K bs ∗ R) (free p) (fun _ => R) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨h₁, h₂, hd₁₂, rfl, hb, hr⟩ := hp
+  obtain ⟨hd₁F, hd₂F⟩ := Heap.disjoint_union_left.mp hd
+  have hm₁ : m.heap = h₁ ∪ (h₂ ∪ hF) := by rw [hm, Heap.union_assoc]
+  obtain ⟨m', hrun, hm', hst', -⟩ := free_run hb hm₁ (Heap.disjoint_union_right.mpr ⟨hd₁₂, hd₁F⟩)
+    hS h0 hpos hst
+  exact ⟨(), m', h₂, hrun, hd₂F, by rw [hm', Heap.empty_union], hr, hst'⟩
 
 end Zig

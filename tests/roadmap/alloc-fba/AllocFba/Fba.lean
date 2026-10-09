@@ -983,6 +983,205 @@ theorem allocSpec (ctx : Ptr) (B : Buf) : AllocSpec Logic.total impl ctx (inv ct
   remap s k n ra bs _ hn hfit hlen _ := remap_spec ctx B s k n ra bs hn hfit hlen
   free s k ra bs _ hlen _ := free_spec ctx B s k ra bs hlen
 
+/-! ## The allocator around the vtable: grant separation, `init`, release, `reset` -/
+
+/-- Two grants of one fixed buffer have disjoint address ranges: the premise of the copying path
+of `realloc` (`Wrap.realloc_spec`). -/
+theorem grantSep (ctx : Ptr) (B : Buf) (k : Nat) : GrantSep (inv ctx B) k := by
+  intro h p q bs bs' A S A' S' K K' hp hq hh
+  obtain ⟨h₁, h₂, hd, rfl, ⟨g₁, g₂, hd₁, rfl, ⟨-, -, b, hpb, hp0, hl₁⟩, ⟨⟨hpblk, hA, -⟩, -⟩⟩,
+    ⟨g₃, g₄, hd₂, rfl, ⟨-, -, b', hqb, hq0, hl₂⟩, ⟨⟨hqblk, hA', -⟩, -⟩⟩⟩ := hh
+  subst hA hA'
+  have hbb : b' = b := by
+    rw [hpblk, hqblk.symm] at hpb; rw [hpb] at hqb; exact (Option.some.inj hqb).symm
+  subst hbb
+  unfold RangeSep
+  apply Classical.byContradiction
+  intro hc
+  simp only [not_or, Int.not_le] at hc
+  obtain ⟨o, ho1, ho2, ho3⟩ : ∃ o : Nat, p.off.toNat ≤ o ∧ q.off.toNat ≤ o ∧
+      (o = p.off.toNat ∨ o = q.off.toNat) := by
+    rcases Nat.le_total p.off.toNat q.off.toNat with hle | hle
+    · exact ⟨q.off.toNat, hle, Nat.le_refl _, Or.inr rfl⟩
+    · exact ⟨p.off.toNat, Nat.le_refl _, hle, Or.inl rfl⟩
+  have c₁ : g₁ (b', o) ≠ none := by
+    rw [hl₁, if_pos ⟨rfl, ho1, by omega⟩]; simp
+  have c₂ : g₃ (b', o) ≠ none := by
+    rw [hl₂, if_pos ⟨rfl, ho2, by omega⟩]; simp
+  rcases hd (b', o) with e | e
+  · simp only [Heap.union_apply, Option.or_eq_none_iff] at e; exact c₁ e.1
+  · simp only [Heap.union_apply, Option.or_eq_none_iff] at e; exact c₂ e.1
+
+theorem sep_junk {P : Assn} {h : Heap} (hp : P h) : (P ∗ junk) h :=
+  ⟨h, Heap.empty, Heap.disjoint_empty h, by simp, hp, trivial⟩
+
+/-- `init` and a fresh struct: the whole buffer is free. -/
+theorem own_init {ctx : Ptr} {B : Buf} {bufbs pb : Array Byte} {h : Heap}
+    (hcap : bufbs.size = B.cap) (hpb : 0 < pb.size) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64)
+    (h0 : 0 ≤ B.ptr.off) (hpin : B.pin.block = B.ptr.block)
+    (hpo : B.pin.off + pb.size ≤ B.ptr.off ∨ B.ptr.off + B.cap ≤ B.pin.off)
+    (hS : B.ptr.off.toNat + B.cap ≤ B.S)
+    (hh : (state ctx B 0 ∗ (regionIn B.ptr B.A B.S B.K 1 bufbs ∗ regionIn B.pin B.A B.S B.K 1 pb)) h) :
+    own ctx B h := by
+  refine own_intro (e := 0) (tail := bufbs) (pb := pb)
+    ⟨Nat.zero_le _, by omega, hpb, hA, h0, hpin, hpo, hS⟩ ?_
+  unfold body
+  have e0 : B.ptr.add ((0 : Nat) : Int) = B.ptr := by simp [Ptr.add]
+  rw [e0]
+  exact sep_mono (fun _ x => x) (fun _ x => sep_mono (fun _ y => y) (fun _ y => sep_junk y) x) hh
+
+/-- The invariant holds the struct. -/
+theorem own_state {ctx : Ptr} {B : Buf} {h : Heap} (ho : own ctx B h) :
+    ((Assn.ex fun e => state ctx B e) ∗ junk) h := by
+  obtain ⟨e, tail, pb, hb⟩ := ho
+  obtain ⟨-, hb⟩ := sep_lift.mp hb
+  unfold body at hb
+  exact sep_mono (fun _ x => ⟨e, x⟩) (fun _ _ => trivial) hb
+
+/-- The struct is 24 bytes of its block. -/
+theorem state_bytes {ctx : Ptr} {B : Buf} {e : Nat} {h : Heap} (hs : state ctx B e h) :
+    ∃ bs, bs.size = 24 ∧ bytesAt ctx B.cA B.cS B.cK bs h := by
+  obtain ⟨h₁, h₂, hd, rfl, ⟨-, -, bs₁, hs₁, -, hb₁⟩, ⟨-, -, bs₂, hs₂, -, hb₂⟩⟩ := hs
+  have e8 : ctx.add 8 = ctx.add ((bs₁.size : Nat) : Int) := by rw [hs₁]; rfl
+  rw [e8] at hb₂
+  refine ⟨bs₁ ++ bs₂, by simp [hs₁, hs₂]; rfl, Region.bytesAt_append.mp ⟨h₁, h₂, hd, rfl, hb₁, hb₂⟩⟩
+
+theorem getElem!_ofFn {n : Nat} (f : Fin n → Byte) {j : Nat} (hj : j < n) :
+    (Array.ofFn f)[j]! = f ⟨j, hj⟩ := by
+  simp [getElem!_def, hj]
+
+/-- `reset` of an allocator whose every buffer byte is held: the struct, the free tail, the junk
+(padding and bytes that frees leaked) together have the whole buffer, which becomes free again.
+`Covers` is the precondition that no one else holds a byte of the buffer: a client that still
+holds a grant would see its bytes reused, so it has to give them back first. -/
+theorem reset_spec (ctx : Ptr) (B : Buf) {b : BlockId} (hb : B.ptr.block = some b)
+    (hctx : ctx.block ≠ B.ptr.block) :
+    TotalTriple (fun h => own ctx B h ∧ Covers b B.ptr.off.toNat (B.ptr.off.toNat + B.cap) h)
+      (heap_FixedBufferAllocator_reset ctx) (fun _ => own ctx B) := by
+  simp only [heap_FixedBufferAllocator_reset]
+  fba_norm
+  intro m hP hF hd hm ⟨ho, hcov⟩ hst
+  obtain ⟨e, tail, pb, hbd⟩ := ho
+  obtain ⟨hok, hbd⟩ := sep_lift.mp hbd
+  have hok' := hok
+  obtain ⟨he, hts, hpb, hA, h0, hpin, hpo, hS⟩ := hok
+  unfold body at hbd
+  obtain ⟨hs, hr, hdsr, rfl, hst₀, hrest⟩ := hbd
+  obtain ⟨ht, hpj, hdt, rfl, htl, ⟨hpp, hj, hdpj, rfl, hpr, -⟩⟩ := hrest
+  -- the struct's cells are in the struct's block, not the buffer's
+  have hsnb : ∀ o, hs (b, o) = none := by
+    intro o
+    obtain ⟨bs, -, hbs⟩ := state_bytes hst₀
+    obtain ⟨c, hcb, -, hl⟩ := hbs
+    rw [hl]
+    have : b ≠ c := by intro hcb'; subst hcb'; exact hctx (by rw [hcb, hb])
+    simp [this]
+  -- store `0` into `end_index`, keeping the rest of the heap exactly
+  have hrun := (store_end (ctx := ctx) (B := B) (e := e) (R := fun h => h = ht ∪ (hpp ∪ hj)) 0) m
+    (hs ∪ (ht ∪ (hpp ∪ hj))) hF hd hm ⟨hs, _, hdsr, rfl, hst₀, rfl⟩ hst
+  obtain ⟨u, m', hQ, hr, hd', hm', ⟨hs', hr', hdsr', rfl, hst', rfl⟩, hst₁⟩ := hrun
+  refine ⟨u, m', _, by simpa using hr, hd', hm', ?_, hst₁⟩
+  -- the pin fixes the buffer block's address, size and kind in the memory
+  have hpinpos := hpb
+  have hpr0 := hpr
+  obtain ⟨-, hKp, bp, hbp, -, hlp⟩ := hpr0
+  rw [hpin, hb] at hbp; cases hbp
+  have hpp1 : hpp (b, B.pin.off.toNat) = some ⟨pb[0]!, B.A, B.S, B.K⟩ := by
+    rw [hlp]; simp [hpinpos]
+  have hpj1 : (hpp ∪ hj) (b, B.pin.off.toNat) = some ⟨pb[0]!, B.A, B.S, B.K⟩ := by simp [hpp1]
+  have ht1 : ht (b, B.pin.off.toNat) = none :=
+    (hdt (b, B.pin.off.toNat)).resolve_right (by rw [hpj1]; simp)
+  have hpincell : m.heap (b, B.pin.off.toNat) = some ⟨pb[0]!, B.A, B.S, B.K⟩ := by
+    rw [hm]; simp [hsnb, ht1, hpj1]
+  obtain ⟨blk, hblk, hlive, hpo', hpc⟩ := Mem.heap_some hpincell
+  simp only [Cell.mk.injEq] at hpc
+  obtain ⟨-, hbA, hbS, hbK⟩ := hpc
+  let lo := B.ptr.off.toNat
+  let inBuf : Loc → Prop := fun l => l.1 = b ∧ lo ≤ l.2 ∧ l.2 < lo + B.cap
+  -- every buffer cell of the old heap is a cell of the block, with the block's metadata
+  have hcell : ∀ i, i < B.cap → ∃ c, (ht ∪ (hpp ∪ hj)) (b, lo + i) = some c ∧
+      c = ⟨c.byte, B.A, B.S, B.K⟩ := by
+    intro i hi
+    have hne := hcov (lo + i) (by omega) (by omega)
+    have hsn := hsnb (lo + i)
+    simp only [Heap.union_apply, hsn, Option.none_or] at hne
+    obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp hne
+    refine ⟨c, hc, ?_⟩
+    have : m.heap (b, lo + i) = some c := by rw [hm]; simp [hsn, hc]
+    obtain ⟨blk', hblk', -, ho', hc'⟩ := Mem.heap_some this
+    rw [hblk] at hblk'; cases hblk'
+    rw [hc']; simp [hbA, hbS, hbK]
+  -- the tail's cells are buffer cells; the pin's are not
+  have hlo : (B.ptr.off.toNat : Int) = B.ptr.off := Int.toNat_of_nonneg h0
+  have htin : ∀ l, ht l ≠ none → inBuf l := by
+    intro l hl
+    obtain ⟨-, -, bt, hbt, -, hlt⟩ := htl
+    rw [hlt] at hl
+    split at hl
+    · rename_i hc
+      simp only [Ptr.add] at hbt
+      rw [hb] at hbt; cases hbt
+      rw [off_add_nat h0] at hc
+      exact ⟨hc.1, by omega, by omega⟩
+    · exact absurd rfl hl
+  have hpin0 : 0 ≤ B.pin.off := Region.bytesAt_pos_off hpr.2.2
+  have hpout : ∀ l, inBuf l → hpp l = none := by
+    rintro l ⟨-, hl2, hl3⟩
+    obtain ⟨-, -, bq, -, -, hlq⟩ := hpr
+    rw [hlq, if_neg]
+    rintro ⟨-, h2, h3⟩
+    have := Int.toNat_of_nonneg hpin0
+    rcases hpo with hpo | hpo <;> omega
+  let old := ht ∪ (hpp ∪ hj)
+  let bs' : Array Byte := Array.ofFn (n := B.cap) fun i =>
+    match old (b, lo + i.val) with
+    | some c => c.byte
+    | none => .undef
+  let hT : Heap := fun l => if inBuf l then old l else none
+  let hj' : Heap := fun l => if inBuf l then none else hj l
+  have hsplit : old = hT ∪ (hpp ∪ hj') := by
+    funext l
+    show old l = (hT l).or ((hpp l).or (hj' l))
+    by_cases hl : inBuf l
+    · simp only [hT, hj', if_pos hl, hpout l hl, Option.none_or, Option.or_none]
+    · have : ht l = none := Classical.byContradiction fun hne => hl (htin l hne)
+      simp only [hT, hj', if_neg hl, Option.none_or, old, Heap.union_apply, this]
+  have hdj : Heap.Disjoint hT (hpp ∪ hj') := by
+    intro l
+    by_cases hl : inBuf l
+    · right; simp [hj', hl, hpout l hl]
+    · left; simp [hT, hl]
+  have hdpj' : Heap.Disjoint hpp hj' := by
+    intro l; rcases hdpj l with e | e
+    · left; exact e
+    · right; simp only [hj']; split <;> simp [e]
+  have hreg : regionIn (B.ptr.add ((0 : Nat) : Int)) B.A B.S B.K 1 bs' hT := by
+    refine ⟨Nat.mod_one _, hKp, b, by simp [Ptr.add, hb], by simp [Ptr.add]; omega, fun l => ?_⟩
+    obtain ⟨x, y⟩ := l
+    have hoff : (B.ptr.add ((0 : Nat) : Int)).off.toNat = lo := by simp [Ptr.add, lo]
+    rw [hoff]
+    simp only [bs', Array.size_ofFn, hT, inBuf]
+    by_cases hl : x = b ∧ lo ≤ y ∧ y < lo + B.cap
+    · simp only [if_pos hl]
+      obtain ⟨hx, hy1, hy2⟩ := hl
+      subst hx
+      obtain ⟨c, hc, hce⟩ := hcell (y - lo) (by omega)
+      rw [show lo + (y - lo) = y by omega] at hc
+      rw [getElem!_ofFn _ (by omega)]
+      simp only [show lo + (y - lo) = y by omega, hc]
+      have ho : old (x, y) = some c := hc
+      rw [ho]
+      exact congrArg some hce
+    · simp only [if_neg hl]
+  refine own_intro (e := 0) (tail := bs') (pb := pb)
+    ⟨Nat.zero_le _, by simp [bs'], hpb, hA, h0, hpin, hpo, hS⟩ ?_
+  unfold body
+  show (state ctx B 0 ∗ (regionIn (B.ptr.add ((0 : Nat) : Int)) B.A B.S B.K 1 bs' ∗
+    (regionIn B.pin B.A B.S B.K 1 pb ∗ junk))) (hs' ∪ old)
+  rw [hsplit]
+  exact ⟨hs', hT ∪ (hpp ∪ hj'), by rw [← hsplit]; exact hdsr', rfl, hst',
+    hT, hpp ∪ hj', hdj, rfl, hreg, hpp, hj', hdpj', rfl, hpr, trivial⟩
+
 end FBA
 
 end AllocFba
