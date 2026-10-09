@@ -41,6 +41,8 @@ theorem mem1_access {bs : Array Byte} {kind : BlockKind} {o n a : Nat} (hn : o +
   have hle : ((o : Int) + n) ≤ (bs.size : Int) := by omega
   simp [Mem.access, mem1, p0, Ptr.add, blk, hle, ha]
 
+nonvacuity_witness mem1_access := ⟨#[], .heap, 0, 0, 1, Nat.le_refl 0, by decide, trivial⟩
+
 theorem mem1_noRace (bs : Array Byte) (kind : BlockKind) (b o n : Nat) (k : AccessKind) :
     NoRace (mem1 bs kind) b o n k :=
   noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) b o n k

@@ -663,6 +663,18 @@ theorem disjoint_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec
     (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
   exact hv
 
+/-- The `u32` of a run of a function `!u32`, for a statement about it. -/
+def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
+  match r.run with
+  | some (.ok (.ok v, _)) => some v.toNat
+  | _ => none
+
+/-- One schedule completes: under the oracle that always picks option 0, `disjoint 1 2` returns
+3 within fuel 1000. The kernel computes the run. -/
+theorem disjoint_completes :
+    okVal (Sched.run dispatch 1000 (fun _ => 0) (disjoint 1 2) mem0) = some 3 := by
+  decide +kernel
+
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/
 theorem disjoint_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :

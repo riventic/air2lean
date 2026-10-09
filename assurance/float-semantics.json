@@ -13,6 +13,10 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "Proofs.Floatconv.Proofs::bits32_ok.nonvacuous": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "Proofs.Floatconv.Proofs::toByte_allowed": {
       "semantics": "ieee",
       "correspondence": "model"
@@ -33,6 +37,10 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "Proofs.Floatconv.Proofs::toByte_ok.nonvacuous": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "Proofs.Floatconv.Proofs::toByte_overflow_of_finite": {
       "semantics": "ieee",
       "correspondence": "model"
@@ -46,6 +54,10 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::cmp64_nan": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floatops.Proofs::cmp64_nan.nonvacuous": {
       "semantics": "ieee",
       "correspondence": "model"
     },
@@ -92,6 +104,15 @@
       ],
       "correspondence": "model"
     },
+    "Proofs.Floatops.Proofs::op128_other.nonvacuous": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
     "Proofs.Floatops.Proofs::op128_spec": {
       "semantics": "compiler-rt",
       "zig_versions": [
@@ -119,6 +140,15 @@
       ],
       "correspondence": "model"
     },
+    "Proofs.Floatops.Proofs::op16_other.nonvacuous": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
     "Proofs.Floatops.Proofs::op16_spec": {
       "semantics": "compiler-rt",
       "zig_versions": [
@@ -129,6 +159,15 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op32_other": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "Proofs.Floatops.Proofs::op32_other.nonvacuous": {
       "semantics": "compiler-rt",
       "zig_versions": [
         "0.14.1",
@@ -155,6 +194,15 @@
       ],
       "correspondence": "model"
     },
+    "Proofs.Floatops.Proofs::op64_other.nonvacuous": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
     "Proofs.Floatops.Proofs::op64_spec": {
       "semantics": "compiler-rt",
       "zig_versions": [
@@ -165,6 +213,15 @@
       "correspondence": "model"
     },
     "Proofs.Floatops.Proofs::op80_other": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
+    "Proofs.Floatops.Proofs::op80_other.nonvacuous": {
       "semantics": "compiler-rt",
       "zig_versions": [
         "0.14.1",
@@ -200,11 +257,24 @@
       ],
       "correspondence": "model"
     },
+    "Proofs.Floatops.Proofs::opSpec_other.nonvacuous": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2",
+        "0.16.0"
+      ],
+      "correspondence": "model"
+    },
     "Proofs.Floats.Dot::dotTerm_error": {
       "semantics": "ieee",
       "correspondence": "model"
     },
     "Proofs.Floats.Dot::dot_eq_sumLeft": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Dot::dot_eq_sumLeft.nonvacuous": {
       "semantics": "ieee",
       "correspondence": "model"
     },
@@ -276,6 +346,10 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "Proofs.Floats.Proofs::clamp_id.nonvacuous": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "Proofs.Floats.Proofs::clamp_spec": {
       "semantics": "ieee",
       "correspondence": "model"
@@ -312,7 +386,15 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "Proofs.Floats.Proofs::lerp_t0.nonvacuous": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
     "Proofs.Floats.Proofs::lerp_t0_negzero": {
+      "semantics": "ieee",
+      "correspondence": "model"
+    },
+    "Proofs.Floats.Proofs::lerp_t0_negzero.nonvacuous": {
       "semantics": "ieee",
       "correspondence": "model"
     },

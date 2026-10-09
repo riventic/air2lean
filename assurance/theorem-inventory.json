@@ -237,6 +237,7 @@
       "module": "Proofs.Threads.Disjoint",
       "example": "threads",
       "scope": "all-schedules",
+      "completes": "Threads.Disjoint.disjoint_completes",
       "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): every completed run returns `a + b` (wrapping); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -244,7 +245,15 @@
       "module": "Proofs.Threads.Disjoint",
       "example": "threads",
       "scope": "all-schedules",
+      "completes": "Threads.Disjoint.disjoint_completes",
       "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threads.Disjoint.disjoint_completes",
+      "module": "Proofs.Threads.Disjoint",
+      "example": "threads",
+      "scope": "single-schedule",
+      "domain": "`disjoint 1 2` returns 3 under one schedule: the oracle that always picks option 0, fuel 1000, computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.MutexCounter.mutexCounter_spec",
@@ -400,7 +409,15 @@
       "module": "Proofs.Atomics.Relaxed",
       "example": "atomics",
       "scope": "all-schedules",
+      "completes": "mpRelaxed_completes",
       "domain": "`mpRelaxed` (relaxed flag): every completed run returns 0 (a read of 1 races); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness; no safety theorem (runs that race end in an error)"
+    },
+    {
+      "name": "mpRelaxed_completes",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`mpRelaxed` returns 0 under the sequentially consistent schedule (`sched []`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Atomics.Stack.stackPush_spec",
@@ -540,6 +557,7 @@
       "module": "Proofs.Sync.SnapshotCache",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.SnapshotCache.cache_completes",
       "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): every completed run returns 10; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
@@ -547,7 +565,15 @@
       "module": "Proofs.Sync.SnapshotCache",
       "example": "sync",
       "scope": "all-schedules",
+      "completes": "Sync.SnapshotCache.cache_completes",
       "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.SnapshotCache.cache_completes",
+      "module": "Proofs.Sync.SnapshotCache",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "the snapshot-cache client (`stdMain`) returns 10 under one schedule: the oracle that always picks option 0, fuel 1000, computed by the kernel (`decide +kernel`); says nothing about other schedules"
     },
     {
       "name": "Sync.Mailbox.mailbox_spec",
