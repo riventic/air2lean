@@ -8,10 +8,12 @@ and needs no Zig; it is skipped when `.lake/build/bin/air2lean` is absent.
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 sys.dont_write_bytecode = True
@@ -74,6 +76,19 @@ class Mocked(unittest.TestCase):
                 data = self.goal(runner, **kw)
                 self.assertEqual((data['classification'], data['reason']), expected)
                 self.assertFalse(data['is_program_bug_evidence'])
+
+    def test_timeout_kills_the_whole_process_group(self):
+        pidfile = self.root/'child.pid'
+        runner = ('sh', '-c', f'sleep 60 & echo $! > {pidfile}; wait')   # like `lake` forking `lean`
+        out = EVAL.run(self.root, self.gen, '', timeout=2, runner=runner)
+        self.assertEqual(out['status'], 'timeout')
+        pid = int(pidfile.read_text())
+        for _ in range(50):
+            try: os.kill(pid, 0)
+            except ProcessLookupError: break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, 9); self.fail('the evaluator child survived the timeout')
 
     def test_unreplayed_violation_is_only_a_candidate(self):
         data = self.goal(fake_runner('V\t1\t{"ok":1}', 'S\t2\t0\t0\t1'))
