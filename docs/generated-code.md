@@ -159,7 +159,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
 | `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
 | `ptr_elem_val`, `slice_elem_val` | `Zig.load T align (p.elem size i)` (`align`: the pointer's `align(N)`, at most `T`'s alignment). `slice_elem_val` first runs `Zig.checkIndex s i`: an index at or past the length is `.illegal` (`Zig.checkSentinelIndex` for `[:s]T`, whose sentinel item at the length is readable) |
-| `slice`, `slice_ptr`, `slice_len`, `array_to_slice` | `⟨p, len⟩`, `s.ptr`, `s.len`, `⟨p, N⟩` |
+| `slice`, `slice_ptr`, `slice_len`, `array_to_slice` | `⟨p, len⟩`, `s.ptr`, `s.len`, `⟨p, N⟩`. A `slice` of a slice or an array pointer first runs `Zig.checkSliceEnd` (end past the operand's length: `.illegal`), and a `u8` sentinel slicing without Sema's check runs `Zig.checkSentinelByte`. A `slice_len` that nothing reads before a `for` loop is `Zig.forLen len bound` (unequal lengths: `.illegal`) ([illegal-behavior.md](illegal-behavior.md)) |
 | `memset`, `memset_safe` | `Zig.memset (α := T) align p n (some v)`; `none` for `undefined` |
 | `memmove` | `Zig.memmove size dstAlign srcAlign dst src n` (all bytes are read before the first write) |
 | `memcpy` | `Zig.memcpy size dstAlign srcAlign dst src n m` (`m`: the source's item count, `n` if it has none): unequal counts or overlapping ranges are `.illegal`, else `Zig.memmove` |
@@ -240,7 +240,7 @@ unchanged.
 | `@intFromPtr(p)` | `bitcast` pointer → integer | `Zig.ptrAddr p` (the block's address plus the offset) |
 | `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.checkAddr align nonNull a` (address zero for a type without `allowzero`, or a misaligned address: `.illegal`), then `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. A cast to a stricter alignment first runs `Zig.checkAlign align p` (misaligned: `.illegal`). A cast between a vector and another pointee is rejected |
-| `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`; local place: remove the proven terminal struct field |
+| `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`, after `Zig.checkParent` for a parent without a defined layout (no live, aligned parent object there: `.illegal`); local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
 | `@bitCast` of an array, `extern` struct or `extern` union (Zig ≤0.16) | `bitcast` with one on either side | `Zig.reprCast T x`: the memory bytes of `x`, padding undefined, decoded as `T` (`docs/aggregate-casts.md`) |
 | `@ptrCast` `?*T` → `*U`; `@intFromPtr`/`@ptrFromInt` of `?*T` (Zig ≤0.16) | `bitcast` | `Zig.optPtrUnwrap` (null: `.panic`), `Zig.optPtrAddr` (null: 0), `Zig.optPtrFromAddr` (0: null) |

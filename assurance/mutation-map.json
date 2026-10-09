@@ -108,6 +108,10 @@
         {
           "path": "tests/roadmap/illegal-behavior/expected.json",
           "anchor": "pointer cast between a vector and another pointee"
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Cases.lean",
+          "anchor": "check \"forLen 2/3\""
         }
       ],
       "mutants": [
@@ -138,6 +142,26 @@
         },
         {
           "name": "shift-count-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-end-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sentinel-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "for-length-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "parent-unchecked",
           "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         }
@@ -1505,6 +1529,10 @@
         {
           "path": "tests/roadmap/illegal-behavior/expected.json",
           "anchor": "pointer cast between a vector and another pointee"
+        },
+        {
+          "path": "tests/roadmap/illegal-behavior/Cases.lean",
+          "anchor": "check \"forLen 2/3\""
         }
       ],
       "mutants": [
@@ -1540,6 +1568,26 @@
         },
         {
           "name": "shift-count-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-end-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sentinel-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "for-length-unchecked",
+          "path": "tests/roadmap/illegal-behavior/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "parent-unchecked",
           "path": "tests/roadmap/illegal-behavior/mutations.py",
           "category": "other"
         }
