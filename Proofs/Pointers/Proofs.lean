@@ -209,7 +209,7 @@ example :
     (Enc.encode (2 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read) _ _ _ 1 2
   all_goals simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
     Mem.recordAt, alignUp, Enc.size, intSize, intAlign, LawfulEnc.size_encode,
-    hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+    hfull, LawfulEnc.decode_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
 
 example :
     let m := Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]
@@ -223,5 +223,5 @@ example :
     _ _ 4294967295 1
   · simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
       Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
-      hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
+      hfull, LawfulEnc.decode_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide

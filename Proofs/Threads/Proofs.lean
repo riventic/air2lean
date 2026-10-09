@@ -35,7 +35,8 @@ atomic. -/
 theorem noRace_of_atomic {m : Mem} {b : BlockId} {o n : Nat} {k : AccessKind}
     (hk : k.isAtomic = true) (hall : ∀ e ∈ m.footprint, e.block = b → e.kind.isAtomic = true) :
     NoRace m b o n k := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   by_cases hbeq : e.block = b

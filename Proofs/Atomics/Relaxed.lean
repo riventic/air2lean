@@ -488,8 +488,12 @@ theorem read_race {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hc : m.current
     ¬ NoRace m 0 0 (Enc.size (BitVec 32)) .read := by
   obtain ⟨e, he, ht, hb, ho, hl, hk⟩ := hi.wrote (.inr hfin)
   obtain ⟨hw1, hw0⟩ := hi.wr e he ht
+  have hsolo : m.solo = false := by
+    rcases hi.thr with ⟨-, -, ⟨h1, -⟩ | ⟨-, ⟨r, hr, -, hj⟩, -⟩⟩
+    · omega
+    · exact solo_false_of hr hj
   refine race_of he hb (by rw [ho, hl]; decide) (by rw [ho]; decide) ?_ (err := .illegal)
-    (by rw [hk]; rfl)
+    (by rw [hk]; rfl) hsolo
   rw [hc]
   simp only [VClock.concurrent, Bool.and_eq_true, Bool.not_eq_true']
   refine ⟨VClock.le_eq_false (i := 1) ?_, VClock.le_eq_false (i := 0) ?_⟩

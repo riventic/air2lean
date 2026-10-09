@@ -96,7 +96,7 @@ theorem readLimit_from_start (ext : ExternInit) :
     rw [← show (Enc.encode ext.limit).size = 4 from LawfulEnc.size_encode ext.limit]
     exact Array.extract_size
   rw [mem0_eq]
-  simp [readLimit, load, loadBytes, recordAccess, Mem.access, raceAt, Enc.size, intSize,
+  simp [readLimit, load, loadBytes, recordAccess, Mem.access, raceCheck, Mem.solo, raceAt, Enc.size, intSize,
     intAlign, alignUp, LawfulEnc.size_encode, hfull, LawfulEnc.decode_encode, set,
     MonadStateOf.set, StateT.set, zig_unfold]
   exact ⟨_, rfl, rfl⟩
@@ -106,7 +106,7 @@ theorem readLimit_from_start (ext : ExternInit) :
 theorem readScratch_undefined (ext : ExternInit) :
     (readScratch.run (mem0 ext)).run = some (.error .unspecified) := by
   rw [mem0_eq]
-  simp [readScratch, load, loadBytes, recordAccess, Mem.access, raceAt, Enc.decode, Enc.size,
+  simp [readScratch, load, loadBytes, recordAccess, Mem.access, raceCheck, Mem.solo, raceAt, Enc.decode, Enc.size,
     intSize, intAlign, alignUp, intOfBytes, byteBits, set, MonadStateOf.set, StateT.set,
     zig_unfold]
   rfl

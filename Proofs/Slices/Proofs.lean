@@ -93,5 +93,5 @@ example :
   have hnone (a : Array Byte) : a.extract 4 4 = #[] := by simp; omega
   simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
     Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
-    Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set,
+    Array.extract_append, hnone, hfull, LawfulEnc.decode_encode, raceCheck, Mem.solo, raceAt, set, MonadStateOf.set,
     StateT.set, zig_unfold]

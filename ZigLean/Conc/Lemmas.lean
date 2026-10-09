@@ -1157,7 +1157,8 @@ theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
     (h : ∀ e ∈ m.footprint, e.block = b → o < e.off + e.len → e.off < o + len →
       VClock.le e.clock (m.clocks[m.current]!) = true ∨ racePair e.kind k = none) :
     NoRace m b o len k := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   by_cases hb : e.block = b
@@ -1174,14 +1175,29 @@ theorem noRace_of {m : Mem} {b o len : Nat} {k : AccessKind}
       · simp [h1]
   · simp [hb]
 
+/-- A thread that is not joined yet: the race check runs (`Mem.solo` is false). -/
+theorem solo_false_of {m : Mem} {t : ThreadId} {r : ThreadRec} (h : m.threads[t]? = some r)
+    (hj : r.joined = false) : m.solo = false := by
+  unfold Mem.solo
+  have : m.threads.all (·.joined) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro hall
+    obtain ⟨hlt, heq⟩ := Array.getElem?_eq_some_iff.mp h
+    have := (Array.all_eq_true.mp hall) t hlt
+    simp only [heq, hj] at this
+    exact Bool.false_ne_true this
+  simp [this]
+
 /-- An entry of block `b` that overlaps an access, whose clock is concurrent with the thread's
-bumped clock, and that races with it by its kind: the access races. -/
+bumped clock, and that races with it by its kind: the access races (unless `m.solo` skips the
+check, which no reachable memory with a concurrent entry does). -/
 theorem race_of {m : Mem} {b o len : Nat} {k : AccessKind} {e : FootprintEntry}
     (he : e ∈ m.footprint) (hb : e.block = b) (h1 : o < e.off + e.len) (h2 : e.off < o + len)
     (hc : VClock.concurrent e.clock (VClock.bump (m.clocks[m.current]!) m.current) = true)
-    {err : Error} (hr : racePair e.kind k = some err) : ¬ NoRace m b o len k := by
-  unfold NoRace raceAt
-  rw [Array.findSome?_eq_none_iff]
+    {err : Error} (hr : racePair e.kind k = some err) (hs : m.solo = false) :
+    ¬ NoRace m b o len k := by
+  unfold NoRace raceCheck raceAt
+  rw [hs, if_neg (by decide), Array.findSome?_eq_none_iff]
   intro h
   have := h e he
   simp [hb, h1, h2, hc, hr] at this

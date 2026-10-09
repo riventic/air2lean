@@ -80,7 +80,13 @@ invariant on `Mem` (an arbitrary `Mem` value has no such invariant), so a caller
 accesses in one thread (no concurrent access to the same bytes, the common case for the example
 proofs) discharges it directly at each step. -/
 def NoRace (m : Mem) (block : BlockId) (off len : Nat) (kind : AccessKind) : Prop :=
-  raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+  raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none
+
+/-- No footprint entry races with the access: `NoRace`, whether or not `m.solo` skips the scan. -/
+theorem noRace_of_raceAt {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
+    (h : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind = none) :
+    NoRace m block off len kind := by
+  unfold NoRace raceCheck; split <;> simp_all
 
 theorem recordAccess_run {m : Mem} {block : BlockId} {off len : Nat} {kind : AccessKind}
     (hnr : NoRace m block off len kind) :
@@ -246,12 +252,29 @@ theorem singleThread_empty {m : Mem} (hf : m.footprint = #[]) (hc : m.current < 
 
 theorem noRace_of_singleThread {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : NoRace m block off len kind := by
-  unfold NoRace raceAt
+  apply noRace_of_raceAt
+  unfold raceAt
   rw [Array.findSome?_eq_none_iff]
   intro e he
   have ⟨_, hle⟩ := h.2 e he
   have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
   simp [VClock.concurrent, hle']
+
+/-- MM-14: on a single-thread memory, `raceCheck`'s skip changes nothing — the scan it skips
+finds no race either. -/
+theorem raceCheck_eq_raceAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
+    (kind : AccessKind) :
+    raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) block off len kind =
+      raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind := by
+  have hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) block off len kind
+      = none := by
+    unfold raceAt
+    rw [Array.findSome?_eq_none_iff]
+    intro e he
+    have ⟨_, hle⟩ := h.2 e he
+    have hle' := VClock.le_trans hle (VClock.le_bump m.clocks[m.current]! m.current)
+    simp [VClock.concurrent, hle']
+  unfold raceCheck; split <;> simp [hr]
 
 theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
@@ -486,7 +509,7 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     simp only [ExceptT.bindCont, Option.bind_some] at h; cases h
   | some (.ok (b, blk, o)), hacc, h =>
     simp only [ExceptT.bindCont, Option.bind_some] at h
-    generalize hr : raceAt m.footprint (VClock.bump (m.clocks[m.current]!) m.current) b o
+    generalize hr : raceCheck m (VClock.bump (m.clocks[m.current]!) m.current) b o
       (Enc.size α) .read = r at h
     match r, hr, h with
     | some _, _, h =>

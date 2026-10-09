@@ -337,14 +337,28 @@ def raceAt (fp : Array FootprintEntry) (clock : VClock) (block : BlockId) (off l
         VClock.concurrent e.clock clock then racePair e.kind kind
     else none
 
+/-- Only the main thread can run: it is the current thread and every spawned thread has been
+joined. Then no recorded access is concurrent with the current one: the main thread's own
+accesses happened before, and a join merged each joined thread's clock (which covers that
+thread's accesses and, through its own joins, its children's) into the joiner's. -/
+def Mem.solo (m : Mem) : Bool := m.current == 0 && m.threads.all (·.joined)
+
+/-- The race check of `recordAccess`: `raceAt` over the footprint, skipped when `m.solo`. In
+every memory that a run from `Mem.ofGlobals` reaches, `raceAt` is `none` when `m.solo`
+(`raceCheck_eq_raceAt` states it for single-thread memories), so the skip changes no outcome;
+it keeps a single-thread run linear instead of quadratic in its number of accesses (MM-14). -/
+def raceCheck (m : Mem) (clock : VClock) (block : BlockId) (off len : Nat) (kind : AccessKind) :
+    Option Error :=
+  if m.solo then none else raceAt m.footprint clock block off len kind
+
 /-- Record one access at `block`/`off`/`len` by the current thread (`ZigLean/Mem/Thread.lean`),
 checking it against every earlier overlapping access from a concurrent thread (`racePair`, via
-`raceAt`). Throws the race's error before recording anything. -/
+`raceCheck`). Throws the race's error before recording anything. -/
 def recordAccess (block : BlockId) (off len : Nat) (kind : AccessKind) : MemM Unit := do
   let m ← get
   let t := m.current
   let clock := VClock.bump (m.clocks[t]!) t
-  match raceAt m.footprint clock block off len kind with
+  match raceCheck m clock block off len kind with
   | some err => throw err
   | none =>
     set { m with
