@@ -156,19 +156,19 @@ theorem main_spec (io : Io) (d : Nat) :
   rcases h3 with h0 | h1 | h2 <;> simp_all [QPair]
 
 /-- Successful results of the actual exported second client, for every fuel/oracle. -/
-theorem snapshotPair_spec {fuel : Nat} {o : Nat → Nat}
+theorem snapshotPair_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (rwLockSnapshotPair io) mem0).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o (rwLockSnapshotPair io) mem0).run = some (.ok (v, m))) :
     v = .ok 0 ∨ v = .ok 11 ∨ v = .ok 22 := by
-  obtain ⟨_, _, hv, _⟩ := (proto E₀).run_sound dispatch G0 (dispatch_spec spec₀)
+  obtain ⟨_, _, hv, _⟩ := (proto E₀).run_sound env (Proto.of_available henv) dispatch G0 (dispatch_spec spec₀)
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
   exact hv
 
 /-- Strict scheduler safety of the actual exported second client, for every fuel/oracle.
 No fairness or termination is asserted. -/
-theorem snapshotPair_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (rwLockSnapshotPair io) mem0).run ≠ some (.error e) :=
-  (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀)
+theorem snapshotPair_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (rwLockSnapshotPair io) mem0).run ≠ some (.error e) :=
+  (proto E₀).run_safe env (Proto.of_available henv) dispatch G0 rfl (dispatch_spec spec₀)
     (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
 
 end Sync.RwLockSnapshotPair

@@ -15,7 +15,7 @@ def main : IO Unit := do
   let fixtureChoicePeriod := 6
   for seed in List.range fixtureChoicePeriod do
     let oracle := fun turn => seed + turn * 11
-    match (Zig.Sched.run SpawnFailure.dispatch 160 oracle (SpawnFailure.threadPair value) SpawnFailure.mem0).run with
+    match (Zig.Sched.run ⟨.threaded 1, .fallible⟩ SpawnFailure.dispatch 160 oracle (SpawnFailure.threadPair value) SpawnFailure.mem0).run with
     | some (.ok (result, m)) =>
       requireOutcome (cleaned m) "SOURCE_REJECTED: pair cleanup leaked a child/group entry"
       match result with
@@ -28,7 +28,7 @@ def main : IO Unit := do
   requireOutcome (failures.size == 5 && secondFailure)
     "SOURCE_REJECTED: missing failure alternatives or second-spawn cleanup"
   for (oracle, expected) in #[(fun _ : Nat => 0, value), (fun _ : Nat => 1, (0 : BitVec 32))] do
-    match (Zig.Sched.run SpawnFailure.dispatch 100 oracle (SpawnFailure.threadCatch value) SpawnFailure.mem0).run with
+    match (Zig.Sched.run ⟨.threaded 1, .fallible⟩ SpawnFailure.dispatch 100 oracle (SpawnFailure.threadCatch value) SpawnFailure.mem0).run with
     | some (.ok (result, m)) =>
       requireOutcome (result == expected && cleaned m) "SOURCE_REJECTED: captured caller ownership lost"
     | _ => throw (IO.userError "SOURCE_REJECTED: caught spawn did not return safely")

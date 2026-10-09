@@ -151,6 +151,7 @@ def proto : Proto Tgt Gh where
     | .add p => p = cPtr ∧ g = (⟨.out, Heap.empty, Heap.empty⟩, .task false)
   fin g := g.1.ph = .gone ∧ g.2 = .fin
   strict := true
+  spawnFails := true
   joins g := g.1.ph = .out ∧ ((∃ i k, g.2 = .joins i k) ∨ g.2 = .task false)
 
 /-- Join before free: block 0 (the `Counter`, with the read-shared `io`) is freed, and every
@@ -1229,33 +1230,49 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {i k : Nat} (hik : i < k)
 
 /-! ## `main`'s asyncs and joins -/
 
+/-- `main` runs the task itself at its `j`-th async: its own increment. -/
+theorem eager_spec {σ : Type} {s : σ} {j k : Nat} (hj : j < 3) (hk : k ≤ j)
+    {G₁ : ThreadId → Gh} {m₁ : Mem} {d : Nat}
+    (hi₁' : proto.inv (upd G₁ 0 (gSpawn j k)) { m₁ with current := 0 }) :
+    proto.WP 0 ((callC ((fun a => (do discard (add a) : ConcM Tgt Unit)) cPtr) :
+        CM Tgt σ Unit).run s)
+      (fun r G' m' d' => r = ((), s) ∧ d' ≤ d ∧ m'.current = 0 ∧
+        ∃ k' ≤ j + 1, proto.inv (upd G' 0 (gSpawn (j + 1) k')) m') G₁ { m₁ with current := 0 } d := by
+  refine WP.callC ?_
+  show proto.WP 0 ((fun _ => ()) <$> add cPtr) _ G₁ _ d
+  refine WP.map (WP.mono ?_ (add_spec 0 _ _ (incStep_main (k := k) hj) G₁ _ d hi₁' rfl))
+  rintro _ G' m' d' ⟨hd', hc', hi'⟩
+  exact ⟨rfl, hd', hc', k, by omega, hi'⟩
+
 /-- One `Group.async` by `main` at its `j`-th async (`j < 3`, `k` tasks so far), under every
-outcome of the oracle: a thread (task `k + 1`), `main`'s own `add`, or a deferred task (task
-`k + 1`, gated until the `await`). -/
+execution that an environment can pick: a thread (task `k + 1`; on an assignment failure, `main`
+runs the task), `main`'s own `add`, or a deferred task (task `k + 1`, gated until the `await`). -/
 theorem async_spec {σ : Type} {s : σ} {j k : Nat} (hj : j < 3) (hk : k ≤ j) (io : Io)
     {G : ThreadId → Gh} {m : Mem} {d : Nat} (hi : proto.inv (upd G 0 (gSpawn j k)) m) :
     proto.WP 0 ((groupAsyncWithPolicyC .available gPtr io (Tgt.add cPtr)
         ((fun a => (do discard (add a) : ConcM Tgt Unit)) cPtr) : CM Tgt σ Unit).run s)
       (fun r G' m' d' => r = ((), s) ∧ d' < d ∧ m'.current = 0 ∧
         ∃ k' ≤ j + 1, proto.inv (upd G' 0 (gSpawn (j + 1) k')) m') G m d := by
-  refine WP.groupAsyncAvailableC fun k₁ hk₁ => ⟨gSpawn j k, hi, fun G₁ m₁ hg₁ hi₁ c hc3 => ?_⟩
+  refine WP.groupAsyncWithPolicyC fun k₁ hk₁ => ⟨gSpawn j k, hi, fun G₁ m₁ hg₁ hi₁ c hc3 => ?_⟩
   have hi₁' : proto.inv (upd G₁ 0 (gSpawn j k)) { m₁ with current := 0 } := by
     rw [← hg₁, upd_same]; exact fits.cur 0 hi₁ (by rw [hg₁]; exact (by decide : LPh.out ≠ LPh.gone))
+  have heager := eager_spec (s := s) (d := k₁) hj hk hi₁'
   unfold groupAsyncOutcomes at hc3
   rcases (by omega : c = 0 ∨ c = 1 ∨ c = 2) with rfl | rfl | rfl
-  · -- a thread
+  · -- a thread, or `main` when the assignment fails
     rw [groupAsyncOutcomeC, if_pos rfl]
-    refine WP.groupAsyncC fun k₂ hk₂ => ⟨gSpawn j k, hi₁', fun G₂ m₂ hg₂ hi₂ =>
-      ⟨gTask false, ⟨rfl, rfl⟩, fun child m' hf => ?_⟩⟩
-    obtain ⟨rfl, hc', hi'⟩ := inv_spawn hj hi₂ hg₂ hf
-    exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
+    refine WP.groupAsyncCFail fun k₂ hk₂ => ⟨gSpawn j k, hi₁', fun G₂ m₂ hg₂ hi₂ =>
+      ⟨fun _ => ?_, gTask false, ⟨rfl, rfl⟩, fun child m' hf => ?_⟩⟩
+    · have hi₂' : proto.inv (upd G₂ 0 (gSpawn j k)) { m₂ with current := 0 } := by
+        rw [← hg₂, upd_same]
+        exact fits.cur 0 hi₂ (by rw [hg₂]; exact (by decide : LPh.out ≠ LPh.gone))
+      exact WP.mono (fun r G' m' d' ⟨h1, h2, h3, h4⟩ => ⟨h1, by omega, h3, h4⟩)
+        (eager_spec (s := s) (d := k₂) hj hk hi₂')
+    · obtain ⟨rfl, hc', hi'⟩ := inv_spawn hj hi₂ hg₂ hf
+      exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
   · -- `main` runs the task itself
     rw [groupAsyncOutcomeC, if_neg (by decide), if_pos rfl]
-    refine WP.callC ?_
-    show proto.WP 0 ((fun _ => ()) <$> add cPtr) _ G₁ _ k₁
-    refine WP.map (WP.mono ?_ (add_spec 0 _ _ (incStep_main (k := k) hj) G₁ _ k₁ hi₁' rfl))
-    rintro _ G' m' d' ⟨hd', hc', hi'⟩
-    exact ⟨rfl, by omega, hc', k, by omega, hi'⟩
+    exact WP.mono (fun r G' m' d' ⟨h1, h2, h3, h4⟩ => ⟨h1, by omega, h3, h4⟩) heager
   · -- a deferred task
     rw [groupAsyncOutcomeC, if_neg (by decide), if_neg (by decide)]
     refine WP.groupDeferC fun k₂ hk₂ => ⟨gSpawn j k, hi₁', fun G₂ m₂ hg₂ hi₂ =>
@@ -1587,28 +1604,28 @@ theorem main_spec (io : Io) (d : Nat) :
 /-! ## The results -/
 
 /-- **`groupCounter` gives 3 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem groupCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
+theorem groupCounter_spec (env : Env) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run env dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
     v = .ok 3 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (fun _ => rfl) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
   exact hv
 
 /-- **No run of `groupCounter` gives an error**: no data race on the counter, no deadlock at the
 futex or at `Group.await`, no panic, under every schedule. -/
-theorem groupCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (groupCounter io) mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec io)
+theorem groupCounter_safe (env : Env) {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (groupCounter io) mem0).run ≠ some (.error e) :=
+  proto.run_safe env (fun _ => rfl) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec io)
 
 /-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block
 0, `ZigLean/Conc/Share.lean`'s `ReadShared`); `main` frees the block only with every task joined
 and every access to `io` happened before it. The run ends right after the frees, which change no
 thread, clock or footprint entry, so the final memory gives these facts at the free. -/
-theorem groupCounter_reclaim {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+theorem groupCounter_reclaim (env : Env) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
     {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o (groupCounter io) mem0).run = some (.ok (v, m))) :
     joinedAll 0 m ∧ Reclaimed m := by
-  obtain ⟨_, _, -, hq⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, -, hq⟩ := proto.run_sound env (fun _ => rfl) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2.1) rfl (main_spec io) h
   exact hq
 

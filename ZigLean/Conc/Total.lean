@@ -19,10 +19,10 @@ open Zig
 
 /-- Total correctness requires a successful result for every sufficiently large budget.
 The bound may depend on the scheduling oracle; safety is a separate all-fuel property. -/
-def EventuallyReturns {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit)
+def EventuallyReturns {Tgt α : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit)
     (main : ConcM Tgt α) (m : Mem) (Q : α → Mem → Prop) : Prop :=
   ∀ o, ∃ bound, ∀ fuel, bound ≤ fuel →
-    ∃ v m', (Sched.run dispatch fuel o main m).run = some (.ok (v, m')) ∧ Q v m'
+    ∃ v m', (Sched.run env dispatch fuel o main m).run = some (.ok (v, m')) ∧ Q v m'
 
 /-- A useful bounded backoff fragment: expose `n` scheduling opportunities and return.
 Unlike a polling/retry loop, this always decreases its remaining-work measure. -/
@@ -55,9 +55,9 @@ private theorem joined_empty : Conc.Proto.joinedAll 0 ({} : Mem) := by
 
 /-- Each scheduler turn consumes one hint. The induction measure is the remaining
 hint count, independently of the numerical values returned by the oracle. -/
-private theorem go_countdown (n : Nat) :
+private theorem go_countdown (env : Env) (n : Nat) :
     ∀ depth fuel step trace (o : Nat → Nat), n ≤ depth → n + 1 ≤ fuel →
-      (Sched.go (fun _ => pure ()) o fuel (pending n depth step trace)).1 =
+      (Sched.go env (fun _ => pure ()) o fuel (pending n depth step trace)).1 =
         some (.ok ((), ({} : Mem))) := by
   induction n with
   | zero =>
@@ -83,8 +83,8 @@ private theorem go_countdown (n : Nat) :
 
 /-- Completion of bounded backoff, for every oracle and all sufficient fuel.
 The explicit bound follows the decreasing hint count, not an eventual-result premise. -/
-theorem countdown_run (n fuel : Nat) (o : Nat → Nat) (hf : n ≤ fuel) :
-    (Sched.run (fun _ => pure ()) fuel o (countdown n) {}).run =
+theorem countdown_run (env : Env) (n fuel : Nat) (o : Nat → Nat) (hf : n ≤ fuel) :
+    (Sched.run env (fun _ => pure ()) fuel o (countdown n) {}).run =
       some (.ok ((), ({} : Mem))) := by
   cases n with
   | zero =>
@@ -95,11 +95,11 @@ theorem countdown_run (n fuel : Nat) (o : Nat → Nat) (hf : n ≤ fuel) :
     | zero => omega
     | succ fuel =>
       simpa [Sched.run, Sched.runTrace, Sched.settle, countdown_succ_eval, pending]
-        using go_countdown n fuel (fuel + 1) 0 #[] o (by omega) (by omega)
+        using go_countdown env n fuel (fuel + 1) 0 #[] o (by omega) (by omega)
 
-theorem countdown_total (n : Nat) :
-    EventuallyReturns (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) := by
+theorem countdown_total (env : Env) (n : Nat) :
+    EventuallyReturns env (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) := by
   intro o
-  exact ⟨n, fun fuel hf => ⟨(), {}, countdown_run n fuel o hf, rfl⟩⟩
+  exact ⟨n, fun fuel hf => ⟨(), {}, countdown_run env n fuel o hf, rfl⟩⟩
 
 end Zig.Conc.Total

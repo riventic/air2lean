@@ -15,10 +15,10 @@ theorem go_kid (o : Nat → Nat) {f : Nat} {s : Sched.State Tgt Unit} {p : Sched
     (hne : s.ready.isEmpty = false)
     (ht : s.ready[(s.choose o s.ready.size).1]! = 1)
     (hk : s.kids[0]? = some (.paused p)) :
-    (Sched.go dispatch o (f + 1) s).1 =
-      match (Sched.turnTrace dispatch f o 1 (s.choose o s.ready.size).2 p).1 with
+    (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 =
+      match (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 (s.choose o s.ready.size).2 p).1 with
       | .error e => Sched.outOf e
-      | .ok (ts, _, s') => (Sched.go dispatch o f { s' with kids := s'.kids.set! 0 ts }).1 := by
+      | .ok (ts, _, s') => (Sched.go ⟨.any, .available⟩ dispatch o f { s' with kids := s'.kids.set! 0 ts }).1 := by
   rw [Sched.go]
   simp only [hne, Bool.false_eq_true, ↓reduceIte]
   generalize hc : s.choose o s.ready.size = cs at ht ⊢
@@ -34,11 +34,11 @@ theorem go_main (o : Nat → Nat) {f : Nat} {s : Sched.State Tgt Unit} {p : Sche
     (hne : s.ready.isEmpty = false)
     (ht : s.ready[(s.choose o s.ready.size).1]! = 0)
     (hm : s.main = .paused p) :
-    (Sched.go dispatch o (f + 1) s).1 =
-      match (Sched.turnTrace dispatch f o 0 (s.choose o s.ready.size).2 p).1 with
+    (Sched.go ⟨.any, .available⟩ dispatch o (f + 1) s).1 =
+      match (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 0 (s.choose o s.ready.size).2 p).1 with
       | .error e => Sched.outOf e
       | .ok (_, some v, s') => some (.ok (v, s'.mem))
-      | .ok (ts, none, s') => (Sched.go dispatch o f { s' with main := ts }).1 := by
+      | .ok (ts, none, s') => (Sched.go ⟨.any, .available⟩ dispatch o f { s' with main := ts }).1 := by
   rw [Sched.go]
   simp only [hne, Bool.false_eq_true, ↓reduceIte]
   generalize hc : s.choose o s.ready.size = cs at ht ⊢
@@ -74,17 +74,17 @@ abbrev atT (S : Sched.State Tgt Unit) (t : ThreadId) : Sched.State Tgt Unit :=
   { S with mem := { S.mem with current := t } }
 
 theorem tt_start (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
-    (Sched.turnTrace dispatch f o 1 S ⟨d + 1, .yield, fun _ m => dispatch .worker (d + 1) m⟩).1 =
+    (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .yield, fun _ m => dispatch .worker (d + 1) m⟩).1 =
       .ok (workerTS .load d, none, atT S 1) := by
   show Sched.settle 1 (atT S 1) (dispatch .worker (d + 1) (atT S 1).mem) = _
   rw [worker_succ]; rfl
 
 theorem tt_spin (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
-    (Sched.turnTrace dispatch f o 1 S ⟨d + 1, .yield, fun _ m => wSpun (d + 1) m⟩).1 =
+    (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .yield, fun _ m => wSpun (d + 1) m⟩).1 =
       .ok (workerTS .yld d, none, atT S 1) := rfl
 
 theorem tt_yld (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
-    (Sched.turnTrace dispatch f o 1 S ⟨d + 1, .choose 2, fun _ m => wLoop (d + 1) m⟩).1 =
+    (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .choose 2, fun _ m => wLoop (d + 1) m⟩).1 =
       .ok (workerTS .load d, none, ((atT S 1).choose o 2).2) := by
   show Sched.settle 1 ((atT S 1).choose o 2).2 (wLoop (d + 1) (atT S 1).mem) = _
   rw [wLoop_succ]; rfl
@@ -96,10 +96,10 @@ theorem tt_load (o : Nat → Nat) (f d : Nat) {st : Bool} (S : Sched.State Tgt U
     let S₁ := ((atT S 1).choose o (loadCnt (atT S 1).mem)).2
     let c := ((atT S 1).choose o (loadCnt (atT S 1).mem)).1
     ∃ m', ((m'.current = 1 ∧ m'.threads = S.mem.threads ∧ Inv st m') ∧
-      ((Sched.turnTrace dispatch f o 1 S ⟨d + 1, .pick loadCnt, fun c m => wAfter c (d + 1) m⟩).1 =
+      ((Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .pick loadCnt, fun c m => wAfter c (d + 1) m⟩).1 =
         .ok (workerTS .spin d, none, { S₁ with mem := m' }) ∧ ¬ (st = true ∧ c = 0)) ∨
       (∃ m'', m''.threads = S.mem.threads ∧ Inv true m'' ∧ st = true ∧
-        (Sched.turnTrace dispatch f o 1 S ⟨d + 1, .pick loadCnt, fun c m => wAfter c (d + 1) m⟩).1 =
+        (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .pick loadCnt, fun c m => wAfter c (d + 1) m⟩).1 =
           .ok (.done, some (), { S₁ with mem := m'' }))) := by
   intro S₁ c
   have hic : Inv st (atT S 1).mem := hi.cur 1
@@ -107,7 +107,7 @@ theorem tt_load (o : Nat → Nat) (f d : Nat) {st : Bool} (S : Sched.State Tgt U
     (load_noErr hic (by exact (by decide : 1 < 2)) (choice_lt _ _))
   obtain ⟨hc', hth, hi', hv, hnew⟩ := step_load hic rfl hl
   refine ⟨m', ?_⟩
-  have htt : (Sched.turnTrace dispatch f o 1 S ⟨d + 1, .pick loadCnt, fun c m => wAfter c (d + 1) m⟩).1 =
+  have htt : (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .pick loadCnt, fun c m => wAfter c (d + 1) m⟩).1 =
       Sched.settle 1 S₁ (wAfter c (d + 1) (atT S 1).mem) := rfl
   rcases hv with rfl | ⟨rfl, hst, hle⟩
   · left
@@ -133,7 +133,7 @@ theorem tt_load (o : Nat → Nat) (f d : Nat) {st : Bool} (S : Sched.State Tgt U
 theorem tt_store (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) (hi : Inv false S.mem) :
     let S₁ := ((atT S 0).choose o (storeCnt (atT S 0).mem)).2
     ∃ m', m'.threads = S.mem.threads ∧ Inv true m' ∧
-      (Sched.turnTrace dispatch f o 0 S (mainP .store (d + 1))).1 =
+      (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 0 S (mainP .store (d + 1))).1 =
         .ok (.paused (mainP .join d), none, { S₁ with mem := m' }) := by
   intro S₁
   have hic : Inv false (atT S 0).mem := hi.cur 0
@@ -143,18 +143,18 @@ theorem tt_store (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) (hi : 
   cases u
   obtain ⟨-, hth, hi'⟩ := step_store hic rfl hs
   refine ⟨m', hth, hi', ?_⟩
-  have htt : (Sched.turnTrace dispatch f o 0 S (mainP .store (d + 1))).1 = Sched.settle 0 S₁
+  have htt : (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 0 S (mainP .store (d + 1))).1 = Sched.settle 0 S₁
       (mainStore ((atT S 0).choose o (storeCnt (atT S 0).mem)).1 1 (d + 1) (atT S 0).mem) := rfl
   rw [htt, mainStore_succ hs]; rfl
 
 theorem tt_store_zero (o : Nat → Nat) (f : Nat) (S : Sched.State Tgt Unit) (hi : Inv false S.mem) :
-    ∃ e, (Sched.turnTrace dispatch f o 0 S (mainP .store 0)).1 = .error e ∧ e = none := by
+    ∃ e, (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 0 S (mainP .store 0)).1 = .error e ∧ e = none := by
   have hic : Inv false (atT S 0).mem := hi.cur 0
   obtain ⟨u, m', hs⟩ := ok_of (nn_atomicStoreAt
     ((atT S 0).choose o (storeCnt (atT S 0).mem)).1 .release 4 fPtr (1 : BitVec 32))
     (store_noErr hic (by exact (by decide : 0 < 2)) (choice_lt _ _))
   refine ⟨none, ?_, rfl⟩
-  have htt : (Sched.turnTrace dispatch f o 0 S (mainP .store 0)).1 =
+  have htt : (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 0 S (mainP .store 0)).1 =
       Sched.settle 0 ((atT S 0).choose o (storeCnt (atT S 0).mem)).2
       ((CoN.leaf ((atomicStoreAt ((atT S 0).choose o (storeCnt (atT S 0).mem)).1 .release 4 fPtr
         (1 : BitVec 32)).run (atT S 0).mem)).bind fun (a, m') k => syncJoin 1 k m') := rfl
@@ -163,7 +163,7 @@ theorem tt_store_zero (o : Nat → Nat) (f : Nat) (S : Sched.State Tgt Unit) (hi
   rfl
 
 theorem tt_join (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) (hi : Inv true S.mem) :
-    ∃ M, (Sched.turnTrace dispatch f o 0 S (mainP .join d)).1 = .ok (.done, some (), M) := by
+    ∃ M, (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 0 S (mainP .join d)).1 = .ok (.done, some (), M) := by
   have hth : (atT S 0).mem.threads = thr0 := hi.thr
   obtain ⟨m', hj⟩ := join_run (m := (atT S 0).mem) (tid := 1) (rec := { spawner := 0, joined := false })
     (by rw [hth]; rfl) rfl rfl

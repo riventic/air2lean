@@ -702,9 +702,9 @@ theorem main_spec (d : Nat) : proto.WP 0 mpRelaxed QM G0 { mem0 with current := 
 
 /-- **Every result of `mpRelaxed` is 0** (every oracle `o`, every `fuel`): a run where `main`
 reads 1 at the relaxed flag races at `data` and gives no result. -/
-theorem mpRelaxed_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mpRelaxed mem0).run = some (.ok (v, m))) : v = .ok 0 := by
-  obtain ⟨_, _, hv⟩ := proto.run_sound dispatch G0 dispatch_spec
+theorem mpRelaxed_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mpRelaxed mem0).run = some (.ok (v, m))) : v = .ok 0 := by
+  obtain ⟨_, _, hv⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun h => absurd h (by decide)) rfl main_spec h
   exact hv
 

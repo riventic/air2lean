@@ -633,8 +633,8 @@ theorem main_spec (io : Io) (lim : Option Nat) (d : Nat) :
       · rw [upd_ne _ _ h0] at hu; cases hu
     · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]
   -- `Group.async`: every resource outcome, then `Group.await`.
-  refine WP.bind (WP.groupAsyncFallibleC fun k _ => ⟨.main .solo 0 (hX ∪ hGr) B, hi₀,
-    fun G₁ m₅ hg₁ hi₅ c hc _ => WP.mono ?_ (afterAsync_spec (v := v) io B hB c hc hX hGr hdX hxF
+  refine WP.bind (WP.groupAsyncWithPolicyC fun k _ => ⟨.main .solo 0 (hX ∪ hGr) B, hi₀,
+    fun G₁ m₅ hg₁ hi₅ c hc => WP.mono ?_ (afterAsync_spec (v := v) io B hB c hc hX hGr hdX hxF
       ⟨_, enc_group, hgF⟩ rfl (by rw [← hg₁, upd_same]; exact inv_current hi₅ 0))⟩)
   rintro ⟨⟨⟩, s'⟩ G₂ m₆ d₂ ⟨hs', hA₆⟩
   simp only at hs'
@@ -676,21 +676,21 @@ theorem main_spec (io : Io) (lim : Option Nat) (d : Nat) :
 /-- **`groupAsync io v` returns `.ok v` under every schedule, every resource outcome and every
 initial budget**, and joins every thread it spawned. Assigned and fallback executions both
 reach this declared contract (`afterAsync_spec`). -/
-theorem groupAsync_spec {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
+theorem groupAsync_spec (env : Env) (henv : env.spawn = .available) {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
     {r : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (groupAsync io v) { mem0 with spawnLimit := lim }).run =
+    (h : (Sched.run env dispatch fuel o (groupAsync io v) { mem0 with spawnLimit := lim }).run =
       some (.ok (r, m))) :
     r = .ok v ∧ joinedAll 0 m := by
-  obtain ⟨_, _, hq⟩ := (proto v).run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hq⟩ := (proto v).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io lim) h
   exact hq
 
 /-- **No run of `groupAsync io v` gives an error**, for every schedule, resource outcome and
 budget: no race on `out` between the child and `main`, no invalid join, no use after free. -/
-theorem groupAsync_safe {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (groupAsync io v) { mem0 with spawnLimit := lim }).run ≠
+theorem groupAsync_safe (env : Env) (henv : env.spawn = .available) {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (groupAsync io v) { mem0 with spawnLimit := lim }).run ≠
       some (.error e) :=
-  (proto v).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+  (proto v).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec io lim)
 
 end SpawnFailure.Group

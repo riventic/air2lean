@@ -5,12 +5,12 @@ open Zig Zig.Conc.Total
 -- Positive family, not finite-fuel sampling: every finite backoff count completes
 -- for every oracle, and every budget above the proved decreasing-measure bound.
 example (n fuel : Nat) (o : Nat → Nat) (h : n ≤ fuel) :
-    (Sched.run (fun _ => pure ()) fuel o (countdown n) {}).run =
-      some (.ok ((), ({} : Mem))) := countdown_run n fuel o h
+    (Sched.run ⟨.any, .available⟩ (fun _ => pure ()) fuel o (countdown n) {}).run =
+      some (.ok ((), ({} : Mem))) := countdown_run _ n fuel o h
 
-example (n : Nat) :
-    EventuallyReturns (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) :=
-  countdown_total n
+example (env : Env) (n : Nat) :
+    EventuallyReturns env (fun _ => pure ()) (countdown n) {} (fun _ m => m = {}) :=
+  countdown_total env n
 
 -- A hint is still a genuine sync operation. Removing it makes this oracle fail;
 -- a zero budget does not constitute a successful result.

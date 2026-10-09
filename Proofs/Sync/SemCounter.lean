@@ -1398,18 +1398,18 @@ theorem main_spec (io : Io) (d : Nat) :
 /-! ## The results -/
 
 /-- **`semaphoreCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem semaphoreCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+theorem semaphoreCounter_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
     {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (semaphoreCounter io) mem0).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o (semaphoreCounter io) mem0).run = some (.ok (v, m))) :
     v = .ok 4 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec io) h
   exact hv
 
 /-- **No run of `semaphoreCounter` gives an error**: no data race on `n`, no deadlock, no panic,
 under every schedule. -/
-theorem semaphoreCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (semaphoreCounter io) mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
+theorem semaphoreCounter_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (semaphoreCounter io) mem0).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec io)
 
 end Sync.SemCounter

@@ -33,12 +33,12 @@ def boolOf (r : Result (Bool × Mem)) : Option Bool :=
   | _ => none
 
 /-- `tryLock` of a new mutex takes it. -/
-theorem tryLock_new : boolOf (Sched.run dispatch 10 sc (do Io_Mutex_tryLock (← newMutex)) {}) = some true := by
+theorem tryLock_new : boolOf (Sched.run ⟨.any, .available⟩ dispatch 10 sc (do Io_Mutex_tryLock (← newMutex)) {}) = some true := by
   decide +kernel
 
 /-- A second `tryLock` of a taken mutex fails. -/
 theorem tryLock_twice :
-    boolOf (Sched.run dispatch 10 sc (do
+    boolOf (Sched.run ⟨.any, .available⟩ dispatch 10 sc (do
       let p ← newMutex
       let _ ← Io_Mutex_tryLock p
       Io_Mutex_tryLock p) {}) = some false := by
@@ -46,7 +46,7 @@ theorem tryLock_twice :
 
 /-- The only thread waits at a futex that no thread wakes: the run is `.deadlock`. -/
 theorem wait_alone_deadlock :
-    (match (Sched.run dispatch 10 sc (do
+    (match (Sched.run ⟨.any, .available⟩ dispatch 10 sc (do
       let p ← newMutex
       ConcM.sync (Tgt := Tgt) (.wait p 0)) {}).run with
      | some (.error .deadlock) => true
@@ -55,7 +55,7 @@ theorem wait_alone_deadlock :
 
 /-- The futex value differs: the wait goes on. -/
 theorem wait_other_value :
-    (match (Sched.run dispatch 10 sc (do
+    (match (Sched.run ⟨.any, .available⟩ dispatch 10 sc (do
       let p ← newMutex
       ConcM.sync (Tgt := Tgt) (.wait p 1)) {}).run with
      | some (.ok _) => true

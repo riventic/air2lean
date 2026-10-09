@@ -95,20 +95,22 @@ theorem WP.callC {r : ConcM Tgt α} {s : σ} {Q : α × σ → (ThreadId → γ)
   show P.WP t (r >>= fun a => pure (a, s)) Q G m n
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq) h)
 
-/-- `Thread.spawn` of `tgt`: the new thread starts with the ghost value `g₀`. -/
+/-- `Thread.spawn` of `tgt` in a proof for `available` environments (`Proto.spawnFails = false`):
+the new thread starts with the ghost value `g₀`. -/
 theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
       ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
         (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
-        Q (.ok child, s) (upd G₁ child g₀) m' k) :
+        Q (.ok child, s) (upd G₁ child g₀) m' k)
+    (hsf : P.spawnFails = false := by rfl) :
     P.WP t ((spawnC tgt : CM Tgt σ (Except ErrName ThreadId)).run s) Q G m n := by
-  show P.WP t ((ConcM.sync (.spawn tgt) >>= fun a => pure (a, s)) >>= fun p =>
-    pure ((Except.ok p.1 : Except ErrName ThreadId), p.2)) Q G m n
-  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
+  show P.WP t (ConcM.sync (.spawn tgt) >>= fun a => pure (a, s)) Q G m n
+  refine WP.bind (WP.sync fun k hk => ?_)
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
-  exact ⟨g₀, hg₀, fun child m' hf => WP.pure' (WP.pure' (hk' child m' hf))⟩
+  exact ⟨(fun hp => by rw [hsf] at hp; cases hp), g₀, hg₀,
+    fun child m' hf => WP.pure' (hk' child m' hf)⟩
 
 /-- The spawn of a deferred task `tgt` (`SyncOp.spawnGated`, `groupDeferC`): as `WP.spawnC`;
 in strict mode the new thread's ghost value `g₀` satisfies `joins` (it waits at its `gate`). -/
@@ -1944,25 +1946,43 @@ theorem fork_clocks_one {c : Array VClock} {b : VClock} (h : c.size = 1) (u : Na
     exact ⟨x, Array.toList_inj.mp (by simp [hx])⟩
   rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl <;> rfl
 
-/-- `Io.Group.async(g, io, f, args)`: a spawn of `tgt`, which the group at `g` records. -/
-theorem WP.groupAsyncC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
+/-- The thread outcome of `Io.Group.async(g, io, f, args)`: a spawn of `tgt`, which the group at
+`g` records, or, when the environment's assignment fails (a proof with `Proto.spawnFails`), the
+task in the caller (`fallback`). -/
+theorem WP.groupAsyncCFail {g : Ptr} {io : Io} {tgt : Tgt} {fallback : ConcM Tgt Unit} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ gh, P.inv (upd G t gh) m ∧ ∀ G₁ m₁, G₁ t = gh → P.inv G₁ m₁ →
+      (P.spawnFails = true →
+        P.WP t ((Zig.callC fallback : CM Tgt σ Unit).run s) Q G₁ { m₁ with current := t } k) ∧
       ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
         (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
         Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k) :
-    P.WP t ((Zig.groupAsyncC g io tgt : CM Tgt σ Unit).run s) Q G m n := by
+    P.WP t ((Zig.groupAsyncC g io tgt fallback : CM Tgt σ Unit).run s) Q G m n := by
   unfold Zig.groupAsyncC
   simp only [StateT.run_bind]
   refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
   obtain ⟨gh, hi, hc⟩ := h k hk
   refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
-  obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
-  refine ⟨g₀, hg₀, fun child m' hf => WP.pure' ?_⟩
+  obtain ⟨hfail, g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
+  refine ⟨fun hp e => WP.pure' (hfail hp), g₀, hg₀, fun child m' hf => WP.pure' ?_⟩
+  dsimp only
   refine WP.callMC (fun e he => (MemM.modify_err he).elim) fun a m'' hr => ?_
   have := modify_ok hr
   subst this
   exact ⟨rfl, hk' child m' hf⟩
+
+/-- `WP.groupAsyncCFail` in a proof for `available` environments only. -/
+theorem WP.groupAsyncC {g : Ptr} {io : Io} {tgt : Tgt} {fallback : ConcM Tgt Unit} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ gh, P.inv (upd G t gh) m ∧ ∀ G₁ m₁, G₁ t = gh → P.inv G₁ m₁ →
+      ∃ g₀, P.init tgt g₀ ∧ ∀ child m',
+        (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
+        Q ((), s) (upd G₁ child g₀) { m' with groups := m'.groups.push (g, child) } k)
+    (hsf : P.spawnFails = false := by rfl) :
+    P.WP t ((Zig.groupAsyncC g io tgt fallback : CM Tgt σ Unit).run s) Q G m n :=
+  WP.groupAsyncCFail fun k hk => by
+    obtain ⟨gh, hi, hc⟩ := h k hk
+    exact ⟨gh, hi, fun G₁ m₁ hg hi₁ => ⟨(fun hp => by rw [hsf] at hp; cases hp), hc G₁ m₁ hg hi₁⟩⟩
 
 /-- A deferred `Io.Group.async` task (`groupDeferC`): a gated spawn of `tgt`, which the group at
 `g` records; in strict mode the task's ghost value satisfies `joins` (it waits at its `gate`). -/

@@ -23,39 +23,6 @@ memory accounting, or the frequency of native failures. The `available` policy i
 
 namespace Zig
 
-/-- The assigned children of thread `t` that no join has reclaimed. -/
-def Mem.liveChildren (m : Mem) (t : ThreadId) : Nat :=
-  (m.threads.filter fun r => r.spawner == t && !r.joined).size
-
-/-- The current thread may receive another child under `Mem.spawnLimit`. -/
-def Mem.spawnAdmits (m : Mem) : Bool :=
-  match m.spawnLimit with
-  | none => true
-  | some limit => decide (m.liveChildren m.current < limit)
-
-inductive SpawnPolicy where
-  | available
-  | fallible
-  deriving DecidableEq, Repr, Inhabited
-
-/-- The exact declared SpawnError set in std.Thread 0.14.1, 0.15.2, and 0.16.0.
-The model does not predict which platform resource fails or its frequency. -/
-def spawnErrors : Array ErrName :=
-  #["ThreadQuotaExceeded", "SystemResources", "OutOfMemory",
-    "LockedMemoryLimitExceeded", "Unexpected"]
-
-/-- A total lookup; the fallback only covers malformed direct callers. -/
-def spawnErrorAt (choice : Nat) : ErrName := spawnErrors[choice]?.getD "Unexpected"
-
-/-- The oracle range of a resource choice with `total` outcomes, where outcome 0 assigns a
-child: without budget for the caller, outcome 0 is not in the range. -/
-def assignmentCount (total : Nat) (m : Mem) : Nat :=
-  if m.spawnAdmits then total else total - 1
-
-/-- The outcome of oracle choice `c`: without budget, choice `c` means outcome `c + 1`. -/
-def assignmentOutcome (admits : Bool) (c : Nat) : Nat :=
-  if admits then c else c + 1
-
 variable {Tgt σ : Type}
 
 /-- A resource choice among `total` outcomes (outcome 0 assigns a child). The budget is read in
@@ -72,7 +39,8 @@ def spawnOutcomeC (choice : Nat) (target : Tgt) : CM Tgt σ (Except ErrName Thre
 
 /-- The available policy retains the historical proof contract; fallible exposes all
 six outcomes (only the five errors at an exhausted budget), without granting a child protocol
-obligation on failure. -/
+obligation on failure. Independently, the run's environment (`Env.spawn`) can make the
+assignment of `spawnC` itself fail. -/
 def spawnWithPolicyC (policy : SpawnPolicy) (target : Tgt) :
     CM Tgt σ (Except ErrName ThreadId) := do
   match policy with
@@ -88,45 +56,29 @@ runs it in the caller when `async_limit` (default CPU count − 1) tasks are bus
 `single_threaded`, and on a resource failure. -/
 def groupAsyncOutcomes : Nat := 3
 
-/-- Outcome 0 assigns a thread; outcome 1 executes the task in the caller's ConcM, with the
+/-- Outcome 0 assigns a thread (on an assignment failure of the environment, the caller runs the
+task, as `Io.Threaded` does); outcome 1 executes the task in the caller's ConcM, with the
 caller's current thread, clock, and captured pointer provenance (no child, handle, or group
 entry); outcome 2 defers it (`groupDeferC`). -/
 def groupAsyncOutcomeC (choice : Nat) (group : Ptr) (io : Io) (target : Tgt)
     (fallback : ConcM Tgt Unit) : CM Tgt σ Unit :=
-  if choice = 0 then groupAsyncC group io target
+  if choice = 0 then groupAsyncC group io target fallback
   else if choice = 1 then callC fallback
   else groupDeferC group io target
 
-/-- The oracle range of `Group.async` under the `fallible` policy: without budget for the
-caller, only the caller execution (outcome 1) is left; the other two make a model thread. -/
-def asyncCount (m : Mem) : Nat := if m.spawnAdmits then groupAsyncOutcomes else 1
+/-- `Io.Group.async`: the run's environment picks the execution (`SyncOp.asyncChoice`,
+`asyncOptions`: under `AsyncEnv.any` all three, under `Io.Threaded` the caller only once
+`async_limit` tasks may be busy, never deferred). The translation's policy does not change it:
+assignment failure is the environment's (`Env.spawn`).
 
-/-- The outcome of oracle choice `c`: without budget, always the caller execution. -/
-def asyncOutcome (admits : Bool) (c : Nat) : Nat := if admits then c else 1
-
-/-- The budgeted choice of `Group.async` (as `assignmentChoiceC`). -/
-def asyncChoiceC : CM Tgt σ Nat := do
-  let c ← pickC asyncCount
-  let admits ← callMC (do pure (← get).spawnAdmits)
-  pure (asyncOutcome admits c)
-
-/-- `Io.Group.async` under every policy: an oracle choice among the three executions
-(`groupAsyncOutcomes`). The `fallible` policy only adds the budget: at an exhausted budget the
-task runs in the caller (`asyncChoiceC`).
-
-The oracle stands for the decision that `Io.Threaded.groupAsync` makes from its own state
-(`busy_count`, `async_limit`, allocation and `Thread.spawn` results). A translation of
+The environment's choice stands for the decision that `Io.Threaded.groupAsync` makes from its
+own state (`busy_count`, `async_limit`, allocation and `Thread.spawn` results). A translation of
 `Io.Threaded` from its AIR, with only the OS primitives trusted, can replace it: its
 `groupAsync` then makes that decision itself, and each outcome here is one of its paths. -/
-def groupAsyncWithPolicyC (policy : SpawnPolicy) (group : Ptr) (io : Io) (target : Tgt)
-    (fallback : ConcM Tgt Unit) : CM Tgt σ Unit :=
-  match policy with
-  | .available => do
-    let choice ← pickC fun _ => groupAsyncOutcomes
-    groupAsyncOutcomeC choice group io target fallback
-  | .fallible => do
-    let choice ← asyncChoiceC
-    groupAsyncOutcomeC choice group io target fallback
+def groupAsyncWithPolicyC (_policy : SpawnPolicy) (group : Ptr) (io : Io) (target : Tgt)
+    (fallback : ConcM Tgt Unit) : CM Tgt σ Unit := do
+  let choice ← StateT.lift (ConcM.sync (Tgt := Tgt) .asyncChoice)
+  groupAsyncOutcomeC choice group io target fallback
 
 /-- Unlike async, concurrent never runs the task synchronously on failure. -/
 def groupConcurrentOutcomeC (choice : Nat) (group : Ptr) (io : Io) (target : Tgt) :
@@ -151,16 +103,14 @@ theorem monotone_groupAsyncWithPolicyC {γ : Type} [PartialOrder γ]
       (groupAsyncOutcomeC choice group io target (f x) : CM Tgt σ Unit)) := by
     intro choice
     by_cases h0 : choice = 0
-    · simpa only [groupAsyncOutcomeC, if_pos h0] using
-        (monotone_const (groupAsyncC group io target : CM Tgt σ Unit) :
-          monotone (fun _ : γ => (groupAsyncC group io target : CM Tgt σ Unit)))
+    · simp only [groupAsyncOutcomeC, if_pos h0]
+      exact monotone_groupAsyncC group io target f hmono
     by_cases h1 : choice = 1
     · simpa only [groupAsyncOutcomeC, if_neg h0, if_pos h1] using (monotone_callC f hmono)
     · simpa only [groupAsyncOutcomeC, if_neg h0, if_neg h1] using
         (monotone_const (groupDeferC group io target : CM Tgt σ Unit) :
           monotone (fun _ : γ => (groupDeferC group io target : CM Tgt σ Unit)))
-  cases policy <;>
-  · apply monotone_bind _ _ _ (monotone_const _)
-    exact monotone_of_monotone_apply _ hout
+  apply monotone_bind _ _ _ (monotone_const _)
+  exact monotone_of_monotone_apply _ hout
 
 end Zig

@@ -26,7 +26,7 @@ partial def next (keep : Nat) (pre opts : Array Nat) : Option (Array Nat) :=
 
 def runOne (fuel : Nat) (main : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32))) (pre : Array Nat) :
     String × Array Nat :=
-  let (r, opts) := Zig.Sched.runTrace dispatch fuel (fun i => pre.getD i 0) main mem0
+  let (r, opts) := Zig.Sched.runTrace ⟨.any, .available⟩ dispatch fuel (fun i => pre.getD i 0) main mem0
   (render r, opts)
 
 /-- Every combination of the first `depth` choices. -/

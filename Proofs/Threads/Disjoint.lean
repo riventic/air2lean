@@ -655,18 +655,18 @@ theorem main_spec (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ =>
 
 /-- **`disjoint a b` gives `a + b` (wrapping) under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem disjoint_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (disjoint a b) mem0).run = some (.ok (v, m))) :
+theorem disjoint_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o (disjoint a b) mem0).run = some (.ok (v, m))) :
     v = .ok (a + b) := by
-  obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
   exact hv
 
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/
-theorem disjoint_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (disjoint a b) mem0).run ≠ some (.error e) :=
-  (proto a b).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+theorem disjoint_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (disjoint a b) mem0).run ≠ some (.error e) :=
+  (proto a b).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     main_spec
 
 end Threads.Disjoint

@@ -27,31 +27,31 @@ def sched (cs : List Nat) : Nat → Nat := fun i => cs.getD i 0
 
 /-- Store buffering: the sequentially consistent schedule gives `2` (the second thread reads
 the first thread's write). -/
-theorem sb_sc : okVal (Sched.run dispatch 100 (sched []) sbRelaxed mem0) = some 2 := by
+theorem sb_sc : okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched []) sbRelaxed mem0) = some 2 := by
   decide +kernel
 
 /-- Store buffering: both threads read the old value, a result of a weak memory model. -/
 theorem sb_weak :
-    okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) sbRelaxed mem0) =
+    okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) sbRelaxed mem0) =
       some 0 := by
   decide +kernel
 
 /-- 2+2W: both first writes are last in the modification order, a result of a weak memory
 model (`x = 1`, `y = 1`). -/
 theorem twoPlusTwoW_weak :
-    okVal (Sched.run dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) twoPlusTwoW mem0) =
+    okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]) twoPlusTwoW mem0) =
       some 11 := by
   decide +kernel
 
 /-- Message passing: the reader sees the flag and then the data. -/
 theorem mp_sees_data :
-    okVal (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelAcq mem0) = some 42 := by
+    okVal (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 1, 1]) mpRelAcq mem0) = some 42 := by
   decide +kernel
 
 /-- The same schedule with relaxed atomics: the read of the data after the flag is a data race
 (`.illegal`), since the relaxed load gives no happens-before edge. -/
 theorem mpRelaxed_race :
-    (match (Sched.run dispatch 100 (sched [0, 1, 1]) mpRelaxed mem0).run with
+    (match (Sched.run ⟨.any, .available⟩ dispatch 100 (sched [0, 1, 1]) mpRelaxed mem0).run with
       | some (.error .illegal) => true
       | _ => false) = true := by
   decide +kernel

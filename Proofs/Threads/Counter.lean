@@ -2262,19 +2262,19 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt g) (u : Thre
 
 /-- **`parallelCounter n` gives `4 * n` under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem parallelCounter_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
-    {m : Mem} (h : (Sched.run dispatch fuel o (parallelCounter n) mem0).run = some (.ok (v, m))) :
+theorem parallelCounter_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+    {m : Mem} (h : (Sched.run env dispatch fuel o (parallelCounter n) mem0).run = some (.ok (v, m))) :
     v = .ok (4 * n) := by
-  obtain ⟨_, _, hv, -⟩ := (proto n).run_sound dispatch (fun u => if u = 0 then .main 0 [] else .none)
+  obtain ⟨_, _, hv, -⟩ := (proto n).run_sound env (Proto.of_available henv) dispatch (fun u => if u = 0 then .main 0 [] else .none)
     (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
     (main_spec n) h
   exact hv
 
 /-- **No run of `parallelCounter n` gives an error**, under any schedule: no data race, no
 deadlock, no overflow, no other illegal behaviour. -/
-theorem parallelCounter_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (parallelCounter n) mem0).run ≠ some (.error e) :=
-  (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
+theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (parallelCounter n) mem0).run ≠ some (.error e) :=
+  (proto n).run_safe env (Proto.of_available henv) dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
     (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n)
 

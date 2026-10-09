@@ -13,7 +13,7 @@ The no-join fixture is explicitly a model mutation using the real writer and loc
 open Zig Sync
 
 private def snapshotCompleted : Bool :=
-  match (Sched.run dispatch 256 sc (rwLockSnapshotPair {}) mem0).run with
+  match (Sched.run ⟨.any, .available⟩ dispatch 256 sc (rwLockSnapshotPair {}) mem0).run with
   | some (.ok (.ok v, m)) =>
     (v == 0 || v == 11 || v == 22) &&
       m.threads.all (fun r => r.joined) && m.blocks[0]?.any (fun b => !b.live)
@@ -43,7 +43,7 @@ private def snapshotWithoutJoin : ConcM Tgt (BitVec 32) :=
 /-- Reclamation and return cannot hide an unjoined production writer. The scheduler's
 actual end-of-thread lifetime guard rejects the mutation with `.illegal`. -/
 private def snapshotWithoutJoinRejected : Bool :=
-    match (Sched.run dispatch 64 sc snapshotWithoutJoin mem0).run with
+    match (Sched.run ⟨.any, .available⟩ dispatch 64 sc snapshotWithoutJoin mem0).run with
      | some (.error .illegal) => true
      | _ => false
 
@@ -60,7 +60,7 @@ private def snapshotWithSentinel : ConcM Tgt (Except ErrName (BitVec 32) × BitV
 /-- The actual client preserves the caller's literal sentinel; both allocations are freed
 and all threads joined at completion. Never accept a fuel-exhausted or errored witness. -/
 private def snapshotPreservesSentinel : Bool :=
-    match (Sched.run dispatch 256 sc snapshotWithSentinel mem0).run with
+    match (Sched.run ⟨.any, .available⟩ dispatch 256 sc snapshotWithSentinel mem0).run with
      | some (.ok ((.ok v, sentinel), m)) =>
        (v == 0 || v == 11 || v == 22) && sentinel == 73 &&
          m.threads.all (fun r => r.joined) &&

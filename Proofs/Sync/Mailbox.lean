@@ -1147,18 +1147,18 @@ abbrev stdDispatch := dispatch Io_Semaphore_post
 
 /-- **The consumer receives the whole message under every schedule**: every completed run of
 the mailbox client returns 34 (every oracle, every fuel). -/
-theorem mailbox_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run stdDispatch fuel o (stdMain io) mem0).run = some (.ok (v, m))) :
+theorem mailbox_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run env stdDispatch fuel o (stdMain io) mem0).run = some (.ok (v, m))) :
     v = .ok 34 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound stdDispatch G0 (dispatch_spec (semaphore S))
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) stdDispatch G0 (dispatch_spec (semaphore S))
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec (semaphore S) io) h
   exact hv
 
 /-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
 (also when the consumer sleeps at the condition first), no lifetime error at the free. -/
-theorem mailbox_safe {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run stdDispatch fuel o (stdMain io) mem0).run ≠ some (.error e) :=
-  proto.run_safe stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
+theorem mailbox_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env stdDispatch fuel o (stdMain io) mem0).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec (semaphore S)) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec (semaphore S) io)
 
 end Sync.Mailbox

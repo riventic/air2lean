@@ -66,40 +66,9 @@ theorem WP.spawnFallibleC {target : Tgt} {s : σ}
   unfold spawnWithPolicyC
   exact WP.assignmentChoiceC (by decide) h
 
-theorem WP.groupAsyncFallibleC {group : Ptr} {io : Io} {target : Tgt}
-    {fallback : ConcM Tgt Unit} {s : σ}
-    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
-      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∀ c, c < groupAsyncOutcomes →
-        (c ≠ 1 → ({ m₁ with current := t } : Mem).spawnAdmits = true) →
-        P.WP t ((groupAsyncOutcomeC c group io target fallback : CM Tgt σ _).run s)
-          Q G₁ { m₁ with current := t } k) :
-    P.WP t ((groupAsyncWithPolicyC .fallible group io target fallback : CM Tgt σ _).run s)
-      Q G m n := by
-  unfold groupAsyncWithPolicyC Zig.asyncChoiceC
-  simp only [bind_assoc, StateT.run_bind]
-  refine WP.bind (WP.pickC fun k hk => ?_)
-  obtain ⟨g, hi, hb⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => ?_⟩
-  refine WP.bind (WP.callMC (fun e he => by cases he) fun a m' hr => ?_)
-  cases hr
-  refine ⟨rfl, ?_⟩
-  simp only [StateT.run_pure, pure_bind]
-  refine hb G₁ m₁ hg hi₁ _ ?_ ?_
-  · unfold asyncOutcome
-    unfold asyncCount at hc
-    unfold groupAsyncOutcomes at hc ⊢
-    split <;> rename_i ha <;> simp only [ha, if_true, if_false, Bool.false_eq_true] at hc <;> omega
-  · intro h1
-    unfold asyncOutcome at h1
-    split at h1
-    · assumption
-    · exact absurd rfl h1
-
-/-- `Io.Group.async` under the `available` policy: every execution of the task (a thread, the
-caller, deferred) must keep the protocol. -/
-theorem WP.groupAsyncAvailableC {group : Ptr} {io : Io} {target : Tgt}
+/-- `Io.Group.async` under either policy: the environment picks the execution
+(`SyncOp.asyncChoice`), so every execution must keep the protocol. -/
+theorem WP.groupAsyncWithPolicyC {policy : SpawnPolicy} {group : Ptr} {io : Io} {target : Tgt}
     {fallback : ConcM Tgt Unit} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
@@ -107,14 +76,13 @@ theorem WP.groupAsyncAvailableC {group : Ptr} {io : Io} {target : Tgt}
       ∀ c, c < groupAsyncOutcomes →
         P.WP t ((groupAsyncOutcomeC c group io target fallback : CM Tgt σ _).run s)
           Q G₁ { m₁ with current := t } k) :
-    P.WP t ((groupAsyncWithPolicyC .available group io target fallback : CM Tgt σ _).run s)
+    P.WP t ((Zig.groupAsyncWithPolicyC policy group io target fallback : CM Tgt σ _).run s)
       Q G m n := by
-  unfold groupAsyncWithPolicyC
-  refine WP.assignmentChoice fun k hk => ?_
+  unfold Zig.groupAsyncWithPolicyC
+  simp only [StateT.run_bind, StateT.run_lift]
+  refine WP.bind (WP.bind (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hb⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => hb G₁ m₁ hg hi₁ c ?_⟩
-  unfold groupAsyncOutcomes at hc ⊢
-  omega
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
 theorem WP.groupConcurrentFallibleC {group : Ptr} {io : Io} {target : Tgt} {s : σ}
     {Q : Except ErrName Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}

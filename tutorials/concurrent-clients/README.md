@@ -24,8 +24,9 @@ pub fn mutexCounter(io: Io) !u32 {
 ```
 
 The translation is `Sync.mutexCounter` in [`Proofs/Sync/Gen.lean`](../../Proofs/Sync/Gen.lean),
-run by the interleaving scheduler `Sched.run dispatch fuel o`, where the oracle `o` picks the
-next thread at each sync operation. [`Proofs/Sync/Mutex.lean`](../../Proofs/Sync/Mutex.lean)
+run by the interleaving scheduler `Sched.run env dispatch fuel o`, where the oracle `o` picks the
+next thread at each sync operation and `env` is the stated environment (here any `env` whose
+thread assignment succeeds, `env.spawn = .available`). [`Proofs/Sync/Mutex.lean`](../../Proofs/Sync/Mutex.lean)
 proves, for every oracle and fuel, `mutexCounter_spec` (a finished run returns `.ok 4`) and
 `mutexCounter_safe` (no run ends in an error: no data race, no deadlock at the futex, no
 panic).
@@ -46,8 +47,9 @@ the value fixed by `mutexCounter_spec`.
 Prove that no schedule loses an increment, so no finished run returns 3:
 
 ```lean
-theorem never_three (io : Io) (fuel : Nat) (o : Nat → Nat) (m : Mem) :
-    (Sched.run dispatch fuel o (mutexCounter io) mem0).run ≠ some (.ok (.ok 3, m))
+theorem never_three (env : Env) (henv : env.spawn = .available) (io : Io) (fuel : Nat)
+    (o : Nat → Nat) (m : Mem) :
+    (Sched.run env dispatch fuel o (mutexCounter io) mem0).run ≠ some (.ok (.ok 3, m))
 ```
 
 A solution is in [`Solution.lean`](Solution.lean).

@@ -36,9 +36,9 @@ FILES = {
         namespace Conc
         /-- **`main` gives 0 under every schedule**. -/
         theorem main_spec {fuel : Nat} {o : Nat → Nat} {v : Nat}
-            (h : (Sched.run dispatch fuel o main mem0).run = some v) : v = 0 := sorry
+            (h : (Sched.run env dispatch fuel o main mem0).run = some v) : v = 0 := sorry
         /-- One schedule. -/
-        theorem main_sc : okVal (Sched.run dispatch 100 (sched []) main mem0) = some 0 := by
+        theorem main_sc : okVal (Sched.run env dispatch 100 (sched []) main mem0) = some 0 := by
           decide +kernel
         end Conc
         ''',

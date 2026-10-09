@@ -215,8 +215,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-01 — Interleaving scheduler and partial-correctness meaning
 
 - Kind: meaning.
-- Statement: `Zig.Sched.run dispatch fuel o main m0` interleaves threads only at sync ops.
-  The oracle `o` picks each turn. A data race between plain code is `.illegal`. A spec
+- Statement: `Zig.Sched.run env dispatch fuel o main m0` interleaves threads only at sync ops.
+  The environment `env : Zig.Env` is explicit in every statement: `env.io` (`Io.Threaded` on
+  a stated CPU count, or any `Io` implementation) and `env.spawn` (assignment `available` or
+  `fallible`); `Sched.run` has no default. The oracle `o` picks each turn. A data race between plain code is `.illegal`. A spec
   constrains every completed result for every oracle and fuel; out of fuel is `none`. No
   fairness or termination follows unless a theorem states it (see SEM-04, THR-07).
 - Derived from: `ZigLean.Conc.Basic`, `ZigLean.Conc.Call`, `ZigLean.Conc.Sched`; implied by every THR premise.
@@ -226,8 +228,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-02 — Thread spawn/join with the `available` policy
 
 - Kind: environment.
-- Statement: `Thread.spawn` is a sync op that always succeeds under the default `available`
-  policy. It copies the argument tuple and gives the child a copy of the parent clock. `join`
+- Statement: `Thread.spawn` is a sync op that always succeeds in an `available` environment
+  (`env.spawn = .available`, a hypothesis of each theorem that needs it; in a `fallible`
+  environment it may return a declared error). It copies the argument tuple and gives the child a copy of the parent clock. `join`
   waits for the child and merges its clock. Only the spawner may join, once. An unjoined
   child at thread end is `.illegal`. The child protocol obligation (`spawnInit`) is explicit.
 - Derived from: `ZigLean.Conc.Sched`; tokens `spawnC`, `joinC`, `spawnInit`.
@@ -237,8 +240,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-03 — Fallible thread assignment policy
 
 - Kind: environment.
-- Statement: The opt-in `fallible` policy adds the declared spawn errors and the `Io.Group`
-  caller-execution fallback. The per-caller budget `Mem.spawnLimit` (default none) removes
+- Statement: The opt-in `fallible` translation policy adds explicit oracle wrappers with the
+  declared spawn errors; a `fallible` environment (`Env.spawn`) lets every assignment fail. The per-caller budget `Mem.spawnLimit` (default none) removes
   assignment from the oracle range while the caller's live children reach it. WP rules must
   cover every oracle outcome.
 - Derived from: `ZigLean.Conc.Spawn`, `ZigLean.Conc.SpawnLemmas`; tokens `SpawnPolicy`, `WithPolicyC`,

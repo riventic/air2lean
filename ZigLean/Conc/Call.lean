@@ -83,10 +83,10 @@ def cmpxchgWeakAsC {α : Type} {n : Nat} [Packed α n] (succ fail : AtomicOrder)
   let c ← pickC (weakCasCount n succ align p (Packed.toBits expected))
   callMC (cmpxchgWeakAs c succ fail align p expected new)
 
-/-- `Thread.spawn` with environment permission that assignment is available (`docs/std-models.md` §Thread model). -/
-def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) := do
-  let tid ← StateT.lift (ConcM.sync (.spawn t))
-  pure (.ok tid)
+/-- `Thread.spawn`: a new thread, or a declared error when the run's environment lets assignment
+fail (`Env.spawn`, `docs/std-models.md` §Thread model). -/
+def spawnC (t : Tgt) : CM Tgt σ (Except ErrName ThreadId) :=
+  StateT.lift (ConcM.sync (.spawn t))
 
 /-- `Thread.join`: waits until thread `tid` ends. -/
 def joinC (tid : ThreadId) : CM Tgt σ Unit := StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.join tid)))
@@ -127,14 +127,17 @@ A task of a group that gets its own thread is a model thread: the group records 
 (`Mem.groups`), and `Group.await` joins each task of the group. `Group.async` does not promise a
 thread: std runs the task in the caller or defers it until `await`, so the generated code calls
 `groupAsyncWithPolicyC` (`ZigLean/Conc/Spawn.lean`), an oracle choice among `groupAsyncC` (a
-thread), the caller (eager) and `groupDeferC` (deferred). The available policy assumes that
-`Group.concurrent` gets a thread; the model never cancels, so `Group.cancel` is `await`. -/
+thread), the caller (eager) and `groupDeferC` (deferred), which the run's environment picks
+(`Env`). When the environment's assignment fails (`SpawnPolicy.fallible`), `Group.async` runs
+the task in the caller and `Group.concurrent` returns `ConcurrencyUnavailable`. The model never
+cancels, so `Group.cancel` is `await`. -/
 
 /-- One outcome of `Io.Group.async(g, io, function, args)`: the task `t` runs as a new thread of
 the group. -/
-def groupAsyncC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ Unit := do
-  let tid ← StateT.lift (ConcM.sync (.spawn t))
-  callMC (Thread.groupAdd g tid)
+def groupAsyncC (g : Ptr) (_ : Io) (t : Tgt) (fallback : ConcM Tgt Unit) : CM Tgt σ Unit := do
+  match ← StateT.lift (ConcM.sync (.spawn t)) with
+  | .ok tid => callMC (Thread.groupAdd g tid)
+  | .error _ => callC fallback
 
 /-- One outcome of `Io.Group.async`: the task `t` is deferred until the group's `await` or
 `cancel` (`SyncOp.spawnGated`): a thread of the group that starts only once `Thread.groupTake`
@@ -143,11 +146,14 @@ def groupDeferC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ Unit := do
   let tid ← StateT.lift (ConcM.sync (.spawnGated t))
   callMC (Thread.groupAdd g tid)
 
-/-- `Io.Group.concurrent`: as `async` (a spawn never fails, `error.ConcurrencyUnavailable` does
-not happen). -/
-def groupConcurrentC (g : Ptr) (io : Io) (t : Tgt) : CM Tgt σ (Except ErrName Unit) := do
-  groupAsyncC g io t
-  pure (.ok ())
+/-- `Io.Group.concurrent`: a thread of the group, or `error.ConcurrencyUnavailable` when the
+environment's assignment fails (`SpawnPolicy.fallible`). -/
+def groupConcurrentC (g : Ptr) (_ : Io) (t : Tgt) : CM Tgt σ (Except ErrName Unit) := do
+  match ← StateT.lift (ConcM.sync (.spawn t)) with
+  | .ok tid =>
+    callMC (Thread.groupAdd g tid)
+    pure (.ok ())
+  | .error _ => pure (.error "ConcurrencyUnavailable")
 
 /-- `Io.Group.await`: joins each task of the group, in the order of their spawn. -/
 def groupAwaitC (g : Ptr) (_ : Io) : CM Tgt σ (Except ErrName Unit) := do
@@ -215,6 +221,18 @@ theorem monotone_callC {γ : Type} [PartialOrder γ] (f : γ → ConcM Tgt α) (
   intro s
   show monotone (fun x => (f x) >>= fun a => pure (a, s))
   exact monotone_bind _ _ _ hmono (monotone_const _)
+
+@[partial_fixpoint_monotone]
+theorem monotone_groupAsyncC {γ : Type} [PartialOrder γ] (g : Ptr) (io : Io) (t : Tgt)
+    (f : γ → ConcM Tgt Unit) (hmono : monotone f) :
+    monotone (fun x => (groupAsyncC g io t (f x) : CM Tgt σ Unit)) := by
+  unfold groupAsyncC
+  apply monotone_bind _ _ _ (monotone_const _)
+  apply monotone_of_monotone_apply
+  intro r
+  cases r with
+  | ok tid => exact monotone_const _
+  | error e => exact monotone_callC f hmono
 
 @[partial_fixpoint_monotone]
 theorem monotone_callMC {γ : Type} [PartialOrder γ] (f : γ → MemM α) (hmono : monotone f) :

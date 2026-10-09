@@ -6,6 +6,12 @@ deriving instance DecidableEq for Except
 
 namespace ConcurrencyRegression
 
+/-- A spawn that this test expects to succeed (an `available` environment). -/
+private def spawnT {T : Type} (t : T) : ConcM T ThreadId := do
+  match ← ConcM.sync (.spawn t) with
+  | .ok tid => pure tid
+  | .error _ => throw .panic
+
 private def check [DecidableEq α] [Repr α] (name : String) (actual expected : α) : IO Unit :=
   unless actual = expected do
     throw (IO.userError s!"{name}: expected {reprStr expected}, got {reprStr actual}")
@@ -20,7 +26,7 @@ private def select (pick diverge : Bool) : ConcM Unit Nat := do
   else pure 7
 
 private def childMain : ConcM Unit Nat := do
-  let tid ← ConcM.sync (.spawn ())
+  let tid ← spawnT ()
   let _ ← ConcM.sync (.join tid)
   pure 7
 
@@ -48,13 +54,13 @@ private def traceTests : IO Unit := do
   for pick in [false, true] do
     for diverge in [false, true] do
       let label := s!"pick={pick}, diverge={diverge}"
-      let run := fun o => Sched.runTrace (fun _ => pure ()) 20 o (select pick diverge) {}
+      let run := fun o => Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 20 o (select pick diverge) {}
       let (r, trace) := run fun _ => 0
       check ("main trace " ++ label) trace #[1, 2]
       check ("main failure " ++ label) (value r)
         (if diverge then none else some (.error .panic))
       check ("main search " ++ label) (search run (some (.ok 7))) (some (.ok 7))
-      let runChild := fun o => Sched.runTrace (fun _ => select pick diverge *> pure ())
+      let runChild := fun o => Sched.runTrace ⟨.any, .available⟩ (fun _ => select pick diverge *> pure ())
         20 o childMain {}
       let (r, trace) := runChild fun _ => 0
       check ("child trace " ++ label) trace #[1, 1, 1, 2]
@@ -67,7 +73,7 @@ private def catches (op : SyncOp Unit) : ConcM Unit Nat :=
 
 private def catchTests : IO Unit := do
   let run := fun (fuel : Nat) (x : ConcM Unit Nat) =>
-    value (Sched.runTrace (fun _ => pure ()) fuel (fun _ => 0) x {}).1
+    value (Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) fuel (fun _ => 0) x {}).1
   check "immediate catch" (run 10 (tryCatch (throw .panic) (fun _ => pure 7))) (some (.ok 7))
   for op in [SyncOp.yield, .choose 2, .pick fun _ => 2] do
     check "catch after sync" (run 10 (catches op)) (some (.ok 7))
@@ -86,7 +92,7 @@ private def catchTests : IO Unit := do
     (fun _ => pure 7)
   check "nested catches" (run 10 nested) (some (.ok 7))
   let joined : ConcM Unit Nat := tryCatch
-    (do let tid ← ConcM.sync (.spawn ())
+    (do let tid ← spawnT ()
         let _ ← ConcM.sync (.join tid)
         throw .panic)
     (fun _ => pure 7)
@@ -103,7 +109,7 @@ private def catchTests : IO Unit := do
     (fun _ => ConcM.liftMem (do pure (← get).allocs))
   check "immediate segment state recovery" (run 10 rollback) (some (.ok 0))
   let shared : ConcM Unit Nat := do
-    let tid ← ConcM.sync (.spawn ())
+    let tid ← spawnT ()
     let v ← tryCatch
       (do let _ ← ConcM.sync .yield
           ConcM.liftMem (modify fun m => { m with allocs := 99 })
@@ -114,7 +120,7 @@ private def catchTests : IO Unit := do
   let dispatch : Unit → ConcM Unit Unit := fun _ =>
     ConcM.liftMem (modify fun m => { m with allocs := 42 })
   check "catch keeps another thread changes"
-    (value (Sched.runTrace dispatch 10 (fun i => if i = 1 then 1 else 0) shared {}).1)
+    (value (Sched.runTrace ⟨.any, .available⟩ dispatch 10 (fun i => if i = 1 then 1 else 0) shared {}).1)
     (some (.ok 42))
   -- Scheduler-origin failures occur before the successful sync continuation;
   -- the structural catch handles thread errors but cannot intercept these.
@@ -127,27 +133,27 @@ private def catchTests : IO Unit := do
 
 private def joinTests : IO Unit := do
   let run := fun (x : ConcM Unit Unit) =>
-    value (Sched.runTrace (fun _ => pure ()) 20 (fun _ => 0) x {}).1
+    value (Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 20 (fun _ => 0) x {}).1
   for tid in [0, 99] do
     check "invalid join" (run (ConcM.sync (.join tid))) (some (.error .illegal))
   let repeated : ConcM Unit Unit := do
-    let tid ← ConcM.sync (.spawn ())
+    let tid ← spawnT ()
     let _ ← ConcM.sync (.join tid)
     ConcM.sync (.join tid)
   check "repeated join" (run repeated) (some (.error .illegal))
   let wrongOwner : ConcM Nat Unit := do
-    let _ ← ConcM.sync (.spawn 2)
-    let _ ← ConcM.sync (.spawn 0)
+    let _ ← spawnT 2
+    let _ ← spawnT 0
     ConcM.sync (.join 1)
   let dispatch : Nat → ConcM Nat Unit := fun tid =>
     if tid = 0 then pure () else ConcM.sync (.join tid)
   check "wrong owner of live child"
-    (value (Sched.runTrace dispatch 20 (fun _ => 0) wrongOwner {}).1)
+    (value (Sched.runTrace ⟨.any, .available⟩ dispatch 20 (fun _ => 0) wrongOwner {}).1)
     (some (.error .illegal))
   let valid : ConcM Unit Unit := do
-    let tid ← ConcM.sync (.spawn ())
+    let tid ← spawnT ()
     ConcM.sync (.join tid)
-  let (r, trace) := Sched.runTrace (fun _ => do let _ ← ConcM.sync .yield; pure ())
+  let (r, trace) := Sched.runTrace ⟨.any, .available⟩ (fun _ => do let _ ← ConcM.sync .yield; pure ())
     20 (fun _ => 0) valid {}
   check "valid live child join" (value r) (some (.ok ()))
   check "valid join waits for child" trace #[1, 1, 1, 1]

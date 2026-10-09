@@ -686,21 +686,21 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
 /-- **`threadPair v` meets its declared contract under every schedule, every resource outcome
 and every initial budget**: it returns `v +% (v +% 1)` or a declared spawn error, and every
 child is joined. -/
-theorem threadPair_spec {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
+theorem threadPair_spec (env : Env) (henv : env.spawn = .available) {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
     {r : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (threadPair v) { mem0 with spawnLimit := lim }).run =
+    (h : (Sched.run env dispatch fuel o (threadPair v) { mem0 with spawnLimit := lim }).run =
       some (.ok (r, m))) :
     (r = .ok (addWrap v (addWrap v 1)) ∨ ∃ e ∈ spawnErrors, r = .error e) ∧ joinedAll 0 m := by
-  obtain ⟨_, _, hq⟩ := (proto v).run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hq⟩ := (proto v).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec lim) h
   exact hq
 
 /-- **No run of `threadPair v` gives an error**: a refused capture is freed by `main` with no
 race, the errdefer join is valid, and no child outlives the stack it captured. -/
-theorem threadPair_safe {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (threadPair v) { mem0 with spawnLimit := lim }).run ≠
+theorem threadPair_safe (env : Env) (henv : env.spawn = .available) {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (threadPair v) { mem0 with spawnLimit := lim }).run ≠
       some (.error e) :=
-  (proto v).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+  (proto v).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec lim)
 
 end SpawnFailure.Pair

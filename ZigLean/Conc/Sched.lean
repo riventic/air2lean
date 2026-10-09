@@ -4,11 +4,15 @@ import ZigLean.Mem.Thread
 /-!
 # The scheduler
 
-`Zig.Sched.run dispatch fuel o main m0` runs the concurrent function `main` and every thread it
+`Zig.Sched.run env dispatch fuel o main m0` runs the concurrent function `main` and every thread it
 spawns, from the memory `m0`, and gives the result of `main`. Threads take turns at sync ops
 (`ZigLean/Conc/Basic.lean`): at each turn the oracle `o` picks one of the threads that can go
 on, the scheduler does that thread's op, and the thread runs to its next stop.
 
+- **Environment** (`Env`, explicit in every statement). `env.spawn`: a `spawn` may fail with a
+  declared error (`fallible`, within the caller's budget `Mem.spawnLimit`) or not (`available`).
+  `env.io`: how `Io.Group.async` executes (`asyncChoice`, `asyncOptions`): `Io.Threaded` on `cpus`
+  CPUs, or any `Io` implementation.
 - **Oracle.** The `i`-th choice of a run is `o i` modulo the number of options, so every `o` is
   a valid schedule. A spec over all schedules is a statement for every `o` (and every `fuel`).
 - **Threads.** Thread 0 is `main`. `spawn t` adds a thread that starts with `dispatch t` at its
@@ -122,9 +126,26 @@ def settle {β : Type} (t : ThreadId) (s : State Tgt α) {n : Nat} (tree : CoN T
     | none => .error none
   | .sync op m k => .ok (.paused ⟨_, op, k⟩, none, { s with mem := m })
 
+/-- The outcome of a thread assignment in the environment: 0 assigns a child; `c > 0` is the
+declared error `spawnErrorAt (c - 1)`. Under `available` there is no choice; under `fallible`
+the oracle picks among every outcome that the caller's budget admits. -/
+def State.spawnOutcome (env : Env) (s : State Tgt α) (o : Nat → Nat) : Nat × State Tgt α :=
+  match env.spawn with
+  | .available => (0, s)
+  | .fallible =>
+    let (c, s') := s.choose o (assignmentCount (spawnErrors.size + 1) s.mem)
+    (assignmentOutcome s.mem.spawnAdmits c, s')
+
+/-- The execution of an `Io.Group.async` task that the oracle picks among the environment's
+`asyncOptions`. -/
+def State.asyncChoice (env : Env) (s : State Tgt α) (o : Nat → Nat) : Nat × State Tgt α :=
+  let opts := asyncOptions env.io s.mem
+  let (i, s') := s.choose o opts.size
+  (opts[i]?.getD 0, s')
+
 /-- Thread `t` does its op and runs to its next stop, retaining choices even when it fails or
 has no result. -/
-def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
+def turnTrace {β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
     (s : State Tgt α) (p : Paused Tgt β) :
     Except (Option Error) (TS Tgt β × Option β × State Tgt α) × Array Nat :=
   let s := { s with mem := { s.mem with current := t } }
@@ -137,11 +158,17 @@ def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : 
     let (c, s) := s.choose o (count s.mem)
     (settle t s (k c s.mem), s.trace)
   | ⟨_, .spawn tgt, k⟩ =>
-    (do
-      let (child, s) ← s.onMem Thread.fork
-      -- The new thread starts with `dispatch tgt` at its first turn, as thread `child`.
-      let s := { s with kids := s.kids.push (.paused ⟨fuel, .yield, fun _ m => dispatch tgt fuel m⟩) }
-      settle t s (k child s.mem), s.trace)
+    let (c, s) := s.spawnOutcome env o
+    if c = 0 then
+      (do
+        let (child, s) ← s.onMem Thread.fork
+        -- The new thread starts with `dispatch tgt` at its first turn, as thread `child`.
+        let s := { s with kids := s.kids.push (.paused ⟨fuel, .yield, fun _ m => dispatch tgt fuel m⟩) }
+        settle t s (k (.ok child) s.mem), s.trace)
+    else (settle t s (k (.error (spawnErrorAt (c - 1))) s.mem), s.trace)
+  | ⟨_, .asyncChoice, k⟩ =>
+    let (c, s) := s.asyncChoice env o
+    (settle t s (k c s.mem), s.trace)
   | ⟨_, .spawnGated tgt, k⟩ =>
     (do
       let (child, s) ← s.onMem Thread.forkGated
@@ -163,13 +190,14 @@ def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : 
       settle t s (k () s.mem), s.trace)
 
 /-- The semantic result of one turn; `turnTrace` also retains its oracle choices. -/
-def turn {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
-    (s : State Tgt α) (p : Paused Tgt β) :
+def turn {β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
+    (t : ThreadId) (s : State Tgt α) (p : Paused Tgt β) :
     Except (Option Error) (TS Tgt β × Option β × State Tgt α) :=
-  (turnTrace dispatch fuel o t s p).1
+  (turnTrace env dispatch fuel o t s p).1
 
 /-- Up to `fuel` turns. -/
-def go (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) : Nat → State Tgt α → Out α × Array Nat
+def go (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) :
+    Nat → State Tgt α → Out α × Array Nat
   | 0, s => (none, s.trace)
   | fuel + 1, s =>
     let ready := s.ready
@@ -182,34 +210,35 @@ def go (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat) : Nat → State Tgt
       match s.main with
       | .done => (none, s.trace)
       | .paused p =>
-        let result := turnTrace dispatch fuel o 0 s p
+        let result := turnTrace env dispatch fuel o 0 s p
         match result.1 with
         | .error e => (outOf e, result.2)
         | .ok (_, some v, s) => (some (.ok (v, s.mem)), s.trace)
-        | .ok (ts, none, s) => go dispatch o fuel { s with main := ts }
+        | .ok (ts, none, s) => go env dispatch o fuel { s with main := ts }
     else
       match s.kids[t - 1]? with
       | some (.paused p) =>
-        let result := turnTrace dispatch fuel o t s p
+        let result := turnTrace env dispatch fuel o t s p
         match result.1 with
         | .error e => (outOf e, result.2)
-        | .ok (ts, _, s) => go dispatch o fuel { s with kids := s.kids.set! (t - 1) ts }
+        | .ok (ts, _, s) => go env dispatch o fuel { s with kids := s.kids.set! (t - 1) ts }
       | _ => (none, s.trace)
 
 /-- `run`, and the number of options of each choice. -/
-def runTrace (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (main : ConcM Tgt α)
+def runTrace (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
+    (main : ConcM Tgt α)
     (m0 : Mem) : Out α × Array Nat :=
   let s0 : State Tgt α := { main := .done, kids := #[], mem := { m0 with current := 0 },
                             step := 0, trace := #[] }
   match settle 0 s0 (main fuel s0.mem) with
   | .error e => (outOf e, #[])
   | .ok (_, some v, s) => (some (.ok (v, s.mem)), #[])
-  | .ok (ts, none, s) => go dispatch o fuel { s with main := ts }
+  | .ok (ts, none, s) => go env dispatch o fuel { s with main := ts }
 
 /-- The result of `main` under the schedule `o`, with at most `fuel` turns. -/
-def run (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (main : ConcM Tgt α)
-    (m0 : Mem) : Result (α × Mem) :=
-  ExceptT.mk (runTrace dispatch fuel o main m0).1
+def run (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
+    (main : ConcM Tgt α) (m0 : Mem) : Result (α × Mem) :=
+  ExceptT.mk (runTrace env dispatch fuel o main m0).1
 
 end Sched
 end Zig
