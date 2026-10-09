@@ -186,8 +186,11 @@ fi
 # built zig finds its own lib dir (self-exe-relative lookup) without --zig-lib-dir.
 # -Dcpu=baseline: the default is the build machine's CPU, and CI restores a cached build on
 # other runners; a newer CPU's instructions then crash it ("Illegal instruction").
+# -Dversion-string: the tarball has no .git; from 0.17.0 build.zig fails without one unless the
+# version is given (older versions fall back to the same release string).
 echo "building zig $version ($optimize, LLVM: $llvm) -> $abs_prefix" >&2
 (cd "$src_dir" && zig build \
+  -Dversion-string="$version" \
   -Doptimize="$optimize" \
   -Dstrip=true \
   -Dno-langref=true \

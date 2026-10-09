@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
@@ -149,6 +150,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
+    -- `Canon.lean` rewrites the whole-byte lanes that 0.16.0 also addressed as elements.
     if l.isLanePtr then
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside the subset"
     if nullablePtrTy types layouts id && l.isVolatile then
@@ -470,8 +472,9 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
-  /-- The function's `zig_version`: up to 0.16.0 `@bitCast` reinterprets memory
-  (`memoryBitCastVersion`). Empty in bare contexts, which then reject representation casts. -/
+  /-- The function's `zig_version`: selects the `@bitCast` semantics. Up to 0.16.0 it reinterprets
+  memory (`memoryBitCastVersion`); from 0.17.0 it uses the logical bit order
+  (`Air2Lean/BitCast.lean`). Empty in bare contexts, which then reject representation casts. -/
   zigVersion : String := ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
@@ -867,6 +870,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
+  | .splat _ =>
+    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
+    unless (cx.types[ty]? matches some (.vector ..)) do
+      cx.fail line "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset"
+    pure line
   | .permuteBits op a =>
     let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"
     let some (_, _, bits) := cx.intShape? aty
@@ -984,6 +992,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless castCapability target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
+    -- Zig 0.17: an array, vector or enum on either side is a logical-bit-order cast
+    -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
+    -- ≤0.16 memory rules below.
+    if let some aty := sourceTy then
+      if logicalBitCastApplies cx.zigVersion cx.types aty ty then
+        match logicalBitCastShapes cx.types aty ty with
+        | .ok _ => return line
+        | .error e => cx.fail line e
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
@@ -2696,7 +2712,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
   if let some model := stdModel? callee then
     unless model.qualifies f.zigVersion do
-      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
+      fail s!"{model.symbol} qualified Zig {", ".intercalate model.qualifiedVersions.toList}"
   if let some fn := allocFn? callee then
     -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
     if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
@@ -2839,7 +2855,7 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
       if let .call (.func name _ _) args := i.op then
         if let some kind := threadFn? name then
           if kind.spawnArgs?.isSome then
-            unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
+            unless #["0.14.1", "0.15.2", "0.16.0", "0.17.0"].contains f.zigVersion do
               throw s!"{f.name}: fallible spawn requires an audited Zig version"
             if kind == .spawn then
               let some (Val.agg ty fields) := (args[0]? : Option Val)
@@ -2857,8 +2873,8 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
               let .optNull _ := fields[1]!
                 | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
             else
-              unless f.zigVersion == "0.16.0" do
-                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+              unless f.zigVersion == "0.16.0" || f.zigVersion == "0.17.0" do
+                throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0 or 0.17.0"
 
 /-- The names of the functions that a direct call in `f` names (translated functions and std
 models alike). -/

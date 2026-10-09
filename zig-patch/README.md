@@ -15,11 +15,15 @@ New dumps include `target_endian` (`little` or `big`) in schema 11. The translat
 explicitly non-little-endian dumps; older dumps without this optional field assume little
 endian. Memory layout checks also enforce the model's 64-bit ABI.
 
-Zig 0.16.0 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read
+A pointer to one vector lane (`&v[i]`) exports `vector_index`; its `host_size` is then the
+vector length. Zig 0.17.0 makes every such pointer a lane pointer (earlier versions only for
+lanes that are not whole power-of-two bytes), so a reader must not take it as a bit-pointer.
+
+Zig 0.16.0 and 0.17.0 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read
 from the exact comptime sentinel in the result pointer type. `allocSentinel(u8, n, s)`
 requires this field; sentinel presence alone cannot supply the stored byte. Initial
-source/native qualification is restricted to Zig 0.16.0. Existing 0.14.1/0.15.2
-exports retain their prior sentinel-presence metadata.
+source/native qualification is restricted to Zig 0.16.0 (0.17.0 exports the field but is not
+qualified yet). Existing 0.14.1/0.15.2 exports retain their prior sentinel-presence metadata.
 
 ## Env vars
 - `ZIG_AIR_JSON_DIR` — output directory. Unset disables the exporter.
@@ -47,7 +51,7 @@ An invalid existing cache entry is reported with its path; remove it before retr
 |---|---|---|
 | What the compiler can do | write AIR only (`build-obj -fno-emit-bin`) | everything a stock zig can do, plus AIR |
 | Lock | yes: `lock.sh` puts a wrapper in `bin/zig` that refuses every other command; the compiler is `bin/zig-unlocked` | no |
-| Needs | a host `zig` | also cmake, and LLVM, Clang and LLD of the version in `versions.toml` (`llvm`: 19 for 0.14.1, 20 for 0.15.2, 21 for 0.16.0) |
+| Needs | a host `zig` | also cmake, and LLVM, Clang and LLD of the version in `versions.toml` (`llvm`: 19 for 0.14.1, 20 for 0.15.2, 21 for 0.16.0, 22 for 0.17.0) |
 | Build | `zig build` | `cmake` configures only (writes `build/config.h`), then `zig build -Denable-llvm -Dconfig_h=…` |
 
 `AIR2LEAN_LLVM_PREFIX` gives the LLVM, Clang and LLD install prefixes (`;`-separated); the default is Homebrew's `llvm@<N>` and `lld@<N>`. CI uses the default: the checks only write AIR.

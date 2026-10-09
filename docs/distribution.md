@@ -16,7 +16,8 @@ sha256, the Lean toolchain by its exact version in `lean-toolchain` (elan instal
 | `lean.elan` | elan release, asset URL and sha256 | `zig-patch/versions.toml` `[ci.elan]` |
 | `zig.versions[]` | supported Zig versions in order, source tarball URL/sha256, hook, LLVM major, CI host Zig URL/sha256 | `zig-patch/versions.toml` |
 | `zig.versions[].hosts` | supported build hosts (`x86_64-linux`, `aarch64-macos`) | the Linux-only rule in `scripts/workflow-common.sh` |
-| `zig.default` | default Zig version | `scripts/translate.sh` |
+| `zig.versions[].status` | `qualified`, or `in-qualification` (CI runs it; version-specific gates and evidence incomplete, e.g. 0.17.0, [zig-0.17-ci.md](zig-0.17-ci.md)) | — (checked: one of the two) |
+| `zig.default` | default Zig version; must be `qualified` | `scripts/translate.sh` |
 | `air2lean.air_json_schemas` | accepted AIR-JSON schemas | `Air2Lean/Air/Profile.lean` |
 | `profiles` | accepted target/build profiles | `Air2Lean/Air/Profile.lean` |
 | `translation` | target, CPU, optimize mode and error tracing of `translate.sh` exports | `scripts/translate.sh` |
@@ -57,6 +58,7 @@ with the command to run. Checks, in order:
 | `metadata` | `compatibility.json` exists and agrees with its sources (`compat.py check`) |
 | `host` | host is a supported build host |
 | `zig-version` | selected version is supported, and supported on this host (0.14.1: Linux only) |
+| `zig-version-status` | note when the selected version is `in-qualification` (0.17.0) |
 | `elan`, `lean-toolchain` | elan is installed; the toolchain pinned in `lean-toolchain` is installed |
 | `proof-build` | `Proofs.Basic.Proofs` is built (editors need built imports) |
 | `stock-zig` | stock Zig on `PATH` (or `AIR2LEAN_ZIG`) matches the selected version; only bootstrapping needs it |

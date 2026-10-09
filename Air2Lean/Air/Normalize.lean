@@ -9,8 +9,12 @@ version-specific knowledge — the AIR tag table — lives here. `Check.lean` an
 never see a `Raw.RawFunc` or a tag string.
 
 One tag table serves every supported version: no subset tag differs between 0.14.1, 0.15.2 and
-0.16.0 (`zig-patch/<version>/TAGS.md`). To add a Zig version: add it to `supportedVersions`;
-if a subset tag differs, add a version case to `normalizeOp` (`PLAN.md` §Zig version support).
+0.16.0 (`zig-patch/<version>/TAGS.md`). Zig 0.17.0's renamed and split tags are mapped back to
+the 0.16.0 spelling by `Canon.lean`'s `versionTags`, which also rejects a tag that the file's
+version does not have; the table below reads the result, plus `div_ceil`, which only 0.17.0
+has (`array_to_vector`, `union_from_enum` and `spirv_runtime_array_len` stay rejected). To add a
+Zig version: add it to `supportedVersions`; if a subset tag differs, add a version case to
+`normalizeOp` (`PLAN.md` §Zig version support).
 -/
 
 namespace Air2Lean
@@ -70,6 +74,9 @@ def runtimeTagReason? (tag : String) : Option String :=
   | "cmp_lt_errors_len" | "cmp_lte_errors_len" => some "error-count comparisons depend on the finalized compiler error universe beyond analyzed-AIR export; do not substitute a currently known error count"
   | "runtime_nav_ptr" => some "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"
   | "err_return_trace" | "set_err_return_trace" | "save_err_return_trace_index" => some "mutable error-return-trace state is outside the model; profile.error_tracing records configuration, not trace semantics"
+  | "spirv_runtime_array_len" => some "SPIR-V runtime arrays exist only on SPIR-V targets, outside the x86_64-linux/aarch64-macos model"
+  | "array_to_vector" => some "Zig 0.17.0's array-to-vector coercion is outside the subset; the vector model has no array conversion"
+  | "union_from_enum" => some "Zig 0.17.0's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion"
   | _ => none
 
 /-- Reason and guidance for every fast-math (`*_optimized`) tag. -/
@@ -141,6 +148,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "div_trunc" => let (a, b) ← arg2 fnName raw; return .div .divTrunc a b
   | "div_floor" => let (a, b) ← arg2 fnName raw; return .div .divFloor a b
   | "div_exact" => let (a, b) ← arg2 fnName raw; return .div .divExact a b
+  | "div_ceil" => let (a, b) ← arg2 fnName raw true; return .div .divCeil a b
   | "div_float" => let (a, b) ← arg2 fnName raw; return .divFloat a b
   | "rem" => let (a, b) ← arg2 fnName raw; return .div .rem a b
   | "mod" => let (a, b) ← arg2 fnName raw; return .div .mod a b
@@ -408,7 +416,7 @@ partial def normalizeCase (fnName : String) (raw : Raw.RawCase) :
 
 end
 
-def supportedVersions : List String := ["0.16.0", "0.15.2", "0.14.1"]
+def supportedVersions : List String := ["0.17.0", "0.16.0", "0.15.2", "0.14.1"]
 
 /-- Tag interpretation after successful canonicalization. Shared by the ordinary
 translator and diagnostic path so the rewrites are applied exactly once. -/

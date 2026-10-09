@@ -17,6 +17,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+/// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.0 removed it
+/// (for `@Int`, which 0.15.2 does not parse).
+fn FloatBits(comptime T: type) type {
+    return std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1);
+}
+
 const ops = [_][]const u8{ "sin", "cos", "tan", "exp", "exp2", "log", "log2", "log10" };
 const narrow_widths = .{
     .{ "f16", f16 },
@@ -49,7 +55,7 @@ fn builtinCall(comptime op: []const u8, comptime T: type, x: T) T {
 fn checkNarrow(comptime op: []const u8, comptime width: []const u8, comptime T: type, mismatches: *usize, total: *usize) void {
     const sym = "air2lean_libm_" ++ op ++ "_" ++ width;
     const archive: *const fn (u64) callconv(.c) u64 = @extern(*const fn (u64) callconv(.c) u64, .{ .name = sym });
-    const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Bits = FloatBits(T);
     for (samples(T)) |x| {
         total.* += 1;
         const xbits: Bits = @bitCast(x);
@@ -67,7 +73,7 @@ fn checkWide(comptime op: []const u8, comptime width: []const u8, comptime T: ty
     const lo_sym = "air2lean_libm_" ++ op ++ "_" ++ width ++ "_lo";
     const archive_hi: *const fn (u64, u64) callconv(.c) u64 = @extern(*const fn (u64, u64) callconv(.c) u64, .{ .name = hi_sym });
     const archive_lo: *const fn (u64, u64) callconv(.c) u64 = @extern(*const fn (u64, u64) callconv(.c) u64, .{ .name = lo_sym });
-    const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Bits = FloatBits(T);
     for (samples(T)) |x| {
         total.* += 1;
         const xbits: Bits = @bitCast(x);

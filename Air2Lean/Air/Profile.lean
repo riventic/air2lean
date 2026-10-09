@@ -42,6 +42,20 @@ private def strField (j : Json) (k : String) : Except String String := do
 private def natField (j : Json) (k : String) : Except String Nat :=
   ((j.getObjVal? k).bind Json.getNat?).mapError fun e => s!"profile.{k}: {e}"
 
+/-- The build mode in its 0.16.0 spelling. Zig 0.17.0 renamed `std.builtin.OptimizeMode` to
+`std.lang.Optimize` with the tags `debug`, `safe`, `fast`, `small`; the exporter writes the tag
+name. A 0.17.0 profile may carry either spelling, older ones only their own, and the parsed
+profile always holds the 0.16.0 spelling. -/
+def canonicalBuildMode (zigVersion mode : String) : Except String String :=
+  let renamed := if zigVersion == "0.17.0" then
+      [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")].lookup mode
+    else none
+  match renamed with
+  | some m => pure m
+  | none =>
+    if ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"].contains mode then pure mode
+    else throw s!"unsupported profile.build_mode '{mode}'"
+
 /-- Central fail-closed schema policy. Legacy schemas cannot carry a schema-12 profile. -/
 def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildProfile := do
   unless 1 ≤ schema && schema ≤ 12 do
@@ -95,9 +109,7 @@ def parse (j : Json) (schema : Nat) (zigVersion : String) : Except String BuildP
   for f in features do
     unless !f.isEmpty && !seen.contains f do throw "profile.features: empty or duplicate feature"
     seen := seen.insert f
-  let buildMode ← strField p "build_mode"
-  unless ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"].contains buildMode do
-    throw s!"unsupported profile.build_mode '{buildMode}'"
+  let buildMode ← canonicalBuildMode zigVersion (← strField p "build_mode")
   let floatMode ← strField p "float_mode"
   unless floatMode == "per-instruction" do
     throw "profile.float_mode: expected 'per-instruction'; optimized AIR remains unsupported"

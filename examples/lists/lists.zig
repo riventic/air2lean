@@ -2,6 +2,9 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+/// Zig 0.17.0 removed `Allocator.dupeZ` (it called `dupeSentinel(T, m, 0)`); 0.15.2 has no
+/// `dupeSentinel`.
+const has_dupe_z = @hasDecl(Allocator, "dupeZ");
 
 pub const Node = struct {
     val: u32,
@@ -73,7 +76,7 @@ pub fn dupe(a: Allocator, xs: []const u8) ![]u8 {
 /// The length of a `dupeZ` copy of `xs` up to its first 0 (the sentinel, if `xs` has no 0).
 /// `free` of the `[:0]u8` frees `len + 1` bytes.
 pub fn dupeZLen(a: Allocator, xs: []const u8) !usize {
-    const z = try a.dupeZ(u8, xs);
+    const z = try if (has_dupe_z) a.dupeZ(u8, xs) else a.dupeSentinel(u8, xs, 0);
     defer a.free(z);
     var n: usize = 0;
     while (z[n] != 0) n += 1;

@@ -704,6 +704,9 @@ def parseFunc (j : Json) : Except String RawFunc := do
   let profile ← (BuildProfile.parse j schema zigVersion).mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
+  -- Zig 0.17.0 removed the `i0` type; one in a 0.17.0 file is a malformed export.
+  if zigVersion == "0.17.0" && types.any (· matches .int true 0) then
+    throw s!"{name}: type i0 does not exist in Zig 0.17.0"
   validateTypeGraph name types
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?

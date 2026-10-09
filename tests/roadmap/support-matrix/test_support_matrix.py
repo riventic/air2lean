@@ -3,6 +3,7 @@
 import contextlib
 import io
 from pathlib import Path
+import re
 import runpy
 import shutil
 import tempfile
@@ -17,6 +18,16 @@ def run(*args):
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = MATRIX['main'](list(map(str, args)))
     return code, out.getvalue() + err.getvalue()
+
+
+def example_cells(doc, example):
+    """{version: cell} of one row of the examples-by-version table; independent of how many
+    versions are supported and in which order."""
+    table = doc.split('## Examples by version')[1].split('\n## ')[0]
+    header = next(line for line in table.splitlines() if line.startswith('| Example |'))
+    versions = [c.strip() for c in header.strip('|').split('|')][1:]
+    row = re.search(rf'^\| `{re.escape(example)}`[^|]*\|(.*)\|$', table, re.M)
+    return dict(zip(versions, (c.strip() for c in row.group(1).split('|'))))
 
 
 class Scratch(unittest.TestCase):
@@ -69,8 +80,10 @@ class Committed(Scratch):
 
     def test_matrix_reflects_register_and_selection(self):
         doc = (ROOT/'docs/support-matrix.md').read_text()
-        self.assertIn('| `threadsync` | — | yes | — |', doc)
-        self.assertIn('| `asm` (x86_64 only) | yes | yes | — |', doc)
+        threadsync, asm = example_cells(doc, 'threadsync'), example_cells(doc, 'asm')
+        self.assertEqual([threadsync[v] for v in ('0.16.0', '0.15.2', '0.14.1')], ['—', 'yes', '—'])
+        self.assertEqual([asm[v] for v in ('0.16.0', '0.15.2', '0.14.1')], ['yes', 'yes', '—'])
+        self.assertIn('| `asm` (x86_64 only) |', doc)
         self.assertIn('| D: Documentation | D01, D02, D03 | D04 | — | — |', doc)
         # No complete requirement is listed as open work, and every register ID appears once.
         region = doc.split(MATRIX['begin']('matrix'))[1].split(MATRIX['end']('matrix'))[0]
@@ -81,7 +94,11 @@ class Committed(Scratch):
 
 class Stale(Scratch):
     def test_hand_edit_of_region_is_stale(self):
-        self.edit('docs/support-matrix.md', '| `basic` | yes | yes | yes |', '| `basic` | yes | yes | — |')
+        path = self.root/'docs/support-matrix.md'
+        text = path.read_text(encoding='utf-8')
+        edited = re.sub(r'^(\| `basic` \|.*)\| yes \|$', r'\1| — |', text, count=1, flags=re.M)
+        self.assertNotEqual(edited, text)
+        path.write_text(edited, encoding='utf-8')
         self.assertProblem('docs/support-matrix.md: generated region is stale')
 
     def test_example_selection_change_is_stale_until_regenerated(self):
@@ -91,7 +108,8 @@ class Stale(Scratch):
         self.assertEqual(status, 0, output)
         self.assertIn('updated PLAN.md', output)
         self.assertEqual(self.check()[0], 0)
-        self.assertIn('| `vectors` | yes | — | — |', (self.root/'docs/support-matrix.md').read_text())
+        cells = example_cells((self.root/'docs/support-matrix.md').read_text(), 'vectors')
+        self.assertEqual(cells, {v: 'yes' if v == '0.16.0' else '—' for v in cells})
 
     def test_register_status_change_is_stale(self):
         self.edit('ROADMAP.md', '| D04 | Tutorials and supported model extension examples | partial |',
@@ -114,8 +132,8 @@ class Stale(Scratch):
 
 class Agreement(Scratch):
     def test_cli_help_must_name_each_version_and_default(self):
-        self.edit('Air2Lean/Main.lean', 'Zig 0.16.0 (default), 0.15.2 and 0.14.1',
-                  'Zig 0.16.0 (default) and 0.15.2')
+        path = self.root/'Air2Lean/Main.lean'
+        path.write_text(path.read_text(encoding='utf-8').replace('0.14.1', '0.14.x'), encoding='utf-8')
         self.assertProblem('help does not name Zig 0.14.1')
         self.edit('Air2Lean/Main.lean', '0.16.0 (default)', '0.16.0')
         self.assertProblem('help does not mark 0.16.0 as the default')
@@ -135,14 +153,26 @@ class Agreement(Scratch):
         self.assertProblem('usage differs from the --diagnostics-json usage')
 
     def test_translator_version_must_be_pinned_and_inventoried(self):
-        self.edit('Air2Lean/Air/Normalize.lean', '"0.16.0", "0.15.2", "0.14.1"',
-                  '"0.16.0", "0.15.2", "0.14.1", "0.17.0"')
+        self.edit('Air2Lean/Air/Normalize.lean', 'def supportedVersions : List String := [',
+                  'def supportedVersions : List String := ["0.99.0", ')
         status, output = run('generate', '--root', self.root)
         self.assertEqual(status, 1, output)
         self.assertIn('zig-patch/versions.toml pins', output)
         self.assertIn('coverage inventories', output)
         self.assertIn('CI matrix versions', output)
-        self.assertIn('help does not name Zig 0.17.0', output)
+        self.assertIn('compatibility.json lists', output)
+        self.assertIn('help does not name Zig 0.99.0', output)
+
+    def test_in_qualification_version_is_labelled(self):
+        rows = MATRIX['version_rows'](ROOT)[2]
+        status = MATRIX['version_status'](ROOT)
+        for row in rows:
+            if status.get(row['version']) == 'in-qualification':
+                self.assertEqual(row['label'], row['version'] + ' (in qualification)')
+        self.assertEqual(MATRIX['version_label']('0.17.0', '0.16.0', {'0.17.0': 'in-qualification'}),
+                         '0.17.0 (in qualification)')
+        self.assertEqual(MATRIX['version_label']('0.16.0', '0.16.0', {'0.16.0': 'qualified'}),
+                         '0.16.0 (default)')
 
     def test_default_scripts_must_agree(self):
         self.edit('scripts/mutate.sh', 'AIR2LEAN_ZIG_VERSION:-0.16.0', 'AIR2LEAN_ZIG_VERSION:-0.15.2')

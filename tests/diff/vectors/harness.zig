@@ -130,11 +130,12 @@ fn runArgs(gpa: std.mem.Allocator, comptime name: []const u8, comptime func: any
         fn call(_: std.mem.Allocator, items: []std.json.Value, writer: anytype) !void {
             const Args = std.meta.ArgsTuple(@TypeOf(func));
             var args: Args = undefined;
-            inline for (@typeInfo(Args).@"struct".fields, 0..) |f, i| {
-                args[i] = switch (@typeInfo(f.type)) {
+            inline for (0..comptime common.fieldCount(Args)) |i| {
+                const F = common.FieldType(Args, i);
+                args[i] = switch (@typeInfo(F)) {
                     .vector => |v| common.vectorFromJson(v.len, v.child, items[i]),
                     .int => @intCast(items[i].integer),
-                    else => @compileError("runArgs: unsupported argument " ++ @typeName(f.type)),
+                    else => @compileError("runArgs: unsupported argument " ++ @typeName(F)),
                 };
             }
             const outcome = try common.forkCall(Args, args, func, false);

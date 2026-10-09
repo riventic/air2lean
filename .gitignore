@@ -10,6 +10,8 @@ zig-out/
 # air2lean
 tests/diff/out/
 zig-air-*/
+# zig-patch/build.sh staging, retained previous installs and writer locks
+.zig-air-*/
 
 # Generated external-contract regression artifacts
 tests/roadmap/models/Generated.lean
@@ -18,3 +20,5 @@ tests/roadmap/models/registry.json
 tests/roadmap/models/TupleGenerated.lean
 tests/roadmap/models/tuple-registry.json
 tests/roadmap/models/CollisionGenerated.lean
+# Qualification proof-audit reports (tens of MB); the committed logs carry each result
+qualification/*.d/assumptions/
