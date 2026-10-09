@@ -189,11 +189,11 @@ function name has. Before the whole-program checks it binds each extern call
    symbol, with the declared `cc`. The call becomes a direct call of that definition, and its
    argument and result types are checked against the definition's parameters and return type
    like any direct call's. This is the static linker's rule for a program linked as one image
-   with that strong definition (for example musl translated through the same route); a symbol
-   exported twice in the AIR set is rejected.
+   with that strong definition (for example musl translated through the same route). A call
+   to a symbol that several functions of the AIR set export is rejected.
 3. Otherwise the program is rejected with `CALLEE_EXTERN_UNBOUND`, naming the symbol (and its
    library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
-   outside the subset.
+   outside the subset. Each call's argument count and result type must be the entry's.
 
 ## Global
 

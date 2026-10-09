@@ -16,6 +16,16 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-extern-calls.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/ExternCalls"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
+python3 - "$here" <<'EOF'
+import hashlib, json, pathlib, sys
+here = pathlib.Path(sys.argv[1])
+record = json.loads((here / 'provenance.json').read_text())
+for name, digest in record['source_sha256'].items():
+    assert hashlib.sha256((here / name).read_bytes()).hexdigest() == digest, name
+files = {str(p.relative_to(here / 'air')): hashlib.sha256(p.read_bytes()).hexdigest()
+         for p in sorted((here / 'air').rglob('*.json'))}
+assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
+EOF
 for version in 0.16.0 0.15.2 0.14.1; do
   "$translator" "$here/air/$version" -o "$work/ExternCalls/Gen.lean" \
     --namespace ExternCalls --prefix extern_calls.

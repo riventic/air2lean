@@ -4,7 +4,6 @@
 import copy
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,10 +12,6 @@ HERE = Path(__file__).resolve().parent
 AIR = HERE / "air" / "0.16.0"
 TRUSTED = HERE / "air" / "0.16.0-trusted"
 REGISTRY = json.loads((HERE / "registry.json").read_text())
-
-
-def load(directory, name):
-    return json.loads((directory / f"{name}.json").read_text())
 
 
 def stage(tmp, source, edits=None, drop=()):
@@ -92,19 +87,29 @@ def main(exe):
 
         # A symbol defined twice in the AIR set is ambiguous.
         twice = stage(tmp, AIR, {"libc_ref.strlen": lambda d: d["export"].update(name="memset")})
-        rejects(exe, twice, "is also exported by", tmp=tmp)
+        rejects(exe, twice, "is defined by several functions (libc_ref.memset, libc_ref.strlen)", tmp=tmp)
+        # ... but only for a call that needs the symbol.
+        no_call = stage(tmp, AIR, {"libc_ref.strlen": lambda d: d["export"].update(name="memset")},
+                        drop={"extern_calls.fillSum", "extern_calls.greetLen"})
+        assert translate(exe, no_call, tmp=tmp).returncode == 0
+
+        # The externs entry must describe each call.
+        rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": lambda d: first_extern(d)["params"].pop()}),
+                "does not match its 'externs' entry", tmp=tmp)
 
         # The definition's signature is checked like any direct call's: here the declared
         # result type (the call's, unused) differs from the definition's.
         def wider_result(d):
             d["types"].append({"k": "int", "signed": False, "bits": 64, "abi_size": 8, "abi_align": 8})
-            memset_call(d)["ty"] = len(d["types"]) - 1
+            memset_call(d)["ty"] = first_extern(d)["ret"] = len(d["types"]) - 1
         rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": wider_result}),
                 "callee 'libc_ref.memset' has an incompatible result type", tmp=tmp)
 
         # A call without an externs entry, and a noreturn extern call.
         no_entry = stage(tmp, AIR, {"extern_calls.fillSum": lambda d: d.pop("externs")})
-        rejects(exe, no_entry, "extern callee 'memset' has no 'externs' entry", tmp=tmp)
+        rejects(exe, no_entry, "extern function 'memset' is bound to neither", tmp=tmp)
+        other_entry = stage(tmp, AIR, {"extern_calls.fillSum": lambda d: first_extern(d).update(name="bzero")})
+        rejects(exe, other_entry, "extern callee 'memset' has no 'externs' entry", tmp=tmp)
         rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": lambda d: memset_call(d)["callee"].update(noreturn=True)}),
                 "noreturn extern function 'memset'", tmp=tmp)
 

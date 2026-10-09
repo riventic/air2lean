@@ -2474,47 +2474,55 @@ rejection per (caller, symbol) that neither binds; callers that need all-or-noth
 `resolveExterns`. -/
 def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #[]) :
     Except String (Array Func × Array (String × String)) := do
-  let mut exports : Std.HashMap String Func := {}
+  -- Every definition of each symbol; more than one is ambiguous only for a call that needs it.
+  let mut exports : Std.HashMap String (Array Func) := {}
   for f in funcs do
     if (externSymbol? f.name).isSome then
       throw s!"{f.name}: a function name cannot have the extern callee form 'extern:<symbol>'"
     if let some e := f.exportDecl then
-      if let some other := exports[e.name]? then
-        throw s!"{f.name}: the symbol '{e.name}' is also exported by '{other.name}' (CALLEE_AMBIGUOUS)"
-      exports := exports.insert e.name f
+      exports := exports.insert e.name ((exports.getD e.name #[]).push f)
   let mut unbound : Array (String × String) := #[]
   let mut out : Array Func := #[]
   for f in funcs do
+    -- Without an `externs` table a function has no extern call (`checkProgram` rejects one).
+    if f.externs.isEmpty then
+      out := out.push f
+      continue
     let mut renames : Std.HashMap String String := {}
     let mut seen : Std.HashSet String := {}
     for i in f.allInsts do
-      let .call (.func callee ..) _ := i.op | continue
+      let .call (.func callee ..) args := i.op | continue
       let some symbol := externSymbol? callee | continue
-      if seen.contains callee then continue
-      seen := seen.insert callee
       let some e := f.externs.find? (·.name == symbol)
         | throw s!"{f.name}: inst {i.id}: extern callee '{symbol}' has no 'externs' entry"
+      -- The declaration must describe each call (a variadic one is rejected below).
+      unless e.varargs || (args.size == e.params.size && i.ty == e.ret) do
+        throw s!"{f.name}: inst {i.id}: the call of extern '{symbol}' does not match its 'externs' entry"
+      if seen.contains callee then continue
+      seen := seen.insert callee
+      let reject (why : String) := unbound.push (f.name, externUnbound f.name e why)
+      let definitions := exports.getD symbol #[]
+      let names := ", ".intercalate (definitions.map (·.name)).toList
       if e.varargs then
-        unbound := unbound.push (f.name, externUnbound f.name e "is variadic, which is outside the subset")
+        unbound := reject "is variadic, which is outside the subset"
+      else if definitions.size > 1 then
+        unbound := reject s!"is defined by several functions ({names}) (CALLEE_AMBIGUOUS)"
       else if let some m := models.find? (·.symbol == callee) then
         let some binding := m.externBinding
           | throw s!"{f.name}: model '{m.symbol}' has no extern binding"
         -- The linker would resolve the symbol to the program's own definition, not the model's.
-        if let some target := exports[symbol]? then
-          unbound := unbound.push (f.name, externUnbound f.name e
-            s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)")
+        if let some target := definitions[0]? then
+          unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
         else unless binding.library == e.library do
-          unbound := unbound.push (f.name, externUnbound f.name e
-            s!"is declared with another library than its registry model's ({binding.library.getD "none"})")
-      else if let some target := exports[symbol]? then
+          unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
+      else if let some target := definitions[0]? then
         let cc := (target.exportDecl.map (·.cc)).getD ""
         if cc == e.cc then renames := renames.insert callee target.name
-        else unbound := unbound.push (f.name, externUnbound f.name e
-          s!"is declared with calling convention '{e.cc}', but its definition '{target.name}' has '{cc}'")
+        else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
+          definition '{target.name}' has '{cc}'")
       else
-        unbound := unbound.push (f.name, externUnbound f.name e
-          s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
-            registry model '{callee}' (--model-registry, docs/external-models.md)")
+        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
+          registry model '{callee}' (--model-registry, docs/external-models.md)"
     out := out.push (if renames.isEmpty then f
       else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
   return (out, unbound)
