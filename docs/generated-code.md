@@ -300,9 +300,12 @@ any other type, a constant pointer into a `threadlocal` global (0.14.1 writes th
 thread-local as a constant; a constant has one address in every thread), and a
 `runtime_nav_ptr` of a global that is not `threadlocal` (an `extern` the compiler reaches at run
 time, a DLL import, a PC-relative `@extern`). An AIR file from an exporter without the
-`runtime_nav_ptr` operand keeps the earlier rejection. The `Io.Group` caller fallback runs the
-target on the caller's thread, so it uses the caller's instances. A detached thread is outside
-the subset. `tests/roadmap/thread-locals` has the proofs over all schedules.
+`runtime_nav_ptr` operand keeps the earlier rejection. A function that an `Io.Group` or
+`Io.async` task reaches must not use `threadlocal` storage (`checkIoTaskThreadlocals`,
+`PROGRAM_FAILURE`): `std.Io.Threaded` runs such tasks on pooled worker threads, each running
+task after task, or on the caller's thread, so a task's instances hold what earlier tasks left
+there, not the initial value. Only `Thread.spawn` threads get the per-thread instances above.
+A detached thread is outside the subset. `tests/roadmap/thread-locals` has the proofs over all schedules.
 
 ### Casts, layout and function pointers
 

@@ -2850,35 +2850,88 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
               unless f.zigVersion == "0.16.0" do
                 throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
 
-/-- `docs/futures.md` §Cancelation. The qualified future subset observes a `Future.cancel`
-request only at `Io.checkCancel`: `Future.cancel` does not interrupt a task blocked at another
-cancelation point (unlike `Io.Group.cancel`, `docs/std-models.md` §Cancelation), and a nested
-`Future.await` is no cancelation point of the model. A program that cancels a future therefore
-must not reach another cancelation point from an `Io.async` task: a cancelable futex wait (also
-inside `Io.Mutex.lock`, `Io.Condition.wait`, ...), `Io.Group.await` or a nested `Future.await`.
-Programs without `Future.cancel` never request a future cancelation. -/
-def checkFutureCancelation (funcs : Array Func) : Except String Unit := do
-  let calls (f : Func) : Array String := f.allInsts.filterMap fun i => match i.op with
-    | .call (.func name ..) _ => some name
-    | _ => none
-  unless funcs.any (fun f => (calls f).any (threadFn? · == some .futureCancel)) do return
+/-- The names of the functions that a direct call in `f` names (translated functions and std
+models alike). -/
+private def Func.callNames (f : Func) : Array String := f.allInsts.filterMap fun i => match i.op with
+  | .call (.func name ..) _ => some name
+  | _ => none
+
+/-- The task functions (`comptime_fn` targets) of the calls in `funcs` to a std model in
+`kinds`. -/
+private def taskTargetsOf (funcs : Array Func) (kinds : List ThreadFn) : List String :=
+  funcs.toList.flatMap fun f => (f.allInsts.filterMap fun i => match i.op with
+    | .call (.func name _ (some sf)) _ =>
+      if (threadFn? name).any kinds.contains then some sf else none
+    | _ => none).toList
+
+/-- The functions of `funcs` that the functions `roots` reach (the roots included): through
+calls (`Func.callees`), and with `viaAsync` also through the tasks of their `Io.async` calls,
+which the `fallible` policy may run on the caller's thread (`Zig.asyncEagerC`). -/
+private def reachableFuncs (funcs : Array Func) (roots : List String) (viaAsync : Bool := false) :
+    Array Func := Id.run do
   let refs := fnRefs funcs
   let byName := funcs.foldl (fun m f => m.insert f.name f) ({} : Std.HashMap String Func)
-  let mut todo : List String := (futureTargets funcs).toList.map (·.1)
+  let mut todo := roots
   let mut seen : Std.HashSet String := {}
+  let mut out := #[]
   while !todo.isEmpty do
     let name := todo.head!
     todo := todo.tail!
     if seen.contains name then continue
     seen := seen.insert name
     let some f := byName[name]? | continue
-    for callee in calls f do
-      if let some fn := threadFn? callee then
-        if fn == .futexWait || fn == .groupAwait || fn == .futureAwait then
-          throw s!"{f.name}: '{callee}' is a cancelation point that the model does not deliver \
-            a Future.cancel request to; in a program with Future.cancel, Io.async tasks may only \
-            observe cancelation through Io.checkCancel (docs/futures.md)"
-    todo := (f.callees refs).toList ++ todo
+    out := out.push f
+    let tasks := if viaAsync then taskTargetsOf #[f] [.futureAsync] else []
+    todo := (f.callees refs).toList ++ tasks ++ todo
+  return out
+
+/-- `docs/futures.md` §Cancelation. The qualified future subset observes a `Future.cancel`
+request only at `Io.checkCancel`: `Future.cancel` does not interrupt a task blocked at another
+cancelation point (unlike `Io.Group.cancel`, `docs/std-models.md` §Cancelation), and a nested
+`Future.await` is no cancelation point of the model. A program that cancels a future therefore
+must not reach another cancelation point from an `Io.async` task: a cancelable futex wait (also
+inside `Io.Mutex.lock`, `Io.Condition.wait`, ...), `Io.Group.await` or a nested `Future.await`.
+Programs without `Future.cancel` never request a future cancelation.
+
+`Io.Group.cancel` requests share `Mem.cancels` with `Future.cancel`, but std's `Future.await`
+by a task with a request hands that request to the awaited future (`await` in
+`Io/Threaded.zig`: its cancelable wait fails, the future is canceled, and the request returns
+to the awaiter only if the future did not acknowledge it). The model's `Zig.awaitC` is a plain
+join, so in a program with `Io.Group.cancel` no `Io.Group` task (nor a task it may run inline)
+may await a future. -/
+def checkFutureCancelation (funcs : Array Func) : Except String Unit := do
+  let has (fn : ThreadFn) := funcs.any fun f => f.callNames.any (threadFn? · == some fn)
+  if has .futureCancel then
+    for f in reachableFuncs funcs ((futureTargets funcs).toList.map (·.1)) do
+      for callee in f.callNames do
+        if let some fn := threadFn? callee then
+          if fn == .futexWait || fn == .groupAwait || fn == .futureAwait then
+            throw s!"{f.name}: '{callee}' is a cancelation point that the model does not deliver \
+              a Future.cancel request to; in a program with Future.cancel, Io.async tasks may only \
+              observe cancelation through Io.checkCancel (docs/futures.md)"
+  if has .groupCancel then
+    let groupTasks := taskTargetsOf funcs [.groupAsync, .groupConcurrent]
+    for f in reachableFuncs funcs groupTasks (viaAsync := true) do
+      for callee in f.callNames do
+        if threadFn? callee == some .futureAwait then
+          throw s!"{f.name}: '{callee}' in an Io.Group task of a program with Io.Group.cancel: \
+            std's await hands the task's cancelation request to the awaited future, which the \
+            model does not (docs/futures.md)"
+
+/-- `docs/generated-code.md` §Thread-local storage. `std.Io.Threaded` runs `Io.Group` and
+`Io.async` tasks on a pool of worker threads, each of which runs task after task (`worker` in
+`Io/Threaded.zig`), and a fallback runs a task on its caller's thread. A task's `threadlocal`
+instances are those of whichever thread runs it, holding what earlier tasks left there; the
+model gives each task fresh instances (`Zig.ConcM.tlsThread`). So no function that an `Io` task
+reaches may use `threadlocal` storage (`runtime_nav_ptr`). `Thread.spawn` threads are new OS
+threads and keep their per-thread instances. -/
+def checkIoTaskThreadlocals (funcs : Array Func) : Except String Unit := do
+  let tasks := taskTargetsOf funcs [.groupAsync, .groupConcurrent, .futureAsync]
+  for f in reachableFuncs funcs tasks do
+    if f.allInsts.any (fun i => match i.op with | .runtimeNavPtr _ => true | _ => false) then
+      throw s!"{f.name}: an Io.Group or Io.async task uses `threadlocal` storage; std.Io runs \
+        tasks on pooled worker threads whose instances outlive each task, which the model's \
+        per-task instances do not cover (docs/generated-code.md)"
 
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
@@ -2961,6 +3014,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
           unless modelledStdFn callee do
             throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
   checkFutureCancelation funcs
+  checkIoTaskThreadlocals funcs
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
