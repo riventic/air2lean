@@ -25,6 +25,7 @@ generated population measures the rest of the pipeline).
 import argparse
 from pathlib import Path
 import random
+import re
 import sys
 
 BIN = ["+", "-", "*", "&", "|", "^"]
@@ -87,6 +88,8 @@ class Gen:
         r = self.rng
         pad = "    " * indent
         scalars = [v for v in scope if v != "arr"]
+        # Loop counters (`i<indent>`) are read-only, so every loop keeps its constant trip count.
+        targets = [v for v in scalars if not (v[0] == "i" and v[1:].isdigit())]
         kind = r.randrange(10) if depth > 0 else r.choice([0, 1, 1, 2])
         if kind == 0:
             self.names += 1
@@ -95,7 +98,7 @@ class Gen:
             scope.append(name)
             return [line]
         if kind in (1, 2):
-            target = r.choice(scalars)
+            target = r.choice(targets)
             if r.random() < 0.3 and "arr" in scope:
                 target = f"arr[{self.expr(scalars, 1)} & 7u]"
             return [f"{pad}{target} {r.choice(ASSIGN)} {self.expr(scope, 2)};"]
@@ -129,7 +132,7 @@ class Gen:
             label = f"skip{self.labels}"
             return ([f"{pad}if ({self.expr(scalars, 1)}) goto {label};"] + self.block(scope, 0, indent, 1)
                     + [f"{label}:;"])
-        return [f"{pad}{r.choice(scalars)} ^= {self.expr(scope, 1)};"]
+        return [f"{pad}{r.choice(targets)} ^= {self.expr(scope, 1)};"]
 
     def function(self, name, params, depth):
         scope = list(params)
@@ -182,6 +185,9 @@ def cmd_light(args):
             return 1
         if "unsigned entry(unsigned a, unsigned b) {" not in text or "goto" in text:
             print(f"seed {seed}: missing entry or unexpected goto", file=sys.stderr)
+            return 1
+        if re.search(r"^\s*i\d+ [-+*^|&]?= ", text, re.M):
+            print(f"seed {seed}: a loop counter is assigned", file=sys.stderr)
             return 1
         if text.count("{") != text.count("}"):
             print(f"seed {seed}: unbalanced braces", file=sys.stderr)

@@ -179,6 +179,7 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
     if portable:
         only_phases = set(only_phases or PORTABLE_PHASES)
     prefix = "portable_" if portable else ""
+    time_key, rss_key = prefix + "max_seconds", prefix + "max_peak_rss_kib"
     if reference and not portable and not allow_platform_mismatch and any(
             measured_platform.get(key) != value for key, value in reference.items()):
         add("platform-mismatch", None,
@@ -215,21 +216,21 @@ def gate(budgets, measurement, allow_pending=False, allow_platform_mismatch=Fals
             if got is None:
                 add("missing-phase", ident, "budgeted phase is absent from the measurement", phase)
                 continue
-            if prefix + "max_seconds" in limits:
+            if time_key in limits:
                 seconds = got.get("seconds")
                 if not isinstance(seconds, (int, float)):
                     add("missing-phase", ident, "phase has no wall time", phase)
-                elif seconds > limits[prefix + "max_seconds"]:
+                elif seconds > limits[time_key]:
                     add("time-regression", ident,
-                        f"{seconds:.3f}s exceeds budget {limits[prefix + 'max_seconds']:.3f}s "
+                        f"{seconds:.3f}s exceeds budget {limits[time_key]:.3f}s "
                         f"(baseline {limits.get('baseline_seconds', 0):.3f}s)", phase)
-            if prefix + "max_peak_rss_kib" in limits:
+            if rss_key in limits:
                 rss = got.get("peak_rss_kib")
                 if not isinstance(rss, int):
                     add("missing-phase", ident, "phase has no peak RSS", phase)
-                elif rss > limits[prefix + "max_peak_rss_kib"]:
+                elif rss > limits[rss_key]:
                     add("memory-regression", ident,
-                        f"peak RSS {rss} KiB exceeds budget {limits[prefix + 'max_peak_rss_kib']} KiB "
+                        f"peak RSS {rss} KiB exceeds budget {limits[rss_key]} KiB "
                         f"(baseline {limits.get('baseline_peak_rss_kib', 0)} KiB)", phase)
     failures = [item for item in findings if item["kind"] != "pending"]
     if failures:

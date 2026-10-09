@@ -24,6 +24,7 @@ that unqualified records still need.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 from pathlib import Path
@@ -117,6 +118,14 @@ def check_evidence(root, record, item, errors, where):
             errors.append(f'{where}: command {needle!r} does not select a non-LLVM backend (-fno-llvm)')
 
 
+@functools.lru_cache(maxsize=None)
+def float_mode_sources(root):
+    """The tested sources that use @setFloatMode (fast-math), relative to `root`."""
+    return tuple(str(p.relative_to(root)) for rel in FLOAT_MODE_SOURCES
+                 for p in sorted((root / rel).rglob('*.zig'))
+                 if 'setFloatMode' in p.read_text(encoding='utf-8'))
+
+
 def check_run(root, record, item, text, errors, where):
     """One differential run record: consistent with its pair, its counts and the sources."""
     mode, backend, path = record['mode'], record['backend'], item['path']
@@ -191,11 +200,8 @@ def check_run(root, record, item, text, errors, where):
     if run.get('float_mode_optimized_sources') != []:
         errors.append(f'{where}: {path} fast-math (@setFloatMode) appears in the tested sources')
     else:
-        for rel in FLOAT_MODE_SOURCES:
-            for source in sorted((root / rel).rglob('*.zig')):
-                if 'setFloatMode' in source.read_text(encoding='utf-8'):
-                    errors.append(f'{where}: {source.relative_to(root)} uses @setFloatMode; '
-                                  f'fast-math needs separate treatment')
+        for source in float_mode_sources(root):
+            errors.append(f'{where}: {source} uses @setFloatMode; fast-math needs separate treatment')
 
 
 def check_record(root, record, known, errors):
@@ -400,9 +406,7 @@ def build_run(summary, cases, args, root):
         flags += ' ' + args.link_flags
     skipped = {row['example']: row['reason'] for row in map(json.loads, cases_rows)
                if row.get('status') == 'skipped'}
-    float_mode = [str(p.relative_to(root)) for rel in FLOAT_MODE_SOURCES
-                  for p in sorted((root / rel).rglob('*.zig'))
-                  if 'setFloatMode' in p.read_text(encoding='utf-8')]
+    float_mode = list(float_mode_sources(root))
     return {
         'schema': RUN_SCHEMA,
         'zig_version': args.zig_version,
@@ -475,7 +479,8 @@ def main(argv=None):
             except (OSError, json.JSONDecodeError) as error:
                 print(f'build-modes: no committed record {out}: {error}', file=sys.stderr)
                 return 1
-            problems = [key for key in ('cases', 'examples', 'triage') if committed.get(key) != run.get(key)]
+            problems = [key for key in ('cases', 'examples', 'triage', 'pin_violations')
+                        if committed.get(key) != run.get(key)]
             problems += [f'counts.{key}' for key in ('mismatch', 'ub_excluded')
                          if committed['counts'].get(key, 0) != run['counts'].get(key, 0)]
             for problem in problems:
