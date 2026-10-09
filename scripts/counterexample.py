@@ -354,7 +354,7 @@ def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs
     common = dict(root=root, source=source, example=example, function=function, input_index=None, input_value=None,
                   input_sha256=None, observed=None, air_dir=air_dir, statement=spec)
 
-    def unsolved(goal):
+    def without_violation(goal):
         return bundle(judgement=verdict(goal=goal), **common)
     try:
         text = path.read_text()
@@ -362,7 +362,7 @@ def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs
         namespace = EVAL.namespace_of(text)
     except (EVAL.Unsupported, OSError) as error:
         source['detail'] = str(error)
-        return unsolved('unsupported')
+        return without_violation('unsupported')
     sign = air_signedness(root, example, function, air_dir)
     signed = sign[0] if sign else [False] * len(params)
     source.update(gen_sha256=EVAL.sha256(path), signedness='air' if sign else 'assumed_unsigned', params=[n for n, _ in params])
@@ -370,7 +370,7 @@ def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs
     source.update(candidate_inputs=len(rows), exhaustive_domain=exhaustive)
     driver = EVAL.driver(namespace, function, params, ret, rows, signed_ret=bool(sign and sign[1]), spec=spec, pre=pre)
     out = EVAL.run(root, path, driver, timeout=timeout, **(dict(runner=runner) if runner else {}))
-    if out['status'] == 'timeout': return unsolved('timeout')
+    if out['status'] == 'timeout': return without_violation('timeout')
     if out['status'] != 'ok':
         source['detail'] = out['detail']
         return bundle(judgement=verdict(automation='lean_error'), **common)
@@ -382,9 +382,9 @@ def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs
     source.update(checked=checked, skipped_by_precondition=skipped, no_result=no_result)
     hit = next((l for l in out['lines'] if l[0] == 'V'), None)
     if hit is None:
-        if checked == 0: return unsolved('no_input')
-        if no_result: return unsolved('no_result')
-        return unsolved('exhaustive' if exhaustive else 'bounded')
+        if checked == 0: return without_violation('no_input')
+        if no_result: return without_violation('no_result')
+        return without_violation('exhaustive' if exhaustive else 'bounded')
     row = rows[int(hit[1])]
     raw = [bool(v) if t[0] == 'bool' else EVAL.to_signed(v, t, sg) for v, (_, t), sg in zip(row, params, signed)]
     request = dict(gen=str(path.relative_to(root)) if path.is_relative_to(root) else str(path), gen_sha256=source['gen_sha256'],

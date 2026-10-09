@@ -344,7 +344,8 @@ def asm_fixtures(version="0.16.0"):
         "rdrand": (f("rdrand", 8, [asm(0, 8, "rdrand %[ret]", clobbers=("cc",), outputs=("=r",)),
                                    returning(1, ref(0))]), 1, 1),
         "outputless": (f("outputless", 1, [asm(0, 1, "mfence"), returning(1, void)]), 1, 1),
-        "memory_clobber": (f("memory_clobber", 1, [asm(0, 1, "", clobbers=("memory",)), returning(1, void)]), 1, 1),
+        # A `memory` clobber off A01's registry (whose only entry is the empty barrier).
+        "memory_clobber": (f("memory_clobber", 1, [asm(0, 1, "mfence", clobbers=("memory",)), returning(1, void)]), 1, 1),
         # Allowlisted (Air2Lean/AsmAllowlist.lean): input-determined, and the C03 spin hint.
         "lzcnt": (f("lzcnt", 8, [inst(0, "arg", 8, param=0),
                                  asm(1, 8, "lzcnt %[x], %[ret]", clobbers=("cc",), outputs=("=r",),

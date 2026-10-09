@@ -115,15 +115,16 @@ uart = codes("default-air.json")
 for name in ("putc", "statusTwice", "clearStatus", "sendThenStatus"):
     assert uart[(f"device_effects.{name}", "VOLATILE_ACCESS")], (name, uart)
 assert uart[("device_effects.writeAll", "CALLEE_BLOCKED")], uart
-# rdtsc twice, rdrand, output-less asm, a memory clobber and non-volatile rdtsc.
+# rdtsc twice, rdrand, output-less asm and non-volatile rdtsc; `barrier` is A01's allowlisted
+# empty memory-clobber block.
 asm = codes("default-air-asm.json")
-expected = {"elapsed": 2, "random": 1, "fence": 1, "barrier": 1, "ticksPlain": 1}
+expected = {"elapsed": 2, "random": 1, "fence": 1, "ticksPlain": 1}
 assert asm == collections.Counter({(f"device_asm.{n}", "ASM_VOLATILE_EFFECT"): k
                                    for n, k in expected.items()}), asm
 # The contract declares only the volatile rdtsc: the rest stays rejected.
 device = codes("device-air-asm.json")
 assert device == collections.Counter({(f"device_asm.{n}", "ASM_VOLATILE_EFFECT"): 1
-                                      for n in ("random", "fence", "barrier", "ticksPlain")}), device
+                                      for n in ("random", "fence", "ticksPlain")}), device
 PY
 
 lake build ZigLean ZigLean.Mem.Lemmas

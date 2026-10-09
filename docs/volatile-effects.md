@@ -183,6 +183,18 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    | `popcnt %[x], %[ret]` | `=r`, `r` | none | x86_64 | opaque | `asm.popcnt64` |
    | `pause` | none | none | x86_64 | C03 spin hint | `progress.idle` |
    | `isb` | none | none | aarch64 | C03 spin hint | `docs/progress-hints.md` |
+   | `incl %[x]`, `incl %[y]` | `+m` | `cc` | x86_64 | opaque (A01 effect contract) | `asm_effects.incm`, `asm_effects.incLocal` |
+   | `movq %[v], %[x]` | `=m`, `r` | none | x86_64 | opaque (A01 effect contract) | `asm_effects.setm` |
+   | `movl %[a], %%eax` / `xchgl %%eax, %[b]` / `movl %%eax, %[a]` | `+m`, `+m` | `rax` | x86_64 | opaque (A01 effect contract) | `asm_effects.swapm` |
+   | `addq %[v], %[x]` | `+r`, `r` | `cc` | x86_64 | opaque (A01 effect contract) | `asm_effects.addr` |
+   | (empty) | none | `memory` | x86_64 | A01 compiler barrier (`asmPureRegistry`) | `asm_effects.barrier`, `device_asm.barrier` |
+
+   A01's read-write and memory operands (`docs/generated-code.md` §Effect contract) are a
+   repeatable opaque of the inputs and the old values, so they need an entry as well: the
+   effect contract (ASM-03) fixes where the wrapper writes, the allowlist that the values are
+   input-determined. The empty `volatile` block with only a `memory` clobber is A01's reviewed
+   compiler barrier: it executes no instruction, so it has no effect in a model that runs
+   accesses in program order. Every other `memory` clobber stays rejected.
 
 2. **Declared device event.** With `--device-contract`, an `asm` entry
    (`{"template", "constraints", "clobbers"}`, matched exactly) makes a `volatile` asm with at most
@@ -195,8 +207,8 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    event, because the compiler may merge or delete it.
 
 Every other asm is `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, with
-guidance). This covers `rdtsc`, `rdrand`, `cpuid`, port I/O, barriers, output-less asm, every
-`memory` clobber, an allowlisted template with other constraints or clobbers, and non-volatile
+guidance). This covers `rdtsc`, `rdrand`, `cpuid`, port I/O, fences, output-less asm, every
+`memory` clobber other than A01's empty barrier, an allowlisted template with other constraints or clobbers, and non-volatile
 asm off the list.
 
 **Non-volatile asm.** Before L13, non-volatile asm with outputs was also a repeatable opaque. Zig
@@ -216,9 +228,11 @@ in the rejection message, which now names `--device-contract`).
 
 **Real-export evidence.** `device_asm.zig` (0.15.2/0.16.0 syntax; the committed export is 0.16.0
 in `air-asm/`) has `elapsed` (two `rdtsc`), `random` (`rdrand`), `fence` (output-less `mfence`),
-`barrier` (a `memory` clobber) and `ticksPlain` (non-volatile `rdtsc`). The default rejects every
-one of them with `ASM_VOLATILE_EFFECT`. Under `tsc.json`, which declares only the `rdtsc` template,
-`elapsed` translates to two `Zig.vasm` (`DeviceAsm/Gen.lean`) and the others stay rejected.
+`barrier` (A01's empty `memory`-clobber compiler barrier) and `ticksPlain` (non-volatile `rdtsc`).
+The default rejects every one of them except `barrier`, which is on the allowlist, with
+`ASM_VOLATILE_EFFECT`. Under `tsc.json`, which declares only the `rdtsc` template, `elapsed`
+translates to two `Zig.vasm` (`DeviceAsm/Gen.lean`) and the others stay rejected. (The source
+comments of `device_asm.zig` predate A01's barrier entry; the source is pinned by `provenance.json`.)
 `DeviceAsm/Proofs.lean` proves `elapsed_trace` (two `asm` events in order, the second answered
 after the first; the result is their difference) and `elapsed_not_merged` (under a counter oracle
 the result is 1, and a merged value gives `a - a = 0`). The `merge_asm` and `repeatable_asm`

@@ -50,6 +50,7 @@ def printTy : Ty → String
   | .allocator => ".allocator"
   | .thread => ".thread"
   | .io => ".io"
+  | .future r => s!"(.future {r})"
   | .other n => s!"(.other {str n})"
 
 partial def printVal : Val → String

@@ -56,6 +56,36 @@ def asmAllowlist : List AsmAllowEntry := [
     target := "x86_64", semantics := .opaque,
     reason := "population count: a function of the input",
     reviewerNote := "examples/asm popcnt64 (tests/golden/asm/air/asm.popcnt64.json); non-volatile" },
+  -- A01's effect-contract forms (`Air2Lean/AsmContract.lean`, premise ASM-03): the new value of
+  -- each read-write or memory output is a function of the register inputs and the old values.
+  { template := "incl %[x]", constraints := ["+m"], clobbers := ["cc"], target := "x86_64",
+    semantics := .opaque,
+    reason := "increment of a memory operand: the new value is a function of the old one; it \
+      only clobbers flags",
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.incm.json; volatile" },
+  { template := "incl %[y]", constraints := ["+m"], clobbers := ["cc"], target := "x86_64",
+    semantics := .opaque,
+    reason := "increment of a memory operand (a local): the new value is a function of the old one",
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.incLocal.json; volatile" },
+  { template := "movq %[v], %[x]", constraints := ["=m", "r"], clobbers := [], target := "x86_64",
+    semantics := .opaque,
+    reason := "store of a register input to a memory output: the output is the input",
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.setm.json; non-volatile" },
+  { template := "movl %[a], %%eax\n\txchgl %%eax, %[b]\n\tmovl %%eax, %[a]",
+    constraints := ["+m", "+m"], clobbers := ["rax"], target := "x86_64", semantics := .opaque,
+    reason := "swap of two memory operands through eax: each new value is the other old value \
+      (xchg with memory is atomic natively; the model has no other thread on these locations)",
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.swapm.json; volatile" },
+  { template := "addq %[v], %[x]", constraints := ["+r", "r"], clobbers := ["cc"],
+    target := "x86_64", semantics := .opaque,
+    reason := "64-bit add into a read-write register: a function of both inputs; it only clobbers flags",
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.addr.json; non-volatile" },
+  { template := "", constraints := [], clobbers := ["memory"], target := "x86_64",
+    semantics := .opaque,
+    reason := "A01's compiler barrier (`asmPureRegistry`): no instruction, so no effect in a model \
+      that runs accesses in program order; the checker also requires `volatile` and the registry",
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.16.0/asm_effects.barrier.json and L13 \
+      tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.barrier.json; volatile" },
   { template := "pause", constraints := [], clobbers := [], target := "x86_64",
     semantics := .spinHint,
     reason := "std.atomic.spinLoopHint on x86_64: no output, no memory effect",
