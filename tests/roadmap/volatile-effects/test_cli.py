@@ -115,9 +115,21 @@ def fixtures(version="0.16.0"):
 LEGACY = ("--profile", "legacy-abi64-le")
 
 
+def legacy_flags(argv):
+    """`LEGACY` when an AIR directory argument holds only schema-11 files and no profile is named."""
+    if "--profile" in map(str, argv):
+        return ()
+    for arg in argv:
+        path = Path(str(arg))
+        files = list(path.glob("*.json")) if path.is_dir() else []
+        if files and all(json.loads(f.read_text()).get("schema", 0) < 12 for f in files):
+            return LEGACY
+    return ()
+
+
 def invoke(binary, *argv):
-    return subprocess.run([str(binary), *map(str, argv)], capture_output=True, text=True,
-                          timeout=30, check=False)
+    return subprocess.run([str(binary), *map(str, argv), *legacy_flags(argv)], capture_output=True,
+                          text=True, timeout=30, check=False)
 
 
 def diagnostics(binary, air, *flags):
@@ -183,17 +195,18 @@ PROFILE_DOCUMENT = Path(__file__).resolve().parents[1] / "models" / "client.json
 
 def registry_client(nested=False):
     base = json.loads(PROFILE_DOCUMENT.read_text())
-    holder = dict(k="struct", name="Regs", layout="extern", fields=[dict(name="reg", ty=2, offset=0)],
-                  abi_size=8, abi_align=8)
+    holder = dict(k="struct", name="Regs", module="root", layout="extern",
+                  fields=[dict(name="reg", ty=2, offset=0)], abi_size=8, abi_align=8)
     fn = dict(k="other", name="fn (*volatile u32) void")
     types = [U32, NORETURN, ptr(0, volatile=True), VOID, holder, fn]
     param = 4 if nested else 2
     body = [inst(0, "arg", param, param=0),
-            inst(1, "call", 3, [ref(0)], callee=dict(ty=5, func="project.mmioWrite", noreturn=False)),
+            inst(1, "call", 3, [ref(0)], callee=dict(ty=5, func="project.mmioWrite", module="root", noreturn=False)),
             inst(2, "ret", 1, [ref(1)])]
     del body[0]["args"]  # schema 12: an `arg` has no operands
     return {**{k: base[k] for k in ("schema", "zig_version", "target_endian", "profile")},
-            "name": "client", "params": [param], "ret": 3, "types": types, "body": body, "globals": []}
+            "name": "client", "module": "root", "params": [param], "ret": 3, "types": types, "body": body,
+            "globals": []}
 
 
 def check_registry(binary, tmp, air):

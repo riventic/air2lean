@@ -131,6 +131,8 @@ def fixtures(version="0.16.0"):
 
 
 def invoke(binary, *argv):
+    # Every fixture here is synthetic schema-11 AIR: it needs the explicit legacy profile.
+    argv = (*argv, "--profile", "legacy-abi64-le")
     return subprocess.run([str(binary), *map(str, argv)], capture_output=True, text=True,
                           timeout=30, check=False)
 

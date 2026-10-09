@@ -166,7 +166,7 @@ theorem countdown_bounded :
     ReturnsWithin 2 (fun _ => pure ()) (countdown 2) {} (fun _ m => m = {}) :=
   countdown_within 2
 
-/-- The budget premise `2 ≤ fuel` is met. -/
+-- The budget premise `2 ≤ fuel` is met.
 nonvacuity_witness countdown_bounded := ⟨fun _ => 0, 2, Nat.le_refl 2, trivial⟩
 
 open Zig.Conc.Total in

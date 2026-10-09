@@ -32,7 +32,7 @@
     },
     "Zig.TotalTripleWithin": {
       "module": "ZigLean.Sep.Bounded",
-      "fingerprint": "00000000000000000000000000000000",
+      "fingerprint": "3e72fba74db819ee16ece50a219351e1",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 4,
       "state": [6],
@@ -40,14 +40,14 @@
     },
     "Zig.Conc.Total.EventuallyReturns": {
       "module": "ZigLean.Conc.Total",
-      "fingerprint": "00000000000000000000000000000000",
+      "fingerprint": "242544e8f2a04a0ae0bfbcfac07de8c8",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 3,
       "state": [4]
     },
     "Zig.Conc.Total.ReturnsWithin": {
       "module": "ZigLean.Conc.Total",
-      "fingerprint": "00000000000000000000000000000000",
+      "fingerprint": "a2a2bee6dab1482cecec85635a6c8193",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 4,
       "state": [5],
@@ -55,7 +55,7 @@
     },
     "Zig.Conc.Total.EventuallyReturnsUnder": {
       "module": "ZigLean.Conc.Total",
-      "fingerprint": "00000000000000000000000000000000",
+      "fingerprint": "7b59f1214665deb3e39d5fbe076bc2f7",
       "claims": ["guaranteed-return-under-premise"],
       "program": 4,
       "state": [5]

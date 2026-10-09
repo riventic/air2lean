@@ -207,12 +207,13 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(theorems['ClaimFixture.ret_total']['premises'], ['ASM-01', 'ASM-04'])
         self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-01'])
         self.assertEqual(theorems['ClaimFixture.ret_partial']['premises'], [])
+        audited = theorems_of(report)
         goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness',
-                                  'domain': 'all'}, theorems)
+                                  'domain': 'all'}, audited, definition='ClaimFixture.ret')
         self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ASM-01', 'ASM-04']))
-        del report['theorems'][0]['opaque_dependencies']
-        name = report['theorems'][0]['name']
-        goal = claims.check_goal({'theorem': name, 'strength': 'safety', 'domain': 'all'}, classified(report))
+        del audited['ClaimFixture.ret_total']['opaque_dependencies']
+        goal = claims.check_goal({'theorem': 'ClaimFixture.ret_total', 'strength': 'safety', 'domain': 'all'},
+                                 audited, definition='ClaimFixture.ret')
         self.assertEqual(goal['status'], 'rejected')
         self.assertIn('opaque_dependencies', goal['reason'])
 

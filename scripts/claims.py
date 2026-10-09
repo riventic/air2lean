@@ -315,7 +315,11 @@ def caller_obligations(report: dict) -> dict:
     """W1: a theorem over a function with a caller-supplied Allocator/Io parameter is about
     callers that pass the model one (docs/premises.md ALC-09, IOM-01); the claim names that
     premise. Theorem name -> premise IDs."""
-    return MARKERS.caller_obligations(report, ROOT) if isinstance(report.get('nodes'), list) else {}
+    nodes = report.get('nodes')
+    # A trimmed fixture report has no dependency graph; every extractor report has one.
+    if not isinstance(nodes, list) or not all(isinstance(n, dict) and 'dependencies' in n for n in nodes):
+        return {}
+    return MARKERS.caller_obligations(report, ROOT)
 
 
 def classify(report: dict, heads: dict | None = None) -> dict:

@@ -315,6 +315,15 @@ def run(binary, baseline=None):
                                   (spawn_documents(runtime=True), "constant SpawnConfig"),
                                   (spawn_documents("0.15.2", "Io.Group.async"), "requires Zig 0.16.0")):
             write(air, documents)
+            if marker == "requires Zig 0.16.0":
+                # The std model rows are qualified only for their reviewed Zig versions: a 0.15.2
+                # `Io.Group.async` is rejected under every policy, before the policy check.
+                available = decode(invoke(binary, air, "--spawn-policy", "available"), "rejected")
+                assert "no reviewed std source for Zig 0.15.2" in available["diagnostics"][0]["message"]
+                assert "no reviewed std source for Zig 0.15.2" in decode(
+                    invoke(binary, air, "--spawn-policy", "fallible"), "rejected")["diagnostics"][0]["message"]
+                checks += 2
+                continue
             decode(invoke(binary, air, "--spawn-policy", "available"), "checked")
             rejected = decode(invoke(binary, air, "--spawn-policy", "fallible"), "rejected")
             assert_policy_rejection(rejected, marker)

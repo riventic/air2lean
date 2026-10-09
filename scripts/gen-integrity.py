@@ -202,6 +202,18 @@ def all_cases():
     return cases + list(golden_cases())
 
 
+def strip_identities(value, root=True):
+    """`value` without the module identity keys of the current exporter (`module` of the file,
+    of a function reference, of a named type or global; `comptime_fn_module`)."""
+    if isinstance(value, list):
+        return [strip_identities(v, False) for v in value]
+    if not isinstance(value, dict):
+        return value
+    named = root or "func" in value or "name" in value
+    return {k: strip_identities(v, False) for k, v in value.items()
+            if k != "comptime_fn_module" and not (k == "module" and named)}
+
+
 def compose(dirs, destination, version):
     """Apply golden overlays as scripts/check.sh does: a later directory replaces every file
     whose normalized function name it provides. Profile metadata is dropped (schema 12 is the
@@ -218,6 +230,9 @@ def compose(dirs, destination, version):
         for name, doc in entries:
             doc = {k: v for k, v in doc.items() if k != "profile"}
             doc.update(zig_version=version, schema=min(doc["schema"], 11))
+            # A legacy (schema-11) program names no modules (docs/air-json.md §Identity): the
+            # identities of a schema-12 overlay go with its profile.
+            doc = strip_identities(doc)
             (destination / name).write_text(json.dumps(doc), encoding="utf-8")
 
 

@@ -26,7 +26,7 @@ theorem asm_divmod_nonzero (a b : BitVec 32) (hb : b ≠ 0) :
   simp only [Zig.asmTrap, hb, ↓reduceIte]
   simp [zig_unfold, Zig.shl]
 
-/-- The fault-avoiding premise `b ≠ 0` is satisfiable. -/
+-- The fault-avoiding premise `b ≠ 0` is satisfiable.
 nonvacuity_witness asm_divmod_nonzero := ⟨0, 1, by decide, trivial⟩
 
 end AuditClaims

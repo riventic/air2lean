@@ -337,6 +337,8 @@ def main():
     timer = function("timerRead", [dict(pointer, child=2), integer(64), timer_type, NORETURN], [0], 1, [
         inst(0, "arg", 0, param=0), inst(1, "call", 1, [dict(inst=0)], callee=dict(func="time.Timer.read", noreturn=False)),
         inst(2, "ret", 3, [dict(inst=1)])])
+    # `std.time.Timer` exists (and its model row is reviewed) up to Zig 0.15.2 only.
+    timer["zig_version"] = "0.15.2"
     checks += run(binary, [timer])
     mutate = copy.deepcopy(timer)
     mutate["types"][2]["name"] = "OtherTimer"

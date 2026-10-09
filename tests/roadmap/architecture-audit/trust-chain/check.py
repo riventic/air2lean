@@ -176,10 +176,11 @@ def case_claims_unbound(binary, tmp):
     claims = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(claims)
     report = json.loads((ROOT / 'tests/roadmap/claims/fixture-report.json').read_text())
-    theorems = {t['name']: t for t in claims.classify(report)['theorems']}
     goal = {'theorem': 'ClaimFixture.ret_total', 'strength': 'total_correctness',
             'domain': 'all pairs of unsigned 32-bit inputs (root basic.tardiness)'}
-    result = claims.check_goal(goal, theorems)
+    # Fixed by claim binding (S5): the conclusion must be about the root's generated definition.
+    result = claims.check_goal(goal, claims.audited_theorems(report), definition='Basic.tardiness',
+                               nodes=claims.nodes_of(report))
     return result['status'] == 'accepted', f'goal for root basic.tardiness backed by `pure v` theorem: {result["status"]}'
 
 
