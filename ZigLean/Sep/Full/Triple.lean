@@ -200,16 +200,15 @@ theorem FTriple.ptrAddr_none {P : FAssn} (off : Int) :
 
 /-- `@ptrFromInt` never fails and changes nothing: its result may point into a dead block (or a
 frame block), which a later access checks. -/
+theorem ptrFromAddr_run (n : Nat) (m : Mem) : ∃ v, (Zig.ptrFromAddr n).run m = pure (v, m) := by
+  unfold Zig.ptrFromAddr
+  simp only [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+    ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, StateT.pure, Option.bind_some]
+  generalize Array.findSome? _ m.blocks.zipIdx = x
+  rcases x with _ | ⟨b, a⟩ <;> exact ⟨_, rfl⟩
+
 theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) : FTriple P (Zig.ptrFromAddr n) (fun _ => P) :=
-  FTriple.of_pure_run (fun m _ => by
-    unfold Zig.ptrFromAddr
-    cases hx : (m.blocks.zipIdx.findSome? fun x =>
-        if x.fst.addr ≤ n ∧ n ≤ x.fst.addr + x.fst.bytes.size then some (x.snd, (x.fst.addr : Int))
-        else none) with
-    | none => exact ⟨_, by simp only [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-        StateT.get, hx]; rfl⟩
-    | some y => exact ⟨_, by simp only [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-        StateT.get, hx]; rfl⟩) fun _ _ h => h
+  FTriple.of_pure_run (fun m _ => ptrFromAddr_run n m) fun _ _ h => h
 
 /-! ## Lifting legacy triples -/
 
@@ -239,15 +238,8 @@ theorem of_eq {c : MemM α}
   exact ⟨by simp [shapes, ha], hk⟩
 
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p n a k) :=
-  of_eq fun m v m' h => by
-    unfold Zig.loadBytes at h
-    obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
-    obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
-    obtain ⟨⟨b, blk, o⟩, m₂, ha, h₂⟩ := Conc.Proto.MemM.bind_ok h₁
-    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok ha
-    obtain ⟨_, m₃, hr, h₃⟩ := Conc.Proto.MemM.bind_ok h₂
-    obtain ⟨-, rfl⟩ := Conc.Proto.recordAccess_ok hr
-    obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h₃
+  of_eq fun _ _ _ h => by
+    obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
     exact ⟨rfl, KMono.of_blocks rfl⟩
 
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
@@ -257,33 +249,10 @@ theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Tame (Zig.load T a p) :=
   bind (loadBytes p _ a .read) fun bs => lift (Enc.decode bs)
 
 theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
-    Tame (Zig.storeBytes p a bs k) := of_eq fun m v m' h => by
-  unfold Zig.storeBytes at h
-  obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
-  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
-  obtain ⟨⟨b, blk, o⟩, m₂, ha, h₂⟩ := Conc.Proto.MemM.bind_ok h₁
-  obtain ⟨ha, rfl⟩ := Conc.Proto.MemM.lift_ok ha
-  obtain ⟨_, m₃, hr, h₃⟩ := Conc.Proto.MemM.bind_ok h₂
-  obtain ⟨-, rfl⟩ := Conc.Proto.recordAccess_ok hr
-  obtain ⟨a₄, m₄, hg, h₄⟩ := Conc.Proto.MemM.bind_ok h₃
-  obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
-  have := Conc.Proto.MemM.set_ok h₄
-  subst this
-  refine ⟨rfl, ?_⟩
-  -- The access found `blk` at `b`.
-  have hacc : (a₁.access p bs.size a).run = some (.ok (b, blk, o)) := by
-    unfold Mem.accessW at ha
-    simp only [bind, ExceptT.bind, ExceptT.mk, ExceptT.bindCont, ExceptT.run] at ha
-    revert ha
-    cases h : (a₁.access p bs.size a).run with
-    | none => simp
-    | some x =>
-      cases x with
-      | error e => simp
-      | ok x => intro ha; split at ha <;> simp_all [pure, ExceptT.pure, ExceptT.mk, throw,
-          throwThe, MonadExceptOf.throw, ExceptT.run]
-  have hblk : a₁.blocks[b]? = some blk := (access_eq (m := a₁) hacc).2.1
-  exact KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs }) hblk rfl rfl
+    Tame (Zig.storeBytes p a bs k) := of_eq fun _ _ _ h => by
+  obtain ⟨b, blk, o, hacc, -, -, rfl⟩ := Conc.Proto.storeBytes_ok h
+  exact ⟨rfl, KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs })
+    (access_eq hacc).2.1 rfl rfl⟩
 
 theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Tame (Zig.store a p v) :=
   storeBytes p a _ .write
