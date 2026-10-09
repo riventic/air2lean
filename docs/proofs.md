@@ -138,6 +138,8 @@ The translated `Io.Mutex` (0.16.0) and `Thread.Mutex` (0.15.2, `FutexImpl`) own 
 
 A proof file over all schedules can set `attribute [local irreducible] Proto.WP`: the rules need `WP` only as a name, and when a type check unfolds `WP`, it runs the program (`Proofs/Threadsync/Mutex.lean`).
 
+The generic contracts that will replace the hand futex under this proof (`FutexSpec`, `MutexSpec`, `EventSpec`, with the `Io.Mutex` algorithm proved over every futex that satisfies `FutexSpec`) are proof-only modules in `ZigLean/Conc/Spec/`: [thread-specs.md](thread-specs.md).
+
 ### A shared atomic word
 
 A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition` or a `Thread.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic (`Word.Ok`), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant.
