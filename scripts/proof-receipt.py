@@ -578,6 +578,8 @@ def main():
     parser.add_argument('--lock', type=Path, default=Path(os.environ.get('AIR2LEAN_BUILD_LOCK',
                                                               str(Path.home() / '.cache/air2lean/build.lock'))))
     a = parser.parse_args()
+    if a.release and a.action != 'verify':
+        parser.error('--release applies to verify only')
     try:
         demand(a.attempt.is_absolute(), 'attempt path must be absolute')
         attempt = physical(a.attempt)

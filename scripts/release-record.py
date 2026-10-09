@@ -37,7 +37,7 @@ SHA1 = re.compile(r'[0-9a-f]{40}')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 GATE_STATUSES = ('passed', 'failed', 'missing', 'unavailable')
 # A gate that seals a proof receipt over uncommitted changes (scripts/proof-receipt.py).
-DIRTY_RECEIPT = re.compile(r'AIR2LEAN_RECEIPT_ALLOW_DIRTY|proof-receipt\.py[^"]*--allow-dirty')
+DIRTY_RECEIPT = re.compile(r'AIR2LEAN_RECEIPT_ALLOW_DIRTY\s*[=:]\s*["\']?1|proof-receipt\.py\b[^\n]*--allow-dirty')
 
 
 class ReleaseError(Exception):
@@ -237,7 +237,12 @@ def macos_plan(job, commands):
 
 
 def build_plan(root, revision):
-    workflow = parse_workflow_yaml(show(root, revision, WORKFLOW))
+    text = show(root, revision, WORKFLOW)
+    # Anywhere in the workflow (step, job or workflow env, a continued command line).
+    if DIRTY_RECEIPT.search(text.replace('\\\n', ' ')):
+        raise ReleaseError('%s: a gate lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
+                           'a release binds only clean-tree receipts' % WORKFLOW)
+    workflow = parse_workflow_yaml(text)
     expression, setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
     jobs = workflow.get('jobs') or {}
     if set(jobs) - {'macos'} != {'test'}:
@@ -272,11 +277,7 @@ def build_plan(root, revision):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     if 'macos' in jobs:
         plan_jobs.append(macos_plan(jobs['macos'], commands))
-    for name, command in commands.items():
-        if DIRTY_RECEIPT.search(json.dumps(command)):
-            raise ReleaseError('%s: step %r lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
-                               'a release binds only clean-tree receipts' % (WORKFLOW, name))
-    blob =lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
+    blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
     return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),
             'local_ci_steps_blob': blob(STEPS_SCRIPT), 'compatibility_blob': blob('compatibility.json'),

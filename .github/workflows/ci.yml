@@ -339,12 +339,13 @@ jobs:
           ./elan-init --default-toolchain none -y
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      # Not the check trees (scripts/check-tree.py): each run derives them from this cache.
+      # Not the check trees (scripts/check-tree.py): each run derives them from this cache. The
+      # exclusion only applies to matched entries, hence `.lake/*` rather than `.lake`.
       - name: Cache Lake build (root package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .lake
+            .lake/*
             !.lake/check-tree
           key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
 
@@ -1342,7 +1343,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .lake
+            .lake/*
             !.lake/check-tree
           key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
 

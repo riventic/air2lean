@@ -164,12 +164,17 @@ class PlanTests(Repo):
                 rr.parse_workflow_yaml(bad)
 
     def test_dirty_tree_receipt_gate_is_refused(self):
-        for run in ('AIR2LEAN_RECEIPT_ALLOW_DIRTY=1 bash tests/roadmap/proof-receipts/check.sh x y z',
-                    'python3 scripts/proof-receipt.py prepare /a --profile p --allow-dirty'):
-            with self.subTest(run=run):
-                self.write('.github/workflows/ci.yml', WORKFLOW.replace('run: echo unit', 'run: ' + run))
-                with self.assertRaisesRegex(rr.ReleaseError, "step 'Unit' lets a proof receipt bind a dirty tree"):
+        unit = 'run: echo unit'
+        for change in ('run: AIR2LEAN_RECEIPT_ALLOW_DIRTY=1 bash tests/roadmap/proof-receipts/check.sh x y z',
+                       'run: python3 scripts/proof-receipt.py prepare "$a" --profile "p" --allow-dirty',
+                       'run: |\n          python3 scripts/proof-receipt.py prepare "$a" \\\n            --allow-dirty',
+                       'env:\n          AIR2LEAN_RECEIPT_ALLOW_DIRTY: "1"\n        ' + unit):
+            with self.subTest(change=change):
+                self.write('.github/workflows/ci.yml', WORKFLOW.replace(unit, change))
+                with self.assertRaisesRegex(rr.ReleaseError, 'lets a proof receipt bind a dirty tree'):
                     rr.build_plan(self.repo, self.commit('dirty receipt gate'))
+        self.write('.github/workflows/ci.yml', WORKFLOW.replace(unit, 'env:\n          AIR2LEAN_RECEIPT_ALLOW_DIRTY: "0"\n        ' + unit))
+        rr.build_plan(self.repo, self.commit('permission disabled'))
 
     def test_unevaluable_condition_fails_closed(self):
         self.write('.github/workflows/ci.yml', WORKFLOW.replace('if: matrix.mutate', "if: matrix.zig != '1'"))
