@@ -831,8 +831,11 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             for premise in config["runtime_modules"].get(module, ()):
                 via.setdefault(premise, []).append(f"runtime module {module}")
         apply_rules(config, via, names, "closure")
-        # The graph does not separate type from proof edges: statement rules see all direct edges.
-        apply_rules(config, via, {user(n) for n in nodes[theorem["name"]]["dependencies"]}, "statement")
+        # Statement rules see the kernel type's edges (`statement_dependencies`, as the source
+        # index sees the theorem's own statement); a report without them falls back to every
+        # direct edge, type and proof.
+        statement = theorem.get("statement_dependencies", nodes[theorem["name"]]["dependencies"])
+        apply_rules(config, via, {user(n) for n in statement}, "statement")
         for module in sorted(generated):
             if module not in profiles:
                 path = generated_path(root, module)
