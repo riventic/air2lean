@@ -30,7 +30,9 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
   "src": { "file": "basic.zig", "module": "root", "decl_line": 14 },
   "params": [0, 1],
   "ret": 3,
+  "export": {"name": "scale", "cc": "x86_64_sysv"},
   "body": [ Inst, ... ],
+  "externs": [ Extern, ... ],
   "globals": [ Global, ... ],
   "types": [ Type, ... ]
 }
@@ -44,7 +46,9 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name, e.g. `root` or `std`) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
+| `export` | `{name, cc}`: present only for a function declared with the `export` keyword. `name` is the linker symbol it defines, `cc` its calling convention's tag (`std.builtin.CallingConvention`, e.g. `x86_64_sysv`, `aarch64_aapcs_darwin`). `@export` aliases are not reported (§Extern calls). Additive; AIR golden comparison (`scripts/normalize-air.py`) ignores it. |
 | `body` | main body (AIR `getMainBody`) |
+| `externs` | the extern functions the body calls (§Extern calls), one entry per symbol, in first-call order. Missing if the body calls none. |
 | `globals` | the globals that pointer constants point into (§Global). A global ID is an index into this array. Missing if the function has no pointer constant (schema 6). |
 | `types` | type table. A type ID is an index into this array. Each type is listed once. |
 
@@ -141,6 +145,7 @@ One of:
 | `{"ty": 3, "fbits": "0x40490fdb"}` | float constant. `fbits`: the value `@bitCast` to an unsigned int of the same width, lowercase hex, zero-padded to `width/4` digits (`f80`: 20 digits). Read from the `InternPool` storage, not `fmtValue`. |
 | `{"ty": 3, "undef": true}` | `undefined` |
 | `{"ty": 9, "func": "basic.tardiness", "noreturn": false}` | function. `noreturn: true` when the return type is `noreturn` (panic handlers). |
+| `{"ty": 9, "extern": "memset", "noreturn": false}` | extern function (`extern fn`, `@extern`, a function translate-c declares or demotes): its linker symbol; the file's `externs` table holds its declaration (§Extern calls). Before this form the exporter wrote `{"ty", "val": "(extern 'memset')"}`, which the translator rejected (`AIR_DECODE`). An extern that is not a function keeps the `val` form. |
 | `{"ty": 1, "err": "NotDigit"}` | error value, or an error union constant in the error state. `ty`'s `k` (`error_set` vs `error_union`) disambiguates. |
 | `{"ty": 1, "payload": Ref}` | error union constant holding a payload (nested `Ref`, recursively). |
 | `{"ty": 2, "some": Ref}` | optional constant holding a payload (nested `Ref`, recursively). |
@@ -156,6 +161,43 @@ The translator accepts `{"inst": n}` as a top-level SSA operand. Inside a consta
 recursive `Ref` in `payload`, `some`, `utag`, `uval`, `elems`, `slice_ptr` or `slice_len`
 must itself be a constant. An instruction reference at any nesting depth is outside the
 subset and is rejected before normalization; compiler-exported constants contain constants.
+
+## Extern calls
+
+An `externs` entry declares one extern function a call names (`{"extern": symbol}`):
+
+```json
+{"name": "memset", "library": null, "cc": "x86_64_sysv", "params": [10, 1, 0], "ret": 10,
+ "varargs": false}
+```
+
+| Field | Meaning |
+|---|---|
+| `name` | the linker symbol (the extern's identity; never a Zig declaration name) |
+| `library` | the library of `extern "lib" fn`, else `null` |
+| `cc` | the calling convention's tag, as in the file's `export` |
+| `params`, `ret` | type IDs of the declared parameter and return types (the variadic part excluded) |
+| `varargs` | the declaration ends in `...` |
+
+The translator decodes an extern call as a call to the callee `extern:<symbol>`, a form no
+function name has. Before the whole-program checks it binds each extern call
+(`Air2Lean/Check.lean` `resolveExterns`), by symbol only:
+
+1. **Trusted base model.** A `--model-registry` entry whose `symbol` is `extern:<symbol>` and
+   whose `extern` object gives the declared `library` and the `premise` (a `docs/premises.md`
+   ID) that states the model's correspondence to the real primitive
+   (`docs/external-models.md` §Extern functions), when the AIR set does not define the symbol
+   (that combination is rejected). The call stays a model call. A registry entry
+   for the Zig declaration's name does not bind the extern call.
+2. **Translated definition.** Else the one function of the AIR set whose `export.name` is the
+   symbol, with the declared `cc`. The call becomes a direct call of that definition, and its
+   argument and result types are checked against the definition's parameters and return type
+   like any direct call's. This is the static linker's rule for a program linked as one image
+   with that strong definition (for example musl translated through the same route). A call
+   to a symbol that several functions of the AIR set export is rejected.
+3. Otherwise the program is rejected with `CALLEE_EXTERN_UNBOUND`, naming the symbol (and its
+   library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
+   outside the subset. Each call's argument count and result type must be the entry's.
 
 ## Global
 

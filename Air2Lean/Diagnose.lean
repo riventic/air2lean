@@ -93,7 +93,8 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
     if let some (caller, insts) := source then
       for i in insts do
         if let .call (.func callee false worker) _ := i.op then
-          if !modelledStdFn callee then
+          -- An extern call is bound or reported by `resolveExternsCollect`.
+          if !modelledStdFn callee && (externSymbol? callee).isNone then
             result := result.push { caller, callee, instruction := i.id, file := u.file }
           if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
             if let some callee := worker then
@@ -303,6 +304,27 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
 def collectProgram (units : Array FileResult) (initial : Log)
     (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
   let mut log := initial
+  -- Bind extern calls first (`docs/air-json.md` §Extern calls): a bound call is a direct call
+  -- of its definition below; each unbound one is its own diagnostic.
+  let mut units := units
+  let normalized := (units.filter (·.structureValid)).filterMap (·.normalized)
+  match resolveExternsCollect normalized with
+  | .error message =>
+    log := log.add { code := .programFailure, phase := .program, category := .validationFailure,
+                     message, prerequisites := #["structurally_valid_selected_functions"] }
+  | .ok (resolved, unbound) =>
+    -- `resolved` is `normalized` rewritten, in the same order.
+    let mut next := 0
+    let mut updated := #[]
+    for u in units do
+      if u.structureValid && u.normalized.isSome then
+        updated := updated.push { u with normalized := resolved[next]? }
+        next := next + 1
+      else updated := updated.push u
+    units := updated
+    for (caller, message) in unbound do
+      let file := ((units.find? (·.function == some caller)).map (·.file)).getD ""
+      log := log.add (boundary file (some caller) .calleeExternUnbound .program .unsupportedSemantics message)
   let safe := units.filter (·.structureValid)
   let funcs := safe.filterMap (·.normalized)
   let snapshot := CallChecksSnapshot.build funcs

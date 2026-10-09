@@ -148,6 +148,27 @@ registry test generates `fillClient` from a registered binding and proves the sa
 through the generated obligation (`FillGenerated.lean`). An assumed variant
 (`FillAssumedGenerated.lean`) also checks, but its theorem rests on the binding axiom.
 
+## Extern functions
+
+A call to an extern function (`docs/air-json.md` §Extern calls) has the callee
+`extern:<symbol>`: its linker symbol, never the name of a Zig declaration. A registry entry
+binds it only with that `symbol` and an `extern` object:
+
+```json
+"symbol": "extern:abs",
+"extern": {"library": "c", "premise": "EXT-03"}
+```
+
+`library` must equal the declared library (`extern "c" fn` gives `"c"`, a plain `extern fn`
+`null`) at every call site. `premise` names the premise (`docs/premises.md`, for example
+EXT-03 or an OS-specific one) under which the model stands for the real primitive; the
+registry report and the `-- air2lean-models:` header carry it. The `extern` object is required
+for an `extern:` symbol and forbidden for any other. A symbol that the AIR set also defines
+(`export fn`) cannot be bound to a model, since the linker resolves it to that definition; without either the program is rejected with
+`CALLEE_EXTERN_UNBOUND`. The template (`--model-registry-template`) lists each unbound extern
+call with its library filled in and no premise. `tests/roadmap/extern-calls` binds
+`extern "c" fn abs` this way (`registry.json`, `Model.lean`).
+
 ## Callback contracts (E02)
 
 `ZigLean.External.Callback` extends the contract layer to function-pointer parameters. A

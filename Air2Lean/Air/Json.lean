@@ -117,6 +117,8 @@ structure RawFunc where
   globals : Array Global
   /-- The function's declaration site (additive provenance; absent in older exports). -/
   src : Option RawSrc := none
+  externs : Array ExternDecl := #[]
+  exportDecl : Option ExportDecl := none
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -450,12 +452,15 @@ def parsePackedLit (fnName : String) (types : Array Ty) (fields : Array (String 
 optional constant holding a payload; nested `Ref`, recursively) / `{"ty", "null": true}` (an
 optional constant, `null`) (`docs/air-json.md`). -/
 partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except String Val := do
-  let forms := ["inst", "func", "undef", "err", "payload", "some", "null", "enum",
+  let forms := ["inst", "func", "extern", "undef", "err", "payload", "some", "null", "enum",
     "uval", "elems", "ptr", "slice_ptr", "fbits", "val"]
   unless (forms.filter fun k => (j.getObjVal? k).toOption.isSome).length == 1 do
     throw s!"{fnName}: a reference must have exactly one value form"
   if let some instJ := optField j "inst" then
     return .inst (← instJ.getNat?)
+  else if let some externJ := optField j "extern" then
+    -- An extern function: its symbol; the function's `externs` table declares it.
+    return .func (externCallee (← externJ.getStr?)) (← boolField j "noreturn")
   else if let some funcJ := optField j "func" then
     let name ← funcJ.getStr?
     let noreturn ← boolField j "noreturn"
@@ -754,6 +759,29 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     | some g => g.getArr?
     | none => pure #[]
   let globals ← globalsJ.mapM (parseGlobal name types)
+  let typeId (k : String) (tj : Json) : Except String TyId := do
+    let t ← tj.getNat?
+    unless t < types.size do throw s!"{name}: {k}: unknown type id {t}"
+    pure t
+  let externsJ ← match optField j "externs" with
+    | some e => e.getArr?
+    | none => pure #[]
+  let externs ← externsJ.mapM fun ej => do
+    let symbol ← (← ej.getObjVal? "name").getStr?
+    let library ← match optField ej "library" with
+      | some l => some <$> l.getStr?
+      | none => pure none
+    let params ← (← (← ej.getObjVal? "params").getArr?).mapM (typeId s!"extern '{symbol}'")
+    return { name := symbol, library, cc := ← (← ej.getObjVal? "cc").getStr?, params,
+             ret := ← typeId s!"extern '{symbol}'" (← ej.getObjVal? "ret"),
+             varargs := ← (← ej.getObjVal? "varargs").getBool? : ExternDecl }
+  for (e, k) in externs.zipIdx do
+    if (externs.extract 0 k).any (·.name == e.name) then
+      throw s!"{name}: extern '{e.name}' is declared twice in 'externs'"
+  let exportDecl ← match optField j "export" with
+    | some ej => pure (some { name := ← (← ej.getObjVal? "name").getStr?,
+                              cc := ← (← ej.getObjVal? "cc").getStr? : ExportDecl })
+    | none => pure none
   return {
     schema
     zigVersion
@@ -766,6 +794,8 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     layouts
     globals
     src := parseSrc? j
+    externs
+    exportDecl
   }
 
 def parseFunc (j : Json) : Except String RawFunc := do

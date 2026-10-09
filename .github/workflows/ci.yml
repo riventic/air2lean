@@ -598,6 +598,15 @@ jobs:
           bash tests/roadmap/const-locals/check.sh
           bash tests/roadmap/const-locals/check.sh --native
 
+      # G1: extern calls bound to translated `export fn` definitions (evaluated per Zig version)
+      # or to a registry model with a premise; CALLEE_EXTERN_UNBOUND otherwise. Committed AIR only.
+      - name: Extern C calls
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/extern-calls/check.sh
+
       - name: Validate check-only diagnostic collection
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |

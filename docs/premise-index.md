@@ -54,6 +54,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
+| [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
 | [TRU-01](premises.md#tru-01) | 2974 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1451 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1451 | Backend lowering and native execution |

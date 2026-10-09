@@ -89,7 +89,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
 ## Target and build profiles
@@ -701,6 +701,21 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: a reached source `axiom` declaration; a non-standard axiom in the compiled report.
 - Sources: [external-models.md](external-models.md), [assumptions-audit.md](assumptions-audit.md).
 
+<a id="ext-03"></a>
+### EXT-03 — Extern functions at their linker identity
+
+- Kind: environment.
+- Statement: A call to an extern function (`extern fn`, a libc or OS primitive) is bound by its
+  linker symbol and declared library only. Bound to a registry model, the model's contract is
+  assumed to describe the real symbol that the target's linker resolves (an OS or libc
+  primitive, for example `mmap` or `abs`); each such binding names this or a more specific
+  premise. Bound to an `export fn` of the translated program, the program is assumed to be
+  linked as one image in which that definition is the symbol's strong definition. Variadic
+  and `noreturn` externs, `@export` aliases and weak definitions are outside the subset.
+- Derived from: a `--model-registry` entry with an `extern` object; an `externs` entry bound by
+  `Air2Lean/Check.lean` `resolveExterns`.
+- Sources: [air-json.md](air-json.md#extern-calls), [external-models.md](external-models.md#extern-functions).
+
 ## Compiler and tool trust
 
 <a id="tru-01"></a>
@@ -759,5 +774,5 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
 | Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, TRU-03 |
 | Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05 |
-| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02 |
+| Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02, EXT-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |

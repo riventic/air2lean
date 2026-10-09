@@ -18,6 +18,7 @@
   },
   "import_roots": ["tests/diff"],
   "generated_imports": {
+    "ExternModel": "tests/roadmap/extern-calls/check.sh compiles Model.lean as ExternModel.olean at gate time (a module name cannot contain the directory's hyphen).",
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Calls": "tests/roadmap/indirect-calls/check.sh compiles the fresh Pipeline.lean translation into Calls.olean at gate time.",
     "DispatchTokenizer": "tests/roadmap/dispatch-templates/check.sh translates a fresh export of source.zig into DispatchTokenizer.olean at gate time.",
@@ -225,7 +226,7 @@
     "ASM-01": ["TRU-04"],
     "ASM-02": ["ASM-01"],
     "ASM-03": ["ASM-01"],
-    "EXT-02": ["EXT-01"],
+    "EXT-02": ["EXT-01"], "EXT-03": ["EXT-01"],
     "SEM-02": ["SEM-01"],
     "SEM-03": ["SEM-01"],
     "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],
