@@ -77,9 +77,9 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 | Zig | AIR tags | `emitted-unfixtured` | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.16.0 | 214 | 29 | 135 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 28 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.15.2 | 212 | 34 | 130 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 28 | `Io.futexWaitTimeout`, `Thread.detach` |
-| 0.14.1 | 207 | 65 | 95 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 28 | `Io.futexWaitTimeout`, `Thread.detach` |
+| 0.16.0 | 214 | 29 | 135 | 5 | 10 | 16 | 19 | 24 | 33 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach`, `Thread.spinLoopHint` |
+| 0.15.2 | 212 | 34 | 130 | 5 | 8 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach`, `Thread.spinLoopHint` |
+| 0.14.1 | 207 | 65 | 95 | 5 | 7 | 16 | 19 | 24 | 34 | 9 | 27 | `Io.futexWaitTimeout`, `Thread.detach`, `Thread.spinLoopHint` |
 
 ## Requirement register
 
