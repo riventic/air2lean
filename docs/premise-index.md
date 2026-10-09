@@ -48,7 +48,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-01](premises.md#sem-01) | 2649 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 2264 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1132 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 108 | Total-correctness statements |
+| [SEM-04](premises.md#sem-04) | 126 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
@@ -898,7 +898,7 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 | Theorem | Premises |
 |---|---|
 | `counter_init` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `bump_spec` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `bump_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `copyWithin_spec` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `fill_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `reverse_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
@@ -3290,13 +3290,13 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 
 ## `tests/roadmap/proof-tools/StepClients.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `at_array_steps` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `bumpAt_array_steps` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `example@L34` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `at_array_steps` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `bumpAt_array_steps` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L34` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/proof-tools/Steps.lean`
 
@@ -3304,22 +3304,22 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 
 | Theorem | Premises |
 |---|---|
-| `example@L15` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L15` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `example@L22` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
-| `example@L29` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L29` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `example@L36` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
-| `example@L45` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L53` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L62` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L72` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L79` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L84` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L93` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L113` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L120` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L128` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L136` | SEM-01, SEM-02, SEM-03, TRU-01 |
-| `example@L144` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `example@L45` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L53` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L62` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L72` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L79` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L84` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L93` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L113` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L120` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L128` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L136` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `example@L144` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `steps_axioms` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 
 ## `tests/roadmap/proof-tools/Total.lean`

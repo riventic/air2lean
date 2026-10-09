@@ -101,9 +101,12 @@ def main():
                                  "--namespace", "Asm", "--prefix", "asm."], text=True,
                                 capture_output=True, check=False, timeout=60)
         assert result.returncode == 0, result.stderr
-        fresh = "\n".join(l for l in out.read_text().split("\n")
-                          if not l.startswith("-- air2lean-profile:"))
-        assert fresh == (ROOT / "Proofs/Asm/Gen.lean").read_text(), "register-only asm changed"
+        # check.sh may have rewritten Proofs/Asm/Gen.lean with this host's profile header first
+        # (CI's x86_64 job does): compare the translations without it.
+        def body(text: str) -> str:
+            return "\n".join(l for l in text.split("\n") if not l.startswith("-- air2lean-profile:"))
+        fresh = body(out.read_text())
+        assert fresh == body((ROOT / "Proofs/Asm/Gen.lean").read_text()), "register-only asm changed"
     checks += 1
 
     # The same template without the clobber is a register-only op of the same hash: both opaques
