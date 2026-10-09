@@ -536,9 +536,9 @@ def emitNamedType (structNames : Array (String × String)) (s : NamedType) : Str
     -- A retag leaves a payload with bits undefined (MM-13): `undef_f v written` holds `f`'s
     -- payload while it is not defined, `v` with the struct fields `written` (`setField_f`).
     -- `unionFreshPayload` takes the AIR index of each inhabited field.
-    let fresh := ((List.range airFields.size).filter fun i =>
-        !uninhabitedTy s.srcTypes airFields[i]!.2).map fun i =>
-      unionFreshPayload s.srcTypes s.ty i (structNames.map (·.2))
+    let fresh := airFields.zipIdx.toList.filterMap fun ((_, id), i) =>
+      if uninhabitedTy s.srcTypes id then none
+      else some (unionFreshPayload s.srcTypes s.ty i (structNames.map (·.2)))
     let undefCtors := (fields.toList.zip fresh).filterMap fun ((f, id), fr) =>
       fr.map fun _ => s!"  | {hn s!"undef_{f}"} (v : {tyStr id}) (written : List String)"
     let ctors := fields.toList.map fun (f, id) =>
@@ -1422,6 +1422,10 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
 /-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
 def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
+/-- `v` is a volatile pointer (L13: a device access with `--device-contract`). -/
+def FCtx.isVolatileVal (fc : FCtx) (v : Val) : Bool :=
+  (fc.valTyId? v |>.map (volatilePtrTy fc.types fc.layouts)).getD false
+
 /-- A derived pointer: the projection `project` (a `Ptr → Ptr` term such as `·.add off`,
 `·.elem size i`, `·.elemSub size i`) of the pointer `base`, whose term is `p`, with result type `result`. It is
 `Zig.ptrProject` (`getelementptr inbounds`: `.illegal` unless base and result are in bounds of
@@ -1432,15 +1436,11 @@ volatile base (a device pointer; the checker admits it only with `--device-contr
 `Zig.ptrProjectDevice`: formed inside the declared register window (L13, DEV-01). -/
 def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String)
     (zero : Bool := false) : String :=
-  if zero then
-    if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
-      s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
-    else s!"pure {p}"
-  else if (fc.valTyId? base |>.map (volatilePtrTy fc.types fc.layouts)).getD false then
+  let nonnull := fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result
+  if zero && !nonnull then s!"pure {p}"
+  else if !zero && fc.isVolatileVal base then
     s!"{fc.callMName} (Zig.ptrProjectDevice {deviceDefName} {p} ({project}))"
-  else if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
-    s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
-  else if zero then s!"pure {p}"
+  else if nonnull then s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
   else s!"{fc.callMName} (Zig.ptrProject {p} ({project}))"
 
 /-- Bind the exact pointee's dictionary at a memory boundary. -/
@@ -1448,10 +1448,6 @@ def FCtx.pointeeStorageExpr (fc : FCtx) (ptr : Val) (expr : String) : String :=
   match (fc.valTyId? ptr).bind (ptrChild fc.types) with
   | some tid => fc.storageExpr tid expr
   | none => expr
-
-/-- `v` is a volatile pointer (L13: a device access with `--device-contract`). -/
-def FCtx.isVolatileVal (fc : FCtx) (v : Val) : Bool :=
-  (fc.valTyId? v |>.map (volatilePtrTy fc.types fc.layouts)).getD false
 
 /-- The bit width of `ptr`'s integer pointee (a device register access). -/
 def FCtx.pointeeBits (fc : FCtx) (ptr : Val) : Nat :=

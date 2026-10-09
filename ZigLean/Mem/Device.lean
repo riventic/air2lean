@@ -84,7 +84,8 @@ def Device.window (d : Device) : Nat × Nat :=
 
 /-- `addr` lies in `d`'s register window (one past its end included). -/
 def Device.inWindow (d : Device) (addr : Nat) : Bool :=
-  !d.regs.isEmpty && decide (d.window.1 ≤ addr) && decide (addr ≤ d.window.2)
+  let (lo, hi) := d.window
+  !d.regs.isEmpty && decide (lo ≤ addr) && decide (addr ≤ hi)
 
 /-- A derived pointer of a device pointer (L13, `--device-contract`): a field or element of the
 register block, such as `&uart.data`. The device's declared register window is the allocation

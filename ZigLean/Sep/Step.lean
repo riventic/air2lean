@@ -355,6 +355,20 @@ def cont (facts : Array Syntax) : TacticM Unit := do
   let facts : Array (TSyntax `Lean.Parser.Tactic.simpLemma) := facts.map (⟨·⟩)
   discard <| observing? (evalTactic (← `(tactic| sep_unfold [$facts,*])))
 
+/-- `&xs[i]` of an owned array `arr p xs` (`arr_ptrProject_bind`, MM-3): the side goals. -/
+def ptrProjectStep (kind : Name) (P cmd : Expr) : TacticM (List MVarId) := do
+  let base := cmd.getAppArgs[0]!.consumeMData
+  let T ← mkFreshExprMVar (mkSort levelOne)
+  let inst ← mkFreshExprMVar none
+  let xs ← mkFreshExprMVar (mkApp (mkConst ``List [levelZero]) T)
+  let arr := mkAppN (mkConst ``Zig.arr) #[T, inst, base, xs]
+  unless ← findAtom P arr ``Zig.arr do
+    throwError "sep_step: the precondition has no `arr` for{indentExpr base}"
+  focus kind P #[← instantiateMVars arr]
+  match ← evalTacticAt (← `(tactic| refine $(lemmaId kind "arr_ptrProject_bind") ?_ ?_)) (← getMainGoal) with
+  | [hi, k] => setGoals [k]; tryBound hi
+  | _ => throwError "sep_step: unexpected goals after the pointer rule"
+
 /-- One symbolic-execution step on the main goal. -/
 def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMainContext do
   let (kind, _, c, _) ← goalTriple
@@ -383,29 +397,9 @@ def step (rule? : Option Term) (facts : Array Syntax) : TacticM Unit := withMain
         evalTactic (← `(tactic| try dsimp only))
         intro []
       pure []
-    | none => do
+    | none => if cmd.isAppOfArity ``Zig.ptrProject 2 then ptrProjectStep kind P cmd else do
       let isLoad := cmd.isAppOfArity ``Zig.load 4
       let isStore := cmd.isAppOfArity ``Zig.store 5
-      if cmd.isAppOfArity ``Zig.ptrProject 2 then
-        -- `&xs[i]` of an owned array `arr p xs` (`arr_ptrProject_bind`, MM-3).
-        let base := cmd.getAppArgs[0]!.consumeMData
-        let T ← mkFreshExprMVar (mkSort levelOne)
-        let inst ← mkFreshExprMVar none
-        let xs ← mkFreshExprMVar (mkApp (mkConst ``List [levelZero]) T)
-        let arr := mkAppN (mkConst ``Zig.arr) #[T, inst, base, xs]
-        unless ← findAtom P arr ``Zig.arr do
-          throwError "sep_step: the precondition has no `arr` for{indentExpr base}"
-        focus kind P #[← instantiateMVars arr]
-        let goals ← evalTacticAt (← `(tactic| refine $(lemmaId kind "arr_ptrProject_bind") ?_ ?_))
-          (← getMainGoal)
-        let side ← match goals with
-          | [hi, k] => do setGoals [k]; tryBound hi
-          | _ => throwError "sep_step: unexpected goals after the pointer rule"
-        let main :: rest ← getGoals | return
-        setGoals [main]
-        cont facts
-        setGoals ((← getGoals) ++ side ++ rest)
-        return
       unless isLoad || isStore do
         throwError "sep_step: no built-in rule for{indentExpr cmd}\nuse `sep_step using rule`"
       let args := cmd.getAppArgs
