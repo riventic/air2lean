@@ -342,7 +342,7 @@ theorem isW_of_pW {c : WCtl WL} (h : 0 < pW c) : isW c = true := by
 
 /-- At most one waiter, so `is_waiting` is one bit. -/
 theorem wbit (hi : WgInv L N s) : tsum N (fun u => pW (s.ctl u)) ≤ 1 :=
-  tsum_le_one (fun u => pW_le _) fun u v hu hv => hi.one u v (isW_of_pW hu) (isW_of_pW hv)
+  tsum_le_one (fun _ => pW_le _) fun u v hu hv => hi.one u v (isW_of_pW hu) (isW_of_pW hv)
 
 /-- A thread `t < N` that has `pW` makes the bit `1`. -/
 theorem wbit_eq (hi : WgInv L N s) {t : Tid} (ht : t < N) (h : pW (s.ctl t) = 1) :
@@ -599,7 +599,7 @@ theorem pS_pF_of_pW {c : WCtl WL} (h : pW c = 1) : pS c = 0 ∧ pF c = 0 := by
 only its view. -/
 theorem wmove (hi : WgInv L N s) {t : Tid} (ht : t < N) {c0 c : WCtl WL} (h : s.ctl t = c0)
     (hW0 : pW c0 = 1) (hW : pW c = 1) (hok : WgPlace.ok c = true) (hiW : isW c = isW c0)
-    (h0asl : c0 ≠ .run .wait .asleep) (hasl : c ≠ .run .wait .asleep) {v' : X}
+    (h0asl : c0 ≠ .run .wait .asleep) {v' : X}
     (hevw : wfut c = true → s.sh.ev.val ≠ 0)
     (hwd : WgPlace.wdone c = true → s.P N = 0 ∧ L.le s.sh.st.msg v')
     (hwev : wev c = true → s.sh.ev.val ≠ 2 → 0 < s.P N ∨ ∃ u, s.ctl u = .run .finish .set) :
@@ -682,12 +682,12 @@ theorem isW_of_wdone {c : WCtl WL} (h : WgPlace.wdone c = true) : isW c = true :
 theorem isW_of_wev {c : WCtl WL} (h : wev c = true) : isW c = true := by
   cases c with
   | run op l => cases op <;> cases l <;> simp_all [wev, isW]
-  | _ => simp_all [wev, isW]
+  | _ => simp_all [wev]
 
 theorem pW_of_wev {c : WCtl WL} (h : wev c = true) : pW c = 1 := by
   cases c with
   | run op l => cases op <;> cases l <;> simp_all [wev, pW]
-  | _ => simp_all [wev, pW]
+  | _ => simp_all [wev]
 
 theorem ne_of_ctl {t u : Tid} {a b : WCtl WL} (hu : s.ctl u = a) (ht : s.ctl t = b) (hab : a ≠ b) :
     u ≠ t := fun e => hab (by rw [← hu, ← ht, e])
@@ -752,6 +752,460 @@ theorem add (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .start .add) :
     · exact .inl h1
     · exact .inr ⟨v, by rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv⟩
 
+
+theorem lt_of_run (hi : WgInv L N s) {t : Tid} {op : WOp} {l : WL} (h : s.ctl t = .run op l) : t < N :=
+  hi.lt_of_ne_idle (by rw [h]; intro he; cases he)
+
+/-- `finish`'s `fetchSub` that reads `3` (the last pending, with the waiter): the event's `set`
+comes next. -/
+theorem subSet (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .finish .sub) (h3 : s.sh.st.val = 3) :
+    WgInv L N { s with
+      sh := { s.sh with st := ⟨1, L.join (s.cur t) s.sh.st.msg⟩ }
+      ctl := tset s.ctl t (.run .finish .set)
+      cur := tset s.cur t (L.join (s.cur t) s.sh.st.msg) } := by
+  have ht := hi.lt_of_run h
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := .run .finish .set) h
+  have z : pS (.run .finish .sub : WCtl WL) = 0 ∧ pS (.run .finish .set : WCtl WL) = 0 ∧
+    pF (.run .finish .sub : WCtl WL) = 1 ∧ pF (.run .finish .set : WCtl WL) = 0 ∧
+    pW (.run .finish .sub : WCtl WL) = 0 ∧ pW (.run .finish .set : WCtl WL) = 0 :=
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hc := hi.cnt
+  have hb := hi.wbit
+  unfold WState.P at hc
+  have hP1 : s.P N = 1 := by unfold WState.P; omega
+  have hw : s.waited = true := hi.waited_of_bit (by omega)
+  have hP' : WState.P N { s with
+      sh := { s.sh with st := ⟨1, L.join (s.cur t) s.sh.st.msg⟩ }
+      ctl := tset s.ctl t (.run .finish .set)
+      cur := tset s.cur t (L.join (s.cur t) s.sh.st.msg) } = 0 := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h (c := .run .finish .set) rfl rfl
+    fun _ he => by cases he
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · rw [hP']; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact hi.evb
+  · exact tset_all (Q := fun c => wfut c = true → s.sh.ev.val ≠ 0) (by simp [wfut])
+      fun u _ => hi.evw u
+  · intro he; have := (hi.evset he).1; omega
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self]; exact ⟨hP', hw, Lat.le_refl _⟩
+    · rw [tset_ne _ _ hut] at hu; have := (hi.setter u hu).1; omega
+  · exact Lat.le_join_of_le_right _ hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self]; exact Lat.le_refl _
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut]
+      exact Lat.le_join_of_le_right _ (hi.post u hu)
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; simp [WgPlace.wdone] at hu
+    · rw [tset_ne _ _ hut] at hu; have := (hi.wdone u hu).1; omega
+  · intro _ _ _; exact .inr ⟨t, tset_self _ _ _⟩
+  · exact hi.qwf
+  · intro u a ha
+    have hu := hi.qloc u a ha
+    rw [tset_ne _ _ (ne_of_ctl hu h (by intro he; cases he))]; exact hu
+  · intro hq
+    rcases hi.wit hq with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · exact .inr ⟨v, by rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv⟩
+
+/-- `finish`'s `fetchSub` that leaves something pending. -/
+theorem subDone (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .finish .sub)
+    (h2 : 2 ≤ s.sh.st.val) (h3 : s.sh.st.val ≠ 3) :
+    WgInv L N { s with
+      sh := { s.sh with st := ⟨s.sh.st.val - 2, L.join (s.cur t) s.sh.st.msg⟩ }
+      ctl := tset s.ctl t (.run .finish .fin)
+      cur := tset s.cur t (L.join (s.cur t) s.sh.st.msg) } := by
+  have ht := hi.lt_of_run h
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := .run .finish .fin) h
+  have z : pS (.run .finish .sub : WCtl WL) = 0 ∧ pS (.run .finish .fin : WCtl WL) = 0 ∧
+    pF (.run .finish .sub : WCtl WL) = 1 ∧ pF (.run .finish .fin : WCtl WL) = 0 ∧
+    pW (.run .finish .sub : WCtl WL) = 0 ∧ pW (.run .finish .fin : WCtl WL) = 0 :=
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hc := hi.cnt
+  have hb := hi.wbit
+  unfold WState.P at hc
+  have hPdef : s.P N = s.tok + tsum N (fun u => pS (s.ctl u)) + tsum N (fun u => pF (s.ctl u)) := rfl
+  have hP1 : 1 ≤ s.P N := by omega
+  have hP' : WState.P N { s with
+      sh := { s.sh with st := ⟨s.sh.st.val - 2, L.join (s.cur t) s.sh.st.msg⟩ }
+      ctl := tset s.ctl t (.run .finish .fin)
+      cur := tset s.cur t (L.join (s.cur t) s.sh.st.msg) } + 1 = s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h (c := .run .finish .fin) rfl rfl
+    fun _ he => by cases he
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · unfold WState.P; dsimp only; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact hi.evb
+  · exact tset_all (Q := fun c => wfut c = true → s.sh.ev.val ≠ 0) (by simp [wfut])
+      fun u _ => hi.evw u
+  · intro he; have := (hi.evset he).1; omega
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; have := (hi.setter u hu).1; omega
+  · exact Lat.le_join_of_le_right _ hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self]; exact Lat.le_refl _
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut]
+      exact Lat.le_join_of_le_right _ (hi.post u hu)
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; simp [WgPlace.wdone] at hu
+    · rw [tset_ne _ _ hut] at hu; have := (hi.wdone u hu).1; omega
+  · intro u hu _
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; simp [wev] at hu
+    · rw [tset_ne _ _ hut] at hu
+      have hW := hi.wbit_eq (hi.lt_of_ne_idle (fun he => by rw [he] at hu; simp [wev] at hu))
+        (pW_of_wev hu)
+      left; unfold WState.P; dsimp only; omega
+  · exact hi.qwf
+  · intro u a ha
+    have hu := hi.qloc u a ha
+    rw [tset_ne _ _ (ne_of_ctl hu h (by intro he; cases he))]; exact hu
+  · intro hq
+    rcases hi.wit hq with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · exact .inr ⟨v, by rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv⟩
+
+/-- `eventSet`'s `xchg(.is_set, .release)`: the wake comes next if the waiter waits. -/
+theorem setE (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .finish .set) {c : WCtl WL}
+    (hc : c = .run .finish .wake ∨ c = .run .finish .fin) (h1 : s.sh.ev.val = 1 → c = .run .finish .wake) :
+    WgInv L N { s with
+      sh := { s.sh with ev := ⟨2, L.join s.sh.ev.msg (s.cur t)⟩ }
+      ctl := tset s.ctl t c
+      cur := tset s.cur t (s.cur t) } := by
+  rw [tset_id]
+  have ht := hi.lt_of_run h
+  obtain ⟨hP, hw, hle⟩ := hi.setter t h
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := c) h
+  have hz : pS c = 0 ∧ pF c = 0 ∧ pW c = 0 ∧ WgPlace.post c = true ∧ WgPlace.ok c = true ∧
+      isW c = false ∧ WgPlace.wdone c = false ∧ wev c = false ∧ wfut c = false ∧
+      c ≠ .run .finish .set ∧ c ≠ .run .wait .asleep := by
+    rcases hc with rfl | rfl <;> refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, ?_, ?_⟩ <;>
+      intro he <;> cases he
+  obtain ⟨zS, zF, zW, zpost, zok, zisW, zwd, zwev, zwf, zset, zasl⟩ := hz
+  have z : pS (.run .finish .set : WCtl WL) = 0 ∧ pF (.run .finish .set : WCtl WL) = 0 ∧
+    pW (.run .finish .set : WCtl WL) = 0 := ⟨rfl, rfl, rfl⟩
+  have hP' : WState.P N { s with
+      sh := { s.sh with ev := ⟨2, L.join s.sh.ev.msg (s.cur t)⟩ }
+      ctl := tset s.ctl t c } = s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h zok (by rw [zisW]; rfl)
+    fun l he => by rcases hc with rfl | rfl <;> cases he
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · rw [hP']; have := hi.cnt; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact Nat.le_refl _
+  · intro _ _ he; cases he
+  · intro _; exact ⟨hP' ▸ hP, hw, Lat.le_join_of_le_right _ hle⟩
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; exact absurd hu zset
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.setter u hu
+  · exact hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut]; exact hi.post t (by rw [h]; rfl)
+    · rw [tset_ne _ _ hut] at hu; exact hi.post u hu
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; rw [zwd] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.wdone u hu
+  · intro _ _ he; exact absurd rfl he
+  · exact hi.qwf
+  · intro u a ha
+    have hu := hi.qloc u a ha
+    have hut : u ≠ t := ne_of_ctl hu h (by intro he; cases he)
+    rw [tset_ne _ _ hut]; exact hu
+  · intro hq
+    rcases hi.wit hq with h1' | ⟨v, hv⟩
+    · exact .inr ⟨t, by rw [tset_self]; exact h1 h1'⟩
+    · exact .inr ⟨v, by rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv⟩
+
+/-- `wait`'s `fetchAdd(is_waiting, .acquire)`, with the new place `c` (`cas` if something is
+pending, else the return). -/
+theorem wadd (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .wait .wadd)
+    {c : WCtl WL} (hc : c = .run .wait .cas ∨ c = .run .wait .fin)
+    (hcas : c = .run .wait .cas → 2 ≤ s.sh.st.val) (hfin : c = .run .wait .fin → s.sh.st.val = 0) :
+    WgInv L N { s with
+      sh := { s.sh with st := ⟨s.sh.st.val + 1, s.sh.st.msg⟩ }
+      ctl := tset s.ctl t c
+      cur := tset s.cur t (L.join (s.cur t) s.sh.st.msg) } := by
+  have ht := hi.lt_of_run h
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := c) h
+  have h0 := hi.bit_zero h
+  have hz : pS c = 0 ∧ pF c = 0 ∧ pW c = 1 ∧ WgPlace.ok c = true ∧ isW c = true ∧
+      WgPlace.post c = false ∧ wfut c = false ∧ (∀ op l, op ≠ .wait → c ≠ .run op l) := by
+    rcases hc with rfl | rfl <;> refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, ?_⟩ <;>
+      intro op l hop he <;> cases he <;> exact hop rfl
+  obtain ⟨zS, zF, zW, zok, zisW, zpost, zwf, zop⟩ := hz
+  have z : pS (.run .wait .wadd : WCtl WL) = 0 ∧ pF (.run .wait .wadd : WCtl WL) = 0 ∧
+    pW (.run .wait .wadd : WCtl WL) = 0 := ⟨rfl, rfl, rfl⟩
+  have hc' := hi.cnt
+  have hPdef : s.P N = s.tok + tsum N (fun u => pS (s.ctl u)) + tsum N (fun u => pF (s.ctl u)) := rfl
+  have hP' : WState.P N { s with
+      sh := { s.sh with st := ⟨s.sh.st.val + 1, s.sh.st.msg⟩ }
+      ctl := tset s.ctl t c
+      cur := tset s.cur t (L.join (s.cur t) s.sh.st.msg) } = s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h zok (by rw [zisW]; rfl)
+    fun l he => (zop .start l (by intro e; cases e) he).elim
+  have hset : ∀ v, s.ctl v = .run .finish .set → tset s.ctl t c v = .run .finish .set := fun v hv => by
+    rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · unfold WState.P; dsimp only; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact hi.evb
+  · exact tset_all (Q := fun c => wfut c = true → s.sh.ev.val ≠ 0) (by rw [zwf]; intro he; cases he)
+      fun u _ => hi.evw u
+  · intro he'; rw [hP']; exact hi.evset he'
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; exact absurd hu (zop .finish .set (by intro e; cases e))
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut, hP']; exact hi.setter u hu
+  · exact hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; rw [zpost] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut]; exact hi.post u hu
+  · intro u hu
+    rw [hP']
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; rw [hut, tset_self]
+      rcases hc with rfl | rfl
+      · simp [WgPlace.wdone] at hu
+      · exact ⟨by have := hfin rfl; omega, Lat.le_join_right _ _⟩
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut]; exact hi.wdone u hu
+  · intro u hu hev
+    rw [hP']
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu
+      rcases hc with rfl | rfl
+      · exact .inl (by have := hcas rfl; omega)
+      · simp [wev] at hu
+    · rw [tset_ne _ _ hut] at hu
+      rcases hi.wwait u hu hev with h1 | ⟨v, hv⟩
+      · exact .inl h1
+      · exact .inr ⟨v, hset v hv⟩
+  · exact hi.qwf
+  · intro u a ha
+    have hu := hi.qloc u a ha
+    rw [tset_ne _ _ (ne_of_ctl hu h (by intro he; cases he))]; exact hu
+  · intro hq
+    rcases hi.wit hq with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · exact .inr ⟨v, by rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv⟩
+
+/-- `eventWait`'s `cmpxchg` that sets the event to `waiting`. -/
+theorem casSet (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .wait .cas) (h0 : s.sh.ev.val = 0) :
+    WgInv L N { s with
+      sh := { s.sh with ev := ⟨1, s.sh.ev.msg⟩ }
+      ctl := tset s.ctl t (.run .wait .fwait)
+      cur := tset s.cur t (L.join (s.cur t) s.sh.ev.msg) } := by
+  have ht := hi.lt_of_run h
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := .run .wait .fwait) h
+  have z : pS (.run .wait .cas : WCtl WL) = 0 ∧ pF (.run .wait .cas : WCtl WL) = 0 ∧
+    pW (.run .wait .cas : WCtl WL) = 1 ∧ pS (.run .wait .fwait : WCtl WL) = 0 ∧
+    pF (.run .wait .fwait : WCtl WL) = 0 ∧ pW (.run .wait .fwait : WCtl WL) = 1 :=
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hc' := hi.cnt
+  have hPdef : s.P N = s.tok + tsum N (fun u => pS (s.ctl u)) + tsum N (fun u => pF (s.ctl u)) := rfl
+  have hP' : WState.P N { s with
+      sh := { s.sh with ev := ⟨1, s.sh.ev.msg⟩ }
+      ctl := tset s.ctl t (.run .wait .fwait)
+      cur := tset s.cur t (L.join (s.cur t) s.sh.ev.msg) } = s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h (c := .run .wait .fwait) rfl rfl
+    fun _ he => by cases he
+  have hset : ∀ v, s.ctl v = .run .finish .set → tset s.ctl t (.run .wait .fwait) v = .run .finish .set :=
+    fun v hv => by rw [tset_ne _ _ (ne_of_ctl hv h (by intro he; cases he))]; exact hv
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · unfold WState.P; dsimp only; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · decide
+  · intro _ _ he; cases he
+  · intro he; cases he
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut, hP']; exact hi.setter u hu
+  · exact hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut]; exact hi.post u hu
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [tset_ne _ _ hut, hP']; exact hi.wdone u hu
+  · intro u hu _
+    rw [hP']
+    have hu' : wev (s.ctl u) = true := by
+      by_cases hut : u = t
+      · rw [hut, h]; rfl
+      · rw [tset_ne _ _ hut] at hu; exact hu
+    rcases hi.wwait u hu' (by rw [h0]; decide) with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · exact .inr ⟨v, hset v hv⟩
+  · exact hi.qwf
+  · intro u a ha
+    have hu := hi.qloc u a ha
+    rw [tset_ne _ _ (ne_of_ctl hu h (by intro he; cases he))]; exact hu
+  · intro _; exact .inl rfl
+
+/-- The waiter's places in its futex wait. -/
+theorem wfut_facts {c : WCtl WL} (hc : wfut c = true) :
+    pS c = 0 ∧ pF c = 0 ∧ pW c = 1 ∧ WgPlace.ok c = true ∧ isW c = true ∧ WgPlace.post c = false ∧
+    WgPlace.wdone c = false ∧ wev c = true ∧ (∀ op l, op ≠ .wait → c ≠ .run op l) := by
+  match c, hc with
+  | .run .wait .fwait, _ | .run .wait .asleep, _ | .run .wait .load, _ =>
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun op l hop he => by cases he; exact hop rfl⟩
+
+/-- A step of the waiter in its futex wait that changes only the futex. -/
+theorem wq (hi : WgInv L N s) {t : Tid} {c0 c : WCtl WL} (h : s.ctl t = c0) (hc0 : wfut c0 = true)
+    (hc : wfut c = true) {f' : Fx.F} (hqwf : (Fx.queue f').WF)
+    (hqloc : ∀ u a, (u, a) ∈ Fx.queue f' → tset s.ctl t c u = .run .wait .asleep)
+    (hwit : Fx.queue f' ≠ [] → s.sh.ev.val = 1 ∨ ∃ u, s.ctl u = .run .finish .wake) :
+    WgInv L N { s with
+      sh := { s.sh with f := f' }
+      ctl := tset s.ctl t c
+      cur := tset s.cur t (s.cur t) } := by
+  rw [tset_id]
+  have hfw := @wfut_facts
+  obtain ⟨zS0, zF0, zW0, -, zisW0, -, -, zwev0, zop0⟩ := hfw hc0
+  obtain ⟨zS, zF, zW, zok, zisW, zpost, zwd, zwev, zop⟩ := hfw hc
+  have ht : t < N := hi.lt_of_ne_idle (by rw [h]; intro he; rw [he] at hc0; cases hc0)
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := c) h
+  have hP' : WState.P N { s with sh := { s.sh with f := f' }, ctl := tset s.ctl t c } = s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h zok (by rw [zisW, zisW0])
+    fun l he => (zop .start l (by intro e; cases e) he).elim
+  have hset : ∀ v, s.ctl v = .run .finish .set → tset s.ctl t c v = .run .finish .set := fun v hv => by
+    rw [tset_ne _ _ (fun e => zop0 .finish .set (by intro e; cases e) (by rw [← h, ← e]; exact hv))]
+    exact hv
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · rw [hP']; have := hi.cnt; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact hi.evb
+  · exact tset_all (Q := fun c => wfut c = true → s.sh.ev.val ≠ 0) (fun _ => hi.evw t (by rw [h]; exact hc0))
+      fun u _ => hi.evw u
+  · intro he; rw [hP']; exact hi.evset he
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; exact absurd hu (zop .finish .set (by intro e; cases e))
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.setter u hu
+  · exact hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; rw [zpost] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; exact hi.post u hu
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; rw [zwd] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.wdone u hu
+  · intro u hu hev
+    rw [hP']
+    have hu' : wev (s.ctl u) = true := by
+      by_cases hut : u = t
+      · rw [hut, h]; exact zwev0
+      · rw [tset_ne _ _ hut] at hu; exact hu
+    rcases hi.wwait u hu' hev with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · exact .inr ⟨v, hset v hv⟩
+  · exact hqwf
+  · exact hqloc
+  · intro hq
+    rcases hwit hq with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · refine .inr ⟨v, ?_⟩
+      rw [tset_ne _ _ (fun e => zop0 .finish .wake (by intro e; cases e) (by rw [← h, ← e]; exact hv))]
+      exact hv
+
+/-- The return of `finish`: its view joins `fin`. -/
+theorem retFinish (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .finish .fin) :
+    WgInv L N { s with ctl := tset s.ctl t .idle, fin := L.join s.fin (s.cur t) } := by
+  have ht := hi.lt_of_run h
+  obtain ⟨e1, e2, e3⟩ := sums s ht (c' := .idle) h
+  have z : pS (.run .finish .fin : WCtl WL) = 0 ∧ pF (.run .finish .fin : WCtl WL) = 0 ∧
+    pW (.run .finish .fin : WCtl WL) = 0 ∧ pS (.idle : WCtl WL) = 0 ∧ pF (.idle : WCtl WL) = 0 ∧
+    pW (.idle : WCtl WL) = 0 := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hP' : WState.P N { s with ctl := tset s.ctl t .idle, fin := L.join s.fin (s.cur t) } = s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := places hi ht h (c := .idle) rfl rfl fun _ he => by cases he
+  have ne : ∀ {u : Tid} {c : WCtl WL}, s.ctl u = c → c ≠ .run .finish .fin → u ≠ t :=
+    fun hu hc => ne_of_ctl hu h hc
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · rw [hP']; have := hi.cnt; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact hi.evb
+  · exact tset_all (Q := fun c => wfut c = true → s.sh.ev.val ≠ 0) (by intro he; cases he)
+      fun u _ => hi.evw u
+  · intro he; rw [hP']; exact hi.evset he
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.setter u hu
+  · exact Lat.join_le hi.fin (hi.post t (by rw [h]; rfl))
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; exact hi.post u hu
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.wdone u hu
+  · intro u hu hev
+    rw [hP']
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu
+      rcases hi.wwait u hu hev with h1 | ⟨v, hv⟩
+      · exact .inl h1
+      · exact .inr ⟨v, by rw [tset_ne _ _ (ne hv (by intro he; cases he))]; exact hv⟩
+  · exact hi.qwf
+  · intro u a ha
+    have hu := hi.qloc u a ha
+    rw [tset_ne _ _ (ne hu (by intro he; cases he))]; exact hu
+  · intro hq
+    rcases hi.wit hq with h1 | ⟨v, hv⟩
+    · exact .inl h1
+    · exact .inr ⟨v, by rw [tset_ne _ _ (ne hv (by intro he; cases he))]; exact hv⟩
+
 end WgInv
 
 
@@ -785,6 +1239,311 @@ theorem threadedWG_init {X : Type} {L : Lat X} {N : Nat} {s : WState (threadedWG
   · rw [hq]; exact Queue.WF.nil
   · intro u a ha; rw [hq] at ha; cases ha
   · intro hne; exact absurd hq hne
+
+/-- `eventSet`'s `futexWake(maxInt(u32))`: it wakes the waiter. -/
+theorem threadedWG_wake {X : Type} {L : Lat X} {N : Nat} {s : WState (threadedWG Fx) X}
+    (hi : WgInv L N s) {t : Tid} (h : s.ctl t = .run .finish .wake) {f' : Fx.F}
+    (hk : Fx.wake t () (2 ^ 32 - 1) s.sh.f f') :
+    WgInv L N { s with
+      sh := { s.sh with f := f' }
+      ctl := tset s.ctl t (.run .finish .fin)
+      cur := tset s.cur t (s.cur t) } := by
+  rw [tset_id]
+  have ht := hi.lt_of_run h
+  obtain ⟨e1, e2, e3⟩ := WgInv.sums s ht (c' := .run .finish .fin) h
+  have z : pS (.run .finish .wake : WCtl WL) = 0 ∧ pF (.run .finish .wake : WCtl WL) = 0 ∧
+    pW (.run .finish .wake : WCtl WL) = 0 ∧ pS (.run .finish .fin : WCtl WL) = 0 ∧
+    pF (.run .finish .fin : WCtl WL) = 0 ∧ pW (.run .finish .fin : WCtl WL) = 0 :=
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have hP' : WState.P N { s with sh := { s.sh with f := f' }, ctl := tset s.ctl t (.run .finish .fin) } =
+      s.P N := by
+    unfold WState.P; dsimp only; omega
+  obtain ⟨c1, c2, c3, c4, c5⟩ := WgInv.places hi ht h (c := .run .finish .fin) rfl rfl
+    fun _ he => by cases he
+  have hempty : Fx.queue f' = [] := by
+    have hall := hF.wake_all hi.qwf hk (by have := hi.queue_len; omega)
+    exact List.eq_nil_iff_forall_not_mem.mpr fun ⟨u, ()⟩ hm => hall u hm
+  have ne : ∀ {u : Tid} {c : WCtl WL}, s.ctl u = c → c ≠ .run .finish .wake → u ≠ t :=
+    fun hu hc => WgInv.ne_of_ctl hu h hc
+  constructor <;> dsimp only
+  · exact c1
+  · exact c2
+  · rw [hP']; have := hi.cnt; omega
+  · exact c3
+  · exact c4
+  · exact c5
+  · exact hi.evb
+  · exact tset_all (Q := fun c => wfut c = true → s.sh.ev.val ≠ 0) (by intro he; cases he)
+      fun u _ => hi.evw u
+  · intro he; rw [hP']; exact hi.evset he
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.setter u hu
+  · exact hi.fin
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut]; exact hi.post t (by rw [h]; rfl)
+    · rw [tset_ne _ _ hut] at hu; exact hi.post u hu
+  · intro u hu
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu; rw [hP']; exact hi.wdone u hu
+  · intro u hu hev
+    rw [hP']
+    by_cases hut : u = t
+    · rw [hut, tset_self] at hu; cases hu
+    · rw [tset_ne _ _ hut] at hu
+      rcases hi.wwait u hu hev with h1 | ⟨v, hv⟩
+      · exact .inl h1
+      · exact .inr ⟨v, by rw [tset_ne _ _ (ne hv (by intro he; cases he))]; exact hv⟩
+  · rw [hempty]; exact Queue.WF.nil
+  · intro u a ha; rw [hempty] at ha; cases ha
+  · intro hq; exact absurd hempty hq
+
+/-- A step of thread `t < N` keeps the invariant. -/
+theorem threadedWG_step {X : Type} {L : Lat X} {N : Nat} {t : Tid} {s s' : WState (threadedWG Fx) X}
+    (hi : WgInv L N s) (ht : t < N) (hs : WStep (threadedWG Fx) L t s s') : WgInv L N s' := by
+  cases hs with
+  | learn x h => exact hi.learn x h
+  | start h hw =>
+    exact hi.inert ht h (c := .run .start .add) (tok := s.tok) (w := s.waited) (h0W := rfl)
+      (h0set := by intro he; cases he) (h0wake := by intro he; cases he)
+      (h0asl := by intro he; cases he) (hok := rfl) (hpW := rfl) (hpost := rfl) (hwd := rfl)
+      (hwev := rfl) (hwf := rfl) (hset := by intro he; cases he) (htok := rfl) (hwt := id)
+      (hisW := fun he => by cases he) (hns := fun hw' => by rw [hw] at hw'; cases hw')
+  | finish h hk =>
+    exact hi.inert ht h (c := .run .finish .sub) (tok := s.tok - 1) (w := s.waited) (h0W := rfl)
+      (h0set := by intro he; cases he) (h0wake := by intro he; cases he)
+      (h0asl := by intro he; cases he) (hok := rfl) (hpW := rfl) (hpost := rfl) (hwd := rfl)
+      (hwev := rfl) (hwf := rfl) (hset := by intro he; cases he)
+      (htok := by show s.tok - 1 + 0 + 1 = s.tok + 0 + 0; omega) (hwt := id)
+      (hisW := fun he => by cases he) (hns := fun hw => ⟨fun l he => (by cases he), hi.nostart hw⟩)
+  | wait h hw hs =>
+    exact hi.inert ht h (c := .run .wait .wadd) (tok := s.tok) (w := true) (h0W := rfl)
+      (h0set := by intro he; cases he) (h0wake := by intro he; cases he)
+      (h0asl := by intro he; cases he) (hok := rfl) (hpW := rfl) (hpost := rfl) (hwd := rfl)
+      (hwev := rfl) (hwf := rfl) (hset := by intro he; cases he) (htok := rfl) (hwt := fun _ => rfl)
+      (hisW := fun _ => ⟨rfl, fun u => by
+        cases hu : isW (s.ctl u)
+        · rfl
+        · rw [hi.waited u hu] at hw; cases hw⟩)
+      (hns := fun _ => ⟨fun l he => (by cases he), hs⟩)
+  | retStart h hd =>
+    rename_i l
+    cases l <;> simp at hd
+    exact hi.inert ht h (c := .idle) (tok := s.tok + 1) (w := s.waited) (h0W := rfl)
+      (h0set := by intro he; cases he) (h0wake := by intro he; cases he)
+      (h0asl := by intro he; cases he) (hok := rfl) (hpW := rfl) (hpost := rfl) (hwd := rfl)
+      (hwev := rfl) (hwf := rfl) (hset := by intro he; cases he) (htok := rfl) (hwt := id)
+      (hisW := fun he => by cases he) (hns := fun hw => ⟨fun l he => (by cases he), hi.nostart hw⟩)
+  | retFinish h hd =>
+    rename_i l
+    cases l <;> simp at hd
+    exact hi.retFinish h
+  | retWait h hd =>
+    rename_i l
+    cases l <;> simp at hd
+    have := hi.wmove ht h (c := .got) (v' := s.cur t) rfl rfl rfl rfl (by intro he; cases he)
+      (by intro he; cases he) (fun _ => (hi.wdone t (by rw [h]; rfl)))
+      (by intro he; cases he)
+    rw [tset_id] at this
+    exact this
+  | exec h hstep =>
+    rename_i op l l' sh' v'
+    have hok := hi.op_ok h
+    cases hstep with
+    | add =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.add h
+    | subSet h3 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.subSet h h3
+    | subDone h2 h3 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.subDone h h2 h3
+    | setWake h1 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.setE h (.inl rfl) fun _ => rfl
+    | setDone h1 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.setE h (.inr rfl) fun h1' => absurd h1' h1
+    | wake hk =>
+      cases op <;> try exact absurd hok (by decide)
+      exact threadedWG_wake hF hi h hk
+    | waddWait he h2 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.wadd h (.inl rfl) (fun _ => h2) fun he' => by cases he'
+    | waddDone h0 =>
+      cases op <;> try exact absurd hok (by decide)
+      have := hi.wadd h (.inr rfl) (fun he' => by cases he') fun _ => h0
+      rw [h0] at this; exact this
+    | casSet h0 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.casSet h h0
+    | casWaiting h1 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.wmove ht h (c := .run .wait .fwait) rfl rfl rfl rfl (by intro he; cases he)
+        (fun _ => by rw [h1]; decide) (fun he => by cases he)
+        fun _ hne => hi.wwait t (by rw [h]; rfl) hne
+    | casIsSet h2 =>
+      cases op <;> try exact absurd hok (by decide)
+      obtain ⟨hP, -, hle⟩ := hi.evset h2
+      exact hi.wmove ht h (c := .run .wait .fin) rfl rfl rfl rfl (by intro he; cases he)
+        (fun he => by cases he)
+        (fun _ => ⟨hP, Lat.le_join_of_le_right _ hle⟩) (fun he => by cases he)
+    | loadSet h2 =>
+      cases op <;> try exact absurd hok (by decide)
+      obtain ⟨hP, -, hle⟩ := hi.evset h2
+      exact hi.wmove ht h (c := .run .wait .fin) rfl rfl rfl rfl (by intro he; cases he)
+        (fun he => by cases he)
+        (fun _ => ⟨hP, Lat.le_join_of_le_right _ hle⟩) (fun he => by cases he)
+    | loadWaiting h1 =>
+      cases op <;> try exact absurd hok (by decide)
+      exact hi.wmove ht h (c := .run .wait .fwait) rfl rfl rfl rfl (by intro he; cases he)
+        (fun _ => by rw [h1]; decide) (fun he => by cases he)
+        fun _ hne => hi.wwait t (by rw [h]; rfl) hne
+    | sleep hfw =>
+      cases op <;> try exact absurd hok (by decide)
+      have hnt := hi.not_has (t := t) (by rw [h]; intro he; cases he)
+      have h1 : s.sh.ev.val = 1 := bv_one hi.evb (hF.sleep_word hfw)
+      have hmem := hF.mem_wait hfw
+      refine hi.wq h rfl rfl (hF.wf_wait hi.qwf hnt hfw) (fun u a ha => ?_) fun _ => .inl h1
+      rcases (hmem (u, a)).mp ha with ha | ⟨-, he⟩
+      · have hu := hi.qloc u a ha
+        rw [tset_ne _ _ (WgInv.ne_of_ctl hu h (by intro he; cases he))]; exact hu
+      · cases he; rw [tset_self]
+    | back hfw =>
+      cases op <;> try exact absurd hok (by decide)
+      have hnt := hi.not_has (t := t) (by rw [h]; intro he; cases he)
+      have hmem := hF.mem_wait hfw
+      refine hi.wq h rfl rfl (hF.wf_wait hi.qwf hnt hfw) (fun u a ha => ?_) fun hq => ?_
+      · rcases (hmem (u, a)).mp ha with ha | ⟨he, -⟩
+        · have hu := hi.qloc u a ha
+          rw [tset_ne _ _ (WgInv.ne_of_ctl hu h (by intro he; cases he))]; exact hu
+        · cases he
+      · refine hi.wit fun he => hq ?_
+        exact List.eq_nil_iff_forall_not_mem.mpr fun x hx => by
+          rcases (hmem x).mp hx with hx | ⟨he', -⟩
+          · rw [he] at hx; cases hx
+          · cases he'
+    | resume hfr =>
+      cases op <;> try exact absurd hok (by decide)
+      have hmem := hF.mem_resume hfr
+      refine hi.wq h rfl rfl (hF.wf_resume hi.qwf hfr) (fun u a ha => ?_) fun hq => ?_
+      · obtain ⟨ha, hut⟩ := (hmem (u, a)).mp ha
+        rw [tset_ne _ _ hut]; exact hi.qloc u a ha
+      · refine hi.wit fun he => hq ?_
+        exact List.eq_nil_iff_forall_not_mem.mpr fun x hx => by
+          have := ((hmem x).mp hx).1; rw [he] at this; cases this
+
+/-- The invariant of `Threaded.WaitGroup` is inductive over every futex that satisfies the
+contract. -/
+theorem threadedWG_inductive (X : Type) (L : Lat X) (N : Nat) :
+    (wmgc (threadedWG Fx) X L N).Inductive (WgInv L N) :=
+  ⟨fun _ h => threadedWG_init hF h, fun _ _ _ hi hs => threadedWG_step hF hi hs.1 hs.2⟩
+
+/-- No deadlock: a thread in `Threaded.WaitGroup`'s code that is not asleep in the futex queue
+can step. -/
+theorem threadedWG_enabled {X : Type} {L : Lat X} {N : Nat} {s : WState (threadedWG Fx) X}
+    (hi : WgInv L N s) {t : Tid} {op : WOp} {l : WL} (h : s.ctl t = .run op l)
+    (hq : (Fx.queue s.sh.f).has t = false) : (wmgc (threadedWG Fx) X L N).Enabled t s := by
+  have ht := hi.lt_of_run h
+  have hok := hi.op_ok h
+  have ex : ∀ {l' : WL} {sh' : WSh Fx X} {v' : X},
+      WgStep Fx L.join t l s.sh (s.cur t) l' sh' v' → (wmgc (threadedWG Fx) X L N).Enabled t s :=
+    fun hs => ⟨_, ht, WStep.exec h hs⟩
+  have hc := hi.cnt
+  have hb := hi.wbit
+  have hPdef : s.P N = s.tok + tsum N (fun u => pS (s.ctl u)) + tsum N (fun u => pF (s.ctl u)) := rfl
+  cases l with
+  | fin =>
+    cases op with
+    | start => exact ⟨_, ht, WStep.retStart h rfl⟩
+    | finish => exact ⟨_, ht, WStep.retFinish h rfl⟩
+    | wait => exact ⟨_, ht, WStep.retWait h rfl⟩
+  | add => exact ex WgStep.add
+  | sub =>
+    cases op <;> try exact absurd hok (by decide)
+    have := hi.pos_of (g := pF) (t := t) (by rw [h]; exact Nat.zero_lt_one) rfl
+    by_cases h3 : s.sh.st.val = 3
+    · exact ex (WgStep.subSet h3)
+    · exact ex (WgStep.subDone (by omega) h3)
+  | set =>
+    by_cases h1 : s.sh.ev.val = 1
+    · exact ex (WgStep.setWake h1)
+    · exact ex (WgStep.setDone h1)
+  | wake =>
+    obtain ⟨f', hk⟩ := hF.wake_total t () (2 ^ 32 - 1) s.sh.f hi.qwf
+    exact ex (WgStep.wake hk)
+  | wadd =>
+    cases op <;> try exact absurd hok (by decide)
+    have h0 := hi.bit_zero h
+    by_cases hz : s.sh.st.val = 0
+    · exact ex (WgStep.waddDone hz)
+    · exact ex (WgStep.waddWait (by omega) (by omega))
+  | cas =>
+    have := hi.evb
+    by_cases h0 : s.sh.ev.val = 0
+    · exact ex (WgStep.casSet h0)
+    · by_cases h1 : s.sh.ev.val = 1
+      · exact ex (WgStep.casWaiting h1)
+      · exact ex (WgStep.casIsSet (by omega))
+  | fwait =>
+    obtain ⟨r, f', hw⟩ := hF.wait_total t () 1 false s.sh.ev.val s.sh.f _ rfl hq
+    cases r with
+    | none => exact ex (WgStep.sleep hw)
+    | some r => exact ex (WgStep.back hw)
+  | asleep =>
+    obtain ⟨r, f', hr⟩ := hF.resume_total t false s.sh.f hq
+    exact ex (WgStep.resume hr)
+  | load =>
+    cases op <;> try exact absurd hok (by decide)
+    have h0 := hi.evw t (by rw [h]; rfl)
+    have := hi.evb
+    by_cases h1 : s.sh.ev.val = 1
+    · exact ex (WgStep.loadWaiting h1)
+    · exact ex (WgStep.loadSet (by omega))
+
+/-- **`Io.Threaded.WaitGroup` satisfies the wait-group contract over every futex that satisfies
+the futex contract.** -/
+theorem threadedWG_spec : WaitGroupSpec (threadedWG Fx) where
+  view X L N := (threadedWG_inductive hF X L N).invariant fun s hi t ht => by
+    obtain ⟨-, hle⟩ := hi.wdone t (by rw [ht]; rfl)
+    exact Lat.le_trans hi.fin hle
+  done X L N := (threadedWG_inductive hF X L N).invariant fun s hi t ht => by
+    have hP := (hi.wdone t (by rw [ht]; rfl)).1
+    unfold WState.P at hP; omega
+  live X L N := (threadedWG_inductive hF X L N).invariant fun s hi ⟨htok, ⟨t, op, l, h⟩, hn⟩ => by
+    -- every thread in the code is disabled, so each one is asleep in the queue: the waiter
+    have hall : ∀ u op l, s.ctl u = .run op l → (Fx.queue s.sh.f).has u = true := by
+      intro u op l hu
+      cases hq : (Fx.queue s.sh.f).has u
+      · exact absurd (threadedWG_enabled hF hi hu hq) (hn u op l hu)
+      · rfl
+    obtain ⟨a, ha⟩ := Queue.has_eq_true.mp (hall t op l h)
+    have hne : Fx.queue s.sh.f ≠ [] := List.ne_nil_of_mem ha
+    have hw := hi.qloc t a ha
+    have notq : ∀ {u : Tid} {op : WOp} {l : WL}, s.ctl u = .run op l → l ≠ .asleep → False :=
+      fun hu hl => by
+        have := hall _ _ _ hu
+        obtain ⟨b, hb⟩ := Queue.has_eq_true.mp this
+        exact hl (by have := hi.qloc _ b hb; rw [hu] at this; cases this; rfl)
+    by_cases h2 : s.sh.ev.val = 2
+    · rcases hi.wit hne with h1 | ⟨v, hv⟩
+      · omega
+      · exact notq hv (by intro he; cases he)
+    · rcases hi.wwait t (by rw [hw]; rfl) h2 with hP | ⟨v, hv⟩
+      · have hS := hi.pS_zero (hi.waited t (by rw [hw]; rfl))
+        have : 0 < tsum N (fun u => pF (s.ctl u)) := by unfold WState.P at hP; omega
+        obtain ⟨v, -, hv⟩ := exists_of_tsum_pos this
+        cases hc : s.ctl v with
+        | run op l =>
+          rw [hc] at hv
+          cases op <;> cases l <;> simp [pF] at hv
+          exact notq hc (by intro he; cases he)
+        | _ => rw [hc] at hv; simp [pF] at hv
+      · exact notq hv (by intro he; cases he)
 
 end
 
