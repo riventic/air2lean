@@ -354,7 +354,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: The compiled code exhibits no load buffering (the model has no promises). LLVM
-  does not promise this for relaxed atomics.
+  does not promise this for relaxed atomics. The translator rejects the straight-line shape
+  (a relaxed load, then a relaxed write to another pointer, with no stronger atomic, call or
+  branch between) unless `--assume-no-lb`; the check is not complete, so every theorem with
+  atomics carries this premise.
 - Derived from: implied by ORD-01.
 - Sources: [std-models.md](std-models.md#thread-model) (**Trusted assumption**).
 

@@ -27,7 +27,7 @@ namespace Air2Lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>]\n" ++
     "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 def help : String :=
@@ -43,6 +43,7 @@ def help : String :=
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable scalar model/unfold interfaces and facts.\n" ++
+  "  --assume-no-lb               Accept relaxed load-then-store code (premise ORD-02); see docs/std-models.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --timing-json <json>         Also write per-phase wall times; see docs/perf-budgets.md.\n" ++
@@ -69,6 +70,8 @@ structure Args where
   modelRegistry : Option String
   registryTemplate : Bool := false
   proofApi : Bool := false
+  /-- `--assume-no-lb`: accept the load-buffering shape (`checkLoadBuffering`, premise ORD-02). -/
+  assumeNoLb : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -103,6 +106,9 @@ private partial def parseArgsGo (args : List String)
   | "--proof-api" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with proofApi := true })
+  | "--assume-no-lb" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeNoLb := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -245,6 +251,7 @@ private def run (args : List String) : IO UInt32 := do
         if !a.registryTemplate then
           checkProgram funcs models profiles[0]?
           if a.spawnSemantics == .fallible then checkFallibleSpawnCalls funcs
+          unless a.assumeNoLb do checkLoadBuffering funcs
         : Except String Unit)
       times := { times with check := times.check + programNs }
       let inputBytes := texts.foldl (fun n text => n + text.utf8ByteSize) 0

@@ -2401,6 +2401,59 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       checkFutex 0 1
       require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
 
+/-- A relaxed (`.unordered`/`.monotonic`) atomic order: no happens-before edge. -/
+private def weakOrder : AtomicOrder → Bool
+  | .unordered | .monotonic => true
+  | _ => false
+
+/-- The load-buffering shape (audit #4, premise ORD-02) on a straight-line path: a relaxed atomic
+load, then a relaxed atomic store, RMW or `cmpxchg` (success order) to another pointer operand,
+with no stronger atomic op, call or branch between. A `block` that its own `br` leaves at its end
+(an inlined call) is straight-line code. RC11 allows the load to read a write that comes after
+the store in another thread; the model has no promises, so it never produces that outcome.
+`loads` are the pointers of the relaxed loads since the last reset; the result is the write
+instruction of a shape, or the loads at the end of `insts` (`target`: the enclosing block). -/
+partial def loadBufferingScan (insts : Array Inst) (loads : Array Val) (target : Option InstId) :
+    Except InstId (Array Val) := do
+  let mut loads := loads
+  for i in insts do
+    match i.op with
+    | .block b => loads ← loadBufferingScan b loads (some i.id)
+    | .atomicLoad p o =>
+      if weakOrder o then loads := loads.push p else loads := #[]
+    | .atomicStore p _ o | .atomicRmw _ o p _ | .cmpxchg _ p _ _ o _ =>
+      if weakOrder o then
+        if loads.any (· != p) then throw i.id
+      else loads := #[]
+    | .br t _ => if some t != target then loads := #[]
+    | .loop b =>
+      let _ ← loadBufferingScan b #[] none; loads := #[]
+    | .condBr _ t e =>
+      let _ ← loadBufferingScan t #[] none; let _ ← loadBufferingScan e #[] none; loads := #[]
+    | .switchBr _ cs e | .loopSwitchBr _ cs e =>
+      for c in cs do let _ ← loadBufferingScan c.body #[] none
+      let _ ← loadBufferingScan e #[] none; loads := #[]
+    | .«try» _ e | .tryPtr _ e => let _ ← loadBufferingScan e #[] none; loads := #[]
+    | .call .. | .«repeat» _ | .switchDispatch .. => loads := #[]
+    | _ => pure ()
+  return loads
+
+/-- The write instruction of a load-buffering shape in `insts` (`loadBufferingScan`). -/
+def loadBufferingShape? (insts : Array Inst) : Option InstId :=
+  match loadBufferingScan insts #[] none with
+  | .error id => some id
+  | .ok _ => none
+
+/-- Reject the load-buffering shape (`loadBufferingShape?`) unless the user assumes that the
+compiled code shows no load buffering (`--assume-no-lb`, premise ORD-02). The check is narrow
+(straight-line code in one function); ORD-02 stays a premise of every theorem with atomics. -/
+def checkLoadBuffering (funcs : Array Func) : Except String Unit := do
+  for f in funcs do
+    if let some id := loadBufferingShape? f.body then
+      throw s!"{f.name}: inst {id}: a relaxed atomic load followed by a relaxed atomic write to \
+        another location (load buffering) is outside the model, which has no promises; pass \
+        --assume-no-lb to assume the compiled code shows no load buffering (premise ORD-02)"
+
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/
 inductive SpawnSemantics where

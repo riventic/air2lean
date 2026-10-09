@@ -287,6 +287,14 @@ def collectProgram (units : Array FileResult) (initial : Log)
           message := "not inspected: fallible spawn policy requires a valid selected program"
           prerequisites := #["validated_selected_program"]
           firstErrorInUnit := true }
+    -- Check-only mode has no `--assume-no-lb`: it reports the load-buffering shape.
+    if program.toOption.isSome then
+      log := log.record {
+        code := .modelFailure
+        phase := .program
+        category := .unsupportedSemantics
+        message := ""
+        prerequisites := #["validated_selected_program"] } (checkLoadBuffering funcs)
   if units.any (!·.localPassed) then
     log := { log with complete := false }
   return log

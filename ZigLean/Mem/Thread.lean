@@ -61,8 +61,10 @@ overlaps an existing atomic location with another offset or size is rejected wit
 `.unspecified`, before any message is read or written (`locIdx`). Plain accesses of any size are
 unaffected; a plain write that overlaps the location becomes a message as above.
 
-**Trusted assumption** (`docs/std-models.md` §Thread model): the compiled code has no load
-buffering (RC11); LLVM does not promise that for relaxed atomics.
+**Trusted assumption** (`docs/std-models.md` §Thread model, premise ORD-02): the compiled code
+has no load buffering (RC11); LLVM does not promise that for relaxed atomics. The translator
+rejects the straight-line load-buffering shape unless `--assume-no-lb` (`checkLoadBuffering`,
+`Air2Lean/Check.lean`).
 -/
 
 /-- The footprint entry `e` is a plain write to a byte of `o..o+len` of block `b`. -/

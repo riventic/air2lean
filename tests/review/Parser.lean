@@ -95,6 +95,17 @@ private def asmFile (output input : String) : Json :=
        ("inputs", .arr #[obj [("constraint", .str input), ("name", .str "in"), ("ref", ref 0)]])],
      inst 2 "ret" 1 #[ref 1]]
 
+
+/-- Audit #4: a relaxed load of `x` (in an inlined block), then a write of `y` with `store`. -/
+private def lbFile (loadOrder store : String) (samePtr : Bool := false) : Json :=
+  let aptr := obj [("k", .str "ptr"), ("size", .str "one"), ("const", .bool false),
+    ("child", num 0), ("ptr_align", num 4), ("abi_size", num 8), ("abi_align", num 8)]
+  file "lb" #[intTy 32, aptr, voidTy, nrTy] #[1, 1] 0
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "arg" 1 #[] [("param", num 1)],
+      inst 2 "block" 0 #[] [("body", .arr #[inst 3 "atomic_load" 0 #[ref 0]
+        [("order", .str loadOrder)], inst 4 "br" 3 #[ref 3] [("target", num 2)]])],
+      inst 5 store 2 #[ref (if samePtr then 0 else 1), lit 0 "1"], inst 6 "ret" 3 #[ref 2]]
+
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Parser.lean OUTPUT_DIR")
   let directory : System.FilePath := output
@@ -321,4 +332,13 @@ def main (args : List String) : IO Unit := do
     | .error e =>
       require ((e.splitOn s!"{callee} argument 0 does not match worker 'missingWorker' parameter 0").length > 1)
         s!"wrong incompatible-worker diagnostic for {callee}: {e}"
+  -- Audit #4: the load-buffering shape is rejected without `--assume-no-lb`.
+  match checkLoadBuffering #[← accept (lbFile "monotonic" "atomic_store_monotonic")] with
+  | .ok _ => throw (IO.userError "accepted the load-buffering shape")
+  | .error e => require ((e.splitOn "load buffering").length > 1) s!"wrong load-buffering diagnostic: {e}"
+  for (lo, st, same) in [("acquire", "atomic_store_monotonic", false),
+      ("monotonic", "atomic_store_release", false), ("monotonic", "atomic_store_monotonic", true)] do
+    match checkLoadBuffering #[← accept (lbFile lo st same)] with
+    | .ok _ => pure ()
+    | .error e => throw (IO.userError s!"rejected a non-LB shape ({lo}, {st}, {same}): {e}")
   IO.println "parser regressions passed"

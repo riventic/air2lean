@@ -14,8 +14,15 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-audit-conc.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
 # Model side: translate litmus.zig and enumerate every schedule of each fixture.
+# S4 fixed: `lbRelaxed` has the load-buffering shape, which the translator rejects unless the
+# user assumes premise ORD-02 (`--assume-no-lb`).
+if scripts/translate.sh "$here/litmus.zig" -o "$work/Litmus.lean" --namespace Litmus \
+    --zig-air "$zig_air" --filter 'litmus.,atomic.Value(u32).init' 2> "$work/nolb.stderr"; then
+  echo "litmus translated without --assume-no-lb (expected the load-buffering rejection)" >&2; exit 1
+fi
+grep -q 'load buffering' "$work/nolb.stderr"
 scripts/translate.sh "$here/litmus.zig" -o "$work/Litmus.lean" --namespace Litmus \
-  --zig-air "$zig_air" --filter 'litmus.,atomic.Value(u32).init'
+  --zig-air "$zig_air" --filter 'litmus.,atomic.Value(u32).init' --assume-no-lb
 cat "$work/Litmus.lean" "$here/Enumerate.lean" > "$work/Run.lean"
 lake env lean --run "$work/Run.lean" | tee "$work/model.txt"
 
@@ -35,7 +42,7 @@ fi
 
 # Expected model observations (fuel 20 / 14); `fixed` lines flip an audit finding:
 grep -q 'lbRelaxed: .*exhaustive=true' "$work/model.txt"
-! grep -q 'lbRelaxed: .*ok(3)' "$work/model.txt"           # no load buffering (S4)
+! grep -q 'lbRelaxed: .*ok(3)' "$work/model.txt"           # no load buffering (ORD-02, assumed)
 grep -q 'mpAllRelaxed: .*ok(100)' "$work/model.txt"         # stale MP allowed (sound)
 ! grep -q 'futexEarly: .*ok(1)' "$work/model.txt"           # no spurious wakeup (S2)
 grep -q 'groupGate: .*deadlock' "$work/model.txt"           # S1 fixed: async may run eagerly
