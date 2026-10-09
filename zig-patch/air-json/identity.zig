@@ -18,6 +18,54 @@ const InternPool = @import("../InternPool.zig");
 
 const zv = @import("builtin").zig_version;
 
+// Zig 0.17.0 changed the reflection and naming APIs this file uses; each helper names only the
+// API of the version being built (comptime-known `zv`).
+
+/// The bits of the integer `x` (`bits` wide), zero-extended. No `std.meta.Int` (gone in 0.17.0)
+/// and no `@Int` (absent before 0.17.0): through a 128-bit integer of `x`'s signedness.
+fn intBits(x: anytype, comptime signed: bool, comptime bits: u16) u128 {
+    const wide: u128 = @bitCast(@as(if (signed) i128 else u128, x));
+    return if (bits >= 128) wide else wide & ((@as(u128, 1) << bits) - 1);
+}
+
+/// The unsigned integer type with a float type's bits.
+fn FloatBits(comptime T: type) type {
+    return switch (T) {
+        f16 => u16,
+        f32 => u32,
+        f64 => u64,
+        f80 => u80,
+        f128 => u128,
+        else => @compileError("air2lean: no float bits for " ++ @typeName(T)),
+    };
+}
+
+/// `@typeInfo` of an enum: exhaustive (`mode` from 0.17.0, `is_exhaustive` before).
+fn enumExhaustive(comptime info: anytype) bool {
+    return if (zv.minor >= 17) info.mode == .exhaustive else info.is_exhaustive;
+}
+
+/// `@typeInfo` of a struct: its field names in order (`field_names` from 0.17.0).
+fn structFieldNames(comptime info: anytype) []const []const u8 {
+    return if (zv.minor >= 17) names: {
+        var names: [info.field_names.len][]const u8 = undefined;
+        for (info.field_names, 0..) |n, i| names[i] = n;
+        const out = names;
+        break :names &out;
+    } else names: {
+        var names: [info.fields.len][]const u8 = undefined;
+        for (info.fields, 0..) |f, i| names[i] = f.name;
+        const out = names;
+        break :names &out;
+    };
+}
+
+/// The fully qualified name of a container type (0.17.0 returns `{name, fqn}`).
+fn containerFqn(t: Type, ip: *const InternPool) []const u8 {
+    const name = t.containerTypeName(ip);
+    return (if (zv.minor >= 17) name.fqn else name).toSlice(ip);
+}
+
 /// The kinds of claimed identities. Each has its own namespace.
 pub const Kind = enum(u8) { module, output, type, global, instance };
 
@@ -209,13 +257,13 @@ const Encoder = struct {
         switch (@typeInfo(T)) {
             .void => {},
             .bool => e.tag(@intFromBool(x)),
-            .int => |i| e.int(@as(std.meta.Int(.unsigned, i.bits), @bitCast(x))),
+            .int => |i| e.int(@intCast(intBits(x, i.signedness == .signed, i.bits))),
             .optional => if (x) |payload| {
                 e.tag(1);
                 e.plain(payload);
             } else e.tag(0),
-            .@"enum" => |info| if (info.is_exhaustive) e.str(@tagName(x)) else e.int(@intFromEnum(x)),
-            .@"struct" => |info| inline for (info.fields) |field| e.plain(@field(x, field.name)),
+            .@"enum" => |info| if (enumExhaustive(info)) e.str(@tagName(x)) else e.int(@intFromEnum(x)),
+            .@"struct" => |info| inline for (comptime structFieldNames(info)) |name| e.plain(@field(x, name)),
             .@"union" => switch (x) {
                 inline else => |payload, t| {
                     e.str(@tagName(t));
@@ -321,7 +369,7 @@ const Encoder = struct {
             },
             .struct_type, .union_type, .enum_type, .opaque_type => {
                 const t = Type.fromInterned(index);
-                const name = t.containerTypeName(ip).toSlice(ip);
+                const name = containerFqn(t, ip);
                 if (!stableName(name)) return error.Unstable;
                 const module = typeModule(e.zcu, t);
                 // One (module, name) is one type in a compilation, as in a type table.
@@ -398,7 +446,7 @@ const Encoder = struct {
                 e.tag('f');
                 switch (v.storage) {
                     inline else => |x| {
-                        const bits: u128 = @as(std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(x))), @bitCast(x));
+                        const bits: u128 = @as(FloatBits(@TypeOf(x)), @bitCast(x));
                         e.int(@bitSizeOf(@TypeOf(x)));
                         e.int(@truncate(bits));
                         e.int(@truncate(bits >> 64));
