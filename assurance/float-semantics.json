@@ -348,6 +348,14 @@
       "semantics": "ieee",
       "correspondence": "model"
     },
+    "ZigLean.Endian::Zig.floatEncOf_little": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
+    "ZigLean.EndianLemmas::Zig.floatEncOf_lawful": {
+      "semantics": "abstract-spec",
+      "correspondence": "model"
+    },
     "ZigLean.Float.Allowed::Zig.Float.Allowed.add_eq": {
       "semantics": "ieee",
       "correspondence": "model"

@@ -1,11 +1,10 @@
-# C programs through translate-c (proposed X01)
+# C programs through translate-c (X01)
 
 air2lean verifies C programs by first turning them into Zig with Zig's own C translator,
 then running the ordinary Zig route. This page records the route, the trust statement, the
 measured coverage of a 40-file C corpus, the gaps in priority order, the libc boundary, and
 a phased plan. The harness is `tests/roadmap/c-frontend/` (`check.sh`, `run.py`, `cgen.py`).
-The proposed register row is at the end; `ROADMAP.md` and `remaining-acceptance.md` are
-not changed by this work.
+The register row (X01) is at the end.
 
 ## Architecture
 
@@ -344,9 +343,9 @@ so it is not a boundary symbol of the translated Zig.
 | 3: translate-c completeness | G7, G8 upstream or as a pinned, reviewed translate-c patch; move the route to the first Zig version without G3 (Q07 qualification) | `goto_*`, `bitfields`, `bitfield_packet`, `varargs_sum`, `switch_fallthrough`, `arrays_2d`, `ring_buffer`, `struct_layout`, `hash_table`, `sort_callback` `lean_ok`; the comparator idiom agrees natively |
 | 4: realistic programs and proofs | project manifests accept C sources (I01); csmith (Docker image) differential at ≥ 1000 seeds; tutorial | csmith seeds with no out-of-scope constructs are `lean_ok` or carry a typed rejection; two kernel-checked proofs over translated C (ring buffer invariant, linked-list reversal) using P01–P05 tactics |
 
-## Proposed register row
+## Register row
 
-Not added to `ROADMAP.md` or `remaining-acceptance.md` by this change.
+Register row X01 in `ROADMAP.md` and `remaining-acceptance.md` (open):
 
 | ID | Title | Classification | Evidence / acceptance |
 |---|---|---|---|
