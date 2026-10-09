@@ -521,6 +521,15 @@ jobs:
           bash tests/roadmap/module-identity/check.sh
           python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed std-name-spoof std-type-spoof
 
+      - name: Instance identity (S1.1)
+        if: ${{ !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/instance-identity/Instances.lean
+          bash tests/roadmap/instance-identity/check.sh
+
       - name: Build optional separation proof tools
         if: ${{ !matrix.mutate }}
         run: |

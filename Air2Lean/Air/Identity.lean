@@ -23,6 +23,16 @@ resolution, shared types and globals, std models, special std types, Lean names)
 and a std function with the same name), and a program that mixes files with and without
 module identity. An export without a top-level `module` is legacy: its names are its keys, and no
 module tells them apart.
+
+**Generic instances.** The compiler names an instance `<generic>__anon_<n>`, with a number that
+depends on the compilation. The exporter writes the instance's content-addressed
+`instance_key` next to its name (`instance_key`, `comptime_fn_instance_key`; `docs/air-json.md`
+§Instances). Before this rewrite, `Anon.renumberAnon` renames each keyed instance to
+`<generic>__anon_<the key's first 12 hex digits>` (`instanceSuffix`), the same in every program that
+uses the instance. The identity of an instance is (module, generic name, instance key): its record
+carries the key, `rewrite` checks that the name is the key's name, and `checkProgram` that no two
+keys share one name. An instance without a key (a legacy export, or an argument without a stable
+identity) keeps a number (`Anon.lean`).
 -/
 
 namespace Air2Lean.Identity
@@ -35,7 +45,20 @@ structure Record where
   key : String
   module : Option String
   name : String
+  /-- A generic instance's content-addressed key (`instance_key`), if the export has one. -/
+  instanceKey : Option String := none
   deriving BEq, Repr, Inhabited
+
+/-- The hex digits of an instance key in an instance's name. -/
+def instanceDigits : Nat := 12
+
+/-- The suffix of the name of the instance with `instanceKey`: `<generic>__anon_<digits>`. -/
+def instanceSuffix (instanceKey : String) : String :=
+  "__anon_" ++ (instanceKey.take instanceDigits).toString
+
+/-- An `instance_key`: 64 lower-case hex digits (a SHA-256). -/
+def validInstanceKey (k : String) : Bool :=
+  k.length == 64 && k.all fun c => c.isDigit || ('a' ≤ c && c ≤ 'f')
 
 /-- The std namespaces whose names the translator interprets (`StdModels.lean`, the special
 types of `Json.parseTy`, the panic handlers of `Op.panicErrorFor?`, the receiver and clock
@@ -65,10 +88,21 @@ def fileKey (j : Json) : String :=
 
 private abbrev M := StateT (Array Record) (Except String)
 
+/-- The instance key in field `field` of `j`, for the identity `name`: a valid key, and `name`
+ends with its `instanceSuffix` (`Anon.renumberAnon` names a keyed instance so). -/
+private def instanceOf (what name : String) (j : Json) (field : String) : M (Option String) := do
+  let .ok v := j.getObjVal? field | return none
+  let .str k := v | throw s!"{what} '{name}': '{field}' must be a string"
+  unless validInstanceKey k do
+    throw s!"{what} '{name}': '{field}' must be 64 lower-case hex digits"
+  unless name.endsWith (instanceSuffix k) do
+    throw s!"{what} '{name}': its '{field}' names another instance (two instances with one compiler name, or a name that is not an instance's)"
+  pure (some k)
+
 /-- `j` with the identity in `nameKey` replaced by its key, given the module in `moduleKey`.
 An export with module identity names the module of every identity; a legacy export none. -/
-private def qualify (legacy : Bool) (what : String) (j : Json) (nameKey moduleKey : String) :
-    M Json := do
+private def qualify (legacy : Bool) (what : String) (j : Json) (nameKey moduleKey : String)
+    (instanceField : Option String := none) : M Json := do
   let .ok (.str name) := j.getObjVal? nameKey | return j
   let module ← match j.getObjVal? moduleKey, legacy with
     | .error _, true => pure none
@@ -78,7 +112,9 @@ private def qualify (legacy : Bool) (what : String) (j : Json) (nameKey moduleKe
       if m.isEmpty then throw s!"{what} '{name}': '{moduleKey}' must not be empty" else pure (some m)
     | .ok _, false => throw s!"{what} '{name}': '{moduleKey}' must be a string"
   let k := key module name
-  modify (·.push { key := k, module, name })
+  modify (·.push { key := k, module, name, instanceKey := ← match instanceField with
+    | some field => instanceOf what name j field
+    | none => pure none })
   pure (j.setObjVal! nameKey (.str k))
 
 /-- `j` with every function reference (`func`, `comptime_fn`) at any depth replaced by its key. -/
@@ -90,8 +126,9 @@ private partial def refs (legacy : Bool) (j : Json) : M Json := do
     for (k, v) in fields.toArray do
       out := out.setObjVal! k (← refs legacy v)
     if (out.getObjVal? "func").toOption.isSome then
-      out ← qualify legacy "function reference" out "func" "module"
+      out ← qualify legacy "function reference" out "func" "module" "instance_key"
       out ← qualify legacy "spawned function" out "comptime_fn" "comptime_fn_module"
+        "comptime_fn_instance_key"
     pure out
   | j => pure j
 
@@ -107,7 +144,7 @@ def rewrite (j : Json) : Except String (Json × Array Record) := do
   let go : M Json := do
     let .ok (.str name) := j.getObjVal? "name" | return j
     let own := key module name
-    modify (·.push { key := own, module, name })
+    modify (·.push { key := own, module, name, instanceKey := ← instanceOf "function" name j "instance_key" })
     let mut j := j.setObjVal! "name" (.str own)
     j ← mapArray j "types" fun t =>
       match (t.getObjValAs? String "k").toOption with
@@ -119,9 +156,12 @@ def rewrite (j : Json) : Except String (Json × Array Record) := do
 
 /-- The (module, name) of a record, for messages. -/
 def Record.describe (r : Record) : String :=
+  let suffix := match r.instanceKey with
+    | some k => s!" (instance {k})"
+    | none => ""
   match r.module with
-  | some m => s!"'{r.name}' of module '{m}'"
-  | none => s!"'{r.name}' (no module)"
+  | some m => s!"'{r.name}' of module '{m}'{suffix}"
+  | none => s!"'{r.name}' (no module){suffix}"
 
 /-- One program's identities (`records[i]`: file `i`'s records, its own function first): every
 key stands for one (module, name), and all files have module identity or none has. -/
@@ -135,7 +175,8 @@ def checkProgram (records : Array (Array Record)) : Except String Unit := do
     match seen[r.key]? with
     | none => seen := seen.insert r.key r
     | some previous =>
-      unless previous.module == r.module && previous.name == r.name do
+      unless previous.module == r.module && previous.name == r.name &&
+          previous.instanceKey == r.instanceKey do
         throw s!"identity '{r.key}' names both {previous.describe} and {r.describe}; rename one of them (docs/air-json.md §Identity)"
 
 end Air2Lean.Identity

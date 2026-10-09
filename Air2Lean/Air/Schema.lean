@@ -133,7 +133,9 @@ def unmodeledAttrs (kind : String) : List Unmodeled :=
 def refForms : List (String × List Key) :=
   [("inst", [req "inst" .nat]),
    ("func", [req "ty" .nat, req "func" .str, moduleKey, req "noreturn" .bool,
-     opt "comptime_fn" .str, opt "comptime_fn_module" .str]),
+     opt "comptime_fn" .str, opt "comptime_fn_module" .str,
+     -- Content-addressed instance identity (`docs/air-json.md` §Instances).
+     opt "instance_key" .str, opt "comptime_fn_instance_key" .str]),
    ("undef", [req "ty" .nat, req "undef" .marker]),
    ("err", [req "ty" .nat, req "err" .str]),
    ("payload", [req "ty" .nat, req "payload" .obj]),
@@ -159,7 +161,7 @@ def laneForms : List (String × List Key) :=
 
 def topKeys : List Key :=
   [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, req "profile" .obj,
-   req "name" .str, moduleKey, opt "src" .obj, req "params" .arr, req "ret" .nat, req "body" .arr,
+   req "name" .str, moduleKey, opt "src" .obj, opt "instance_key" .str, req "params" .arr, req "ret" .nat, req "body" .arr,
    opt "globals" .arr, req "types" .arr]
 
 /-- A declaration site (`src`, I05): of the file's function and of a `dbg_inline_block`'s

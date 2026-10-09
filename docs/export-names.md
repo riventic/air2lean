@@ -6,7 +6,9 @@ translator reads JSON identities; changing a storage key does not rename a funct
 After all validation guards succeed, emission uses the historical virtual
 `<original full JSON name>.json` order. The key is cached before anonymous
 renumbering, so hashes and numeric project staging paths cannot reorder definitions
-or change which generic instance receives a preferred declaration name. Reads,
+or change which generic instance receives a preferred declaration name. A program
+with content-addressed instances ([AIR JSON §Instances](air-json.md#instances))
+uses the renamed full names instead, which no compiler number affects. Reads,
 validation errors and profile receipts continue using the actual storage paths.
 
 A nonempty ASCII name uses its existing `<name>.json` spelling when it begins

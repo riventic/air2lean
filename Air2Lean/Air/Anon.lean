@@ -30,6 +30,13 @@ there; with one instance per name, both still get `1`.
 A type without a name (`os.linux.timespec__struct_2872`, a `__enum_`, `__union_` or `__opaque_`)
 has such a number too, and the translator can use it as a Lean name; each of these markers gets
 the same renumbering, after the functions (`renumberAll`).
+
+**Content-addressed instances.** An instance with an `instance_key` (`docs/air-json.md`
+§Instances) needs no number: it is renamed `<name>__anon_<the key's first 12 hex digits>`
+(`Identity.instanceSuffix`), the same in every program that uses it, whatever the scan order.
+Only the instances without a key (a legacy export, or an argument without a stable identity)
+are numbered as above; a legacy export translates as before. A program with a keyed instance
+emits its functions in the order of these names, not of the compiler's names (`Main.lean`).
 -/
 
 namespace Air2Lean.Anon
@@ -50,7 +57,7 @@ def anonInsts (s : String) (marker : String := "__anon_") : Array Inst := Id.run
 
 /-- `s` with each `<name><marker><n>` changed to `<name><marker><map (name, n)>` (unchanged if
 it has no entry). -/
-def rename (map : Std.HashMap Inst Nat) (s : String) (marker : String := "__anon_") : String :=
+def rename (map : Std.HashMap Inst String) (s : String) (marker : String := "__anon_") : String :=
   Id.run do
   let parts := s.splitOn marker
   let mut out := parts.head!
@@ -58,7 +65,7 @@ def rename (map : Std.HashMap Inst Nat) (s : String) (marker : String := "__anon
     let digits := (p.takeWhile Char.isDigit).toString
     let rest := (p.drop digits.length).toString
     match map[(((prev.splitOn "\"").getLast!), digits)]? with
-    | some k => out := out ++ marker ++ toString k ++ rest
+    | some k => out := out ++ marker ++ k ++ rest
     | none => out := out ++ marker ++ p
   out
 
@@ -103,7 +110,7 @@ partial def mapIdentities (f : String → String) (j : Lean.Json) (root : Bool :
     (k, v) :: acc)
   | j => j
 
-def renameIdentities (map : Std.HashMap Inst Nat) (marker : String) (j : Lean.Json) : Lean.Json :=
+def renameIdentities (map : Std.HashMap Inst String) (marker : String) (j : Lean.Json) : Lean.Json :=
   mapIdentities (rename map · marker) j
 
 /-- Zig 0.17.0 names a generic function instance `<name>__func_<n>` where 0.16.0 and older
@@ -120,11 +127,40 @@ def funcInstances017 (j : Lean.Json) : Lean.Json :=
       out := out ++ (if digits.isEmpty then "__func_" else "__anon_") ++ p
     out) j
 
+/-- The keyed instances of one AIR file: each `<name>__anon_<n>` with an instance key (the
+function's own `name` and `instance_key`, a reference's `func` and `instance_key` or
+`comptime_fn` and `comptime_fn_instance_key`), mapped to the key's digits. A name keeps its first
+key; `Identity.rewrite` rejects a different second one. -/
+partial def instanceKeys (j : Lean.Json) (acc : Std.HashMap Inst String) (root : Bool := true) :
+    Std.HashMap Inst String :=
+  match j with
+  | .arr vs => vs.foldl (fun acc v => instanceKeys v acc false) acc
+  | .obj fields =>
+    let field (k : String) := (j.getObjValAs? String k).toOption
+    let add (acc : Std.HashMap Inst String) (nameField keyField : String) :=
+      match field nameField, field keyField with
+      | some name, some key =>
+        match (anonInsts ("\"" ++ name)).back? with
+        | some n => if acc.contains n then acc else
+            acc.insert n (key.take Identity.instanceDigits).toString
+        | none => acc
+      | _, _ => acc
+    let acc := if root then add acc "name" "instance_key" else acc
+    let acc := add (add acc "func" "instance_key") "comptime_fn" "comptime_fn_instance_key"
+    fields.foldl (fun acc _ v => instanceKeys v acc false) acc
+  | _ => acc
+
+/-- The keyed instances of a program (`instanceKeys`). -/
+def programInstanceKeys (parsed : Array (Option Lean.Json)) : Std.HashMap Inst String :=
+  parsed.foldl (fun acc j => (j.map (instanceKeys · acc)).getD acc) {}
+
 /-- `texts`: the JSON text of each function. The same functions, with the numbers after `marker`
-renamed, and for each whether any identity of it contains a `marker` instance (otherwise its
-JSON is returned unchanged, without being rebuilt). -/
+renamed (a keyed instance, `keyed`, to its key's digits, any other to its next number), and for
+each whether any identity of it contains a `marker` instance (otherwise its JSON is returned
+unchanged, without being rebuilt). -/
 def renumberParsedChanged (texts : Array String) (parsed : Array (Option Lean.Json))
-    (marker : String) : Array (Option Lean.Json) × Array Bool := Id.run do
+    (marker : String) (keyed : Std.HashMap Inst String := {}) :
+    Array (Option Lean.Json) × Array Bool := Id.run do
   let names := parsed.map fun j => (j.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
   let identities := parsed.map fun j =>
     let ns := (j.map identityNames).getD #[]
@@ -138,7 +174,7 @@ def renumberParsedChanged (texts : Array String) (parsed : Array (Option Lean.Js
   let isInst (i : Nat) := !(anonInsts names[i]! marker).isEmpty
   let roots := sorted ((Array.range texts.size).filter (!isInst ·))
   let rest := sorted ((Array.range texts.size).filter isInst)
-  let mut map : Std.HashMap Inst Nat := {}
+  let mut map : Std.HashMap Inst String := {}
   let mut count : Std.HashMap String Nat := {}
   let mut seen : Std.HashSet Nat := {}
   let mut queue := roots
@@ -158,9 +194,12 @@ def renumberParsedChanged (texts : Array String) (parsed : Array (Option Lean.Js
       for n in anonInsts texts[i]! marker do
         unless identities[i]!.contains n do continue
         if !map.contains n then
-          let k := count.getD n.1 0 + 1
-          count := count.insert n.1 k
-          map := map.insert n k
+          match keyed[n]? with
+          | some digits => map := map.insert n digits
+          | none =>
+            let k := count.getD n.1 0 + 1
+            count := count.insert n.1 k
+            map := map.insert n (toString k)
           if let some j := byInst[n]? then
             if !seen.contains j then
               seen := seen.insert j
@@ -170,25 +209,28 @@ def renumberParsedChanged (texts : Array String) (parsed : Array (Option Lean.Js
     if changed[i]! then j.map (renameIdentities map marker ·) else j, changed)
 
 /-- `texts`: the JSON text of each function. The same texts, with the numbers after `marker`
-renamed. -/
+renamed: a keyed instance (`keyed`) to its key's digits, any other to its next number. -/
 def renumberParsed (texts : Array String) (parsed : Array (Option Lean.Json))
-    (marker : String) : Array (Option Lean.Json) :=
-  (renumberParsedChanged texts parsed marker).1
+    (marker : String) (keyed : Std.HashMap Inst String := {}) : Array (Option Lean.Json) :=
+  (renumberParsedChanged texts parsed marker keyed).1
 
 def compressParsed (texts : Array String) (parsed : Array (Option Lean.Json)) : Array String :=
   (texts.zip parsed).map fun (text, j) => (j.map (·.compress)).getD text
 
 def renumberAnon (texts : Array String) (marker : String := "__anon_") : Array String :=
   let parsed := texts.map fun text => (StrictJson.parse text).toOption
-  compressParsed texts (renumberParsed texts parsed marker)
+  let keyed := if marker == "__anon_" then programInstanceKeys parsed else {}
+  compressParsed texts (renumberParsed texts parsed marker keyed)
 
 private def renumberAllParsed (texts : Array String)
     (initialParsed : Array (Option Lean.Json)) : Array String := Id.run do
+  let keyed := programInstanceKeys initialParsed
   let mut parsed := initialParsed
   let mut current := texts
   let mut first := true
   for marker in ["__anon_", "__struct_", "__enum_", "__union_", "__opaque_"] do
-    let (next, changed) := renumberParsedChanged current parsed marker
+    let (next, changed) :=
+      renumberParsedChanged current parsed marker (if marker == "__anon_" then keyed else {})
     parsed := next
     -- The first pass compresses every text. After that a text equals the compressed form of
     -- its JSON, so only a function whose JSON changed needs compressing again.

@@ -299,7 +299,6 @@ private def run (args : List String) : IO UInt32 := do
       -- uses hashes or project staging names. Cache before anonymous renumbering.
       let ((originalNames, rewrittenTexts), renumberNs) ← timed fun _ => Anon.renumberAllWithNames texts
       times := { times with renumber := renumberNs }
-      let emissionKeys := originalNames.map (· ++ ".json")
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut err : Option String := none
@@ -349,7 +348,11 @@ private def run (args : List String) : IO UInt32 := do
               pure 0
           else
             -- Reads and every validation guard retain their original path order.
-            -- Only successful emission depends on identity rather than storage keys.
+            -- Only successful emission depends on identity rather than storage keys. With
+            -- content-addressed instances (docs/air-json.md §Instances), the renamed identity:
+            -- the compiler's instance numbers must not order the definitions.
+            let keyed := funcs.any (·.identities.any (·.instanceKey.isSome))
+            let emissionKeys := (if keyed then funcs.map (·.name) else originalNames).map (· ++ ".json")
             let emissionFuncs := ((emissionKeys.zip funcs).qsort
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"

@@ -578,7 +578,7 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
 
     var w: W = .{ .pt = pt, .air = air, .j = &sink.j, .gpa = arena.allocator() };
     // A partly written file is invalid JSON; say which one, like the open failures above.
-    w.writeFunc(fqn, Type.fromInterned(func.ty), func.owner_nav) catch |err| {
+    w.writeFunc(fqn, Type.fromInterned(func.ty), func) catch |err| {
         std.log.warn("air2lean: incomplete JSON for {s}: {s}", .{ fqn, @errorName(err) });
         return;
     };
@@ -677,7 +677,8 @@ const W = struct {
         try w.j.endObject();
     }
 
-    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, owner_nav: InternPool.Nav.Index) Error!void {
+    fn writeFunc(w: *W, fqn: []const u8, fn_ty: Type, func: InternPool.Key.Func) Error!void {
+        const owner_nav = func.owner_nav;
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
         try w.j.beginObject();
@@ -695,6 +696,7 @@ const W = struct {
         try w.j.write(Identity.navModule(zcu, owner_nav));
         try w.field("src");
         try w.writeSrc(owner_nav);
+        try w.writeInstanceKey("instance_key", func);
         try w.field("params");
         try w.j.beginArray();
         const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
@@ -735,6 +737,13 @@ const W = struct {
 
     fn field(w: *W, name: []const u8) Error!void {
         try w.j.objectField(name);
+    }
+
+    /// The content-addressed key of a generic instance (`Identity.instanceKey`), if it has one.
+    fn writeInstanceKey(w: *W, name: []const u8, f: InternPool.Key.Func) Error!void {
+        const key = Identity.instanceKey(w.pt.zcu, w.gpa, f) orelse return;
+        try w.field(name);
+        try w.j.write(key[0..]);
     }
 
     fn writeInst(w: *W, inst: Air.Inst.Index) Error!void {
@@ -1289,6 +1298,7 @@ const W = struct {
                     try w.j.write(ip.getNav(f.owner_nav).fqn.toSlice(ip));
                     try w.field("module");
                     try w.j.write(Identity.navModule(zcu, f.owner_nav));
+                    try w.writeInstanceKey("instance_key", f);
                     try w.field("noreturn");
                     try w.j.write(Type.fromInterned(f.ty).fnReturnType(zcu).zigTypeTag(zcu) == .noreturn);
                     // A generic instantiation (e.g. `std.Thread.spawn`'s `function` comptime
@@ -1304,6 +1314,7 @@ const W = struct {
                                     try w.j.write(ip.getNav(cf.owner_nav).fqn.toSlice(ip));
                                     try w.field("comptime_fn_module");
                                     try w.j.write(Identity.navModule(zcu, cf.owner_nav));
+                                    try w.writeInstanceKey("comptime_fn_instance_key", cf);
                                     break;
                                 },
                                 else => {},

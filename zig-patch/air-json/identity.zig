@@ -19,7 +19,7 @@ const InternPool = @import("../InternPool.zig");
 const zv = @import("builtin").zig_version;
 
 /// The kinds of claimed identities. Each has its own namespace.
-pub const Kind = enum(u8) { module, output, type, global };
+pub const Kind = enum(u8) { module, output, type, global, instance };
 
 /// The declaration that claimed an identity: its compilation and an ID that is unique there
 /// (a `Nav.Index`, an `InternPool.Index` or a module address).
@@ -102,3 +102,436 @@ pub fn storageName(a: std.mem.Allocator, module: []const u8, name: []const u8) !
     if (std.mem.eql(u8, module, "root") or std.mem.eql(u8, module, "std")) return name;
     return std.mem.concat(a, u8, &.{ module, ":", name });
 }
+
+// Generic instances (docs/air-json.md §Instances).
+//
+// The compiler names a generic instance `<generic fqn>__anon_<n>`, where `n` is the instance's
+// InternPool index: it depends on everything the compilation analysed before. The
+// `instance_key` is intrinsic: the SHA-256 of a canonical encoding of what makes the instance
+// (the InternPool's own instance identity): the generic declaration (module, fqn), each comptime
+// argument, and the instance's function type (an `anytype` parameter's type, `noinline`). A
+// type is encoded by its stable identity (a named container by (module, name), every other
+// type structurally), a value canonically (an integer by its magnitude, an aggregate by its
+// elements, a pointer by its base and offset), never by an InternPool index. So the same
+// instance has the same key in every program that uses it and in every source order, and two
+// different instances have different keys.
+//
+// An argument without a stable identity (a container whose compiler-made name has a number,
+// `__struct_<n>`; a pointer into comptime-mutable memory; a lazy `@sizeOf`) gives no key: the
+// instance has no `instance_key` and keeps the compiler's name. One compilation never gives
+// two different instances one key (the `instance` claim).
+
+const Sha256 = std.crypto.hash.sha2.Sha256;
+
+/// The version of the encoding, hashed into every key: a changed encoding changes every key.
+const encoding_version = "air2lean-instance-v1";
+
+/// The `instance_key` of function `f`: 64 lower-case hex digits, or `null` if `f` is not a
+/// generic instance or an argument has no stable identity.
+pub fn instanceKey(zcu: *Zcu, gpa: std.mem.Allocator, f: InternPool.Key.Func) ?[64]u8 {
+    if (f.generic_owner == .none) return null;
+    // An instance is hashed and claimed once per compilation, however often it is referenced.
+    const cache_key: [2]usize = .{ @intFromPtr(zcu), @intFromEnum(f.owner_nav) };
+    {
+        lock.lock();
+        defer lock.unlock();
+        if (instance_keys.get(cache_key)) |cached| return cached;
+    }
+    const key = computeInstanceKey(zcu, gpa, f);
+    lock.lock();
+    defer lock.unlock();
+    instance_keys.put(arena.allocator(), cache_key, key) catch fatalOom();
+    return key;
+}
+
+/// The keys of the instances seen so far, by (compilation, instance `Nav`); `null`: no key.
+var instance_keys: std.AutoHashMapUnmanaged([2]usize, ?[64]u8) = .empty;
+
+fn computeInstanceKey(zcu: *Zcu, gpa: std.mem.Allocator, f: InternPool.Key.Func) ?[64]u8 {
+    var e: Encoder = .{ .zcu = zcu, .gpa = gpa, .h = Sha256.init(.{}) };
+    e.str(encoding_version);
+    e.instance(f, 0) catch |err| switch (err) {
+        error.Unstable => return null,
+        error.OutOfMemory => fatalOom(),
+    };
+    const key = std.fmt.bytesToHex(e.h.finalResult(), .lower);
+    const ip = &zcu.intern_pool;
+    const owner = ip.funcDeclInfo(f.generic_owner).owner_nav;
+    const name = std.mem.concat(gpa, u8, &.{ ip.getNav(owner).fqn.toSlice(ip), "#", &key }) catch fatalOom();
+    claim(zcu, .instance, navModule(zcu, owner), name, @intFromEnum(f.owner_nav));
+    return key;
+}
+
+/// Does `name` (a fqn or type name) have no per-compilation number? The compiler numbers
+/// generic instances (`__anon_<n>`) and containers without a declaration name (`__struct_<n>`,
+/// `__enum_<n>`, `__union_<n>`, `__opaque_<n>`).
+fn stableName(name: []const u8) bool {
+    for ([_][]const u8{ "__anon_", "__struct_", "__enum_", "__union_", "__opaque_" }) |marker| {
+        var rest = name;
+        while (std.mem.indexOf(u8, rest, marker)) |i| {
+            rest = rest[i + marker.len ..];
+            if (rest.len > 0 and std.ascii.isDigit(rest[0])) return false;
+        }
+    }
+    return true;
+}
+
+/// A prefix-free encoding into the hash: every item starts with a tag byte, and every string
+/// and sequence with its length.
+const Encoder = struct {
+    zcu: *Zcu,
+    gpa: std.mem.Allocator,
+    h: Sha256,
+
+    const Error = error{ Unstable, OutOfMemory };
+    /// Deeper nesting (a type of a type of …) gives no key.
+    const max_depth = 64;
+
+    fn tag(e: *Encoder, t: u8) void {
+        e.h.update(&.{t});
+    }
+
+    fn int(e: *Encoder, x: u64) void {
+        var bytes: [8]u8 = undefined;
+        std.mem.writeInt(u64, &bytes, x, .little);
+        e.h.update(&bytes);
+    }
+
+    fn str(e: *Encoder, s: []const u8) void {
+        e.int(s.len);
+        e.h.update(s);
+    }
+
+    /// A compiler value without InternPool indices (`CallingConvention` and its options): by
+    /// field, enum tags by name.
+    fn plain(e: *Encoder, x: anytype) void {
+        const T = @TypeOf(x);
+        switch (@typeInfo(T)) {
+            .void => {},
+            .bool => e.tag(@intFromBool(x)),
+            .int => |i| e.int(@as(std.meta.Int(.unsigned, i.bits), @bitCast(x))),
+            .optional => if (x) |payload| {
+                e.tag(1);
+                e.plain(payload);
+            } else e.tag(0),
+            .@"enum" => |info| if (info.is_exhaustive) e.str(@tagName(x)) else e.int(@intFromEnum(x)),
+            .@"struct" => |info| inline for (info.fields) |field| e.plain(@field(x, field.name)),
+            .@"union" => switch (x) {
+                inline else => |payload, t| {
+                    e.str(@tagName(t));
+                    e.plain(payload);
+                },
+            },
+            else => @compileError("air2lean: no canonical encoding for " ++ @typeName(T)),
+        }
+    }
+
+    /// A declaration: (module, fqn). A compiler-made fqn has no stable identity.
+    fn nav(e: *Encoder, index: InternPool.Nav.Index) Error!void {
+        const ip = &e.zcu.intern_pool;
+        const fqn = ip.getNav(index).fqn.toSlice(ip);
+        if (!stableName(fqn)) return error.Unstable;
+        e.str(navModule(e.zcu, index));
+        e.str(fqn);
+    }
+
+    /// A generic instance: its generic declaration, comptime arguments and parameter types.
+    /// The uncoerced type: a coerced function value is the same instance.
+    fn instance(e: *Encoder, f: InternPool.Key.Func, depth: u32) Error!void {
+        const ip = &e.zcu.intern_pool;
+        try e.nav(ip.funcDeclInfo(f.generic_owner).owner_nav);
+        const args = f.comptime_args.get(ip);
+        e.int(args.len);
+        for (args) |arg| try e.optValue(arg, depth + 1);
+        // The return type follows from the rest; it can be this instance's inferred error set.
+        try e.fnType(ip.indexToKey(f.uncoerced_ty).func_type, false, depth + 1);
+    }
+
+    fn func(e: *Encoder, f: InternPool.Key.Func, depth: u32) Error!void {
+        if (f.generic_owner == .none) {
+            e.tag('d');
+            try e.nav(f.owner_nav);
+        } else {
+            e.tag('g');
+            try e.instance(f, depth);
+        }
+    }
+
+    fn fnType(e: *Encoder, t: InternPool.Key.FuncType, with_return: bool, depth: u32) Error!void {
+        const ip = &e.zcu.intern_pool;
+        const params = t.param_types.get(ip);
+        e.int(params.len);
+        for (params) |param| try e.ty(param, depth + 1);
+        e.int(t.comptime_bits);
+        e.int(t.noalias_bits);
+        e.plain(t.cc);
+        e.plain(t.is_var_args);
+        e.plain(t.is_noinline);
+        if (with_return) try e.ty(t.return_type, depth + 1);
+    }
+
+    fn ty(e: *Encoder, index: InternPool.Index, depth: u32) Error!void {
+        if (depth > max_depth) return error.Unstable;
+        const ip = &e.zcu.intern_pool;
+        const d = depth + 1;
+        switch (ip.indexToKey(index)) {
+            .int_type => |t| {
+                e.tag('i');
+                e.plain(t.signedness);
+                e.int(t.bits);
+            },
+            .ptr_type => |t| {
+                e.tag('p');
+                // Size, alignment, const, volatile, allowzero, address space, vector lane.
+                e.int(@as(u32, @bitCast(t.flags)));
+                e.int(@as(u32, @bitCast(t.packed_offset)));
+                try e.optValue(t.sentinel, d);
+                try e.ty(t.child, d);
+            },
+            .array_type => |t| {
+                e.tag('a');
+                e.int(t.len);
+                try e.optValue(t.sentinel, d);
+                try e.ty(t.child, d);
+            },
+            .vector_type => |t| {
+                e.tag('v');
+                e.int(t.len);
+                try e.ty(t.child, d);
+            },
+            .opt_type => |child| {
+                e.tag('o');
+                try e.ty(child, d);
+            },
+            .anyframe_type => |child| {
+                e.tag('F');
+                if (child == .none) e.tag(0) else {
+                    e.tag(1);
+                    try e.ty(child, d);
+                }
+            },
+            .error_union_type => |t| {
+                e.tag('e');
+                try e.ty(t.error_set_type, d);
+                try e.ty(t.payload_type, d);
+            },
+            .simple_type => |t| {
+                e.tag('s');
+                e.str(@tagName(t));
+            },
+            .struct_type, .union_type, .enum_type, .opaque_type => {
+                const t = Type.fromInterned(index);
+                const name = t.containerTypeName(ip).toSlice(ip);
+                if (!stableName(name)) return error.Unstable;
+                const module = typeModule(e.zcu, t);
+                // One (module, name) is one type in a compilation, as in a type table.
+                claim(e.zcu, .type, module, name, @intFromEnum(index));
+                e.tag('c');
+                e.str(module);
+                e.str(name);
+            },
+            .tuple_type => |t| {
+                e.tag('t');
+                const types = t.types.get(ip);
+                e.int(types.len);
+                for (types, t.values.get(ip)) |field_ty, field_val| {
+                    try e.ty(field_ty, d);
+                    try e.optValue(field_val, d);
+                }
+            },
+            .func_type => |t| {
+                e.tag('f');
+                try e.fnType(t, true, d);
+            },
+            .error_set_type => |t| {
+                e.tag('E');
+                // By name: the InternPool sorts them by string index.
+                const names = try e.gpa.alloc([]const u8, t.names.len);
+                defer e.gpa.free(names);
+                for (names, t.names.get(ip)) |*n, s| n.* = s.toSlice(ip);
+                std.mem.sort([]const u8, names, {}, lessThan);
+                e.int(names.len);
+                for (names) |n| e.str(n);
+            },
+            .inferred_error_set_type => |owner| {
+                e.tag('I');
+                try e.func(ip.indexToKey(owner).func, d);
+            },
+            else => return error.Unstable,
+        }
+    }
+
+    fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+        return std.mem.lessThan(u8, a, b);
+    }
+
+    fn optValue(e: *Encoder, index: InternPool.Index, depth: u32) Error!void {
+        if (index == .none) return e.tag(0);
+        e.tag(1);
+        try e.value(index, depth);
+    }
+
+    /// A comptime value: a type by its identity, any other value by its type and contents.
+    fn value(e: *Encoder, index: InternPool.Index, depth: u32) Error!void {
+        if (depth > max_depth) return error.Unstable;
+        const ip = &e.zcu.intern_pool;
+        const d = depth + 1;
+        const value_ty = ip.typeOf(index);
+        if (value_ty == .type_type) {
+            e.tag('T');
+            return e.ty(index, d);
+        }
+        e.tag('V');
+        try e.ty(value_ty, d);
+        const key = ip.indexToKey(index);
+        switch (key) {
+            .undef => e.tag('u'),
+            .simple_value => |v| {
+                e.tag('s');
+                e.str(@tagName(v));
+            },
+            .int => |v| {
+                e.tag('i');
+                try e.bigInt(v.storage);
+            },
+            .float => |v| {
+                e.tag('f');
+                switch (v.storage) {
+                    inline else => |x| {
+                        const bits: u128 = @as(std.meta.Int(.unsigned, @bitSizeOf(@TypeOf(x))), @bitCast(x));
+                        e.int(@bitSizeOf(@TypeOf(x)));
+                        e.int(@truncate(bits));
+                        e.int(@truncate(bits >> 64));
+                    },
+                }
+            },
+            .err => |v| {
+                e.tag('r');
+                e.str(v.name.toSlice(ip));
+            },
+            .error_union => |v| switch (v.val) {
+                .err_name => |name| {
+                    e.tag('r');
+                    e.str(name.toSlice(ip));
+                },
+                .payload => |payload| {
+                    e.tag('P');
+                    try e.value(payload, d);
+                },
+            },
+            .enum_literal => |name| {
+                e.tag('l');
+                e.str(name.toSlice(ip));
+            },
+            .enum_tag => |v| {
+                e.tag('n');
+                try e.value(v.int, d);
+            },
+            .func => |f| {
+                e.tag('F');
+                try e.func(f, d);
+            },
+            .ptr => |p| {
+                e.tag('p');
+                e.int(p.byte_offset);
+                switch (p.base_addr) {
+                    .nav => |n| {
+                        e.tag('n');
+                        try e.nav(n);
+                    },
+                    .uav => |u| {
+                        e.tag('u');
+                        try e.ty(u.orig_ty, d);
+                        try e.value(u.val, d);
+                    },
+                    .comptime_field => |v| {
+                        e.tag('c');
+                        try e.value(v, d);
+                    },
+                    .int => e.tag('i'),
+                    .eu_payload => |base| {
+                        e.tag('E');
+                        try e.value(base, d);
+                    },
+                    .opt_payload => |base| {
+                        e.tag('O');
+                        try e.value(base, d);
+                    },
+                    .field => |b| {
+                        e.tag('f');
+                        try e.value(b.base, d);
+                        e.int(b.index);
+                    },
+                    .arr_elem => |b| {
+                        e.tag('a');
+                        try e.value(b.base, d);
+                        e.int(b.index);
+                    },
+                    // Comptime-mutable memory is not a value of the instance.
+                    .comptime_alloc => return error.Unstable,
+                }
+            },
+            .slice => |s| {
+                e.tag('S');
+                try e.value(s.ptr, d);
+                try e.value(s.len, d);
+            },
+            .opt => |o| {
+                e.tag('o');
+                try e.optValue(o.val, d);
+            },
+            .aggregate => |a| switch (a.storage) {
+                // The InternPool keeps one storage form per value.
+                .bytes => |bytes| {
+                    e.tag('b');
+                    e.str(bytes.toSlice(ip.aggregateTypeLenIncludingSentinel(a.ty), ip));
+                },
+                .elems => |elems| {
+                    e.tag('A');
+                    e.int(elems.len);
+                    for (elems) |elem| try e.value(elem, d);
+                },
+                .repeated_elem => |elem| {
+                    e.tag('R');
+                    try e.value(elem, d);
+                },
+            },
+            .un => |u| {
+                e.tag('U');
+                try e.optValue(u.tag, d);
+                try e.value(u.val, d);
+            },
+            else => {
+                // 0.16.0's packed struct and union values.
+                if (zv.minor >= 16) {
+                    if (key == .bitpack) {
+                        e.tag('k');
+                        return e.value(key.bitpack.backing_int_val, d);
+                    }
+                }
+                return error.Unstable;
+            },
+        }
+    }
+
+    /// An integer: its sign, then its magnitude's little-endian bytes without trailing zeros.
+    /// A lazy `@sizeOf`/`@alignOf` (before 0.16.0) gives no key.
+    fn bigInt(e: *Encoder, storage: InternPool.Key.Int.Storage) Error!void {
+        var space: InternPool.Key.Int.Storage.BigIntSpace = undefined;
+        const big: std.math.big.int.Const = switch (storage) {
+            inline else => |x, t| if (t == .big_int)
+                x
+            else if (t == .u64 or t == .i64)
+                std.math.big.int.Mutable.init(&space.limbs, x).toConst()
+            else
+                return error.Unstable,
+        };
+        e.tag(@intFromBool(big.positive or big.eqlZero()));
+        // Limbs least significant first, each little-endian: the magnitude's little-endian bytes.
+        comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
+        const bytes = std.mem.sliceAsBytes(big.limbs);
+        var len = bytes.len;
+        while (len > 0 and bytes[len - 1] == 0) len -= 1;
+        e.str(bytes[0..len]);
+    }
+};
