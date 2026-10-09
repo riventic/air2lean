@@ -1,9 +1,9 @@
 {
-  "manifest_sha256": "0147f29c45239917727fc92b29eb83e2b795228d9d6158faf8b2730a79a2a2f4",
+  "manifest_sha256": "63074a357682fb956740215cf8b4ec2fd707cec150e5ed2dc3965c53bd384bdb",
   "native_binary_sha256": "fb0b69e77d0aa3880ec7118ddca9ce2aa76e530d6538dd2ee2b410f395f206ca",
-  "native_sha256": "b6fa24808e1936b973c012979ec200c68672b7acf7f5a944f3699a65c0c86c1e",
+  "native_sha256": "0065711bc01ee375194430a31bc011b6d65bb420ad68db49782e5efd834d3426",
   "note": "Reviewer pins for assurance/provenance-gap/manifest.json (scripts/provenance-evidence.py). Update only with a regenerated, reviewed manifest.",
   "profile_sha256": "cff267bc7c4a9df1ebbd9b8f838aeb82ceaab0ca5b517101538b3ad499804509",
-  "source_sha256": "2cf0a9b7084fe6418d61f6434707db4b080df1c711178e612aa919c3256eee2c",
+  "source_sha256": "6dbbb8b807550b57614190dcaa8f2604b25e4a49051ccb8af25ccd61f796d3b3",
   "zig_version": "0.16.0"
 }
