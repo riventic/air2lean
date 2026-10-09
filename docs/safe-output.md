@@ -18,16 +18,17 @@ destination's mode is kept.
 | Writer | Artifact | Policy |
 | --- | --- | --- |
 | `scripts/translate.sh` | `-o OUTPUT.lean` after Lean elaboration | `--overwrite` (default) or `--no-clobber` |
-| `scripts/check.sh` | `Proofs/<Ex>/Gen.lean`, check report `<ex>.json` and `<ex>.Gen.lean`, `AIR2LEAN_OUT_DIR` copies | overwrite (a rerun replaces its own output) |
+| `scripts/check.sh` | check report `<ex>.json` and `<ex>.Gen.lean`, `AIR2LEAN_OUT_DIR` copies | overwrite (a rerun replaces its own output) |
 | `scripts/proof-receipt.py` | `plan.json`, `before.json`, `after.json`, `receipt.json` | no-clobber (`os.link`); a sealed receipt is never replaced |
 | `scripts/assumptions.py` | audit report (`--output`) | overwrite, fsynced; failure writes an error report |
 | `scripts/project.py` | report / artifact directory | see [project-workflow.md](project-workflow.md) |
 
 `translate.sh --no-clobber` refuses an existing output before running any stage. It
 also refuses at publication time if the output appears during the run.
-`check.sh` writes `Proofs/<Ex>/Gen.lean` before `lake build` checks it. This tracked
-source is replaced atomically, but it is the input to the check, not a verified
-artifact. The build and the proof-receipt flow establish verification.
+`check.sh` never writes a tracked file: a translation that differs from the committed
+`Proofs/<Ex>/Gen.lean` is built and tested in a check tree, a derived copy of the checkout
+([generated-code.md](generated-code.md#check-trees)). The build and the proof-receipt flow
+establish verification.
 
 ## Bounded stages and cancellation
 

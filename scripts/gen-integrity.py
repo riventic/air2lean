@@ -19,11 +19,12 @@ and requires the committed file to equal the fresh output:
 A tracked generated module that no rule covers fails. EXCEPTIONS lists each reviewed file
 that is not current translator output, with its reason; no Lean module may import one.
 
-`attest [PATH ...]` (default: every tracked generated module) is the check for consumers
-that run after scripts/check.sh has replaced Proofs/<Ex>/Gen.lean with one Zig version's
-translation: each file must equal (as above) a fresh translation of some case for that file
-or, for Proofs/<Ex>/Gen.lean, of any version/OS of example <ex>. It prints one JSON record
-per file (sha256 and the matching cases) and fails on any file without a match.
+`attest [PATH ...]` (default: every tracked generated module) is the check for evidence
+consumers (proof receipts, theorem inventory records): each file must equal (as above) a fresh
+translation of one of its own cases. Verification never replaces a committed module
+(scripts/check.sh builds another version's translation in a check tree), so no other
+translation is accepted. It prints one JSON record per file (sha256 and the matching cases) and
+fails on any file without a match.
 
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
@@ -93,7 +94,13 @@ EXCEPTIONS = {
         "historical translator output retained byte-for-byte as a provenance input "
         "(tests/roadmap/try-pointers/README.md); check-artifacts.py pins its hash and no "
         "Lean module imports it",
+    "tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean":
+        "hand-written stand-in for a translation in the architecture-audit claim counterexamples "
+        "(docs/architecture-audit/claims.md); only those untrusted fixtures import it",
 }
+# Exceptions that counterexample fixtures import on purpose; assurance/premises.json keeps those
+# fixtures out of the theorem universe.
+STAND_INS = {"tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean"}
 
 
 @dataclasses.dataclass
@@ -104,7 +111,6 @@ class Case:
     mode: str
     label: str
     version: str | None = None
-    example: str | None = None
 
 
 def git_files(*patterns):
@@ -154,7 +160,7 @@ def golden_cases():
                             if (golden / "Gen.lean").is_file() else ROOT / "Proofs" / Ex / "Gen.lean")
                 dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", os_dir) if d.is_dir()]
                 yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
-                           f"{ex} {version} {os_name}", version, ex)
+                           f"{ex} {version} {os_name}", version)
 
 
 def all_cases():
@@ -265,6 +271,8 @@ def coverage_errors(cases):
         if not (ROOT / path).is_file():
             errors.append(f"{path}: listed exception no longer exists; remove it from EXCEPTIONS")
             continue
+        if path in STAND_INS:
+            continue
         # An importer resolves `<Dir>.Gen` against its own `-R` root: only a module below the
         # exception's package root can import it.
         package = Path(path).parent.parent
@@ -303,11 +311,9 @@ def run_attest(translator, cases, paths):
             records.append(dict(path=path, sha256=hashlib.sha256((ROOT / path).read_bytes()).hexdigest(),
                                 exception=EXCEPTIONS[path]))
             continue
-        parts = Path(path).parts
-        example = parts[1].lower() if len(parts) == 3 and parts[0] == "Proofs" and parts[2] == "Gen.lean" else None
         matched = []
         for index, case in enumerate(cases):
-            if case.path == path or example and case.example == example:
+            if case.path == path:
                 try:
                     if translator.matches(index, case, path) is None:
                         matched.append(case.label)
