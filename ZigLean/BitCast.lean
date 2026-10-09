@@ -204,11 +204,23 @@ theorem getLsbD_ofBools {n : Nat} (v : Vector Bool n) (i : Nat) (hi : i < n) :
   intro i hi
   rw [getLsbD_ofBools _ i hi, toBools, Vector.getElem_ofFn]
 
-/-- The model's memory decoder of `@Vector(n, bool)` (its in-memory form is the `uN` of its
-lanes) is `toBools` of that integer: the bool-vector layout already is the logical order. -/
+/-- A 1-bit lane of a packed integer is its bit (`Vec.packedEnc` with `w = 1`). -/
+theorem laneOf_one (x i : Nat) : (laneOf 1 x i == 1#1) = x.testBit i := by
+  unfold laneOf
+  rw [Nat.mul_one, Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow]
+  rcases Nat.mod_two_eq_zero_or_one (x / 2 ^ i) with h | h
+  · simp [h, BitVec.ofNat, Fin.ofNat]
+  · simp [h, BitVec.ofNat, Fin.ofNat]
+
+/-- The model's memory decoder of `@Vector(n, bool)` (`Vec.packedEnc n 1`: its in-memory form is
+the `uN` of its lanes) reads lane `i` as bit `i` of that integer, as `toBools` does: the
+bool-vector layout already is the logical order. -/
 theorem decode_boolVec {n : Nat} (bs : Array Byte) :
     (Enc.decode bs : Result (Vec Bool n)) =
-      (do let b ← intOfBytes n (bs.extract 0 ((n + 7) / 8)); pure ⟨toBools b⟩) := rfl
+      (do let x ← intOfBytes (n * 1) bs; pure ⟨Vector.ofFn fun i => x.toNat.testBit i⟩) := by
+  show (do let x ← intOfBytes (n * 1) bs
+           pure (⟨Vector.ofFn fun i => (laneOf 1 x.toNat i == 1#1)⟩ : Vec Bool n)) = _
+  simp only [laneOf_one]
 
 /-! ## Agreement with the memory encoding (Zig ≤0.16 `@bitCast` through memory) -/
 
