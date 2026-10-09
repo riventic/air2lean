@@ -170,10 +170,16 @@ def main (args : List String) : IO Unit := do
     if label == "async" then
       require (hasText output "worker capture0 capture1") "caller fallback lost complete captures"
     IO.FS.writeFile (System.FilePath.mk directory / s!"group-{label}.lean") output
-    let old ← checked #[spawner "0.15.2" callee, worker "0.15.2"]
-    match checkFallibleSpawnCalls old with
-    | .ok _ => throw (IO.userError "pre-16 group was accepted")
-    | .error message =>
-      require (hasText message "fallible Io.Group requires Zig 0.16.0")
+    -- Before 0.16.0 `Io.Group` has no reviewed std source, so the program check rejects it
+    -- first; the spawn-policy check rejects it too.
+    let rejected ← try
+        let old ← checked #[spawner "0.15.2" callee, worker "0.15.2"]
+        pure (match checkFallibleSpawnCalls old with | .ok _ => none | .error m => some m)
+      catch e => pure (some (toString e))
+    match rejected with
+    | none => throw (IO.userError "pre-16 group was accepted")
+    | some message =>
+      require (hasText message "fallible Io.Group requires Zig 0.16.0" ||
+          hasText message "no reviewed std source for Zig 0.15.2")
         "pre-16 group fixture failed for an unrelated reason"
   IO.println "all-version spawn policy and caller fallback pipeline fixtures passed"

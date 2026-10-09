@@ -44,9 +44,10 @@ theorem withEvent_after (m : Mem) (e : DevEvent) : m.withEvent e = after m [e] :
 theorem status_addr : devAddr? uart = some STATUS := by decide
 theorem data_addr : devAddr? (uart.add 4) = some DATA := by decide
 
-/-- `&uart.data`: an offset of the block-less register window, formed under DEV-01. -/
-theorem data_ptr (m : Mem) : (ptrProject uart (·.add 4)).run m = pure (uart.add 4, m) :=
-  ptrProject_external_run (·.add 4) rfl rfl (by decide) (by decide)
+/-- `&uart.data`: an offset inside the declared register window (`ptrProjectDevice`, DEV-01). -/
+theorem data_ptr (m : Mem) :
+    (ptrProjectDevice air2lean_device uart (·.add 4)).run m = pure (uart.add 4, m) :=
+  ptrProjectDevice_run (a := STATUS) (b := DATA) (by decide) (by decide) (by decide) (by decide)
 
 theorem status_read {m : Mem} {v : BitVec 32}
     (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) :

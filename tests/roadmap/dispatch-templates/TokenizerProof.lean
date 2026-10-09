@@ -157,13 +157,13 @@ theorem step_start (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
     have hlt' : i.toNat < sl.len.toNat := hlen ▸ hlt
     cases hA : alpha xs[i.toNat] <;> cases hD : digit xs[i.toNat]
     · refine ⟨(.dispatch10 .start, ⟨i + 1, count, .start⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD]
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', checkIndex, hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, hD, Bool.false_eq_true, ↓reduceIte] at hc
           exact ⟨by simp only [hi1]; omega, by simpa only [hi1] using hc⟩
     · refine ⟨(.dispatch10 .number, ⟨i + 1, count + 1, .number⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD,
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', checkIndex, hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD,
           Zig.addWrap]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
@@ -172,7 +172,7 @@ theorem step_start (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
           simp only [hi1, BitVec.toNat_add, one32]
           omega
     · refine ⟨(.dispatch10 .ident, ⟨i + 1, count + 1, .ident⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA,
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', checkIndex, hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA,
           Zig.addWrap]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
@@ -181,7 +181,7 @@ theorem step_start (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
           simp only [hi1, BitVec.toNat_add, one32]
           omega
     · refine ⟨(.dispatch10 .ident, ⟨i + 1, count + 1, .ident⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hend, hlt', hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA,
+      · simp [countTokens.loop10, zig_unfold, hend, hlt', checkIndex, hv, hnoOverflow, isAlpha_eq, isDigit_eq, hA,
           Zig.addWrap]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
@@ -210,20 +210,20 @@ theorem step_ident (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs
     cases hA : alpha xs[i.toNat] <;> cases hD : digit xs[i.toNat]
     · -- Neither: the identifier ends here; `start` rereads this byte.
       refine ⟨(.dispatch10 .start, ⟨i, count, .start⟩), m2, h, ?_, hd, hm2, ?_, hst2⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hv2, isAlpha_eq, isDigit_eq, hA, hD]
+      · simp [countTokens.loop10, zig_unfold, hlt', checkIndex, hv, hv2, isAlpha_eq, isDigit_eq, hA, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.rank rfl (by simp [μ, rank])) (sep_lift.mpr ⟨?_, ha⟩)
         refine ⟨hle, ?_⟩
         rw [hdrop]
         simpa only [tokens, hA, hD, Bool.or_false, Bool.false_eq_true, ↓reduceIte] using hc
     · refine ⟨(.dispatch10 .ident, ⟨i + 1, count, .ident⟩), m2, h, ?_, hd, hm2, ?_, hst2⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hv2, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD]
+      · simp [countTokens.loop10, zig_unfold, hlt', checkIndex, hv, hv2, hnoOverflow, isAlpha_eq, isDigit_eq, hA, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, hD, Bool.or_true, ↓reduceIte] at hc
           exact ⟨by simp only [hi1]; omega, by simpa only [hi1] using hc⟩
     all_goals
       refine ⟨(.dispatch10 .ident, ⟨i + 1, count, .ident⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hnoOverflow, isAlpha_eq, hA]
+      · simp [countTokens.loop10, zig_unfold, hlt', checkIndex, hv, hnoOverflow, isAlpha_eq, hA]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hA, Bool.true_or, ↓reduceIte] at hc
@@ -256,14 +256,14 @@ theorem step_number (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = x
     rw [hdrop] at hc
     cases hD : digit xs[i.toNat]
     · refine ⟨(.dispatch10 .start, ⟨i, count, .start⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, isDigit_eq, hD]
+      · simp [countTokens.loop10, zig_unfold, hlt', checkIndex, hv, isDigit_eq, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.rank rfl (by simp [μ, rank])) (sep_lift.mpr ⟨?_, ha⟩)
         refine ⟨hle, ?_⟩
         rw [hdrop]
         cases hA : alpha xs[i.toNat] <;>
           simpa only [tokens, hA, hD, Bool.false_eq_true, ↓reduceIte] using hc
     · refine ⟨(.dispatch10 .number, ⟨i + 1, count, .number⟩), m1, h, ?_, hd, hm1, ?_, hst1⟩
-      · simp [countTokens.loop10, zig_unfold, hlt', hv, hnoOverflow, isDigit_eq, hD]
+      · simp [countTokens.loop10, zig_unfold, hlt', checkIndex, hv, hnoOverflow, isDigit_eq, hD]
       · refine dispatchNext_repeat rfl (DispatchLt.data ?_) (sep_lift.mpr ⟨?_, ha⟩)
         · simp only [μ, hi1]; omega
         · simp only [tokens, hD, ↓reduceIte] at hc
@@ -341,17 +341,16 @@ example (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.length)
 theorem countTokens_total (p : Ptr) (xs : List (BitVec 8)) (hlen : xs.length < 2 ^ 64) :
     TotalTriple (arr p xs) (countTokens p (BitVec.ofNat 64 xs.length))
       (fun r => ⌜r.toNat = tokens .start xs % 2 ^ 32⌝ ∗ arr p xs) := by
-  have hp : p.elem 1 0 = p := by cases p; simp [Ptr.elem, Ptr.add]
-  let sl : Slice := ⟨p.elem 1 0, BitVec.ofNat 64 xs.length - 0⟩
+  let sl : Slice := ⟨p, BitVec.ofNat 64 xs.length - 0⟩
   have hsl : sl.len.toNat = xs.length := by simp [sl, Nat.mod_eq_of_lt hlen]
   apply TotalTriple.of_run
   intro m h hF hd hm ha hst
   let s0 : countTokensLocals := { (default : countTokensLocals) with
     i := 0, count := 0, dispatchValue10 := .start }
   obtain ⟨⟨e, s'⟩, m', h', hr, hd', hm', hpost, hst'⟩ :=
-    loop_total sl xs hsl s0 rfl rfl rfl m h hF hd hm (by show arr (p.elem 1 0) xs h; rw [hp]; exact ha) hst
+    loop_total sl xs hsl s0 rfl rfl rfl m h hF hd hm ha hst
   obtain ⟨⟨rfl, hc⟩, ha'⟩ := sep_lift.mp hpost
-  refine ⟨s'.count, m', h', ?_, hd', hm', sep_lift.mpr ⟨hc, by rw [← hp]; exact ha'⟩, hst'⟩
+  refine ⟨s'.count, m', h', ?_, hd', hm', sep_lift.mpr ⟨hc, ha'⟩, hst'⟩
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
   simp [countTokens, zig_unfold, sl, s0] at hr ⊢
   simp [hr, zig_unfold, ExceptT.bindCont, ExceptT.pure, ExceptT.mk, ExceptT.bind]

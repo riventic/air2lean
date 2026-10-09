@@ -566,10 +566,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   integer is one event in `Mem.dev.trace`, in program order (`Zig.vload`/`Zig.vstore`). A read's
   value is `Mem.dev.oracle` applied to the whole trace so far, the address and the width; theorems
   quantify over the oracle or state which answers they need. Device registers are the declared
-  addresses of the generated `air2lean_device`, reached through block-less pointers. An offset of
-  a block-less pointer at a positive address (a register of a device struct, `ptrProject`) is
-  formed without a bounds check: the address range is taken to be one allocation outside the
-  model, as LLVM's `getelementptr inbounds` requires (`ptrProject_external_run`). The device
+  addresses of the generated `air2lean_device`, reached through block-less pointers. A field or
+  element pointer of a device pointer is formed inside the declared register window
+  (`Zig.ptrProjectDevice`): the window is taken to be the allocation that LLVM's
+  `getelementptr inbounds` requires, outside the model. The device
   neither observes nor changes model memory (no DMA, no aliasing of model blocks), so ordinary
   memory accesses are not events and their order relative to events is not claimed. Interrupts,
   other bus masters, timing, side effects of a read beyond the trace, and multi-threaded device
@@ -577,7 +577,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   event of the same trace, with outputs from `Mem.dev.asmOracle`; a `memory` clobber is never
   declared. No correspondence with real hardware is claimed: the compiled
   program's volatile order is trusted to match the AIR order (TRU-03).
-- Derived from: `ZigLean.Mem.Device`; tokens `vload`, `vstore`, `vasm`, `vasmEffect`, `DevOracle`, `AsmOracle`, `Device`, `ptrProject_external_run`,
+- Derived from: `ZigLean.Mem.Device`; tokens `vload`, `vstore`, `vasm`, `vasmEffect`, `DevOracle`, `AsmOracle`, `Device`, `ptrProjectDevice`,
   `DevState.oracle`, `DevState.asmOracle`. The `Mem.dev` field alone (for example in a struct update) does not select it.
 - Sources: [volatile-effects.md](volatile-effects.md#device-contract), `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`.
 

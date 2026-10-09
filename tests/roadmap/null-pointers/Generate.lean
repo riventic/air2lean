@@ -68,7 +68,7 @@ private def argInsts (tys : List Nat) : Array Json :=
   (tys.toArray.mapIdx fun i t => inst i "arg" t #[] [("param", num i)])
 /-- Shared runtime helpers for the storage cases: a live 8-aligned heap block and raw bytes. -/
 private def storageHelpers : String := "
-private def zeros (n : Nat) : Zig.Mem := { blocks := #[{ bytes := Array.replicate n (.int 0), align := 8, kind := .heap, live := true, addr := 4096 }], nextAddr := 4096 + n + 1 }
+private def zeros (n : Nat) : Zig.Mem := { blocks := #[{ bytes := Array.replicate n (.int 0), align := 8, kind := .heap, live := true, addr := 4096 }] }
 private def block0 : Zig.Ptr := ⟨some 0, 0⟩
 private def valueIn (m : Zig.Mem) (f : Zig.MemM α) : Option α := ((f.run m).run.bind Except.toOption).map Prod.fst
 private def failureIn (m : Zig.Mem) (f : Zig.MemM α) (e : Zig.Error) : Bool := match (f.run m).run with | some (.error got) => decide (got = e) | _ => false
@@ -121,7 +121,7 @@ example : failureIn (zeros 4) (Nullable.storeLoad block0 Zig.Ptr.null) .illegal 
   writeCase dir "storedIsNull" (file "storedIsNull" (storageTypes) #[6] 3
     (argInsts [6] ++ #[inst 1 "load" 2 #[ref 0], inst 2 "is_null" 3 #[ref 1], inst 3 "ret" 4 #[ref 2]]))
     (storageHelpers ++ "example : valueIn (zeros 8) (Nullable.storedIsNull block0) = some true := by native_decide
-private def undefMem : Zig.Mem := { blocks := #[{ bytes := Array.replicate 8 .undef, align := 8, kind := .heap, live := true, addr := 4096 }], nextAddr := 4105 }
+private def undefMem : Zig.Mem := { blocks := #[{ bytes := Array.replicate 8 .undef, align := 8, kind := .heap, live := true, addr := 4096 }] }
 example : failureIn undefMem (Nullable.storedIsNull block0) .unspecified = true := by native_decide
 private def storedLive : Zig.MemM Bool := do
   let p ← Zig.alloc .heap 8 8

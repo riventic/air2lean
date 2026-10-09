@@ -149,10 +149,10 @@ theorem dueOf_spec (j : Ptr) (m : Mem) (hj : m.inBounds j = true)
   simp [dueOf, zig_unfold, hp]
 
 /-- Out of bounds, `&j.due` is illegal behaviour (LLVM poison), not a pointer. -/
-theorem dueOf_oob (j : Ptr) (m : Mem) (hj : j.block ≠ none) (h : m.inBounds (j.add 4) = false) :
+theorem dueOf_oob (j : Ptr) (m : Mem) (h : m.inBounds (j.add 4) = false) :
     (dueOf j).run m = throw .illegal := by
   have hne : j.add 4 ≠ j := by intro he; have := congrArg Ptr.off he; simp [Ptr.add_off] at this; omega
-  have hp := ptrProject_illegal (m := m) (·.add 4) hne (by simp [h]) hj
+  have hp := ptrProject_illegal (m := m) (·.add 4) hne (by simp [h])
   simp only [StateT.run] at hp
   simp [dueOf, zig_unfold, hp]
 

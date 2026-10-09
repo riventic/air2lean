@@ -70,7 +70,7 @@ def putc (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Unit) := do
     match ← ((do
       Zig.loop (putc.loop3 p0) putc.again3) : Zig.MM putcLocals putcExit) with
     | .br2 => (do
-      let i13 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
+      let i13 ← Zig.callM (Zig.ptrProjectDevice air2lean_device p0 (·.add 4))
       let i14 ← Zig.intCast false false 32 p1
       Zig.vstore air2lean_device 32 4 i13 i14
       pure .ret)
@@ -87,7 +87,7 @@ inductive sendThenStatusExit where
 
 def sendThenStatus (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i2 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
+    let i2 ← Zig.callM (Zig.ptrProjectDevice air2lean_device p0 (·.add 4))
     let i3 ← Zig.intCast false false 32 p1
     Zig.vstore air2lean_device 32 4 i2 i3
     let i5 ← pure p0

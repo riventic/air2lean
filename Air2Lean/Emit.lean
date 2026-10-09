@@ -1427,10 +1427,18 @@ def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 `Zig.ptrProject` (`getelementptr inbounds`: `.illegal` unless base and result are in bounds of
 the base's block; MM-3), and the base itself for a constant offset 0 (`zero`; no instruction
 natively). From a C/allowzero base whose result the compiler types as a nonnullable pointer
-(Zig ≤0.15 `struct_field_ptr`) it is `Zig.ptrProjectNonnull`: address zero is also illegal. -/
+(Zig ≤0.15 `struct_field_ptr`) it is `Zig.ptrProjectNonnull`: address zero is also illegal. From a
+volatile base (a device pointer; the checker admits it only with `--device-contract`) it is
+`Zig.ptrProjectDevice`: formed inside the declared register window (L13, DEV-01). -/
 def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String)
     (zero : Bool := false) : String :=
-  if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
+  if zero then
+    if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
+      s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
+    else s!"pure {p}"
+  else if (fc.valTyId? base |>.map (volatilePtrTy fc.types fc.layouts)).getD false then
+    s!"{fc.callMName} (Zig.ptrProjectDevice {deviceDefName} {p} ({project}))"
+  else if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
     s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
   else if zero then s!"pure {p}"
   else s!"{fc.callMName} (Zig.ptrProject {p} ({project}))"
