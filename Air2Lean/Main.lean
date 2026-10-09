@@ -45,8 +45,8 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]\n" ++
     "       air2lean --print-op-table"
 
 def help : String :=
@@ -59,6 +59,9 @@ def help : String :=
   "  --float-semantics <mode>      ieee (default) or compiler-rt; see docs/floats.md.\n" ++
   "  --spawn-policy <policy>      available (default) or fallible; see docs/spawn-failure.md.\n" ++
   "  --profile <name>             Require this input build profile; see docs/profiles.md.\n" ++
+  "                               AIR schemas 1-11 need --profile legacy-abi64-le.\n" ++
+  "  --allow-unqualified-build-mode  Also translate AIR of a build mode/backend that\n" ++
+  "                               docs/build-modes.md does not qualify (recorded in the header).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
@@ -95,6 +98,9 @@ structure Args where
   modelRegistry : Option String
   registryTemplate : Bool := false
   proofApi : Bool := false
+  /-- `--allow-unqualified-build-mode`: admit a profile outside `BuildProfile.qualifiedBuilds`
+  (`docs/build-modes.md`); recorded in the generated header. -/
+  allowUnqualified : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -137,6 +143,9 @@ private partial def parseArgsGo (args : List String)
   | "--proof-api" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with proofApi := true })
+  | "--allow-unqualified-build-mode" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with allowUnqualified := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -327,7 +336,7 @@ private def run (args : List String) : IO UInt32 := do
       match checked with
       | .error e => die e
       | .ok () =>
-        match BuildProfile.checkProgram profiles a.profile with
+        match BuildProfile.checkProgram profiles a.profile a.allowUnqualified with
         | .error e => die e
         | .ok profile =>
           if a.registryTemplate then
@@ -344,8 +353,11 @@ private def run (args : List String) : IO UInt32 := do
             let emissionFuncs := ((emissionKeys.zip funcs).qsort
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
-            let metadata := Lean.Json.mkObj [("profile", profile.toJson),
-              ("float_semantics", .str semantics), ("correspondence", .str "model")]
+            -- An admission opt-in is part of the claim scope: the header records it.
+            let admission := if a.allowUnqualified then
+              [("admission", Lean.Json.str "unqualified-build-mode")] else []
+            let metadata := Lean.Json.mkObj ([("profile", profile.toJson),
+              ("float_semantics", .str semantics), ("correspondence", .str "model")] ++ admission)
             let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++
               (if models.isEmpty then "" else
                 "-- air2lean-models: " ++ (ModelRegistry.report models).compress ++ "\n") ++

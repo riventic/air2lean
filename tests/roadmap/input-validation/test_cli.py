@@ -34,7 +34,9 @@ TARGET = function("target", [VOID, integer(), NORETURN], [1], 1, [
 
 def invoke(binary, air, output, error=None, timeout=10):
     output.write_text("sentinel\n")
-    result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation"],
+    # Every fixture here is schema-11 AIR: translating it needs the explicit legacy profile.
+    result = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Validation",
+                             "--profile", "legacy-abi64-le"],
                             text=True, capture_output=True, check=False, timeout=timeout)
     if error is not None:
         assert result.returncode == 1, (error, result.returncode, result.stderr)
@@ -110,7 +112,8 @@ def diagnose(binary, document, marker):
         air = Path(directory) / "air"
         air.mkdir()
         (air / "0.json").write_text(json.dumps(document))
-        result = subprocess.run([str(binary), "--diagnostics-json", str(air)], text=True,
+        result = subprocess.run([str(binary), "--diagnostics-json", str(air),
+                                 "--profile", "legacy-abi64-le"], text=True,
                                 capture_output=True, check=False, timeout=10)
         assert result.returncode != 0, (marker, result.stdout)
         assert marker in result.stdout, (marker, result.stdout, result.stderr)

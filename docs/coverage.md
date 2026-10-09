@@ -132,14 +132,15 @@ semantic support claims.
   only resolves `Compat.vNN` tests; an explicit arm still needs operand and
   nested helper review. A version label that is not `0.N.P` keeps every branch,
   and a tag stays forbidden unless they agree.
-* **Normalization:** explicit tag branches, fast-math and runtime-reason
-  rejections, and unknown-tag rejection are recorded with their returned
+* **Normalization:** explicit tag branches (each call tag is one), fast-math and
+  runtime-reason rejections, and unknown-tag rejection are recorded with their returned
   constructors. They come from the translator's own op table
   (`air2lean --print-op-table`, committed as `coverage/op-table/op-table.json`):
   each named tag is decoded by `normalizeOp` itself, and the row records its `Op`
   constructor, its effect class (`Op.effects`, `Air2Lean/Air/Effects.lean`) and its
   emitter route (`Op.emitRoute`). The fast-math suffix and every rejection reason
-  are in the same table. `tests/roadmap/op-effects/test_op_table.py` checks that the
+  are in the same table. `normalizeOp` has no tag prefix rule: an unlisted `call*` tag is
+  an unknown tag. `tests/roadmap/op-effects/test_op_table.py` checks that the
   committed table is the translator's output and names every tag of `normalizeOp`.
 * **Parser and checker:** generic schema parsing and conditional type/layout
   checking are source references. They do not establish acceptance of all

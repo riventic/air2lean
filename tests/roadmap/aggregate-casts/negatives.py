@@ -58,7 +58,8 @@ def main():
             (air / f"{doc['name']}.json").write_text(json.dumps(doc))
             out = Path(temp) / "Gen.lean"
             result = subprocess.run([sys.argv[1], str(air), "-o", str(out), "--namespace",
-                                     "AggregateCastsNegative", "--prefix", "aggregate_casts."],
+                                     "AggregateCastsNegative", "--prefix", "aggregate_casts.",
+                                     "--profile", "legacy-abi64-le"],
                                     capture_output=True, text=True, timeout=300)
             output = result.stdout + result.stderr
             if result.returncode == 0 or MESSAGE not in output:

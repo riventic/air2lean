@@ -407,6 +407,8 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let toOperand (o : Raw.RawAsmOperand) : AsmOperand :=
       { constraint := o.constraint, name := o.name, ref := o.ref }
     return .asm a.source a.isVolatile a.clobbers (a.outputs.map toOperand) (a.inputs.map toOperand)
+  -- The four call tags differ only in tail-call and inlining hints. Any other `call*` tag
+  -- is unknown: a future tag with other semantics fails closed.
   | "call" | "call_always_tail" | "call_never_tail" | "call_never_inline" =>
     let some callee := raw.callee
       | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs 'callee'"

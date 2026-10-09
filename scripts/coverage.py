@@ -786,7 +786,7 @@ def generate(version, source, os_name='linux'):
         tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
                      'exporter': {'status': export_status, 'reason': export_reasons[export_status]},
                      'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'unknown-tag-rejection', 'constructors': ops},
-                     'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
+                     'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},

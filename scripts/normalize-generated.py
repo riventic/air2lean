@@ -126,7 +126,11 @@ def split_generated(data, required=False):
     if not newline:
         raise ValueError("profile record must end with a newline")
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
-    if (not isinstance(metadata, dict) or set(metadata) != {"profile", "float_semantics", "correspondence"} or
+    # `admission` is present only when the translator was given an admission opt-in
+    # (`--allow-unqualified-build-mode`, docs/build-modes.md).
+    if (not isinstance(metadata, dict) or
+            set(metadata) - {"admission"} != {"profile", "float_semantics", "correspondence"} or
+            metadata.get("admission", "unqualified-build-mode") != "unqualified-build-mode" or
             not isinstance(metadata["float_semantics"], str) or
             metadata["float_semantics"] not in {"ieee", "compiler-rt"} or metadata["correspondence"] != "model"):
         raise ValueError("unsupported generated profile record")

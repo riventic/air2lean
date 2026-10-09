@@ -18,6 +18,7 @@ structure CheckArgs where
   spawnPolicy : SpawnSemantics := .available
   /-- `--device-contract <json>` (L13): check volatile integer accesses as device events. -/
   deviceContract : Option String := none
+  allowUnqualified : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -27,6 +28,8 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     unless p == BuildProfile.legacyName || p == BuildProfile.currentName do throw "invalid --profile"
     if out.profile.isSome then throw "duplicate --profile"
     parseOptions rest { out with profile := some p } spawnPolicySeen
+  | "--allow-unqualified-build-mode" :: rest =>
+    parseOptions rest { out with allowUnqualified := true } spawnPolicySeen
   | "--diagnostic-limit" :: value :: rest =>
     let some limit := value.toNat? | throw "--diagnostic-limit must be an integer"
     unless 1 ≤ limit && limit ≤ 4096 do throw "--diagnostic-limit must be from 1 through 4096"
@@ -44,7 +47,7 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     if out.deviceContract.isSome then throw "duplicate --device-contract"
     parseOptions rest { out with deviceContract := some path } spawnPolicySeen
   | ["--device-contract"] => throw "missing value for --device-contract"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy and --device-contract; emission flags are incompatible"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy and --device-contract; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -52,7 +55,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
 
 structure FileResult where
   file : String
@@ -503,7 +506,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile
       firstProfile := some baseline
-      for message in BuildProfile.programViolations #[baseline, profile] a.profile do
+      for message in BuildProfile.programViolations #[baseline, profile] a.profile a.allowUnqualified do
         log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))

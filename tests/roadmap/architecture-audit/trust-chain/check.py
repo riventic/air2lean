@@ -13,13 +13,16 @@ Exit 0 after reporting (audit mode). With --require-fixed, exit 1 if any case is
 a fix agent flips its case(s) to fixed and adds --require-fixed coverage for them.
 `std-name-spoof` and `std-type-spoof` (findings 1 and 9) are fixed; CI requires them fixed.
 
-Three Lean witnesses state the wrong model facts as checked theorems over the generated text
-as of the audit base (they need ZigLean.Basic built; a fix makes the first two fail to
-elaborate, which is the intended signal, and the files are then deleted or inverted):
+Lean witnesses state the wrong model facts as checked theorems over the generated text as of
+the audit base (they need ZigLean.Basic built; a fix makes them fail to elaborate, which is
+the intended signal, and the files are then deleted or inverted). The comptime-field witness
+was deleted when the translator started rejecting comptime fields:
 
   lake env lean tests/roadmap/architecture-audit/trust-chain/volatile-asm/SameTick.lean
-  lake env lean tests/roadmap/architecture-audit/trust-chain/comptime-field/ComptimeField.lean
   lake env lean tests/roadmap/architecture-audit/trust-chain/reduce-bool-handedit/PanicDefault.lean
+
+Fixed cases (CI runs them with --require-fixed): addrspace, comptime-field, build-mode,
+legacy-default, unknown-key, missing-flag.
 """
 import argparse
 import importlib.util
@@ -69,14 +72,15 @@ def case_std_type_spoof(binary, tmp):
 
 
 def case_addrspace(binary, tmp):
-    # `*addrspace(.gs) const u64` and `*const u64` export identical type tables.
+    # `*addrspace(.gs) const u64` and `*const u64` exported identical type tables before the
+    # exporter wrote `address_space`; the translator emitted the same generic load for both.
     gs = json.loads((HERE / 'addrspace/air/addr.readGs.json').read_text())
     gen = json.loads((HERE / 'addrspace/air/addr.readGen.json').read_text())
     identical = all(gs[k] == gen[k] for k in ('types', 'params', 'ret', 'body'))
     rc, log, text = translate(binary, HERE / 'addrspace/air', tmp / 'addr.lean', 'addr.')
     same = rc == 0 and body(text, 'readGs').replace('readGs', 'X') == body(text, 'readGen').replace('readGen', 'X')
-    return identical and rc == 0, (f'export identical: {identical}; rc={rc}; '
-                                   f'readGs/readGen bodies equal: {same}; {log.strip()[:300]}')
+    return rc == 0, (f'export identical: {identical}; rc={rc}; '
+                     f'readGs/readGen bodies equal: {same}; {log.strip()[:300]}')
 
 
 def case_unchecked_memcpy(binary, tmp):
@@ -117,6 +121,52 @@ def case_comptime_field(binary, tmp):
                                            f'k is a Lean runtime field: {has_k}; {log.strip()[:300]}')
 
 
+def case_build_mode(binary, tmp):
+    # Finding 8: ReleaseFast AIR (no Sema safety checks) is translated without an opt-in.
+    rc, log, text = translate(binary, HERE / 'unchecked-memcpy/air-releasefast', tmp / 'fast.lean', 'mc.')
+    vulnerable = rc == 0 and '"admission"' not in text.partition('\n')[0]
+    return vulnerable, f'rc={rc}; accepted without a recorded opt-in: {vulnerable}; {log.strip()[:300]}'
+
+
+def edited_air(tmp, name, source, edit):
+    """A hand edit of a real export, in its own directory."""
+    doc = json.loads(source.read_text())
+    edit(doc)
+    out = tmp / name
+    out.mkdir()
+    (out / source.name).write_text(json.dumps(doc, indent=1))
+    return out
+
+
+def case_legacy_default(binary, tmp):
+    # Finding 10: drop the profile and claim schema 11. The legacy reader assumes a 64-bit
+    # little-endian target without checking it; that needs an explicit opt-in.
+    def edit(doc):
+        del doc['profile']
+        doc['schema'] = 11
+    air = edited_air(tmp, 'legacy', HERE / 'addrspace/air/addr.readGen.json', edit)
+    rc, log, _ = translate(binary, air, tmp / 'legacy.lean', 'addr.')
+    return rc == 0, f'rc={rc} without --profile legacy-abi64-le; {log.strip()[:300]}'
+
+
+def case_unknown_key(binary, tmp):
+    # Finding 11: a key the decoder does not know (a future pointer attribute) is ignored.
+    def edit(doc):
+        next(t for t in doc['types'] if t['k'] == 'ptr')['is_far'] = True
+    air = edited_air(tmp, 'unknown', HERE / 'addrspace/air/addr.readGen.json', edit)
+    rc, log, _ = translate(binary, air, tmp / 'unknown.lean', 'addr.')
+    return rc == 0, f'rc={rc} with an unknown pointer key; {log.strip()[:300]}'
+
+
+def case_missing_flag(binary, tmp):
+    # Finding 11: an absent `volatile` flag defaults to false under schema 12.
+    def edit(doc):
+        del next(t for t in doc['types'] if t['k'] == 'ptr')['volatile']
+    air = edited_air(tmp, 'missing', HERE / 'addrspace/air/addr.readGen.json', edit)
+    rc, log, _ = translate(binary, air, tmp / 'missing.lean', 'addr.')
+    return rc == 0, f'rc={rc} without the pointer volatile flag; {log.strip()[:300]}'
+
+
 def case_claims_unbound(binary, tmp):
     # A goal's theorem is not tied to its root's generated function: any total triple, here
     # about `pure v`, satisfies a `total_correctness` goal of any root.
@@ -139,6 +189,10 @@ CASES = {
     'volatile-asm': case_volatile_asm,
     'reduce-bool-handedit': case_reduce_bool_handedit,
     'comptime-field': case_comptime_field,
+    'build-mode': case_build_mode,
+    'legacy-default': case_legacy_default,
+    'unknown-key': case_unknown_key,
+    'missing-flag': case_missing_flag,
     'claims-unbound': case_claims_unbound,
 }
 

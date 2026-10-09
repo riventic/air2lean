@@ -131,6 +131,32 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : B
       pending := (childTys ty).toList ++ rest
   return pending.isEmpty
 
+/-- The fields of a non-packed struct or tuple occupy disjoint byte ranges inside the type.
+Field storage the compiler does not lay out (a comptime field exported by an older exporter,
+at the offset of another field) therefore fails closed. Zero-sized fields may share an
+offset; fields of unknown size or offset are left to the layout comparison. -/
+def checkFieldRanges (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
+    (id : TyId) : Except String Unit := do
+  let fields : Array TyId ← match types[id]? with
+    | some (.struct _ layout fs) => pure (if layout == "packed" then #[] else fs.map (·.2))
+    | some (.tuple fs) => pure fs
+    | _ => pure #[]
+  let l := layouts[id]?.getD {}
+  if fields.isEmpty || l.offsets.size != fields.size then return
+  let mut ranges : Array (Nat × Nat) := #[]
+  for (fty, off) in fields.zip l.offsets do
+    let some size := (layouts[fty]?.getD {}).size | continue
+    if size == 0 then continue
+    if let some total := l.size then
+      if off + size > total then
+        throw s!"{fnName}: near line {line}: type {id}: a field at offset {off} of {size} bytes \
+          extends beyond the type's {total} bytes"
+    ranges := ranges.push (off, off + size)
+  let sorted := ranges.qsort (fun a b => a.1 < b.1)
+  for (a, b) in sorted.zip (sorted.extract 1 sorted.size) do
+    if b.1 < a.2 then
+      throw s!"{fnName}: near line {line}: type {id}: fields at offsets {a.1} and {b.1} overlap"
+
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
 partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout) (line : Nat)
@@ -140,6 +166,9 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   let some ty := types[id]?
     | throw s!"{fnName}: near line {line}: unknown type id {id}"
   let recur (c : TyId) := checkTy fnName types layouts line c (seen.push id)
+  if let some attr := (layouts[id]?.getD {}).unmodeled[0]? then
+    throw s!"{fnName}: near line {line}: type {id}: {attr}; outside the subset"
+  checkFieldRanges fnName types layouts line id
   match ty with
   | .other name =>
     throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \

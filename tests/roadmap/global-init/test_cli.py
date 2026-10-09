@@ -15,7 +15,8 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 AIR = HERE / "air" / "0.16.0"
 GEN = HERE / "GlobalInit" / "Gen.lean"
-ARGS = ["--namespace", "GlobalInit", "--prefix", "global_init."]
+# The fixtures are schema-11 AIR: translating them needs the explicit legacy profile.
+ARGS = ["--namespace", "GlobalInit", "--prefix", "global_init.", "--profile", "legacy-abi64-le"]
 
 
 def fixtures():
@@ -48,7 +49,7 @@ def reject(binary, documents, marker, code="GLOBAL_FAILURE", diagnostic=None):
         assert result.returncode == 1, (marker, result.returncode, result.stderr)
         assert marker in result.stderr, (marker, result.stderr)
         assert out.read_text() == "sentinel\n", "a rejected input replaced the output"
-        diagnostics = subprocess.run([str(binary), "--diagnostics-json", str(Path(d) / "air")],
+        diagnostics = subprocess.run([str(binary), "--diagnostics-json", str(Path(d) / "air"), "--profile", "legacy-abi64-le"],
                                      text=True, capture_output=True, check=False, timeout=60)
         assert diagnostics.returncode == 1, diagnostics.stderr
         report = json.loads(diagnostics.stdout)

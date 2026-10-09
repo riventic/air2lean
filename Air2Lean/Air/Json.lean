@@ -1,6 +1,7 @@
 import Air2Lean.Air.StrictJson
 import Air2Lean.Air.Op
 import Air2Lean.Air.Profile
+import Air2Lean.Air.Schema
 
 /-!
 # AIR JSON parser
@@ -307,7 +308,8 @@ def parseLayout (j : Json) : Except String Layout := do
            ptrAlign := ← nat? "ptr_align", sentinel := ← bool "sentinel", sentinelByte,
            isVolatile := ← bool "volatile",
            allowzero := ← bool "allowzero", hostSize,
-           bitOffset := bitOffset.getD 0, vectorIndex, runtimeLane, vectorIndexExported }
+           bitOffset := bitOffset.getD 0, vectorIndex, runtimeLane, vectorIndexExported,
+           unmodeled := Schema.unmodeled j }
 
 /-- A hex digit's value, `0`-`9`/`a`-`f`/`A`-`F`. -/
 def hexDigitVal (c : Char) : Option Nat :=
@@ -335,9 +337,11 @@ or `{}`. Shared between a top-level constant and an optional's payload (below): 
 `fmtValue` reuses this same string format for the payload, disambiguated only by `ty`. -/
 def parseLeafVal (fnName : String) (tyId : TyId) (ty : Ty) (s : String) : Except String Val := do
   match ty with
-  | .int .. => return .int tyId (← parseIntLit fnName s)
-  -- A packed struct constant is its backing integer (`Emit.lean` writes `Zig.Packed.ofBits`).
-  | .struct _ "packed" _ => return .int tyId (← parseIntLit fnName s)
+  | .int signed bits =>
+    let n ← parseIntLit fnName s
+    unless integerFits signed bits n do
+      throw s!"{fnName}: integer constant does not fit type {tyId}"
+    return .int tyId n
   | .bool =>
     match s with
     | "true" => return .bool true
@@ -497,7 +501,15 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       | other => throw s!"{fnName}: 'null' constant of unexpected type {repr other}"
     else if let some enumJ := optField j "enum" then
       match ty with
-      | .enum .. => return .enumTag tyId (← parseIntLit fnName (← enumJ.getStr?))
+      | .enum name tag exhaustive fields =>
+        let n ← parseIntLit fnName (← enumJ.getStr?)
+        let some (.int signed bits) := types[tag]?
+          | throw s!"{fnName}: enum '{name}' has a non-integer tag type"
+        unless integerFits signed bits n do
+          throw s!"{fnName}: enum constant '{name}' does not fit its tag type"
+        if exhaustive && !fields.any (·.2 == n) then
+          throw s!"{fnName}: enum constant '{name}' has no field with tag {n}"
+        return .enumTag tyId n
       | other => throw s!"{fnName}: 'enum' constant of unexpected type {repr other}"
     else if let some uvalJ := optField j "uval" then
       match ty with
@@ -572,8 +584,15 @@ partial def parseVal (fnName : String) (types : Array Ty) (j : Json) : Except St
       let s ← (← j.getObjVal? "val").getStr?
       match ty with
       | .struct _ "packed" fields =>
+        -- A packed struct constant is its backing integer (`Emit.lean` writes
+        -- `Zig.Packed.ofBits`), as `.{ .f = v, … }` or as the integer itself.
         if s.startsWith ".{" then return .int tyId (← parsePackedLit fnName types fields s)
-        parseLeafVal fnName tyId ty s
+        let n ← parseIntLit fnName s
+        let some w := packedWidth types tyId
+          | throw s!"{fnName}: packed constant of type {tyId} has no bit width"
+        unless integerFits false w n do
+          throw s!"{fnName}: packed integer constant does not fit type {tyId}"
+        return .int tyId n
       | _ => parseLeafVal fnName tyId ty s
 
 /-- One lane of a shuffle mask: `{"a": i}`, `{"b": i}`, `{"u": true}`, or `{"v": Ref}`
@@ -737,6 +756,8 @@ def parseHeader (j : Json) : Except String (String × Nat × String) := do
 placeholder) profile. -/
 def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc := do
   let (name, schema, zigVersion) ← parseHeader j
+  -- Deny by default: every key of a current-schema file is in the schema table.
+  if schema ≥ 12 then Schema.validate j |>.mapError fun e => s!"{name}: {e}"
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM parseTy
   validateTypeGraph name types

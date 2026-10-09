@@ -65,8 +65,10 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
             continue
         # A packed field bit-pointer's `"vector_index": null` (the exporter's explicit "not a
         # lane pointer") is the same AIR as a golden that predates the field. A lane number or
-        # "runtime" stays observable.
-        if type_entry and key == "vector_index" and item is None:
+        # "runtime" stays observable. Likewise a pointer's `"address_space": "generic"`; any
+        # other address space stays observable.
+        if type_entry and ((key == "vector_index" and item is None) or
+                           (key == "address_space" and item == "generic")):
             continue
         # Source provenance (I05): the declaration site (`src`, at the root and on
         # `dbg_inline_block`) and a `dbg_stmt` column locate diagnostics only. They are not

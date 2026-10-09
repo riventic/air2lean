@@ -40,7 +40,10 @@ have illegal behaviour. If the ReleaseSafe model does not throw on an input, the
 no illegal behaviour on that input. This holds only if export, translation and LLVM
 lowering are faithful (TRU-02, TRU-03). This is the premise behind the README sentence on
 ReleaseFast. No output, layout or performance correspondence is claimed beyond the tested
-inputs, and ReleaseFast AIR is never translated. The premise does not cover code under
+inputs, and ReleaseFast AIR is never translated by default: the translator admits only the
+qualified `ReleaseSafe`/`stage2_llvm` profile unless `--allow-unqualified-build-mode` is
+given, and that opt-in is recorded in the generated header (`docs/air-json.md` §Schema
+table). The premise does not cover code under
 `@setRuntimeSafety(false)` or `@setFloatMode(.optimized)`. It also does not cover other
 CPU features, other error-tracing settings, or comptime branches on
 `@import("builtin").mode`.

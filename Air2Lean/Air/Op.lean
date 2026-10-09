@@ -194,6 +194,10 @@ structure Layout where
   slice, `usize` and allocator in `modelLayout`. Set by `normalize` from the profile, never by the
   exporter, as `packedLanes`. -/
   ptrBytes : Nat := 8
+  /-- Semantic attributes of the type entry that the translator does not model, with a value
+  other than the one it accepts (`Air2Lean/Air/Schema.lean` `unmodeledAttrs`): a non-generic
+  pointer address space, a comptime field. `Check.checkTy` rejects a used type with any. -/
+  unmodeled : Array String := #[]
   deriving Repr, Inhabited, BEq
 
 /-- The profile's pointer size in bytes, as `normalize` set it in every layout (8 when there is

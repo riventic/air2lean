@@ -27,7 +27,8 @@ USIZE = dict(k="int", signed=False, bits=64, abi_size=8, abi_align=8)
 def ptr(child, *, volatile, const=False, size="one", align=4):
     abi = 16 if size == "slice" else 8
     return dict(k="ptr", size=size, const=const, child=child, ptr_align=align, volatile=volatile,
-                allowzero=False, sentinel=False, host_size=0, abi_size=abi, abi_align=8)
+                allowzero=False, address_space="generic", sentinel=False, host_size=0,
+                abi_size=abi, abi_align=8)
 
 
 # 0 u32, 1 void, 2 noreturn, 3 *volatile u32, 4 *u32, 5 *const volatile u32,
@@ -110,13 +111,17 @@ def fixtures(version="0.16.0"):
     }
 
 
+# The synthetic fixtures are schema-11 AIR: they need the explicit legacy profile.
+LEGACY = ("--profile", "legacy-abi64-le")
+
+
 def invoke(binary, *argv):
     return subprocess.run([str(binary), *map(str, argv)], capture_output=True, text=True,
                           timeout=30, check=False)
 
 
-def diagnostics(binary, air):
-    result = invoke(binary, "--diagnostics-json", air)
+def diagnostics(binary, air, *flags):
+    result = invoke(binary, "--diagnostics-json", air, *flags)
     assert result.stderr == "", result.stderr
     report = json.loads(result.stdout)
     assert result.returncode == (1 if report["status"] == "rejected" else 0), result
@@ -149,7 +154,7 @@ def check_fixtures(binary, air):
     for version in VERSIONS:
         for name, (document, expected) in fixtures(version).items():
             write(air, {name: document})
-            report = diagnostics(binary, air)
+            report = diagnostics(binary, air, *LEGACY)
             if expected is None:
                 assert report["status"] == "checked", (version, name, report)
             else:
@@ -164,7 +169,7 @@ def check_emission(binary, tmp, air):
     for name, (document, expected) in fixtures().items():
         write(air, {name: document})
         out.write_text("KEEP\n")
-        result = invoke(binary, air, "-o", out, "--namespace", "Volatile")
+        result = invoke(binary, air, "-o", out, "--namespace", "Volatile", *LEGACY)
         if expected is None:
             assert result.returncode == 0, (name, result.stderr)
         else:
@@ -180,11 +185,13 @@ def registry_client(nested=False):
     base = json.loads(PROFILE_DOCUMENT.read_text())
     holder = dict(k="struct", name="Regs", layout="extern", fields=[dict(name="reg", ty=2, offset=0)],
                   abi_size=8, abi_align=8)
-    types = [U32, NORETURN, ptr(0, volatile=True), VOID, holder]
+    fn = dict(k="other", name="fn (*volatile u32) void")
+    types = [U32, NORETURN, ptr(0, volatile=True), VOID, holder, fn]
     param = 4 if nested else 2
     body = [inst(0, "arg", param, param=0),
-            inst(1, "call", 3, [ref(0)], callee=dict(func="project.mmioWrite")),
+            inst(1, "call", 3, [ref(0)], callee=dict(ty=5, func="project.mmioWrite", noreturn=False)),
             inst(2, "ret", 1, [ref(1)])]
+    del body[0]["args"]  # schema 12: an `arg` has no operands
     return {**{k: base[k] for k in ("schema", "zig_version", "target_endian", "profile")},
             "name": "client", "params": [param], "ret": 3, "types": types, "body": body, "globals": []}
 

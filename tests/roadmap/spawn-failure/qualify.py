@@ -458,8 +458,10 @@ def qualify(mode, destination):
                 raise RuntimeError("default and explicit availability policy emission differ")
             gate.run("available-kernel", lean + ["-R", str(destination), str(default)])
             legacy = destination / "TupleDefault.lean"
+            # Schema-11 thread-tuples AIR needs the explicit legacy profile.
             gate.run("legacy-default-bytes", [str(translator), str(ROOT / "tests/roadmap/thread-tuples/air/0.16.0"),
-                     "-o", str(legacy), "--namespace", "ThreadTuples", "--prefix", "thread_tuples."])
+                     "-o", str(legacy), "--namespace", "ThreadTuples", "--prefix", "thread_tuples.",
+                     "--profile", "legacy-abi64-le"])
             legacy_receipt = destination / "legacy-default-receipt.json"
             generated_receipt(legacy, ROOT / "tests/roadmap/thread-tuples/air/0.16.0", legacy_receipt)
             HELPERS["compare"](ROOT / "tests/roadmap/thread-tuples/ThreadTuples/Gen.lean",
