@@ -622,8 +622,8 @@
           "translator_sha256": "aed15a50e68e0c7137a0e507d83b2a9247e08d0ca1877cd9c8c2c4106a676dcb"
         },
         "output": {
-          "bytes": 53988,
-          "sha256": "de2ab3f3d174919ac230323976030a882e72a0385cfb86944389394f2c79fed5",
+          "bytes": 54003,
+          "sha256": "320c3104cf2ecd1d535443e90c9347471fb88437eb312d5a44556562684efbea",
           "matches_reference": true,
           "functions": 28,
           "input_bytes": 285454
@@ -1086,11 +1086,11 @@
           "translator_sha256": "aed15a50e68e0c7137a0e507d83b2a9247e08d0ca1877cd9c8c2c4106a676dcb"
         },
         "output": {
-          "bytes": 5200,
-          "sha256": "f1a561a8d6554a6d2cb37f1a400417eba65a3ce12967e77712539c126d06042a",
+          "bytes": 7377,
+          "sha256": "c01281c694e525279594cada2cdcafe455b19518a8afb6c1f417dfe23eba85f3",
           "matches_reference": true,
-          "functions": 6,
-          "input_bytes": 15564
+          "functions": 7,
+          "input_bytes": 25145
         },
         "phases": {
           "check": {
