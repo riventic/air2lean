@@ -2300,7 +2300,7 @@ def cntLoc : ALoc :=
 /-- A memory whose block 1 is the counter, `0`, with its atomic location. -/
 def cntMem : Mem :=
   { blocks := #[Witness.blk #[], { Witness.blk (Enc.encode (0 : BitVec 32)) with addr := 8192 }],
-    nextAddr := 8192 + 5, atomics := #[cntLoc] }
+    atomics := #[cntLoc] }
 
 theorem cntAt_cntMem : CntAt 0 0 cntMem where
   find := by decide +kernel

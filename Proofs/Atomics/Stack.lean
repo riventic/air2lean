@@ -2045,8 +2045,7 @@ def blkW (bs : Array Byte) (addr : Nat) : Block :=
 def memW : Mem :=
   { blocks := #[blkW (Enc.encode (0 : BitVec 32) ++ Enc.encode (0 : BitVec 32)) 4096,
       blkW (Enc.encode sPtr ++ Enc.encode (1 : BitVec 32)) 8192,
-      blkW (Enc.encode sPtr ++ Enc.encode (2 : BitVec 32)) 12288],
-    nextAddr := 12288 + 17 }
+      blkW (Enc.encode sPtr ++ Enc.encode (2 : BitVec 32)) 12288] }
 
 theorem memW_inv : Inv G0 memW :=
   pre_inv ⟨⟨rfl, rfl, rfl, rfl, fun _ h => by simp [memW] at h⟩, ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩,
