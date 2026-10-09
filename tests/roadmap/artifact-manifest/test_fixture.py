@@ -9,6 +9,7 @@ require the replay verdict (current, aged for shared Lean/toolchain drift, stale
 files or a tampered audit). No Zig, Lake or Lean runs; `scripts/provenance-evidence.py regenerate` is
 the heavy counterpart.
 """
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -290,6 +291,22 @@ class GapTests(FixtureCases, unittest.TestCase):
     TARGET = 'aarch64-macos'
     AIR = ('gap.gap.json', 'gap.within.json')
     THEOREMS = ('gap_eq', 'within_eq')
+
+
+class ClosureTests(unittest.TestCase):
+    def test_imports_after_a_block_comment_and_comments_on_the_line_are_followed(self):
+        spec = importlib.util.spec_from_file_location('provenance_evidence', ROOT / 'scripts/provenance-evidence.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'A.lean').write_text('/-! header\nimport Hidden\n-/\n-- note\nimport B -- trailing\nimport Lean.Elab\n\ntheorem t : True := trivial\n')
+            (root / 'B.lean').write_text('/- one line -/\nimport C D\ndef b := 1\n')
+            (root / 'C.lean').write_text('def c := 1\n')
+            (root / 'D.lean').write_text('import A\n')  # an import cycle is tolerated
+            files, external = module.lean_closure(root, 'A')
+        self.assertEqual(sorted(files), ['A', 'B', 'C', 'D'])
+        self.assertEqual(external, ['Lean.Elab'])
 
 
 if __name__ == '__main__':

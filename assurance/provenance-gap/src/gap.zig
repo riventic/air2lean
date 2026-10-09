@@ -1,4 +1,4 @@
-//! Second provenance fixture (I07): an aarch64-linux, ReleaseSafe example whose source, fresh
+//! Second provenance fixture (I07): an aarch64-macos, ReleaseSafe example whose source, fresh
 //! schema-12 AIR, generated Lean, proofs, proof receipt and native build are chained by
 //! assurance/provenance-gap/manifest.json (see assurance/provenance for the x86_64 fixture).
 

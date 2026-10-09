@@ -870,7 +870,8 @@ def trivial_conclusion(theorem, definition):
 
     The audit records an equation's right-hand side and no other argument. An `Eq` whose right-hand
     side is the generated root itself (`root x = root x`, or `root x = root y`) relates the root to
-    itself and fixes no value. A `True` conclusion never gets here (it does not reference the root).
+    itself and fixes no value; the audit omits the left-hand side, so a genuine relational property
+    (commutativity, idempotence) cannot be told apart and is not credited either (fail closed). A `True` conclusion never gets here (it does not reference the root).
     Other conclusions are left to the derived strength: they are not called trivial without evidence."""
     shape = theorem.get('conclusion')
     if not isinstance(shape, dict):
@@ -878,7 +879,8 @@ def trivial_conclusion(theorem, definition):
     args = shape.get('args')
     if shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1 and isinstance(args[0], dict) \
             and args[0].get('head') == definition:
-        return f'trivial conclusion: the equation\'s right-hand side is the generated root {definition} itself, so it fixes no result'
+        return (f'trivial conclusion: the equation only relates the generated root {definition} to itself and fixes no result '
+                '(a relational property such as commutativity is not credited either; state the result against a specification)')
     return None
 
 

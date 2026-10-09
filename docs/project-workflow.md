@@ -203,7 +203,9 @@ even when its proof mentions the generated code. An audit without statement depe
 (an older extractor) leaves goals `unbound`. A conclusion that mentions the root but only equates it with itself (`root x = root x`: the
 audited equation's right-hand side is the generated root) is `trivial_conclusion`: it fixes no
 result, so it is not direct, does not reach `proved_scoped` and blocks the root (the real audited
-`double_refl` of `assurance/provenance` is the committed example). Each direct goal also records the
+`double_refl` of `assurance/provenance` is the committed example). The audit records no
+left-hand side, so a genuine relational property such as `root a b = root b a` is refused the
+same way (fail closed); state the result against a specification to have it counted. Each direct goal also records the
 `derived_strength` and `claim_class` that `scripts/claims.py` derives from the audited
 conclusion shape, and a declared `safety`/`partial_correctness`/`total_correctness` counts
 toward levels and absence claims only up to that derived strength (an unclassified

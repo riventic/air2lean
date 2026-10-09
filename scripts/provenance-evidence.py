@@ -61,11 +61,6 @@ for _fx in FIXTURES.values():
     _fx['gen'] = 'Proofs/%s/Gen.lean' % _fx['namespace']
     _fx['proofs'] = 'Proofs/%s/Proofs.lean' % _fx['namespace']
     _fx['path'] = ROOT / _fx['dir']
-    _fx['binary'] = _fx['example']
-
-
-def fixture(name):
-    return FIXTURES[name]
 
 
 def check(fx, strict, native_binary=None, native_compiler=None):
@@ -113,9 +108,14 @@ def lean_closure(root, module):
             external.add(name)
             continue
         files[name] = relative
+        in_comment = False
         for line in path.read_text().splitlines():
             stripped = line.strip()
-            if stripped.startswith('import '):
+            if in_comment:
+                in_comment = '-/' not in stripped
+            elif stripped.startswith('/-'):
+                in_comment = '-/' not in stripped
+            elif stripped.startswith('import '):
                 pending += IMPORT.fullmatch(stripped).group(1).split('--')[0].split()
             elif stripped and not stripped.startswith('--'):
                 break
@@ -145,9 +145,10 @@ def revision_available(root, head):
 
 def replay(fx, strict, root=ROOT):
     """Replay the committed receipt against the tree, without its revision or its attempt directory."""
-    folder = Path(root) / fx['dir'] / 'receipt'
+    root = Path(root)
+    folder = root / fx['dir'] / 'receipt'
     receipt, plan, audit = (json.loads((folder / n).read_text()) for n in ('receipt.json', 'plan.json', 'audit.json'))
-    manifest = json.loads((Path(root) / fx['dir'] / 'manifest.json').read_text())
+    manifest = json.loads((root / fx['dir'] / 'manifest.json').read_text())
     module = fx['proof_module']
     problems = []
     if not (receipt.get('schema') == 2 and receipt.get('status') == 'audited' and plan.get('schema') == 1
@@ -155,7 +156,7 @@ def replay(fx, strict, root=ROOT):
         problems.append('receipt copy is not a schema-2 audited explicit-module receipt for ' + module)
     if audit.get('status') != 'pass' or audit.get('violations') or audit.get('build_checked') is not True:
         problems.append('audit did not pass the dependency policy with a checked build')
-    toolchain_file = (Path(root) / 'lean-toolchain').read_text().strip()
+    toolchain_file = (root / 'lean-toolchain').read_text().strip()
     if audit.get('lean_toolchain') != toolchain_file:
         problems.append('receipt audited %s, tree pins %s' % (audit.get('lean_toolchain'), toolchain_file))
     local = host_paths([receipt, plan, audit, manifest], [])
@@ -170,13 +171,13 @@ def replay(fx, strict, root=ROOT):
     # Input bytes: every closure file must carry the sha256 the receipt compiled.
     recorded = {row['path'].removeprefix('<repo>/'): row.get('sha256') for row in plan.get('sources', [])
                 if isinstance(row, dict) and row.get('kind') == 'regular' and isinstance(row.get('path'), str)}
-    closure, external = lean_closure(Path(root), module)
+    closure, external = lean_closure(root, module)
     own = 'Proofs/%s/' % fx['namespace']
     changed, unrecorded = [], []
     for relative in sorted([*closure.values(), *ENVIRONMENT]):
         if relative not in recorded:
             unrecorded.append(relative)
-        elif sha256_file(Path(root) / relative) != recorded[relative]:
+        elif sha256_file(root / relative) != recorded[relative]:
             changed.append(relative)
     stale_local = [p for p in changed + unrecorded if p.startswith(own)]
     aged = [p for p in changed + unrecorded if not p.startswith(own)]
@@ -197,7 +198,7 @@ def replay(fx, strict, root=ROOT):
 
 def rerun(fx, a):
     """Rerun the guarded proof receipt on the current tree; its compiled audit must equal the committed one."""
-    work = Path(os.path.abspath(a.workdir))
+    work = Path(os.path.abspath(a.rerun))
     am.demand(not work.exists(), 'WORKDIR must not exist: ' + str(work))
     work.mkdir(parents=True)
     attempt = work / 'attempt'
@@ -259,7 +260,7 @@ def regenerate(fx, a):
              '.lake/build/bin/air2lean "$4" -o "$2/Gen.lean" --namespace %s --prefix %s; '
              '"$5" build-exe -OReleaseSafe -fstrip -target %s -mcpu=baseline -femit-bin="$6/%s" %s'
              % (fx['filter'], fx['target'], fx['source'], fx['namespace'], fx['prefix'], fx['target'],
-                fx['binary'], fx['source']))
+                fx['example'], fx['source']))
     guarded(work, 'pipeline', ['bash', '-c', shell, 'pipeline', ROOT, work, zig_air, air, stock, native, lean_toolchain()],
             a.timeout, a.lock_wait)
     problems = []
@@ -278,14 +279,13 @@ def regenerate(fx, a):
     fresh_audit = fresh_receipt(fx, attempt)
     # --refresh (a new fixture, or an intentional proof change): the fresh manifest is only
     # self-checked, and `install` + `record` replace the committed manifest and pins.
-    refresh = a.refresh
-    committed = None if refresh else json.loads((fx['path'] / 'manifest.json').read_text())
-    pins = None if refresh else json.loads((fx['path'] / 'pins.json').read_text())
+    committed = None if a.refresh else json.loads((fx['path'] / 'manifest.json').read_text())
+    pins = None if a.refresh else json.loads((fx['path'] / 'pins.json').read_text())
     if committed and fresh_audit != committed['links']['theorems']['value']['compiled_audit']:
         problems.append('fresh compiled theorem audit differs from the committed manifest')
     # 3/4 fresh manifest chaining the fresh export, receipt and native binary.
     manifest_path = work / 'manifest.json'
-    record_manifest(fx, manifest_path, air, attempt, native / fx['binary'], stock)
+    record_manifest(fx, manifest_path, air, attempt, native / fx['example'], stock)
     fresh = json.loads(manifest_path.read_text())
     if committed:
         if fresh['links']['native']['value']['compiler_sha256'] == committed['links']['native']['value']['compiler_sha256']:
@@ -298,7 +298,7 @@ def regenerate(fx, a):
     pinned = pins or {'profile_sha256': fresh['links']['profile']['value']['profile_sha256'],
                       'source_sha256': fresh['links']['source']['sha256']}
     expect = ['zig_version=' + VERSION, 'profile=' + pinned['profile_sha256'], 'source=' + pinned['source_sha256']]
-    report = am.check_manifest(ROOT, manifest_path, expect, a.allow_dirty, False, native / fx['binary'], stock, True)
+    report = am.check_manifest(ROOT, manifest_path, expect, a.allow_dirty, False, native / fx['example'], stock, True)
     problems += report['problems']
     status = 'current' if report['status'] == 'current' and not problems else 'stale'
     print(json.dumps({'fixture': fx['example'], 'status': status, 'problems': problems,
@@ -360,7 +360,7 @@ def record(fx, a):
     # Recorded beside the run, then moved over the fixture: a failure keeps the committed manifest.
     staged = work / 'fixture-manifest.json'
     staged.unlink(missing_ok=True)
-    record_manifest(fx, staged, fx['dir'] + '/air', fx['dir'] + '/receipt', work / 'native' / fx['binary'], stock)
+    record_manifest(fx, staged, fx['dir'] + '/air', fx['dir'] + '/receipt', work / 'native' / fx['example'], stock)
     path = fx['path'] / 'manifest.json'
     os.replace(staged, path)
     manifest = am.load(path)
@@ -389,7 +389,6 @@ def main(argv):
     y = sub.add_parser('replay', help="offline replay of the committed receipt against the tree (no revision needed)")
     y.add_argument('--strict', action='store_true', help='also fail on drift of shared Lean/toolchain closure files')
     y.add_argument('--rerun', metavar='WORKDIR', help='also rerun the guarded proof receipt and compare audits (needs Lean, lock)')
-    y.add_argument('--timeout', type=int, default=7200)
     g = sub.add_parser('regenerate', help='rerun the pipeline and compare with the fixture (needs Zig, Lean, lock)')
     g.add_argument('workdir')
     g.add_argument('--zig-air', default=os.environ.get('AIR2LEAN_ZIG_AIR', str(ROOT / 'zig-air-0.16.0/bin/zig')))
@@ -410,14 +409,14 @@ def main(argv):
         parser.error(a.action + ' needs one --fixture')
     try:
         if a.action == 'regenerate':
-            return regenerate(fixture(names[0]), a)
+            return regenerate(FIXTURES[names[0]], a)
         if a.action == 'install':
-            return install(fixture(names[0]), a)
+            return install(FIXTURES[names[0]], a)
         if a.action == 'record':
-            return record(fixture(names[0]), a)
+            return record(FIXTURES[names[0]], a)
         if a.action == 'replay':
             return replay_main(names, a)
-        reports = {n: check(fixture(n), a.strict, a.native_binary, a.native_compiler) for n in names}
+        reports = {n: check(FIXTURES[n], a.strict, a.native_binary, a.native_compiler) for n in names}
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print('provenance evidence unavailable: ' + str(error), file=sys.stderr)
         return 2
@@ -435,11 +434,11 @@ def emit(reports, summary, names):
 
 
 def replay_main(names, a):
-    reports = {n: replay(fixture(n), a.strict) for n in names}
+    reports = {n: replay(FIXTURES[n], a.strict) for n in names}
     code = 0
     if a.rerun:
         am.demand(len(names) == 1, '--rerun needs one --fixture')
-        fx = fixture(names[0])
+        fx = FIXTURES[names[0]]
         report = reports[names[0]]
         am.demand(report['status'] != 'stale', 'refusing to rerun: the receipt is stale for this tree')
         fresh, committed = rerun(fx, a)

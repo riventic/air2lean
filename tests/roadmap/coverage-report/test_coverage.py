@@ -213,7 +213,7 @@ class CoverageTests(unittest.TestCase):
                 goal = root['goals'][0]
                 self.assertEqual((goal['binding'], goal['derived_strength'], goal['claim_class']),
                                  ('trivial_conclusion', None, 'unclassified'))
-                self.assertIn('right-hand side is the generated root Example.root', goal['reason'])
+                self.assertIn('only relates the generated root Example.root to itself', goal['reason'])
                 self.assertEqual(root['stages']['proved']['status'], 'failed')
                 self.assertEqual(root['level'], 'tested_sampled')
                 self.assertNotFunctional(root)
