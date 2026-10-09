@@ -50,6 +50,12 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-02](premises.md#sem-02) | 2383 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1205 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 134 | Total-correctness statements |
+=======
+| [SEM-01](premises.md#sem-01) | 2649 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2264 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1132 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 126 | Total-correctness statements |
+>>>>>>> origin/codex/roadmap-batch8
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |

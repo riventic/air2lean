@@ -84,6 +84,9 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 ## Requirement register
 
 From [ROADMAP.md](../ROADMAP.md): 89 requirements, 37 complete, 42 partial, 1 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+=======
+From [ROADMAP.md](../ROADMAP.md): 88 requirements, 36 complete, 42 partial, 0 open, 10 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+>>>>>>> origin/codex/roadmap-batch8
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
