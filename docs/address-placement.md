@@ -28,9 +28,10 @@ the block id, quantifying over it covers every address assignment that a native 
 produce, as long as the block's declared alignment is right:
 
 * stack block: the alignment of the `alloc`'s pointer type (`align(N)` or the ABI alignment);
-* global: the ABI alignment of its type, lowered to the alignment of every pointer constant
-  that points into it. The export does not record a global's own `align(N)`, but `&g` of an
-  under-aligned global has the under-aligned pointer type;
+* global: the ABI alignment of its type, capped by the largest alignment of a pointer constant
+  into it at an offset that alignment divides (each is a true lower bound). The export does not
+  record a global's own `align(N)`, but `&g` of an under-aligned global has the under-aligned
+  pointer type;
 * heap and allocator block: the requested alignment.
 
 ## What a statement can and cannot say
@@ -70,6 +71,12 @@ liveness and provenance: an access, `free` and `@ptrFromInt`'s provenance recove
 
 * Out-of-allocation pointer arithmetic (MM-3) is still accepted; LLVM treats it as poison.
 * The stack is unbounded (MM-5).
+* The fallback address (`alignUp Mem.top align`) is not bounded by 2^64, unlike a placed one; it
+  only matters for programs that allocate close to 2^64 bytes.
+* `Mem.top` scans every block, so allocation under `Placement.fresh` is linear in the number of
+  blocks so far (runtime cost only).
+* VC extraction (`vc_gen`) has a pointer `==` contract only for provenance-free pointers
+  (`Zig.VC.ptrEqAddr_raw`); comparing pointers into blocks needs a proof by hand.
 * A zero-size object may overlap another block in a native layout; the model's `addrFree`
   does not separate them, so `@ptrFromInt` of such an address can be ambiguous (`.unspecified`
   under `.strict` provenance).

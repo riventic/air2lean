@@ -534,8 +534,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   and its theorems hold for every `σ`; the fixed layout `Placement.fresh` is used only to run
   programs. Pointer `==` compares addresses for every pointer kind. The declared alignment is
   the `alloc`'s pointer alignment for a stack block, and for a global its type's ABI alignment
-  lowered to the alignment of every pointer constant into it (the export does not record a
-  global's own `align(N)`). Zero-size objects are not separated from other blocks. In-place
+  capped by the largest alignment of a pointer constant into it at an offset that alignment
+  divides (the export does not record a global's own `align(N)`). Zero-size objects are not separated from other blocks. In-place
   growth needs only that the grown range is clear of other live blocks (`Mem.growFree`).
 - Derived from: `ZigLean.Mem.Basic`; implied by SEM-02.
 - Sources: [address-placement.md](address-placement.md),

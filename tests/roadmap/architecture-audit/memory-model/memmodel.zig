@@ -1,10 +1,13 @@
-// Architecture audit (memory model) counterexamples. Each function is exported to AIR with the
-// patched compiler (ReleaseSafe), translated, run in Lean from the empty memory, and compared
-// with the native ReleaseSafe build of `main` below (see check.sh / README in this directory).
+// Architecture audit (memory model) fixtures. Each function is exported to AIR with the patched
+// compiler (ReleaseSafe), translated, run in Lean from `mem0 σ` under several placements, and
+// compared with the native ReleaseSafe build of `main` below (see check.sh in this directory).
+// The comments record the original findings; MM-1, MM-2 and MM-4 are fixed by the placement
+// oracle (docs/address-placement.md).
 const std = @import("std");
 
-// MM-1: the model gives every block a fixed address (first block at 4096), so the result of
-// `@intFromPtr` is a constant that Lean can prove; natively it is a stack address.
+// MM-1: the model used to give every block a fixed address (first block at 4096), so the result
+// of `@intFromPtr` was a provable constant; natively it is a stack address. Now it is the
+// placement's address.
 pub noinline fn addrOfLocal() usize {
     var x: u8 = 7;
     const p: *u8 = &x;
@@ -12,17 +15,17 @@ pub noinline fn addrOfLocal() usize {
     return @intFromPtr(p);
 }
 
-// MM-2: an over-aligning `@alignCast` passes in the model (the block lands on 4096) and panics
-// natively ("incorrect alignment") because the native stack slot is not 4096-aligned.
+// MM-2: an over-aligning `@alignCast` passed in the model (the block landed on 4096) and panics
+// natively ("incorrect alignment"). Now it panics under every placement without the alignment.
 pub noinline fn overAlign() u8 {
     var buf: [2]u8 = .{ 1, 2 };
     const p: *align(4096) [2]u8 = @alignCast(&buf);
     return p[1];
 }
 
-// MM-4: `==` on ordinary pointers is structural (block, offset) while `@intFromPtr` is the
-// address. Two pointers made from the same integer compare unequal in the model once a block
-// is allocated over that address in between; natively both comparisons are true (result 3).
+// MM-4: `==` on ordinary pointers was structural (block, offset) while `@intFromPtr` is the
+// address, so two pointers made from the same integer compared unequal once a block covered the
+// address. Now `==` compares addresses and the model gives 3, as natively.
 noinline fn eqLater(p1: *u8, n: usize) u8 {
     var b: [128]u8 = undefined;
     @memset(&b, 0);

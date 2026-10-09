@@ -1805,7 +1805,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let isPtrVal (v : Val) := match fc.valTy v with
       | .ptr "slice" .. => false
       | .ptr .. => true
-      | _ => (fc.valTyId? v |>.map (nullablePtrTy fc.types fc.layouts) |>.getD false)
+      | _ => false
     let isOptPtrVal (v : Val) := match fc.valTy v with
       | .optional c => match fc.tyOfId c with | .ptr "slice" .. => false | .ptr .. => true | _ => false
       | _ => false
@@ -2804,12 +2804,13 @@ def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := no
   | some (.undef _) | none => fc.storageExpr g.ty s!"Array.replicate (Zig.Enc.size ({ty})) .undef"
   | some init => fc.storageExpr g.ty (encodeTerm (fc.resolveVal #[] init) ty)
 
-/-- Every pointer constant in `v`, at any depth, whose pointer type's alignment (`ptr_align`) is
-known: its global and that alignment. -/
+/-- Every pointer constant in `v`, at any depth, whose pointer type's alignment `a` (`ptr_align`)
+is known and divides its offset: its global and `a`. Zig guarantees `(addr + off) % a = 0`, so
+then `addr % a = 0`: `a` is a true lower bound on the global's address alignment. -/
 partial def Val.ptrConstAligns (layouts : Array Layout) (v : Val) : Array (Nat × Nat) :=
   match v with
-  | .ptrConst ty g _ => match layouts[ty]?.bind (·.ptrAlign) with
-    | some a => #[(g, a)]
+  | .ptrConst ty g off => match layouts[ty]?.bind (·.ptrAlign) with
+    | some a => if 0 < a && off % a == 0 then #[(g, a)] else #[]
     | none => #[]
   | .agg _ vs => vs.flatMap (Val.ptrConstAligns layouts)
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => Val.ptrConstAligns layouts v
@@ -2859,15 +2860,19 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   -- The block's alignment is what Zig guarantees for the global's address (MM-1): its declared
-  -- alignment, which the export does not record. A pointer constant into it never claims more
-  -- (`&g` of an `align(1)` global is `*align(1) T`), so the smallest pointer alignment of a
-  -- pointer constant into it bounds the type's ABI alignment from below to a true guarantee.
+  -- alignment, which the export does not record. Each pointer constant into it at an offset its
+  -- alignment divides is a true lower bound (`Val.ptrConstAligns`); the largest one caps the
+  -- type's ABI alignment (`&g` of an `align(1)` global is `*align(1) T`). The smallest one is not
+  -- a bound: `&g.a : *u8` or a coercion to `*align(1) T` of an aligned global claims less.
+  let mut bound : Array Nat := out.map fun _ => 0
   for (f, k) in funcs.zipIdx do
     let vals := f.allInsts.flatMap (placeOperands ·.op) ++ f.globals.filterMap (·.init)
     for (g, a) in vals.flatMap (Val.ptrConstAligns f.layouts) do
       if let some id := ids[k]!.2[g]? then
-        if let some pg := out[id]? then
-          if 0 < a && a < pg.align then out := out.set! id { pg with align := a }
+        if id < bound.size then bound := bound.set! id (Nat.max bound[id]! a)
+  for (b, id) in bound.zipIdx do
+    if let some pg := out[id]? then
+      if 0 < b && b < pg.align then out := out.set! id { pg with align := b }
   return (out, ids)
 
 /-- The enums whose tag names a function reads (`@tagName`), as `(Zig name, Lean name, fields,
