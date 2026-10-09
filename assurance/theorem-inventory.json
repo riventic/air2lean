@@ -598,16 +598,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e5d48c1f715920f9259c5c51738e78d84ebc4ab4",
+        "head": "92a927ab77d5adc88d4bdc6888611a13c3369873",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-09T07:19:11.222558+00:00",
-      "elapsed_seconds": 24.201,
+      "started_utc": "2026-10-09T10:53:27.060004+00:00",
+      "elapsed_seconds": 36.958,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "6dd9f1be0c45bbfe9070db5836abaa3524546d30bd565d32fb078d687d96a3c5",
+      "log_sha256": "8638a59ecb64d674c98b07228b5557d08e06cd514af26fb98599918224da4e2b",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -679,16 +679,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e5d48c1f715920f9259c5c51738e78d84ebc4ab4",
+        "head": "92a927ab77d5adc88d4bdc6888611a13c3369873",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-09T07:19:35.555662+00:00",
-      "elapsed_seconds": 243.458,
+      "started_utc": "2026-10-09T10:54:04.127564+00:00",
+      "elapsed_seconds": 33.325,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d8916a4c4951c8baad99bd30550eb887da267af56e5aa4acb3b1120d2dc11244",
+      "log_sha256": "747ae8812793830b9bee1251f8826a350138b0a8aef5553d84b0d485bfe67ddf",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threadsync.Deadline",
@@ -761,16 +761,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e5d48c1f715920f9259c5c51738e78d84ebc4ab4",
+        "head": "92a927ab77d5adc88d4bdc6888611a13c3369873",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-09T07:17:36.290448+00:00",
-      "elapsed_seconds": 94.821,
+      "started_utc": "2026-10-09T10:52:03.195368+00:00",
+      "elapsed_seconds": 83.748,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "e7ff64023d8b26b7bcf20852f54a12b9dd313a383e13c16a715a35993e286cc5",
+      "log_sha256": "1d3e359a46b7b061749ae096269f44e35e9719830eb9ad5b7a673b94362c09a0",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
