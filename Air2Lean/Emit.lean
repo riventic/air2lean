@@ -3599,7 +3599,7 @@ width-parameterized form (`ZigLean/Mem/Width.lean`). `Main` refuses such an outp
 def width64Names : List String :=
   ["Zig.readSlice ", "Zig.memset ", "Zig.memmove ", "Zig.len ", "Zig.index ", "Zig.vindex ",
    "Zig.ptrAddr ", "Zig.Allocator.alloc ", "Zig.Allocator.create ", "Zig.Allocator.free ",
-   ".elem ", ".elemSub "]
+   "Zig.Allocator.freeSentinel ", ".elem ", ".elemSub "]
 
 /-- `Zig.Slice` as a whole identifier (not `Zig.Slice32`/`Zig.SliceOf`), or a name of
 `width64Names`, in a 32-bit translation's source. -/
