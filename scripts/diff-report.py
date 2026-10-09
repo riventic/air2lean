@@ -510,6 +510,14 @@ def pins(path):
         result.setdefault(parts[0], {})[parts[1]] = (lo,hi,parts[3])
     return result
 
+def pin_file(directory, bucket, host):
+    """`<bucket>.<host>.txt` (host: `uname -s`-`uname -m`, e.g. `Darwin-arm64`) if present, else
+    `<bucket>.txt`. A host file replaces the shared one whole: on that host the diff test runs
+    that host's translation, whose target profile makes other float cases unspecified
+    (docs/floats.md §Targets)."""
+    own = directory/f'{bucket}.{host}.txt'
+    return own if own.exists() else directory/f'{bucket}.txt'
+
 def host_allowances(path):
     """tests/diff/<ex>/host.txt: `<fn> <kind>[,<kind>...]` lines (HOST_KINDS), `#` comments."""
     result = {}
@@ -599,7 +607,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
             if not inputs.is_dir(): raise Invalid('missing example inputs')
             allowances=host_allowances(root/'tests/diff'/ex/'host.txt')
             allowed_host=allowances if host!='Linux-x86_64' else {}
-            fn_pins={bucket:pins(root/'tests/diff'/ex/(bucket+'.txt')) for bucket in ('unspecified','capped')}
+            fn_pins={bucket:pins(pin_file(root/'tests/diff'/ex,bucket,host)) for bucket in ('unspecified','capped')}
             files=sorted(inputs.glob('*.jsonl'))
             if not files: raise Invalid('no function inputs')
             for infile in files:
@@ -645,7 +653,7 @@ def compare_summary(root, examples, version, host, summary, schedule_receipts=()
                         lo,hi,_=pinned.get(sha,(0,0,None));actual=per_input[bucket][sha]
                         if lo<=actual<=hi:continue
                         violations.append({'example':ex,'function':fn,'counter':bucket,'input_sha256':sha,'actual':actual,'min':lo,'max':hi})
-                        print(f'EXCLUSION PIN {ex}.{fn} {bucket} input {sha}: {actual}, expected {lo}-{hi} (tests/diff/{ex}/{bucket}.txt)',file=sys.stderr)
+                        print(f'EXCLUSION PIN {ex}.{fn} {bucket} input {sha}: {actual}, expected {lo}-{hi} ({pin_file(Path("tests/diff")/ex,bucket,host)})',file=sys.stderr)
                         # Search-cap changes are budget evidence, not semantic mutation detections.
                         if bucket=='unspecified' and not incomplete_search and not any(statuses[s] for s in (Status.SEARCH_CAP,Status.BOUNDED_NO_RESULT,Status.HOST,Status.INPUT_FAILURE,Status.NATIVE_HARNESS_FAILURE)):eligible+=1
     setup_failures=totals[Status.INPUT_FAILURE.value]+totals[Status.NATIVE_HARNESS_FAILURE.value]

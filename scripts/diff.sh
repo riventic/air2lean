@@ -288,6 +288,14 @@ pin_of() {
     END { printf "%d-%d\n", lo, hi }' "$2"
 }
 
+# The pin file of bucket `$2` (unspecified, capped) of example `$1`: `<bucket>.<host>.txt` on that
+# host if present (host: `uname -s`-`uname -m`; scripts/diff-report.py's pin_file), else
+# `<bucket>.txt`.
+pin_file() {
+  local own="tests/diff/$1/$2.$(uname -s)-$(uname -m).txt"
+  if [ -f "$own" ]; then echo "$own"; else echo "tests/diff/$1/$2.txt"; fi
+}
+
 # The pin of function `$1` in the pin file `$2` allows the count `$3`.
 pin_ok() {
   local spec lo hi
@@ -394,16 +402,18 @@ for ex in $examples; do
       exit 1
     }
 
-    if ! pin_ok "$fn" "tests/diff/$ex/unspecified.txt" "$fn_unspecified"; then
+    unspecified_pins=$(pin_file "$ex" unspecified)
+    if ! pin_ok "$fn" "$unspecified_pins" "$fn_unspecified"; then
       mismatch_found=1
       echo "UNSPECIFIED COUNT $ex.$fn: $fn_unspecified, expected" \
-        "$(pin_of "$fn" "tests/diff/$ex/unspecified.txt") (tests/diff/$ex/unspecified.txt)" >&2
+        "$(pin_of "$fn" "$unspecified_pins") ($unspecified_pins)" >&2
     fi
 
-    if ! pin_ok "$fn" "tests/diff/$ex/capped.txt" "$fn_capped"; then
+    capped_pins=$(pin_file "$ex" capped)
+    if ! pin_ok "$fn" "$capped_pins" "$fn_capped"; then
       mismatch_found=1
       echo "CAPPED COUNT $ex.$fn: $fn_capped, expected" \
-        "$(pin_of "$fn" "tests/diff/$ex/capped.txt") (tests/diff/$ex/capped.txt)" >&2
+        "$(pin_of "$fn" "$capped_pins") ($capped_pins)" >&2
     fi
 
     host_str=""
