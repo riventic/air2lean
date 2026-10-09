@@ -55,7 +55,7 @@ private theorem joined_empty : Conc.Proto.joinedAll 0 ({} : Mem) := by
 
 /-- Each scheduler turn consumes one hint. The induction measure is the remaining
 hint count, independently of the numerical values returned by the oracle. -/
-private theorem go_countdown (n : Nat) :
+theorem go_countdown (n : Nat) :
     ∀ depth fuel step trace (o : Nat → Nat), n ≤ depth → n + 1 ≤ fuel →
       (Sched.go (fun _ => pure ()) o fuel (pending n depth step trace)).1 =
         some (.ok ((), ({} : Mem))) := by

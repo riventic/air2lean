@@ -32,6 +32,9 @@ def p0 : Ptr := ⟨some 0, 0⟩
 /-- The first byte of block `1`. -/
 def p1 : Ptr := ⟨some 1, 0⟩
 
+/-- A declared error domain with the one error `A`. -/
+def domA : ErrorDomain := ⟨#["A"], by decide, by decide⟩
+
 theorem mem1_access {bs : Array Byte} {kind : BlockKind} {o n a : Nat} (hn : o + n ≤ bs.size)
     (ha : (4096 + o) % a = 0) :
     (mem1 bs kind).access (p0.add o) n a = pure (0, blk bs kind, o) := by

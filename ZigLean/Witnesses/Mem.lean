@@ -38,9 +38,6 @@ theorem w32_access₂ : (mem2 w32 w32).access p1 (Enc.size (BitVec 32)) 4 =
 theorem mem1_single (bs : Array Byte) (kind : BlockKind) : (mem1 bs kind).SingleThread :=
   singleThread_empty rfl Nat.zero_lt_one
 
-/-- A declared error domain with the one error `A`. -/
-def domA : ErrorDomain := ⟨#["A"], by decide, by decide⟩
-
 /-- The error table with the one error `A` (code 1). -/
 def tableA : ErrorTable := ⟨#["A"], by decide⟩
 

@@ -68,7 +68,7 @@ private theorem errUnion_decode_eq {bs : Array Byte} {u : Except ErrName α}
     cases h
     exact ⟨rfl, fun y hy => by cases hy⟩
 
-private theorem errUnion_decode_write [LawfulEnc α] {bs : Array Byte} {x : α}
+theorem errUnion_decode_write [LawfulEnc α] {bs : Array Byte} {x : α}
     (hs : bs.size = Enc.size (Except ErrName α))
     (h : Enc.decode bs = pure (Except.ok x : Except ErrName α)) (y : α) :
     Enc.decode (writeBytes bs (errUnionOffsets (Enc.size α) (Enc.align α)).2 (Enc.encode y)) =
