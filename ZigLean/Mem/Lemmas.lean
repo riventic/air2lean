@@ -906,9 +906,10 @@ theorem size_encode_ptr (p : Ptr) : (Enc.encode p).size = 8 := LawfulEnc.size_en
 
 /-- `@memcpy` with equal counts between different blocks, or of no bytes, is `@memmove`: its
 illegal-behaviour checks pass. -/
-theorem memcpy_eq_memmove {size da sa : Nat} {dst src : Ptr} {n : BitVec 64}
+theorem memcpy_eq_memmove {size da sa : Nat} {dst src : Ptr} {n m : BitVec 64} (hm : n = m)
     (h : dst.block ≠ src.block ∨ n.toNat * size = 0) :
-    memcpy size da sa dst src n n = memmove size da sa dst src n := by
+    memcpy size da sa dst src n m = memmove size da sa dst src n := by
+  subst hm
   unfold memcpy Ptr.overlaps
   rcases h with h | h <;> simp [h]
 

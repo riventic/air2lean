@@ -7,7 +7,9 @@ AIR operation in the air2lean subset.
 * Integers are `BitVec n`. Signedness is not in the type: each operation takes `s : Bool`
   (`true` = signed), which the translator reads from the AIR type.
 * Every check that Zig does in `Debug` / `ReleaseSafe` becomes `throw`. In `ReleaseFast`
-  the same cases are illegal behaviour, so a proof of "never throws" covers both modes.
+  the same cases are illegal behaviour, so a proof of "never throws" covers both modes. Each
+  op also checks its own illegal-behaviour precondition (`.illegal`), so illegal behaviour that
+  no safety check catches throws too (`docs/illegal-behavior.md`).
 -/
 
 namespace Zig
@@ -19,12 +21,14 @@ inductive Error where
   | unreachable
   | panic
   /-- Zig leaves the result open, and the model does not choose one: the bits of a NaN
-  (`@bitCast`), or `@intFromFloat` of a NaN or of an out-of-range value without a safety
-  check. A proof of "never throws" shows that the code never reaches such a case. -/
+  (`@bitCast`), an undefined byte in a loaded value. A proof of "never throws" shows that the
+  code never reaches such a case. -/
   | unspecified
-  /-- Illegal behaviour that `ReleaseSafe` does not check (`ZigLean/Mem/Basic.lean`): an access
-  to a freed block, out of bounds, or misaligned; a double free. A proof of "never throws" shows
-  that the code never reaches such a case. -/
+  /-- Illegal behaviour that no safety check before the op catches: each op's model checks its
+  own precondition (`docs/illegal-behavior.md`). For example an access to a freed block, out of
+  bounds, or misaligned (`ZigLean/Mem/Basic.lean`); a double free; an inexact float
+  `@divExact`; `@intFromFloat` of a NaN. A proof of "never throws" shows that the code never
+  reaches such a case. -/
   | illegal
   /-- Every thread that has not ended waits (a futex wait that no thread wakes, a `join` of such
   a thread): the program hangs (`ZigLean/Conc/Sched.lean`). -/

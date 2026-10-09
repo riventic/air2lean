@@ -561,7 +561,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
         simp only [StateT.run] at s₈ s₉ r₁ r₂ mv fr
         simp [array_list_Aligned_u32_null_ensureTotalCapacityPrecise, zig_unfold, l₁, l₂, hge,
           array_list_Aligned_u32_null_allocatedSlice, Allocator.remap, hg0, ha₃, l₄, l₅, hsl,
-          r₁, r₂, hle1, memcpy_eq_memmove (Or.inl hne), mv, fr, s₈, s₉, Zig.le, BitVec.ule,
+          r₁, r₂, hle1, memcpy_eq_memmove rfl (Or.inl hne), mv, fr, s₈, s₉, Zig.le, BitVec.ule,
           show len.toNat ≤ g.toNat by omega]
       · simp only [buf, hg0, ↓reduceIte]
         refine ⟨hoff, A', _, hA', ?_, ?_, hbN'⟩

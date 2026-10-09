@@ -2307,13 +2307,20 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
   | .memcpy move dst src =>
     -- The item count of the operand that has one. `memcpy` also passes the source's count,
-    -- which must agree (`Zig.memcpy` checks it and the overlap itself).
+    -- which must agree (`Zig.memcpy` checks it and the overlap itself; with safety Sema
+    -- checks it first, `copyLenMismatch`).
     let hasLen (v : Val) : Bool :=
       fc.isSlice v || match fc.pointeeOf v with | .array .. => true | _ => false
     let (dptr, dn) := fc.itemsOf dst (rv dst)
     let (_, sn) := fc.itemsOf src (rv src)
     let n := if hasLen dst then dn else sn
-    let m := if hasLen src then sn else n
+    -- Sema passes a slice source as its `slice_ptr`; its count is the slice's length.
+    let slicePtrOf : Option Val := match src with
+      | .inst id => match (fc.allInsts.find? (·.id == id)).map (·.op) with
+        | some (Op.slicePtr sl) => some sl
+        | _ => none
+      | _ => none
+    let m := if hasLen src then sn else (slicePtrOf.map (s!"{rv ·}.len")).getD n
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
     let args := s!"{size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n}"
