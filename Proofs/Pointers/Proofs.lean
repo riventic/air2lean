@@ -1,6 +1,7 @@
 import Proofs.Pointers.Gen
 import ZigLean.Mem.Lemmas
 import ZigLean.Simp
+import ZigLean.Mem.Witness
 
 /-!
 # Proofs about `examples/pointers/pointers.zig`
@@ -225,3 +226,18 @@ example :
       Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
       hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide
+
+/-! ## Non-vacuity witnesses: the runs on two `u32` one after the other in one block -/
+
+nonvacuity_witness decode_writeBytes32 := ⟨Array.replicate 4 .undef, 0, 0, by decide, trivial⟩
+
+/-- `0` at `p0` and `1` at `p0 + 4`. -/
+abbrev memSwap : Mem := Witness.mem1 (Enc.encode (0 : BitVec 32) ++ Enc.encode (1 : BitVec 32))
+
+nonvacuity_witness swap_run :=
+  ⟨memSwap, _, _, _, _, Witness.p0, Witness.p0.add 4, 0, 1, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+
+nonvacuity_witness maxPtr_spec :=
+  ⟨_, _, Witness.p0, Witness.p0.add 4, memSwap, 0, 1, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, trivial⟩
