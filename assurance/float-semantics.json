@@ -423,6 +423,14 @@
       ],
       "correspondence": "model"
     },
+    "Proofs.Floatops.Proofs::opSpec_other.nonvacuous": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Proofs.Floatops.Proofs::softF80Chk_ceilRtLegacy": {
       "semantics": "compiler-rt",
       "zig_versions": [
@@ -445,11 +453,14 @@
       ],
       "correspondence": "model"
     },
-    "Proofs.Floatops.Proofs::opSpec_other.nonvacuous": {
-      "semantics": "ieee",
+    "Proofs.Floatops.Proofs::softF80Chk_truncRt017": {
+      "semantics": "compiler-rt",
+      "zig_versions": [
+        "0.14.1",
+        "0.15.2"
+      ],
       "targets": [
-        "aarch64-macos",
-        "x86_64-linux"
+        "aarch64-macos"
       ],
       "correspondence": "model"
     },
@@ -1073,17 +1084,6 @@
       ],
       "correspondence": "model"
     },
-    "ZigLean.Float.CompilerRt::Zig.Float.truncRt017Chk_eq": {
-      "semantics": "compiler-rt",
-      "targets": [
-        "aarch64-macos",
-        "x86_64-linux"
-      ],
-      "zig_versions": [
-        "0.17.0"
-      ],
-      "correspondence": "model"
-    },
     "ZigLean.Float.CompilerRt::Zig.Float.divRt016_eq_div_of_exp": {
       "semantics": "compiler-rt",
       "zig_versions": [
@@ -1151,6 +1151,17 @@
       "targets": [
         "aarch64-macos",
         "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.Float.CompilerRt::Zig.Float.truncRt017Chk_eq": {
+      "semantics": "compiler-rt",
+      "targets": [
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "zig_versions": [
+        "0.17.0"
       ],
       "correspondence": "model"
     },

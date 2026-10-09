@@ -422,6 +422,15 @@ theorem softF80Chk_ceilRtLegacy (a : Zig.F80) :
   · rw [Zig.Float.ceilRtLegacyChk_eq a h]
   · simp [Zig.Float.isNoncanonicalF80, h]
 
+/-- The same for 0.17.0's f80 `@trunc` (`truncRt017Chk`, group I). -/
+theorem softF80Chk_truncRt017 (a : Zig.F80) :
+    Zig.Float.softF80Chk [a] (Zig.Float.truncRt017Chk a) =
+      Zig.Float.softF80Chk [a] (Zig.Float.truncChk a) := by
+  unfold Zig.Float.softF80Chk
+  cases h : a.isPseudoDenormalF80
+  · rw [Zig.Float.truncRt017Chk_eq a h]
+  · simp [Zig.Float.isNoncanonicalF80, h]
+
 /-- aarch64 `f80`: every selector is `opSpec80A64` of the translation's version profile. -/
 theorem op80_spec_aarch64 (ht : floatopsTarget = .aarch64) (sel : BitVec 8)
     (a b c : Zig.Float .f80) : op80 sel a b c = opSpec80A64 op128Profile sel a b c := by
@@ -465,7 +474,12 @@ theorem op80_spec_aarch64 (ht : floatopsTarget = .aarch64) (sel : BitVec 8)
         try rw [softF80Chk_ceilRtLegacy a]
         generalize Zig.Float.softF80Chk [a] (Zig.Float.ceilChk a) = x
         rcases x with _ | _ | _ <;> rfl
-      | 12, _ => spec_case op80, Zig.Float.softF80Chk [a] (Zig.Float.truncChk a)
+      | 12, _ =>
+        show _ = Zig.Float.softF80Chk [a] (Zig.Float.truncChk a)
+        unfold op80
+        try rw [softF80Chk_truncRt017 a]
+        generalize Zig.Float.softF80Chk [a] (Zig.Float.truncChk a) = x
+        rcases x with _ | _ | _ <;> rfl
       | 13, _ => spec_case op80, Zig.Float.softF80Chk [a] (Zig.Float.roundChk a)
       | 16, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (Zig.Float.minChk a b)
       | 17, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (Zig.Float.maxChk a b)

@@ -35,7 +35,7 @@ comments. All seven cases were `vulnerable` with the translator built from `af9d
 | 3 | fixed, one gap | every op checks its own illegal-behaviour precondition (`.illegal`): `memcpy` counts and overlap, slice ends and sentinels, float/int `@divExact`, `@ptrFromInt`, `@alignCast`, bare `unreach`, `for` lengths, memory `@fieldParentPtr` (`unchecked-memcpy`, `docs/illegal-behavior.md`). Remaining: a `for` loop with safety off whose second operand is a range or array has no length in AIR |
 | 4 | fixed | reviewed asm allowlist; other asm is a declared device event or rejected (`volatile-asm`) |
 | 5 | fixed | comptime fields are exported (`comptime: true`) and rejected when used (`comptime-field`) |
-| 6 | open | emitter placeholders (`reduce-bool-handedit`): memory-model fix MM-6 |
+| 6 | fixed | emitter placeholders (MM-6): every formerly reachable arm is a checker rule, and output with a placeholder is rejected (`EMITTER_PLACEHOLDER`; `reduce-bool-handedit`) |
 | 7 | fixed | claim goals bind to the root's generated definition (`claims-unbound`) |
 | 8, 10 | fixed | admission: only ReleaseSafe/stage2_llvm by default, legacy schemas only with `--profile legacy-abi64-le` (`build-mode`, `legacy-default`) |
 | 11 | fixed | schema-12 deny-by-default schema table (`unknown-key`, `missing-flag`) |
