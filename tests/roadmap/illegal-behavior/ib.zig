@@ -117,6 +117,22 @@ pub fn forRange(a: []const u32, n: usize) u32 {
     return sum;
 }
 
+/// `for` over a slice and a range that does not start at 0.
+pub fn forRangeFrom(a: []const u32, lo: usize, hi: usize) u32 {
+    @setRuntimeSafety(false);
+    var sum: u32 = 0;
+    for (a, lo..hi) |x, i| sum +%= x +% @as(u32, @truncate(i));
+    return sum;
+}
+
+/// `for` over a slice and an array: the array's comptime length bounds the loop.
+pub fn forArray(a: []const u32, b: *const [3]u32) u32 {
+    @setRuntimeSafety(false);
+    var sum: u32 = 0;
+    for (a, b) |x, y| sum +%= x +% y;
+    return sum;
+}
+
 /// `@fieldParentPtr` of a pointer that is not to that field.
 pub fn parentOf(p: *u32) *S {
     @setRuntimeSafety(false);
@@ -142,5 +158,7 @@ comptime {
     _ = &forLen;
     _ = &forLenMem;
     _ = &forRange;
+    _ = &forRangeFrom;
+    _ = &forArray;
     _ = &parentOf;
 }

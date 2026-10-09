@@ -680,5 +680,8 @@ structure Func where
   /-- The profile is big endian (`profile.endian`, T03): generated code opens `Zig.BigEndian`
   (`ZigLean/Endian.lean`). Legacy profiles and hand-built functions are little endian. -/
   bigEndian : Bool := false
+  /-- The export's `unchecked_ib` (`docs/air-json.md`): `"for_len"` when the compiler lowers an
+  unchecked `for` length mismatch to `unreach`. Hand-built functions have none. -/
+  uncheckedIb : Array String := #[]
 
 end Air2Lean

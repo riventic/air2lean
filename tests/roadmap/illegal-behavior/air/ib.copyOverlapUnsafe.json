@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -35,6 +38,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "ib.copyOverlapUnsafe",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 59
+ },
  "params": [
   0,
   1
@@ -85,7 +93,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 24
   },
   {
    "id": 6,
@@ -105,7 +114,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 16
   },
   {
    "id": 8,
@@ -162,7 +172,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 33
   },
   {
    "id": 13,

@@ -117,6 +117,9 @@ structure RawFunc where
   globals : Array Global
   /-- The function's declaration site (additive provenance; absent in older exports). -/
   src : Option RawSrc := none
+  /-- `unchecked_ib`: the illegal behaviours that the patched compiler's Sema lowers to `unreach`
+  where it has no safety check (`zig-patch/<version>/hook.patch`); empty in older exports. -/
+  uncheckedIb : Array String := #[]
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -754,6 +757,9 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     | some g => g.getArr?
     | none => pure #[]
   let globals ← globalsJ.mapM (parseGlobal name types)
+  let uncheckedIb ← match optField j "unchecked_ib" with
+    | some u => do (← u.getArr?).mapM Json.getStr?
+    | none => pure #[]
   return {
     schema
     zigVersion
@@ -766,6 +772,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     layouts
     globals
     src := parseSrc? j
+    uncheckedIb
   }
 
 def parseFunc (j : Json) : Except String RawFunc := do

@@ -224,12 +224,6 @@ after the `shr_exact`, `shrOverflow`). An out-of-range count is `.illegal` (`shi
   let hi : Int := if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1
   if lo ≤ v ∧ v ≤ hi then pure (.ofInt m v) else throw .overflow
 
-/-- The length of an operand of a multi-operand `for` loop under `@setRuntimeSafety(false)` (a
-`slice_len` the loop does not read otherwise): it must equal the loop's length `bound`. Unequal
-lengths are illegal behaviour that only Sema's check (`forLenMismatch`) catches: `.illegal`. -/
-@[inline] def forLen (len bound : usize) : Result usize :=
-  if len = bound then pure len else throw .illegal
-
 /-- `@truncate`: keep the low `m` bits. -/
 @[inline] def trunc (m : Nat) (a : BitVec n) : BitVec m := a.setWidth m
 

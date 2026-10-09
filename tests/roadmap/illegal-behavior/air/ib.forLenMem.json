@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -35,6 +38,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "ib.forLenMem",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 105
+ },
  "params": [
   0,
   0
@@ -57,7 +65,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 3,
@@ -112,7 +121,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 10
   },
   {
    "id": 9,
@@ -128,7 +138,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 15
   },
   {
    "id": 11,
@@ -162,16 +173,67 @@
   },
   {
    "id": 14,
+   "tag": "cmp_eq",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "inst": 13
+    }
+   ]
+  },
+  {
+   "id": 16,
    "tag": "block",
    "ty": 2,
    "body": [
     {
-     "id": 15,
+     "id": 17,
+     "tag": "cond_br",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 14
+      }
+     ],
+     "then": [
+      {
+       "id": 18,
+       "tag": "br",
+       "ty": 8,
+       "target": 16,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 15,
+       "tag": "unreach",
+       "ty": 8
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 20,
      "tag": "loop",
-     "ty": 7,
+     "ty": 8,
      "body": [
       {
-       "id": 16,
+       "id": 21,
        "tag": "load",
        "ty": 5,
        "args": [
@@ -181,24 +243,24 @@
        ]
       },
       {
-       "id": 17,
+       "id": 22,
        "tag": "block",
        "ty": 2,
        "body": [
         {
-         "id": 18,
+         "id": 23,
          "tag": "bitcast",
-         "ty": 8,
+         "ty": 9,
          "args": [
           {
-           "inst": 16
+           "inst": 21
           }
          ]
         },
         {
-         "id": 19,
+         "id": 24,
          "tag": "bitcast",
-         "ty": 8,
+         "ty": 9,
          "args": [
           {
            "inst": 12
@@ -206,30 +268,30 @@
          ]
         },
         {
-         "id": 20,
+         "id": 25,
          "tag": "cmp_lt",
-         "ty": 9,
+         "ty": 7,
          "args": [
           {
-           "inst": 18
+           "inst": 23
           },
           {
-           "inst": 19
+           "inst": 24
           }
          ]
         },
         {
-         "id": 34,
+         "id": 39,
          "tag": "cond_br",
-         "ty": 7,
+         "ty": 8,
          "args": [
           {
-           "inst": 20
+           "inst": 25
           }
          ],
          "then": [
           {
-           "id": 21,
+           "id": 26,
            "tag": "slice_elem_val",
            "ty": 1,
            "args": [
@@ -237,23 +299,23 @@
              "inst": 9
             },
             {
-             "inst": 16
+             "inst": 21
             }
            ]
           },
           {
-           "id": 22,
+           "id": 27,
            "tag": "dbg_var_val",
            "ty": 2,
            "args": [
             {
-             "inst": 21
+             "inst": 26
             }
            ],
            "name": "x"
           },
           {
-           "id": 23,
+           "id": 28,
            "tag": "slice_elem_val",
            "ty": 1,
            "args": [
@@ -261,29 +323,30 @@
              "inst": 11
             },
             {
-             "inst": 16
+             "inst": 21
             }
            ]
           },
           {
-           "id": 24,
+           "id": 29,
            "tag": "dbg_var_val",
            "ty": 2,
            "args": [
             {
-             "inst": 23
+             "inst": 28
             }
            ],
            "name": "y"
           },
           {
-           "id": 25,
+           "id": 30,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 27
           },
           {
-           "id": 26,
+           "id": 31,
            "tag": "load",
            "ty": 1,
            "args": [
@@ -293,20 +356,7 @@
            ]
           },
           {
-           "id": 27,
-           "tag": "add_wrap",
-           "ty": 1,
-           "args": [
-            {
-             "inst": 21
-            },
-            {
-             "inst": 23
-            }
-           ]
-          },
-          {
-           "id": 28,
+           "id": 32,
            "tag": "add_wrap",
            "ty": 1,
            "args": [
@@ -314,12 +364,25 @@
              "inst": 26
             },
             {
-             "inst": 27
+             "inst": 28
             }
            ]
           },
           {
-           "id": 29,
+           "id": 33,
+           "tag": "add_wrap",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 31
+            },
+            {
+             "inst": 32
+            }
+           ]
+          },
+          {
+           "id": 34,
            "tag": "store",
            "ty": 2,
            "args": [
@@ -327,26 +390,27 @@
              "inst": 3
             },
             {
-             "inst": 28
+             "inst": 33
             }
            ]
           },
           {
-           "id": 30,
+           "id": 35,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 40
           },
           {
-           "id": 31,
+           "id": 36,
            "tag": "dbg_empty_stmt",
            "ty": 2
           },
           {
-           "id": 32,
+           "id": 37,
            "tag": "br",
-           "ty": 7,
-           "target": 17,
+           "ty": 8,
+           "target": 22,
            "args": [
             {
              "ty": 2,
@@ -357,10 +421,10 @@
          ],
          "else": [
           {
-           "id": 33,
+           "id": 38,
            "tag": "br",
-           "ty": 7,
-           "target": 14,
+           "ty": 8,
+           "target": 19,
            "args": [
             {
              "ty": 2,
@@ -373,12 +437,12 @@
        ]
       },
       {
-       "id": 35,
+       "id": 40,
        "tag": "add",
        "ty": 5,
        "args": [
         {
-         "inst": 16
+         "inst": 21
         },
         {
          "ty": 5,
@@ -387,7 +451,7 @@
        ]
       },
       {
-       "id": 36,
+       "id": 41,
        "tag": "store",
        "ty": 2,
        "args": [
@@ -395,28 +459,29 @@
          "inst": 6
         },
         {
-         "inst": 35
+         "inst": 40
         }
        ]
       },
       {
-       "id": 37,
+       "id": 42,
        "tag": "repeat",
-       "ty": 7,
-       "target": 15
+       "ty": 8,
+       "target": 20
       }
      ]
     }
    ]
   },
   {
-   "id": 38,
+   "id": 43,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
-   "id": 39,
+   "id": 44,
    "tag": "load",
    "ty": 1,
    "args": [
@@ -426,18 +491,19 @@
    ]
   },
   {
-   "id": 40,
+   "id": 45,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
-   "id": 41,
+   "id": 46,
    "tag": "ret",
-   "ty": 7,
+   "ty": 8,
    "args": [
     {
-     "inst": 39
+     "inst": 44
     }
    ]
   }
@@ -515,6 +581,11 @@
    "abi_align": 8
   },
   {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
    "k": "noreturn"
   },
   {
@@ -523,11 +594,6 @@
    "bits": 64,
    "abi_size": 8,
    "abi_align": 8
-  },
-  {
-   "k": "bool",
-   "abi_size": 1,
-   "abi_align": 1
   }
  ]
 }

@@ -20,7 +20,7 @@
   ],
   "export_note": "full-mode progress-hint qualifications at these clean revisions exported byte-identical progress.idle AIR",
   "artifacts": {
-    "air/progress.idle.json": "6396951d9743b43d1ba1c2f49943b1c504fd74204edc83533ff57ee319b54d62"
+    "air/progress.idle.json": "32cc3b0a7d294eed145185c745786c3bb0e6bad8f4df258eec955d31dc12202e"
   },
   "translation": {
     "command": "air2lean tests/roadmap/idle-loops/air -o IdleLoop/Gen.lean --namespace IdleLoop --prefix progress.",

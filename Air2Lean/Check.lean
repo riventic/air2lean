@@ -2389,6 +2389,19 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
         fail "`@fieldParentPtr` from a byte pointer to a packed struct field"
     | _ => pure ()
 
+/-- With runtime safety off, Sema does not check that the operands of a multi-operand `for` have
+equal lengths, and the AIR need not hold any length but the loop's own bound (a range `0..n`
+operand has no instruction): the mismatch is unchecked illegal behaviour. The patched compiler
+lowers it to `if (!ok) unreachable` and lists `for_len` in `unchecked_ib`
+(`docs/illegal-behavior.md` row 27). An export without that fact may hide the mismatch in any
+loop, so a function with a loop is rejected. -/
+def checkForLenFact (f : Func) (insts : Array Inst) : Except String Unit := do
+  unless f.uncheckedIb.contains "for_len" do
+    if let some i := insts.find? (fun i => i.op matches .loop _) then
+      throw s!"{f.name}: inst {i.id}: a loop in an export without the `for` length fact \
+        (`unchecked_ib` lacks \"for_len\"): with runtime safety off it may hide an unequal \
+        `for` operand length; re-export with a compiler built from zig-patch"
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
@@ -2403,6 +2416,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
+  checkForLenFact f insts
   -- The 32-bit pointer model (`ZigLean/Mem/Width.lean`) parameterizes pointers, slices,
   -- `usize` and allocation; the ops below remain 64-bit only.
   let ptrBytes := ptrBytesOf f.layouts
@@ -3520,6 +3534,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
         (checkMemTy f.name f.types f.layouts 0 id f.errorSetBits)
   let insts := index.insts
+  log := log.record { (checkDiagnostic file f .instructionFailure) with
+    category := .unsupportedSemantics } (checkForLenFact f insts)
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts

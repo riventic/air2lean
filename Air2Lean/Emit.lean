@@ -1722,27 +1722,6 @@ def FCtx.isReferenced (fc : FCtx) (id : InstId) : Bool :=
   | some uses => uses.contains id
   | none => fc.allInsts.any fun i => (fc.directVals i.op).contains (.inst id)
 
-/-- A multi-operand `for` loop without safety: Sema still computes each operand's `slice_len`,
-but only the loop's own length bounds the loop (`cmp_lt(bitcast(i), bitcast(bound))`). A
-`slice_len` that nothing reads, followed by such a loop, is an operand whose length must equal
-`bound` (`Zig.forLen`). With safety, Sema's `forLenMismatch` check reads every length. -/
-def FCtx.forLenBound? (fc : FCtx) (id : InstId) : Option Val := do
-  guard (!fc.isReferenced id)
-  let after := fc.allInsts.filter (·.id > id)
-  let cmp ← after.findSome? fun i => match i.op with
-    | .cmp .lt (.inst idx) b => match fc.opOf? (.inst idx), b with
-      | some (.bitcast _), .inst _ => match fc.opOf? b with
-        | some (.bitcast bound) => some bound
-        | _ => none
-      -- A comptime-known first length (an array operand).
-      | some (.bitcast _), .int .. => some b
-      | _, _ => none
-    | _ => none
-  -- The bound must already be in scope at the `slice_len`.
-  let inScope : Bool := match cmp with | .inst b => decide (b < id) | _ => true
-  guard inScope
-  pure cmp
-
 /-- `id`'s parameter index if the instruction defining it is an `arg`, else `none`. -/
 def FCtx.argIndexOf (fc : FCtx) (id : InstId) : Option Nat :=
   match fc.allInsts.find? (·.id == id) with
@@ -2526,11 +2505,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
-    let len := if fc.mem then s!"{rv s}.len"
-      else s!"({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
-    let expr := match fc.forLenBound? inst.id with
-      | some bound => fc.liftR s!"Zig.forLen {len} {rv bound}"
-      | none => s!"pure {len}"
+    let expr := if fc.mem then s!"pure {rv s}.len"
+      else s!"pure ({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them, after

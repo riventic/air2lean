@@ -19,6 +19,7 @@ const Value = @import("../Value.zig");
 const Type = @import("../Type.zig");
 const Air = @import("../Air.zig");
 const InternPool = @import("../InternPool.zig");
+const Sema = @import("../Sema.zig");
 const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 
@@ -676,6 +677,14 @@ const W = struct {
         try w.j.write(build_options.version);
         try w.field("target_endian");
         try w.j.write(@tagName(zcu.getTarget().cpu.arch.endian()));
+        // The illegal behaviours that the patched Sema (`<version>/hook.patch`) lowers to `unreach`
+        // where it has no safety check; absent without that patch.
+        if (@hasDecl(Sema, "air_json_unchecked_ib")) {
+            try w.field("unchecked_ib");
+            try w.j.beginArray();
+            for (Sema.air_json_unchecked_ib) |name| try w.j.write(name);
+            try w.j.endArray();
+        }
         try w.field("profile");
         try w.writeProfile(owner_nav);
         try w.field("name");

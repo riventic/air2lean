@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -35,6 +38,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "ib.parentOf",
+ "src": {
+  "file": "ib.zig",
+  "module": "ib",
+  "decl_line": 137
+ },
  "params": [
   0
  ],
@@ -50,7 +58,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 2,
@@ -77,7 +86,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,

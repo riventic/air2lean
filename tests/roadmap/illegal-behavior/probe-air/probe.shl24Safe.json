@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -35,6 +38,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "probe.shl24Safe",
+ "src": {
+  "file": "probe.zig",
+  "module": "probe",
+  "decl_line": 41
+ },
  "params": [
   0,
   1
@@ -57,7 +65,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 14
   },
   {
    "id": 3,
@@ -139,7 +148,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 11,

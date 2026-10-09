@@ -12,9 +12,9 @@
   "qualification": "Fresh export of device_effects.zig (filter device-filter) with the patched 0.16.0 compiler (aarch64-macos host build of zig-patch 5715fa4a); check-device.sh --export re-exports and requires the same translation. The 0.15.2 and 0.14.1 exports translate to the same Gen.lean except for the profile header. Re-export and refresh this record when device_effects.zig changes.",
   "air_sha256": {
     "device_effects.clearStatus.json": "57743cbcb3021164292cbf022685ac5f9486d49d317f6b0f40b9a4e4dad65f43",
-    "device_effects.putc.json": "ae110cb065b390d78e4ffc1cdc159704e165bc80ed8be6a6c2fa040d8db75398",
+    "device_effects.putc.json": "55634be5a1d450fe74175e6c9267702e2916c7af1c9a89b8d9044b5836047ea7",
     "device_effects.sendThenStatus.json": "e4b0c60b0a339db75e45306c342a69d43566d7e17f696351ad34b521f0ce4c11",
     "device_effects.statusTwice.json": "5149973494e98bf9e3ec68c8d21194c94792486cee66fe024060be66f211f2d1",
-    "device_effects.writeAll.json": "97c64cb52e81b69869ee53fbe7e612642a073effff580c92c1fffc08ff8ea4d6"
+    "device_effects.writeAll.json": "b4418d6a103072578fd53a6bd1506602a1beca0ac03b498b550685b054344d2d"
   }
 }
