@@ -10,12 +10,12 @@ compares them with a recorded output (`native/<arch>-<os>-<version>.txt`).
 
 A configuration is `--error-limit` plus the total number of errors in the compilation. The probe
 names that many, minus the errors the compiler's own start code names (`hidden`: none in 0.15.2
-and 0.16.0, 12 in 0.14.1, measured first); a configuration smaller than that is `skipped`. Observed per configuration: whether it compiles, the probe's report
+and 0.16.0, 12 in 0.14.1, measured first); a configuration smaller than that is `skipped`.
+Observed per configuration: whether it compiles, the probe's report
 (encoding, error-union layout), the `@errorFromInt` boundary (a panic is a signal exit of a
 `probe from C` subprocess) and the names of codes 1..N (all of them up to 1000 errors, else the
 first and last three).
 """
-import os
 import subprocess
 import sys
 import tempfile
@@ -105,9 +105,9 @@ def hidden_errors(zig, work):
 
 def observe(zig, name, limit, total, hidden, work):
     shown = "default" if limit is None else limit
-    head = f"config {name} limit {shown} total {total} compile"
+    head = f"config {name} limit {shown} total {total}"
     if total - hidden < 1:
-        return [head.replace(" compile", "") + " skipped"]
+        return [head + " skipped"]
     d = Path(work) / name
     d.mkdir()
     (d / "errs.zig").write_text(errs_zig(total - hidden))
@@ -116,8 +116,8 @@ def observe(zig, name, limit, total, hidden, work):
     if r.returncode != 0:
         if "error:" not in r.stderr:
             raise SystemExit(f"{name}: compiler failed without a diagnostic:\n{r.stderr}")
-        return [head + " fail"]
-    out = [head + " ok"]
+        return [head + " compile fail"]
+    out = [head + " compile ok"]
     rep = run([str(exe)])
     if rep.returncode != 0:
         raise SystemExit(f"{name}: probe failed ({rep.returncode}):\n{rep.stderr}")

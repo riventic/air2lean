@@ -315,6 +315,13 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
+    # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
+    'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits8': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits10': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits16': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits17': 'tests/roadmap/error-width/provenance.json',
+    'tests/roadmap/error-width/air-fresh/{version}/bits32': 'tests/roadmap/error-width/provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',

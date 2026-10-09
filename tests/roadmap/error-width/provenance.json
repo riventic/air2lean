@@ -147,7 +147,7 @@
   "exporter_sha256": "c470a8c9041176fd3fde7b74fb4edcbe32e0459ca37191dbae83fde68521aa03",
   "native": {
     "command": "<stock zig> build-exe -lc -OReleaseSafe -fno-error-tracing [--error-limit <limit>] probe.zig, one build per configuration (native.py)",
-    "driver_sha256": "7c0899e9912b5ffd2c94f1faec0dc201f9bef717990b1508ed23570ed3c5cdf5",
+    "driver_sha256": "6833b4d3f64756148818439312b09d5a452cae7736a2f26b4b05bc80cf80f9c0",
     "observations_sha256": {
       "aarch64-macos-0.14.1.txt": "029f3d2f233f9691236c104fd24e19b08bc3cbd2876f3c9841598ec8d4a0e08c",
       "aarch64-macos-0.15.2.txt": "db3f08676848fe4fab854b0c349a835145df60bbd98d0fe5390a6380a211c527",
