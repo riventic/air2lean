@@ -339,6 +339,8 @@ NON_COMPILER_AIR = {
     'tests/roadmap/air-semantics/fixtures': 'hand-written caller of the golden basic.scale (docs/air-semantics.md)',
     'tests/roadmap/zig017/air': 'synthetic 0.17.0 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
     'tests/roadmap/zig017/reject': 'synthetic 0.17.0 rejection inputs (tests/roadmap/zig017/test_cli.py)',
+    'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
+    'tests/roadmap/illegal-behavior': 'illegal-behaviour fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
 }
 
 

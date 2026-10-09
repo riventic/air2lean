@@ -3,3 +3,6 @@ op32 12
 op64 12
 # f80 invalid/pseudo encodings: 65 deterministic rows + 308 unchanged random rows.
 op80 373
+# Inexact @divExact quotients that are not NaN: illegal behaviour that ReleaseSafe does not check
+# (docs/illegal-behavior.md row 11); a NaN quotient stays the safety panic.
+divExact64 123

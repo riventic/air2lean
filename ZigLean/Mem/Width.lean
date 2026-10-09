@@ -182,6 +182,13 @@ def memmoveOf {n : Nat} (size dstAlign srcAlign : Nat) (dst src : Ptr) (k : BitV
   let bs ← loadBytes src (k.toNat * size) srcAlign
   storeBytes dst dstAlign bs
 
+/-- `memcpy` (`Zig.memcpy`) with item counts of `n` bits: the counts must agree and the ranges
+must not overlap, else `.illegal` (`docs/illegal-behavior.md`). -/
+def memcpyOf {n : Nat} (size dstAlign srcAlign : Nat) (dst src : Ptr) (k m : BitVec n) :
+    MemM Unit :=
+  if k ≠ m || dst.overlaps src (k.toNat * size) then throw .illegal
+  else memmoveOf size dstAlign srcAlign dst src k
+
 /-- `readSlice` of a slice with a length of `n` bits. -/
 def readSliceOf (α : Type) [Enc α] {n : Nat} (align : Nat) (s : SliceOf n) : MemM (Array α) := do
   if s.len.toNat = 0 then return #[]

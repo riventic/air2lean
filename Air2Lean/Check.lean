@@ -480,6 +480,34 @@ def ptrChild (types : Array Ty) (id : TyId) : Option TyId :=
   | some (.ptr _ _ c) => some c
   | _ => none
 
+/-- The pointee of a pointer or of an optional pointer. -/
+def ptrOrOptChild (types : Array Ty) (id : TyId) : Option TyId :=
+  match types[id]? with
+  | some (.optional child) => ptrChild types child
+  | _ => ptrChild types id
+
+/-- The `slice` results whose sentinel a Sema check compares (`slice_elem_val` or
+`ptr_elem_val` of the slice, in a `cmp_eq` whose `cond_br` calls `sentinelMismatch`). Only
+these sentinel slicings may lack an exported sentinel value: the check panics before the model
+needs one. -/
+def sentinelCheckedSlices (insts : Array Inst) : Array InstId := Id.run do
+  let opOf (v : Val) : Option Op := match v with
+    | .inst id => (insts.find? (·.id == id)).map (·.op)
+    | _ => none
+  let itemOf (v : Val) : Option InstId := match opOf v with
+    | some (.sliceElemVal (.inst s) _) | some (.ptrElemVal (.inst s) _) => some s
+    | _ => none
+  let mut out := #[]
+  for i in insts do
+    if let .condBr c _ elseBody := i.op then
+      let mismatch := elseBody.any fun j => match j.op with
+        | .call (.func name ..) _ => panicMember? name == some "sentinelMismatch"
+        | _ => false
+      if mismatch then
+        if let some (.cmp .eq a b) := opOf c then
+          for s in [itemOf a, itemOf b].filterMap id do out := out.push s
+  return out
+
 structure CheckCtx where
   fnName : String
   types : Array Ty
@@ -505,6 +533,8 @@ structure CheckCtx where
   device : Option DeviceContract := none
   /-- `Func.targetArch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
   targetArch : String := ""
+  /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
+  sentinelChecked : Array InstId := #[]
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -812,7 +842,7 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
     | .store p _ | .memset p _ | .setUnionTag p _ => #[(p, "store")]
     | .atomicLoad p _ | .atomicStore p .. | .atomicRmw _ _ p _ | .cmpxchg _ p .. =>
       #[(p, "atomic access")]
-    | .memcpy dst src => #[(dst, "store"), (src, "load")]
+    | .memcpy _ dst src => #[(dst, "store"), (src, "load")]
     | .isNullPtr _ p | .isErrPtr _ p | .errCodePtr p | .tryPtr p _ => #[(p, "load")]
     | .optPayloadPtr true p | .errPayloadPtr true p => #[(p, "store")]
     | .asm _ _ _ outputs _ => outputs.filterMap fun o => o.ref.map (·, "asm output store")
@@ -962,6 +992,19 @@ def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool �
     | _ => none
   | _ => none
 
+/-- Sentinel slicing (a `slice` of a type with a sentinel) needs the sentinel value for its own
+check (`Zig.checkSentinelByte`), which the export records only for a `u8` pointer on 0.16.0.
+Without it, only a Sema `sentinelMismatch` check can stand in (`sentinelCheckedSlices`);
+otherwise the sentinel is never checked, so the function is rejected (`docs/illegal-behavior.md`
+row 24). -/
+def CheckCtx.checkSentinelSlice (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Unit := do
+  if let .slice .. := inst.op then
+    if let some l := cx.layouts[inst.ty]? then
+      if l.sentinel && l.sentinelByte.isNone && !cx.sentinelChecked.contains inst.id then
+        throw s!"{cx.fnName}: near line {line}: sentinel slicing without a safety check needs the \
+          exported sentinel value (only `u8` sentinels on Zig 0.16.0 have one); slice without the \
+          sentinel or keep runtime safety on"
+
 /-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
 def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
 
@@ -1002,6 +1045,7 @@ mutual
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
   cx.checkBitPtrSource line inst.ty inst.op
+  cx.checkSentinelSlice line inst
   let line ← checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
   -- Inline asm: A01's operand/effect-contract checks (in `checkOp`, with specific messages) come
   -- first, then the L13 allowlist.
@@ -1100,10 +1144,6 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
       if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
         cx.fail line "an opaque bitcast involving optional, aggregate or error-union error storage is outside the finite symbolic error-storage fragment"
-      let pointerChild (id : TyId) : Option TyId :=
-        match cx.types[id]? with
-        | some (.optional child) => ptrChild cx.types child
-        | _ => ptrChild cx.types id
       -- Changing only const qualification preserves the decoder and pointer
       -- representation even when the unchanged pointee graph is recursive.
       let qualifierPointer (id : TyId) : Option (Bool × TyId × String × Bool × TyId) := do
@@ -1138,7 +1178,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- other block, L11).
       let castCapability (t : TyId) : Option Bool :=
         if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
-      match pointerChild aty, pointerChild ty with
+      match ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty with
       | some source, some target =>
         unless qualifierOnly || optionalWrapOnly do
           let some sourceCap := castCapability source
@@ -1165,6 +1205,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
       cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
+    -- A vector has no defined byte layout, so a `@ptrCast` between it and another pointee is
+    -- illegal behaviour that no safety check catches (langref §Vectors); the model would read
+    -- its bytes as an array (`docs/illegal-behavior.md`).
+    let pointee (t : Option TyId) : Option TyId := t.bind (ptrOrOptChild cx.types)
+    if (isVector (pointee (some ty)) || isVector (pointee sourceTy)) &&
+        pointee sourceTy != pointee (some ty) then
+      cx.fail line "a pointer cast between a vector and another pointee type is illegal behaviour \
+        (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
     -- normalize to a plain `bitcast`; `Emit.lean` picks the ptr<->int direction from the operand
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
@@ -1293,7 +1341,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       | cx.fail line "pointer arithmetic result is not a pointer"
     cx.knownSize line child
     pure line
-  | .memcpy dst src =>
+  | .memcpy _ dst src =>
     cx.rejectNullableProjection line dst
     cx.rejectNullableProjection line src
     let _ ← cx.memPtrTy line src
@@ -2104,7 +2152,7 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
   | .call _ args =>
     for v in args do
       if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
-  | .memcpy dst src =>
+  | .memcpy _ dst src =>
     for v in #[dst, src] do
       if ((aliasValueTy? insts v).map (fun t => carriesPointer f t)).getD false && dependsOnErrorGlobal f insts v && !immutableOrdinaryNumericValue f insts v then reject
   | .memset p _ =>
@@ -2413,7 +2461,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
-                         zigVersion := f.zigVersion, device, targetArch := f.targetArch }
+                         zigVersion := f.zigVersion, device, targetArch := f.targetArch,
+                         sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   pure ()
@@ -3430,7 +3479,7 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | _ =>
       if typeCheck.toOption.isSome && volatileCheck.toOption.isSome &&
           packedCheck.toOption.isSome && paddedCheck.toOption.isSome then
-        let opCheck := checkOp cx line i.ty i.op
+        let opCheck := do cx.checkSentinelSlice line i; checkOp cx line i.ty i.op
         log := log.record (checkDiagnostic file f .instructionFailure anchor) opCheck
         -- L13: inline asm that passes A01's operand checks but is off the reviewed allowlist and
         -- not a declared device event has its own stable code.
@@ -3520,7 +3569,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     localPaths := localPlacePaths f.types f.layouts insts
     zigVersion := f.zigVersion
     device
-    targetArch := f.targetArch }
+    targetArch := f.targetArch
+    sentinelChecked := sentinelCheckedSlices insts }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/

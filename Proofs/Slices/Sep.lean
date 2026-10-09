@@ -51,11 +51,13 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
     rw [Nat.mod_eq_of_lt (by omega)]; omega
   have hsl : (s.toNat + n.toNat) % 18446744073709551616 ≤ sl.len.toNat := by
     rw [Nat.mod_eq_of_lt (by omega)]; omega
+  have hdc : d.toNat + n.toNat ≤ sl.len.toNat := by omega
+  have hsc : s.toNat + n.toNat ≤ sl.len.toNat := by omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
   rw [e4] at hr
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
   simp (config := { maxSteps := 1000000 }) [copyWithin, zig_unfold, Zig.add, Zig.le, BitVec.ule,
-    hdo, hso, hdl, hsl, hr]
+    checkSliceEnd, hdc, hsc, hdo, hso, hdl, hsl, hr]
 
 /-- `@memset` of a whole slice: every item becomes `v`. -/
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :
@@ -93,7 +95,7 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
   by_cases hlt : s.i.toNat < s.j.toNat
   · have hio : Zig.add false s.i 1 = pure (s.i + 1) := by simp [Zig.add, BitVec.uaddOverflow]; omega
     have hjo : Zig.sub false s.j 1 = pure (s.j - 1) := by simp [Zig.sub, BitVec.usubOverflow]; omega
-    sep_unfold [reverse.loop15, hlt,
+    sep_unfold [reverse.loop15, hlt, Zig.checkIndex,
       show s.i.toNat < sl.len.toNat by omega, show s.j.toNat < sl.len.toNat by omega]
     sep_steps [hio, hjo]
     sep_ret

@@ -99,23 +99,25 @@ def Float.ofInt (fmt : FloatFmt) (s : Bool) {n : Nat} (x : BitVec n) : Float fmt
   Float.roundRat fmt (v < 0) (v : Rat)
 
 /-- `@floatToInt`: truncate toward zero into an `n`-bit integer (signed per `s`). `safe`
-matches Zig's runtime safety check, i.e. whether the truncated value (incl. NaN, ±inf) is
-out of the target type's range: `x ≤ floor(min-1) ∨ x ≥ ceil(max+1)` is, for a
-truncate-toward-zero result, exactly "the truncated value is outside `[min, max]`", so this
-checks that range directly instead of re-deriving it from the pre-truncation value. Out of
-range (or NaN): `.overflow` if `safe`, `.unspecified` otherwise. -/
+matches Zig's runtime safety check, i.e. whether the truncated value (incl. ±inf) is out of
+the target type's range: `x ≤ floor(min-1) ∨ x ≥ ceil(max+1)` is, for a truncate-toward-zero
+result, exactly "the truncated value is outside `[min, max]`", so this checks that range
+directly instead of re-deriving it from the pre-truncation value. Out of range: `.overflow`
+if `safe`, `.illegal` otherwise. A NaN is out of range too, but both comparisons of the check
+are false for it, so it is unchecked illegal behaviour: `.illegal` either way
+(`docs/illegal-behavior.md`). -/
 def Float.toInt {fmt : FloatFmt} (s : Bool) (n : Nat) (safe : Bool) (x : Float fmt) :
     Result (BitVec n) :=
   match x.classify with
-  | .nan => throw .unspecified
-  | .inf _ => if safe then throw .overflow else throw .unspecified
+  | .nan => throw .illegal
+  | .inf _ => if safe then throw .overflow else throw .illegal
   | .finite sn m e =>
     let mag : Nat := if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat
     let tv : Int := if sn then -(mag : Int) else (mag : Int)
     let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
     let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
     if tv < lo || tv > hi then
-      if safe then throw .overflow else throw .unspecified
+      if safe then throw .overflow else throw .illegal
     else pure (.ofInt n tv)
 
 /-! ## Arithmetic
@@ -315,6 +317,32 @@ def Float.divTrunc {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.trunc
 
 /-- `@divFloor`: division, rounded once, then floored. -/
 def Float.divFloor {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.floor (Float.div a b)
+
+/-! ## `@divExact`
+
+`@divExact(a, b)` is illegal behaviour unless `@divTrunc(a, b) * b == a` (langref §`@divExact`).
+With safety on, Sema lowers it to `div_trunc`, then checks `floor(r) == r`: that panics
+(`exactDivisionRemainder`) only for a NaN quotient, so ReleaseSafe returns the truncated
+quotient of every other inexact division, and ReleaseFast/ReleaseSmall the plain quotient
+(`div_exact`). The model makes those inputs `.illegal` (`docs/illegal-behavior.md`). `q` is the
+quotient `a / b` that the build computes (`Float.div`, or a compiler-rt variant). -/
+
+/-- `q = a / b` is exact: a whole number (±∞ included) with `q * b == a`. A zero `b` never is:
+`q` is ±∞ or NaN, and `±∞ * 0` is NaN. For a whole `q`, `@divTrunc(a, b) = q`, so this is the
+langref condition; a fractional `q` is illegal on either reading (`div_exact`'s "no remainder"). -/
+def Float.exactQuotient {fmt : FloatFmt} (a b q : Float fmt) : Bool :=
+  Float.eq (Float.trunc q) q && Float.eq (Float.mul q b) a
+
+/-- `@divExact` with safety (`div_trunc`): the truncated quotient. A NaN quotient passes through
+so that the generated `floor` check panics as ReleaseSafe does; any other inexact quotient is
+`.illegal`. -/
+def Float.divExactTrunc {fmt : FloatFmt} (a b q : Float fmt) : Result (Float fmt) :=
+  if q.isNaN || Float.exactQuotient a b q then pure (Float.trunc q) else throw .illegal
+
+/-- `@divExact` without safety (`div_exact`): the quotient; every inexact one, NaN included, is
+`.illegal`. -/
+def Float.divExactChk {fmt : FloatFmt} (a b q : Float fmt) : Result (Float fmt) :=
+  if Float.exactQuotient a b q then pure q else throw .illegal
 
 /-- `@divCeil` (Zig 0.17.0): division, rounded once, then ceiled (LLVM backend: `fdiv`, `ceil`). -/
 def Float.divCeil {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.ceil (Float.div a b)

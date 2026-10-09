@@ -188,10 +188,11 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | `cmp_lt`, `cmp_lte`, `cmp_gt`, `cmp_gte` on pointers | `Zig.ptrLt`, `Zig.ptrLe`: the order of the addresses (`Zig.ptrAddr`) |
 | `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
 | `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
-| `ptr_elem_val`, `slice_elem_val` | `Zig.load T align (p.elem size i)` (`align`: the pointer's `align(N)`, at most `T`'s alignment) |
-| `slice`, `slice_ptr`, `slice_len`, `array_to_slice` | `⟨p, len⟩`, `s.ptr`, `s.len`, `⟨p, N⟩` |
+| `ptr_elem_val`, `slice_elem_val` | `Zig.load T align (p.elem size i)` (`align`: the pointer's `align(N)`, at most `T`'s alignment). `slice_elem_val` first runs `Zig.checkIndex s i`: an index at or past the length is `.illegal` (`Zig.checkSentinelIndex` for `[:s]T`, whose sentinel item at the length is readable) |
+| `slice`, `slice_ptr`, `slice_len`, `array_to_slice` | `⟨p, len⟩`, `s.ptr`, `s.len`, `⟨p, N⟩`. A `slice` of a slice or an array pointer first runs `Zig.checkSliceEnd` (end past the operand's length: `.illegal`), and a `u8` sentinel slicing without Sema's check runs `Zig.checkSentinelByte`. A `slice_len` that nothing reads before a `for` loop is `Zig.forLen len bound` (unequal lengths: `.illegal`) ([illegal-behavior.md](illegal-behavior.md)) |
 | `memset`, `memset_safe` | `Zig.memset (α := T) align p n (some v)`; `none` for `undefined` |
-| `memcpy`, `memmove` | `Zig.memmove size dstAlign srcAlign dst src n` (all bytes are read before the first write) |
+| `memmove` | `Zig.memmove size dstAlign srcAlign dst src n` (all bytes are read before the first write) |
+| `memcpy` | `Zig.memcpy size dstAlign srcAlign dst src n m` (`m`: the source's item count, `n` if it has none): unequal counts or overlapping ranges are `.illegal`, else `Zig.memmove` |
 | `tag_name` | `E.tagName e` (below) |
 | `error_name` | `errorNameOf e` (below) |
 | `call` of `mem.Allocator.create`, `alloc`, `free`, … | `Zig.Allocator.create a size align`, … ([std-models.md](std-models.md)) |
@@ -327,9 +328,9 @@ A detached thread is outside the subset. `tests/roadmap/thread-locals` has the p
 | Zig | AIR | Lean |
 |---|---|---|
 | `@intFromPtr(p)` | `bitcast` pointer → integer | `Zig.ptrAddr p` (the block's address plus the offset) |
-| `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
-| `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
-| `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`; local place: remove the proven terminal struct field |
+| `@ptrFromInt(a)` | `bitcast` integer → pointer, after the `castToNull` and `incorrectAlignment` checks | `Zig.checkAddr align nonNull a` (address zero for a type without `allowzero`, or a misaligned address: `.illegal`), then `Zig.ptrFromAddr a`: the block whose bytes contain `a`, else `⟨none, a⟩` |
+| `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. A cast to a stricter alignment first runs `Zig.checkAlign align p` (misaligned: `.illegal`). A cast between a vector and another pointee is rejected |
+| `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`, after `Zig.checkParent` for a parent without a defined layout (no live, aligned parent object there: `.illegal`); local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
 | `@bitCast` with an array, vector or enum side (Zig 0.17.0 only: logical bit order, [bitcast-semantics.md](bitcast-semantics.md)) | `bit_cast`/`bit_cast_safe` (canonical `bitcast`) | `Zig.BitCast.ofLanes`/`toLanes`/`ofBools`/`toBools`, enum tag bits with `Zig.enumOf`; ≤0.16 rejects these aggregate casts |
 | `@bitCast` of an array, `extern` struct or `extern` union (Zig ≤0.16) | `bitcast` with one on either side | `Zig.reprCast T x`: the memory bytes of `x`, padding undefined, decoded as `T` (`docs/aggregate-casts.md`) |
@@ -451,7 +452,7 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
 
 ## Panics
 
-`Zig.Error` has 9 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `deadlock` (every thread that has not ended waits, std-models.md §Thread model), `unsupportedTimer` (a clock or timed wait the model has no semantics for: `time.Timer.start`/`.read` and `Thread.Futex.timedWait` emit `Zig.callRC (throw Zig.Error.unsupportedTimer)`; premises.md TMR-01). `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, `@intFromFloat` without a safety check out of range, an `undef` byte in a loaded value). `illegal` = illegal behaviour that `ReleaseSafe` does not check (§Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) and `unreach` map directly; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
+`Zig.Error` has 10 constructors: `overflow`, `outOfBounds`, `divByZero`, `unreachable`, `panic`, `unspecified`, `illegal`, `deadlock` (every thread that has not ended waits, std-models.md §Thread model), `unsupportedTimer` (a clock or timed wait the model has no semantics for: `time.Timer.start`/`.read` and `Thread.Futex.timedWait` emit `Zig.callRC (throw Zig.Error.unsupportedTimer)`; premises.md TMR-01), `trap` (an allowlisted inline-asm instruction faults on its input, `Zig.asmTrap`; premises.md ASM-04). `unspecified` = Zig leaves the result open and the model does not choose one (the bits of a NaN, an `undef` byte in a loaded value). `illegal` = illegal behaviour that no safety check before the op catches: every op's model checks its own precondition ([illegal-behavior.md](illegal-behavior.md); §Memory: an access to a dead block, out of bounds or misaligned; a double free; `@rem`/`@mod` of `minInt` by `-1`, where x86_64's `idiv` traps; an inexact float `@divExact`; `@intFromFloat` of a NaN). Checked arithmetic (`add_safe`/`sub_safe`/`mul_safe`) maps directly. A bare `unreach` (no panic call before it) is `unreachable` without its check: `.illegal`; a `call` to a noreturn function (AIR's `func` field, e.g. `debug.FullPanic((function 'defaultPanic')).outOfBounds`) is a Zig std lib panic-handler function named by its trailing `.`-segment — `Air2Lean/Air/Op.lean`'s `panicErrorFor?` maps that segment to a constructor, and `Check.lean` rejects a noreturn callee outside the table:
 
 | segment | constructor |
 |---|---|

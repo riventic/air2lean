@@ -407,7 +407,7 @@ def align4 (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
       else (do
         throw .panic)) : Zig.MM align4Locals align4Exit) with
     | .br4 => (do
-      let i9 ← pure (p0)
+      let i9 ← Zig.callM (Zig.checkAlign 4 p0 >>= fun _ => pure p0)
       pure (.ret i9))
     | e => pure e) : Zig.MM align4Locals align4Exit).run' (default : align4Locals)
   match e with
@@ -1049,7 +1049,7 @@ inductive parentOfXExit where
 
 def parentOfX (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add (-(0 : Int)))
+    let i1 ← Zig.callM (Zig.checkParent 8 4 (p0.add (-(0 : Int))) >>= fun _ => pure (p0.add (-(0 : Int))))
     pure (.ret i1)) : Zig.MM parentOfXLocals parentOfXExit).run' (default : parentOfXLocals)
   match e with
   | .ret v => pure v
@@ -1062,7 +1062,7 @@ inductive parentOfYExit where
 
 def parentOfY (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add (-(4 : Int)))
+    let i1 ← Zig.callM (Zig.checkParent 8 4 (p0.add (-(4 : Int))) >>= fun _ => pure (p0.add (-(4 : Int))))
     pure (.ret i1)) : Zig.MM parentOfYLocals parentOfYExit).run' (default : parentOfYLocals)
   match e with
   | .ret v => pure v
@@ -1092,7 +1092,7 @@ def ptrFromAddr (p0 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
         else (do
           throw .panic)) : Zig.MM ptrFromAddrLocals ptrFromAddrExit) with
       | .br9 => (do
-        let i14 ← Zig.callM (Zig.ptrFromAddr (p0).toNat)
+        let i14 ← Zig.callM (Zig.checkAddr 4 true (p0).toNat >>= fun _ => Zig.ptrFromAddr (p0).toNat)
         pure (.ret i14))
       | e => pure e)
     | e => pure e) : Zig.MM ptrFromAddrLocals ptrFromAddrExit).run' (default : ptrFromAddrLocals)
@@ -1126,7 +1126,7 @@ def ptrRoundTrip (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
         else (do
           throw .panic)) : Zig.MM ptrRoundTripLocals ptrRoundTripExit) with
       | .br10 => (do
-        let i15 ← Zig.callM (Zig.ptrFromAddr (i1).toNat)
+        let i15 ← Zig.callM (Zig.checkAddr 4 true (i1).toNat >>= fun _ => Zig.ptrFromAddr (i1).toNat)
         pure (.ret i15))
       | e => pure e)
     | e => pure e) : Zig.MM ptrRoundTripLocals ptrRoundTripExit).run' (default : ptrRoundTripLocals)

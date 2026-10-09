@@ -272,7 +272,7 @@ theorem toInt_of_finite {s : Bool} {n : Nat} {safe : Bool} {sn : Bool} {m : Nat}
       let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
       let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
       if tv < lo || tv > hi then
-        if safe then throw .overflow else throw .unspecified
+        if safe then throw .overflow else throw .illegal
       else pure (BitVec.ofInt n tv) := by
   unfold Float.toInt
   rw [hx]
@@ -374,7 +374,7 @@ theorem toInt_of_toRat {s : Bool} {n : Nat} {safe : Bool} {x : Float fmt} {q : R
       let lo : Int := if s then -(2 ^ (n - 1) : Int) else 0
       let hi : Int := if s then (2 ^ (n - 1) : Int) - 1 else (2 ^ n : Int) - 1
       if truncRat q < lo || truncRat q > hi then
-        if safe then throw .overflow else throw .unspecified
+        if safe then throw .overflow else throw .illegal
       else pure (BitVec.ofInt n (truncRat q)) := by
   obtain ⟨sn, m, e, hclass, hq⟩ := exists_finite_of_toRat? hx
   have htv : (if sn then -((if e ≥ 0 then m * 2 ^ e.toNat else m / 2 ^ (-e).toNat : Nat) : Int)
