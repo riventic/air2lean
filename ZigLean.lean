@@ -1,5 +1,6 @@
 import ZigLean.Basic
 import ZigLean.Bit
+import ZigLean.BitCast
 import ZigLean.Permutation
 import ZigLean.Conc
 import ZigLean.Float
@@ -13,5 +14,6 @@ import ZigLean.Simp
 import ZigLean.Union
 import ZigLean.Vec
 import ZigLean.External
+import ZigLean.VersionGate
 import ZigLean.External.Callback
 import ZigLean.Asm

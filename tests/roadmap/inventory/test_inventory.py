@@ -362,6 +362,15 @@ end
             self.assertIn('Inventory stale', stale.stderr)
             missing = subprocess.run(command + ['check', '--version', 'synthetic', '--source', str(source/'missing'), '--inventory', str(snapshot)], capture_output=True, text=True)
             self.assertEqual(missing.returncode, 2, missing.stderr)
+            # Zig 0.17 moved Type to lib/std/lang.zig; with neither file the inventory fails closed.
+            (source/'lib/std/builtin.zig').rename(source/'lib/std/lang.zig')
+            lang_universe, lang_fingerprints = coverage.compiler_inventory(source)
+            self.assertEqual(lang_universe['types'], ['int', 'struct'])
+            self.assertIn('lib/std/lang.zig', lang_fingerprints)
+            self.assertNotIn('lib/std/builtin.zig', lang_fingerprints)
+            (source/'lib/std/lang.zig').unlink()
+            with self.assertRaises(OSError): coverage.compiler_inventory(source)
+            (source/'lib/std/builtin.zig').write_text('pub const Type = union(enum) { int: Int, @"struct": Struct, };')
             old_fingerprint = fingerprints['src/InternPool.zig']
             with (source/'src/InternPool.zig').open('a') as f: f.write('\n// changed layout assumption\n')
             _, new_fingerprints = coverage.compiler_inventory(source)

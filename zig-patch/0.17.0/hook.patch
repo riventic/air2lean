@@ -1,0 +1,10 @@
+--- zig-0.17.0-pristine/src/Zcu/PerThread.zig
++++ zig-0.17.0/src/Zcu/PerThread.zig
+@@ -2295,6 +2295,7 @@
+     tracy_trace.addTextFmt("func_ip_index={d}", .{func_index});
+ 
+     var air = try pt.analyzeFuncBodyInner(func_index, reason);
++    @import("../Air/json.zig").dumpToDir(&air, pt, func_index);
+     var air_owned = true;
+     defer if (air_owned) air.deinit(gpa);
+ 

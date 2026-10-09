@@ -58,7 +58,7 @@ class ValidateAir(unittest.TestCase):
         files = v.committed_air()
         self.assertGreater(len(files), 400)
         versions = {json.loads(p.read_text(encoding='utf-8'))['zig_version'] for p in files}
-        self.assertEqual(versions, {'0.14.1', '0.15.2', '0.16.0'})
+        self.assertEqual(versions, {'0.14.1', '0.15.2', '0.16.0', '0.17.0'})
         cache = {}
         bad = {str(p): r for p in files if (r := v.validate_text(p.read_text(encoding='utf-8'), cache=cache))}
         self.assertEqual(bad, {})

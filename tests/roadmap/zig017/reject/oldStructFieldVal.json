@@ -1,0 +1,100 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.6.0...6.0-gnu.2.39",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.17.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "sse",
+   "sse2"
+  ],
+  "build_mode": "safe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "zig017.field",
+ "params": [
+  0
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "args": [],
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "struct_field_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 0
+    }
+   ],
+   "index": 1
+  },
+  {
+   "id": 2,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "struct",
+   "name": "zig017.Pair",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 1,
+     "offset": 4
+    },
+    {
+     "name": "b",
+     "ty": 2,
+     "offset": 0
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "noreturn"
+  }
+ ],
+ "globals": []
+}

@@ -1,0 +1,361 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.6.17...6.17-gnu.2.39",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.17.0",
+  "backend": "stage2_llvm",
+  "cpu": "graniterapids",
+  "features": [
+   "64bit",
+   "adx",
+   "aes",
+   "allow_light_256_bit",
+   "amx_bf16",
+   "amx_fp16",
+   "amx_int8",
+   "amx_tile",
+   "avx",
+   "avx10_1",
+   "avx2",
+   "avx512bf16",
+   "avx512bitalg",
+   "avx512bw",
+   "avx512cd",
+   "avx512dq",
+   "avx512f",
+   "avx512fp16",
+   "avx512ifma",
+   "avx512vbmi",
+   "avx512vbmi2",
+   "avx512vl",
+   "avx512vnni",
+   "avx512vpopcntdq",
+   "avxvnni",
+   "bmi",
+   "bmi2",
+   "branch_hint",
+   "cldemote",
+   "clflushopt",
+   "clwb",
+   "cmov",
+   "crc32",
+   "cx16",
+   "cx8",
+   "ermsb",
+   "f16c",
+   "false_deps_getmant",
+   "false_deps_mulc",
+   "false_deps_mullq",
+   "false_deps_perm",
+   "false_deps_range",
+   "fast_15bytenop",
+   "fast_gather",
+   "fast_scalar_fsqrt",
+   "fast_shld_rotate",
+   "fast_variable_crosslane_shuffle",
+   "fast_variable_perlane_shuffle",
+   "fast_vector_fsqrt",
+   "fma",
+   "fsgsbase",
+   "fsrm",
+   "fxsr",
+   "gfni",
+   "idivq_to_divl",
+   "invpcid",
+   "lzcnt",
+   "macrofusion",
+   "mmx",
+   "movbe",
+   "movdir64b",
+   "movdiri",
+   "no_bypass_delay_blend",
+   "no_bypass_delay_mov",
+   "no_bypass_delay_shuffle",
+   "nopl",
+   "pclmul",
+   "popcnt",
+   "prefer_256_bit",
+   "prefetchi",
+   "prfchw",
+   "rdpid",
+   "rdrnd",
+   "rdseed",
+   "rtm",
+   "sahf",
+   "serialize",
+   "sha",
+   "shstk",
+   "slow_pmullq",
+   "smap",
+   "smep",
+   "sse",
+   "sse2",
+   "sse3",
+   "sse4_1",
+   "sse4_2",
+   "ssse3",
+   "tsxldtrk",
+   "tuning_fast_imm_vector_shift",
+   "vaes",
+   "vpclmulqdq",
+   "vzeroupper",
+   "waitpkg",
+   "x87",
+   "xsave",
+   "xsavec",
+   "xsaveopt",
+   "xsaves"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "asm.divmod",
+ "params": [
+  0,
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 3
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "ty": 0,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_var_ptr",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "rem"
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3
+  },
+  {
+   "id": 7,
+   "tag": "assembly",
+   "ty": 0,
+   "source": "xorl %%edx, %%edx\n\tdivl %[b]",
+   "volatile": false,
+   "clobbers": [],
+   "outputs": [
+    {
+     "constraint": "={eax}",
+     "name": "q"
+    },
+    {
+     "constraint": "=&{edx}",
+     "name": "r",
+     "ref": {
+      "inst": 3
+     }
+    }
+   ],
+   "inputs": [
+    {
+     "constraint": "{eax}",
+     "name": "a",
+     "ref": {
+      "inst": 0
+     }
+    },
+    {
+     "constraint": "r",
+     "name": "b",
+     "ref": {
+      "inst": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 7
+    }
+   ],
+   "name": "q"
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 9
+  },
+  {
+   "id": 10,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "int_cast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 10
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 9
+  },
+  {
+   "id": 13,
+   "tag": "shl",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "ty": 4,
+     "val": "32"
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "int_cast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 7
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "bit_or",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 13
+    },
+    {
+     "inst": 14
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 9
+  },
+  {
+   "id": 17,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

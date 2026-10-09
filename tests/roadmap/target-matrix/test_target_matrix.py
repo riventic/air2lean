@@ -58,6 +58,11 @@ class Scratch(unittest.TestCase):
         return output
 
 
+def version(data, zig):
+    """compatibility.json's entry for `zig` (the list is newest first)."""
+    return next(v for v in data['zig']['versions'] if v['version'] == zig)
+
+
 class CommittedMatrix(Scratch):
     def test_every_declared_path_is_backed_without_gaps(self):
         code, output = run('check', '--root', self.root, '--json')
@@ -65,6 +70,8 @@ class CommittedMatrix(Scratch):
         report = json.loads(output)
         paths = {row['path']: row for row in report['paths']}
         self.assertEqual(set(paths), {
+            '0.17.0/x86_64-linux/x86_64-linux/abi64-le-v1',
+            '0.17.0/aarch64-macos/aarch64-macos/abi64-le-v1',
             '0.16.0/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.15.2/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.14.1/x86_64-linux/x86_64-linux/abi64-le-v1',
@@ -72,7 +79,7 @@ class CommittedMatrix(Scratch):
             '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1'})
         self.assertEqual(paths['0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1']['job'], 'macos')
         self.assertEqual({row['status'] for row in paths.values()}, {'backed'})
-        self.assertEqual([row['gaps'] for row in paths.values()], [[]] * 5)
+        self.assertEqual([row["gaps"] for row in paths.values()], [[]] * len(paths))
         self.assertEqual(report['input_only_profiles'], ['legacy-abi64-le'])
 
     def test_committed_matrix_passes_strict(self):
@@ -129,7 +136,7 @@ class Evidence(Scratch):
 
     def test_new_declared_host_without_a_job_fails(self):
         def change(data):
-            data['zig']['versions'][0]['hosts'].append('aarch64-linux')
+            version(data, '0.16.0')['hosts'].append('aarch64-linux')
             data['profiles'][0]['target_triples'].append('aarch64-linux-<abi>')
         self.edit_json('compatibility.json', change)
         self.check_fails('0.16.0/aarch64-linux/aarch64-linux/abi64-le-v1: declared supported',
@@ -137,7 +144,7 @@ class Evidence(Scratch):
 
     def test_entry_for_an_undeclared_path_is_stale(self):
         def change(data):
-            data['zig']['versions'][1]['hosts'].remove('aarch64-macos')
+            version(data, '0.15.2')['hosts'].remove('aarch64-macos')
         self.edit_json('compatibility.json', change)
         self.check_fails('0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1 is not a path')
 

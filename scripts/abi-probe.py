@@ -25,8 +25,9 @@ VALUES = {'vector_u9_image': 268173823, 'vector_u9_lane_write': 178782719,
           'wrapping24': 1, 'packed_bits': 1793, 'vector_sum': 10, 'pointer_load': 1234567}
 OFFSETS = {'record_count': 4, 'record_pointer': 8}
 # Zig versions with committed probe contracts: 0.16.0's profiles are
-# tests/roadmap/abi-probes/<triple>-<mode>.json, every other version's are under <version>/.
-VERSIONS = ('0.14.1', '0.15.2', '0.16.0')
+# tests/roadmap/abi-probes/<triple>-<mode>.json, every other version's are under <version>/
+# (`observe` selects it from the stock compiler's `zig version`).
+VERSIONS = ('0.14.1', '0.15.2', '0.16.0', '0.17.0')
 
 
 def fingerprints():
@@ -158,6 +159,14 @@ def compare(left, right):
             'native_execution_attested': False, 'translation_qualified': False, 'wasm_qualified': False}
 
 
+def version_profile(zig, path):
+    """`path`, or its contract for the stock compiler's Zig version (`VERSIONS`)."""
+    version = subprocess.run([zig, 'version'], check=True, timeout=60, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE).stdout.decode('utf-8').strip()
+    variant = path.parent / version / path.name
+    return variant if variant.is_file() else path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
@@ -170,7 +179,7 @@ def main():
     pair.add_argument('right', type=Path)
     args = parser.parse_args()
     if args.action == 'observe':
-        report = run(args.zig, json.loads(args.profile.read_text()))
+        report = run(args.zig, json.loads(version_profile(args.zig, args.profile).read_text()))
         args.output.write_text(json.dumps(report, indent=2) + '\n')
     else:
         print(json.dumps(compare(json.loads(args.left.read_text()), json.loads(args.right.read_text())), indent=2))

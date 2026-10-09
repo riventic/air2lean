@@ -153,11 +153,14 @@ def main (args : List String) : IO Unit := do
       (output ++ "\nexample (a b : BitVec 32) : Synthetic.dispatch (.worker (a, b)) =\n  discard (Zig.ConcM.liftMem (StateT.lift (Synthetic.worker a b))) := by rfl\n")
     reject "nonpositive stack" version (config "0")
     reject "custom allocator" version (config "16777216" false)
-  match parseChecked (spawner "0.17.0" "Thread.spawn") with
-  | .ok _ => throw (IO.userError "unaudited version was accepted")
+  match parseChecked (spawner "0.99.0" "Thread.spawn") with
+  | .ok _ => throw (IO.userError "unsupported version was accepted")
   | .error message =>
-    require (hasText message "unsupported zig_version '0.17.0'")
-      "unaudited version fixture failed for an unrelated reason"
+    require (hasText message "unsupported zig_version '0.99.0'")
+      "unsupported version fixture failed for an unrelated reason"
+  -- 0.17.0's std spawn path is audited (unchanged `Thread.spawn`/`SpawnConfig`, docs/std-models.md).
+  let audited017 ← checked #[spawner "0.17.0" "Thread.spawn", worker "0.17.0"]
+  require (checkFallibleSpawnCalls audited017 |>.toOption.isSome) "audited 0.17.0 spawn rejected"
   for (callee, label, op) in #[("Io.Group.async", "async", "groupAsyncWithPolicyC"),
       ("Io.Group.concurrent", "concurrent", "groupConcurrentWithPolicyC")] do
     let fs ← checked #[spawner "0.16.0" callee, worker "0.16.0"]

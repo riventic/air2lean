@@ -308,9 +308,12 @@ any other type, a constant pointer into a `threadlocal` global (0.14.1 writes th
 thread-local as a constant; a constant has one address in every thread), and a
 `runtime_nav_ptr` of a global that is not `threadlocal` (an `extern` the compiler reaches at run
 time, a DLL import, a PC-relative `@extern`). An AIR file from an exporter without the
-`runtime_nav_ptr` operand keeps the earlier rejection. The `Io.Group` caller fallback runs the
-target on the caller's thread, so it uses the caller's instances. A detached thread is outside
-the subset. `tests/roadmap/thread-locals` has the proofs over all schedules.
+`runtime_nav_ptr` operand keeps the earlier rejection. A function that an `Io.Group` or
+`Io.async` task reaches must not use `threadlocal` storage (`checkIoTaskThreadlocals`,
+`PROGRAM_FAILURE`): `std.Io.Threaded` runs such tasks on pooled worker threads, each running
+task after task, or on the caller's thread, so a task's instances hold what earlier tasks left
+there, not the initial value. Only `Thread.spawn` threads get the per-thread instances above.
+A detached thread is outside the subset. `tests/roadmap/thread-locals` has the proofs over all schedules.
 
 ### Casts, layout and function pointers
 
@@ -321,6 +324,7 @@ the subset. `tests/roadmap/thread-locals` has the proofs over all schedules.
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. |
 | `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `p.add (-offset)`; local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
+| `@bitCast` with an array, vector or enum side (Zig 0.17.0 only: logical bit order, [bitcast-semantics.md](bitcast-semantics.md)) | `bit_cast`/`bit_cast_safe` (canonical `bitcast`) | `Zig.BitCast.ofLanes`/`toLanes`/`ofBools`/`toBools`, enum tag bits with `Zig.enumOf`; ≤0.16 rejects these aggregate casts |
 | `@bitCast` of an array, `extern` struct or `extern` union (Zig ≤0.16) | `bitcast` with one on either side | `Zig.reprCast T x`: the memory bytes of `x`, padding undefined, decoded as `T` (`docs/aggregate-casts.md`) |
 | `@ptrCast` `?*T` → `*U`; `@intFromPtr`/`@ptrFromInt` of `?*T` (Zig ≤0.16) | `bitcast` | `Zig.optPtrUnwrap` (null: `.panic`), `Zig.optPtrAddr` (null: 0), `Zig.optPtrFromAddr` (0: null) |
 | `f(x)`, `f: *const fn` | `call` of an instruction or a constant address | `if f == ⟨some k, 0⟩ then g x else …` for each function `g` of the type of `f` whose address the program takes; any other pointer throws `.illegal` |

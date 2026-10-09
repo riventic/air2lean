@@ -59,6 +59,8 @@ def check_flag(flag):
     """Flags pass through verbatim; reject those that would change what is exported or where."""
     if flag.startswith('@'):
         raise Invalid(f'export flag {flag!r}: response files can hide emission overrides')
+    if flag.startswith('--zig-lib-dir'):
+        raise Invalid(f'export flag {flag!r}: the std models are audited against the compiler\'s own lib directory')
     if flag.startswith(('-femit-', '-fno-emit-bin', '-M', '--dep', '-o')) or flag in ('--', '--mod'):
         raise Invalid(f'export flag {flag!r}: emission and modules are set by the export section')
     if flag.endswith(('.zig', '.c', '.o', '.a')):
@@ -327,7 +329,8 @@ def run_export(project, manifest_path, zig, translator, out, module_overrides=()
             air_dir = work / f'air-{iteration}'
             air_dir.mkdir()
             argv = compiler_argv(zig, spec, paths, generated)
-            env = {k: v for k, v in os.environ.items() if not k.startswith('ZIG_AIR_JSON_')}
+            # ZIG_LIB_DIR would swap the std library that the std models are audited against.
+            env = {k: v for k, v in os.environ.items() if not k.startswith('ZIG_AIR_JSON_') and k != 'ZIG_LIB_DIR'}
             env.update(ZIG_AIR_JSON_DIR=str(air_dir), ZIG_AIR_JSON_FILTER=','.join(prefixes))
             result = project._run_bounded(argv, base, run_limits, merged=False, env=env)
             shown = [a.replace(str(work), '${EXPORT_WORK}') for a in argv]

@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
@@ -149,6 +150,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
+    -- `Canon.lean` rewrites the whole-byte lanes that 0.16.0 also addressed as elements.
     if l.isLanePtr && !l.laneBitPtr then
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
@@ -283,7 +285,7 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | some (.future r) =>
     if pb != 8 then throw "an Io.Future is outside the 32-bit pointer model"
     -- `Zig.Future`: `any_future` at 0, the result at `Zig.Future.resultOff`.
-    let (s, a) ← modelLayout types layouts r
+    let (s, a) ← modelLayout types layouts r errBits
     let off := Zig.alignUp 8 a
     unless (layouts[id]?.map (·.offsets)).getD #[] == #[0, off] do
       throw s!"Io.Future field offsets differ from any_future at 0 and result at {off}"
@@ -473,8 +475,9 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
-  /-- The function's `zig_version`: up to 0.16.0 `@bitCast` reinterprets memory
-  (`memoryBitCastVersion`). Empty in bare contexts, which then reject representation casts. -/
+  /-- The function's `zig_version`: selects the `@bitCast` semantics. Up to 0.16.0 it reinterprets
+  memory (`memoryBitCastVersion`); from 0.17.0 it uses the logical bit order
+  (`Air2Lean/BitCast.lean`). Empty in bare contexts, which then reject representation casts. -/
   zigVersion : String := ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
@@ -888,6 +891,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
+  | .splat _ =>
+    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
+    unless (cx.types[ty]? matches some (.vector ..)) do
+      cx.fail line "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset"
+    pure line
   | .permuteBits op a =>
     let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"
     let some (_, _, bits) := cx.intShape? aty
@@ -1009,6 +1017,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless castCapability target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
+    -- Zig 0.17: an array, vector or enum on either side is a logical-bit-order cast
+    -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
+    -- ≤0.16 memory rules below.
+    if let some aty := sourceTy then
+      if logicalBitCastApplies cx.zigVersion cx.types aty ty then
+        match logicalBitCastShapes cx.types aty ty with
+        | .ok _ => return line
+        | .error e => cx.fail line e
     let isVector (t : Option TyId) : Bool := match t.bind (cx.types[·]?) with
       | some (.vector ..) => true | _ => false
     if (isVector (some ty) || isVector sourceTy) && sourceTy != some ty then
@@ -1592,17 +1608,19 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
   | _ => false
 
 /-- Whether a value of type `id` holds, by value, an error union whose payload has nonzero size
-and alignment below 2. Zig 0.14.1–0.17.0's LLVM backend (`codegen/llvm.zig` `lowerPtr`)
-measures an `eu_payload` constant base with the error union type instead of its payload, so it
-addresses such a payload at the error code (`Zig.ConstPtr.llvmPayloadOffset_ne_iff`,
-`tests/roadmap/const-bases`). A shared budget bounds the scan; `none` means unknown. -/
+and alignment below the error code's (2 for the default 16-bit error integer, `Zig.errCodeAlign`
+of the profile's `error_set_bits` in general). Zig 0.14.1–0.17.0's LLVM backend
+(`codegen/llvm.zig` `lowerPtr`) measures an `eu_payload` constant base with the error union type
+instead of its payload, so it addresses such a payload at the error code
+(`Zig.ConstPtr.llvmPayloadOffset_ne_iff`, `tests/roadmap/const-bases`). A shared budget bounds the
+scan; `none` means unknown. -/
 private partial def llvmPayloadTypeScan (f : Func) (id fuel : Nat) : Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
   match ← f.types[id]? with
   | .errorUnion _ payload =>
-    let (size, align) ← (modelLayout f.types f.layouts payload).toOption
-    if size != 0 && align < 2 then return (remaining, true)
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    if size != 0 && align < Zig.errCodeAlign f.errorSetBits then return (remaining, true)
     llvmPayloadTypeScan f payload remaining
   | ty =>
     for child in valueChildTys ty do
@@ -1618,12 +1636,12 @@ members are not reconstructed from an address: a union with an affected member c
 private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
-  let (size, _) ← (modelLayout f.types f.layouts id).toOption
+  let (size, _) ← (modelLayout f.types f.layouts id f.errorSetBits).toOption
   if off > size then return (remaining, false)
   let within (members : Array (TyId × Nat)) : Option (Nat × Bool) := do
     let mut remaining := remaining
     for (child, base) in members do
-      let (childSize, _) ← (modelLayout f.types f.layouts child).toOption
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
       if base ≤ off && off ≤ base + childSize then
         let (next, hit) ← llvmPayloadOffsetScan f child (off - base) remaining
         remaining := next
@@ -1631,9 +1649,10 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
     return (remaining, false)
   match ← f.types[id]? with
   | .errorUnion _ payload =>
-    let (payloadSize, payloadAlign) ← (modelLayout f.types f.layouts payload).toOption
-    let (_, po) := Zig.errUnionOffsets payloadSize payloadAlign
-    if po ≤ off && off ≤ po + payloadSize && payloadSize != 0 && payloadAlign < 2 then
+    let (payloadSize, payloadAlign) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (_, po) := Zig.errUnionOffsetsW f.errorSetBits payloadSize payloadAlign
+    if po ≤ off && off ≤ po + payloadSize && payloadSize != 0 &&
+        payloadAlign < Zig.errCodeAlign f.errorSetBits then
       return (remaining, true)
     within #[(payload, po)]
   | .optional child =>
@@ -1641,7 +1660,7 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
     | some (.ptr ..) | some (.errorSet _) => return (remaining, false)
     | _ => within #[(child, 0)]
   | .array len child sentinel =>
-    let (stride, _) ← (modelLayout f.types f.layouts child).toOption
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 then return (remaining, false)
     let count := len + (if sentinel then 1 else 0)
     let k := off / stride
@@ -1661,24 +1680,31 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
   | .union .. => llvmPayloadTypeScan f id remaining
   | _ => return (remaining, false)
 
-/-- Fail closed for the LLVM backend's misplaced `eu_payload` constants: a pointer constant on
-the `stage2_llvm` profile cannot address (or end) an affected payload of its global. Other
-backends lower these constants with the payload offset that the model uses. -/
+/-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
+instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`
+(observed in 0.16.0). -/
+def euPayloadMisplacedBackends : List String := ["stage2_llvm", "stage2_wasm"]
+
+/-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
+(`euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
+affected payload of its global. Other backends lower these constants with the payload offset
+that the model uses. -/
 private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
     Except String Unit := do
-  unless f.backend == "stage2_llvm" do return
+  unless euPayloadMisplacedBackends.contains f.backend do return
   let affected : Bool := match llvmPayloadTypeScan f global.ty 1024 with
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
   if affected then
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
-      alignment-1 error-union payload, which Zig's LLVM backend lowers at the error code \
-      (codegen/llvm.zig lowerPtr eu_payload); such constants are outside the stage2_llvm profile"
+      alignment-1 error-union payload, which this backend lowers at the error code \
+      (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
+      outside the {f.backend} profile"
 
 /-- A constant pointer stays within its global or one past its end. -/
 private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do
   if let some (.func ..) := global.init then return
-  if let .ok (size, _) := modelLayout f.types f.layouts global.ty then
+  if let .ok (size, _) := modelLayout f.types f.layouts global.ty f.errorSetBits then
     if off > size then
       throw s!"{f.name}: a pointer constant at offset {off} is outside global {g} ({size} \
         bytes); constant provenance ends one past its object"
@@ -1739,7 +1765,7 @@ private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat :
 included. A profile limit, so it runs with the constant checks, not structural validation. -/
 private partial def checkLlvmPayloadConstants (f : Func) (v : Val) (fuel : Nat := 256) :
     Except String Unit := do
-  unless f.backend == "stage2_llvm" do return
+  unless euPayloadMisplacedBackends.contains f.backend do return
   if fuel == 0 then throw s!"{f.name}: pointer constant traversal exceeds 256 levels"
   match v with
   | .ptrConst _ g off =>
@@ -2501,7 +2527,7 @@ callee types per call; the other kinds exist only in the whole-program validator
 inductive ProgramIssueKind where
   | model | structure | sharedDefinition | stdConflict | indirectCallee | indirectTarget
   | callSignature | progressHint | modelSignature | spawnTarget | spawnWorker | threadSpawn
-  | callee | memory | fallibleSpawn | futureCancel
+  | callee | memory | fallibleSpawn | futureCancel | ioTaskThreadlocal
   deriving BEq, Repr
 
 def ProgramIssueKind.collectedPerCall : ProgramIssueKind → Bool
@@ -2752,7 +2778,7 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
   if let some model := stdModel? callee then
     unless model.qualifies f.zigVersion do
-      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}"
+      fail s!"{model.symbol} qualified Zig {", ".intercalate model.qualifiedVersions.toList}"
   if let some fn := allocFn? callee then
     -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
     if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
@@ -2890,7 +2916,7 @@ inductive SpawnSemantics where
 SpawnConfig requesting 1 MiB or the default 16 MiB and a null custom allocator. Other sizes, runtime configs
 and allocator-specific semantics remain outside this model. -/
 private def checkFallibleSpawnCall (f : Func) (kind : ThreadFn) (args : Array Val) : Except String Unit := do
-  unless #["0.14.1", "0.15.2", "0.16.0"].contains f.zigVersion do
+  unless #["0.14.1", "0.15.2", "0.16.0", "0.17.0"].contains f.zigVersion do
     throw s!"{f.name}: fallible spawn requires an audited Zig version"
   if kind == .spawn then
     let some (Val.agg ty fields) := (args[0]? : Option Val)
@@ -2908,8 +2934,8 @@ private def checkFallibleSpawnCall (f : Func) (kind : ThreadFn) (args : Array Va
     let .optNull _ := fields[1]!
       | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
   else
-    unless f.zigVersion == "0.16.0" do
-      throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0"
+    unless f.zigVersion == "0.16.0" || f.zigVersion == "0.17.0" do
+      throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0 or 0.17.0"
 
 /-- The first unsupported configuration of every spawn call under the fallible policy. -/
 def fallibleSpawnIssues (funcs : Array Func) : Array ProgramIssue := Id.run do
@@ -2928,35 +2954,88 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit :=
   | some issue => throw issue.message
   | none => pure ()
 
-/-- `docs/futures.md` §Cancelation. The qualified future subset observes a `Future.cancel`
-request only at `Io.checkCancel`: `Future.cancel` does not interrupt a task blocked at another
-cancelation point (unlike `Io.Group.cancel`, `docs/std-models.md` §Cancelation), and a nested
-`Future.await` is no cancelation point of the model. A program that cancels a future therefore
-must not reach another cancelation point from an `Io.async` task: a cancelable futex wait (also
-inside `Io.Mutex.lock`, `Io.Condition.wait`, ...), `Io.Group.await` or a nested `Future.await`.
-Programs without `Future.cancel` never request a future cancelation. -/
-def checkFutureCancelation (funcs : Array Func) : Except String Unit := do
-  let calls (f : Func) : Array String := f.allInsts.filterMap fun i => match i.op with
-    | .call (.func name ..) _ => some name
-    | _ => none
-  unless funcs.any (fun f => (calls f).any (threadFn? · == some .futureCancel)) do return
+/-- The names of the functions that a direct call in `f` names (translated functions and std
+models alike). -/
+private def Func.callNames (f : Func) : Array String := f.allInsts.filterMap fun i => match i.op with
+  | .call (.func name ..) _ => some name
+  | _ => none
+
+/-- The task functions (`comptime_fn` targets) of the calls in `funcs` to a std model in
+`kinds`. -/
+private def taskTargetsOf (funcs : Array Func) (kinds : List ThreadFn) : List String :=
+  funcs.toList.flatMap fun f => (f.allInsts.filterMap fun i => match i.op with
+    | .call (.func name _ (some sf)) _ =>
+      if (threadFn? name).any kinds.contains then some sf else none
+    | _ => none).toList
+
+/-- The functions of `funcs` that the functions `roots` reach (the roots included): through
+calls (`Func.callees`), and with `viaAsync` also through the tasks of their `Io.async` calls,
+which the `fallible` policy may run on the caller's thread (`Zig.asyncEagerC`). -/
+private def reachableFuncs (funcs : Array Func) (roots : List String) (viaAsync : Bool := false) :
+    Array Func := Id.run do
   let refs := fnRefs funcs
   let byName := funcs.foldl (fun m f => m.insert f.name f) ({} : Std.HashMap String Func)
-  let mut todo : List String := (futureTargets funcs).toList.map (·.1)
+  let mut todo := roots
   let mut seen : Std.HashSet String := {}
+  let mut out := #[]
   while !todo.isEmpty do
     let name := todo.head!
     todo := todo.tail!
     if seen.contains name then continue
     seen := seen.insert name
     let some f := byName[name]? | continue
-    for callee in calls f do
-      if let some fn := threadFn? callee then
-        if fn == .futexWait || fn == .groupAwait || fn == .futureAwait then
-          throw s!"{f.name}: '{callee}' is a cancelation point that the model does not deliver \
-            a Future.cancel request to; in a program with Future.cancel, Io.async tasks may only \
-            observe cancelation through Io.checkCancel (docs/futures.md)"
-    todo := (f.callees refs).toList ++ todo
+    out := out.push f
+    let tasks := if viaAsync then taskTargetsOf #[f] [.futureAsync] else []
+    todo := (f.callees refs).toList ++ tasks ++ todo
+  return out
+
+/-- `docs/futures.md` §Cancelation. The qualified future subset observes a `Future.cancel`
+request only at `Io.checkCancel`: `Future.cancel` does not interrupt a task blocked at another
+cancelation point (unlike `Io.Group.cancel`, `docs/std-models.md` §Cancelation), and a nested
+`Future.await` is no cancelation point of the model. A program that cancels a future therefore
+must not reach another cancelation point from an `Io.async` task: a cancelable futex wait (also
+inside `Io.Mutex.lock`, `Io.Condition.wait`, ...), `Io.Group.await` or a nested `Future.await`.
+Programs without `Future.cancel` never request a future cancelation.
+
+`Io.Group.cancel` requests share `Mem.cancels` with `Future.cancel`, but std's `Future.await`
+by a task with a request hands that request to the awaited future (`await` in
+`Io/Threaded.zig`: its cancelable wait fails, the future is canceled, and the request returns
+to the awaiter only if the future did not acknowledge it). The model's `Zig.awaitC` is a plain
+join, so in a program with `Io.Group.cancel` no `Io.Group` task (nor a task it may run inline)
+may await a future. -/
+def checkFutureCancelation (funcs : Array Func) : Except String Unit := do
+  let has (fn : ThreadFn) := funcs.any fun f => f.callNames.any (threadFn? · == some fn)
+  if has .futureCancel then
+    for f in reachableFuncs funcs ((futureTargets funcs).toList.map (·.1)) do
+      for callee in f.callNames do
+        if let some fn := threadFn? callee then
+          if fn == .futexWait || fn == .groupAwait || fn == .futureAwait then
+            throw s!"{f.name}: '{callee}' is a cancelation point that the model does not deliver \
+              a Future.cancel request to; in a program with Future.cancel, Io.async tasks may only \
+              observe cancelation through Io.checkCancel (docs/futures.md)"
+  if has .groupCancel then
+    let groupTasks := taskTargetsOf funcs [.groupAsync, .groupConcurrent]
+    for f in reachableFuncs funcs groupTasks (viaAsync := true) do
+      for callee in f.callNames do
+        if threadFn? callee == some .futureAwait then
+          throw s!"{f.name}: '{callee}' in an Io.Group task of a program with Io.Group.cancel: \
+            std's await hands the task's cancelation request to the awaited future, which the \
+            model does not (docs/futures.md)"
+
+/-- `docs/generated-code.md` §Thread-local storage. `std.Io.Threaded` runs `Io.Group` and
+`Io.async` tasks on a pool of worker threads, each of which runs task after task (`worker` in
+`Io/Threaded.zig`), and a fallback runs a task on its caller's thread. A task's `threadlocal`
+instances are those of whichever thread runs it, holding what earlier tasks left there; the
+model gives each task fresh instances (`Zig.ConcM.tlsThread`). So no function that an `Io` task
+reaches may use `threadlocal` storage (`runtime_nav_ptr`). `Thread.spawn` threads are new OS
+threads and keep their per-thread instances. -/
+def checkIoTaskThreadlocals (funcs : Array Func) : Except String Unit := do
+  let tasks := taskTargetsOf funcs [.groupAsync, .groupConcurrent, .futureAsync]
+  for f in reachableFuncs funcs tasks do
+    if f.allInsts.any (fun i => match i.op with | .runtimeNavPtr _ => true | _ => false) then
+      throw s!"{f.name}: an Io.Group or Io.async task uses `threadlocal` storage; std.Io runs \
+        tasks on pooled worker threads whose instances outlive each task, which the model's \
+        per-task instances do not cover (docs/generated-code.md)"
 
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
@@ -3094,6 +3173,8 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
   -- Needs the whole program: every task an `Io.async` reaches (`checkFutureCancelation`).
   if let .error message := checkFutureCancelation funcs then
     issues := issues.push { kind := .futureCancel, message }
+  if let .error message := checkIoTaskThreadlocals funcs then
+    issues := issues.push { kind := .ioTaskThreadlocal, message }
   return issues
 
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
