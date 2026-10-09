@@ -126,7 +126,15 @@
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
-    "ZigLean.VC.Result": ["SEM-03"]
+    "ZigLean.VC.Result": ["SEM-03"],
+    "ZigLean.Os": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OST-03", "OSY-01", "OSK-01", "OSK-02", "OSG-01", "OSM-02"],
+    "ZigLean.Os.Env": ["OST-01", "OST-03", "OSK-01", "OSM-02"],
+    "ZigLean.Os.Futex": ["OSF-01", "OSF-02"],
+    "ZigLean.Os.Thread": ["OST-01", "OST-02", "OST-03", "OSY-01", "OSG-01"],
+    "ZigLean.Os.Clock": ["OSK-01", "OSK-02"],
+    "ZigLean.Os.Malloc": ["OSM-02"],
+    "ZigLean.Sep.OsMalloc": ["OSM-02"],
+    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
   },
   "rules": [
     {"premise": "ALC-01", "scope": "closure", "pattern": "(?:^|\\.)Allocator(?:\\.|$)"},
@@ -139,7 +147,7 @@
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
     {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC|spawnAdmits|assignment(?:Count|Outcome|ChoiceC)"},
     {"premise": "THR-04", "scope": "closure", "pattern": "group(?:Async|Await|Concurrent|Cancel)C"},
-    {"premise": "THR-05", "scope": "closure", "pattern": "[Ff]utex"},
+    {"premise": "THR-05", "scope": "closure", "pattern": "^(?!.*(?:^|\\.)Os\\.).*[Ff]utex"},
     {"premise": "THR-06", "scope": "closure", "pattern": "osUnfairLock|DarwinImpl"},
     {"premise": "THR-07", "scope": "closure", "pattern": "spinLoopHint|threadYield"},
     {"premise": "THR-09", "scope": "closure", "pattern": "(?:^|\\.)Cooperative(?:\\.|$)"},
@@ -153,7 +161,17 @@
     {"premise": "MTH-03", "scope": "closure", "pattern": "Rt016|(?:^|\\.)mulRt$|RtChk"},
     {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
     {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
-    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"}
+    {"premise": "SEM-03", "scope": "closure", "pattern": "(?:^|\\.)loop[A-Za-z_]*$"},
+    {"premise": "OSF-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:futexWait|Linux\\.futex_4arg|Darwin\\.__ulock_wait2?)$"},
+    {"premise": "OSF-02", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:futexWake|wakeAt|Linux\\.futex_3arg|Darwin\\.__ulock_wake)$"},
+    {"premise": "OST-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:Linux\\.clone|Darwin\\.pthread_create|Darwin\\.pthread_attr_[a-z]+)$"},
+    {"premise": "OST-02", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:Linux\\.clone(?:Thread|Exit)|Darwin\\.pthread_(?:join|detach))$"},
+    {"premise": "OST-03", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:Env\\.cpus|Linux\\.(?:gettid|getpid|sched_getaffinity)|Darwin\\.(?:pthread_self|pthread_threadid_np|sysctlbyname))$"},
+    {"premise": "OSY-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:Linux|Darwin)\\.sched_yield$"},
+    {"premise": "OSK-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:readClock|(?:Linux|Darwin)\\.clock_gettime)$"},
+    {"premise": "OSK-02", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:Linux\\.clock_nanosleep|Darwin\\.nanosleep|Darwin\\.__error)$"},
+    {"premise": "OSG-01", "scope": "closure", "pattern": "(?:^|\\.)Os\\.(?:interrupt|Linux\\.tgkill|Darwin\\.pthread_kill)$"},
+    {"premise": "OSM-02", "scope": "closure", "pattern": "(?:^|\\.)Os\\.Darwin\\.(?:malloc|free|malloc_size)$"}
   ],
   "implies": {
     "ALC-02": ["ALC-01"],
@@ -181,6 +199,14 @@
     "SEM-02": ["SEM-01"],
     "SEM-03": ["SEM-01"],
     "THR-01": ["SEM-02"],
-    "TRU-02": ["TRU-03", "SEM-01"]
+    "TRU-02": ["TRU-03", "SEM-01"],
+    "OSF-01": ["THR-01", "ORD-01"],
+    "OSF-02": ["THR-01"],
+    "OST-01": ["THR-01", "THR-03"],
+    "OST-02": ["THR-01"],
+    "OSY-01": ["THR-01"],
+    "OSK-02": ["THR-01"],
+    "OSG-01": ["THR-01"],
+    "OSM-02": ["SEM-02", "ALC-02"]
   }
 }
