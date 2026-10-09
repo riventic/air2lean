@@ -9,7 +9,8 @@ inductive Code where
   | exporterUnsupported | optimizedUnsupported | canonicalFailure | normalizationFailure
   | structureFailure | typeFailure | globalFailure | memoryFailure | instructionFailure
   | constantFailure | signatureFailure | modelFailure | programFailure | profileFailure
-  | duplicateFunction | calleeMissing | calleeBlocked | calleeAmbiguous | prerequisiteSkipped
+  | duplicateFunction | calleeMissing | calleeBlocked | calleeAmbiguous | calleeExternUnbound
+  | prerequisiteSkipped
   | volatileAccess | packedLayout
   deriving BEq, Repr
 
@@ -37,6 +38,7 @@ def Code.text : Code → String
   | .calleeMissing => "CALLEE_MISSING"
   | .calleeBlocked => "CALLEE_BLOCKED"
   | .calleeAmbiguous => "CALLEE_AMBIGUOUS"
+  | .calleeExternUnbound => "CALLEE_EXTERN_UNBOUND"
   | .prerequisiteSkipped => "PREREQUISITE_SKIPPED"
   | .volatileAccess => "VOLATILE_ACCESS"
   | .packedLayout => "PACKED_LAYOUT"

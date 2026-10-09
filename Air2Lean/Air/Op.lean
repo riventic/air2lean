@@ -600,6 +600,34 @@ structure Global where
   init : Option Val
   deriving Repr, Inhabited
 
+/-- An extern function that a body calls: one entry of the function file's `externs` table
+(`docs/air-json.md` §Extern calls). `params`/`ret` are type IDs of the calling function. -/
+structure ExternDecl where
+  /-- The linker symbol. -/
+  name : String
+  library : Option String
+  /-- The calling convention's tag (`std.builtin.CallingConvention`), e.g. `x86_64_sysv`. -/
+  cc : String
+  params : Array TyId
+  ret : TyId
+  varargs : Bool
+  deriving Repr, Inhabited, BEq
+
+/-- The linker symbol an `export fn` defines, and its calling convention. -/
+structure ExportDecl where
+  name : String
+  cc : String
+  deriving Repr, Inhabited, BEq
+
+/-- The callee name of a call to the extern function `symbol`. No function's fully qualified
+name has this form (`Check.resolveExterns` rejects one that does), so an extern call can never
+be taken for a call to a translated function or a project model of the same bare name. -/
+def externCallee (symbol : String) : String := "extern:" ++ symbol
+
+/-- The linker symbol of an extern callee name (`externCallee`). -/
+def externSymbol? (callee : String) : Option String :=
+  if callee.startsWith "extern:" then some (callee.drop 7).toString else none
+
 structure Func where
   zigVersion : String
   name : String
@@ -613,5 +641,9 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- The extern functions the body calls (`externCallee` callees). -/
+  externs : Array ExternDecl := #[]
+  /-- `some`: an `export fn`, the definition of this linker symbol. -/
+  exportDecl : Option ExportDecl := none
 
 end Air2Lean

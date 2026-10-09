@@ -1042,6 +1042,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .call callee _ =>
     match callee with
     | .func name true .. =>
+      if let some symbol := externSymbol? name then
+        throw s!"{fnName}: near line {line}: a call to the noreturn extern function '{symbol}' \
+          is outside the subset (docs/air-json.md §Extern calls)"
       if (panicErrorFor? name).isNone then
         throw s!"{fnName}: near line {line}: noreturn callee '{name}' is not a known \
           panic-handler function (docs/generated-code.md §Panics)"
@@ -2438,6 +2441,84 @@ def parseSpawnPolicy (value : String) : Except String SpawnSemantics :=
   | "fallible" => .ok .fallible
   | _ => .error "invalid --spawn-policy (expected available or fallible)"
 
+/-- `i` with every direct callee renamed by `rename` (nested bodies included). -/
+private partial def renameCallees (rename : String → String) (i : Inst) : Inst :=
+  let body := Array.map (renameCallees rename)
+  let cases := Array.map fun (c : SwitchCase) => { c with body := body c.body }
+  { i with op := match i.op with
+    | .call (.func name noreturn spawnFn) args => .call (.func (rename name) noreturn spawnFn) args
+    | .block b => .block (body b)
+    | .loop b => .loop (body b)
+    | .condBr c t e => .condBr c (body t) (body e)
+    | .switchBr v cs e => .switchBr v (cases cs) (body e)
+    | .loopSwitchBr v cs e => .loopSwitchBr v (cases cs) (body e)
+    | .«try» v e => .«try» v (body e)
+    | .tryPtr p e => .tryPtr p (body e)
+    | op => op }
+
+/-- The rejection of an extern call that `resolveExterns` cannot bind. -/
+def externUnbound (caller : String) (e : ExternDecl) (why : String) : String :=
+  s!"{caller}: CALLEE_EXTERN_UNBOUND: extern function '{e.name}'\
+    {(e.library.map (s!" (library '{·}')")).getD ""} {why} (docs/air-json.md §Extern calls)"
+
+/-- Bind each extern call (`externCallee`, `docs/air-json.md` §Extern calls) at its linker
+symbol, never at a Zig declaration name:
+(a) to a registry model whose `symbol` is the extern callee and whose `extern.library` is the
+    declared library; the call stays an extern callee, which the model implements;
+(b) else to the one `export fn` of the program that defines the symbol, with the declared
+    calling convention; the call becomes a direct call of that function, whose signature
+    `checkProgram` then checks like any direct call's.
+A variadic extern is outside the subset. The result is the rewritten functions and one
+rejection per (caller, symbol) that neither binds; callers that need all-or-nothing use
+`resolveExterns`. -/
+def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #[]) :
+    Except String (Array Func × Array (String × String)) := do
+  let mut exports : Std.HashMap String Func := {}
+  for f in funcs do
+    if (externSymbol? f.name).isSome then
+      throw s!"{f.name}: a function name cannot have the extern callee form 'extern:<symbol>'"
+    if let some e := f.exportDecl then
+      if let some other := exports[e.name]? then
+        throw s!"{f.name}: the symbol '{e.name}' is also exported by '{other.name}' (CALLEE_AMBIGUOUS)"
+      exports := exports.insert e.name f
+  let mut unbound : Array (String × String) := #[]
+  let mut out : Array Func := #[]
+  for f in funcs do
+    let mut renames : Std.HashMap String String := {}
+    for i in f.allInsts do
+      let .call (.func callee ..) _ := i.op | continue
+      let some symbol := externSymbol? callee | continue
+      if renames.contains callee || unbound.contains (f.name, symbol) then continue
+      let some e := f.externs.find? (·.name == symbol)
+        | throw s!"{f.name}: inst {i.id}: extern callee '{symbol}' has no 'externs' entry"
+      if e.varargs then
+        unbound := unbound.push (f.name, externUnbound f.name e "is variadic, which is outside the subset")
+      else if let some m := models.find? (·.symbol == callee) then
+        let some binding := m.externBinding
+          | throw s!"{f.name}: model '{m.symbol}' has no extern binding"
+        unless binding.library == e.library do
+          unbound := unbound.push (f.name, externUnbound f.name e
+            s!"is declared with another library than its registry model's ({binding.library.getD "none"})")
+      else if let some target := exports[symbol]? then
+        let cc := (target.exportDecl.map (·.cc)).getD ""
+        if cc == e.cc then renames := renames.insert callee target.name
+        else unbound := unbound.push (f.name, externUnbound f.name e
+          s!"is declared with calling convention '{e.cc}', but its definition '{target.name}' has '{cc}'")
+      else
+        unbound := unbound.push (f.name, externUnbound f.name e
+          s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
+            registry model '{callee}' (--model-registry, docs/external-models.md)")
+    out := out.push (if renames.isEmpty then f
+      else { f with body := f.body.map (renameCallees (fun n => renames.getD n n)) })
+  return (out, unbound)
+
+/-- `resolveExternsCollect`, rejecting the program at the first unbound extern call. -/
+def resolveExterns (funcs : Array Func) (models : Array ModelBinding := #[]) :
+    Except String (Array Func) := do
+  let (resolved, unbound) ← resolveExternsCollect funcs models
+  if let some (_, message) := unbound[0]? then throw message
+  return resolved
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -2490,6 +2571,9 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
             checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
               k args index
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
+          if let some symbol := externSymbol? callee then
+            throw s!"{f.name}: CALLEE_EXTERN_UNBOUND: extern function '{symbol}' is bound to \
+              neither a definition nor a registry model (docs/air-json.md §Extern calls)"
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless modelledStdFn callee do

@@ -412,7 +412,8 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     | _ => l
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,
-           errorSetBits := raw.profile.errorSetBits }
+           errorSetBits := raw.profile.errorSetBits, externs := raw.externs,
+           exportDecl := raw.exportDecl }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do
