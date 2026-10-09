@@ -958,6 +958,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_receipt.py
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_check.py
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_ci_stash.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/proof-receipts/test_rss_budget.py
           tests/roadmap/assurance/check.sh
 
       # Claim strength is derived from extracted theorem types; overstated goals are rejected.

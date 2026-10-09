@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Tiny copied-wrapper tests; no actual guard, helper worker or toolchains."""
+import rss_budget
+START_RSS = rss_budget.baseline()  # bare-interpreter peak; the suite's imports count as growth
 import gc
 import json
 import os
 from pathlib import Path
-import resource
 import shutil
 import subprocess
 import sys
@@ -119,10 +120,6 @@ raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
 
 if __name__ == '__main__':
     result = unittest.main(exit=False).result
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    peak_bytes = peak if sys.platform == 'darwin' else peak * 1024
-    print('offline peak RSS bytes:', peak_bytes)
-    if peak_bytes > 32 * 1024 * 1024:
-        raise SystemExit('offline test RSS exceeded 32 MiB')
+    rss_budget.enforce(START_RSS)
     if not result.wasSuccessful():
         raise SystemExit(1)
