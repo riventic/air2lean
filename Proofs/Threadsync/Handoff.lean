@@ -2713,13 +2713,13 @@ theorem sg1_noFail {G : ThreadId → Gh} {m : Mem} {j : Nat} {b : BitVec 32}
 
 /-- `signal`'s loop invariant: the producer read `1` (at `sg1`) or `0` (it does not signal: at
 `set`). -/
-def sInv (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : ThreadId → Gh) (m : Mem)
+def sInv (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → Gh) (m : Mem)
     (_ : Nat) : Prop :=
   m.current = 1 ∧ ((s.state = sv 1 ∧ proto.inv (upd G 1 (gP { ph := .sg1 })) m) ∨
     (s.state = sv 0 ∧ proto.inv (upd G 1 (gP { ph := .set })) m))
 
 /-- `signal`'s loop ends with the producer at `set`. -/
-def sPost (r : Thread_Condition_FutexImpl_wake__anon_1Exit × Thread_Condition_FutexImpl_wake__anon_1Locals)
+def sPost (r : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit × Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals)
     (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
   r.1 = .ret ∧ m.current = 1 ∧ ∃ b, proto.inv (upd G 1 (gP { ph := .set, cw := b })) m
 
@@ -2731,18 +2731,18 @@ theorem dv01 : (divTrunc false (sv 0 &&& 65535) (1 : BitVec 32)).run = some (.ok
 theorem dv02 : (divTrunc false (sv 0 &&& 4294901760) (65536 : BitVec 32)).run = some (.ok 0) := rfl
 theorem sb00 : (sub false (0 : BitVec 32) 0).run = some (.ok 0) := rfl
 
-theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : ThreadId → Gh) (m : Mem)
+theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → Gh) (m : Mem)
     (d : Nat) (h : sInv s G m d) :
-    proto.WP 1 ((Thread_Condition_FutexImpl_wake__anon_1.loop9 ((bPtr.add 4).add 0)).run s)
+    proto.WP 1 ((Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 ((bPtr.add 4).add 0)).run s)
       (fun r G' m' d' =>
-        if Thread_Condition_FutexImpl_wake__anon_1.again9 r.1 then sInv r.2 G' m' d' ∧
+        if Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9 r.1 then sInv r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
-            (fun (_ : Thread_Condition_FutexImpl_wake__anon_1Locals) => 0) s)
+            (fun (_ : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) => 0) s)
         else sPost r G' m' d') G m d := by
   obtain ⟨st⟩ := s
   obtain ⟨hc, ⟨hs, hi⟩ | ⟨hs, hi⟩⟩ := h
   · simp only at hs; subst hs
-    unfold Thread_Condition_FutexImpl_wake__anon_1.loop9
+    unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9
     simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
     refine WP.bind ?_
     refine WP.bind (WP.callRC_ok dv11 ?_)
@@ -2777,7 +2777,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
         | exact ⟨rfl, hc₅, true, hi₆⟩
         | refine WP.pure' ?_
         | simp only [StateT.run_pure, StateT.run_bind, pure_bind,
-            Thread_Condition_FutexImpl_wake__anon_1.again9, Bool.false_eq_true, ↓reduceIte])
+            Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true, ↓reduceIte])
       done
     · have hb : b = sv 1 := by
         apply Classical.byContradiction
@@ -2794,11 +2794,11 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
         | exact ⟨⟨hop.current, .inl ⟨rfl, hi₂⟩⟩, .inl (by omega)⟩
         | refine WP.pure' ?_
         | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
-            Thread_Condition_FutexImpl_wake__anon_1.again9, ↓reduceIte])
+            Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, ↓reduceIte])
       done
 
   · simp only at hs; subst hs
-    unfold Thread_Condition_FutexImpl_wake__anon_1.loop9
+    unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9
     simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
     refine WP.bind ?_
     refine WP.bind (WP.callRC_ok dv01 ?_)
@@ -2810,7 +2810,7 @@ theorem sig_body (s : Thread_Condition_FutexImpl_wake__anon_1Locals) (G : Thread
       | refine WP.pure' ?_
       | simp only [StateT.run_pure, StateT.run_bind, pure_bind,
           show ((0 : BitVec 32) == 0) = true from rfl, ↓reduceIte,
-          Thread_Condition_FutexImpl_wake__anon_1.again9, Bool.false_eq_true])
+          Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true])
     done
 
 /-- `signal` by the producer after its `unlock`: it signals iff `main` did `waiters += 1`. -/
@@ -2824,7 +2824,7 @@ theorem signal_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
   refine WP.bind (WP.callC ?_)
-  unfold Thread_Condition_FutexImpl_wake__anon_1
+  unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
