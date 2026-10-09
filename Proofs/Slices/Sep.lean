@@ -1,5 +1,6 @@
 import Proofs.Slices.Gen
 import ZigLean.Sep
+import ZigLean.Sep.Witness
 
 /-!
 # Separation-logic proofs about `examples/slices/slices.zig`
@@ -195,3 +196,41 @@ theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
       simp [BitVec.usubOverflow]; omega
     simp only [StateT.run] at hr
     simp [reverse, zig_unfold, hne, Zig.sub, hso, hr, s₀]
+
+/-! ## Non-vacuity and liveness witnesses: one item in one block -/
+
+theorem counter_pre : pts counter 4 (0 : BitVec 32) (Witness.mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  Witness.mem1_pts' 0 (by decide)
+
+nonvacuity_witness bump_spec := ⟨0, by decide, Witness.Admit.of_heap counter_pre (Witness.mem1_seq _ _)⟩
+liveness_witness bump_spec :=
+  ⟨0, by decide,
+    Witness.Live.of_heap counter_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+theorem arr32_pre : arr Witness.p0 [(0 : BitVec 32)] (Witness.mem1 (Enc.encode (0 : BitVec 32))).heap :=
+  Witness.mem1_arr1 0 (by decide +kernel)
+
+theorem arr8_pre : arr Witness.p0 [(0 : BitVec 8)] (Witness.mem1 (Enc.encode (0 : BitVec 8))).heap :=
+  Witness.mem1_arr1 0 (by decide +kernel)
+
+nonvacuity_witness copyWithin_spec :=
+  ⟨⟨Witness.p0, 1⟩, [0], 0, 0, 0, rfl, by decide, by decide,
+    Witness.Admit.of_heap arr32_pre (Witness.mem1_seq _ _)⟩
+liveness_witness copyWithin_spec :=
+  ⟨⟨Witness.p0, 1⟩, [0], 0, 0, 0, rfl, by decide, by decide,
+    Witness.Live.of_heap arr32_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+nonvacuity_witness fill_sep :=
+  ⟨⟨Witness.p0, 1⟩, [0], 1, rfl, Witness.Admit.of_heap arr8_pre (Witness.mem1_seq _ _)⟩
+liveness_witness fill_sep :=
+  ⟨⟨Witness.p0, 1⟩, [0], 1, rfl,
+    Witness.Live.of_heap arr8_pre (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
+nonvacuity_witness reverse_spec :=
+  ⟨⟨Witness.p0, 1⟩, [0], rfl, Witness.Admit.of_heap arr32_pre (Witness.mem1_seq _ _)⟩
+-- The loop is a `partial_fixpoint`, which the kernel does not evaluate: the run shown is the one
+-- on the empty slice, which returns before the loop.
+liveness_witness reverse_spec :=
+  ⟨⟨Witness.p0, 0⟩, [], rfl,
+    Witness.Live.of_heap (Witness.mem1_arr0 (T := BitVec 32) (by decide +kernel)) (Witness.mem1_seq _ _)
+      (Witness.ok_of_okb (by decide +kernel))⟩

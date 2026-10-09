@@ -69,6 +69,22 @@ theorem mem1_pts' {T : Type} [Enc T] [LawfulEnc T] (v : T) {a : Nat} (ha : 4096 
     pts p0 a v (mem1 (Enc.encode v)).heap :=
   mem1_pts (LawfulEnc.size_encode v) (LawfulEnc.decode_encode v) ha (by decide)
 
+/-- `p0` points to the empty array. -/
+theorem mem1_arr0 {T : Type} [Enc T] (ha : 4096 % Enc.align T = 0) :
+    arr p0 ([] : List T) (mem1 #[]).heap :=
+  ⟨4096, _, .heap, #[], by simpa [p0] using ha, by simp, fun i hi => by simp at hi,
+    mem1_bytesAt _ _, by decide⟩
+
+/-- `p0` points to the one-item array `[v]`. -/
+theorem mem1_arr1 {T : Type} [Enc T] [LawfulEnc T] (v : T) (ha : 4096 % Enc.align T = 0) :
+    arr p0 [v] (mem1 (Enc.encode v)).heap := by
+  have hs := LawfulEnc.size_encode v
+  refine ⟨4096, _, .heap, Enc.encode v, by simpa [p0] using ha, by simp [hs], fun i hi => ?_,
+    mem1_bytesAt _ _, by decide⟩
+  have : i = 0 := by simp at hi; omega
+  subst this
+  simpa [← hs] using LawfulEnc.decode_encode v
+
 /-- Two values one after the other: `p0` points to `v` and `p0.add (Enc.size T)` to `w`. -/
 theorem mem1_pts₂ {T U : Type} [Enc T] [LawfulEnc T] [Enc U] [LawfulEnc U] (v : T) (w : U)
     {a b : Nat} (ha : 4096 % a = 0) (hb : (4096 + Enc.size T) % b = 0) :
