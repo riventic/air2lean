@@ -5,3 +5,6 @@ maskCount 135
 numInt 30
 shapeArea 30
 writeTable 3
+# A field pointer whose `Point` would extend past the buffer: no parent object exists there, so
+# `@fieldParentPtr` is illegal behaviour (docs/illegal-behavior.md row 40).
+parentOfX 114

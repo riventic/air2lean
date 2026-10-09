@@ -1049,7 +1049,7 @@ inductive parentOfXExit where
 
 def parentOfX (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add (-(0 : Int)))
+    let i1 ← Zig.callM (Zig.checkParent 8 4 (p0.add (-(0 : Int))) >>= fun _ => pure (p0.add (-(0 : Int))))
     pure (.ret i1)) : Zig.MM parentOfXLocals parentOfXExit).run' (default : parentOfXLocals)
   match e with
   | .ret v => pure v
@@ -1062,7 +1062,7 @@ inductive parentOfYExit where
 
 def parentOfY (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add (-(4 : Int)))
+    let i1 ← Zig.callM (Zig.checkParent 8 4 (p0.add (-(4 : Int))) >>= fun _ => pure (p0.add (-(4 : Int))))
     pure (.ret i1)) : Zig.MM parentOfYLocals parentOfYExit).run' (default : parentOfYLocals)
   match e with
   | .ret v => pure v

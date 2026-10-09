@@ -68,6 +68,16 @@ fn die() noreturn {
     @panic("die");
 }
 
+/// Sentinel slicing of `u16` items: no recorded sentinel value, so the translator rejects it.
+pub fn sentinelWords(s: []const u16, n: usize) [:0]const u16 {
+    @setRuntimeSafety(false);
+    return s[0..n :0];
+}
+
+pub fn errorCastUnionSafe(e: Big!u32) Small!u32 {
+    return @errorCast(e);
+}
+
 comptime {
     _ = &errorFromIntSafe;
     _ = &errorFromIntUnsafe;
@@ -81,4 +91,6 @@ comptime {
     _ = &sentinelUnsafe;
     _ = &forLenUnsafe;
     _ = &noreturnCall;
+    _ = &sentinelWords;
+    _ = &errorCastUnionSafe;
 }

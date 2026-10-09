@@ -490,7 +490,7 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
           else (do
             throw .outOfBounds)) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with
         | .br51 => (do
-          let i56 ← pure (⟨i48, i49⟩ : Zig.Slice)
+          let i56 ← Zig.callMC (Zig.checkSliceEnd (4 : BitVec 64) (0 : BitVec 64) i49 0 >>= fun _ => pure (⟨i48, i49⟩ : Zig.Slice))
           let i57 ← pure i56.len
           match ← ((do
             Zig.loop (parallelCounter.loop59 i56 i57) parallelCounter.again59) : Zig.CM Tgt parallelCounterLocals parallelCounterExit) with

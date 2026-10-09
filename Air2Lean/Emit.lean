@@ -673,6 +673,8 @@ structure FCtx where
   /-- The float `div_trunc`s that are the safety-checked lowering of `@divExact`
   (`exactFloatDivs`). -/
   exactFloatDivs : Array InstId := #[]
+  /-- The sentinel slicings that a Sema check compares (`sentinelCheckedSlices`). -/
+  sentinelChecked : Array InstId := #[]
 
 /-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
 `r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
@@ -1564,8 +1566,12 @@ def FCtx.forLenBound? (fc : FCtx) (id : InstId) : Option Val := do
   guard (!fc.isReferenced id)
   let after := fc.allInsts.filter (·.id > id)
   let cmp ← after.findSome? fun i => match i.op with
-    | .cmp .lt (.inst idx) (.inst b) => match fc.opOf? (.inst idx), fc.opOf? (.inst b) with
-      | some (.bitcast _), some (.bitcast bound) => some bound
+    | .cmp .lt (.inst idx) b => match fc.opOf? (.inst idx), b with
+      | some (.bitcast _), .inst _ => match fc.opOf? b with
+        | some (.bitcast bound) => some bound
+        | _ => none
+      -- A comptime-known first length (an array operand).
+      | some (.bitcast _), .int .. => some b
       | _, _ => none
     | _ => none
   -- The bound must already be in scope at the `slice_len`.
@@ -2356,8 +2362,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let checks := (srcLen.map fun (n, srcSentinel) =>
         let extra := if resultSentinel && !srcSentinel then 1 else 0
         [s!"Zig.checkSliceEnd {n} {start} {rv len} {extra}"]).getD [] ++
+      -- Sema's own sentinel check comes after the slicing and panics first when present.
       (match ((fc.layouts[inst.ty]?).bind (·.sentinelByte)) with
-        | some byte => [s!"Zig.checkSentinelByte {rv p} {rv len} ({byte} : BitVec 8)"]
+        | some byte =>
+          if fc.sentinelChecked.contains inst.id then []
+          else [s!"Zig.checkSentinelByte {rv p} {rv len} ({byte} : BitVec 8)"]
         | none => [])
     let value := s!"(⟨{rv p}, {rv len}⟩ : Zig.Slice)"
     let expr := if checks.isEmpty then s!"pure {value}"
@@ -2898,7 +2907,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs,
       escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
-      rawRet := rawFuncs.contains f.name, exactFloatDivs := exactFloatDivs allInsts }
+      rawRet := rawFuncs.contains f.name, exactFloatDivs := exactFloatDivs allInsts,
+      sentinelChecked := sentinelCheckedSlices allInsts }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
   { fc with rawInsts := fc.computeRawInsts fc.rawRet }
 

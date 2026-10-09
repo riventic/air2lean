@@ -74,6 +74,39 @@ def cases : IO Unit := do
     itemUnsafe sl (BitVec.ofNat 64 i)
   check "itemUnsafe past length, inside block" (memErr (item 3)) (some .illegal)
   check "itemUnsafe in range" (memErr (item 1)) none
+  -- Slicing past the end; a start after the end overflows the length subtraction first.
+  let words (n : Nat) : MemM Ptr := do
+    let items ← alloc .heap (4 * n) 4
+    for k in [0:n] do store 4 (items.elem 4 (BitVec.ofNat 64 k)) (BitVec.ofNat 32 k)
+    pure items
+  let sliceOf (len : Nat) (cap : Nat) : MemM Ptr := do
+    let items ← words cap
+    let sl ← alloc .heap 16 8
+    store 8 sl (⟨items, BitVec.ofNat 64 len⟩ : Slice)
+    pure sl
+  check "sliceEnd 1..6 of 4 (inside an 8-item block)"
+    (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 1 6)) (some .illegal)
+  check "sliceEnd 1..4 of 4" (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 1 4)) none
+  check "sliceEnd 3..1" (memErr (do let sl ← sliceOf 4 8; sliceEnd sl 3 1)) (some .overflow)
+  check "sliceArray 2..7" (memErr (do let a ← words 8; sliceArray a 2 7)) (some .illegal)
+  check "sliceArray 2..4" (memErr (do let a ← words 8; sliceArray a 2 4)) none
+  check "sentinelBytes 0..2 (no 0 at 2)"
+    (memErr (do let s ← buffer 4; sentinelBytes s 2)) (some .illegal)
+  check "sentinelBytes 0..0 (0 at 0)" (memErr (do let s ← buffer 4; sentinelBytes s 0)) none
+  check "sentinelBytes 0..4 of 4" (memErr (do let s ← buffer 4; sentinelBytes s 4)) (some .illegal)
+  let arr (n : Nat) : Array (BitVec 32) := (Array.range n).map (BitVec.ofNat 32)
+  check "forLen 2/3" (errOf (forLen (arr 2) (arr 3))) (some .illegal)
+  check "forLen 3/3" (errOf (forLen (arr 3) (arr 3))) none
+  let slicePtr (n : Nat) : MemM Ptr := sliceOf n n
+  check "forLenMem 2/3"
+    (memErr (do let a ← slicePtr 2; let b ← slicePtr 3; forLenMem a b)) (some .illegal)
+  check "forLenMem 3/3"
+    (memErr (do let a ← slicePtr 3; let b ← slicePtr 3; forLenMem a b)) none
+  -- Residual gap: the range's end never reaches the AIR (docs/illegal-behavior.md row 27).
+  check "forRange 3/5 (gap: returns a value)" (errOf (forRange (arr 3) 5)) none
+  check "parentOf lone u32" (memErr (do let x ← alloc .heap 4 4; parentOf x)) (some .illegal)
+  check "parentOf field b of an S"
+    (memErr (do let p ← alloc .heap 8 4; parentOf (p.add 4))) none
 
 end IllegalCases
 

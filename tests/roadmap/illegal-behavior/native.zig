@@ -37,4 +37,18 @@ pub fn main() void {
     var buf = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8 };
     ib.copyOverlapUnsafe(&buf, 4);
     std.debug.print("copyOverlapUnsafe {x}\n", .{buf});
+    const items = [_]u32{ 1, 2, 3, 4, 5, 6, 7, 8 };
+    const four: []const u32 = items[0..4];
+    std.debug.print("sliceEnd 1..6 len {d}\n", .{ib.sliceEnd(&four, 1, 6).len});
+    const arr: [4]u32 = .{ 1, 2, 3, 4 };
+    std.debug.print("sliceArray 2..7 len {d}\n", .{ib.sliceArray(&arr, 2, 7).len});
+    const bytes = [_]u8{ 'a', 'b', 'c', 0 };
+    std.debug.print("sentinelBytes 0..2 len {d}\n", .{ib.sentinelBytes(&bytes, 2).len});
+    const twoItems: []const u32 = items[0..2];
+    const threeItems: []const u32 = items[0..3];
+    std.debug.print("forLen 2/3 {d}\n", .{ib.forLen(twoItems, threeItems)});
+    std.debug.print("forLenMem 2/3 {d}\n", .{ib.forLenMem(&twoItems, &threeItems)});
+    std.debug.print("forRange 3/5 {d}\n", .{ib.forRange(threeItems, 5)});
+    var lone: u32 = 7;
+    std.debug.print("parentOf lone {}\n", .{@intFromPtr(ib.parentOf(&lone)) + 4 == @intFromPtr(&lone)});
 }

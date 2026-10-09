@@ -34,7 +34,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 2 | Index out of bounds: array, slice | `outOfBounds` | `.outOfBounds` | pure `Zig.index`/`Zig.vindex`: `.outOfBounds`. Memory `slice_elem_val`: `Zig.checkIndex` (the sentinel item of `[:s]T` included), `.illegal` (**fixed**, was a value when the item lay inside the block) |
 | 3 | Index out of bounds: many-item pointer | none (no length) | `Mem.access`: `.illegal` outside the allocation | same |
 | 4 | Slice start greater than end | `startGreaterThanEnd` | `.outOfBounds` | the length `sub` overflows: `.overflow` |
-| 5 | Slice end past the length | `outOfBounds` | `.outOfBounds` | **gap**: the `slice` op has no source length. A later access outside the allocation is `.illegal`; inside it is a value |
+| 5 | Slice end past the length | `outOfBounds` | `.outOfBounds` | `Zig.checkSliceEnd` on `slice(ptr_add(base, start), len)`, where `base` is a slice's `slice_ptr` or an array pointer: `.illegal` (**fixed**, was a slice past the operand). A many-item pointer has no length, so its slicing has no bound to break |
 | 6 | Cast negative to unsigned / cast truncates data (`@intCast`) | `integerOutOfBounds` | `.overflow` | `intcast`: `Zig.intCast`, `.overflow` |
 | 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor` of `minInt / -1`) | `integerOverflow`, `*_safe` tags | `.overflow` | plain `add`/`sub`/`mul`, `div_trunc`/`div_floor`: `.overflow` |
 | 8 | Division by zero (integers) | `divideByZero` | `.divByZero` | `.divByZero` |
@@ -48,15 +48,15 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 16 | Attempt to unwrap error | `unwrapError` | `.panic` | `Zig.unwrapPayload`: `.panic` |
 | 17 | Invalid error code (`@errorFromInt`) | `cmp_lte_errors_len` | *rejected* (normalizer) | *rejected*: raw error representation casts |
 | 18 | Invalid enum cast (`@enumFromInt`) | `invalidEnumValue` | `.panic` | `Zig.enumOf`: `.panic` |
-| 19 | Invalid error set cast (`@errorCast`) | `error_set_has_value` | *rejected* (exporter) | error set: `Zig.errorIn`, `.illegal` (**fixed**, was the error). Error union: *rejected* |
+| 19 | Invalid error set cast (`@errorCast`) | `error_set_has_value` | *rejected* (exporter) | error set: `Zig.errorIn`, `.illegal` (**fixed**, was the error). Error union: *rejected* with or without safety (the checker refuses a `bitcast` between error unions of different sets; probes `errorCastUnionSafe`, `errorCastUnionUnsafe`) |
 | 20 | Incorrect pointer alignment (`@alignCast`, `@ptrFromInt`) | `incorrectAlignment` | `.panic` | `Zig.checkAlign`, `Zig.checkAddr`: `.illegal` (**fixed**, was the pointer) |
 | 21 | Wrong union field access (tagged, bare) | `inactiveUnionField` | `.panic` | `U.get_f`: `.panic` |
 | 22 | Out-of-bounds float to integer (`@intFromFloat`, and `@floor`/`@ceil`/`@trunc`/`@round` to an integer) | `integerPartOutOfBounds`, false for a NaN | `.overflow`; NaN: `.illegal` (**fixed**, was `.unspecified`) | `int_from_float`: `.illegal` (**fixed**, was `.unspecified`) |
 | 23 | Pointer cast invalid null (`@ptrFromInt(0)`, `?*T` or `[*c]T` to `*T`) | `castToNull` | `.panic` | `@ptrFromInt`: `Zig.checkAddr`, `.illegal` (**fixed**, was an address-zero pointer). Optional and C pointers: `.panic` |
-| 24 | Sentinel mismatch (sentinel slicing) | `sentinelMismatch` | `.panic` | **gap**: a value. The AIR type records whether a sentinel exists, but its value only for a `u8` pointer on 0.16.0 |
+| 24 | Sentinel mismatch (sentinel slicing) | `sentinelMismatch` | `.panic` | `u8` sentinel on 0.16.0 (the export records its value): `Zig.checkSentinelByte`, and the sentinel item must lie in the operand, `.illegal` (**fixed**, was a value). Any other sentinel without Sema's check: *rejected* (**fixed**) |
 | 25 | `@memcpy` arguments of unequal length | `copyLenMismatch` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove` with the destination's count) |
 | 26 | `@memcpy` arguments alias | `memcpyAlias` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove`) |
-| 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | **gap**: no single op holds both lengths. Each item read is checked as in rows 2 and 3 |
+| 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | slice operands: Sema still emits each slice operand's `slice_len`; one that nothing reads, before a loop bounded by `cmp_lt(bitcast(i), bound)`, becomes `Zig.forLen len bound`, `.illegal` when unequal (**fixed**, was a value). A later range or array operand: **gap**, see below |
 | 28 | `@tagName` of an unnamed non-exhaustive enum value | `invalidEnumValue` (via `is_named_enum_value`) | `.panic` | `E.tagName`: `.illegal` (**fixed**, was `.panic`) |
 | 29 | Switch on a corrupt value | `corruptSwitch` | `.panic` | every model enum value is named; no corrupt value exists |
 | 30 | A `noreturn` function returns | `noreturnReturned` | *rejected* (handler outside the table) | — |
@@ -74,7 +74,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 37 | Access to a freed or dead block (use after free, stack pointer after return), out of bounds or misaligned; double free; write to a `const` global | `Mem.access` and the allocator: `.illegal` |
 | 38 | Loading an invalid `bool`, enum tag or packed-struct field pattern | `Enc` decode and `Packed.ofBits?`: `.illegal` |
 | 39 | Data race | the race check of `ZigLean/Mem/Basic.lean`: `.illegal` |
-| 40 | `@fieldParentPtr` of a pointer that is not to that field | local places: the checker requires the proven field. Memory: **gap**, `p.add (-offset)` is a value |
+| 40 | `@fieldParentPtr` of a pointer that is not to that field (parent without a defined layout) | local places: the checker requires the proven field. Memory: `Zig.checkParent`, the parent must be a live, aligned object of its size in the field pointer's block, `.illegal` (**fixed**, was a value). `extern`/`packed` parents: defined arithmetic, a value |
 | 41 | Inline assembly with undeclared clobbers | premises [ASM-01](premises.md#asm-01), [ASM-02](premises.md#asm-02) |
 | 42 | Branch on, or arithmetic with, `undefined` | `undefined` constant operands are *rejected*. A load of undefined bytes throws `.unspecified`, earlier than the IB |
 
@@ -90,14 +90,20 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 
 ## Gaps
 
-Rows 5, 24, 27 and 40 still give a value for IB, and only in unsafe AIR. In ReleaseSafe a
-Sema check catches each of them, except row 40, which needs a pointer that is not to the
-field. The [build-modes](build-modes.md) premise already excludes `@setRuntimeSafety(false)`.
-These rows have no claim beyond it.
+`@setRuntimeSafety(false)` blocks inside a ReleaseSafe build produce the unchecked shapes,
+so the rows above model each op's own check instead of relying on a Sema check. One case stays
+open: a `for` loop with runtime safety off whose second or later operand is a range
+(`for (a, 0..n)`) or an array. Sema emits no instruction for that operand's length, so the
+analyzed AIR does not contain it (`ib.forRange`). The loop runs over the first operand, and the
+model returns that result for any other length. Neither the model nor the checker can see the
+mismatch. Closing it needs an exporter change that keeps the operand lengths. Until then, a
+claim about a function with such a loop under `@setRuntimeSafety(false)` does not cover
+unequal lengths.
 
 ## Evidence
 
-- `tests/roadmap/illegal-behavior/check.sh`: the fixture sources `ib.zig` and `probe.zig`,
+- `tests/roadmap/illegal-behavior/check.sh`: the fixture sources `ib.zig` and `probe.zig`
+  (each former gap as a `@setRuntimeSafety(false)` function),
   their retained 0.16.0 AIR (`air/`, `probe-air/`), the translation, `Cases.lean` on the
   generated functions, and `Runtime.lean` on the runtime ops.
 - Native: `native.zig` prints what a ReleaseSafe and a ReleaseFast build return for each input

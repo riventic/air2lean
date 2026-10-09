@@ -152,7 +152,7 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : 
               else (do
                 throw .outOfBounds)) : Zig.MM array_list_Aligned_u32_null_ensureTotalCapacityPreciseLocals array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit) with
             | .br40 => (do
-              let i45 ← pure (⟨i36, i37⟩ : Zig.Slice)
+              let i45 ← Zig.callM (Zig.checkSliceEnd v28.len (0 : BitVec 64) i37 0 >>= fun _ => pure (⟨i36, i37⟩ : Zig.Slice))
               let i46 ← pure (p0.add 0)
               let i47 ← Zig.load (Zig.Slice) 8 i46
               let i48 ← pure i45.len
@@ -496,7 +496,7 @@ def mem_Allocator_dupeZ__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM
         else (do
           throw .outOfBounds)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
       | .br15 => (do
-        let i20 ← pure (⟨i11, i12⟩ : Zig.Slice)
+        let i20 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i12 0 >>= fun _ => pure (⟨i11, i12⟩ : Zig.Slice))
         let i21 ← pure i20.len
         let i22 ← pure p1.len
         let i23 ← pure (i21 == i22)
@@ -544,7 +544,7 @@ def mem_Allocator_dupeZ__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM
                 else (do
                   throw .outOfBounds)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
               | .br59 => (do
-                let i64 ← pure (⟨i54, i55⟩ : Zig.Slice)
+                let i64 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i55 1 >>= fun _ => pure (⟨i54, i55⟩ : Zig.Slice))
                 let i65 ← Zig.callM (Zig.checkSentinelIndex i64 i55 >>= fun _ => Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
                 let i66 ← pure ((0 : BitVec 8) == i65)
                 match ← ((do

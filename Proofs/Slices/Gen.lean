@@ -219,7 +219,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
       else (do
         throw .outOfBounds)) : Zig.MM copyWithinLocals copyWithinExit) with
     | .br9 => (do
-      let i14 ← pure (⟨i5, p3⟩ : Zig.Slice)
+      let i14 ← Zig.callM (Zig.checkSliceEnd p0.len p1 p3 0 >>= fun _ => pure (⟨i5, p3⟩ : Zig.Slice))
       let i15 ← pure p0.ptr
       let i16 ← pure (i15.elem 4 p2)
       let i17 ← Zig.add false p2 p3
@@ -231,7 +231,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
         else (do
           throw .outOfBounds)) : Zig.MM copyWithinLocals copyWithinExit) with
       | .br20 => (do
-        let i25 ← pure (⟨i16, p3⟩ : Zig.Slice)
+        let i25 ← Zig.callM (Zig.checkSliceEnd p0.len p2 p3 0 >>= fun _ => pure (⟨i16, p3⟩ : Zig.Slice))
         let i26 ← pure i14.len
         let i27 ← pure i25.len
         let i28 ← pure (i26 == i27)
@@ -652,7 +652,7 @@ def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slic
         else (do
           throw .outOfBounds)) : Zig.MM subZLocals subZExit) with
       | .br15 => (do
-        let i20 ← pure (⟨i4, i11⟩ : Zig.Slice)
+        let i20 ← Zig.callM (Zig.checkSliceEnd p0.len p1 i11 1 >>= fun _ => Zig.checkSentinelByte i4 i11 (0 : BitVec 8) >>= fun _ => pure (⟨i4, i11⟩ : Zig.Slice))
         let i21 ← Zig.callM (Zig.checkSentinelIndex i20 i11 >>= fun _ => Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
         let i22 ← pure ((0 : BitVec 8) == i21)
         match ← ((do
@@ -749,7 +749,7 @@ def sumMid (p0 : Zig.Slice) : Zig.MemM (BitVec 32) := do
         else (do
           throw .outOfBounds)) : Zig.MM sumMidLocals sumMidExit) with
       | .br14 => (do
-        let i19 ← pure (⟨i4, i11⟩ : Zig.Slice)
+        let i19 ← Zig.callM (Zig.checkSliceEnd p0.len (1 : BitVec 64) i11 0 >>= fun _ => pure (⟨i4, i11⟩ : Zig.Slice))
         let i20 ← pure (i19)
         let i21 ← Zig.callR (sumSlice (← Zig.callM (Zig.readSlice (BitVec 32) 4 i20)))
         pure (.ret i21))

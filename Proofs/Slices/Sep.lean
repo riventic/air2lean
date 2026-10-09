@@ -58,11 +58,13 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
     rw [Nat.mod_eq_of_lt (by omega)]; omega
   have hsl : (s.toNat + n.toNat) % 18446744073709551616 ≤ sl.len.toNat := by
     rw [Nat.mod_eq_of_lt (by omega)]; omega
+  have hdc : d.toNat + n.toNat + 0 ≤ sl.len.toNat := by omega
+  have hsc : s.toNat + n.toNat + 0 ≤ sl.len.toNat := by omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
   rw [e4] at hr
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
   simp (config := { maxSteps := 1000000 }) [copyWithin, zig_unfold, Zig.add, Zig.le, BitVec.ule,
-    hdo, hso, hdl, hsl, hr]
+    checkSliceEnd, hdc, hsc, hdo, hso, hdl, hsl, hr]
 
 /-- `@memset` of a whole slice: every item becomes `v`. -/
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :

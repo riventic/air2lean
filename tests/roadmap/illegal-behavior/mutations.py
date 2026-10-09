@@ -22,6 +22,10 @@ MUTANTS = {
     'memcpy-as-memmove': (r'Zig\.memcpy (\d+ \d+ \d+ \S+ \S+ \S+) \S+\)', r'Zig.memmove \1)'),
     'slice-index-unchecked': (r'Zig\.checkIndex \S+ \S+ >>= fun _ => ', ''),
     'shift-count-unchecked': (r'Zig\.shlChk (\w+) (\w+)', r'pure (Zig.shl \1 \2)'),
+    'slice-end-unchecked': (r'Zig\.checkSliceEnd \S+ \S+ \S+ \d+ >>= fun _ => ', ''),
+    'sentinel-unchecked': (r'Zig\.checkSentinelByte \S+ \S+ \(\d+ : BitVec 8\) >>= fun _ => ', ''),
+    'for-length-unchecked': (r'Zig\.call[RM]? \(Zig\.forLen (\S+|\(Zig\.len \S+\)) \S+\)', r'pure \1'),
+    'parent-unchecked': (r'Zig\.checkParent \d+ \d+ \(.*?\) >>= fun _ => ', ''),
 }
 
 

@@ -73,6 +73,56 @@ pub fn itemUnsafe(s: *const []const u32, i: usize) u32 {
     return s.*[i];
 }
 
+const S = struct { a: u32, b: u32 };
+
+/// A slice end past the length (also a start after the end).
+pub fn sliceEnd(s: *const []const u32, a: usize, b: usize) []const u32 {
+    @setRuntimeSafety(false);
+    return s.*[a..b];
+}
+
+/// A slice of an array pointer past its length.
+pub fn sliceArray(p: *const [4]u32, a: usize, b: usize) []const u32 {
+    @setRuntimeSafety(false);
+    return p[a..b];
+}
+
+/// Sentinel slicing of bytes: the 0.16.0 export records the sentinel value.
+pub fn sentinelBytes(s: []const u8, n: usize) [:0]const u8 {
+    @setRuntimeSafety(false);
+    return s[0..n :0];
+}
+
+/// `for` over two slices of unequal length (pure function).
+pub fn forLen(a: []const u32, b: []const u32) u32 {
+    @setRuntimeSafety(false);
+    var sum: u32 = 0;
+    for (a, b) |x, y| sum +%= x +% y;
+    return sum;
+}
+
+/// `for` over two slices of unequal length (function that uses memory).
+pub fn forLenMem(a: *const []const u32, b: *const []const u32) u32 {
+    @setRuntimeSafety(false);
+    var sum: u32 = 0;
+    for (a.*, b.*) |x, y| sum +%= x +% y;
+    return sum;
+}
+
+/// `for` over a slice and a range of unequal length.
+pub fn forRange(a: []const u32, n: usize) u32 {
+    @setRuntimeSafety(false);
+    var sum: u32 = 0;
+    for (a, 0..n) |x, i| sum +%= x +% @as(u32, @truncate(i));
+    return sum;
+}
+
+/// `@fieldParentPtr` of a pointer that is not to that field.
+pub fn parentOf(p: *u32) *S {
+    @setRuntimeSafety(false);
+    return @fieldParentPtr("b", p);
+}
+
 comptime {
     _ = &divExactSafe;
     _ = &divExactUnsafe;
@@ -86,4 +136,11 @@ comptime {
     _ = &copyOverlapUnsafe;
     _ = &copyLenUnsafe;
     _ = &itemUnsafe;
+    _ = &sliceEnd;
+    _ = &sliceArray;
+    _ = &sentinelBytes;
+    _ = &forLen;
+    _ = &forLenMem;
+    _ = &forRange;
+    _ = &parentOf;
 }
