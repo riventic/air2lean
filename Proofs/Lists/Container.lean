@@ -74,6 +74,10 @@ theorem linkedAdd_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32))
     exact ⟨p, hd, rfl, hp⟩
   | error e => exact Triple.ret (Q := Added LList hd xs v) (.error e)
 
+nonvacuity_witness linkedAdd_spec := ⟨⟨⟩, none, [], 0, Witness.Admit.of_empty list_nil_empty⟩
+liveness_witness linkedAdd_spec :=
+  ⟨⟨⟩, none, [], 0, Witness.Live.of_empty list_nil_empty (Witness.ok_of_okb (by decide +kernel))⟩
+
 /-- The linked list as a `SeqImpl`. -/
 def linkedSeq : SeqImpl where
   H := Option Ptr
@@ -134,11 +138,29 @@ theorem arrayAdd_spec (a : Allocator) (p : Ptr) (xs : List (BitVec 32)) (v : Bit
     exact ⟨.error "OutOfMemory", m', hL', by simp [arrayAdd, hr], hd', hm',
       sep_lift.mpr ⟨rfl, ptr, cap, hz, hl'⟩, hst'⟩
 
+/-- An empty list: its header at `p0` names no buffer. -/
+theorem alist_empty :
+    AList Witness.p0 [] (Witness.mem1 (hdrBytes ⟨none, 0⟩ 0 0)).heap :=
+  ⟨⟨none, 0⟩, 0, fun _ => rfl, by decide, by decide, _, Heap.empty, Heap.disjoint_empty _,
+    (Heap.union_empty _).symm, ⟨4096, _, .heap, by decide, by decide, Witness.mem1_bytesAt _ _⟩,
+    by simp [buf]⟩
+
+nonvacuity_witness arrayAdd_spec :=
+  ⟨⟨⟩, Witness.p0, [], 0, Witness.Admit.of_heap alist_empty (Witness.mem1_seq _ _)⟩
+liveness_witness arrayAdd_spec :=
+  ⟨⟨⟩, Witness.p0, [], 0,
+    Witness.Live.of_heap alist_empty (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
+
 /-- `std.ArrayListUnmanaged(u32)` as a `SeqImpl`. -/
 def arraySeq : SeqImpl where
   H := Ptr
   Rep := AList
   add := arrayAdd
   add_spec := arrayAdd_spec
+
+nonvacuity_witness SeqImpl.add_spec :=
+  ⟨linkedSeq, ⟨⟩, none, [], 0, Witness.Admit.of_empty list_nil_empty⟩
+liveness_witness SeqImpl.add_spec :=
+  ⟨linkedSeq, ⟨⟩, none, [], 0, Witness.Live.of_empty list_nil_empty (Witness.ok_of_okb (by decide +kernel))⟩
 
 end Lists

@@ -1,6 +1,7 @@
 import Proofs.Lists.Gen
 import ZigLean.Sep
 import ZigLean.Sep.Total
+import ZigLean.Sep.Witness
 
 /-!
 # Separation-logic proofs about `examples/lists/lists.zig`
@@ -187,6 +188,14 @@ theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
     Triple (list hd xs) (reverse hd) (fun r => list r xs.reverse) :=
   (reverse_total hd xs).toPartial
 
+/-- The empty list owns no bytes: an admissible input of every list spec. -/
+theorem list_nil_empty : list none [] Heap.empty := ⟨rfl, rfl⟩
+
+nonvacuity_witness reverse_total := ⟨none, [], Witness.Admit.of_empty list_nil_empty⟩
+nonvacuity_witness reverse_spec := ⟨none, [], Witness.Admit.of_empty list_nil_empty⟩
+liveness_witness reverse_spec :=
+  ⟨none, [], Witness.Live.of_total (reverse_total none []) (Witness.Admit.of_empty list_nil_empty)⟩
+
 /-- What `push` returns: a new node in front of `q`, or `error.OutOfMemory` and no bytes. -/
 def pushed (v : BitVec 32) (q : Option Ptr) : Except ErrName Ptr → Assn
   | .ok p => node p v q
@@ -226,6 +235,10 @@ theorem push_total (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
 theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
     Triple emp (push a q v) (pushed v q) :=
   (push_total a q v).toPartial
+
+nonvacuity_witness push_total := ⟨⟨⟩, none, 0, Witness.Admit.emp⟩
+nonvacuity_witness push_spec := ⟨⟨⟩, none, 0, Witness.Admit.emp⟩
+liveness_witness push_spec := ⟨⟨⟩, none, 0, Witness.Live.of_total (push_total ⟨⟩ none 0) Witness.Admit.emp⟩
 
 /-- The invariant of `freeAll`: `p` is a list of `n` items. -/
 def freeInv (s : freeAllLocals) (n : Nat) : Assn := fun h => ∃ zs, zs.length = n ∧ list s.p zs h
@@ -274,5 +287,12 @@ theorem freeAll_total (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) 
 theorem freeAll_spec (a : Allocator) (hd : Option Ptr) (xs : List (BitVec 32)) :
     Triple (list hd xs) (freeAll a hd) (fun _ => emp) :=
   (freeAll_total a hd xs).toPartial
+
+nonvacuity_witness freeAll_total := ⟨⟨⟩, none, [], Witness.Admit.of_empty list_nil_empty⟩
+nonvacuity_witness freeAll_spec := ⟨⟨⟩, none, [], Witness.Admit.of_empty list_nil_empty⟩
+liveness_witness freeAll_spec :=
+  ⟨⟨⟩, none, [], Witness.Live.of_total (freeAll_total ⟨⟩ none []) (Witness.Admit.of_empty list_nil_empty)⟩
+
+nonvacuity_witness Zig.optPayload.eq_1 := ⟨Unit, (), trivial⟩
 
 end Lists
