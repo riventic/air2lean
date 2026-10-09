@@ -168,6 +168,7 @@
    "callee": {
     "ty": 17,
     "func": "Thread.spawn__anon_1571",
+    "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
     "comptime_fn": "threadsync.task"
    },
@@ -316,6 +317,7 @@
    "callee": {
     "ty": 17,
     "func": "Thread.spawn__anon_1571",
+    "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
     "comptime_fn": "threadsync.task"
    },

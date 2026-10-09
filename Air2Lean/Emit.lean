@@ -767,6 +767,8 @@ structure FCtx where
   rawFuncs : Array String := #[]
   /-- `Func.targetArch`: an asm op off the allowlist is a device event (`Op.isDeviceAsm`). -/
   targetArch : String := ""
+  /-- `--device-contract` was given: `air2lean_device` is declared (L13). -/
+  deviceContract : Bool := false
   /-- The instructions whose value is `Zig.Bytes T` (`FCtx.computeRawInsts`). -/
   rawInsts : Array InstId := #[]
   /-- This function returns `Zig.Bytes T` (it is in `rawFuncs`). -/
@@ -1027,7 +1029,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => placeholder "a pointer constant without a global"
-  | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : {sliceTyName fc.ptrBits})"
+  | .sliceConst _ p len => s!"(⟨{resolve p}, {resolve len}⟩ : {sliceTyName fc.ptrBits})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
@@ -1432,13 +1434,14 @@ def FCtx.isVolatileVal (fc : FCtx) (v : Val) : Bool :=
 the base's block; MM-3), and the base itself for a constant offset 0 (`zero`; no instruction
 natively). From a C/allowzero base whose result the compiler types as a nonnullable pointer
 (Zig ≤0.15 `struct_field_ptr`) it is `Zig.ptrProjectNonnull`: address zero is also illegal. From a
-volatile base (a device pointer; the checker admits it only with `--device-contract`) it is
-`Zig.ptrProjectDevice`: formed inside the declared register window (L13, DEV-01). -/
+volatile base under `--device-contract` it is `Zig.ptrProjectDevice`: formed inside the declared
+register window (L13, DEV-01). Without a contract, forming a volatile pointer is address metadata
+only (`CheckCtx.checkVolatile`) and no `air2lean_device` exists: MM-3's `ptrProject`. -/
 def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String)
     (zero : Bool := false) : String :=
   let nonnull := fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result
   if zero && !nonnull then s!"pure {p}"
-  else if !zero && fc.isVolatileVal base then
+  else if !zero && fc.deviceContract && fc.isVolatileVal base then
     s!"{fc.callMName} (Zig.ptrProjectDevice {deviceDefName} {p} ({project}))"
   else if nonnull then s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
   else s!"{fc.callMName} (Zig.ptrProject {p} ({project}))"
@@ -3413,10 +3416,10 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) : FuncParts :=
+    (recursive : Bool := false) (deviceContract : Bool := false) : FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
-  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive }.prepareInstUses
+  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive, deviceContract }.prepareInstUses
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
@@ -4272,7 +4275,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device.isSome
     let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

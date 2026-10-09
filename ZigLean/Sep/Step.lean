@@ -358,9 +358,9 @@ def cont (facts : Array Syntax) : TacticM Unit := do
 /-- `&xs[i]` of an owned array `arr p xs` (`arr_ptrProject_bind`, MM-3): the side goals. -/
 def ptrProjectStep (kind : Name) (P cmd : Expr) : TacticM (List MVarId) := do
   let base := cmd.getAppArgs[0]!.consumeMData
-  let T ← mkFreshExprMVar (mkSort levelOne)
+  let T ← mkFreshExprMVar (mkSort Level.one)
   let inst ← mkFreshExprMVar none
-  let xs ← mkFreshExprMVar (mkApp (mkConst ``List [levelZero]) T)
+  let xs ← mkFreshExprMVar (mkApp (mkConst ``List [Level.zero]) T)
   let arr := mkAppN (mkConst ``Zig.arr) #[T, inst, base, xs]
   unless ← findAtom P arr ``Zig.arr do
     throwError "sep_step: the precondition has no `arr` for{indentExpr base}"

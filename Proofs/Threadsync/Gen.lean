@@ -302,14 +302,14 @@ def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.By
   | .ret v => pure v
   | _ => throw .panic
 
-structure math_sub__anon_1Locals where
+structure math_sub__anon_85a035d52c51Locals where
   deriving Inhabited
 
-inductive math_sub__anon_1Exit where
+inductive math_sub__anon_85a035d52c51Exit where
   | ret (v : Except Zig.ErrName (BitVec 64))
   | br3
 
-def math_sub__anon_1 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
+def math_sub__anon_85a035d52c51 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     let i2 ← pure (Zig.subWithOverflow false p0 p1)
     match ← ((do
@@ -318,12 +318,12 @@ def math_sub__anon_1 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.
       if i5 then (do
         pure (.ret (.error "Overflow" : Except Zig.ErrName (BitVec 64))))
       else (do
-        pure .br3)) : Zig.M math_sub__anon_1Locals math_sub__anon_1Exit) with
+        pure .br3)) : Zig.M math_sub__anon_85a035d52c51Locals math_sub__anon_85a035d52c51Exit) with
     | .br3 => (do
       let i9 ← pure ((i2).1)
       let i10 ← pure ((.ok i9) : Except Zig.ErrName (BitVec 64))
       pure (.ret i10))
-    | e => pure e) : Zig.M math_sub__anon_1Locals math_sub__anon_1Exit).run' (default : math_sub__anon_1Locals)
+    | e => pure e) : Zig.M math_sub__anon_85a035d52c51Locals math_sub__anon_85a035d52c51Exit).run' (default : math_sub__anon_85a035d52c51Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -352,7 +352,7 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
       let i12 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
       let i13 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
       match ← ((do
-        let i15 ← Zig.callRC (math_sub__anon_1 v3 i13)
+        let i15 ← Zig.callRC (math_sub__anon_85a035d52c51 v3 i13)
         let i16 ← pure (Zig.isNonErr i15)
         if i16 then (do
           let i18 ← Zig.callRC (Zig.unwrapPayload i15)
@@ -745,11 +745,11 @@ def Thread_Condition_FutexImpl_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Option (
   | .ret v => pure v
   | _ => throw .panic
 
-structure Thread_Condition_FutexImpl_wake__anon_1Locals where
+structure Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals where
   state : BitVec 32
   deriving Inhabited
 
-inductive Thread_Condition_FutexImpl_wake__anon_1Exit where
+inductive Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit where
   | ret
   | br4 (v : BitVec 32)
   | br18
@@ -759,11 +759,11 @@ inductive Thread_Condition_FutexImpl_wake__anon_1Exit where
   | br10
   | rep9
 
-def Thread_Condition_FutexImpl_wake__anon_1.again9 : Thread_Condition_FutexImpl_wake__anon_1Exit → Bool
+def Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9 : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit → Bool
   | .rep9 => true
   | _ => false
 
-def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit := do
+def Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit := do
   match ← ((do
     let i11 ← pure ((← get).state)
     let i12 ← pure (i11 &&& (65535 : BitVec 32))
@@ -777,7 +777,7 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
       if i19 then (do
         pure .ret)
       else (do
-        pure .br18)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
+        pure .br18)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
     | .br18 => (do
       let i23 ← pure ((← get).state)
       let i24 ← Zig.add false i23 (65536 : BitVec 32)
@@ -787,7 +787,7 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
         match ← ((do
           let i29 ← pure i26
           let i30 ← Zig.cmpxchgWeakC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i29 i27 i24
-          pure (.br28 i30)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
+          pure (.br28 i30)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
         | .br28 v28 => (do
           let i32 ← pure ((v28).isSome)
           if i32 then (do
@@ -798,35 +798,35 @@ def Thread_Condition_FutexImpl_wake__anon_1.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Th
             match ← ((do
               let i38 ← pure i36
               let i39 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.release 4 i38 (1 : BitVec 32)
-              pure (.br37 i39)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
+              pure (.br37 i39)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
             | .br37 _v37 => (do
               let i41 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
               let i42 ← pure (i41)
               let _i43 ← Zig.threadFutexWakeC i42 (1 : BitVec 32)
               pure .ret)
             | e => pure e))
-        | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
+        | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
       | .br25 v25 => (do
         modify (fun s => { s with state := v25 })
         pure .br10)
       | e => pure e)
-    | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
+    | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
   | .br10 => (do
     pure .rep9)
   | e => pure e
 
-def Thread_Condition_FutexImpl_wake__anon_1 (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+def Thread_Condition_FutexImpl_wake__anon_b3c587c57789 (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure p0
     let i3 ← pure (i2)
     match ← ((do
       let i5 ← pure i3
       let i6 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i5
-      pure (.br4 i6)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit) with
+      pure (.br4 i6)) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
     | .br4 v4 => (do
       modify (fun s => { s with state := v4 })
-      Zig.loop (Thread_Condition_FutexImpl_wake__anon_1.loop9 p0) Thread_Condition_FutexImpl_wake__anon_1.again9)
-    | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_1Locals Thread_Condition_FutexImpl_wake__anon_1Exit).run' (default : Thread_Condition_FutexImpl_wake__anon_1Locals)
+      Zig.loop (Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 p0) Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9)
+    | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit).run' (default : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals)
   match e with
   | .ret => pure ()
   | _ => throw .panic
@@ -840,7 +840,7 @@ inductive Thread_Condition_signalExit where
 def Thread_Condition_signal (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure p0
-    let _i2 ← Zig.callC (Thread_Condition_FutexImpl_wake__anon_1 i1)
+    let _i2 ← Zig.callC (Thread_Condition_FutexImpl_wake__anon_b3c587c57789 i1)
     pure .ret) : Zig.CM Tgt Thread_Condition_signalLocals Thread_Condition_signalExit).run' (default : Thread_Condition_signalLocals)
   match e with
   | .ret => pure ()
@@ -1236,14 +1236,14 @@ def Thread_WaitGroup_wait (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
-structure math_sub__anon_2Locals where
+structure math_sub__anon_2645c921d0aaLocals where
   deriving Inhabited
 
-inductive math_sub__anon_2Exit where
+inductive math_sub__anon_2645c921d0aaExit where
   | ret (v : Except Zig.ErrName (BitVec 64))
   | br3
 
-def math_sub__anon_2 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
+def math_sub__anon_2645c921d0aa (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     let i2 ← pure (Zig.subWithOverflow true p0 p1)
     match ← ((do
@@ -1252,24 +1252,24 @@ def math_sub__anon_2 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.
       if i5 then (do
         pure (.ret (.error "Overflow" : Except Zig.ErrName (BitVec 64))))
       else (do
-        pure .br3)) : Zig.M math_sub__anon_2Locals math_sub__anon_2Exit) with
+        pure .br3)) : Zig.M math_sub__anon_2645c921d0aaLocals math_sub__anon_2645c921d0aaExit) with
     | .br3 => (do
       let i9 ← pure ((i2).1)
       let i10 ← pure ((.ok i9) : Except Zig.ErrName (BitVec 64))
       pure (.ret i10))
-    | e => pure e) : Zig.M math_sub__anon_2Locals math_sub__anon_2Exit).run' (default : math_sub__anon_2Locals)
+    | e => pure e) : Zig.M math_sub__anon_2645c921d0aaLocals math_sub__anon_2645c921d0aaExit).run' (default : math_sub__anon_2645c921d0aaLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-structure math_sub__anon_3Locals where
+structure math_sub__anon_b9091a243743Locals where
   deriving Inhabited
 
-inductive math_sub__anon_3Exit where
+inductive math_sub__anon_b9091a243743Exit where
   | ret (v : Except Zig.ErrName (BitVec 64))
   | br3
 
-def math_sub__anon_3 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
+def math_sub__anon_b9091a243743 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     let i2 ← pure (Zig.subWithOverflow false p0 p1)
     match ← ((do
@@ -1278,12 +1278,12 @@ def math_sub__anon_3 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.
       if i5 then (do
         pure (.ret (.error "Overflow" : Except Zig.ErrName (BitVec 64))))
       else (do
-        pure .br3)) : Zig.M math_sub__anon_3Locals math_sub__anon_3Exit) with
+        pure .br3)) : Zig.M math_sub__anon_b9091a243743Locals math_sub__anon_b9091a243743Exit) with
     | .br3 => (do
       let i9 ← pure ((i2).1)
       let i10 ← pure ((.ok i9) : Except Zig.ErrName (BitVec 64))
       pure (.ret i10))
-    | e => pure e) : Zig.M math_sub__anon_3Locals math_sub__anon_3Exit).run' (default : math_sub__anon_3Locals)
+    | e => pure e) : Zig.M math_sub__anon_b9091a243743Locals math_sub__anon_b9091a243743Exit).run' (default : math_sub__anon_b9091a243743Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
