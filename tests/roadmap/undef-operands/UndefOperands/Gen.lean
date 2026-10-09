@@ -26,8 +26,8 @@ instance : Zig.Enc Pair where
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.a), (4, Zig.Enc.encode v.b)]
   decode bs := do pure { a := ← Zig.Enc.decodeAt bs 0, b := ← Zig.Enc.decodeAt bs 4 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: undef_operands.rec
   (Zig.Enc.encode (({ len := (0 : BitVec 8), buf := (#v[(0 : BitVec 16), (0 : BitVec 16), (0 : BitVec 16)] : Vector (BitVec 16) 3) } : Rec) : Rec), 2, .global)]
 
