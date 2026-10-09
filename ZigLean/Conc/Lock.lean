@@ -354,6 +354,10 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   fq : L.Queue G m.waiters
   wit : L.Waits m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
     (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))
+  /-- `os_unfair_lock` (`c = 1`): the newest message of the word is the holder's (its acquire;
+  the other threads only read the word), for the owner check of the unlock
+  (`Thread.unfairOwnerCheck`). -/
+  owner : L.c = 1 → ∀ u, L.ph (G u) = .holds → ∃ i l, L.Loc m i l ∧ (l.msgs.back!).writer = some u
 
 /-- A step of thread `t` in the lock's code: the threads, the groups and the other threads'
 clocks stay, `t`'s clock does not get smaller, and only the word's bytes can change. -/
@@ -462,14 +466,14 @@ theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)
     L.Inv G { m with current := c, seen := s, nextMsg := k, woken := w } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
-    hi.res, hi.fq, hi.wit⟩
+    hi.res, hi.fq, hi.wit, hi.owner⟩
 
 /-- The same memory, but the groups' tasks. -/
 theorem Inv.groups {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (gs : Array (Ptr × ThreadId)) :
     L.Inv G { m with groups := gs } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
-    hi.res, hi.fq, hi.wit⟩
+    hi.res, hi.fq, hi.wit, hi.owner⟩
 
 /-- The queue with fewer threads, whose places stay. -/
 theorem Queue.mono {G G' : ThreadId → γ} {ws ws' : Array (ThreadId × Ptr)} (hq : L.Queue G ws)
@@ -522,7 +526,8 @@ theorem Inv.congr {G G' : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
     fun u hu => hi.live u (by rw [← hph]; exact hu), hi.blk, ?_, fun u v hu hv => hi.one u v
       (by rw [← hph]; exact hu) (by rw [← hph]; exact hv), ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩,
     fun u => hown ▸ hi.off u, hi.wfpW (fun u h => by rw [← hph]; exact h), fun i l hl => ?_,
-    fun hF => ?_, fun u hu => ?_, hi.fq.mono (fun w hw => hw) (fun w _ => hph w.1), fun hp => ?_⟩
+    fun hF => ?_, fun u hu => ?_, hi.fq.mono (fun w hw => hw) (fun w _ => hph w.1), fun hp => ?_,
+    fun hc1 u hu => hi.owner hc1 u (by rw [← hph]; exact hu)⟩
   · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
   · obtain ⟨h1, h2⟩ := hi.rel i l hl
     exact ⟨h1, fun u hu => h2 u (by rw [← hph]; exact hu)⟩
@@ -664,7 +669,9 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   refine ⟨hown ▸ ho', fun u => ?_, fun u hu => ?_, fun u hu => ?_, hblk', ?_,
     fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_,
       fun i l hl => ?_⟩, fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
-    hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1), fun hp => ?_⟩
+    hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1), fun hp => ?_,
+    fun hc1 u hu => let ⟨i, l, hl, hw⟩ := hi.owner hc1 u (by rwa [hphu] at hu)
+      ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · by_cases hu : u = t
     · subst hu; rw [upd_self]; exact hpd
     · rw [upd_ne _ _ hu]; exact hi.pdisj u
@@ -749,7 +756,7 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
   refine ⟨hown ▸ hi.own, fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_,
     fun u v hu hv => hi.one u v ((hholds u).mp hu) ((hholds v).mp hv), ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩,
     fun u => hown ▸ hi.off u, hi.wfpW hgw, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
-    fun w hw => ?_, fun hp => ?_⟩
+    fun w hw => ?_, fun hp => ?_, fun hc1 u hu => hi.owner hc1 u ((hholds u).mp hu)⟩
   · unfold upd; split
     · rw [hheld]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -892,7 +899,8 @@ theorem Inv.fork {G : ThreadId → γ} {m m' : Mem} {t c : ThreadId} {g₁ g₀ 
       · simp [h1, h2]; exact fun _ _ h => h
   refine ⟨hown ▸ ho, fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_,
     fun u v hu hv => ?_, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => ?_, fun e he hh => ?_,
-    fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, fun w hw => ?_, fun hp => ?_⟩
+    fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, fun w hw => ?_, fun hp => ?_,
+    fun hc1 u hu => hi.owner hc1 u ((hholds u).mp hu)⟩
   · unfold upd
     by_cases h1 : u = t
     · simp only [h1, ↓reduceIte, h₁h]; exact Heap.disjoint_empty _
@@ -1019,7 +1027,8 @@ theorem Inv.join {G : ThreadId → γ} {m m' : Mem} {t u : ThreadId} {g : γ} (h
   refine ⟨hown ▸ ho, fun w => ?_, fun w hw => ?_, fun w hw => ?_, hi.blk, ?_,
     fun v w hv hw => ?_, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun w => ?_, fun e he hh => ?_,
     fun i l hl => ?_, fun hF => ?_, fun v hv => ?_,
-    hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_⟩
+    hi.fq.mono (fun w hw => hw) (fun w _ => hphu w.1), fun hp => ?_,
+    fun hc1 v hv => hi.owner hc1 v (by rwa [hphu] at hv)⟩
   · unfold upd; split
     · rw [hgh]; exact Heap.disjoint_empty _
     · exact hi.pdisj w
@@ -1120,7 +1129,8 @@ theorem Inv.make {G : ThreadId → γ} {m : Mem} {own : ThreadId → Heap} {t : 
         (ho.owns t ht e he (htc.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hL1.ne h3⟩) id))
         (hall u hu)⟩,
     fun u hu => absurd hu (hfree u),
-    fun w hw => by rw [hq] at hw; simp at hw, fun hp => by rw [hq] at hp; simp [Lock.Waits] at hp⟩
+    fun w hw => by rw [hq] at hw; simp at hw, fun hp => by rw [hq] at hp; simp [Lock.Waits] at hp,
+    fun _ u hu => absurd hu (hfree u)⟩
   rw [hownE]; unfold upd
   by_cases hu : u = t
   · simp only [hu, ↓reduceIte]

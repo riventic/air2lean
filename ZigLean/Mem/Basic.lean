@@ -192,6 +192,9 @@ structure Msg where
   relClock : VClock
   /-- For an RMW: the id of the message it read. It stays right after that message. -/
   rmwOf : Option Nat := none
+  /-- The thread of an atomic store or RMW (`none` for a plain write). Ghost: it only decides
+  the owner check of `os_unfair_lock_unlock` (`Thread.unfairOwnerCheck`). -/
+  writer : Option ThreadId := none
   deriving Repr, Inhabited
 
 /-- An atomic location: its writes in modification order. -/

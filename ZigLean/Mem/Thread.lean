@@ -211,7 +211,7 @@ def atomicStoreAt {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr
   let id := m.nextMsg
   let msg : Msg :=
     { id := id, bytes := padTo (intSize n) (intBytes v), clock := cl,
-      relClock := (if ord.isRel then cl else #[]) }
+      relClock := (if ord.isRel then cl else #[]), writer := some m.current }
   insertMsg li slot msg
   observe li id
 
@@ -248,7 +248,8 @@ def rmwWrite {n : Nat} (li pos : Nat) (ord : AtomicOrder) (rd : Msg) (new : BitV
   let id := m.nextMsg
   let msg : Msg :=
     { id := id, bytes := padTo (intSize n) (intBytes new), clock := cl,
-      relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id }
+      relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id,
+      writer := some m.current }
   insertMsg li (pos + 1) msg
   observe li id
 
@@ -454,6 +455,31 @@ def join (tid : ThreadId) : MemM Unit := do
   set { m with
     clocks := m.clocks.set! m.current merged
     threads := m.threads.set! tid { rec with joined := true } }
+
+/-- The newest message of the atomic location at `(b, o)` is the current thread's and is not `0`
+(`unfairOwnerCheck`). -/
+def _root_.Zig.Mem.unfairHeld (m : Mem) (b o : Nat) : Bool :=
+  match m.atomics.findIdx? (fun l => l.block == b && l.off == o) with
+  | none => false
+  | some i =>
+    match m.atomics[i]?.bind (·.msgs.back?) with
+    | none => false
+    | some msg =>
+      msg.writer == some m.current &&
+        match (intOfBytes 32 msg.bytes).run with
+        | some (.ok v) => v != 0
+        | _ => false
+
+/-- The owner check of `os_unfair_lock_unlock` at the lock word `p` (macOS terminates the process
+on an unlock by a thread that does not hold the lock): the word's newest message is the current
+thread's (`Msg.writer`) and is not `0`. While a thread holds an `os_unfair_lock`, the newest
+message is its successful acquire (`cmpxchg 0 → 1`): the other threads only read the word, so a
+waiter never makes the holder's unlock fail. Else `.illegal`: an unlock by another thread, a
+double unlock, an unlock of a lock that was never locked. It changes nothing. -/
+def unfairOwnerCheck (p : Ptr) : MemM Unit := do
+  let m ← get
+  let (b, _, o) ← m.access p 4 4
+  if m.unfairHeld b o then pure () else throw .illegal
 
 /-- `Io.Group`: the task `tid` belongs to the group at `g`. -/
 def groupAdd (g : Ptr) (tid : ThreadId) : MemM Unit := modify fun m =>

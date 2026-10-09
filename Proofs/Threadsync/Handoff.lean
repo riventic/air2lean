@@ -1793,7 +1793,7 @@ theorem fwait_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (hL : Heap)
   simp only [StateT.run_bind, StateT.run_modify, StateT.run_pure, pure_bind]
   -- `unlock`
   refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec fits rfl mptr 0
-    (gK hQ hL { ph := .reg, cw := true }) rfl G₂ m₅ k₂ hi₅)))
+    (gK hQ hL { ph := .reg, cw := true }) rfl G₂ m₅ k₂ hi₅ hop₂.current)))
   rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
   have hi₆' : proto.inv (upd G₃ 0 (gM hQ { ph := .reg, cw := true })) m₆ := hi₆
   have hfl := hi₆'.2.flags

@@ -37,7 +37,7 @@ if [ "$(uname -s)" = Darwin ]; then
   cc -O2 "$here/native_unfair_lock.c" -o "$work/native_unfair_lock"
   status=0
   "$work/native_unfair_lock" || status=$?
-  echo "native_unfair_lock exit status $status (model: returns normally)"
+  echo "native_unfair_lock exit status $status (model: .illegal, tests/review/Concurrency.lean unfairTests)"
 fi
 
 # Expected model observations (fuel 20 / 14); `fixed` lines flip an audit finding:

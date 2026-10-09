@@ -190,9 +190,12 @@ def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
   let _ ← loop (osUnfairLockTry p) id
   pure ()
 
-/-- `os_unfair_lock_unlock`: a release `xchg` of 0 (the C function is a release `cmpxchg` of the
-owner to 0, an RMW), then a wake of one waiter. -/
+/-- `os_unfair_lock_unlock`: the owner check (`Thread.unfairOwnerCheck`: an unlock by a thread
+that does not hold the lock is `.illegal`, as the C function terminates the process), a release
+`xchg` of 0 (the C function is a release `cmpxchg` of the owner to 0, an RMW), then a wake of one
+waiter. -/
 def osUnfairUnlockC (p : Ptr) : CM Tgt σ Unit := do
+  callMC (Thread.unfairOwnerCheck p)
   let _ ← atomicRmwC .xchg false .release 4 p (0 : BitVec 32)
   threadFutexWakeC p 1
 

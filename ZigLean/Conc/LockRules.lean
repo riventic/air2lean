@@ -197,7 +197,7 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
     ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_,
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp hpl⟩, fun u => hown ▸ hi.off u,
     fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hw]; exact hi.fq,
-    fun hp => ?_⟩
+    fun hp => ?_, fun hc1 u hu => let ⟨i, l, hl, hw⟩ := hi.owner hc1 u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [hown]
     refine hi.own.keep (by rw [ht]) hcs (fun u => hheap ▸ hi.own.sub u)
       (Nat.le_of_eq (by rw [hb])) (fun u _ => hcl u) (fun e he => ?_)
@@ -441,7 +441,8 @@ theorem Inv.locIdx {G : ThreadId → γ} {m m₁ : Mem} {li : Nat} (hi : L.Inv G
         rcases how e he htc with h' | ⟨i, l, hl, -⟩
         · exact .inl h'
         · exact absurd hl (hno i l),
-      hi.res, hi.fq, hi.wit⟩
+      hi.res, hi.fq, hi.wit, fun hc1 u hu =>
+        let ⟨i, l, hl, _⟩ := hi.owner hc1 u hu; absurd hl (hno i l)⟩
 
 /-! ## The memory after an RMW at the word -/
 
@@ -518,7 +519,8 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
     (hwit : L.U32 M (BitVec.ofNat 32 w') → L.Waits M.waiters → ∃ v, v < M.threads.size ∧
       M.waiters.any (·.1 == v) = false ∧ (L.ph (G' v)).busy = true ∧
       (L.ph (G' v) = .holds → L.U32 M (BitVec.ofNat 32 L.c)))
-    (hpt : L.ph (G t) ≠ .gone) (hmc : msg.clock = M.clocks[t]!) :
+    (hpt : L.ph (G t) ≠ .gone) (hmc : msg.clock = M.clocks[t]!)
+    (howner : L.c = 1 → ∀ u, L.ph (G' u) = .holds → msg.writer = some u) :
     L.Inv G' M := by
   obtain ⟨blk₀, hb₀, hlv, hsz, ha4, hk⟩ := hi.blk
   rw [hb] at hb₀; cases hb₀
@@ -541,7 +543,7 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
   have honly : ∀ i l₀, L.Loc M i l₀ → i = li ∧ l₀ = l' := fun i l₀ h => loc_unique h hl'
   refine ⟨hown, hpdisj, hidle, fun u hu => ?_, ?_, ⟨w', hw', hU, hz⟩, hone, ⟨fun l₀ hl₀ hb' h1 h2 => ?_,
     fun i l₀ hl₀ => ?_, fun i l₀ hl₀ => ?_⟩, hoff, fun e he hh => ?_, fun i l₀ hl₀ => ?_, hfree, hres,
-    hfq, hwit hU⟩
+    hfq, hwit hU, fun hc1 u hu => ⟨li, l', hl', by rw [back_push]; exact howner hc1 u hu⟩⟩
   · rw [hst.threads, hjb]; exact hi.live u (hlive u hu)
   · refine ⟨_, hMb, hlv, ?_, ha4, hk⟩
     show L.o + 4 ≤ (writeBytes blk.bytes L.o msg.bytes).size
@@ -726,7 +728,7 @@ theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   refine ⟨hst, hcM, hL, hR, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw3 (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_) (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hp => ?_)
-    hpt (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
+    hpt (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc])) (fun _ u hu => ?_)⟩
   · unfold upd; split
     · rename_i hu; subst hu; rw [L.part_set, L.held_set]
       have := hdj u; rw [hownt] at this; exact this.symm
@@ -777,10 +779,15 @@ theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
         · rw [h] at h1; cases h1
         · exact hU
       · exact absurd hh (hF v)
+  · -- the new holder `t` wrote the newest message
+    rw [hphu] at hu
+    split at hu
+    · rename_i h; subst h; simp [rmwMsg, acqM, hc]
+    · exact absurd hu (hF u)
 
 /-- Thread `t` in `lock`'s loop writes `2` to the held lock (an acquire RMW): the holder stays, and
 `t` goes to the futex wait. -/
-theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
+theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} (hc1 : L.c ≠ 1)
     (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t) (hph : L.ph (G t) = .spin)
     (hnF : ¬ L.Free G)
     (hM : M = rmwM m₁ li (l.msgs.size - 1) .acquire (l.msgs[l.msgs.size - 1]!)
@@ -818,7 +825,8 @@ theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
     (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)) (fun hU _ => ?_)
-    (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
+    (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
+    (fun h => absurd h hc1)⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -848,7 +856,7 @@ theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
 RMW, as `Thread.Mutex`'s `or 1` on a held lock): the holder stays, and `t` goes to `spin` or to the
 futex wait. -/
 theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc} {w : Nat} {p : LPh}
-    (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t)
+    (hc1 : L.c ≠ 1) (hi : L.Inv G m₁) (hl : L.Loc m₁ li l) (hc : m₁.current = t)
     (hph : L.ph (G t) = .out ∨ L.ph (G t) = .spin) (hp : p = .spin ∨ p = .wait)
     (hw : L.Val w) (hU0 : L.U32 m₁ (BitVec.ofNat 32 w)) (hw0 : w ≠ 0)
     (hM : M = rmwM m₁ li (l.msgs.size - 1) .acquire (l.msgs[l.msgs.size - 1]!)
@@ -893,7 +901,7 @@ theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
     (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hq => ?_) hng
-    (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
+    (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc])) (fun h => absurd h hc1)⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -977,7 +985,8 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu _ => absurd hu (hnh u))
     (fun u => ?_) ?_ (fun _ => ?_) (fun u hu => absurd hu (hnh u))
     (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide))
-    (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))⟩
+    (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
+    (fun _ u hu => absurd hu (hnh u))⟩
   · unfold upd; split
     · rw [L.held_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -1073,7 +1082,8 @@ theorem Inv.queue {G : ThreadId → γ} {m : Mem} {t c : ThreadId} {p : LPh}
   refine ⟨by rw [hown]; exact ⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩,
     fun u => ?_, fun u hu => ?_, fun u hu => ?_, hi.blk, ?_, fun u v hu hv => ?_,
     ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun u => by rw [hown]; exact hi.off u, hi.wfpW hgw,
-    fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, hfq, hwit⟩
+    fun i l hl => ?_, fun hF => ?_, fun u hu => ?_, hfq, hwit,
+    fun hc1 u hu => hi.owner hc1 u ((hholds u).mp hu)⟩
   · unfold upd; split
     · rw [L.held_set, L.part_set]; exact Heap.disjoint_empty _
     · exact hi.pdisj u
@@ -1234,7 +1244,7 @@ theorem Inv.requeue {G : ThreadId → γ} {m : Mem} {c : ThreadId} {ws : Array (
     L.Inv G { m with current := c, waiters := ws, woken := wk } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
-    hi.res, hfq, hwit⟩
+    hi.res, hfq, hwit, hi.owner⟩
 
 /-- The bytes of the futex word at `p` (4 bytes) are in no thread's part, in no resource, and
 not the lock's word: the kernel's recorded atomic read of them keeps the lock's invariant. -/
@@ -1344,6 +1354,14 @@ structure States (α : Type) [Packed α 32] where
   ne01 : unl ≠ one
   ne02 : unl ≠ two
   ne12 : one ≠ two
+
+/-- The contended value of the states is not `1` (`one ≠ two`). -/
+theorem States.c_ne1 {α : Type} [Packed α 32] (S : States α) (hS : S.c = L.c) : L.c ≠ 1 := by
+  intro h
+  have h2 := S.dec2
+  rw [hS, h, S.dec1] at h2
+  simp only [Option.some.injEq, Except.ok.injEq] at h2
+  exact S.ne12 h2
 
 theorem intSize32 : intSize 32 = 4 := rfl
 
@@ -1588,7 +1606,7 @@ theorem Inv.xchgLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {α : Type} 
     · cases h
     · exact absurd h.symm L.c_ne0
   · have hnF : ¬ L.Free G := fun hF => hw0 ((hi₁.free_iff hw hU).mpr hF)
-    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.contend hl' hcu₁ hph hnF hm'
+    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.contend (S.c_ne1 hS) hl' hcu₁ hph hnF hm'
     refine ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨?_, hi'⟩⟩
     rcases hcase with ⟨h, -⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩
     · exact absurd h hw0
@@ -1642,13 +1660,13 @@ theorem Inv.orLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {b : BitVec 32
   · have he : RmwOp.or.apply false (BitVec.ofNat 32 1) (1 : BitVec 32) = BitVec.ofNat 32 1 := by
       decide
     rw [he] at hm'
-    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.rmwKeep hl' hcu₁ (.inl hph) (.inl rfl) L.val1 hU (by decide) hm'
+    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.rmwKeep (by rw [hc3]; decide) hl' hcu₁ (.inl hph) (.inl rfl) L.val1 hU (by decide) hm'
     exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨.inl rfl, hi'⟩⟩
   · subst hwc
     have he : RmwOp.or.apply false (BitVec.ofNat 32 L.c) (1 : BitVec 32) = BitVec.ofNat 32 L.c := by
       rw [hc3]; decide
     rw [he] at hm'
-    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.rmwKeep hl' hcu₁ (.inl hph) (.inl rfl) L.valC hU L.c_ne0 hm'
+    obtain ⟨hst₂, hcM, hi'⟩ := hi₁.rmwKeep (by rw [hc3]; decide) hl' hcu₁ (.inl hph) (.inl rfl) L.valC hU L.c_ne0 hm'
     exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, .inr ⟨.inr (by rw [hc3]; rfl), hi'⟩⟩
 
 /-- An atomic read of the word that is not an acquire, by thread `t`: no place changes. -/
@@ -1857,7 +1875,7 @@ theorem Inv.wait_ok {G : ThreadId → γ} {m : Mem} {t : ThreadId} {e : BitVec 3
 
 The model (`Zig.osUnfairLockC`, `Zig.osUnfairUnlockC`, `ZigLean/Conc/Call.lean`): the lock is a loop
 of an acquire `cmpxchg` `0 → 1` that, on a failure, waits at the futex while the word is `1`; the
-unlock is a release `xchg` of `0` and a wake. The contended value is `1`: a thread that finds the
+unlock is an owner check (`Inv.ownerCheck`, from `Inv.owner`), a release `xchg` of `0` and a wake. The contended value is `1`: a thread that finds the
 word `1` goes to `wait`, and the holder goes to `wake` at its unlock. -/
 
 /-- `os_unfair_lock_lock`'s `cmpxchg` `0 → 1` with an acquire, by thread `t` at `out` (the first
@@ -1955,6 +1973,39 @@ theorem Inv.xchgRel {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {b : BitVec 3
   have hwc : w = L.c := by rcases hw with h | h | h <;> omega
   obtain ⟨hst₂, hcM, hbf, hi'⟩ := hi₁.release (p := .wake) hl' hcu₁ hph hU (.inr ⟨hwc, rfl⟩) hm'
   exact ⟨hst₁.trans hst₂ (.inl hb₁), hcM, before_le hbf (hst₁.clocks t), hi'⟩
+
+/-- `os_unfair_lock_unlock`'s owner check (`Thread.unfairOwnerCheck`) by the holder `t`, the
+current thread: it passes and changes nothing (`Inv.owner`: the newest message of the word is
+`t`'s; the word is not `0`, since `t` holds the lock). -/
+theorem Inv.ownerCheck {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hc1 : L.c = 1)
+    (hi : L.Inv G m) (hph : L.ph (G t) = .holds) (hc : m.current = t) :
+    ((Thread.unfairOwnerCheck L.ptr).run m).run = some (.ok ((), m)) := by
+  obtain ⟨blk, -, -, -, ha, -⟩ := hi.access
+  obtain ⟨i, l, hl, hwr⟩ := hi.owner hc1 t hph
+  obtain ⟨-, h0, -, -, hlast⟩ := hi.loc.ok i l hl
+  obtain ⟨w, hw, hU, hz⟩ := hi.word
+  have hw0 : w ≠ 0 := fun e => (hz.mp e) t hph
+  have hback : l.msgs.back? = some l.msgs.back! := by
+    rw [Array.back?_eq_getElem?, Array.back!, getElem!_pos _ _ (by omega)]
+    exact Array.getElem?_eq_getElem (by omega)
+  have hbytes : l.msgs.back!.bytes = curBytes m L.b L.o 4 := by
+    rw [← hlast]; unfold ALoc.lastBytes; rw [hback]; rfl
+  have hv : (intOfBytes 32 l.msgs.back!.bytes).run = some (.ok (BitVec.ofNat 32 w)) := by
+    rw [hbytes]; exact hU
+  have hne : (BitVec.ofNat 32 w != 0) = true := by
+    simp only [bne_iff_ne, ne_eq]
+    intro h
+    exact hw0 (ofNat_inj hw.lt (by decide) h)
+  have hheld : m.unfairHeld L.b L.o = true := by
+    unfold Mem.unfairHeld
+    rw [hl.1]
+    simp only [hl.2, Option.bind_some, hback, hwr, hc, hv, hne]
+    simp
+  unfold Thread.unfairOwnerCheck
+  have ha' : m.access L.ptr 4 4 = pure (L.b, blk, L.o) := ha
+  simp [ha', hheld, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
+    pure, StateT.pure, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run,
+    liftM, monadLift, MonadLift.monadLift, StateT.lift]
 
 /-! ## A protocol with the lock -/
 

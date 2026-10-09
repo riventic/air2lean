@@ -677,7 +677,8 @@ def observeM (m : Mem) (li id : Nat) : Mem :=
 def rmwMsg {n : Nat} (m : Mem) (ord : AtomicOrder) (rd : Msg) (new : BitVec n) : Msg :=
   let cl := m.clocks[m.current]!
   { id := m.nextMsg, bytes := padTo (intSize n) (intBytes new), clock := cl,
-    relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id }
+    relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock), rmwOf := some rd.id,
+    writer := some m.current }
 
 /-- `rmwWrite li pos ord rd new` on `m`. -/
 def rmwM {n : Nat} (m : Mem) (li pos : Nat) (ord : AtomicOrder) (rd : Msg) (new : BitVec n) : Mem :=
@@ -1027,7 +1028,7 @@ theorem cas_chain_pos {n : Nat} {m : Mem} {li : Nat} {e : BitVec n} {c pos : Nat
 def storeMsg {n : Nat} (m : Mem) (ord : AtomicOrder) (v : BitVec n) : Msg :=
   let cl := m.clocks[m.current]!
   { id := m.nextMsg, bytes := padTo (intSize n) (intBytes v), clock := cl,
-    relClock := if ord.isRel then cl else #[] }
+    relClock := if ord.isRel then cl else #[], writer := some m.current }
 
 /-- `atomicStoreAt` at place `slot` of location `li` on `m` (after `storePrep`). -/
 def storeM {n : Nat} (m : Mem) (li slot : Nat) (ord : AtomicOrder) (v : BitVec n) : Mem :=

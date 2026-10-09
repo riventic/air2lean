@@ -216,12 +216,45 @@ private def freeTests : IO Unit := do
   check "frame end races with an unordered read" (run false) (some (.error .illegal))
   check "frame end after the join" (run true) (some (.ok ()))
 
+/-- Audit #5: `os_unfair_lock_unlock` by a thread that does not hold the lock is `.illegal` (the C
+function terminates the process); a contended lock with a sleeping waiter still unlocks. -/
+private def unfairTests : IO Unit := do
+  let lock := fun (p : Ptr) => (Zig.osUnfairLockC (Tgt := Bool × Ptr) (σ := Unit) p).run' ()
+  let unlock := fun (p : Ptr) => (Zig.osUnfairUnlockC (Tgt := Bool × Ptr) (σ := Unit) p).run' ()
+  -- the target: `(true, p)` unlocks the lock of another thread; `(false, p)` locks, then unlocks
+  let dispatch : Bool × Ptr → ConcM (Bool × Ptr) Unit := fun (foreign, p) =>
+    if foreign then unlock p else do lock p; unlock p
+  let prog (foreign : Bool) : ConcM (Bool × Ptr) Nat := do
+    let p ← ConcM.liftMem (alloc .heap 4 4)
+    ConcM.liftMem (store 4 p (0#32))
+    lock p
+    let tid ← spawnT (foreign, p)
+    let _ ← ConcM.sync .yield
+    unless foreign do unlock p
+    ConcM.sync (.join tid)
+    if foreign then unlock p
+    pure 7
+  let run := fun (o : Nat → Nat) (foreign : Bool) =>
+    value (Sched.runTrace ⟨.any, .available⟩ dispatch 5000 o (prog foreign) {}).1
+  for k in [0, 1, 2, 3] do
+    let o : Nat → Nat := fun i => (i * k + k) % 3
+    check s!"cross-thread unlock (oracle {k})" (run o true) (some (.error .illegal))
+    -- a relaxed failed `cmpxchg` may keep reading a stale `1`: no progress is promised (`none`)
+    let r := run o false
+    unless r = some (.ok 7) || r = none do
+      throw (IO.userError s!"contended lock and unlock (oracle {k}): got {reprStr r}")
+  check "contended lock and unlock" (run (fun _ => 0) false) (some (.ok 7))
+  check "double unlock" (value (Sched.runTrace ⟨.any, .available⟩ dispatch 40 (fun _ => 0)
+    (do let p ← ConcM.liftMem (alloc .heap 4 4); ConcM.liftMem (store 4 p (0#32))
+        lock p; unlock p; unlock p; pure 7) {}).1) (some (.error .illegal))
+
 end ConcurrencyRegression
 
 def main : IO Unit := do
   ConcurrencyRegression.wakeTests
   ConcurrencyRegression.futexReadTests
   ConcurrencyRegression.freeTests
+  ConcurrencyRegression.unfairTests
   ConcurrencyRegression.traceTests
   ConcurrencyRegression.catchTests
   ConcurrencyRegression.joinTests
