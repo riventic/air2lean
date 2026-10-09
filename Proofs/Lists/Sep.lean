@@ -1,6 +1,7 @@
 import Proofs.Lists.Gen
 import ZigLean.Sep
 import ZigLean.Sep.Total
+import ZigLean.Sep.Step
 
 /-!
 # Separation-logic proofs about `examples/lists/lists.zig`
@@ -14,7 +15,9 @@ at offset 8, 4 bytes of padding. `list hd xs`: the nodes from `hd` hold the item
 
 Each is the partial form (`Triple.toPartial`) of a total one (`push_total`, `reverse_total`,
 `freeAll_total`): the run returns, so a client can compose them into a total triple
-(`tutorials/memory-safety`).
+(`tutorials/memory-safety`). The loop steps `reverse_step` and `freeAll_step` execute the
+generated bodies with the `sep_*` tactics of `ZigLean.Sep.Step` and the node triples
+`node_next_total`, `node_set_next_total` and `node_free_total`.
 -/
 
 namespace Lists
@@ -107,10 +110,35 @@ theorem node_free_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Di
 
 end Node
 
+/-! The node operations as total triples, the rules `sep_step using` applies. -/
+
+theorem node_next_total {p : Ptr} {v : BitVec 32} {q : Option Ptr} :
+    TotalTriple (node p v q) (load (Option Ptr) 8 (p.add 0)) (fun r => ⌜r = q⌝ ∗ node p v q) :=
+  fun _ h _ hd hm hn hst => by
+    obtain ⟨m', hr, hm', hst'⟩ := node_next_run hn hm hst
+    exact ⟨q, m', h, hr, hd, hm', sep_lift.mpr ⟨rfl, hn⟩, hst'⟩
+
+theorem node_set_next_total {p : Ptr} {v : BitVec 32} {q q' : Option Ptr} :
+    TotalTriple (node p v q) (store 8 (p.add 0) q') (fun _ => node p v q') :=
+  fun _ _ _ hd hm hn hst => by
+    obtain ⟨m', hr, hst', h', hd', hm', hn'⟩ := node_set_next_run hn hm hd hst q'
+    exact ⟨(), m', h', hr, hd', hm', hn', hst'⟩
+
+theorem node_free_total {p : Ptr} {v : BitVec 32} {q : Option Ptr} {a : Allocator} :
+    TotalTriple (node p v q) (a.destroy 16 p) (fun _ => emp) :=
+  fun _ _ _ hd hm hn hst => by
+    obtain ⟨m', hr, hm', hst'⟩ := node_free_run hn hm hd hst a
+    exact ⟨(), m', Heap.empty, hr, (Heap.disjoint_empty _).symm, hm', rfl, hst'⟩
+
 /-- The list at `hd` has the items `xs`. -/
 def list (hd : Option Ptr) : List (BitVec 32) → Assn
   | [] => ⌜hd = none⌝
   | v :: vs => fun h => ∃ p q, hd = some p ∧ (node p v q ∗ list q vs) h
+
+/-- A nonempty list as separation connectives, for `sep_intro` and `sep_close`. -/
+theorem list_cons_eq {hd : Option Ptr} {v : BitVec 32} {vs : List (BitVec 32)} :
+    list hd (v :: vs) = Assn.ex fun p => Assn.ex fun q => ⌜hd = some p⌝ ∗ (node p v q ∗ list q vs) := by
+  funext h; simp only [list, Assn.ex, sep_lift]
 
 /-- The middle part `h₂` of `h₁ ∪ (h₂ ∪ h₃)`, with the rest and the frame as its frame. -/
 theorem focus_mid {h₁ h₂ h₃ hF : Heap} (d12 : Heap.Disjoint h₁ (h₂ ∪ h₃)) (d23 : Heap.Disjoint h₂ h₃)
@@ -135,36 +163,25 @@ theorem reverse_step (xs : List (BitVec 32)) (hF : Heap) (s : reverseLocals) (n 
       m'.heap = h' ∪ hF ∧ m'.Seq ∧
       (if reverse.again6 e then ∃ n' < n, revInv xs s' n' h'
        else e = .br5 ∧ list s'.prev xs.reverse h') := by
-  obtain ⟨ys, zs, hxs, hn, h₁, h₂, d12, rfl, hl₁, hl₂⟩ := hi
+  obtain ⟨ys, zs, hxs, hn, hl⟩ := hi
+  refine TotalTriple.step_run ?_ hd hm hl hst
   cases zs with
   | nil =>
-    obtain ⟨hcur, rfl⟩ := hl₂
-    refine ⟨.br5, s, m, h₁ ∪ Heap.empty, ?_, hd, hm, hst, ?_⟩
-    · simp [reverse.loop6, zig_unfold, hcur]
-    · simp only [reverse.again6, Bool.false_eq_true, ↓reduceIte, true_and, Heap.union_empty]
-      simpa [hxs] using hl₁
+    simp only [list]
+    sep_intro hcur
+    sep_unfold [reverse.loop6, hcur]
+    sep_ret
+    exact fun _ hl' => by simpa [reverse.again6, hxs] using hl'
   | cons z zs =>
-    obtain ⟨p, q, hcur, hn₂, hr, d2, rfl, hnode, hrest⟩ := hl₂
-    obtain ⟨hm', dN⟩ := focus_mid d12 d2 hd
-    replace hm' := hm.trans hm'
-    -- `reverse.loop6` reads `next` then writes it: each step mutates memory, so the write runs on
-    -- the memory after the read.
-    obtain ⟨mA, hl, hmA, hstA⟩ := node_next_run hnode hm' hst
-    obtain ⟨m₁, hs, hst₁, hn', dN', hm₁, hnode'⟩ := node_set_next_run hnode hmA dN hstA s.prev
-    simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hl hs
-    obtain ⟨-, d1r⟩ := Heap.disjoint_union_right.mp d12
-    obtain ⟨dn'1r, dn'F⟩ := Heap.disjoint_union_right.mp dN'
-    obtain ⟨dn'1, dn'r⟩ := Heap.disjoint_union_right.mp dn'1r
-    obtain ⟨d1F, d2rF⟩ := Heap.disjoint_union_left.mp hd
-    obtain ⟨-, drF⟩ := Heap.disjoint_union_left.mp d2rF
-    refine ⟨.rep6, { s with cur := q, prev := some p }, m₁, (hn' ∪ h₁) ∪ hr, ?_, ?_, ?_, hst₁, ?_⟩
-    · simp [reverse.loop6, zig_unfold, hcur, Zig.optPayload, hl, hs]
-    · exact Heap.disjoint_union_left.mpr ⟨Heap.disjoint_union_left.mpr ⟨dn'F, d1F⟩, drF⟩
-    · rw [hm₁]; simp only [Heap.union_assoc]
-    · simp only [reverse.again6, ↓reduceIte]
-      refine ⟨zs.length, by simp at hn; omega, z :: ys, zs, by simp [hxs], rfl,
-        hn' ∪ h₁, hr, Heap.disjoint_union_left.mpr ⟨dn'r, d1r⟩, rfl,
-        ⟨p, s.prev, rfl, hn', h₁, dn'1, rfl, hnode', hl₁⟩, hrest⟩
+    rw [list_cons_eq]
+    sep_intro p q hcur
+    sep_unfold [reverse.loop6, hcur]
+    sep_steps using node_next_total, node_set_next_total
+    sep_ret
+    intro _ hp
+    refine ⟨zs.length, by simp at hn; omega, z :: ys, zs, by simp [hxs], rfl, ?_⟩
+    rw [list_cons_eq]
+    sep_close hp p s.prev
 
 /-- `reverse` turns the list at `hd` into the list of the items in the other order. It
 returns. -/
@@ -236,26 +253,21 @@ theorem freeAll_step (a : Allocator) (hF : Heap) (s : freeAllLocals) (n : Nat) (
       m'.heap = h' ∪ hF ∧ m'.Seq ∧
       (if freeAll.again5 e then ∃ n' < n, freeInv s' n' h' else e = .br4 ∧ emp h') := by
   obtain ⟨zs, hn, hl⟩ := hi
+  refine TotalTriple.step_run (P := list s.p zs) ?_ hd hm hl hst
   cases zs with
   | nil =>
-    obtain ⟨hp, rfl⟩ := hl
-    refine ⟨.br4, s, m, Heap.empty, ?_, hd, hm, hst, ?_⟩
-    · simp [freeAll.loop5, zig_unfold, hp]
-    · simp [freeAll.again5, emp]
+    simp only [list]
+    sep_intro hp
+    sep_unfold [freeAll.loop5, hp]
+    sep_ret
+    exact fun _ he => ⟨rfl, he⟩
   | cons z zs =>
-    obtain ⟨p, q, hp, hn₁, hr, d, rfl, hnode, hrest⟩ := hl
-    obtain ⟨dnF, drF⟩ := Heap.disjoint_union_left.mp hd
-    have hm' : m.heap = hn₁ ∪ (hr ∪ hF) := by rw [hm, Heap.union_assoc]
-    have dN : Heap.Disjoint hn₁ (hr ∪ hF) := Heap.disjoint_union_right.mpr ⟨d, dnF⟩
-    -- `freeAll.loop5` reads `next` then frees the node: each step mutates memory, so the free
-    -- runs on the memory after the read.
-    obtain ⟨mA, hl, hmA, hstA⟩ := node_next_run hnode hm' hst
-    obtain ⟨m', hf, hm'', hst'⟩ := node_free_run hnode hmA dN hstA a
-    simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hl hf
-    refine ⟨.rep5, { s with p := q }, m', hr, ?_, drF, by simpa using hm'', hst', ?_⟩
-    · simp [freeAll.loop5, zig_unfold, hp, Zig.optPayload, hl, hf]
-    · simp only [freeAll.again5, ↓reduceIte]
-      exact ⟨zs.length, by simp at hn; omega, zs, rfl, hrest⟩
+    rw [list_cons_eq]
+    sep_intro p q hp
+    sep_unfold [freeAll.loop5, hp]
+    sep_steps using node_next_total, node_free_total
+    sep_ret
+    exact fun _ hr => ⟨zs.length, by simp at hn; omega, zs, rfl, sep_emp.mp (sep_comm hr)⟩
 
 /-- `freeAll` frees every node of the list: after it, the function owns no bytes. It
 returns. -/

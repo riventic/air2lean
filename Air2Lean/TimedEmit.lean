@@ -109,8 +109,8 @@ private def emitChecked (funcs : Array Func) (ns prefix_ : String) : String := I
     let fc := mk f ids
     let allocs := collectAllocs f.types fc.allInsts (structNames.map (·.2))
     output := output ++
-      [emitLocalsStruct structNames f.types fc.localsName allocs fc.escaping true,
-       emitExitInductive structNames f.types fc.exitName f.ret #[] #[] #[] true,
+      [emitLocalsStruct structNames f.types fc.localsName allocs fc.escaping true (ptrBits := fc.ptrBits),
+       emitExitInductive structNames f.types fc.exitName f.ret #[] #[] #[] true (ptrBits := fc.ptrBits),
        functionDef fc f]
   return String.intercalate "\n\n" (output ++ [s!"end {ns}"])
 

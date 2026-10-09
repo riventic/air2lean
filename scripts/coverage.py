@@ -294,6 +294,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/bitops/qualified/{version}/air': 'tests/roadmap/bitops/qualified/0.16.0/manifest.json',
     'tests/roadmap/idle-loops/air': 'tests/roadmap/idle-loops/provenance.json',
     'tests/roadmap/spawn-failure/air/{version}': 'tests/roadmap/spawn-failure/air/provenance.json',
+    'tests/roadmap/thread-locals/air/{version}': 'tests/roadmap/thread-locals/README.md',
+    'tests/roadmap/futures/air/{version}': 'tests/roadmap/futures/check.sh',
+    'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
+    'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/README.md',
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
@@ -306,6 +310,14 @@ NON_COMPILER_AIR = {
     'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; compiler export pending)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
+    'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/const-bases/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/pointer-width/air/0.16.0/wasm32-freestanding':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/0.16.0/wasm32-wasi':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/0.16.0/wasm32-reject':
+        'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',

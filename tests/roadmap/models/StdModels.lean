@@ -16,10 +16,11 @@ private def expectError {α : Type} (result : Except String α) (part : String) 
 private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
-  #[.spawn, .join, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
+  #[.spawn, .join, .detach, .yield, .spinLoopHint, .futexWait, .futexWaitU, .futexWake,
     .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
     .timerStart, .timerRead, .futexTimedWait,
-    .groupAsync, .groupConcurrent, .groupAwait, .groupCancel]
+    .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
+    .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
 /-- A call of `callee` with the single `u8` argument of `f`, returning `u8`. -/
 private def caller (f : Func) (name callee : String) : Func :=
@@ -51,7 +52,24 @@ def main : IO Unit := do
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"
   require (threadFn? "Thread.Futex.timedWait" == some .futexTimedWait) "clock projection"
-  require ((rejectedThreadFn? "Thread.detach").isSome) "rejection projection"
+  require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
+  require (threadFn? "Thread.detach" == some .detach) "detach projection"
+  -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
+  -- modelled cancelation points stay models.
+  for name in #["Io.recancel", "Io.swapCancelProtection", "Io.sleep",
+      "Io.operate", "Io.Batch.awaitAsync", "Io.Batch.cancel"] do
+    require ((rejectedThreadFn? name).isSome) s!"{name}: cancelable API not rejected"
+  for name in #["Io.futexWait", "Io.Group.cancel", "Io.Group.await", "Io.checkCancel"] do
+    require (modelledStdFn name) s!"{name}: cancelation point not modelled"
+  -- C08: methods of instantiated generic types name their generic method.
+  require (threadFn? "Io.Future(u32).await" == some .futureAwait) "Future(T).await projection"
+  require (threadFn? "Io.Future(error{Canceled}!u32).cancel" == some .futureCancel) "Future(E!T).cancel projection"
+  require (threadFn? "Io.Future(foo(bar).Baz).await" == some .futureAwait) "nested type argument"
+  require (threadFn? "Io.async__anon_582" == some .futureAsync) "Io.async projection"
+  require ((rejectedThreadFn? "Io.Select(union).async__anon_9").isSome) "Select rejection"
+  require ((rejectedThreadFn? "Io.concurrent__anon_3").isSome) "Io.concurrent rejection"
+  require ((stdModel? "Io.Futurex(u32).await").isNone) "generic prefix is exact"
+  require ((stdModel? "Io.async").map (·.zigVersions) == some #["0.16.0"]) "futures are 0.16.0 only"
 
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/client.json")
   let f ← get <| normalize raw
@@ -71,11 +89,21 @@ def main : IO Unit := do
     require (qualifies symbol "0.17.0") s!"{symbol}: audited for 0.17.0"
   for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
     require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
-  require (qualifies "Thread.detach" "0.17.0") "a rejection holds in every version"
+  require (qualifies "Io.futexWaitTimeout" "0.17.0") "a rejection holds in every version"
+  -- C07 detach and the C08 future API are audited for 0.16.0 only.
+  for symbol in #["Thread.detach", "Io.async", "Io.checkCancel"] do
+    require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
   expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])
     "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2, 0.16.0"
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.realloc qualified Zig 0.16.0"
+  expectError (checkProgram #[{ caller f "client" "Thread.detach" with zigVersion := "0.15.2" }])
+    "Thread.detach qualified Zig 0.16.0"
+  expectError (checkProgram #[caller f "client" "Thread.detach"]) "has an incompatible Thread/void signature"
+  expectError (checkProgram #[{ caller f "client" "Io.Future(u8).await" with zigVersion := "0.15.2" }])
+    "Io.Future.await qualified Zig 0.16.0"
+  expectError (checkProgram #[caller f "client" "Io.concurrent__anon_1"])
+    "Io.concurrent is not a qualified async API"
   -- A translated function cannot reuse a built-in std model name.
   for name in #["Thread.join", "Thread.spawn__anon_4", "Thread.detach", "mem.Allocator.free__anon_9"] do
     expectError (checkProgram #[f, { f with name }]) s!"{name}: translated function conflicts with built-in std model"
@@ -110,8 +138,8 @@ def main : IO Unit := do
     #[deps #["mem.Allocator.create", "mem.Allocator.allocSentinel", "RegistryExample.identity"], other]
   let _ ← get <| ModelRegistry.checkDependencies #[deps #["project.other"]]
   expectError (ModelRegistry.checkDependencies #[deps #["Zig.x", "Zig.x"]]) "duplicate semantic dependency 'Zig.x'"
-  expectError (ModelRegistry.checkDependencies #[deps #["Thread.detach"]])
-    "semantic dependency 'Thread.detach' is outside the subset"
+  expectError (ModelRegistry.checkDependencies #[deps #["Io.futexWaitTimeout"]])
+    "semantic dependency 'Io.futexWaitTimeout' is outside the subset"
   let legacy := { deps #["mem.Allocator.allocSentinel"] with profile := { model.profile with zigVersion := "0.15.2" } }
   expectError (ModelRegistry.checkDependencies #[legacy])
     "semantic dependency 'mem.Allocator.allocSentinel' is not qualified for Zig 0.15.2"
@@ -120,5 +148,5 @@ def main : IO Unit := do
   expectError (ModelRegistry.checkDependencies #[deps #["project.identity"]]) "cyclic semantic dependency"
   expectError (ModelRegistry.checkDependencies #[deps #["project.other"], other]) "cyclic semantic dependency"
   -- The registry check applies them end to end.
-  expectError (ModelRegistry.check #[deps #["Thread.detach"]] raw.profile #[f]) "outside the subset"
+  expectError (ModelRegistry.check #[deps #["Io.futexWaitTimeout"]] raw.profile #[f]) "outside the subset"
   IO.println s!"std model registry tests passed ({stdModels.size} rows)"

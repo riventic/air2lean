@@ -10,7 +10,7 @@
 The profile is the CI matrix of .github/workflows/ci.yml at the recorded revision; every matrix
 row is one job and every `run:` step whose condition holds for that row is a gate (actions and the
 tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`
-job is one more job that only GitHub evidence covers. `record` requires a clean
+and `aarch64-linux` jobs are native-runner jobs that only GitHub evidence covers. `record` requires a clean
 checkout and binds to HEAD. A gate is passed only with evidence for that exact commit: GitHub
 Actions run JSON (`gh run view ID --json databaseId,headSha,headBranch,conclusion,status,event,
 workflowName,url,jobs`) or a scripts/local-ci.sh results directory. Gates without evidence are
@@ -205,20 +205,26 @@ def reproduce(row):
 
 
 MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs the Linux test job'
+# Matrix-free jobs on native runners that scripts/local-ci.sh cannot reproduce: Q05 `macos` and
+# T04 `aarch64-linux` (ubuntu-24.04-arm).
+NATIVE_JOBS = {
+    'macos': MACOS_REPRODUCE,
+    'aarch64-linux': 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job',
+}
 
 
-def macos_plan(job, commands):
-    """The Q05 `macos` job: no matrix, so GitHub names it `macos`; only GitHub evidence covers it.
+def native_plan(name, job, commands):
+    """A matrix-free native job (`NATIVE_JOBS`): GitHub names it `name`; only GitHub evidence covers it.
 
-    Its commands are keyed `macos::<step>` (step names may repeat the test job's). A step whose
+    Its commands are keyed `<name>::<step>` (step names may repeat the test job's). A step whose
     condition reads another step's outputs (a cache hit) is tool setup, not a gate.
     """
     if job.get('strategy') is not None:
-        raise ReleaseError('%s: the macos job must not have a matrix' % WORKFLOW)
+        raise ReleaseError('%s: the %s job must not have a matrix' % (WORKFLOW, name))
     steps = job.get('steps') or []
     names = [step.get('name') for step in steps]
     if None in names or len(set(names)) != len(names):
-        raise ReleaseError('%s: every macos step needs a unique name' % WORKFLOW)
+        raise ReleaseError('%s: every %s step needs a unique name' % (WORKFLOW, name))
     gates = []
     for step in steps:
         if 'run' not in step:
@@ -227,18 +233,19 @@ def macos_plan(job, commands):
         if not isinstance(condition, bool) and 'steps.' in str(condition):
             continue
         if condition is not True:
-            raise ReleaseError('%s: macos step %r: unsupported condition %r' % (WORKFLOW, step['name'], condition))
-        commands['macos::' + step['name']] = {key: step[key] for key in ('env', 'run') if key in step}
+            raise ReleaseError('%s: %s step %r: unsupported condition %r' % (WORKFLOW, name, step['name'], condition))
+        commands[name + '::' + step['name']] = {key: step[key] for key in ('env', 'run') if key in step}
         gates.append(step['name'])
-    return {'name': 'macos', 'matrix': None, 'reproduce': MACOS_REPRODUCE, 'gates': gates, 'not_applicable': []}
+    return {'name': name, 'matrix': None, 'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': []}
 
 
 def build_plan(root, revision):
     workflow = parse_workflow_yaml(show(root, revision, WORKFLOW))
     expression, setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
     jobs = workflow.get('jobs') or {}
-    if set(jobs) - {'macos'} != {'test'}:
-        raise ReleaseError('%s: only the test and macos jobs are qualified for release records' % WORKFLOW)
+    if set(jobs) - set(NATIVE_JOBS) != {'test'}:
+        raise ReleaseError('%s: only the test, macos and aarch64-linux jobs are qualified for release records'
+                           % WORKFLOW)
     job = jobs['test']
     rows = (((job.get('strategy') or {}).get('matrix') or {}).get('include')) or []
     steps = job.get('steps') or []
@@ -267,8 +274,9 @@ def build_plan(root, revision):
                           'gates': gates, 'not_applicable': skipped})
     if len({j['name'] for j in plan_jobs}) != len(plan_jobs):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
-    if 'macos' in jobs:
-        plan_jobs.append(macos_plan(jobs['macos'], commands))
+    for name in NATIVE_JOBS:
+        if name in jobs:
+            plan_jobs.append(native_plan(name, jobs[name], commands))
     blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
     return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),

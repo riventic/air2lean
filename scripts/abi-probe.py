@@ -11,10 +11,6 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ('tests/roadmap/abi-probes/probe.zig', 'tests/diff/compat.zig')
 TARGETS = ('x86_64-linux-gnu', 'aarch64-linux-gnu')  # the paired Linux relation
-# Zig versions with a bounded contract. A profile `tests/roadmap/abi-probes/<p>.json` is the 0.16.0
-# contract; `tests/roadmap/abi-probes/<version>/<p>.json` is the same contract for another Zig
-# version (`observe` selects it from the stock compiler's `zig version`).
-PROFILE_VERSIONS = ('0.16.0', '0.17.0')
 # triple -> (platform.system() that executes it, builtin os, builtin abi, baseline CPU model)
 NATIVE = {'x86_64-linux-gnu': ('Linux', 'linux', 'gnu', 'x86_64'),
           'aarch64-linux-gnu': ('Linux', 'linux', 'gnu', 'generic'),
@@ -28,6 +24,10 @@ VALUES = {'vector_u9_image': 268173823, 'vector_u9_lane_write': 178782719,
           'vector_u24_image': 20016001699311,
           'wrapping24': 1, 'packed_bits': 1793, 'vector_sum': 10, 'pointer_load': 1234567}
 OFFSETS = {'record_count': 4, 'record_pointer': 8}
+# Zig versions with committed probe contracts: 0.16.0's profiles are
+# tests/roadmap/abi-probes/<triple>-<mode>.json, every other version's are under <version>/
+# (`observe` selects it from the stock compiler's `zig version`).
+VERSIONS = ('0.14.1', '0.15.2', '0.16.0', '0.17.0')
 
 
 def fingerprints():
@@ -43,7 +43,7 @@ def profile_check(profile):
     if (profile['name'] != 'abi64-le-v1' or profile['target_triple'] not in NATIVE
             or type(profile['pointer_bits']) is not int or profile['pointer_bits'] != 64
             or profile['endian'] != 'little' or profile['abi'] != NATIVE[profile['target_triple']][2]
-            or profile['backend'] != 'stage2_llvm' or profile['zig_version'] not in PROFILE_VERSIONS
+            or profile['backend'] != 'stage2_llvm' or profile['zig_version'] not in VERSIONS
             or profile['build_mode'] not in ('ReleaseSafe', 'ReleaseFast')
             or profile['export_stage'] != 'analyzed-air'
             or profile['float_mode'] != 'per-instruction' or profile['error_layout'] != 'type-table'
@@ -150,6 +150,8 @@ def compare(left, right):
         raise ValueError('pair requires one observation of each selected Linux target')
     if left['profile']['build_mode'] != right['profile']['build_mode']:
         raise ValueError('pair build modes differ')
+    if left['profile']['zig_version'] != right['profile']['zig_version']:
+        raise ValueError('pair Zig versions differ')
     return {'schema': 1, 'kind': 'air2lean-paired-abi-observations',
             'relation': 'exact equality of listed layouts, offsets and integer values',
             'observations_equal': all(left['observations'][key] == right['observations'][key]
@@ -158,7 +160,7 @@ def compare(left, right):
 
 
 def version_profile(zig, path):
-    """`path`, or its contract for the stock compiler's Zig version (`PROFILE_VERSIONS`)."""
+    """`path`, or its contract for the stock compiler's Zig version (`VERSIONS`)."""
     version = subprocess.run([zig, 'version'], check=True, timeout=60, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE).stdout.decode('utf-8').strip()
     variant = path.parent / version / path.name

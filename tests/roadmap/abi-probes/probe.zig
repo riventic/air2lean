@@ -26,13 +26,29 @@ fn image(comptime T: type, value: *const T) u64 {
     for (0..@sizeOf(T)) |i| result |= @as(u64, bytes[i]) << @intCast(8 * i);
     return result & ((@as(u64, 1) << @bitSizeOf(T)) - 1);
 }
-fn layout(out: *std.Io.Writer, comptime name: []const u8, comptime T: type) !void {
+/// Output collected with std.fmt.bufPrint and written with compat.write: the same code
+/// builds on Zig 0.14.1 (no std.Io.Writer), 0.15.2 and 0.16.0.
+const Out = struct {
+    buffer: [16384]u8 = undefined,
+    len: usize = 0,
+    fn print(self: *Out, comptime format: []const u8, args: anytype) !void {
+        self.len += (try std.fmt.bufPrint(self.buffer[self.len..], format, args)).len;
+    }
+    fn flush(self: *Out) !void {
+        var done: usize = 0;
+        while (done < self.len) {
+            const written = try compat.write(1, self.buffer[done..self.len]);
+            if (written == 0) return error.BrokenPipe;
+            done += written;
+        }
+    }
+};
+fn layout(out: *Out, comptime name: []const u8, comptime T: type) !void {
     try out.print("layout {s} {d} {d}\n", .{ name, @sizeOf(T), @alignOf(T) });
 }
 pub fn main() !void {
-    var buffer: [4096]u8 = undefined;
-    var writer = compat.stdoutWriter(&buffer);
-    const out = &writer.interface;
+    var output: Out = .{};
+    const out = &output;
     try out.print("meta arch {s}\nmeta os {s}\nmeta abi {s}\nmeta endian {s}\n", .{
         @tagName(builtin.cpu.arch), @tagName(builtin.os.tag), @tagName(builtin.abi),
         @tagName(builtin.cpu.arch.endian()),

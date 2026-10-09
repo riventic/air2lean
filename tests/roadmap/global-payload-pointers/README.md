@@ -57,6 +57,8 @@ ABI for this qualification. General translator acceptance is separate from this 
 A native address probe on all three stock versions found the small error payload constant at
 offset 36 with LLVM and its runtime projection at 38; stage2_x86_64 produced 38 for both.
 Optional, wide and equal-alignment controls agreed across both backends. The original offset
-oracle is unchanged. LLVM constant small error-payload pointer correspondence remains
-unqualified; this observation is not a general backend theorem. See
-`native-abi-boundary.json` for the diagnostic provenance.
+oracle is unchanged. See `native-abi-boundary.json` for the diagnostic provenance.
+`tests/roadmap/const-bases` (§The LLVM constant `eu_payload` offset) resolves the
+discrepancy: 38 is correct. Zig 0.14.1–0.17.0's `codegen/llvm.zig` `lowerPtr` measures the
+error union type instead of its payload, so it places an alignment-1 payload at the error
+code. The translator rejects such constants on the `stage2_llvm` profile.

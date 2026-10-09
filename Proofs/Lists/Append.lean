@@ -14,7 +14,8 @@ no block for `cap = 0`).
 * `append_run`: `append` gives `xs ++ [v]`, or `error.OutOfMemory` and the same list. When the
   buffer is full, `ensureTotalCapacityPrecise` allocates a new block, copies the items with a
   `@memcpy` and frees the old block. The `@memcpy` alias check holds because the new block lies
-  above every live block (`alloc_run`, `Mem.AddrBelow`).
+  clear of every live block (`alloc_run`): above them for a fresh address, and for every address
+  reuse policy too (M05, `docs/address-reuse.md`).
 * `append_cost_run`: `append_run` with its allocation cost (`ZigLean/Sep/Cost.lean`). With
   spare capacity, `append` makes no allocation request and retains no new block.
 
@@ -253,7 +254,7 @@ theorem alloc_slice_run (hd : Heap.Disjoint h hF) (hm : m.heap = h ∪ hF) (hst 
       | .ok s => s.len = g ∧ s.ptr.off = 0 ∧ 4 * g.toNat < 2 ^ 64 ∧ ∃ h', Heap.Disjoint (h ∪ h') hF ∧
           m'.heap = (h ∪ h') ∪ hF ∧ Heap.Disjoint h h' ∧ ∃ A, A % 4 = 0 ∧
           bytesAt s.ptr A (4 * g.toNat) .heap (Array.replicate (4 * g.toNat) .undef) h' ∧
-          ∀ l c, m.heap l = some c → c.addr + c.size < A := by
+          ∀ l c, m.heap l = some c → c.addr + c.size < A ∨ A + 4 * g.toNat < c.addr := by
   by_cases hbig : 2 ^ 64 ≤ 4 * g.toNat
   · refine ⟨.error "OutOfMemory", m, ?_, hst, Nat.le_refl _, rfl, hm⟩
     simp [Allocator.alloc, hbig, zig_unfold]
@@ -593,7 +594,8 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
         (n := 4 * cap.toNat) (a := 1) hbO (hm₅'.trans vB) (by simp [Ptr.add]) (by omega)
         (by omega) (Nat.mod_one _)
       have hpO : ptr.block = some bO := (access_eq haccO).1
-      -- The old block ends below the new one (`alloc_run`).
+      -- The new block's address range is clear of the live old block (`alloc_run`): above it
+      -- for a fresh address, possibly below it under address reuse (M05).
       have hcell : m₂.heap (bO, 0) = some ⟨bs[0]!, A₀, 4 * cap.toNat, .heap⟩ := by
         obtain ⟨b', hb', -, hown⟩ := hbO
         rw [hpO] at hb'; cases hb'
@@ -607,7 +609,9 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
           pure ((blkO.addr : Int) + (ptr.elem 4 len).off, m₅) := ptrAddr_run hpO hblkO
       have aO0 : (ptrAddr ptr).run m₅ = pure ((blkO.addr : Int) + ptr.off, m₅) :=
         ptrAddr_run hpO hblkO
-      have hle1 : (blkO.addr : Int) + (ptr.elem 4 len).off ≤ (blkN.addr : Int) + sl.ptr.off := by
+      have hle1 : (blkO.addr : Int) + (ptr.elem 4 len).off ≤ (blkN.addr : Int) + sl.ptr.off ∨
+          (blkN.addr : Int) + (sl.ptr.elem 4 len).off ≤ (blkO.addr : Int) + ptr.off := by
+        have : len.toNat ≤ g.toNat := by omega
         simp [Ptr.elem, Ptr.add, hoffO, hoff, haddrO, haddrN]; omega
       obtain ⟨m₆, mv, hs₆, hz₆, hN', dN', hm₆, hbN'⟩ : ∃ m₆,
           (memmove 4 4 4 sl.ptr ptr len).run m₅ = pure ((), m₆) ∧ m₆.Seq ∧

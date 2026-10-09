@@ -52,6 +52,23 @@ class Reports(unittest.TestCase):
         with self.assertRaises(ValueError):
             n.proof_api_records(b'-- air2lean-proof-api: {"format":1,"format":2}\n', {}, sources)
 
+    def test_lemma_names_follow_source_encoding_and_loop_order(self):
+        source = 'api.sum'
+        base = 'air2lean_api' + ''.join('_' + str(b) for b in source.encode())
+        loop = lambda k: dict(body=f'{base}_loop{k}_body', again=f'{base}_loop{k}_again',
+                              body_unfold=f'{base}_loop{k}_body_unfold', step=f'{base}_loop{k}_step')
+        r = dict(format='air2lean-proof-lemmas-v1', source=source, definition='sum',
+                 model=base+'_model', unfold=base+'_unfold', loops=[loop(0), loop(1)])
+        line = lambda r: ('-- air2lean-proof-lemmas: '+json.dumps(r)+'\n').encode()
+        sources = {source: {}}
+        self.assertEqual(n.proof_lemma_records(line(r), sources), [r])
+        plain = {k: v for k, v in r.items() if k != 'loops'}
+        self.assertEqual(n.proof_lemma_records(line(plain), sources), [plain])
+        for bad in [dict(r, loops=[loop(1), loop(0)]), dict(r, loops=[]), dict(r, extra=1),
+                    dict(r, step='x'), dict(r, model='x'), dict(r, source='missing')]:
+            with self.assertRaises(ValueError): n.proof_lemma_records(line(bad), sources)
+        with self.assertRaises(ValueError): n.proof_lemma_records(line(r)+line(r), sources)
+
     def test_roundtrip_extends_the_existing_profile_report(self):
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary); air = work/'air'; air.mkdir()

@@ -480,7 +480,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
     obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₉.main
     rw [hg₄] at h0; cases h0
     obtain ⟨hsz₉, r1₉, k1₉, hn₉⟩ := hsh
-    refine ⟨fun _ => ⟨by decide, by rw [hsz₉]; decide, ⟨_, B, .inl rfl⟩, by
+    refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₉]; decide, ⟨_, B, .inl rfl⟩, by
       have hr := r1₉
       unfold KidRec at hr
       simp [Thread.joinValid, hr]⟩,
@@ -569,7 +569,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
   obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₁₁.main
   rw [hg₅] at h0; cases h0
   obtain ⟨hsz₁₁, r1₁₁, r2₁₁, k1₁₁, k2₁₁, hn₁₁⟩ := hsh
-  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₁]; decide, ⟨_, B, .inr (.inl rfl)⟩, by
+  refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁₁]; decide, ⟨_, B, .inr (.inl rfl)⟩, by
     have hr := r1₁₁
     unfold KidRec at hr
     simp [Thread.joinValid, hr]⟩,
@@ -625,7 +625,7 @@ theorem main_spec (lim : Option Nat) (d : Nat) :
   obtain ⟨ph, hm, B', h0, -, hma₁₃, hsh⟩ := hi₁₃.main
   rw [hg₆] at h0; cases h0
   obtain ⟨hsz₁₃, r1₁₃, r2₁₃, k1₁₃, k2₁₃, hn₁₃⟩ := hsh
-  refine ⟨fun _ => ⟨by decide, by rw [hsz₁₃]; decide, ⟨_, B, .inr (.inr rfl)⟩, by
+  refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁₃]; decide, ⟨_, B, .inr (.inr rfl)⟩, by
     have hr := r2₁₃
     unfold KidRec at hr
     simp [Thread.joinValid, hr]⟩,

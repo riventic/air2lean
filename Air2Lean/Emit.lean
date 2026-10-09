@@ -164,12 +164,19 @@ def floatFmtName (n : Nat) : String :=
   | 16 => "Zig.F16" | 32 => "Zig.F32" | 64 => "Zig.F64" | 80 => "Zig.F80" | 128 => "Zig.F128"
   | _ => s!"Zig.Float .f{n}" -- unreachable: Check.lean restricts `n`
 
+/-- The Lean type of a slice for a profile with `ptrBits`-bit pointers. -/
+def sliceTyName (ptrBits : Nat) : String :=
+  if ptrBits == 64 then "Zig.Slice" else s!"Zig.Slice{ptrBits}"
+
 /-- `TyId → Lean type` as source text. `structNames` maps the Zig name of a struct, enum or
 union to its Lean name. `pureSlice`: `ty` is the type of a value of a pure function, where a
 `[]const T` is an `Array` (`docs/generated-code.md` §Memory); everywhere else a slice is a
-`Zig.Slice`. -/
+`Zig.Slice`, or `Zig.Slice32` for a 32-bit profile (`ptrBits`, `ZigLean/Mem/Width.lean`). -/
 partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty)
-    (pureSlice : Bool := false) : String :=
+    (pureSlice : Bool := false) (ptrBits : Nat := 64) : String :=
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
+    emitTy structNames types ty (ptrBits := ptrBits)
+  let slice := sliceTyName ptrBits
   match ty with
   | .int _ bits => s!"BitVec {bits}"
   | .float bits => floatFmtName bits
@@ -177,8 +184,8 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .void => "Unit"
   | .noreturn => "Unit"
   | .ptr "slice" true child =>
-    if pureSlice then s!"Array ({emitTy structNames types types[child]!})" else "Zig.Slice"
-  | .ptr "slice" .. => "Zig.Slice"
+    if pureSlice then s!"Array ({emitTy structNames types types[child]!})" else slice
+  | .ptr "slice" .. => slice
   | .ptr .. => "Zig.Ptr"
   | .array len child s =>
     s!"Vector ({emitTy structNames types types[child]!}) {len + if s then 1 else 0}"
@@ -194,6 +201,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .allocator => "Zig.Allocator"
   | .thread => "Zig.ThreadId"
   | .io => "Zig.Io"
+  | .future r => s!"Zig.Future ({emitTy structNames types types[r]!})"
   | .other name => name
 
 /-- A finite declared name table, with checked capacity and uniqueness. These positions
@@ -215,7 +223,11 @@ error width every error union also gets an explicit dictionary, since the regist
 allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes (`Check.lean` rejects
 an optional of one, which would need a separate flag). -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
-    (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) : Option String :=
+    (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) :
+    Option String :=
+  let emitStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
+      (id : TyId) (layouts : Array Layout) :=
+    emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits)
   match types[id]? with
   | some (.ptr ..) => if nullablePtrTy types layouts id then some "Zig.nullablePtrEnc" else none
   | some (.errorSet (some names)) => some s!"{errOp errBits "errorEnc"} {emitErrorDomain names}"
@@ -229,22 +241,25 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
   | some (.errorUnion set payload) =>
     let payloadEnc := emitStorageEnc structNames types errBits payload layouts
     let enc := payloadEnc.getD
-      s!"(inferInstance : Zig.Enc ({emitTy structNames types types[payload]!}))"
+      s!"(inferInstance : Zig.Enc ({emitTy structNames types types[payload]! (ptrBits := ptrBits)}))"
     match types[set]? with
     | some (.errorSet (some names)) => some s!"{errOp errBits "errorUnionEnc"} {emitErrorDomain names} ({enc})"
     | _ =>
       if errBits == 16 then payloadEnc.map fun _ => s!"Zig.Enc.errorUnionWith ({enc})"
       else some s!"Zig.Enc.errorUnionWithW {errBits} ({enc})"
+  | some (.future r) =>
+    (emitStorageEnc structNames types errBits r layouts).map fun enc =>
+      s!"@Zig.Future.instEnc ({emitTy structNames types types[r]! (ptrBits := ptrBits)}) ({enc})"
   | _ => none
 
 /-- Bind a dictionary only around the storage operation that needs it. This preserves the
 public semantic types (`ErrName`, `Option ErrName`, `Except ErrName`) and pure APIs. -/
 def withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
-    (id : TyId) (expr : String) (layouts : Array Layout := #[]) : String :=
-  match emitStorageEnc structNames types errBits id layouts with
+    (id : TyId) (expr : String) (layouts : Array Layout := #[]) (ptrBits : Nat := 64) : String :=
+  match emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) with
   | none => expr
   | some enc =>
-    s!"(letI : Zig.Enc ({emitTy structNames types types[id]!}) := {enc}; {expr})"
+    s!"(letI : Zig.Enc ({emitTy structNames types types[id]! (ptrBits := ptrBits)}) := {enc}; {expr})"
 
 /-! ## Named types: emit each distinct Zig struct, enum and union once -/
 
@@ -284,7 +299,7 @@ partial def namedDeps (types : Array Ty) (ty : Ty) : Array String :=
   | .struct _ _ fields | .union _ _ none fields => fields.flatMap (go ·.2)
   | .union _ _ (some tag) fields => go tag ++ fields.flatMap (go ·.2)
   | .enum .. => #[]
-  | .ptr "slice" _ c | .array _ c _ | .optional c => go c
+  | .ptr "slice" _ c | .array _ c _ | .optional c | .future c => go c
   | .errorUnion _ p => go p
   | .tuple fs => fs.flatMap go
   | _ => #[]
@@ -369,6 +384,12 @@ def rawUnionInit (u layout : String) (size : Nat) (v t : String) : String :=
 /-- The `Zig.Enc` instance of a struct or enum that can be in memory (`ZigLean/Mem/Enc.lean`):
 the size, alignment and field offsets from the exporter. -/
 def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
+  let ptrBits := 8 * ptrBytesOf s.srcLayouts
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
+    emitTy structNames types ty (ptrBits := ptrBits)
+  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
+      (id : TyId) (expr : String) (layouts : Array Layout) :=
+    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits)
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
   let hn := helperLookup s.ty (structNames.map (·.2))
@@ -420,6 +441,12 @@ def emitEnc (structNames : Array (String × String)) (s : NamedType) : String :=
   | _ => ""
 
 def emitNamedType (structNames : Array (String × String)) (s : NamedType) : String :=
+  let ptrBits := 8 * ptrBytesOf s.srcLayouts
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) :=
+    emitTy structNames types ty (ptrBits := ptrBits)
+  let withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
+      (id : TyId) (expr : String) (layouts : Array Layout) :=
+    withStorageEnc structNames types errBits id expr layouts (ptrBits := ptrBits)
   let tyStr (id : TyId) : String := emitTy structNames s.srcTypes s.srcTypes[id]!
   let n := s.leanName
   let fm := memberLookup s.ty (structNames.map (·.2))
@@ -692,11 +719,22 @@ def FCtx.memberName (fc : FCtx) (ty : Ty) (raw : String) : String :=
 def FCtx.helperName (fc : FCtx) (ty : Ty) (raw : String) : String :=
   Air2Lean.helperName ty raw (fc.structNames.map (·.2))
 
+/-- The profile's pointer width in bits (`Layout.ptrBytes`): 64, or 32 for wasm32. -/
+def FCtx.ptrBits (fc : FCtx) : Nat := 8 * ptrBytesOf fc.layouts
+
+/-- The 64-bit runtime name `name`, or its width-parameterized form (`ZigLean/Mem/Width.lean`)
+for another pointer width. -/
+def FCtx.widthFn (fc : FCtx) (name wide : String) : String :=
+  if fc.ptrBits == 64 then name else wide
+
+/-- The `Zig.PtrWidth` term of the profile. -/
+def FCtx.ptrWidthTerm (fc : FCtx) : String := if fc.ptrBits == 64 then ".w64" else ".w32"
+
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
-  emitTy fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
+  emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
 def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
-  withStorageEnc fc.structNames fc.types fc.errBits tid expr fc.layouts
+  withStorageEnc (ptrBits := fc.ptrBits) fc.structNames fc.types fc.errBits tid expr fc.layouts
 
 def FCtx.tyBits (fc : FCtx) (tid : TyId) : Nat := match fc.tyOfId tid with | .int _ b => b | _ => 0
 def FCtx.tySigned (fc : FCtx) (tid : TyId) : Bool :=
@@ -833,7 +871,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
   | .ptrOther .. => "(panic! \"air2lean: a pointer constant without a global\")"
-  | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : Zig.Slice)"
+  | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : {sliceTyName fc.ptrBits})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
@@ -863,7 +901,7 @@ def FCtx.structFieldNamesFor (fc : FCtx) (ty : Ty) : Array String :=
 
 /-- The Lean type of `v`. -/
 def FCtx.emitValTy (fc : FCtx) (v : Val) : String :=
-  emitTy fc.structNames fc.types (fc.valTy v) (pureSlice := !fc.mem)
+  emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.valTy v) (pureSlice := !fc.mem)
 
 def isEnumTy (t : Ty) : Bool := match t with | .enum .. => true | _ => false
 
@@ -1112,8 +1150,15 @@ def FCtx.atomicTyped (fc : FCtx) (ptr : Val) : Bool :=
   | .enum .. | .bool | .struct _ "packed" _ => true
   | _ => false
 
+/-- An atomic op through `ptr` on a pointer (`*T`, `?*T`): the pointer op (`Zig.atomicLoadPtrC`,
+…, `ZigLean/Conc/PtrAtomic.lean`), whose message keeps the pointer's block. -/
+def FCtx.atomicPtr (fc : FCtx) (ptr : Val) : Bool :=
+  match fc.valTy ptr with
+  | .ptr _ _ c => atomicPtrPointee fc.types fc.layouts c
+  | _ => false
+
 /-- The Lean type of the value that the pointer `v` points to. -/
-def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy fc.structNames fc.types (fc.pointeeOf v)
+def FCtx.pointeeTy (fc : FCtx) (v : Val) : String := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.pointeeOf v)
 
 /-- The byte offset of field `idx` of the struct that the pointer `base` points to. `baseBit`:
 the bit offset of `base` if it is a bit-pointer (its address is its host's). -/
@@ -1167,7 +1212,7 @@ def FCtx.isSlice (fc : FCtx) (v : Val) : Bool :=
 def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
   if fc.isSlice v then (s!"{rv}.ptr", s!"{rv}.len")
   else match fc.pointeeOf v with
-    | .array len .. | .vector len _ => (rv, s!"({len} : BitVec 64)")
+    | .array len .. | .vector len _ => (rv, s!"({len} : BitVec {fc.ptrBits})")
     | _ => (rv, "(panic! \"air2lean: items of a pointer without a length\")")
 
 /-- `v` is a pointer to memory: not a place. -/
@@ -1236,8 +1281,8 @@ def FCtx.computeRawInsts (fc : FCtx) (canRet : Bool) : Array InstId :=
 /-- A call argument. A pure callee gets the items of a `[]const T` argument (`Zig.readSlice`). -/
 def FCtx.callArg (fc : FCtx) (env : Array (InstId × String)) (memCallee : Bool) (a : Val) : String :=
   if fc.mem && !memCallee && fc.isSlice a then
-    let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
-    s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"Zig.readSlice ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
+    let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId a))
+    s!"(← {fc.callMName} ({fc.storageExpr (fc.itemTyId a) s!"{fc.widthFn "Zig.readSlice" "Zig.readSliceOf"} ({item}) {fc.itemAlign a} {fc.resolveVal env a}"}))"
   else fc.resolveVal env a
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
@@ -1254,8 +1299,13 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   let argSize := fc.sizeOf (((fc.valTyId? (arg 1)).bind (ptrChild fc.types)).getD 0)
   let a := rv (arg 0)
   match fn with
-  | .create => s!"Zig.Allocator.create {a} {size} {align}"
-  | .alloc | .alignedAlloc => s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+  -- `Check.lean` admits only create, alloc, alignedAlloc, destroy and free for a 32-bit profile.
+  | .create =>
+    if fc.ptrBits == 64 then s!"Zig.Allocator.create {a} {size} {align}"
+    else s!"Zig.Allocator.createOf {fc.ptrWidthTerm} {a} {size} {align}"
+  | .alloc | .alignedAlloc =>
+    if fc.ptrBits == 64 then s!"Zig.Allocator.alloc {a} {size} {align} {rv (arg 1)}"
+    else s!"Zig.Allocator.allocOf {fc.ptrWidthTerm} {a} {size} {align} {rv (arg 1)}"
   | .allocSentinel =>
     let sentinel := (fc.layouts[p]?.bind (·.sentinelByte)).getD 0
     s!"Zig.Allocator.allocSentinel {a} {rv (arg 1)} ({sentinel}#8)"
@@ -1263,17 +1313,23 @@ def FCtx.allocCall (fc : FCtx) (env : Array (InstId × String)) (fn : AllocFn) (
   | .destroy => s!"Zig.Allocator.destroy {a} {argSize} {rv (arg 1)}"
   | .free =>
     let sentinel := ((fc.valTyId? (arg 1)).bind (fc.layouts[·]?) |>.map (·.sentinel)).getD false
-    s!"Zig.Allocator.{if sentinel then "freeSentinel" else "free"} {a} {argSize} {rv (arg 1)}"
+    s!"Zig.Allocator.{if sentinel then "freeSentinel" else fc.widthFn "free" "freeOf"} {a} {argSize} {rv (arg 1)}"
   | .remap => s!"Zig.Allocator.remap {a} {argSize} {rv (arg 1)} {rv (arg 2)}"
   | .realloc => s!"Zig.Allocator.realloc {a} {rv (arg 1)} {rv (arg 2)}"
+
+/-- The `Tgt` constructor of the `Io.async` task of the worker with generated name `worker`. -/
+def futureCtorName (worker : String) : String := s!"{worker}_future"
+
+/-- The `spawnFallbacks` key of the caller's eager execution of an `Io.async` task. -/
+def futureEagerKey (worker : String) : String := s!"future:{worker}"
 
 /-- A sync op of the thread model (`ZigLean/Conc/Call.lean`), a `Zig.CM Tgt` term. `.spawn`:
 `callee`'s `spawnFn` (its `comptime_fn`) names the spawned function, a constructor of the
 program's `Tgt` (`emitTgt`); `args[1]` is the complete by-value captured tuple. Zero
 fields use `Unit`, one field keeps the historical scalar representation, and multiple
-fields form a right-associated product. Dispatch applies each field in source order. `.join`: `args[0]` is the `Thread` handle. -/
+fields form a right-associated product. Dispatch applies each field in source order. `.join`, `.detach`: `args[0]` is the `Thread` handle. -/
 def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
-    (args : Array Val) : String :=
+    (args : Array Val) (ret : TyId := 0) : String :=
   let rv := fc.resolveVal env
   match fn with
   | .spawn =>
@@ -1282,6 +1338,7 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let op := if fc.spawnSemantics == .fallible then "spawnWithPolicyC .fallible" else "spawnC"
     s!"Zig.{op} (Tgt.{target} {rv (args[1]?.getD .void)})"
   | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  | .detach => s!"Zig.detachC {rv (args[0]?.getD .void)}"
   | .yield => "Zig.threadYieldC"
   | .spinLoopHint => "Zig.spinLoopHintC"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
@@ -1295,7 +1352,7 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
   | .osLock => s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
   | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
   | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
-  | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unspecified)"
+  | .timerStart | .timerRead | .futexTimedWait => "Zig.callRC (throw Zig.Error.unsupportedTimer)"
   -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`).
   | .groupAsync | .groupConcurrent =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
@@ -1313,13 +1370,33 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
       (Tgt.{target} {capture}){fallback}"
   | .groupAwait => s!"Zig.groupAwaitC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
   | .groupCancel => s!"Zig.groupCancelC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
+  -- `Io.async(io, args)`: the task is `callee`'s `spawnFn`, its target `Tgt.<worker>_future`
+  -- (`emitTgtWithStorage`); `ret` is the `Io.Future(T)` type (`docs/futures.md`).
+  | .futureAsync =>
+    let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
+    let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
+    let capture := rv (args[1]?.getD .void)
+    let result := match fc.tyOfId ret with | .future r => r | _ => ret
+    let resultTy := fc.emitTyOf result
+    let mk := s!"(fun futureSlot => Tgt.{futureCtorName target} futureSlot {capture})"
+    let call := if fc.spawnSemantics == .fallible then
+      s!"Zig.asyncWithPolicyC (α := {resultTy}) .fallible {mk} \
+        (({fc.spawnFallback (futureEagerKey spawnFn)}) {capture})"
+      else s!"Zig.asyncC (α := {resultTy}) {mk}"
+    fc.storageExpr result call
+  -- `Future(T).await(&f, io)`, `.cancel(&f, io)`: `ret` is `T`.
+  | .futureAwait | .futureCancel =>
+    let op := if fn == .futureAwait then "awaitC" else "cancelC"
+    fc.storageExpr ret s!"Zig.{op} (α := {fc.emitTyOf ret}) {rv (args[1]?.getD .void)} \
+      {rv (args[0]?.getD .void)}"
+  | .checkCancel => s!"Zig.checkCancelC {rv (args[0]?.getD .void)}"
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/
 def FCtx.loadItem (fc : FCtx) (v : Val) (p i : String) : String :=
   let item := fc.itemTyId v
-  fc.storageExpr item s!"Zig.load ({emitTy fc.structNames fc.types (fc.tyOfId item)}) {fc.itemAlign v} \
-    ({p}.elem {fc.sizeOf item} {i})"
+  fc.storageExpr item s!"Zig.load ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId item)}) {fc.itemAlign v} \
+    ({p}.{fc.widthFn "elem" "elemOf"} {fc.sizeOf item} {i})"
 
 /-! ## `alloc` → `<Fn>Locals` field prepass -/
 
@@ -1359,8 +1436,10 @@ def collectAllocs (types : Array Ty) (allInsts : Array Inst) (reserved : Array S
 memory. -/
 def emitLocalsStruct (structNames : Array (String × String)) (types : Array Ty)
     (localsName : String) (allocs : Array (InstId × String × TyId)) (escaping : Array InstId)
-    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (byteLocals : Array InstId := #[]) :
-    String :=
+    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (byteLocals : Array InstId := #[])
+    (ptrBits : Nat := 64) : String :=
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) (pureSlice : Bool) :=
+    emitTy structNames types ty pureSlice ptrBits
   let lines := (allocs.map fun (aid, nm, cty) =>
     if escaping.contains aid then s!"  {nm} : Zig.Ptr"
     else if byteLocals.contains aid then
@@ -1396,7 +1475,10 @@ def repTargets (allInsts : Array Inst) : Array InstId :=
 
 def emitExitInductive (structNames : Array (String × String)) (types : Array Ty)
     (exitName : String) (retTy : TyId) (blTys : Array (InstId × TyId)) (brT repT : Array InstId)
-    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (rawRet : Bool := false) : String :=
+    (mem : Bool) (dispatches : Array (InstId × Ty) := #[]) (rawRet : Bool := false)
+    (ptrBits : Nat := 64) : String :=
+  let emitTy (structNames : Array (String × String)) (types : Array Ty) (ty : Ty) (pureSlice : Bool) :=
+    emitTy structNames types ty pureSlice ptrBits
   let retLine := match types[retTy]! with
     | .void => "  | ret"
     | rt =>
@@ -1468,7 +1550,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .isNamedEnum a => #[a]
   | .unionTag a => #[a]
   | .unionInit _ a => #[a]
-  | .alloc => #[]
+  | .alloc | .runtimeNavPtr _ => #[]
   | .fieldPtr base _ => if fc.isMemPtr base then #[base] else #[]
   | .fieldParentPtr fieldPtr _ => if fc.isMemPtr fieldPtr then #[fieldPtr] else #[]
   | .setUnionTag p tag => if fc.isMemPtr p then #[p, tag] else #[]
@@ -1608,6 +1690,9 @@ structure AsmDef where
   inputWidths : Array Nat
   /-- The width of each output, in output order. -/
   outputWidths : Array Nat
+  /-- The width of each read-write (`+r`, `+m`) output, in output order: the opaque's trailing
+  parameters, the old values (A01). Empty for a register-only op. -/
+  rwWidths : Array Nat := #[]
   deriving BEq
 
 /-- The identity of an asm op: the source template, the ordered constraint list and the operand
@@ -1628,10 +1713,20 @@ Lean's own `hash`: this only needs to be stable within one generation run (the t
 pinned), and a hand-rolled hash keeps that independent of a core implementation detail.
 `collectAsmOps` removes duplicates by the full `asmKey`, not by this name: two different asm ops
 with the same hash give two `opaque` defs of one name, a Lean build error, never one shared def. -/
-def asmDefName (key : String) : String :=
-  let h := key.foldl (init := (0x811c9dc5 : UInt32)) fun h c =>
-    (h ^^^ c.val) * 0x01000193
-  s!"airAsm_{h}"
+def asmHash (key : String) : UInt32 :=
+  key.foldl (init := (0x811c9dc5 : UInt32)) fun h c => (h ^^^ c.val) * 0x01000193
+
+def asmDefName (key : String) : String := s!"airAsm_{asmHash key}"
+
+/-- The opaque's name for an op with these clobbers and outputs: `airAsmFx_<hash>` for an op under
+the effect contract (`asmIsEffect`: a read-write or memory output, or a registry-approved
+`"memory"` clobber; premise ASM-03), else `airAsm_<hash>` (register-only, ASM-01). Same hash. -/
+def asmOpName (clobbers : Array String) (outputs : Array AsmOperand) (key : String) : String :=
+  if asmIsEffect clobbers outputs then s!"airAsmFx_{asmHash key}" else asmDefName key
+
+/-- The widths of the read-write outputs, in output order (`AsmDef.rwWidths`). -/
+def asmRwWidths (outputs : Array AsmOperand) (outputWidths : Array Nat) : Array Nat :=
+  (outputs.zip outputWidths).filterMap fun (o, w) => if o.isReadWrite then some w else none
 
 /-- The bit width of `v`'s type within `f` (0 if it is not an integer): `Op.asm`'s operands, since
 `Check.lean` accepts only register (so integer) operands. -/
@@ -1659,7 +1754,7 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
   for f in funcs do
     for i in f.allInsts do
       if i.op.isSpinHint then continue
-      if let .asm source _ _ outputs inputs := i.op then
+      if let .asm source _ clobbers outputs inputs := i.op then
         let inputWidths := inputs.map fun o => asmValBits f o.ref.get!
         let tyOf (v : Val) : Option TyId := match v with
           | .inst id => (f.allInsts.find? (·.id == id)).map (·.ty)
@@ -1667,9 +1762,13 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
         let outputWidths := asmOutputWidths f.types tyOf i.ty outputs
         let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
         let key := asmKey source constraints inputWidths outputWidths
-        if !seen.contains key then
-          seen := seen.push key
-          defs := defs.push { name := asmDefName key, inputWidths, outputWidths }
+        -- The key omits clobbers, so one key can name both forms (`asm volatile ("")` and the
+        -- registry's `"memory"` barrier): deduplicate by name and key.
+        let name := asmOpName clobbers outputs key
+        if !seen.contains (name ++ "\u0002" ++ key) then
+          seen := seen.push (name ++ "\u0002" ++ key)
+          defs := defs.push { name, inputWidths, outputWidths,
+                              rwWidths := asmRwWidths outputs outputWidths }
   return defs
 
 /-- The `opaque` def for one distinct asm op: an uninterpreted function from its inputs' `BitVec`s
@@ -1677,7 +1776,7 @@ to its output's `BitVec` (`Unit` for no output; a tuple in output order for more
 about it — no built-in axiom describes what any asm op computes (`Air2Lean/Air/Op.lean`'s `.asm`
 doc comment). -/
 def emitAsmDef (d : AsmDef) : String :=
-  let params := (d.inputWidths.toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
+  let params := ((d.inputWidths ++ d.rwWidths).toList.zipIdx.map fun (w, k) => s!"(i{k} : BitVec {w})")
   let ret := if d.outputWidths.isEmpty then "Unit"
     else " × ".intercalate (d.outputWidths.toList.map fun w => s!"BitVec {w}")
   s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
@@ -1957,7 +2056,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
     if srcPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr`.
-      let expr := s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+      let expr := if fc.ptrBits == 64 || fc.tyBits inst.ty != fc.ptrBits then
+          s!"{fc.callMName} (do pure (BitVec.ofInt {fc.tyBits inst.ty} (← Zig.ptrAddr {rv a})))"
+        -- The address must fit the target's address space (`Zig.ptrAddrOf`).
+        else s!"{fc.callMName} (Zig.ptrAddrOf {fc.ptrWidthTerm} {rv a})"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if isInt (fc.valTy a) && dstPtr then
       -- `@ptrFromInt`.
@@ -2054,7 +2156,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .optional c => match fc.tyOfId c with
         | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
         | .errorSet (some names) => s!"{errOp fc.errBits "optionalErrorIsSome"} {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
-        | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy fc.structNames fc.types ct}) {rv p}"
+        | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
       | _ => "(panic! \"air2lean: is_null_ptr of a non-optional\")"
     let expr := if isNull then s!"(!·) <$> {some'}" else some'
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2063,13 +2165,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | true, .optional c =>
         match fc.tyOfId c with
         | .ptr .. | .errorSet _ => s!"pure {rv p}"
-        | ct => fc.storageExpr c s!"Zig.optSetSome ({emitTy fc.structNames fc.types ct}) {rv p}"
+        | ct => fc.storageExpr c s!"Zig.optSetSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
       | _, _ => s!"pure {rv p}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .isErrPtr _ p | .errPayloadPtr _ p | .errCodePtr p =>
     -- `Zig.errIsErrAt` & co. (`ZigLean/Mem/Enc.lean`) take the payload type.
     let payload := match fc.pointeeOf p with
-      | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+      | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
       | _ => "(panic! \"air2lean: an error-union pointer op on another type\")"
     let a := fc.ptrAlign p
     let domain := match fc.pointeeOf p with
@@ -2123,6 +2225,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | _, some (u, f, false) => s!"pure ({u}.{fc.memberName (fc.tyOfId inst.ty) f} {rv a})"
       | _, none => "(panic! \"air2lean: union_init of a non-union type\")"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
+  | .runtimeNavPtr g =>
+    -- The current thread's instance of the `threadlocal` global whose key (the block of the
+    -- main thread's instance) is `globalIds[g]` (§Thread-local storage).
+    let (env, l) := bindLet fc env inst.id s!"Zig.tlsPtr {fc.globalIds[g]!}"; (env, some l)
   | .alloc =>
     if fc.escaping.contains inst.id then
       -- The pointer to the local's stack block (made at function entry: `emitFunctionDef`).
@@ -2152,7 +2258,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       match fc.pointeeOf ptr with
       | .union _ _ (some tagTy) fields =>
         let to := ((unionOffsets fc.types fc.layouts tagTy (fields.map (·.2)) fc.errBits).map (·.1)).getD 0
-        let ty := emitTy fc.structNames fc.types (fc.tyOfId tagTy)
+        let ty := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tagTy)
         let align := Nat.min (fc.ptrAlign ptr) ((fc.layouts[tagTy]?.bind (·.align)).getD 1)
         (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
       | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
@@ -2230,11 +2336,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .atomicLoad ptr order =>
     let bits := fc.tyBits inst.ty
     let o := orderTerm order
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+    let expr := if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
+      else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else s!"Zig.atomicLoadC (n := {bits}) {o} {fc.ptrAlign ptr} {rv ptr}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .atomicStore ptr v order =>
-    let f := if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
+    let f := if fc.atomicPtr ptr then s!"Zig.atomicStorePtrC (α := {fc.pointeeTy ptr})"
+      else if fc.atomicTyped ptr then "Zig.atomicStoreAsC" else "Zig.atomicStoreC"
     (env, some s!"{f} {orderTerm order} {fc.ptrAlign ptr} {rv ptr} {rv v}")
   | .atomicRmw op order ptr v =>
     -- `RmwOp`'s constructors have the same names in `Air2Lean.RmwOp` (parsed AIR) and
@@ -2245,53 +2353,60 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let opTerm := s!"Zig.RmwOp.{opName}"
     let signed := if fc.tySigned inst.ty then "true" else "false"
     let o := orderTerm order
-    let expr := if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+    -- `Check.lean` admits only `.Xchg` on a pointer.
+    let expr := if fc.atomicPtr ptr then s!"Zig.atomicXchgPtrC (α := {fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
+      else if fc.atomicTyped ptr then s!"Zig.atomicRmwAsC {opTerm} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
       else s!"Zig.atomicRmwC {opTerm} {signed} {o} {fc.ptrAlign ptr} {rv ptr} {rv v}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .cmpxchg weak ptr expected new succ fail =>
-    let f := if fc.atomicTyped ptr then
+    let f := if fc.atomicPtr ptr then
+        if weak then s!"Zig.cmpxchgWeakPtrC (α := {fc.pointeeTy ptr})" else s!"Zig.cmpxchgPtrC (α := {fc.pointeeTy ptr})"
+      else if fc.atomicTyped ptr then
         if weak then "Zig.cmpxchgWeakAsC" else "Zig.cmpxchgAsC"
       else if weak then "Zig.cmpxchgWeakC" else "Zig.cmpxchgC"
     let expr := s!"{f} {orderTerm succ} {orderTerm fail} {fc.ptrAlign ptr} {rv ptr} {rv expected} {rv new}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceLen s =>
-    let expr := if fc.mem then s!"pure {rv s}.len" else s!"pure (Zig.len {rv s})"
+    let expr := if fc.mem then s!"pure {rv s}.len"
+      else s!"pure ({fc.widthFn "Zig.len" s!"Zig.lenOf {fc.ptrBits}"} {rv s})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them.
     let expr := if fc.mem then s!"{fc.callMName} ({fc.loadItem s s!"{rv s}.ptr" (rv i)})"
-      else fc.liftR s!"Zig.index {rv s} {rv i}"
+      else fc.liftR s!"{fc.widthFn "Zig.index" "Zig.indexOf"} {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
-    let f := if sub then "elemSub" else "elem"
+    let f := if sub then fc.widthFn "elemSub" "elemSubOf" else fc.widthFn "elem" "elemOf"
     let (env, l) := bindLet fc env inst.id (fc.projectExpr p (rv p) s!"{f} {size} {rv n}"); (env, some l)
   | .elemPtr p i =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
-    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.elem {size} {rv i})"
-      else fc.projectExpr p (rv p) s!"elem {size} {rv i}"
+    let elem := fc.widthFn "elem" "elemOf"
+    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.{elem} {size} {rv i})"
+      else fc.projectExpr p (rv p) s!"{elem} {size} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
     (env, some l)
   | .arrayElemVal a i =>
-    let (env, l) := bindLet fc env inst.id (fc.liftR s!"Zig.vindex {rv a} {rv i}"); (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.widthFn "Zig.vindex" "Zig.vindexOf"} {rv a} {rv i}"); (env, some l)
   | .slice p len =>
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : Zig.Slice)"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure (⟨{rv p}, {rv len}⟩ : {sliceTyName fc.ptrBits})"; (env, some l)
   | .slicePtr sl => let (env, l) := bindLet fc env inst.id s!"pure {rv sl}.ptr"; (env, some l)
   | .arrayToSlice p =>
     let (ptr, len) := fc.itemsOf p (rv p)
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{ptr}, {len}⟩ : Zig.Slice)"; (env, some l)
+    let (env, l) := bindLet fc env inst.id s!"pure (⟨{ptr}, {len}⟩ : {sliceTyName fc.ptrBits})"; (env, some l)
   | .sliceFieldPtr len p =>
     if fc.isMemPtr p then
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.add {if len then 8 else 0})"
+      -- The length follows the pointer: `Zig.PtrWidth.bytes` (`ZigLean/Mem/Width.lean`).
+      let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.add {if len then fc.ptrBits / 8 else 0})"
       (env, some l)
     else (env, none)
   | .memset dst v =>
     let (ptr, n) := fc.itemsOf dst (rv dst)
-    let item := emitTy fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
+    let item := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId (fc.itemTyId dst))
     let v' := match v with | .undef _ => "none" | _ => s!"(some {rv v})"
-    (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"Zig.memset (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
+    (env, some s!"{fc.callMName} ({fc.storageExpr (fc.itemTyId dst) s!"{fc.widthFn "Zig.memset" "Zig.memsetOf"} (α := {item}) {fc.ptrAlign dst} {ptr} {n} {v'}"})")
   | .memcpy dst src =>
     -- The item count of the operand that has one (the AIR checks that both agree).
     let hasLen (v : Val) : Bool :=
@@ -2300,7 +2415,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let n := if hasLen dst then n else (fc.itemsOf src (rv src)).2
     let sptr := if fc.isSlice src then s!"{rv src}.ptr" else rv src
     let size := fc.sizeOf (fc.itemTyId dst)
-    (env, some s!"{fc.callMName} (Zig.memmove {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
+    (env, some s!"{fc.callMName} ({fc.widthFn "Zig.memmove" "Zig.memmoveOf"} {size} {fc.ptrAlign dst} {fc.ptrAlign src} {dptr} {sptr} {n})")
   | .tagName a =>
     let (env, l) := bindLet fc env inst.id (fc.liftR s!"{fc.emitValTy a}.{fc.helperName (fc.valTy a) "tagName"} {rv a}")
     (env, some l)
@@ -2358,11 +2473,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
       (env, some l)
     else if let some fn := threadFn then
-      let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args)
+      let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args inst.ty)
       (env, some l)
     else if isNoreturn then (env, none)
-    else if let .inst p := callee then
+    else if callee.isIndirectCallee then
       -- An indirect call: the function whose block the pointer points to, at offset 0 (M20).
+      -- A constant address resolves through the same table of address-taken functions of
+      -- the callee's type; any other address throws `.illegal` (L11).
       let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
         | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
         | _ => ""
@@ -2371,7 +2488,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let memCallee := fc.memFuncs.contains nm
         let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
         let call := fc.callOf nm term memCallee
-        s!"if {rv (.inst p)} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
+        s!"if {rv callee} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
       let (env, l) := bindLet fc env inst.id s!"({String.join arms}throw .illegal)"
       (env, some l)
     else
@@ -2391,18 +2508,31 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
-  | .asm source _ _ outputs inputs =>
+  | .asm source _ clobbers outputs inputs =>
     if inst.op.isSpinHint then
       let (env, l) := bindLet fc env inst.id "Zig.spinLoopHintC"
       (env, some l)
     else
-    -- Same identity as `collectAsmOps` (`asmKey`): this must name the very `opaque` def that
-    -- pass emitted, or the call below resolves to nothing.
+    -- Same identity as `collectAsmOps` (`asmKey`, `asmOpName`): this must name the very `opaque`
+    -- def that pass emitted, or the call below resolves to nothing.
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
     let outputWidths := asmOutputWidths fc.types fc.valTyId? inst.ty outputs
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-    let name := asmDefName (asmKey source constraints inputWidths outputWidths)
-    let args := inputs.toList.map fun i => rv i.ref.get!
+    let name := asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths)
+    -- The effect contract (A01, `ZigLean/Asm.lean`): the old value of each read-write output is
+    -- read before the call, in output order, and passed after the inputs.
+    let rwOuts := outputs.toList.zipIdx.filter (·.1.isReadWrite)
+    let rwName (k : Nat) : String := s!"a{inst.id}o{k}"
+    let rwReads := rwOuts.filterMap fun (o, k) => o.ref.map fun ptr =>
+      if fc.isMemPtr ptr then s!"let {rwName k} ← {fc.loadMem ptr (rv ptr)}"
+      else s!"let {rwName k} ← pure ({fc.loadPlace ptr})"
+    -- Two or more locations written through memory pointers: the aliasing guard.
+    let memWrites := outputs.toList.filterMap fun o => o.ref.filter fc.isMemPtr
+    let guard := if memWrites.length < 2 then [] else
+      let locs := memWrites.map fun ptr =>
+        s!"({rv ptr}, {fc.sizeOf (((fc.valTyId? ptr).bind (ptrChild fc.types)).getD 0)})"
+      [s!"Zig.Asm.guard [{", ".intercalate locs}]"]
+    let args := inputs.toList.map (fun i => rv i.ref.get!) ++ rwOuts.map (rwName ·.2)
     let call := if args.isEmpty then name else s!"{name} {String.intercalate " " args}"
     if outputs.size ≤ 1 && outputs.all (·.ref.isNone) then
       let (env, l) := bindLet fc env inst.id s!"pure ({call})"
@@ -2415,7 +2545,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let n := outputs.size
       let proj (k : Nat) : String :=
         t ++ tupleProjection n k
-      let (env, lines) := outputs.toList.zipIdx.foldl (init := (env, [s!"let {t} := {call}"]))
+      let (env, lines) := outputs.toList.zipIdx.foldl
+        (init := (env, guard ++ rwReads ++ [s!"let {t} := {call}"]))
         fun (env, ls) (o, k) => match o.ref with
           | none =>
             let (env, l) := bindLet fc env inst.id s!"pure {proj k}"
@@ -2562,7 +2693,7 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
           | .ok {vname} => {doBlock restStr}"
       | .tryPtr p errBody =>
         let payload := match fc.pointeeOf p with
-          | .errorUnion _ c => emitTy fc.structNames fc.types (fc.tyOfId c)
+          | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
           | _ => "(panic! \"air2lean: try_ptr of a non-error-union pointer\")"
         let errStr := emitStmts fc env errBody.toList
         let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
@@ -2666,28 +2797,23 @@ partial def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Va
 
 end
 
-/-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
-proof can refer to it — the point of extracting it at all), taking its captured values
-(`FCtx.loopCaptures`) as explicit parameters with the same names the body text already uses. -/
-def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
+/-- The captured parameters `(id, name, type)` of a loop's extracted body def. -/
+def FCtx.loopParams (fc : FCtx) (loopInst : Inst) : Array (InstId × String × String) :=
+  match loopInst.op with
+  | .loop body => fc.loopCaptures body
+  | .loopSwitchBr .. => fc.loopCaptures (dispatchCaptureBody loopInst)
+  | _ => #[]
+
+/-- The text after `:= ` of a loop's extracted body def, starting with `do`. -/
+def emitLoopBody (fc : FCtx) (loopInst : Inst) : String :=
+  let initEnv := (fc.loopParams loopInst).map fun (id, name, _) => (id, name)
   match loopInst.op with
   | .loop body =>
-    let caps := fc.loopCaptures body
-    let paramsStr := String.intercalate " "
-      ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
-    let initEnv := caps.map fun (id, name, _) => (id, name)
-    let bodyStr := emitStmts fc initEnv body.toList
-    String.intercalate "\n"
-      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := do",
-       indent 2 bodyStr]
+    "do\n" ++ indent 2 (emitStmts fc initEnv body.toList)
   | .loopSwitchBr initial cases elseBody =>
-    let caps := fc.loopCaptures (dispatchCaptureBody loopInst)
-    let paramsStr := String.intercalate " "
-      ((caps.map fun (_, name, ty) => s!"({name} : {ty})").toList)
-    let initEnv := caps.map fun (id, name, _) => (id, name)
     let branch := fc.ascribedDo (emitSwitch fc initEnv initial "dispatchValue" cases elseBody)
     String.intercalate "\n"
-      [s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := do",
+      ["do",
        s!"  let dispatchValue := (← get).{dispatchFieldName loopInst.id}",
        s!"  let dispatchExit ← {indentTail 2 branch}",
        "  match dispatchExit with",
@@ -2695,6 +2821,18 @@ def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
        s!"    modify fun s => \{ s with {dispatchFieldName loopInst.id} := dispatchValue }",
        "    pure dispatchExit",
        "  | _ => pure dispatchExit"]
+  | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
+
+/-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
+proof can refer to it — the point of extracting it at all), taking its captured values
+(`FCtx.loopCaptures`) as explicit parameters with the same names the body text already uses. -/
+def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
+  match loopInst.op with
+  | .loop _ | .loopSwitchBr .. =>
+    let paramsStr := String.intercalate " "
+      (((fc.loopParams loopInst).map fun (_, name, ty) => s!"({name} : {ty})").toList)
+    s!"def {fc.fnName}.loop{loopInst.id} {paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := " ++
+      emitLoopBody fc loopInst
   | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
 
 -- `again` is named too: an inline `fun e => match …` gets a fresh matcher per elaboration,
@@ -2776,6 +2914,8 @@ structure FuncParts where
   loops : List String
   defn : String
   body : String
+  /-- The prepared context, for `--proof-api` lemmas over the same text. -/
+  ctx : FCtx
 
 /-- The static context without block-emission membership, for global encoding. -/
 private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String)) (funcNames : Array (String × String))
@@ -2833,9 +2973,9 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let exitName := fc.exitName
   let escaping := fc.escaping
   let localsStr := emitLocalsStruct structNames f.types localsName allocs escaping fc.mem
-    fc.dispatchTys fc.byteLocals
+    fc.dispatchTys fc.byteLocals fc.ptrBits
   let exitStr := emitExitInductive structNames f.types exitName f.ret blTys brT repT fc.mem
-    fc.dispatchTys fc.rawRet
+    fc.dispatchTys fc.rawRet fc.ptrBits
   -- Every `loop` in the function, innermost first: `flattenInst`/`Func.allInsts` visits a node
   -- before its children (pre-order), so a parent loop always precedes a nested one; reversing
   -- flips that to child-before-parent, which is what "the inner loop's def is emitted before
@@ -2847,26 +2987,53 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     agains := (loops.map (emitAgainDef fc)).toList
     loops := (loops.map (emitLoopDef fc)).toList
     defn := emitFunctionHeader fc leanName f.params f.ret ++ functionBody
-    body := functionBody }
+    body := functionBody
+    ctx := fc }
 
-/-- Optional stable scalar unfolding boundary. The equality exposes the actual emitted
-body and is kernel checked with `rfl`; no replacement model or axiom is introduced. -/
-def emitProofApi (f : Func) (mkFc : Unit → FCtx) (rhs : String) : Option String :=
-  match proofApiFacts f with
-  | none => none
-  | some facts =>
-    let fc := mkFc ()
-    let base := proofApiName f.name
-    let params := String.intercalate " " ((f.params.mapIdx fun i ty =>
-      s!"(p{i} : {fc.emitTyOf ty})").toList)
-    let arguments := String.intercalate " " ((Array.range f.params.size).map (fun i => s!"p{i}")).toList
-    let record := Lean.Json.mkObj [("format", .str "air2lean-proof-api-v1"),
-      ("source", .str f.name), ("definition", .str fc.fnName),
-      ("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold")),
-      ("facts", facts), ("source_map", proofApiSourceMap f)]
-    some ("-- air2lean-proof-api: " ++ record.compress ++ "\n" ++
-      s!"abbrev {base}_model := {fc.fnName}\n\n" ++
-      s!"theorem {base}_unfold {params} : {base}_model {arguments} = ({rhs}) := rfl")
+/-- `--proof-api` lemmas of one emitted function (`docs/generated-code.md`): a model
+abbreviation and its unfolding lemma, and per loop (pre-order index `k`) body/again
+abbreviations, the body's unfolding lemma and the `Zig.loop` step lemma. Every equality
+exposes the actual emitted text and is kernel checked: by `rfl`, or by the definition's
+equation lemma for a `partial_fixpoint` (recursive) group. No axiom is introduced. Names come
+from the source identity and the loop index (`proofLemmaIndex`), never from AIR IDs. -/
+def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
+  let fc := p.ctx
+  let base := proofApiName f.name
+  let binders (xs : Array (String × String)) :=
+    String.join (xs.toList.map fun (name, ty) => s!" ({name} : {ty})")
+  let applied (head : String) (xs : Array (String × String)) :=
+    head ++ String.join (xs.toList.map fun (name, _) => s!" {name}")
+  let proof (defn : String) (xs : Array (String × String)) :=
+    if recursive then applied s!"{defn}.eq_def" xs else "rfl"
+  let params := f.params.mapIdx fun i ty => (s!"p{i}", fc.emitTyOf ty)
+  let record := Lean.Json.mkObj ([("format", .str "air2lean-proof-lemmas-v1"),
+    ("source", .str f.name), ("definition", .str fc.fnName)] ++ proofLemmaFields f)
+  let scalar := match proofApiFacts f with
+    | none => []
+    | some facts =>
+      let v1 := Lean.Json.mkObj [("format", .str "air2lean-proof-api-v1"),
+        ("source", .str f.name), ("definition", .str fc.fnName),
+        ("model", .str (base ++ "_model")), ("unfold", .str (base ++ "_unfold")),
+        ("facts", facts), ("source_map", proofApiSourceMap f)]
+      ["-- air2lean-proof-api: " ++ v1.compress]
+  let function := String.intercalate "\n" (scalar ++
+    ["-- air2lean-proof-lemmas: " ++ record.compress, s!"abbrev {base}_model := {fc.fnName}", "",
+     s!"theorem {base}_unfold{binders params} : {applied (base ++ "_model") params} = ({p.body}) :=",
+     s!"  {proof fc.fnName params}"])
+  let monad := s!"{fc.monad} {fc.localsName} {fc.exitName}"
+  let loops := (proofLoops f).toList.zipIdx.map fun (inst, k) =>
+    let (body, again, bodyUnfold, step) := proofLoopNames base k
+    let defn := s!"{fc.fnName}.loop{inst.id}"
+    let caps := (fc.loopParams inst).map fun (_, name, ty) => (name, ty)
+    let call := applied body caps
+    String.intercalate "\n\n" [
+      s!"abbrev {body} := {defn}",
+      s!"abbrev {again} := {fc.fnName}.again{inst.id}",
+      s!"theorem {bodyUnfold}{binders caps} : {call} = ({emitLoopBody fc inst}) :=\n  {proof defn caps}",
+      s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
+        s!"      ({call} >>= fun e => if {again} e then Zig.loop ({call}) {again} else pure e : {monad}) :=\n" ++
+        "  Zig.loop.eq_1 _ _"]
+  String.intercalate "\n\n" (function :: loops)
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
 emission shares one prepared map across all functions. -/
@@ -2885,7 +3052,8 @@ is taken or that a thread runs keeps its type. `mk f raw`: `f`'s context with `r
 partial def rawFunctions (funcs : Array Func) (mk : Func → Array String → FCtx) : Array String :=
   -- A raw value starts at a byte local.
   if funcs.all (byteLocals · |>.isEmpty) then #[] else
-  let excluded := (spawnTargets funcs).map (·.1) ++ (fnRefs funcs).map (·.2)
+  let excluded := (spawnTargets funcs).map (·.1) ++ (futureTargets funcs).map (·.1) ++
+    (fnRefs funcs).map (·.2)
   let rec go (raw : Array String) : Array String :=
     let next := funcs.filterMap fun f =>
       if raw.contains f.name || excluded.contains f.name then none else
@@ -2910,9 +3078,16 @@ structure ProgGlobal where
   isVar : Bool := false
   /-- An `extern` global: its `ExternInit` field and Lean type; `bytes` encode that field. -/
   externField : Option (String × String) := none
+  /-- A `threadlocal` global: the block is the main thread's instance, and its index is the
+  global's TLS key (§Thread-local storage). -/
+  tls : Bool := false
 
 /-- The structure of the explicit external initial state that `mem0` takes (§Globals). -/
 def externInitName : String := "ExternInit"
+
+/-- The name reserved for the initial bytes of the `threadlocal` globals, only if there is one. -/
+def tlsReservedNames (funcs : Array Func) : Array String :=
+  if funcs.any (·.globals.any (·.threadlocal)) then #["tlsInit"] else #[]
 
 /-- Program names reserved for explicit external initial state, only if a global is `extern`. -/
 def externReservedNames (funcs : Array Func) : Array String :=
@@ -2924,7 +3099,7 @@ def encodeTerm (term ty : String) : String := s!"Zig.Enc.encode ({term} : {ty})"
 /-- The initial bytes of global `g` of `fc`'s function. `undefined` is undefined bytes. An
 `extern` global (`externField = some field`) is the encoding of `ext.field`, never a default. -/
 def FCtx.globalBytes (fc : FCtx) (g : Global) (externField : Option String := none) : String :=
-  let ty := emitTy fc.structNames fc.types (fc.tyOfId g.ty)
+  let ty := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId g.ty)
   if let some field := externField then fc.storageExpr g.ty (encodeTerm s!"ext.{field}" ty) else
   match g.init with
   -- A function: one byte, so that its pointer has a block (an indirect call, M20).
@@ -2971,7 +3146,8 @@ def collectGlobals (funcs : Array Func) (mkFc : Func → Array Nat → FCtx) (pr
     if let some field := externField then fields := fields.push field
     out := out.push { label := n, bytes := fc.globalBytes g externField,
                       align := (f.layouts[g.ty]?.bind (·.align)).getD 1, isVar := !g.isConst,
-                      externField := externField.map (·, emitTy fc.structNames fc.types (fc.tyOfId g.ty)) }
+                      externField := externField.map (·, emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId g.ty)),
+                      tls := g.threadlocal }
   for (bytes, align) in unnamed do
     out := out.push { label := "a constant", bytes, align }
   return (out, ids)
@@ -3027,15 +3203,26 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
   let lines := gs.toList.zipIdx.map fun (g, k) =>
     let source := match g.externField with
       | some (field, _) => s!" (extern: initial value `ext.{field}`)"
-      | none => ""
+      | none => if g.tls then " (threadlocal: the main thread's instance)" else ""
     s!"  -- {k}: {g.label}{source}\n  ({g.bytes}, {g.align}, {kind g})"
   let body := if lines.isEmpty then "[]" else s!"[\n{",\n".intercalate lines}]"
+  let keys := gs.toList.zipIdx.filterMap fun (g, k) => if g.tls then some s!"{k}" else none
+  let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals {body}" else
+    s!"(Zig.Mem.ofGlobals {body}).mainTls #[{", ".intercalate keys}]"
+  let tlsDoc := if keys.isEmpty then "" else
+    " The main thread's instance of a `threadlocal` global is its block (its TLS key)."
+  let tlsInit := if keys.isEmpty then "" else
+    let items := gs.toList.zipIdx.filterMap fun (g, k) =>
+      if g.tls then some s!"  -- {g.label}\n  ({k}, {g.bytes}, {g.align})" else none
+    s!"\n\n/-- The `threadlocal` globals: key, initial bytes and alignment. A spawned thread \
+      makes its own instance of each from these (`Zig.ConcM.tlsThread`). -/\n\
+      def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [\n{",\n".intercalate items}]"
   let externs := gs.toList.zipIdx.filterMap fun (g, k) => g.externField.map fun (field, ty) =>
     let access := if g.isVar then "`var`, writable" else "`const`, read-only"
     s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
   if externs.isEmpty then
-    s!"/-- The memory at program start: block `k` is global `k`. -/\n\
-      def mem0 : Zig.Mem := Zig.Mem.ofGlobals {body}"
+    s!"/-- The memory at program start: block `k` is global `k`.{tlsDoc} -/\n\
+      def mem0 : Zig.Mem := {body}{tlsInit}"
   else
     s!"/-- External initial state: the initial value of each `extern` global, which this program \
       does not define. Fields follow block (initialization) order. Contract: the external \
@@ -3043,8 +3230,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
       other assumption about external storage is a hypothesis on this value. -/\n\
       structure {externInitName} where\n{"\n".intercalate externs}\n\n\
       /-- The memory at program start: block `k` is global `k`. Blocks are added in order; an \
-      `extern` block holds its `ext` field, never a default. -/\n\
-      def mem0 (ext : {externInitName}) : Zig.Mem := Zig.Mem.ofGlobals {body}"
+      `extern` block holds its `ext` field, never a default.{tlsDoc} -/\n\
+      def mem0 (ext : {externInitName}) : Zig.Mem := {body}{tlsInit}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
@@ -3155,11 +3342,20 @@ def emitCapturedCallWithStorage (name : String) (args : Array (String × Option 
   | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
       "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
 
+/-- Bind a multi-field capture `a` to the `capture<i>` names of `emitCapturedCallWithStorage`. -/
+def emitCaptureUnpack (size : Nat) : String :=
+  let binders := (List.range size).map fun i => s!"capture{i}"
+  if size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
+
 def emitCapturedFallbackWithStorage (name : String) (args : Array (String × Option (String × Nat × Option String)))
     (kind : Nat) : String :=
-  let binders := (List.range args.size).map fun i => s!"capture{i}"
-  let unpack := if args.size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
-  s!"fun a => (do {unpack}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
+  s!"fun a => (do {emitCaptureUnpack args.size}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
+
+/-- The caller's eager execution of an `Io.async` task (fallible policy): the complete
+capture, the worker's result. -/
+def emitFutureEager (name : String) (args : Array (String × Option (String × Nat × Option String)))
+    (kind : Nat) : String :=
+  s!"fun a => (do {emitCaptureUnpack args.size}{emitCapturedCallWithStorage name args kind})"
 
 /-- Only async sites execute a caller fallback. Scan all sites before filtering the
 ordered first-use descriptions: an earlier spawn/concurrent site can share the worker. -/
@@ -3222,8 +3418,9 @@ def captureClass (types : Array Ty) (id : TyId) : CaptureClass :=
 
 /-- `Tgt.captures`: every captured field in source order, as a `Zig.Conc.Capture`. The
 ownership obligation over it is `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`). -/
-def emitTgtCaptures (targets : Array (String × Array CaptureClass)) : String :=
-  let arms := targets.toList.map fun (n, classes) =>
+def emitTgtCaptures (targets : Array (String × Array CaptureClass))
+    (futures : Array (String × Array CaptureClass) := #[]) : String :=
+  let arm (lead : String) (n : String) (classes : Array CaptureClass) :=
     let binder (i : Nat) := if classes.size == 1 then "a" else s!"capture{i}"
     let parts := classes.toList.zipIdx.map fun (c, i) =>
       if c == .ptr || c == .slice then binder i else "_"
@@ -3236,7 +3433,10 @@ def emitTgtCaptures (targets : Array (String × Array CaptureClass)) : String :=
       | .ptr => s!".ptr {binder i}"
       | .slice => s!".slice {binder i}"
       | .other => ".other"
-    s!"  | .{n} {pattern} => [{String.intercalate ", " items}]"
+    s!"  | .{n}{lead} {pattern} => [{String.intercalate ", " items}]"
+  -- A future target's runtime record is not a capture: the task owns its result cells.
+  let arms := targets.toList.map (fun (n, classes) => arm "" n classes) ++
+    futures.toList.map fun (n, classes) => arm " _" (futureCtorName n) classes
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   String.intercalate "\n" (["/-- Each captured field in source order. A value is copied and carries no ownership;",
     "a pointer or slice copies only its identity, so a spawn proof must hand over or share its",
@@ -3249,12 +3449,16 @@ source order, adapting every slice argument for a pure worker in the child threa
 classifies every field as `other`. -/
 def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCapture : Bool)
     (targets : Array (String × Array (String × Option (String × Nat × Option String)) × Nat))
-    (captureClasses : Array (Array CaptureClass) := #[]) :
+    (captureClasses : Array (Array CaptureClass) := #[]) (tls : Bool := false)
+    (futures : Array (String × Array (String × Option (String × Nat × Option String)) × Nat ×
+      String × Array CaptureClass) := #[]) :
     List String × List String :=
-  let ctors := targets.toList.map fun (n, args, _) =>
-    let ty := if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
+  let tupleTy (args : Array (String × Option (String × Nat × Option String))) :=
+    if args.isEmpty then "Unit" else if args.size == 1 then args[0]!.1 else
       String.intercalate " × " (args.toList.map fun (ty, _) => s!"({ty})")
-    s!"  | {n} (a : {ty})"
+  let ctors := targets.toList.map (fun (n, args, _) => s!"  | {n} (a : {tupleTy args})") ++
+    futures.toList.map fun (n, args, _) =>
+      s!"  | {futureCtorName n} (futureSlot : Zig.Ptr) (a : {tupleTy args})"
   let captureDoc := if extendedCapture then
     "/-- The spawn targets of the program; fields are captured by value. -/"
     else "/-- The spawn targets of the program. -/"
@@ -3265,14 +3469,28 @@ def emitTgtWithStorage (_structNames : Array (String × String)) (extendedCaptur
   let arms := targets.toList.map fun (n, args, k) =>
     let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
     let call := emitCapturedCallWithStorage n args k
-    if args.size ≤ 1 then s!"  | .{n} a => discard ({call})" else
+    -- With `threadlocal` globals the thread makes and frees its own instances around the target.
+    let run := if tls then s!"Zig.ConcM.tlsThread tlsInit (discard ({call}))" else s!"discard ({call})"
+    if args.size ≤ 1 then s!"  | .{n} a => {run}" else
       let binders := (List.range args.size).map arg
-      s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    discard ({call})"
+      s!"  | .{n} a =>\n    let ({String.intercalate ", " binders}) := a\n    {run}"
+  -- An `Io.async` task runs the worker and writes its result into its runtime record; with
+  -- `threadlocal` globals it is a thread with its own instances, as a spawn target is.
+  let futureArms := futures.toList.map fun (n, args, k, complete, _) =>
+    let arg (i : Nat) := if args.size == 1 then "a" else s!"capture{i}"
+    let call := emitCapturedCallWithStorage n args k
+    let run := s!"do\n      let futureResult ← {call}\n      Zig.ConcM.liftMem ({complete})"
+    let run := if tls then s!"Zig.ConcM.tlsThread tlsInit {run}" else run
+    if args.size ≤ 1 then s!"  | .{futureCtorName n} futureSlot a => {run}" else
+      let binders := (List.range args.size).map arg
+      s!"  | .{futureCtorName n} futureSlot a =>\n    let ({String.intercalate ", " binders}) := a\n    {run}"
+  let arms := arms ++ futureArms
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   let dispatch := String.intercalate "\n" (["/-- Runs a spawn target (`Zig.Sched.run`). -/",
     s!"def dispatch : Tgt → Zig.ConcM Tgt Unit{if arms.isEmpty then " :=" else ""}"] ++ body)
   let captures := emitTgtCaptures (targets.mapIdx fun i (n, args, _) =>
     (n, captureClasses[i]?.getD (args.map fun _ => .other)))
+    (futures.map fun (n, _, _, _, classes) => (n, classes))
   ([tgt] ++ (if extendedCapture then [obligation, captures] else []), [dispatch])
 
 /-- Preserve the public helper for callers whose captures need ordinary dictionaries. -/
@@ -3292,7 +3510,8 @@ def generatedBinderNames (funcs : Array Func)
     (targets : Array (String × Func × Array TyId)) (extendedCapture : Bool) :
     Std.HashSet String := Id.run do
   let mut names : Std.HashSet String := {}
-  for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2"] do
+  for name in #["v", "e", "g", "_g", "u", "b", "bs", "t", "x", "y", "s", "a", "items", "x0", "x1", "x2",
+      "futureSlot", "futureResult"] do
     names := names.insert name
   for (_, _, fields) in targets do
     if fields.size > 1 then
@@ -3424,33 +3643,73 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := _root_.{m.implementation} {tuple}"] ++
     footprintDef ++ [evidence])
 
-/-- `funcs → one Lean source file` importing `ZigLean`, namespaced under `ns`. `prefix_` is
-stripped from every Zig name (function or struct) before mangling. `floatSemantics` selects
-`--float-semantics` (default `ieee`). Also returns each function's declaration name. -/
-def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
+/-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
+(`ZigLean/Mem/Width.lean`); a 64-bit program keeps the global ones. -/
+def wasm32Open (funcs : Array Func) : List String :=
+  if funcs.any (fun f => ptrBytesOf f.layouts == 4) then ["open scoped Zig.Wasm32"] else []
+
+/-- Runtime names of the 64-bit model that a 32-bit translation must not contain: each has a
+width-parameterized form (`ZigLean/Mem/Width.lean`). `Main` refuses such an output. -/
+def width64Names : List String :=
+  ["Zig.readSlice ", "Zig.memset ", "Zig.memmove ", "Zig.len ", "Zig.index ", "Zig.vindex ",
+   "Zig.ptrAddr ", "Zig.Allocator.alloc ", "Zig.Allocator.create ", "Zig.Allocator.free ",
+   "Zig.Allocator.freeSentinel ", ".elem ", ".elemSub "]
+
+/-- `Zig.Slice` as a whole identifier (not `Zig.Slice32`/`Zig.SliceOf`), or a name of
+`width64Names`, in a 32-bit translation's source. -/
+def width64Leak (src : String) : Option String :=
+  let parts := src.splitOn "Zig.Slice"
+  let wholeSlice := parts.drop 1 |>.any fun rest =>
+    match rest.toList.head? with
+    | some c => !(c.isAlphanum || c == '_')
+    | none => true
+  if wholeSlice then some "Zig.Slice" else width64Names.find? fun n => (src.splitOn n).length > 1
+
+/-- One emitted program in the pieces that `emitWithNames` concatenates. `groups` are the
+call groups (`callGroups`) in emission order: each group's member source names, the source
+names of the functions it references outside itself (`calleesOf`), and its declarations. -/
+structure EmitParts where
+  /-- `import` lines and the spawn-policy comment, before `namespace`. -/
+  header : List String
+  /-- Scoped instances every module opens right after its `namespace` (`wasm32Open`). -/
+  opens : List String := []
+  /-- Types, inline assembly, models, globals and `Tgt`: everything the functions share. -/
+  preamble : List String
+  groups : Array (Array String × Array String × String)
+  /-- `dispatch`, which references the spawn targets. -/
+  dispatch : List String
+  /-- Source names of the functions `dispatch` references. -/
+  dispatchTargets : Array String
+  /-- Each function's declaration name. -/
+  declNames : Array (String × String)
+
+/-- The pieces of `funcs → one Lean source file` importing `ZigLean` (`EmitParts.render`).
+`prefix_` is stripped from every Zig name (function or struct) before mangling.
+`floatSemantics` selects `--float-semantics` (default `ieee`). -/
+def emitParts (funcs : Array Func) (prefix_ : String)
     (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
-    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
-    String × Array (String × String) :=
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) : EmitParts :=
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
   let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
   let targets := spawnTargets funcs
-  let extendedCapture := targets.any fun (_, _, fields) => fields.size != 1
+  let futures := futureTargets funcs
+  let extendedCapture := targets.any (fun (_, _, fields) => fields.size != 1) || !futures.isEmpty
   let modelCalls := firstModelCalls models funcs
   let maxModelArgs := modelCalls.fold (fun count _ site => max count site.args.size) 0
   let modelBinders := (Array.range maxModelArgs).map fun i => s!"p{i}"
   let modelNames := models.zipIdx.flatMap fun (m, i) =>
     #[s!"air2lean_model_{i}", s!"air2lean_model_{i}_contract", s!"air2lean_model_{i}_evidence"] ++
       (if m.footprint.isSome then #[s!"air2lean_model_{i}_footprint"] else #[])
-  let apiNames := if proofApi then funcs.flatMap (fun f =>
-    if (proofApiFacts f).isSome then #[proofApiName f.name ++ "_model", proofApiName f.name ++ "_unfold"] else #[]) else #[]
+  let apiNames := if proofApi then funcs.flatMap proofLemmaNames else #[]
   let fixed := runtimeNames ++ apiNames ++ modelNames ++ modelBinders ++
-    (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs) ++
+    (if memFuncs.isEmpty then #[] else #["mem0"] ++ externReservedNames funcs ++ tlsReservedNames funcs) ++
     (if concFuncs.isEmpty then #[] else #["Tgt", "dispatch"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++ asmDefs.map (·.name)
-  let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed targets extendedCapture
+  let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
+    (targets ++ futures.map fun (nm, f, fields, _) => (nm, f, fields)) extendedCapture
   let funcNames := ownFuncNames ++ models.mapIdx (fun i m => (m.symbol, s!"air2lean_model_{i}"))
   let structNames := structs.map fun s => (s.zigName, s.leanName)
   let structsStr := (structs.map (emitNamed structNames (encTypeNames funcs memFuncs))).toList
@@ -3479,7 +3738,7 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
   let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
     (globals.findIdx? (·.label == nm)).map (tn, nm, ·)
   let leanOf (nm : String) := (funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
-  let targetDescriptions := targets.map fun (nm, f, fields) =>
+  let describe (nm : String) (f : Func) (fields : Array TyId) :=
       let kind := if concFuncs.contains nm then 2 else if memFuncs.contains nm then 1 else 0
       -- The physical capture comes from the first call; conversion requirements
       -- belong to the worker contract and must also accept later weaker captures.
@@ -3495,35 +3754,69 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
           | _ => none
         (emitTy structNames f.types f.types[a]!, adapter)
       (nm, leanOf nm, args, kind)
+  let targetDescriptions := targets.map fun (nm, f, fields) => describe nm f fields
+  -- `Io.async` tasks: the description, the result write and the capture classes.
+  let futureDescriptions := futures.map fun (nm, f, fields, r) =>
+    let (_, name, args, kind) := describe nm f fields
+    let complete := withStorageEnc structNames f.types f.errorSetBits r
+      "Zig.Future.complete futureSlot futureResult" f.layouts
+    (nm, name, args, kind, complete, fields.map (captureClass f.types))
   let spawnFallbacks := if spawnSemantics == .fallible then
-    emitSpawnFallbacksWithStorage funcs targetDescriptions
+    emitSpawnFallbacksWithStorage funcs targetDescriptions ++
+      futureDescriptions.map fun (nm, name, args, kind, _, _) =>
+        (futureEagerKey nm, emitFutureEager name args kind)
     else #[]
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
-      (targets.map fun (_, f, fields) => fields.map (captureClass f.types))
-  let funcsStr := (callGroups funcs).toList.map fun (members, recursive) =>
+      (targets.map fun (_, f, fields) => fields.map (captureClass f.types)) (globals.any (·.tls))
+      (futureDescriptions.map fun (_, name, args, kind, complete, classes) =>
+        (name, args, kind, complete, classes))
+  let allNames := funcs.map (·.name)
+  let refs := fnRefs funcs
+  let groups := (callGroups funcs).map fun (members, recursive) =>
+    let names := members.map (·.name)
+    let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
-    if recursive then
+    let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.
       let fix (d : String) := s!"{d}\npartial_fixpoint"
       let defs := parts.flatMap fun p => (p.loops ++ [p.defn]).map fix
       String.intercalate "\n\n"
-        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"])
+        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"] ++
+          (if proofApi then (members.toList.zip parts).map fun (f, p) => emitProofApi f p true
+           else []))
     else
       String.intercalate "\n\n" ((members.toList.zip parts).flatMap fun (f, p) =>
         p.types ++ p.agains ++ p.loops ++ [p.defn] ++
-          (if proofApi then
-            (emitProofApi f (fun _ => mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs (idsOf f) concFuncs rawFuncs) p.body).toList
-          else []))
-  (String.intercalate "\n\n"
-    (["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
-      (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else []) ++
-      [s!"\nnamespace {ns}"] ++ structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr ++
-      funcsStr ++ dispatchStr ++ [s!"end {ns}"]), ownFuncNames)
+          (if proofApi then [emitProofApi f p false] else []))
+    (names, callees, text)
+  { header := ["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
+      (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else [])
+    opens := wasm32Open funcs
+    preamble := structsStr ++ asmStr ++ modelStr ++ globalsStr ++ tgtStr
+    groups
+    dispatch := dispatchStr
+    -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
+    dispatchTargets := if dispatchStr.isEmpty then #[] else
+      targets.map (·.1) ++ futures.map (·.1)
+    declNames := ownFuncNames }
+
+/-- The single-file output: every part in order under one `namespace`. -/
+def EmitParts.render (p : EmitParts) (ns : String) : String :=
+  String.intercalate "\n\n" (p.header ++ [s!"\nnamespace {ns}"] ++ p.opens ++ p.preamble ++
+    (p.groups.map (·.2.2)).toList ++ p.dispatch ++ [s!"end {ns}"])
+
+/-- `funcs → one Lean source file` (`emitParts`). Also returns each function's declaration name. -/
+def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
+    String × Array (String × String) :=
+  let p := emitParts funcs prefix_ floatSemantics models spawnSemantics proofApi
+  (p.render ns, p.declNames)
 
 /-- `emitWithNames`'s Lean source only. -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)

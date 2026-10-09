@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "kind": "air2lean-reproduction-note",
+  "requirement": "I03",
+  "manifest": "example-project.json",
+  "revision": "ea8e8e75c87111cb33da246dc03ddc6765e25306",
+  "date_utc": "2026-10-08",
+  "result": "reproduced",
+  "machines": {
+    "A": {
+      "description": "host checkout: macOS 27.0.1 (Darwin 27.0.0) arm64, Apple M5 Pro, Python 3.14.8, elan 4.2.4 (Homebrew), translator built by `lake build air2lean` under build-guard",
+      "commands": [
+        "python3 scripts/build-guard.py --cwd \"$PWD\" --lock ~/.cache/air2lean/build.lock --report /tmp/i03a-guard.json --log /tmp/i03a-guard.log --timeout 7200 --rss-mib 12000 --lock-wait 21600 -- lake build air2lean",
+        "python3 scripts/project.py check example-project.json --translator .lake/build/bin/air2lean --out /tmp/i03-A --lock ~/.cache/air2lean/build.lock --lock-wait 21600"
+      ],
+      "exit_status": 0,
+      "record": "record-a-macos-arm64.json",
+      "record_sha256": "fcb76ceec73a42ff2787237d467cb1e168171b35f09c7495e5c83e696c0c7b39",
+      "translator_sha256": "d53e9516b66acdbe76d6e637a4f491c96b43e84bc555f6785a24765d6e2ab61a"
+    },
+    "B-linux-arm64": {
+      "description": "fresh clone (git bundle of the revision) in Dockerfile.clean-env: Ubuntu 24.04 linux/arm64 (Linux 7.0.14-linuxkit aarch64, native), Python 3.12.3, pinned elan v4.2.4 aarch64, Lean v4.34.0 from lean-toolchain, translator built in the container",
+      "commands": [
+        "python3 scripts/build-guard.py --cwd \"$PWD\" --lock ~/.cache/air2lean/build-b.lock --report /tmp/i03b-arm64-guard.json --log /tmp/i03b-arm64-guard.log --timeout 21600 --rss-mib 12000 --lock-wait 21600 -- scripts/second-machine.sh --platform linux/arm64 --rev codex/roadmap-second-machine --compare /tmp/i03-A/record.json"
+      ],
+      "exit_status": 0,
+      "record": "record-b-linux-arm64.json",
+      "record_sha256": "6d6643ede2b9ef9594c27244e707a831c5380ebfdac79b17b51e7dc8638603b7",
+      "translator_sha256": "cc8b04c997e9c5bf2fa31df13a1c50845234625443736d9524456649d38f8da8",
+      "comparison": "compare-a-b-linux-arm64.json"
+    },
+    "B-linux-amd64": {
+      "description": "the same recipe on linux/amd64 (compatibility.json clean_environment.platform), Linux 7.0.14-linuxkit x86_64 under Docker Desktop emulation (VirtualApple CPU), Python 3.12.3, pinned elan v4.2.4 x86_64, Lean v4.34.0, translator built in the container",
+      "commands": [
+        "python3 scripts/build-guard.py --cwd \"$PWD\" --lock ~/.cache/air2lean/build-b.lock --report /tmp/i03b-amd64-guard.json --log /tmp/i03b-amd64-guard.log --timeout 21600 --rss-mib 12000 --lock-wait 21600 -- scripts/second-machine.sh --platform linux/amd64 --rev codex/roadmap-second-machine --compare /tmp/i03-A/record.json"
+      ],
+      "exit_status": 0,
+      "record": "record-b-linux-amd64.json",
+      "record_sha256": "31c497e8aba405436e565d006017cd22b651cf4c8dcef1b8a509ca6a577f53b6",
+      "translator_sha256": "16f0752697ec9ee009434350dc4611a925a40d6c2a81768ba27f8be2190f49dc",
+      "comparison": "compare-a-b-linux-amd64.json"
+    }
+  },
+  "comparisons": {
+    "A vs B-linux-arm64": {"status": "reproduced", "differences": 0, "exit_status": 0},
+    "A vs B-linux-amd64": {"status": "reproduced", "differences": 0, "exit_status": 0}
+  },
+  "stages": "translate, reproduce, build, audit, claims and inputs_stable passed on all three; goal tardiness/tardiness_spec allowed",
+  "limits": "Both containers ran on the same physical host as A (Docker Desktop VM), but with a different OS, C library, Python, elan and Lean binaries, independently built translators (three different translator hashes) and, for amd64, a different instruction set. Records were produced from revision ea8e8e75; later commits that change scripts hashed in `reproducible` (project.py, build-guard.py, assumptions.py, claims.py, normalize-generated.py) need a fresh pair."
+}

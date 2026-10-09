@@ -21,7 +21,8 @@ def check_inventory(directory, version):
         assert raw["zig_version"] == version, path
         assert raw["name"] not in functions, "duplicate exported function"
         functions[raw["name"]] = raw
-    required = {"source.direct", "source.nested", "source.castAlias", "source.escaped", "source.write"}
+    required = {"source.direct", "source.nested", "source.castAlias", "source.escaped", "source.write",
+                "source.arrayItem"}
     assert required <= functions.keys(), (required, functions.keys())
     for name in required - {"source.write"}:
         insts = list(nested_insts(functions[name]["body"]))
@@ -33,6 +34,10 @@ def check_inventory(directory, version):
     assert sum(i["tag"] == "field_parent_ptr" for i in nested) >= 2, "nested recovery disappeared"
     assert any(i["tag"] == "bitcast" for i in nested_insts(functions["source.castAlias"]["body"])), "const alias cast disappeared"
     assert any(i["tag"] == "call" for i in nested_insts(functions["source.escaped"]["body"])), "escape call disappeared"
+    # L11: recovery from a field of an array element inside a struct, then of the struct.
+    item = list(nested_insts(functions["source.arrayItem"]["body"]))
+    assert sum(i["tag"] == "field_parent_ptr" for i in item) >= 2, "array-element recovery disappeared"
+    assert any(i["tag"] in ("ptr_elem_ptr", "array_elem_ptr") for i in item), "array element projection disappeared"
 
 
 def checks():
@@ -43,6 +48,9 @@ def checks():
             expr = f"LocalParentNative.{name} {n}"
             observe = "memoryValue" if name == "escaped" else "successful"
             lines.append(f"example : ({observe} ({expr})).map BitVec.toNat = some {(n + delta) % 2**32} := by decide +kernel")
+    for n in [0, 3, 255, 0xffffffff]:
+        for i, value in [(1, 6 + n + 27 + 5), (0, 6 + 30 + 9), (5, 6 + n + 27 + 5)]:
+            lines.append(f"example : (memoryValue (LocalParentNative.arrayItem {n} {i})).map BitVec.toNat = some {value % 2**32} := by decide +kernel")
     return "\n".join(lines) + "\n"
 
 

@@ -97,7 +97,7 @@ def main():
     bump = "global_init.bump.json"
     scratch = "global_init.readScratch.json"
     extern_cases = [
-        ("threadlocal", lambda g, d: g.update(threadlocal=True), "`threadlocal` is outside the subset"),
+        ("threadlocal", lambda g, d: g.update(threadlocal=True), "it is `extern` (its instances are defined outside the program)"),
         ("init", lambda g, d: g.update(init=dict(ty=0, val="5")), "the AIR file gives it an initial value"),
         ("unnamed", lambda g, d: (g.pop("name"), g.update(const=True)), "it has no name"),
     ]

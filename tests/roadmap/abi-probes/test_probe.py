@@ -14,16 +14,16 @@ abi = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(abi)
 
 
-def profile(target='x86_64-linux-gnu', mode='ReleaseSafe'):
-    return json.loads((ROOT / 'tests/roadmap/abi-probes' /
-                       f'{target}-{mode}.json').read_text())
+def profile(target='x86_64-linux-gnu', mode='ReleaseSafe', version='0.16.0'):
+    directory = ROOT / 'tests/roadmap/abi-probes' / ('' if version == '0.16.0' else version)
+    return json.loads((directory / f'{target}-{mode}.json').read_text())
 
 
 def text(p):
     _, os_tag, abi_tag, _ = abi.NATIVE[p['target_triple']]
     rows = {'meta': {'arch': p['target_triple'].split('-')[0], 'os': os_tag, 'abi': abi_tag,
                     'endian': 'little', 'backend': p['backend'], 'mode': p['build_mode'],
-                    'cpu': p['cpu'], 'zig': '0.16.0', 'pointer_bits': '64',
+                    'cpu': p['cpu'], 'zig': p['zig_version'], 'pointer_bits': '64',
                     'error_set_bits': '16', 'error_tracing': str(p['error_tracing']).lower()},
             'layout': abi.LAYOUTS, 'offset': abi.OFFSETS, 'value': abi.VALUES,
             'feature': {name: 1 for name in p['features']}}
@@ -41,7 +41,7 @@ class ContractTests(unittest.TestCase):
     def test_profiles_fail_closed(self):
         for key, value in [('pointer_bits', 32), ('pointer_bits', True), ('endian', 'big'),
                            ('backend', 'stage2_aarch64'), ('build_mode', 'Debug'),
-                           ('target_triple', 'wasm32-wasi-musl'), ('zig_version', '0.15.2'),
+                           ('target_triple', 'wasm32-wasi-musl'), ('zig_version', '0.13.0'),
                            ('features', ['sse2', 'sse']), ('features', ['sse', 'sse2', 'sse2']),
                            ('export_stage', 'shipping-binary'), ('float_mode', 'optimized')]:
             p = profile(); p[key] = value
@@ -106,6 +106,31 @@ class ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'requires a Linux execution environment'):
                 abi.run('/nonexistent/zig', profile())
         launch.assert_not_called()
+
+    def test_versioned_contracts_bind_their_version(self):
+        # Q05: 0.14.1 x86_64-linux and 0.15.2 aarch64-macos target probes (CI test/macos jobs).
+        for version, target in (('0.14.1', 'x86_64-linux-gnu'), ('0.15.2', 'aarch64-macos-none')):
+            for mode in ('ReleaseSafe', 'ReleaseFast'):
+                p = profile(target, mode, version)
+                self.assertEqual(p['zig_version'], version)
+                abi.profile_check(p)
+                abi.observations(text(p), p)
+                other = text(p).replace(f'meta zig {version}', 'meta zig 0.16.0')
+                with self.subTest(version=version, mode=mode), self.assertRaises(ValueError):
+                    abi.observations(other, p)
+        # 0.15.2 names the zero-cycle FP/GPR move features differently from 0.16.0.
+        newer = text(profile('aarch64-macos-none')).replace('meta zig 0.16.0', 'meta zig 0.15.2')
+        with self.assertRaises(ValueError):
+            abi.observations(newer, profile('aarch64-macos-none', version='0.15.2'))
+
+    def test_pair_requires_one_zig_version(self):
+        left = report(abi.TARGETS[0])
+        right = report(abi.TARGETS[1])
+        older = copy.deepcopy(left)
+        older['profile']['zig_version'] = '0.14.1'
+        older['observations'] = abi.observations(text(older['profile']), older['profile'])
+        with self.assertRaisesRegex(ValueError, 'Zig versions differ'):
+            abi.compare(older, right)
 
     def test_macos_report_is_outside_the_linux_pair(self):
         with self.assertRaises(ValueError):

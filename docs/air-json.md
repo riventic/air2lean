@@ -120,7 +120,7 @@ Float tags decoded as `bin_op`: `div_float`. As `un_op`: `sqrt sin cos tan exp e
 
 Vector tags (schema 9): `splat` is a `ty_op` (`args: [operand]`). `select` is `args: [lhs, rhs, pred]` (`pl_op` + `Air.Bin`: the predicate vector is the `pl_op` operand, written last). `reduce`/`reduce_optimized` are `args: [operand]` plus `op` (`std.builtin.ReduceOp` tag name). `cmp_vector`/`cmp_vector_optimized` are `args: [lhs, rhs]` plus `op` (`std.math.CompareOperator` tag name). `shuffle_one` (single source) and `shuffle_two` (two sources; 0.15.2+) have `args: [source]` or `args: [source_a, source_b]` plus `mask`: one entry per output lane, each `{"a": i}` (index into the first/only source), `{"b": i}` (index into the second source), `{"u": true}` (undefined lane), or `{"v": Ref}` (a comptime-known value lane; `shuffle_one` only). 0.14.1 has one `shuffle` tag instead, whose mask is a comptime `@Vector` of signed indices (negative for the second source); the exporter re-encodes it into the same four-shape mask so the reader never sees the version difference. Every `*_optimized` tag (float or vector) stays outside the subset: fast-math permits reassociation the translator does not claim to match, so the normalizer rejects any `_optimized` tag on sight, even one the exporter fully decoded (`reduce_optimized`, `cmp_vector_optimized`).
 
-`assembly` (schema 8; M21, register operands only): `source: string` (the asm template, verbatim), `volatile: bool`, `clobbers: [string]` (register/flag names), `outputs: [{constraint, name, ref}]` (`ref` is the output pointer; missing when the output is the asm expression's own result, `-> T`), `inputs: [{constraint, name, ref}]` (`ref` is the input operand). 0.14.1 has no inline asm support: `assembly` is always `"unsupported": true` there.
+`assembly` (schema 8; M21 register operands, A01 read-write and memory lvalue outputs — `docs/generated-code.md` §Inline asm): `source: string` (the asm template, verbatim), `volatile: bool`, `clobbers: [string]` (the set fields of `std.builtin.assembly.Clobbers`: register/flag names, `memory`), `outputs: [{constraint, name, ref}]` (`ref` is the output pointer; missing when the output is the asm expression's own result, `-> T`), `inputs: [{constraint, name, ref}]` (`ref` is the input operand). 0.14.1 has no inline asm support: `assembly` is always `"unsupported": true` there.
 
 Error-union pointer tags (schema 11), all with `args: [pointer]`: `is_err_ptr`, `is_non_err_ptr` (`un_op`), `unwrap_errunion_payload_ptr`, `unwrap_errunion_err_ptr`, `errunion_payload_ptr_set` (`ty_op`). `field_parent_ptr` (schema 11) is `args: [field pointer]` plus `index` (the field index, `Air.FieldParentPtr`).
 
@@ -144,7 +144,7 @@ One of:
 | `{"ty": 4, "enum": "5"}` | enum constant: its tag value in decimal (schema 4). |
 | `{"ty": 6, "utag": Ref, "uval": Ref}` | union constant: the tag (an enum constant; missing for a union without a tag) and the payload (schema 4). |
 | `{"ty": 8, "elems": [Ref, ...]}` | array, vector, struct or tuple constant: its constant items or fields (recursively nested constants only). An array with a sentinel has the sentinel as the last item (schema 6). A vector has no sentinel (schema 9). |
-| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice is the global and the total offset. A pointer without a global has `{"unsupported": "<base>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `eu_payload`, `opt_payload`, `arr_elem`, or `field` of a packed struct (schema 6). |
+| `{"ty": 9, "ptr": {"global": 0, "off": 4}}` | pointer constant: byte `off` of global 0 (§Global). A pointer to a field of a global struct or slice, an optional or error-union payload, or an array element, at any nesting, is the global and the total offset (`payload_base: true` when a payload was crossed). The translator requires `off` to be at most the global's size, and on a `stage2_llvm` profile it rejects offsets at or one past an alignment-1 error-union payload (`tests/roadmap/const-bases`). A pointer without a global has `{"unsupported": "<reason>", "off": n}` instead: `int` (a nonzero constant `@ptrFromInt`), `comptime_alloc`, `comptime_field`, `arr_elem`, `field` of a packed struct, or a payload-resolution reason such as `payload_unbacked` (schema 6). |
 | `{"ty": 9, "ptr": {"null": true, "off": 0}}` | address-zero scalar C/allowzero pointer constant. `null` must be true, the offset zero, and `global`/`unsupported` absent; the checker validates nullability. This additive schema-11 form needs the updated exporter. |
 | `{"ty": 10, "slice_ptr": Ref, "slice_len": Ref}` | slice constant (schema 6). |
 
@@ -155,15 +155,23 @@ subset and is rejected before normalization; compiler-exported constants contain
 
 ## Global
 
-Schema 6. One entry per global that a pointer constant points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
+Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` points into, in the order the exporter finds them (a pointer in the initial value of a global adds the global it points to after it).
 
 | Field | Meaning |
 |---|---|
 | `name` | fully qualified name of a container-level `var` or `const`. Missing for an unnamed constant (a string literal, the value behind `&.{…}`). |
 | `ty` | type ID of the value |
 | `const` | `false` only for a `var` |
-| `threadlocal`, `extern` | a named global only |
+| `threadlocal`, `extern` | a named global only. A `threadlocal` global is also listed when a `runtime_nav_ptr` names it. |
 | `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
+
+`runtime_nav_ptr` (0.15.2+, `ty_nav`) has no `args`; `global` is the global's entry in
+`globals` (an additive field of the current exporter). Zig emits it for a `threadlocal var`, an
+`extern threadlocal var`, a DLL-imported or PC-relative `@extern`; the entry's flags say which,
+and the translator admits only a non-`extern` `threadlocal` global
+(`docs/generated-code.md` §Thread-local storage). An export without `global` (an older exporter
+writes `"unsupported": true`) stays rejected. 0.14.1 has no such tag: it writes the address of a
+`threadlocal` global as a pointer constant, which the translator rejects.
 
 `try_ptr` and `try_ptr_cold` use one `args` operand (the pointer to the error union) and
 `body` for the error branch. The instruction's `ty` is the payload pointer type. On

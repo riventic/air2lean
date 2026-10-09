@@ -23,6 +23,7 @@ add up to its `cases`:
 | `exact_matches` | `value_match`, `error_return_match`, `panic_match` |
 | `host_differences` | `host_difference` |
 | `illegal` / `unspecified` | `illegal_exclusion` / `unspecified_exclusion` |
+| `unspecified_timer` | `unspecified_timer_exclusion` (`Zig.Error.unsupportedTimer`: a clock the model lacks) |
 | `capped_searches` | `search_cap` (including any capped search that would otherwise have matched) |
 | `bounded_no_result` | `bounded_no_result` |
 | `mismatches` | `mismatch` |
@@ -70,7 +71,10 @@ A focused `AIR2LEAN_EXAMPLES` run therefore cannot serve as evidence for a versi
 Full jobs (0.16.0 and 0.15.2) publish, check and claim-check their own summary after the
 differential gate and append the table to the job summary. They upload
 `tests/diff/out/report.json` as the artifact `diff-summary-<zig>-<os>-<arch>`, even when the
-gate fails, in which case the summary is incomplete and `publish` rejects it. The restricted
+gate fails, in which case the summary is incomplete and `publish` rejects it. The `macos` job
+(`macos-14`, aarch64) runs the differential test for 0.16.0 and 0.15.2 and uploads each
+version's summary the same way, as `diff-summary-<zig>-macOS-ARM64`. Each is a separate
+version/target row (its selection omits `asm`, which runs only on x86_64). The restricted
 0.14.1 job runs no diff harness and uploads no summary. To publish the cross-version table for
 a run:
 
@@ -81,5 +85,38 @@ python3 scripts/accounting.py publish $(printf -- '--summary %s ' summaries/*/re
 python3 scripts/accounting.py claims $(printf -- '--summary %s ' summaries/*/report.json) --require-full-versions
 ```
 
-Only Linux x86_64 full jobs exist today, so the table has one target per version. Cross-target
-rows wait on Q05.
+The macOS summaries add one aarch64-macos row per full version. The first `main` run after the
+`macos` job began uploading them is the first one whose table has cross-target rows.
+
+## Published table
+
+From CI run [37747391759](https://github.com/riventic/air2lean/actions/runs/37747391759), the
+`push` run on `main` at `9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee` (conclusion `success`). Its
+two full-job artifacts, `diff-summary-0.16.0-Linux-X64` and `diff-summary-0.15.2-Linux-X64`,
+are committed unchanged under
+[`assurance/accounting/9f39e808…/`](../assurance/accounting/9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee/),
+and the table published from them is
+[`assurance/accounting/9f39e808….json`](../assurance/accounting/9f39e8088cd8b1a9fe89f9f662bf5cdd970ff0ee.json).
+
+Successful comparisons (exact matches only): **171934**.
+
+| Zig | Target | cases | exact_matches | host_differences | illegal | unspecified | unspecified_timer | capped_searches | bounded_no_result | mismatches | setup_failures | skipped_examples | skipped_functions | proof_exclusions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.15.2 | Linux-x86_64 | 87004 | 85927 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 0 | 2 | 7 | 17 |
+| 0.16.0 | Linux-x86_64 | 87084 | 86007 | 0 | 497 | 580 | 0 | 0 | 0 | 0 | 0 | 1 | 3 | 18 |
+| total |  | 174088 | 171934 | 0 | 994 | 1160 | 0 | 0 | 0 | 0 | 0 | 3 | 10 | 35 |
+
+The `unspecified_timer` column (V06) was added after that run: its summaries come from the
+pre-V06 runner, whose timer counter is pinned at 0, so the column is 0 and the table is
+republished unchanged from the same committed summaries.
+
+Verification, on that run's summaries: `publish`, `check` and `claims --require-full-versions`
+each exit 0 against this commit's README and CI matrix. `tests/roadmap/host-accounting/test_accounting.py`
+re-checks every committed table against its committed summaries.
+
+The table is `qualified: false`. It does not establish compiler/native correspondence or proof
+applicability. The 0.16.0 row's 87,084 cases are the current scope; README's 87,064-case headline
+belongs to the original Outcome closeout. 0.14.1 has no row because its restricted job runs no
+diff harness. This table has no cross-target rows because, at that commit, the `macos` job uploaded no
+`diff-summary-*` artifact. It uploads them now, and the macOS rows (`diff-summary-0.16.0-macOS-ARM64`,
+`diff-summary-0.15.2-macOS-ARM64`) appear in the table published from the next `main` run.

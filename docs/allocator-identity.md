@@ -7,6 +7,10 @@ kind of a block records its owner: `.heap` is the model's `std.mem.Allocator`
 `.owned a`) gives the `std.mem.Allocator` calls (`create`, `destroy`, `alloc`, `free`,
 `remap`) for either.
 
+Owned blocks get fresh model addresses by default. The opt-in address-reuse policy (M05,
+[address-reuse.md](address-reuse.md)) may give a new owned block the address of a freed or reset
+one; block ids, and so every ownership and liveness check, are unaffected.
+
 ## Semantics
 
 The policies follow the Zig 0.16.0 sources `lib/std/heap/ArenaAllocator.zig` and

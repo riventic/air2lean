@@ -1,0 +1,23 @@
+{
+  "differences": [],
+  "differences_truncated": false,
+  "hosts": {
+    "left": {
+      "machine": "arm64",
+      "release": "27.0.0",
+      "system": "Darwin"
+    },
+    "right": {
+      "machine": "aarch64",
+      "release": "7.0.14-linuxkit",
+      "system": "Linux"
+    }
+  },
+  "kind": "air2lean-project-record-comparison",
+  "record_status": {
+    "left": "reproduced",
+    "right": "reproduced"
+  },
+  "schema": 1,
+  "status": "reproduced"
+}

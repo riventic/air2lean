@@ -107,7 +107,14 @@ def markedTagGuidance (tag : String) : String :=
     | some reason => s!": {reason}"
     | none => ""
 
+/-- A `runtime_nav_ptr` that names its global (the current exporter): `Check.lean` admits it
+for a `threadlocal` global only (`docs/generated-code.md` §Thread-local storage). Without the
+global, or with the exporter's unsupported marker, it keeps its rejection. -/
+def runtimeNavGlobal? (raw : Raw.RawInst) : Option Nat :=
+  if raw.tag == "runtime_nav_ptr" && !raw.unsupported then raw.global else none
+
 private def rejectRuntimeTag (fnName : String) (raw : Raw.RawInst) : Except String Unit := do
+  if (runtimeNavGlobal? raw).isSome then return
   if let some reason := runtimeTagReason? raw.tag then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}': {reason}"
 
@@ -249,6 +256,12 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
       | throw s!"{fnName}: inst {raw.id}: 'union_init' needs 'index'"
     return .unionInit idx a
   | "alloc" | "ret_ptr" => return .alloc
+  | "runtime_nav_ptr" =>
+    let some g := runtimeNavGlobal? raw
+      | throw s!"{fnName}: inst {raw.id}: 'runtime_nav_ptr' needs 'global'"
+    unless raw.args.isEmpty do
+      throw s!"{fnName}: inst {raw.id}: 'runtime_nav_ptr' has no args"
+    return .runtimeNavPtr g
   | "struct_field_ptr" =>
     let a ← arg1 fnName raw
     let some idx := raw.index
@@ -414,13 +427,16 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   let body ← raw.body.mapM (normalizeInst raw.name)
   -- The bit-packed vector layout is the LLVM backend's (`tests/roadmap/vector-layouts`).
   let llvm := raw.profile.backend == "stage2_llvm"
+  -- The pointer width is the profile's (`BuildProfile.parse` admits 32 and 64 bits).
+  let ptrBytes := raw.profile.pointerBits / 8
   let layouts := raw.layouts.mapIdx fun i l =>
+    let l := { l with ptrBytes }
     match raw.types[i]? with
     | some (.vector ..) => { l with packedLanes := llvm }
     | _ => l
   return { zigVersion := raw.zigVersion, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,
-           errorSetBits := raw.profile.errorSetBits }
+           errorSetBits := raw.profile.errorSetBits, backend := raw.profile.backend }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do

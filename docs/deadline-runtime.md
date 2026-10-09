@@ -10,8 +10,9 @@ The smallest selected source boundary is awake observation, a finite nonnegative
 absolute deadline or zero duration, and one caller waiting on an owned u32 with a framed
 sentinel. The implementation additionally represents checked nonnegative awake durations
 and unbounded waits. Other clock kinds, negative values, overflowing durations, cancellation
-and OS correspondence are outside this boundary. `defaultEnvNoClock` returns the existing
-model's unspecified error at clock-dependent operations. No timestamp is clamped.
+and OS correspondence are outside this boundary. `defaultEnvNoClock` returns the model's
+`.unsupportedTimer` error (distinct from `.unspecified`) at clock-dependent operations; so do a
+wrong clock and an unselected timeout. No timestamp is clamped.
 Every Program.wait, including an unbounded wait, requires the selected awake environment.
 
 The working v5 atomic-comparison candidate is documented separately in

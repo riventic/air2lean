@@ -14,7 +14,8 @@ unbound opaque or a width or type mismatch appears. Every wrapper line is kept v
 
 `Interp.lean` is a small x86_64 register machine. It allocates registers from the
 constraints, fills unbound registers and the upper bits of inputs with junk, expands the
-template and runs `bswap`, `popcnt`, `lzcnt`, `xor` and `div`. It rejects writes to undeclared
+template and runs `bswap`, `popcnt`, `lzcnt`, `xor` and `div` (and A01's `inc`, `add`, `mov`,
+`xchg`). It rejects writes to undeclared
 registers, `#DE` and unsupported syntax, and requires the same outputs under three allocations:
 two distinct-register pools and one where an `r` input shares a plain `=r` output's register. `Runner.lean` compares every wrapper with the Zig source semantics (`AsmHarness.Oracle`) on
 about 700 inputs per function, including the diff-test inputs, edge values and deterministic
@@ -79,5 +80,7 @@ python3 scripts/assumptions.py --module Proofs.Asm.Gen --module Proofs.Asm.Proof
 python3 tests/roadmap/asm-wrappers/audit.py --assurance "$out"
 ```
 
-The harness does not cover memory or immediate constraints, read-write (`+r`) outputs or
-multi-instruction templates beyond `examples/asm`. The translator rejects the first three.
+This harness does not cover immediate constraints or templates beyond `examples/asm`; the
+translator rejects immediates. A01's `tests/roadmap/asm-effects/harness.py` reuses
+`Interp.lean` for read-write (`+r`, `+m`) and memory (`=m`) outputs, with the extra
+instructions `inc`, `add`, `mov` and `xchg`; its runner is audited here like `Runner.lean`.

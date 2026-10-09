@@ -1,10 +1,12 @@
 # Target and build profiles
 
-The current runtime models a reference 64-bit, little-endian ABI. Profile metadata
+The current runtime models a little-endian ABI with 64-bit pointers, or 32-bit pointers
+for wasm32 ([generated-code.md](generated-code.md#pointer-width)). Profile metadata
 makes the source assumptions visible; it does not prove correspondence with a
 shipping executable. Existing type, pointer, layout, and unsupported-instruction
-checks still apply. Pointer-width and endian generalization remain separate work. Schema 12 retains
-the existing Linux x86_64 reference and macOS aarch64 model workflows. These are
+checks still apply. Endian generalization remains separate work. Schema 12 retains
+the existing Linux x86_64 reference and macOS aarch64 model workflows, and admits
+wasm32-freestanding and wasm32-wasi with the 32-bit pointer model. These are
 accepted model ABI scopes with per-type layout checks, not hardware or binary
 qualification claims.
 
@@ -20,9 +22,9 @@ Every schema-12 function has a mandatory `profile` object:
 
 | Field | Accepted value or meaning |
 | --- | --- |
-| `name` | `"abi64-le-v1"` |
-| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>` and `aarch64-macos-<abi>` (OS and ABI version suffixes are retained) |
-| `pointer_bits` | `64`; narrower targets are rejected |
+| `name` | `"abi64-le-v1"` (the exporter's profile name, also for a 32-bit target) |
+| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
+| `pointer_bits` | `64` for x86_64/aarch64, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
 | `endian` | `"little"`; big endian is rejected |
 | `abi` | Target ABI tag; must equal the triple's ABI component before a version suffix |
 | `zig_version` | Must equal the file's top-level `zig_version`; normal supported-version checks still apply |
@@ -208,6 +210,15 @@ observes both ([target-matrix.md](target-matrix.md); per-mode status:
 [build-modes.md](build-modes.md)). A macOS report stays outside the
 paired Linux `compare` relation.
 
+Contracts for other Zig versions are under `tests/roadmap/abi-probes/<zig>/`: 0.14.1
+x86_64-linux-gnu and 0.15.2 aarch64-macos-none, in both modes. They are the Q05 target probes
+of those declared paths. Each differs from its 0.16.0 counterpart only in `zig_version`
+and, for 0.15.2 on macOS, in the LLVM feature names (`zcm` against 0.16.0's
+`zcm_fpr64`/`zcm_gpr64`). The probe prints its compiler's version, so a contract matches only
+that version. `compare` pairs only reports of the same Zig version. The probe writes its output
+with `std.fmt.bufPrint` and `compat.write`, which lets the same source build on 0.14.1, 0.15.2
+and 0.16.0.
+
 ```sh
 python3 scripts/abi-probe.py observe --zig /absolute/path/to/stock/zig \
   --profile tests/roadmap/abi-probes/x86_64-linux-gnu-ReleaseSafe.json \
@@ -239,5 +250,24 @@ ReleaseFast is a separate observation profile, not inferred from ReleaseSafe
 
 This tool does not change the translator's accepted target profiles. In particular,
 aarch64-linux translation remains guarded, and wasm32 pointer parameterization
-remains absent. The native probe records a bounded candidate for T04/T05/T06;
-profile-bound generated proofs and broader target qualification remain pending.
+remains absent. The native probe records a bounded candidate for T04/T05/T06.
+
+## aarch64 ABI profiles (T04)
+
+`scripts/aarch64-abi.py` qualifies aarch64-linux-gnu and aarch64-macos-none separately
+([aarch64-abi.md](aarch64-abi.md)). Each profile is probed natively for:
+
+- unusual integer widths;
+- f80/f128 layout and results, including NaN and subnormal edges;
+- `c_longdouble`;
+- L09 vector layouts;
+- atomic widths, alignment and results, and the 128-bit atomic limit.
+
+The output must equal that profile's versioned expected file
+(`tests/roadmap/aarch64-abi/expected/0.16.0/`). A wrong host or an unrecorded Zig version
+is `excluded`, which exits non-zero and never counts as a match. `tests/roadmap/aarch64-abi/Model.lean`
+kernel-checks each profile's layout table against the model and compares the file's float
+and atomic results with it. Four declared divergences are reported and not counted as
+matches: soft-float f80 unnormal and pseudo-denormal handling, and padding-sensitive `u24`/`u40`
+cmpxchg. These are ABI-only profiles. aarch64-linux AIR is still rejected by
+`BuildProfile.parse`.

@@ -34,10 +34,8 @@
       "job": "test", "matrix": {"zig": "0.14.1", "full": false, "mutate": false},
       "evidence": {
         "native_execution": ["Loop-switch dispatch regressions"],
+        "target_probe": ["ABI target probe (0.14.1)"],
         "proof_check": ["Build proofs"]
-      },
-      "gaps": {
-        "target_probe": "the float probe runs in full jobs only and the ABI probe is 0.16.0-only; 0.14.1 has no target probe in CI"
       }
     },
     {
@@ -63,10 +61,8 @@
       "job": "macos",
       "evidence": {
         "native_execution": ["macOS golden AIR, translate, differential test (0.15.2)"],
+        "target_probe": ["macOS ABI target probe (0.15.2)"],
         "proof_check": ["macOS proofs (0.15.2)"]
-      },
-      "gaps": {
-        "target_probe": "scripts/abi-probe.py qualifies Zig 0.16.0 only and the float probe's expected results are the x86_64-linux reference"
       }
     }
   ],
@@ -75,6 +71,20 @@
   ],
   "not_declared": [
     {"target": "wasm32-wasi", "depends_on": ["T02", "T05"], "reason": "32-bit pointer parameterization and native/WASM correspondence are not implemented; WASM execution joins this matrix only once compatibility.json declares it"},
-    {"target": "aarch64-linux", "depends_on": ["T04"], "reason": "the Linux aarch64 ABI probe profiles exist, but translation of aarch64-linux AIR stays guarded"}
+    {"target": "aarch64-linux", "depends_on": ["T04"], "reason": "aarch64-linux-gnu is ABI-qualified only (abi_profiles); translation of aarch64-linux AIR stays guarded: no native AIR export, differential test or proof build runs on that host"}
+  ],
+  "abi_profiles": [
+    {
+      "requirement": "T04", "zig": "0.16.0", "host": "aarch64-linux", "target_triple": "aarch64-linux-gnu",
+      "mode": "ReleaseSafe", "expected": "tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt",
+      "probe": {"job": "aarch64-linux", "step": "aarch64-linux ABI qualification (T04, 0.16.0)"},
+      "proof": {"job": "test", "matrix": {"zig": "0.16.0", "full": true, "mutate": false}, "step": "aarch64 ABI profile proofs (T04)"}
+    },
+    {
+      "requirement": "T04", "zig": "0.16.0", "host": "aarch64-macos", "target_triple": "aarch64-macos-none",
+      "mode": "ReleaseSafe", "expected": "tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-macos-none-ReleaseSafe.txt",
+      "probe": {"job": "macos", "step": "aarch64-macos ABI qualification (T04, 0.16.0)"},
+      "proof": {"job": "test", "matrix": {"zig": "0.16.0", "full": true, "mutate": false}, "step": "aarch64 ABI profile proofs (T04)"}
+    }
   ]
 }

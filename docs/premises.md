@@ -79,14 +79,14 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 | Category | IDs |
 |---|---|
-| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) |
-| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) |
+| Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) |
+| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
-| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) |
+| Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
@@ -124,6 +124,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: an import listed in `generated_imports`.
 - Sources: [global-payload-pointers README](../tests/roadmap/global-payload-pointers/README.md).
 
+<a id="prf-04"></a>
+### PRF-04 — Parameterized pointer width
+
+- Kind: environment.
+- Statement: The theorem uses the width-parameterized memory model (`Zig.PtrWidth`): pointers,
+  `?*T`, `usize`, slices and `std.mem.Allocator` of `PtrWidth.bytes` bytes, and allocation
+  byte counts bounded by `2 ^ bits`. For `.w32` it concerns the wasm32 layouts that the
+  exporter recorded for the generated module's profile; the model's block addresses are not
+  bounded by the 32-bit address space, so `@intFromPtr` of an address outside it is
+  `.unspecified`. Every `.w64` definition is proved equal to the 64-bit model.
+- Derived from: the runtime module `ZigLean.Mem.Width` or its width names (`PtrWidth`,
+  `Slice32`, `SliceOf`, `Wasm32`).
+- Sources: [generated-code.md](generated-code.md#pointer-width), `ZigLean/Mem/Width.lean`.
+
 ## Allocator policies
 
 <a id="alc-01"></a>
@@ -133,7 +147,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: `std.mem.Allocator` is one modelled allocator. Each allocation is a fresh
   `.heap` block with undefined bytes. A zero-byte allocation has no block. A free must name
   the start and whole length of a live heap block, or it is `.illegal`. `free` records the
-  slice poison write. No native malloc address, reuse or identity behavior is modelled.
+  slice poison write. Addresses are fresh unless a theorem selects the opt-in reuse policy
+  (`ALC-08`). No native malloc address or identity behavior is modelled.
 - Derived from: `ZigLean.Mem.Alloc`, `ZigLean.Sep.Alloc`; tokens `Allocator`.
 - Sources: [std-models.md](std-models.md#allocator-model), `ZigLean/Mem/Alloc.lean`.
 
@@ -202,12 +217,30 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   destroy or remap through one allocator of another's block is `.illegal`. An arena request is
   an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end exactly the
   arena's blocks. A fixed buffer pads from its base address, fails past its capacity and gives
-  bytes back only for its last allocation. Owned blocks get fresh model addresses; growing
-  remap fails; reset records no race-check access. The translator does not route
+  bytes back only for its last allocation. Owned blocks get fresh model addresses unless the
+  reuse policy (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check access. The translator does not route
   `std.heap` arena or fixed-buffer calls.
 - Derived from: `ZigLean.Mem.Owned`, `ZigLean.Sep.Owned`, `ZigLean.Sep.ArenaClient`; tokens
   `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
 - Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
+
+<a id="alc-08"></a>
+### ALC-08 — Address reuse and provenance recovery
+
+- Kind: environment.
+- Statement: `Mem.allocPolicy.reuseAddr` is an arbitrary opt-in oracle that may give a new heap
+  or owned block the address of a freed block (`Mem.reuseOk`: nonzero, aligned, below
+  `nextAddr`, clear of every live block with a 1-byte gap). Block ids stay unique and every
+  liveness check uses them, so lifetime theorems over arbitrary `Mem` hold under every reuse
+  policy. Stack blocks and globals keep fresh addresses. `@ptrFromInt` of an address that two
+  blocks cover is `.unspecified` under the default `.strict` provenance mode; the
+  address-sensitive contract `.liveBlock` recovers the live block. A theorem that observes
+  addresses holds only under the policy and mode it states. No native allocator address
+  behavior is claimed.
+- Derived from: `ZigLean.Sep.AddrReuse`; tokens `withReuse`, `liveBlock` (the opt-in policy
+  and provenance mode; the default path `Mem.reuseAddr?`/`ProvenanceMode.strict` that every
+  `alloc`/`@ptrFromInt` unfolds to is not a token).
+- Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
 
 ## Thread creation and scheduling
 
@@ -228,8 +261,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Thread.spawn` is a sync op that always succeeds under the default `available`
   policy. It copies the argument tuple and gives the child a copy of the parent clock. `join`
-  waits for the child and merges its clock. Only the spawner may join, once. An unjoined
-  child at thread end is `.illegal`. The child protocol obligation (`spawnInit`) is explicit.
+  waits for the child and merges its clock. Only the handle's owner (the spawner, or the thread
+  an explicit transfer named, THR-10) may join, once. An owned handle neither joined nor
+  detached at thread end is `.illegal`. The child protocol obligation (`spawnInit`) is explicit.
 - Derived from: `ZigLean.Conc.Sched`; tokens `spawnC`, `joinC`, `spawnInit`.
 - Sources: [std-models.md](std-models.md#thread-model), [generated-code.md](generated-code.md#atomics-and-threads).
 
@@ -250,17 +284,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: `Group.async`/`concurrent` spawn a recorded task; `Group.await` joins the tasks
-  in spawn order. Cancellation is not modelled, so `Group.cancel` is `await`.
-- Derived from: tokens `groupAsyncC`, `groupAwaitC`, `groupConcurrentC`, `groupCancelC`.
+  in spawn order. `Group.cancel` gives each task a cancelation request (`Mem.cancels`) and
+  joins it; a task's cancelation point (a cancelable futex wait, its own `Group.await`)
+  delivers a pending request as `error.Canceled`. `main` is not an `Io` task and is never
+  canceled.
+- Derived from: tokens `groupAsyncC`, `groupAwaitC`, `groupConcurrentC`, `groupCancelC`, `cancelPending`, `requestCancel`.
 - Sources: [std-models.md](std-models.md#thread-model).
 
 <a id="thr-05"></a>
 ### THR-05 — Futex model
 
 - Kind: environment.
-- Statement: A futex wait on a matching `u32` sleeps until a wake at that address. Waiters
-  wake in FIFO order. There is no spurious wakeup or cancellation, and a wake adds no
-  happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
+- Statement: A futex wait on a matching `u32` sleeps until a wake at that address, or returns
+  spuriously in place of the sleep (an oracle choice, `Sched.spuriousWake`). Waiters wake in
+  FIFO order; a sleeping waiter leaves the queue only through a wake or a cancelation request.
+  A wake adds no happens-before edge. No runnable thread with an unfinished thread is
+  `Zig.Error.deadlock`.
 - Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
@@ -311,6 +350,39 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: token `Cooperative`.
 - Sources: [progress-hints.md](progress-hints.md#worker-idle-loop),
   `tests/roadmap/idle-loops/IdleLoop/Theorems.lean`.
+
+<a id="thr-10"></a>
+### THR-10 — Detached threads and explicit handle transfer
+
+- Kind: environment.
+- Statement: `Thread.detach` (Zig 0.16.0) consumes the owner's handle without a
+  happens-before edge; the thread runs on, and `main`'s end ends the run as the process exit
+  does, whatever detached threads still run: no detached thread takes a turn after `main`'s
+  end, so its accesses after that point are not explored. A later join or detach of the handle is
+  `.illegal`. `Thread.transferHandle` is a model step, not a `std` call: a proof or
+  hand-written client inserts it where a handle passes to another thread, which then is the
+  one thread that may join or detach it and must do so before it ends. The translator never
+  emits it, so a translated thread that joins a handle it did not spawn is `.illegal`. A
+  transfer to a thread that has already ended is not detected (its handle is then never
+  consumed and no end check reports it). A
+  strict-safety proof may order joins by a protocol rank (`Proto.rank`) instead of thread ids.
+- Derived from: `ZigLean.Conc.Detach`; tokens `detachC`, `transferHandle`, `Thread.detach`.
+- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Detach/`.
+
+<a id="thr-11"></a>
+### THR-11 — `Io.Future` tasks and cancelation (0.16.0)
+
+- Kind: environment.
+- Statement: `Io.async` allocates a runtime record and spawns the task as a model thread (or,
+  under `fallible`, runs it in the caller). `await`/`cancel` join it and return the result
+  that it wrote. Only the spawner may consume a future, and an unconsumed future is `.illegal`.
+  A cancelation request is delivered only at `Io.checkCancel`. Programs with `Future.cancel`
+  whose tasks reach another cancelation point are rejected. Group support does not imply
+  future support.
+- Derived from: `ZigLean.Conc.Future`, `ZigLean.Conc.FutureLemmas`; tokens `asyncC`, `awaitC`,
+  `cancelC`, `checkCancelC`, `futureProto`.
+- Sources: [futures.md](futures.md).
+
 ## Memory ordering
 
 <a id="ord-01"></a>
@@ -323,7 +395,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   distinct; a plain write of an equal value is its own message). The model admits more outcomes
   than RC11 (no SC order, read views not transferred through release/acquire), never fewer.
   Overlapping atomic accesses of another offset or size are `.unspecified`. Atomic pointees are
-  integers, enums, bools or packed structs.
+  integers, enums, bools, packed structs or single/many pointers (ORD-05).
 - Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
@@ -354,6 +426,18 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.WeakCasLemmas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
 - Sources: [weak-cas.md](weak-cas.md).
 
+<a id="ord-05"></a>
+### ORD-05 — Pointer atomics keep provenance and compare identities
+
+- Kind: environment.
+- Statement: An atomic message of a `*T`/`?*T` pointee holds the pointer's bytes, which keep
+  its block. `cmpxchg` compares identities (block, offset): equal identities succeed, different
+  identities at different addresses fail, and different identities at the same address (or an
+  address the memory cannot resolve) are `.unspecified`; the hardware compares addresses, and
+  the model claims neither outcome. Only `.Xchg` is a pointer RMW.
+- Derived from: `ZigLean.Mem.AtomicPtr`, `ZigLean.Conc.PtrAtomic`, `ZigLean.Conc.PtrAtomicLemmas`; tokens `AtomicPtrVal`, `ptrValEq`, `*PtrAt`, `*PtrC`.
+- Sources: [pointer-atomics.md](pointer-atomics.md).
+
 ## Timers and clocks
 
 <a id="tmr-01"></a>
@@ -361,7 +445,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: The default runtime has no clock. Reaching `time.Timer` or
-  `Thread.Futex.timedWait` (0.15.2 `Futex.Deadline` with a timeout) is `.unspecified`.
+  `Thread.Futex.timedWait` (0.15.2 `Futex.Deadline` with a timeout) is `.unsupportedTimer`,
+  a model error kept apart from `.unspecified` (reports type it `unspecified_timer`).
   `Io.futexWaitTimeout` is rejected at translation. Theorems cover the no-timeout path only.
 - Derived from: tokens `Deadline`, `time_Timer`, `timedWait`.
 - Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Deadline.lean`.
@@ -451,8 +536,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: The theorem states the instruction fact it needs (for example `bswap` is an
   involution) as a hypothesis about the opaque. The result transfers to hardware only if
   that hypothesis holds for the target CPU.
-- Derived from: `statement` rule on `airAsm_<n>` in the theorem's own type.
-- Sources: `Proofs/Asm/Proofs.lean`.
+- Derived from: `statement` rule on `airAsm_<n>` or `airAsmFx_<n>` in the theorem's own type.
+- Sources: `Proofs/Asm/Proofs.lean`, `tests/roadmap/asm-effects/AsmEffects/Proofs.lean`.
+
+<a id="asm-03"></a>
+### ASM-03 — Assembly effects follow the declared contract
+
+- Kind: trusted.
+- Statement: An asm op with a read-write (`+r`, `+m`) or memory (`=m`) output, or a
+  registry-approved `"memory"` clobber, is an opaque `airAsmFx_<hash>` whose generated wrapper
+  holds every memory effect. The instructions read only their register inputs and the old values
+  of their read-write outputs, write each declared output location whole and nothing else
+  (no store through an address held in an integer input), and register/flag clobbers are not
+  model state. Overlapping written locations are `.unspecified`. A `"memory"` clobber is
+  accepted only for a reviewed `asmPureRegistry` entry, whose block has no model-visible effect.
+- Derived from: tokens `airAsmFx_<n>`; runtime module `ZigLean.Asm`.
+- Sources: [generated-code.md](generated-code.md#effect-contract-read-write-and-memory-operands-aliases-clobbers-a01), `Air2Lean/AsmContract.lean`, `Proofs/Asm/Effects.lean`.
 
 ## Core runtime semantics
 
@@ -494,8 +593,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: meaning.
 - Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
-  than SEM-03 and only cover their stated finite clients.
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Conc.Total`.
+  than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
+  bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
+  budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
+  satisfy its stated premise and is not an unconditional total result.
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.LoopTemplate`, `ZigLean.Sep.Step`, `ZigLean.Conc.Total`; the `sep_*` step tactics (they elaborate to `ZigLean.Sep.Step` lemmas).
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
@@ -506,7 +608,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   They count allocation requests, live `.heap` blocks and loop-body runs of successful runs.
   A count does not measure CPU time, instruction count, cache behavior or native allocator
   memory use. Relating one to those needs a separate calibration argument.
-- Derived from: `ZigLean.Sep.Cost`.
+- Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`.
 - Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
 
 ## External models

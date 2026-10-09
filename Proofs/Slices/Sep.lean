@@ -1,12 +1,14 @@
 import Proofs.Slices.Gen
 import ZigLean.Sep
+import ZigLean.Sep.Step
 
 /-!
 # Separation-logic proofs about `examples/slices/slices.zig`
 
 `bump` on the global counter, `copyWithin` with overlapping ranges, and `reverse` (a loop with a
 separation invariant). Each spec is a `Triple`: the frame (the rest of the memory) stays
-unchanged.
+unchanged. `bump_spec` and `reverse_step` execute the generated code symbolically with the
+`sep_*` tactics of `ZigLean.Sep.Step` (`docs/proof-tools.md`).
 -/
 
 open Slices Zig Assn
@@ -25,19 +27,10 @@ theorem counter_init : ∃ h hF, Heap.Disjoint h hF ∧ mem0.heap = h ∪ hF ∧
 /-- `bump` adds 1 to the counter and returns the new value. -/
 theorem bump_spec (x : BitVec 32) (hx : x.toNat + 1 < 2 ^ 32) :
     Triple (pts counter 4 x) bump (fun r => ⌜r = x + 1⌝ ∗ pts counter 4 (x + 1)) := by
-  apply Triple.of_run
-  intro m hP hF hd hm hp hst
-  -- `bump` reads the counter, writes it, reads it again: each step mutates memory (`recordAt`),
-  -- so it runs on the previous step's output memory.
-  obtain ⟨mA, hl, hmA, hstA⟩ := pts_load_run hp hm (by decide) hst
-  obtain ⟨mB, hs, hstB, h', hd', hmB, hp'⟩ := pts_store_run hp hmA hd (by decide) hstA (x + 1#32)
-  obtain ⟨mC, hl', hmC, hstC⟩ := pts_load_run hp' hmB (by decide) hstB
-  have hov : x.uaddOverflow 1#32 = false := by
-    have : x.toNat + 1 < 4294967296 := hx
-    simp [BitVec.uaddOverflow]; omega
-  refine ⟨x + 1, mC, h', ?_, hd', hmC, sep_lift.mpr ⟨rfl, hp'⟩, hstC⟩
-  simp only [StateT.run, counter, pure, ExceptT.pure, ExceptT.mk] at hl hs hl'
-  simp [bump, zig_unfold, Zig.add, hl, hs, hl', hov]
+  have hov : Zig.add false x 1 = pure (x + 1) := by simp [Zig.add, BitVec.uaddOverflow]; omega
+  sep_unfold [bump]
+  sep_steps [hov]
+  sep_ret
 
 /-- `@memmove` inside one slice: the `n` items from `d` on become the `n` items from `s` on, read
 before the copy, also if the two ranges overlap. -/
@@ -96,71 +89,57 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
       (if reverse.again15 e then revInv sl.ptr vs s' h' ∧ revMeas s' < revMeas s
        else e = .br14 ∧ arr sl.ptr vs.reverse h') := by
   obtain ⟨ws, hw, hwl, hij, hk⟩ := hi
+  refine TotalTriple.step_run ?_ hd hm hw hst
   by_cases hlt : s.i.toNat < s.j.toNat
-  · have hjn : s.j.toNat < ws.length := by omega
+  · have hio : Zig.add false s.i 1 = pure (s.i + 1) := by simp [Zig.add, BitVec.uaddOverflow]; omega
+    have hjo : Zig.sub false s.j 1 = pure (s.j - 1) := by simp [Zig.sub, BitVec.usubOverflow]; omega
+    sep_unfold [reverse.loop15, hlt,
+      show s.i.toNat < sl.len.toNat by omega, show s.j.toNat < sl.len.toNat by omega]
+    sep_steps [hio, hjo]
+    sep_ret
+    intro _ hw₂
+    have hjn : s.j.toNat < ws.length := by omega
     have hin : s.i.toNat < ws.length := by omega
-    have e4 : Enc.size (BitVec 32) = 4 := rfl
-    -- `reverse.loop15` reads item `i`, reads item `j`, writes item `i`, writes item `j`: each
-    -- step mutates memory (`recordAt`), so it runs on the previous step's output memory.
-    obtain ⟨mA, l1, hmA, hstA⟩ :=
-      arr_load_run (a := 4) (i := s.i) hw hm (by decide) (by decide) (by decide) hin hst
-    obtain ⟨mB, l2, hmB, hstB⟩ :=
-      arr_load_run (a := 4) (i := s.j) hw hmA (by decide) (by decide) (by decide) hjn hstA
-    obtain ⟨m₁, s₁, hst₁, h₁, hd₁, hm₁, hw₁⟩ :=
-      arr_store_run (a := 4) (i := s.i) hw hmB hd (by decide) (by decide) (by decide) hin hstB
-        ws[s.j.toNat]
-    obtain ⟨m₂, s₂, hst₂, h₂, hd₂, hm₂, hw₂⟩ :=
-      arr_store_run (a := 4) (i := s.j) hw₁ hm₁ hd₁ (by decide) (by decide) (by decide)
-        (by simpa using hjn) hst₁ ws[s.i.toNat]
-    rw [e4] at l1 l2 s₁ s₂
-    simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at l1 l2 s₁ s₂
-    have hil : s.i.toNat < sl.len.toNat := by omega
-    have hjl : s.j.toNat < sl.len.toNat := by omega
-    have hio : s.i.uaddOverflow 1#64 = false := by simp [BitVec.uaddOverflow]; omega
-    have hjo : s.j.usubOverflow 1#64 = false := by simp [BitVec.usubOverflow]; omega
-    refine ⟨.rep15, { { s with i := s.i + 1#64 } with j := s.j - 1#64 }, m₂, h₂, ?_, hd₂, hm₂, hst₂,
-      ?_⟩
-    · simp [reverse.loop15, zig_unfold, Zig.lt, BitVec.ult, Zig.add, Zig.sub, hlt, hil, hjl, l1, l2,
-        s₁, s₂, hio, hjo]
-    · have hi1 : (s.i + 1#64).toNat = s.i.toNat + 1 := by
-        rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
-      have hj1 : (s.j - 1#64).toNat = s.j.toNat - 1 := by
-        rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def]; simp; omega)]; simp
-      simp only [reverse.again15, ↓reduceIte]
-      refine ⟨⟨_, hw₂, by simp [hwl], by simp only [hi1, hj1]; omega, ?_⟩, ?_⟩
-      · intro k hkn
-        simp only [hi1, hj1]
-        rw [List.getElem?_set, List.getElem?_set]
-        by_cases hkj : k = s.j.toNat
-        · subst hkj
-          simp only [↓reduceIte, List.length_set, hjn]
-          rw [ite_eq_left_of_eq_true _ _ (eq_true (by omega)), ← List.getElem?_eq_getElem hin, hk _ (by omega),
-            ite_eq_right_of_eq_false _ _ (eq_false (by omega)), show vs.length - 1 - s.j.toNat = s.i.toNat by omega]
-        · rw [ite_eq_right_of_eq_false _ _ (eq_false (Ne.symm hkj))]
-          by_cases hki : k = s.i.toNat
-          · subst hki
-            simp only [↓reduceIte, hin]
-            rw [ite_eq_left_of_eq_true _ _ (eq_true (by omega)), ← List.getElem?_eq_getElem hjn, hk _ (by omega),
-              ite_eq_right_of_eq_false _ _ (eq_false (by omega)), show vs.length - 1 - s.i.toNat = s.j.toNat by omega]
-          · rw [ite_eq_right_of_eq_false _ _ (eq_false (Ne.symm hki)), hk k hkn]
-            have : (k < s.i.toNat + 1 ∨ s.j.toNat - 1 < k) ↔ (k < s.i.toNat ∨ s.j.toNat < k) := by
-              omega
-            simp only [this]
-      · simp only [revMeas, hi1, hj1]; omega
-  · refine ⟨.br14, s, m, h, ?_, hd, hm, hst, ?_⟩
-    · simp [reverse.loop15, zig_unfold, Zig.lt, BitVec.ult, hlt]
-    · simp only [reverse.again15, Bool.false_eq_true, ↓reduceIte, true_and]
-      have : ws = vs.reverse := by
-        apply List.ext_getElem?
-        intro k
-        by_cases hkn : k < vs.length
-        · rw [hk k hkn, List.getElem?_reverse hkn]
-          split
-          · rfl
-          · -- the middle item: `k = n - 1 - k`
-            congr 1; omega
-        · rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by simp; omega)]
-      rw [← this]; exact hw
+    have hi1 : (s.i + 1).toNat = s.i.toNat + 1 := by
+      rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
+    have hj1 : (s.j - 1).toNat = s.j.toNat - 1 := by
+      rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def]; simp; omega)]; simp
+    simp only [reverse.again15, ↓reduceIte]
+    refine ⟨⟨_, sep_emp.mp hw₂, by simp [hwl], by simp only [hi1, hj1]; omega, ?_⟩, ?_⟩
+    · intro k hkn
+      simp only [hi1, hj1]
+      rw [List.getElem?_set, List.getElem?_set]
+      by_cases hkj : k = s.j.toNat
+      · subst hkj
+        simp only [↓reduceIte, List.length_set, hjn]
+        rw [ite_eq_left_of_eq_true _ _ (eq_true (by omega)), ← List.getElem?_eq_getElem hin, hk _ (by omega),
+          ite_eq_right_of_eq_false _ _ (eq_false (by omega)), show vs.length - 1 - s.j.toNat = s.i.toNat by omega]
+      · rw [ite_eq_right_of_eq_false _ _ (eq_false (Ne.symm hkj))]
+        by_cases hki : k = s.i.toNat
+        · subst hki
+          simp only [↓reduceIte, hin]
+          rw [ite_eq_left_of_eq_true _ _ (eq_true (by omega)), ← List.getElem?_eq_getElem hjn, hk _ (by omega),
+            ite_eq_right_of_eq_false _ _ (eq_false (by omega)), show vs.length - 1 - s.i.toNat = s.j.toNat by omega]
+        · rw [ite_eq_right_of_eq_false _ _ (eq_false (Ne.symm hki)), hk k hkn]
+          have : (k < s.i.toNat + 1 ∨ s.j.toNat - 1 < k) ↔ (k < s.i.toNat ∨ s.j.toNat < k) := by
+            omega
+          simp only [this]
+    · simp only [revMeas, hi1, hj1]; omega
+  · sep_unfold [reverse.loop15, hlt]
+    sep_ret
+    intro _ hw'
+    simp only [reverse.again15, Bool.false_eq_true, ↓reduceIte, true_and]
+    have : ws = vs.reverse := by
+      apply List.ext_getElem?
+      intro k
+      by_cases hkn : k < vs.length
+      · rw [hk k hkn, List.getElem?_reverse hkn]
+        split
+        · rfl
+        · -- the middle item: `k = n - 1 - k`
+          congr 1; omega
+      · rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by simp; omega)]
+    rw [← this]; exact hw'
 
 /-- `reverse` reverses the items in place. -/
 theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :

@@ -397,6 +397,27 @@ class CoverageTests(unittest.TestCase):
         claims = self.run_coverage()['absence_claims']
         self.assertEqual((claims['no-panic']['status'], claims['guaranteed-return']['status']), ('proved', 'not_proved'))
 
+    def test_unsupported_timer_is_distinct_and_refuses_absence(self):
+        timer = {'schema': 1, 'example': 'example', 'function': 'root', 'status': 'unspecified_timer_exclusion',
+                 'model_kind': 'unspecified_timer'}
+        self.write_diff([{'schema': 1, 'example': 'example', 'function': 'root', 'status': 'value_match'}, timer])
+        root = self.run_coverage()
+        self.assertEqual(root['stages']['tested']['status'], 'passed')
+        self.assertIn('differential unspecified_timer_exclusion: 1 sampled case(s)', root['exclusions'])
+        self.assertEqual(root['outcomes'], {'valid': 1, 'unspecified_timer': 1})
+        for claim in ('no-panic', 'guaranteed-return'):
+            verdict = root['absence_claims'][claim]
+            self.assertEqual(verdict['status'], 'refused')
+            self.assertEqual(verdict['blocking'], {'unspecified_timer': 1})
+            self.assertIn('unsupported timer', verdict['reason'])
+        self.assertEqual(root['level'], 'proved_scoped')
+        # A non-timer unspecified result stays `unspecified`.
+        self.write_diff([{'schema': 1, 'example': 'example', 'function': 'root', 'status': 'value_match'},
+                         dict(timer, status='unspecified_exclusion', model_kind='unspecified')])
+        root = self.run_coverage()
+        self.assertEqual(root['outcomes'], {'valid': 1, 'unspecified_behavior': 1})
+        self.assertNotIn('unsupported timer', root['absence_claims']['no-panic']['reason'])
+
     def test_unsupported_air_is_an_outcome_and_not_proved_absence(self):
         (self.base / 'air.json').write_text(json.dumps({'schema': 11, 'name': 'example.root', 'zig_version': '0.16.0',
                                                         'body': [{'id': 1, 'tag': 'future', 'unsupported': True}]}))

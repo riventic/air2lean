@@ -279,7 +279,7 @@ def Thread_Futex_Deadline_init (p0 : Option (BitVec 64)) : Zig.ConcM Tgt (Zig.By
       let i8 ← pure ((i7).isSome)
       if i8 then (do
         match ← ((do
-          let i12 ← Zig.callRC (throw Zig.Error.unspecified)
+          let i12 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
           let i13 ← pure (Zig.isNonErr i12)
           if i13 then (do
             let i15 ← Zig.callRC (Zig.unwrapPayload i12)
@@ -350,7 +350,7 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
         pure (.ret (.ok () : Except Zig.ErrName (Unit))))) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit) with
     | .br3 v3 => (do
       let i12 ← pure (p0.add 16)
-      let i13 ← Zig.callRC (throw Zig.Error.unspecified)
+      let i13 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
       match ← ((do
         let i15 ← Zig.callRC (math_sub__anon_1 v3 i13)
         let i16 ← pure (Zig.isNonErr i15)
@@ -361,7 +361,7 @@ def Thread_Futex_Deadline_wait (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : 
           let _i20 ← Zig.callRC (Zig.unwrapErr i15)
           pure (.br14 (0 : BitVec 64)))) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit) with
       | .br14 v14 => (do
-        let i22 ← Zig.callRC (throw Zig.Error.unspecified)
+        let i22 ← Zig.callRC (throw Zig.Error.unsupportedTimer)
         pure (.ret i22))
       | e => pure e)
     | e => pure e) : Zig.CM Tgt Thread_Futex_Deadline_waitLocals Thread_Futex_Deadline_waitExit).run' (default : Thread_Futex_Deadline_waitLocals)

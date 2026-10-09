@@ -23,12 +23,14 @@ invariant and ghost values.
 - **Join.** A `join` of thread `u` goes on only after `u` ended, so the thread learns `fin (G u)`.
 - **Two results** (`run_spec`). Every `ok` result of a run satisfies `main`'s post
   (`run_sound`; an error or no result satisfies every spec). In strict mode (`Proto.strict`) no
-  run gives an error (`run_safe`): no error leaf, every join is of a later thread that exists and
+  run gives an error (`run_safe`): no error leaf, every join is of a thread of a higher rank
+  (`Proto.rank`, by default a later thread) that exists and
   was not joined, and a thread that sleeps at a futex is not the last one (`Live`). So there is
   no deadlock (`ready_ne`). No result (out of fuel) is still allowed.
 - **Futex.** The futex queue is in the memory (`Mem.waiters`, `Mem.woken`), so the invariant can
   name it. A wait that sleeps keeps the invariant with the thread's ghost value; the thread goes
-  on when a wake woke it.
+  on when a wake woke it. A wait that would sleep may instead return spuriously
+  (`Sched.spuriousWake`), so its continuation must also hold from the memory before the wait.
 
 The rules for generated code are on `WP` (the weakest precondition of a `ConcM` run): `pure`,
 `bind`, a step in `MemM` (`WP.liftMem`), a sync op (`WP.sync`), and a loop (`WP.loop`). The post
@@ -48,12 +50,17 @@ structure Proto (Tgt γ : Type) where
   init : Tgt → γ → Prop
   /-- Holds of the ghost value of a thread that has ended. -/
   fin : γ → Prop
-  /-- `true`: no run gives an error (`run_safe`): no error leaf, every join is of a later thread
+  /-- `true`: no run gives an error (`run_safe`): no error leaf, every join is of a higher-rank thread
   that has not been joined, and a futex wait keeps `Live` (so no deadlock). `false`: partial
   correctness (`run_sound`). -/
   strict : Bool := false
   /-- Holds of the ghost value of a thread that waits at a join (strict mode). `Live` uses it. -/
   joins : γ → Prop := fun _ => True
+  /-- The join order (strict mode): a thread joins only a thread of a higher rank, so a chain of
+  joins ends (`ready_ne`). The default is the thread id: a thread joins a later thread. A handle
+  transfer (`ZigLean/Conc/Detach.lean`) can give a later thread an earlier thread's handle; its
+  proof picks a rank in which every join goes up. -/
+  rank : ThreadId → Nat := fun t => t
 
 variable {Tgt γ : Type}
 
@@ -80,7 +87,8 @@ def Live (t : ThreadId) (G : ThreadId → γ) (m : Mem) : Prop :=
 /-- Thread `t` goes on at `op`, with the ghost values `G` and the memory `m` at that time: `K`
 holds of each response and the memory after the scheduler's part of the op
 (`Sched.turn`). A futex wait begins with the thread not in the queue; one that sleeps keeps the
-invariant. In strict mode a join handle is valid already while its target runs, because the
+invariant, and `K` also holds of a spurious return in its place (`Sched.spuriousWake`): the
+memory before the wait. In strict mode a join handle is valid already while its target runs, because the
 scheduler rejects invalid handles without waiting for `fin`. -/
 def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
     (K : op.Resp → (ThreadId → γ) → Mem → Prop) : Prop :=
@@ -92,7 +100,7 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
   | .spawn tgt, K => ∃ g, P.init tgt g ∧ ∀ child m',
       (Thread.fork.run { m with current := t }).run = some (.ok (child, m')) →
       K child (upd G child g) m'
-  | .join tid, K => (P.strict = true → t < tid ∧ tid < m.threads.size ∧ P.joins (G t) ∧
+  | .join tid, K => (P.strict = true → P.rank t < P.rank tid ∧ tid < m.threads.size ∧ P.joins (G t) ∧
       Thread.joinValid m t tid = true) ∧
       (P.fin (G tid) →
       (P.strict = true → ∃ m', ((Thread.join tid).run { m with current := t }).run =
@@ -102,7 +110,7 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
       (P.strict = true → ∃ b m',
         ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
       ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
-        if b then P.inv G m' else K () G m')
+        if b then P.inv G m' ∧ K () G { m with current := t } else K () G m')
   | .wake p n, K => ∀ m',
       ((Thread.futexWake p n).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
@@ -117,7 +125,7 @@ theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Me
     have := (hs.2 hq).2 b m' hr
     cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
     · exact h _ _ _ this
-    · exact this
+    · exact ⟨this.1, h _ _ _ this.2⟩
   | choose | pick => exact fun c hc => h _ _ _ (hs c hc)
   | spawn tgt =>
     obtain ⟨g, hg, hk⟩ := hs
@@ -255,14 +263,14 @@ end WP
 
 /-! ## Soundness: the scheduler keeps the protocol -/
 
-/-- Thread `t` joined every thread that it spawned (`Thread.checkJoinedByChild` does not
-throw). -/
+/-- Thread `t` consumed (joined or detached) every handle that it owns
+(`Thread.checkJoinedByChild` does not throw). -/
 def joinedAll (t : ThreadId) (m : Mem) : Prop :=
   ∀ r ∈ m.threads, r.spawner = t → r.joined = true
 
 variable (P) in
 /-- The end of a spawned thread `t`: the invariant with its last ghost value, which satisfies
-`fin`; in strict mode it joined its own threads. -/
+`fin`; in strict mode it consumed every handle it owns. -/
 def QKid (t : ThreadId) : Unit → (ThreadId → γ) → Mem → Nat → Prop :=
   fun _ G m _ => ∃ g, P.inv (upd G t g) m ∧ P.fin g ∧ (P.strict = true → joinedAll t m)
 
@@ -527,6 +535,8 @@ theorem choice_lt (n k : Nat) : (if n = 0 then 0 else k % n) < n ∨
   · exact .inr ⟨h, by simp [h]⟩
   · exact .inl (by simp only [h, ↓reduceIte]; exact Nat.mod_lt _ (Nat.pos_of_ne_zero h))
 
+theorem two_ne_zero_nat : ((2 : Nat) = 0) = False := by decide
+
 /-- One turn of thread `t` keeps the protocol. -/
 theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
     {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {s : Sched.State Tgt α}
@@ -556,7 +566,7 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_turnPost h (hstep m₁ hw) hsz rfl rfl (congrArg Array.size hth)
   | wait ptr e =>
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem] at h
     match hw : ((Thread.futexWait ptr e).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error _) => simp [hw] at h
@@ -568,10 +578,13 @@ theorem turn_ok {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) 
       have hth : m₁.threads.size = s.mem.threads.size := by rw [futexWait_threads hw]
       cases b with
       | true =>
-        simp only [↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at h hK
-        obtain ⟨rfl, rfl, rfl⟩ := h
-        refine ⟨G, fun _ _ => rfl, rfl, by rw [hth, hsz], .inl rfl,
-          .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK, hp⟩⟩
+        simp only [↓reduceIte, Sched.State.choose, two_ne_zero_nat] at h hK
+        split at h
+        · exact settle_turnPost h hK.2 hsz rfl rfl rfl
+        · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl, rfl⟩ := h
+          refine ⟨G, fun _ _ => rfl, rfl, by rw [hth, hsz], .inl rfl,
+            .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK.1, hp⟩⟩
       | false =>
         simp only [Bool.false_eq_true, ↓reduceIte] at h hK
         exact settle_turnPost h hK hsz rfl rfl hth
@@ -641,9 +654,13 @@ theorem turn_safe {α β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat
       simpa [Sched.canGo] using hgo
     obtain ⟨b, m₁, hw⟩ := (hstep.2 hq0).1 hstr
     have hK := (hstep.2 hq0).2 b m₁ hw
-    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, bind, Except.bind, hw] at h
+    simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem, hw] at h
     cases b with
-    | true => simp at h
+    | true =>
+      simp only [↓reduceIte, Sched.State.choose, two_ne_zero_nat] at h hK
+      split at h
+      · exact settle_safe hstr hK.2 hQ e h
+      · simp at h
     | false =>
       simp only [Bool.false_eq_true, ↓reduceIte] at h hK
       exact settle_safe hstr hK hQ e h
@@ -757,12 +774,12 @@ def Good {α : Type} (QM : α → (ThreadId → γ) → Mem → Nat → Prop) (r
     Prop :=
   (∀ v m, r = .ok (v, m) → ∃ G d, QM v G m d) ∧ (P.strict = true → ∀ e, r ≠ .error e)
 
-/-- In strict mode a thread that waits at a join waits for a later thread, and `joins` holds of
+/-- In strict mode a thread that waits at a join waits for a thread of a higher rank, and `joins` holds of
 its ghost value; a thread at a futex wait keeps `Live`. -/
 theorem paused_info {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {g : γ}
     {p : Sched.Paused Tgt β} {G : ThreadId → γ} {m : Mem} (hstr : P.strict = true)
     (hp : P.PausedOk t Q g p) (hg : G t = g) (hi : P.inv G m) :
-    (∀ tid, p.op = .join tid → t < tid ∧ tid < m.threads.size ∧ P.joins (G t)) ∧
+    (∀ tid, p.op = .join tid → P.rank t < P.rank tid ∧ tid < m.threads.size ∧ P.joins (G t)) ∧
       ∀ ptr e, p.op = .wait ptr e → P.Live t G m := by
   obtain ⟨d, op, k⟩ := p
   have hs := hp G m hg hi
@@ -790,13 +807,14 @@ theorem ready_of_kid {α : Type} {s : Sched.State Tgt α} {i : Nat} {p : Sched.P
   refine ⟨(.paused p, i), Array.mem_zipIdx_iff_getElem?.mpr hp, ?_⟩
   simp [hc]
 
-/-- In strict mode a thread that cannot go on waits at a join of a later thread that has not
+/-- In strict mode a thread that cannot go on waits at a join of a thread of a higher rank that has not
 ended, or sleeps at a futex and keeps `Live`. -/
 theorem stuck_info {α β : Type} {s : Sched.State Tgt α} {t : ThreadId}
     {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {p : Sched.Paused Tgt β} {G : ThreadId → γ}
     (hstr : P.strict = true) (hp : P.PausedOk t Q (G t) p) (hi : P.inv G s.mem)
     (hc : Sched.canGo s t p.op = false) :
-    (∃ tid, t < tid ∧ tid < s.mem.threads.size ∧ P.joins (G t) ∧ s.isDone tid = false) ∨
+    (∃ tid, P.rank t < P.rank tid ∧ tid < s.mem.threads.size ∧ P.joins (G t) ∧
+      s.isDone tid = false) ∨
       (s.mem.waiters.any (·.1 == t) = true ∧ P.Live t G s.mem) := by
   obtain ⟨hj, hw⟩ := paused_info hstr hp rfl hi
   obtain ⟨d, op, k⟩ := p
@@ -811,16 +829,29 @@ theorem stuck_info {α β : Type} {s : Sched.State Tgt α} {t : ThreadId}
     exact .inr ⟨hc, hw ptr e rfl⟩
   | yield | choose | pick | spawn | wake => simp [Sched.canGo] at hc
 
+variable (P) in
+/-- The ranks of the first `N` threads are bounded. -/
+theorem rank_bound (N : Nat) : ∃ M, ∀ u < N, P.rank u < M := by
+  induction N with
+  | zero => exact ⟨0, fun _ h => absurd h (Nat.not_lt_zero _)⟩
+  | succ N ih =>
+    obtain ⟨M, hM⟩ := ih
+    refine ⟨Nat.max M (P.rank N + 1), fun u hu => ?_⟩
+    rcases Nat.lt_succ_iff_lt_or_eq.mp hu with h | rfl
+    · exact Nat.lt_of_lt_of_le (hM u h) (Nat.le_max_left _ _)
+    · exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_max_right _ _)
+
 /-- **No deadlock.** In strict mode a state that keeps the protocol has a thread that can go on.
-A thread that cannot go on waits at a join of a later thread that has not ended, so it waits
-too; the thread ids go up, so this ends at a thread that sleeps at a futex. Then every thread
+A thread that cannot go on waits at a join of a thread of a higher rank (`Proto.rank`) that has
+not ended, so it waits too; the ranks go up, so this ends at a thread that sleeps at a futex. Then every thread
 has ended, sleeps, or waits at a join, which its `Live` excludes. -/
 theorem ready_ne {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
     {s : Sched.State Tgt α} {G : ThreadId → γ} (hstr : P.strict = true) (hs : P.SInv QM s G)
     (hre : s.ready = #[]) : False := by
   have hsz := hs.size
   have hst : ∀ t, t < s.mem.threads.size → s.isDone t = false →
-      (∃ tid, t < tid ∧ tid < s.mem.threads.size ∧ P.joins (G t) ∧ s.isDone tid = false) ∨
+      (∃ tid, P.rank t < P.rank tid ∧ tid < s.mem.threads.size ∧ P.joins (G t) ∧
+      s.isDone tid = false) ∨
         (s.mem.waiters.any (·.1 == t) = true ∧ P.Live t G s.mem) := by
     intro t ht hnd
     by_cases h0 : t = 0
@@ -853,17 +884,19 @@ theorem ready_ne {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → 
       · exact .inr (.inr hj)
       · exact .inr (.inl hw)
     · exact .inl (hs.done u hd)
-  have hup : ∀ d t, s.mem.threads.size - t = d → t < s.mem.threads.size →
+  obtain ⟨M, hM⟩ := rank_bound P s.mem.threads.size
+  have hup : ∀ d t, M - P.rank t = d → t < s.mem.threads.size →
       s.isDone t = false → False := by
     intro d
     induction d using Nat.strongRecOn with
     | _ d ih =>
       intro t hd ht hnd
       rcases hst t ht hnd with ⟨tid, h1, h2, -, h3⟩ | ⟨hw, hl⟩
-      · exact ih _ (by unfold ThreadId at *; omega) tid rfl h2 h3
+      · have := hM tid h2
+        exact ih (M - P.rank tid) (by omega) tid rfl h2 h3
       · exact hl hw hall
   obtain ⟨p, hp, -⟩ := hs.main
-  exact hup _ 0 rfl (by omega) (by simp [Sched.State.isDone, hp])
+  exact hup _ 0 rfl (by rw [hsz]; exact Nat.succ_pos _) (by simp [Sched.State.isDone, hp])
 
 /-- Up to `fuel` turns from a state that keeps the protocol: a result of `main` is `Good`. -/
 theorem go_spec {α : Type} (dispatch : Tgt → ConcM Tgt Unit) (o : Nat → Nat)

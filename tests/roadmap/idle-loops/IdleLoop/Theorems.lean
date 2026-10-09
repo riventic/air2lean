@@ -322,4 +322,20 @@ theorem not_eventuallyReturns :
   rw [idle_starves] at hr
   cases hr
 
+/-! ## The conditional concurrent-termination interface -/
+
+/-- **Guaranteed return under the explicit premise (THR-09).** `idle_progress` stated through
+`Zig.Conc.Total.EventuallyReturnsUnder`: every `Cooperative` oracle returns. The premise is a
+named argument of the interface, not an axiom. -/
+theorem idle_total_under :
+    Zig.Conc.Total.EventuallyReturnsUnder Cooperative dispatch main mem0 (fun _ _ => True) := by
+  intro o ho
+  obtain ⟨b, hb⟩ := idle_progress o ho
+  exact ⟨b, fun fuel hf => by obtain ⟨M, hM⟩ := hb fuel hf; exact ⟨(), M, hM, trivial⟩⟩
+
+/-- The premise cannot be discharged: some legal oracle is not cooperative. So the conditional
+result does not yield the unconditional one (`not_eventuallyReturns`). -/
+theorem cooperative_not_all : ¬ ∀ o, Cooperative o :=
+  fun h => favorWorker_not_cooperative (h favorWorker)
+
 end IdleLoop.Client

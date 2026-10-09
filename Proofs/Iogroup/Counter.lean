@@ -1345,6 +1345,14 @@ theorem main_spec (io : Io) (d : Nat) :
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
   obtain ⟨rfl, rfl⟩ := hr
   refine ⟨rfl, ?_⟩
+  -- `main` is not an `Io` task: no cancelation
+  refine WP.bind (WP.callMC (fun e he => by rw [isTask_run] at he; cases he) fun b m₈ hr => ?_)
+  rw [isTask_run] at hr
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+  obtain ⟨hb, rfl⟩ := hr
+  obtain rfl : b = false := by rw [← hb]; simp [hc₇]
+  refine ⟨rfl, ?_⟩
+  simp only [Bool.false_eq_true, ↓reduceIte]
   have hiA := inv_await hi₇
   rw [← Array.forIn_toList]
   simp only [Array.toList, List.forIn_cons, List.forIn_nil, StateT.run_bind, bind_assoc]

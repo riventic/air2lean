@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "profile": "case-studies/profile-x86_64-linux-musl-releasesafe.json",
+  "float_semantics": "ieee",
+  "source_closure": [
+    "scripts/project-export.py"
+  ],
+  "components": {
+    "compiler_patch": [
+      "zig-patch/air-json/json.zig",
+      "zig-patch/0.16.0/hook.patch"
+    ],
+    "runtime": [
+      "ZigLean.lean",
+      "ZigLean/Basic.lean"
+    ],
+    "toolchain": [
+      "lean-toolchain",
+      "lakefile.toml",
+      "lake-manifest.json"
+    ]
+  },
+  "allowed_assumptions": [
+    "trusted-air-translation"
+  ],
+  "export": {
+    "zig_version": "0.16.0",
+    "flags": [
+      "-fllvm",
+      "-OReleaseSafe",
+      "-fno-error-tracing",
+      "-target",
+      "x86_64-linux-musl",
+      "-mcpu=baseline"
+    ],
+    "modules": [
+      {
+        "name": "pcg64",
+        "path": "/opt/dev/boxhub/optimizer/engine/src/pcg64.zig",
+        "env": "PCG64_SOURCE",
+        "sha256": "e436661b7d21dd5193ada396ff681368561f8b78b70605a693238fbc4fb7a6f0"
+      }
+    ],
+    "references": [
+      "pcg64.init",
+      "pcg64.nextU32"
+    ],
+    "max_iterations": 4
+  },
+  "roots": [
+    {
+      "id": "pcg64-init",
+      "function": "pcg64.init",
+      "air": [],
+      "namespace": "Pcg64",
+      "prefix": "pcg64.",
+      "contracts": [],
+      "goals": [],
+      "assumptions": [
+        "trusted-air-translation"
+      ],
+      "exclusions": [
+        "translation only: no property proofs"
+      ]
+    },
+    {
+      "id": "pcg64-nextU32",
+      "function": "pcg64.nextU32",
+      "air": [],
+      "namespace": "Pcg64",
+      "prefix": "pcg64.",
+      "contracts": [],
+      "goals": [],
+      "assumptions": [
+        "trusted-air-translation"
+      ],
+      "exclusions": [
+        "translation only: no property proofs"
+      ]
+    }
+  ]
+}

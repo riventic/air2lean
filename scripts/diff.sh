@@ -16,7 +16,8 @@
 # evaluation does not establish divergence) — is a mismatch: printed immediately, and
 # makes the whole run exit 1.
 #
-# A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics)
+# A Lean `Zig.Error.unspecified` (Zig leaves the result open; docs/generated-code.md §Panics),
+# `.illegal` or `.unsupportedTimer` (a clock the model lacks; typed as `unspecified_timer`)
 # is projected into the legacy "unspecified" counter, distinct from an exact match in the typed report. The count per function must equal the
 # one in tests/diff/<ex>/unspecified.txt ("<fn> <count>" lines; a function that is not listed
 # expects 0), so a model that throws `unspecified` too often fails the test. "<fn> <min>-<max>"
@@ -382,7 +383,8 @@ for ex in $examples; do
       if [ "$zkind" = ok ] && [ "$lkind" = ok ] && [ "$zval" = "$lval" ] &&
         bufs_match "$zbufs" "$lbufs" && [ "$zlive" = "$llive" ]; then
         fn_ok=$((fn_ok + 1))
-      elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ]; }; then
+      elif [ "$lkind" = fail ] && { [ "$lval" = Zig.Error.unspecified ] || [ "$lval" = Zig.Error.illegal ] ||
+        [ "$lval" = Zig.Error.unsupportedTimer ]; }; then
         fn_unspecified=$((fn_unspecified + 1))
       elif [ "$lkind" = fail ] && [ "$lval" = Zig.Error.capped ]; then
         fn_capped=$((fn_capped + 1))

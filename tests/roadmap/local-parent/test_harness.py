@@ -32,11 +32,12 @@ class HarnessTests(unittest.TestCase):
                          ["block", "inside", "switch", "yes", "no", "case"])
 
     def write_air(self, root):
-        for name in ["direct", "nested", "castAlias", "escaped", "write"]:
+        for name in ["direct", "nested", "castAlias", "escaped", "write", "arrayItem"]:
             body = [{"tag": "alloc"}, {"tag": "struct_field_ptr_index_0"}, {"tag": "field_parent_ptr"}]
             if name == "nested": body.append({"tag": "block", "body": [{"tag": "field_parent_ptr"}]})
             if name == "castAlias": body.append({"tag": "bitcast"})
             if name == "escaped": body.append({"tag": "call"})
+            if name == "arrayItem": body += [{"tag": "ptr_elem_ptr"}, {"tag": "field_parent_ptr"}]
             (root / (name + ".json")).write_text(json.dumps({"name": "source." + name,
                 "zig_version": "0.16.0", "body": body}))
 
@@ -51,7 +52,8 @@ class HarnessTests(unittest.TestCase):
 
     def test_missing_parent_and_nested_recovery_fail(self):
         for name, tag in [("direct", "field_parent_ptr"), ("nested", "block"),
-                          ("castAlias", "bitcast"), ("escaped", "call")]:
+                          ("castAlias", "bitcast"), ("escaped", "call"),
+                          ("arrayItem", "ptr_elem_ptr"), ("arrayItem", "field_parent_ptr")]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 self.write_air(root)
@@ -63,7 +65,7 @@ class HarnessTests(unittest.TestCase):
 
     def test_semantic_checks_and_mutation_anchors(self):
         checks = native.checks()
-        self.assertEqual(checks.count(":= by decide +kernel"), 16)
+        self.assertEqual(checks.count(":= by decide +kernel"), 28)
         self.assertIn("memoryValue (LocalParentNative.escaped 4294967295)", checks)
         self.assertIn("= some 41", checks)
         self.assertIn("successful (LocalParentNative.nested 3)", checks)

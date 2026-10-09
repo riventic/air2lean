@@ -5,6 +5,7 @@ import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
 import Air2Lean.ModelRegistry
+import Air2Lean.AsmContract
 import ZigLean.Mem.Enc
 import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
@@ -15,18 +16,22 @@ import ZigLean.Vec
 `check : Func → Except String Unit` rejects anything `Emit.lean` cannot translate: `other`
 types, a union without a tag, a float type outside `16 32 64 80 128` bits, an integer `@abs`, a
 an unsupported nullable-pointer representation, a memory access to a value that the memory model cannot
-encode (`modelLayout`), a pointer constant without a global, a global that is `threadlocal`,
-has no initial value or a partly `undefined` one, and an `extern` global outside
-`checkExternGlobal`'s storage. `checkProgram` checks the slice items that a function that
+encode (`modelLayout`), a pointer constant without a global or into a `threadlocal` global, a
+`threadlocal` global outside `checkThreadlocalGlobal`'s storage, a `runtime_nav_ptr` of a global
+that is not `threadlocal`, a global that has no initial value or a partly `undefined` one, and an
+`extern` global outside `checkExternGlobal`'s storage. `checkProgram` checks the slice items that a function that
 uses memory reads (`Air2Lean/Memory.lean`). Errors name the function and the nearest `dbg_stmt`
 line.
 
-An `assembly` instruction (M21) is accepted only when every operand is an integer with a
-register constraint (`=r`, `r`, `{reg}`, `={reg}`) or, for an input, a matching constraint that
-names an output (`0`, `1`, …), and there is no `"memory"` clobber. At most one output is the asm
-expression's own result (`ref = none`); every other output is an lvalue output, a store through
-its pointer `ref`. Anything else (a memory operand, a read-write output, a `"memory"` clobber)
-is outside the subset.
+An `assembly` instruction (M21, A01) is accepted only when every operand is an integer with a
+constraint of `Air2Lean/AsmContract.lean`'s grammar: a register output (`=r`, `={reg}`, early
+clobber `=&`), a read-write (`+r`, `+{reg}`) or memory (`=m`, `+m`) lvalue output, a register
+input (`r`, `{reg}`) or a matching input (`0`, `1`, …) tied to a write-only register output. At
+most one output is the asm expression's own result (`ref = none`); every other output is an
+lvalue output, a store through its pointer `ref`. No two outputs write the same local, no
+clobber names a pinned operand register, and a `"memory"` clobber needs a reviewed
+`asmPureRegistry` entry. Anything else (an `m` input, an immediate, `=&m`) is outside the
+subset.
 -/
 
 namespace Air2Lean
@@ -35,7 +40,7 @@ namespace Air2Lean
 named register in braces — either alone or with a leading `=` (write-only) marker. -/
 def isRegisterConstraint (c : String) : Bool :=
   let body := if c.startsWith "=&" then c.drop 2 else if c.startsWith "=" then c.drop 1 else c
-  body == "r" || (body.startsWith "{" && body.endsWith "}" && body.toString.length > 2)
+  (asmRegBody? body.toString).isSome
 
 /-- Is `c` a matching constraint on an input, tying it to output operand `k < outputs` — the
 register a register-modify-in-place instruction (`bswap`) both reads and writes? -/
@@ -71,9 +76,15 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
     (seen : Array TyId := #[]) : Option (Nat × Bool) := do
   if fuel == 0 || seen.contains id then none
   let ty ← types[id]?
+  -- A function pointer stored as data is a code address: its pointee is no data storage
+  -- (`Emit.lean`'s 1-byte function block, L11). A view of code itself stays unresolved.
+  let fnPointer := match ty with
+    | .ptr _ _ c => (types[c]?.map isFnTy).getD false
+    | _ => false
   let count ← match ty with
     | .other _ | .errorSet none => none
-    | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => some 1
+    | .ptr .. => some (if fnPointer then 0 else 1)
+    | .array .. | .vector .. | .optional .. | .enum .. => some 1
     | .errorUnion .. => some 2
     | .struct _ _ fields => some fields.size
     | .union _ _ tag fields => some (tag.toArray.size + fields.size)
@@ -82,7 +93,7 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   let mut remaining := fuel - 1
   if count > remaining then none
   let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
-  for child in childTys ty do
+  for child in if fnPointer then #[] else childTys ty do
     let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id)
     remaining := next
     symbolic := symbolic || childCap
@@ -218,6 +229,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: nullable pointers in aggregate values are outside the qualified pointer fragment"
     fields.forM recur
   | .int .. | .bool | .void | .noreturn | .allocator | .thread | .io => pure ()
+  | .future result => recur result
 
 /-- The layout of a tagged union from the tag's and the payload's size and alignment (the
 largest field's), as `(tag offset, payload offset, size, alignment)`: the compiler's rule puts
@@ -248,22 +260,39 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     match layouts[id]? with
     | some { size := some s, align := some a, .. } => pure (s, a)
     | _ => throw s!"type {id} has no layout in the AIR file"
+  -- The pointer size of the profile (`Layout.ptrBytes`, `Zig.PtrWidth.bytes`).
+  let pb := (layouts[id]?.map (·.ptrBytes)).getD 8
   match types[id]? with
   | some (.int _ bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .bool => pure (1, 1)
   | some (.float bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .void => pure (0, 1)
   -- A C/allowzero pointer is stored with `Zig.nullablePtrEnc` (null = eight zero bytes).
-  | some (.ptr size ..) => pure (if size == "slice" then 16 else 8, 8)
-  | some .allocator => pure (16, 8)
-  | some .thread => pure (8, 8)
-  | some .io => pure (16, 8)
+  | some (.ptr size ..) =>
+    if pb != 8 && nullablePtrTy types layouts id then
+      throw "a C/allowzero pointer is outside the 32-bit pointer model"
+    pure (if size == "slice" then 2 * pb else pb, pb)
+  | some .allocator => pure (2 * pb, pb)
+  | some .thread =>
+    if pb != 8 then throw "a std.Thread handle is outside the 32-bit pointer model"
+    pure (8, 8)
+  | some .io =>
+    if pb != 8 then throw "a std.Io value is outside the 32-bit pointer model"
+    pure (16, 8)
+  | some (.future r) =>
+    if pb != 8 then throw "an Io.Future is outside the 32-bit pointer model"
+    -- `Zig.Future`: `any_future` at 0, the result at `Zig.Future.resultOff`.
+    let (s, a) ← modelLayout types layouts r errBits
+    let off := Zig.alignUp 8 a
+    unless (layouts[id]?.map (·.offsets)).getD #[] == #[0, off] do
+      throw s!"Io.Future field offsets differ from any_future at 0 and result at {off}"
+    pure (Zig.alignUp (off + s) (Nat.max 8 a), Nat.max 8 a)
   | some (.optional c) =>
     if nullablePtrTy types layouts c then
       throw "an optional C/allowzero pointer needs a separate null flag"
     match types[c]? with
-    | some (.ptr "slice" ..) => pure (16, 8)
-    | some (.ptr ..) => pure (8, 8)
+    | some (.ptr "slice" ..) => pure (2 * pb, pb)
+    | some (.ptr ..) => pure (pb, pb)
     | some (.errorSet _) => modelLayout types layouts c errBits
     | _ =>
       let (s, a) ← modelLayout types layouts c errBits
@@ -272,6 +301,8 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     let (s, a) ← modelLayout types layouts c errBits
     pure ((len + if sentinel then 1 else 0) * s, a)
   | some (.vector len c) =>
+    -- The vector memory images are qualified on the 64-bit LLVM targets only (L09).
+    if pb != 8 then throw "a vector in memory is outside the 32-bit pointer model"
     match types[c]? with
     | some (.int _ bits) | some (.float bits) =>
       let (s, _) ← modelLayout types layouts c errBits
@@ -516,17 +547,69 @@ def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) :
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
     cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"
 
-/-- An atomic op's pointee must be an integer, an enum, a `bool` or a packed struct
-(`docs/std-models.md` §Thread model: the subset does not model a float or pointer atomic). -/
-def CheckCtx.atomicIntChild (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
+/-- An atomic op's pointer pointee (C09): `*T`/`[*]T` or `?*T`/`?[*]T`, not a slice, C or
+allowzero pointer. Its value is `Zig.Ptr` or `Option Zig.Ptr`, whose message keeps the pointer's
+block (`ZigLean/Mem/AtomicPtr.lean`). -/
+def atomicPtrPointee (types : Array Ty) (layouts : Array Layout) (c : TyId) : Bool :=
+  let plain (id : TyId) := match types[id]? with
+    | some (.ptr size _ _) => (size == "one" || size == "many") && !nullablePtrTy types layouts id
+    | _ => false
+  plain c || match types[c]? with
+    | some (.optional c') => plain c'
+    | _ => false
+
+/-- An atomic op's pointee must be an integer, an enum, a `bool`, a packed struct, or a pointer
+(`atomicPtrPointee`; `docs/std-models.md` §Thread model). An RMW on a pointer must be `.Xchg`.
+A float atomic is rejected with its own reason. -/
+def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option RmwOp := none) :
+    Except String Unit := do
   let some pty := cx.valTy? ptr
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
+  if atomicPtrPointee cx.types cx.layouts c then
+    match rmw with
+    | some op => if op != .xchg then
+        cx.fail line "an atomic RMW on a pointer other than `.Xchg` is outside the subset"
+    | none => pure ()
+    return
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
-  | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool` or a \
-      packed struct is outside the subset"
+  | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \
+      atomic messages (float RMW arithmetic and the bitwise compare of `cmpxchg` are not qualified)"
+  | some (.ptr "c" ..) | some (.ptr "one" ..) | some (.ptr "many" ..) =>
+    -- `atomicPtrPointee` admits these only when not C/allowzero (L05 stores those with a
+    -- null-byte encoding: eight zero bytes, not the model's pointer message).
+    cx.fail line "an atomic op on a C or allowzero pointer is outside the subset: its null-byte \
+      encoding (L05) has no pointer atomic messages"
+  | _ => cx.fail line "an atomic op on a type other than an integer, an enum, a `bool`, a packed \
+      struct or a single/many pointer (`*T`, `?*T`) is outside the subset"
+
+/-- A `cmpxchg` (strong or weak), or an RMW `.Max`/`.Min`, on an integer representation with
+padding bits (`u24`, `u31`, `i40`, `enum(u24)`, a packed struct backed by `u40`: bit width other
+than `8 * @sizeOf`). Zig lowers these to an LLVM op on the whole ABI cell (`cmpxchg ptr, i64` for
+`u40`), so the padding bits take part in the comparison: they can hold anything a plain `iN`
+store left untouched, a carry of an RMW `.Add`, the sign extension of a signed operand. Native
+code then fails a `cmpxchg` (or keeps the old value of a `.Max`) whose value bits match, where
+the model (padding undefined, value bits compared) succeeds. The other atomic ops are unaffected:
+loads and RMW results are masked, and stores, `.Xchg` and the arithmetic/bitwise RMWs only write
+the padding, which the model leaves undefined. -/
+def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let (ptr, what) ← match op with
+    | .cmpxchg weak p .. => pure (p, if weak then "@cmpxchgWeak" else "@cmpxchgStrong")
+    | .atomicRmw .max _ p _ => pure (p, "@atomicRmw .Max")
+    | .atomicRmw .min _ p _ => pure (p, "@atomicRmw .Min")
+    | _ => return
+  let some c := (cx.valTy? ptr).bind (ptrChild cx.types) | return
+  -- The integer, an enum's tag or a packed struct's backing integer. A `bool` is one whole
+  -- byte, 0 or 1, in both the model and the native code.
+  if cx.types[c]? == some .bool then return
+  let some bits := packedBits cx.types c | return
+  if bits != 8 * Zig.intSize bits then
+    cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
+      (ABI size {Zig.intSize bits} bytes), is outside the subset: the native op compares the whole \
+      ABI cell, padding included, which the model leaves undefined; use an integer whose width \
+      is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
@@ -774,6 +857,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   let fnName := cx.fnName
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
+  cx.checkPaddedAtomic line op
   match op with
   | .arith _ mode _ _ =>
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
@@ -888,19 +972,24 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         return pid == aty && a.size.isSome && a.align.isSome &&
           a.ptrAlign.isSome && b.ptrAlign.isNone &&
           a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
+      -- A code address carries no data storage: a function pointer may be reinterpreted,
+      -- and a call through it dispatches over the table of its type (`.illegal` for any
+      -- other block, L11).
+      let castCapability (t : TyId) : Option Bool :=
+        if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
       match pointerChild aty, pointerChild ty with
       | some source, some target =>
         unless qualifierOnly || optionalWrapOnly do
-          let some sourceCap := hasErrorCapability cx.types source
+          let some sourceCap := castCapability source
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
-          let some targetCap := hasErrorCapability cx.types target
+          let some targetCap := castCapability target
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           if sourceCap != targetCap ||
               hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
               ((sourceCap || targetCap) && source != target) then
             cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
       | none, some target =>
-        unless hasErrorCapability cx.types target == some false do
+        unless castCapability target == some false do
           cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       | _, _ => pure ()
     -- Zig 0.17: an array, vector or enum on either side is a logical-bit-order cast
@@ -996,10 +1085,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
-  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .atomicRmw _ _ ptr _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
-  | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicIntChild line ptr; pure line
+  | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
+  | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
+  | .atomicRmw op _ ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr op; pure line
+  | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .fieldPtr base _ =>
     if let .inst b := base then
       if cx.places.contains b then return line
@@ -1063,11 +1152,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           panic-handler function (docs/generated-code.md §Panics)"
       pure line
     | .func .. => pure line
-    -- A pointer to a function (`checkTy`): `Emit.lean` dispatches on the address-taken
-    -- functions of its type (`fnRefs`).
-    | .inst _ => pure line
-    | _ => throw s!"{fnName}: near line {line}: an indirect call through a constant is outside \
-        the subset"
+    -- A pointer to a function (`checkTy`), from an instruction or a constant address:
+    -- `Emit.lean` dispatches on the address-taken functions of its type (`fnRefs`), and
+    -- `checkIndirectCallTarget` rejects a provably unknown or incompatible fixed address (L11).
+    | .inst _ | .ptrConst .. => pure line
+    | _ => throw s!"{fnName}: near line {line}: an indirect call through a constant that is \
+        not a function address is outside the subset"
   | .block body | .loop body => checkInsts cx line body
   | .condBr _ thenBody elseBody => do
     let _ ← checkInsts cx line thenBody
@@ -1116,22 +1206,32 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let _ ← checkInsts cx line errBody
     pure line
   | .line n => pure n
-  | .asm _ _ clobbers outputs inputs =>
+  | .asm source isVolatile clobbers outputs inputs =>
     if op.isSpinHint && cx.types[ty]? != some .void then
       throw s!"{fnName}: near line {line}: a spin hint must return void"
-    -- Register operands only (M21): every operand value is an integer, so `Emit.lean` can map it
-    -- to a `BitVec`.
+    -- Register operands (M21) and the explicit effect contract (A01, `Air2Lean/AsmContract.lean`):
+    -- every operand value is an integer, so `Emit.lean` can map it to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
-    if clobbers.contains "memory" then
-      throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21)"
+    if clobbers.contains "memory" &&
+        (asmPureEntry? source isVolatile clobbers outputs inputs).isNone then
+      throw s!"{fnName}: near line {line}: an asm 'memory' clobber is outside the subset (M21): \
+        it may write any memory, and no reviewed registry entry declares this block pure \
+        (`Air2Lean/AsmContract.lean`'s `asmPureRegistry`)"
     -- One output can be the expression's own result (`-> T`, no `ref`); every other output
     -- is a store through its pointer `ref` (an lvalue output).
+    let mut parsed : Array AsmOutput := #[]
     for o in outputs do
-      if !isRegisterConstraint o.constraint || !o.constraint.startsWith "=" then
-        throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
-          register output constraint (M21)"
+      let some po := parseAsmOutput o.constraint
+        | throw s!"{fnName}: near line {line}: asm output constraint '{o.constraint}' is not a \
+          register, read-write or memory output constraint (M21, A01)"
+      parsed := parsed.push po
       let outTy ← match o.ref with
-        | none => pure ty
+        | none =>
+          if po.isEffect then
+            throw s!"{fnName}: near line {line}: asm output '{o.name}' with constraint \
+              '{o.constraint}' needs an lvalue operand: a read-write or memory output has a \
+              location (A01)"
+          pure ty
         | some r =>
           let some pty := cx.valTy? r
             | cx.fail line s!"asm output '{o.name}': operand has no known type"
@@ -1139,13 +1239,65 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             | cx.fail line s!"asm output '{o.name}' is not a pointer"
           if (cx.layouts[pty]?.map (·.hostSize)).getD 0 != 0 then
             cx.fail line s!"asm output '{o.name}' is a bit-pointer"
+          if let some (.ptr _ true _) := cx.types[pty]? then
+            cx.fail line s!"asm output '{o.name}' writes through a const pointer"
           cx.memAccess line r
           pure c
       if !isIntTy outTy then
         throw s!"{fnName}: near line {line}: asm output is not an integer register value (M21)"
+      if po.memory then
+        match cx.types[outTy]? with
+        | some (.int _ b) =>
+          unless [8, 16, 32, 64].contains b do
+            throw s!"{fnName}: near line {line}: asm memory output '{o.name}' is a {b}-bit \
+              integer, not a whole 1, 2, 4 or 8 byte memory operand (A01)"
+        | _ => pure ()
     if (outputs.filter (·.ref.isNone)).size > 1 then
       cx.fail line "an asm expression with two result outputs (malformed input in the AIR file)"
+    -- Aliases (A01): two outputs that write the same local (or the same pointer value) leave the
+    -- final value to the instructions' store order, which the contract does not fix.
+    let written := outputs.filterMap (·.ref)
+    let root? (v : Val) : Option InstId := match v with
+      | .inst id => (cx.localRoots.find? (·.1 == id)).map (·.2)
+      | _ => none
+    for h : a in [0:written.size] do
+      for h' : b in [a + 1:written.size] do
+        let same := written[a] == written[b] ||
+          match root? written[a], root? written[b] with
+          | some x, some y => x == y
+          | _, _ => false
+        if same then
+          throw s!"{fnName}: near line {line}: two asm outputs write the same location: their \
+            final value depends on the store order, which the asm contract does not fix (A01)"
+    -- Pinned registers and clobbers (A01): a clobbered register cannot also carry an operand,
+    -- two outputs (or two inputs) cannot share one pinned register, and an input cannot share an
+    -- early-clobber output's register.
+    let family? (pin : Option String) : Option Nat := pin.bind x86RegFamily
+    let clobbered := clobbers.filterMap x86RegFamily
+    let outPins := parsed.filterMap fun po => family? po.pin
+    let inputPin? (c : String) : Option Nat := (asmRegBody? c).bind family?
+    let inPins := inputs.filterMap fun i => inputPin? i.constraint
+    let dup (xs : Array Nat) : Bool := xs.zipIdx.any fun (x, k) => (xs.extract 0 k).contains x
+    if (outPins ++ inPins).any clobbered.contains then
+      throw s!"{fnName}: near line {line}: an asm clobber names a register that also carries an \
+        operand (A01)"
+    if dup outPins || dup inPins then
+      throw s!"{fnName}: near line {line}: two asm outputs or two inputs pin the same register \
+        (A01)"
+    -- An early-clobber output is written before the inputs are read; a read-write output's
+    -- register already holds its old value. Neither can also hold an input.
+    let busyPins := parsed.filterMap fun po =>
+      if po.earlyClobber || po.readWrite then family? po.pin else none
+    if inPins.any busyPins.contains then
+      throw s!"{fnName}: near line {line}: an asm input pins the register of an early-clobber \
+        or read-write output (A01)"
     for i in inputs do
+      let tied := match i.constraint.toNat? with
+        | some k => (parsed[k]?).map fun po => !po.readWrite && !po.memory && !po.earlyClobber
+        | none => none
+      if tied == some false then
+        throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' ties to a \
+          read-write, memory or early-clobber output (A01)"
       if !((!i.constraint.startsWith "=" && isRegisterConstraint i.constraint) ||
           isMatchingConstraint outputs.size i.constraint) then
         throw s!"{fnName}: near line {line}: asm input constraint '{i.constraint}' is not a \
@@ -1421,8 +1573,111 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
     | none => false
   | _ => false
 
+/-- Whether a value of type `id` holds, by value, an error union whose payload has nonzero size
+and alignment below the error code's (2 for the default 16-bit error integer, `Zig.errCodeAlign`
+of the profile's `error_set_bits` in general). Zig 0.14.1–0.17.0's LLVM backend
+(`codegen/llvm.zig` `lowerPtr`) measures an `eu_payload` constant base with the error union type
+instead of its payload, so it addresses such a payload at the error code
+(`Zig.ConstPtr.llvmPayloadOffset_ne_iff`, `tests/roadmap/const-bases`). A shared budget bounds the
+scan; `none` means unknown. -/
+private partial def llvmPayloadTypeScan (f : Func) (id fuel : Nat) : Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  match ← f.types[id]? with
+  | .errorUnion _ payload =>
+    let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    if size != 0 && align < Zig.errCodeAlign f.errorSetBits then return (remaining, true)
+    llvmPayloadTypeScan f payload remaining
+  | ty =>
+    for child in valueChildTys ty do
+      let (next, hit) ← llvmPayloadTypeScan f child remaining
+      remaining := next
+      if hit then return (remaining, true)
+    return (remaining, false)
+
+/-- Whether byte `off` of a value of type `id` (a one-past-the-end address included) can lie in
+an affected payload (`llvmPayloadTypeScan`). Every struct/tuple field or array item whose range
+contains `off` is visited, so a folded offset is never attributed to only one candidate. Union
+members are not reconstructed from an address: a union with an affected member counts. -/
+private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Option (Nat × Bool) := do
+  if fuel == 0 then none
+  let mut remaining := fuel - 1
+  let (size, _) ← (modelLayout f.types f.layouts id f.errorSetBits).toOption
+  if off > size then return (remaining, false)
+  let within (members : Array (TyId × Nat)) : Option (Nat × Bool) := do
+    let mut remaining := remaining
+    for (child, base) in members do
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
+      if base ≤ off && off ≤ base + childSize then
+        let (next, hit) ← llvmPayloadOffsetScan f child (off - base) remaining
+        remaining := next
+        if hit then return (remaining, true)
+    return (remaining, false)
+  match ← f.types[id]? with
+  | .errorUnion _ payload =>
+    let (payloadSize, payloadAlign) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
+    let (_, po) := Zig.errUnionOffsetsW f.errorSetBits payloadSize payloadAlign
+    if po ≤ off && off ≤ po + payloadSize && payloadSize != 0 &&
+        payloadAlign < Zig.errCodeAlign f.errorSetBits then
+      return (remaining, true)
+    within #[(payload, po)]
+  | .optional child =>
+    match f.types[child]? with
+    | some (.ptr ..) | some (.errorSet _) => return (remaining, false)
+    | _ => within #[(child, 0)]
+  | .array len child sentinel =>
+    let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
+    if stride == 0 then return (remaining, false)
+    let count := len + (if sentinel then 1 else 0)
+    let k := off / stride
+    -- `off` can start item `k` and end item `k - 1`.
+    let items := (if k < count then #[(child, k * stride)] else #[]) ++
+      (if off % stride == 0 && 0 < k && k ≤ count then #[(child, (k - 1) * stride)] else #[])
+    within items
+  | .struct _ layout fields =>
+    if layout == "packed" then return (remaining, false)
+    let offsets := (f.layouts[id]?.getD {}).offsets
+    if offsets.size != fields.size then none
+    within (fields.zipIdx.map fun ((_, child), k) => (child, offsets[k]!))
+  | .tuple fields =>
+    let offsets := (f.layouts[id]?.getD {}).offsets
+    if offsets.size != fields.size then none
+    within (fields.zipIdx.map fun (child, k) => (child, offsets[k]!))
+  | .union .. => llvmPayloadTypeScan f id remaining
+  | _ => return (remaining, false)
+
+/-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
+instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`
+(observed in 0.16.0). -/
+def euPayloadMisplacedBackends : List String := ["stage2_llvm", "stage2_wasm"]
+
+/-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
+(`euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
+affected payload of its global. Other backends lower these constants with the payload offset
+that the model uses. -/
+private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
+    Except String Unit := do
+  unless euPayloadMisplacedBackends.contains f.backend do return
+  let affected : Bool := match llvmPayloadTypeScan f global.ty 1024 with
+    | some (_, false) => false
+    | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
+  if affected then
+    throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
+      alignment-1 error-union payload, which this backend lowers at the error code \
+      (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
+      outside the {f.backend} profile"
+
+/-- A constant pointer stays within its global or one past its end. -/
+private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do
+  if let some (.func ..) := global.init then return
+  if let .ok (size, _) := modelLayout f.types f.layouts global.ty f.errorSetBits then
+    if off > size then
+      throw s!"{f.name}: a pointer constant at offset {off} is outside global {g} ({size} \
+        bytes); constant provenance ends one past its object"
+
 private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit := do
   let some global := f.globals[g]? | throw s!"{f.name}: pointer has unknown global id {g}"
+  checkGlobalOffset f g off global
   let some (kind, child) := globalAliasPointer? f pty
     | throw s!"{f.name}: global alias has no pointer type"
   -- A named function block stores code identity (one undefined byte in Emit),
@@ -1470,6 +1725,20 @@ private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat :
   | .agg _ vs => vs.forM fun v => checkGlobalAliasConstants f v (fuel - 1)
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => checkGlobalAliasConstants f v (fuel - 1)
   | .sliceConst _ p n => checkGlobalAliasConstants f p (fuel - 1); checkGlobalAliasConstants f n (fuel - 1)
+  | _ => pure ()
+
+/-- `checkLlvmPayloadConstant` for every pointer constant in `v`, slices and aggregates
+included. A profile limit, so it runs with the constant checks, not structural validation. -/
+private partial def checkLlvmPayloadConstants (f : Func) (v : Val) (fuel : Nat := 256) :
+    Except String Unit := do
+  unless euPayloadMisplacedBackends.contains f.backend do return
+  if fuel == 0 then throw s!"{f.name}: pointer constant traversal exceeds 256 levels"
+  match v with
+  | .ptrConst _ g off =>
+    if let some global := f.globals[g]? then checkLlvmPayloadConstant f g off global
+  | .agg _ vs => vs.forM fun v => checkLlvmPayloadConstants f v (fuel - 1)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => checkLlvmPayloadConstants f v (fuel - 1)
+  | .sliceConst _ p n => checkLlvmPayloadConstants f p (fuel - 1); checkLlvmPayloadConstants f n (fuel - 1)
   | _ => pure ()
 
 private def aliasValueTy? (insts : Array Inst) (v : Val) : Option TyId :=
@@ -1596,6 +1865,51 @@ private def immutableOrdinaryNumericValue (f : Func) (insts : Array Inst) (v : V
     let global ← f.globals[g]?
     return immutableOrdinaryNumericAlias f global pty : Option Bool)).getD false
 
+/-- L11: an indirect callee whose address is a fixed global (`fixedGlobalOrigin?`) must be
+the exact zero-offset address of a named function block of the callee's function type.
+Any other fixed address is provably an unknown executable address or a target of an
+incompatible signature, rejected here. A callee without a fixed origin dispatches at
+runtime over the address-taken functions of its type (`Emit.lean`); any other address
+throws `.illegal` there. -/
+private def checkIndirectCallTarget (f : Func) (insts : Array Inst) (i : Inst) :
+    Except String Unit := do
+  let .call callee _ := i.op | return
+  unless callee.isIndirectCallee do return
+  let calleeTy? : Option TyId := match callee with
+    | .inst id => (insts.find? (·.id == id)).map (·.ty)
+    | v => v.constTy?
+  -- A non-function instruction callee is reported by the program check.
+  let some tn := calleeTy?.bind (fnPtrTyName? f.types)
+    | if callee matches .inst _ then return
+      else throw s!"{f.name}: inst {i.id}: a constant indirect callee is not a function pointer"
+  let some (g, off) := fixedGlobalOrigin? f insts callee | return
+  let unknown : Except String Unit :=
+    throw s!"{f.name}: inst {i.id}: indirect callee is the fixed address {off} of global {g}, \
+      not a function block (an unknown executable address)"
+  let some global := f.globals[g]? | unknown
+  let some (.func name ..) := global.init | unknown
+  unless off == 0 do unknown
+  unless f.types[global.ty]? == some (.other tn) do
+    throw s!"{f.name}: inst {i.id}: indirect callee '{name}' has an incompatible signature \
+      (called through '{tn}')"
+
+/-- L11: a function-pointer value is the address of a function block (`&f`, a `ptrConst`),
+which resolves through the callable-address table. A bare function constant outside a callee
+or call argument (whose check is `checkCallSignature`) has no address in the model. -/
+private def checkFunctionValues (f : Func) (i : Inst) : Except String Unit := do
+  if let .call .. := i.op then return
+  let rec bare (fuel : Nat) (v : Val) : Bool :=
+    match fuel, v with
+    | 0, _ => true
+    | _, .func .. => true
+    | fuel + 1, .agg _ vs => vs.any (bare fuel)
+    | fuel + 1, .optSome _ v | fuel + 1, .errUnionOk _ v | fuel + 1, .unionVal _ _ v => bare fuel v
+    | fuel + 1, .sliceConst _ p n => bare fuel p || bare fuel n
+    | _, _ => false
+  if (valueOperands i.op ++ ptrOperands i.op).any (bare 256) then
+    throw s!"{f.name}: inst {i.id}: a function used as a value is outside the subset (its \
+      address `&f` resolves through the callable-address table)"
+
 private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Array Inst) (i : Inst) : Except String Unit := do
   let reject : Except String Unit := throw s!"{f.name}: inst {i.id}: an escaping, arithmetic or unresolved pointer alias into an error-bearing global is outside the finite error-storage fragment"
   -- A numeric getter does not carry an interprocedural proof for recovering a
@@ -1642,6 +1956,7 @@ private def checkPointerConstant (f : Func) (v : Val) (missing : String → Stri
     (alignment : Nat → Nat → String) : Except String Unit := do
   checkPointerPresence v missing
   checkGlobalAliasConstants f v
+  checkLlvmPayloadConstants f v
   if let .ptrConst pty g _ := v then
     let pa := (f.layouts[pty]?.bind (·.ptrAlign)).getD 1
     let ga := (f.globals[g]?.bind (f.layouts[·.ty]?)).bind (·.align) |>.getD 1
@@ -1663,13 +1978,81 @@ private def checkExternGlobal (f : Func) (g : Global) (what : String) : Except S
   checkTy f.name f.types f.layouts 0 g.ty
   checkMemTy f.name f.types f.layouts 0 g.ty f.errorSetBits
 
+/-- A `threadlocal var` (`docs/generated-code.md` §Thread-local storage): one instance per
+thread, initialized from the global's initial value. Only a named, non-`extern` `var` with a
+resolved, wholly defined or wholly `undefined` initial value of a pointer-free, error-free type
+that the model encodes qualifies. -/
+private def checkThreadlocalGlobal (f : Func) (g : Global) (what : String) : Except String Unit := do
+  let fail (why : String) : Except String Unit :=
+    throw s!"{f.name}: `threadlocal` global {what}: {why}; a thread-local instance is modelled \
+      only for a named, non-`extern` `var` with an initial value in pointer-free, error-free \
+      storage"
+  if g.name.isNone then fail "it has no name"
+  if g.isExtern then fail "it is `extern` (its instances are defined outside the program)"
+  if g.isConst then fail "it is `const`"
+  let some init := g.init | fail "the AIR file has no initial value"
+  if init.hasNestedUndef then fail "a partly `undefined` initial value"
+  if (f.types[g.ty]?.map isFnTy).getD true then fail "it is a function or has an unknown type"
+  if (pointerFreeInitializerType f g.ty 1024).isNone then
+    fail "its type can hold a pointer, a union or an unresolved type"
+  if hasErrorStorage f.types g.ty then fail "its type holds error storage"
+  checkNullConstants f.name f.types f.layouts init
+  checkTy f.name f.types f.layouts 0 g.ty
+  checkMemTy f.name f.types f.layouts 0 g.ty
+
+/-- The globals that the pointer constants of `v` point into, at any depth. -/
+partial def Val.ptrGlobals (v : Val) : Array Nat :=
+  match v with
+  | .ptrConst _ g _ => #[g]
+  | .agg _ elems => elems.flatMap Val.ptrGlobals
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.ptrGlobals
+  | .sliceConst _ p l => p.ptrGlobals ++ l.ptrGlobals
+  | _ => #[]
+
+/-- A constant pointer has one address in every thread, so it cannot point into a `threadlocal`
+global (0.14.1 writes the address of a thread-local as a constant). -/
+private def checkNoThreadlocalConstant (f : Func) (v : Val) : Except String Unit := do
+  for g in v.ptrGlobals do
+    if let some global := f.globals[g]? then
+      if global.threadlocal then
+        throw s!"{f.name}: a constant pointer to the `threadlocal` global \
+          {global.name.getD "an unnamed global"} is outside the subset (each thread has its own \
+          instance; only `runtime_nav_ptr` addresses it)"
+
+/-- `runtime_nav_ptr` (`Op.runtimeNavPtr`): the current thread's instance of a `threadlocal`
+global, as a single-item pointer to the global's type with at most its alignment. A run-time
+address of anything else (an `extern` the compiler reaches at run time, a DLL import, a
+PC-relative `@extern`) is outside the subset. -/
+private def checkRuntimeNavPtr (f : Func) (i : Inst) (g : Nat) : Except String Unit := do
+  let some global := f.globals[g]?
+    | throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` names no global (malformed input in the \
+        AIR file)"
+  unless global.threadlocal do
+    throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` of {global.name.getD "an unnamed global"}, \
+      which is not `threadlocal` (a run-time address of an `extern`, a DLL import or a \
+      PC-relative `@extern`), is outside the subset"
+  let some (.ptr "one" _ child) := f.types[i.ty]?
+    | throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` must have a single-item pointer type"
+  unless child == global.ty do
+    throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` must point to its global's type"
+  let some l := f.layouts[i.ty]?
+    | throw s!"{f.name}: inst {i.id}: `runtime_nav_ptr` has no pointer layout"
+  if l.isVolatile || l.allowzero || l.sentinel || l.hostSize != 0 then
+    throw s!"{f.name}: inst {i.id}: a volatile, allowzero, sentinel or bit-pointer to a \
+      `threadlocal` global is outside the subset"
+  let pa := l.ptrAlign.getD 1
+  let ga := (f.layouts[global.ty]?.bind (·.align)).getD 1
+  if pa > ga then
+    throw s!"{f.name}: inst {i.id}: a pointer with `align({pa})` to a `threadlocal` global of \
+      alignment {ga} is outside the subset"
+
 /-- A global that a pointer constant points into: a `var` or `const` with its initial value, in a
 type that the model encodes, or an `extern` global (`checkExternGlobal`). An array with a
 sentinel is encoded with the sentinel. A wholly `undefined` initial value is undefined bytes; a
 partly `undefined` one is rejected, never replaced by a default. -/
 def checkGlobal (f : Func) (g : Global) : Except String Unit := do
   let what := g.name.getD "an unnamed constant"
-  if g.threadlocal then throw s!"{f.name}: global {what}: `threadlocal` is outside the subset"
+  if g.threadlocal then return ← checkThreadlocalGlobal f g what
   if g.isExtern then return ← checkExternGlobal f g what
   let some init := g.init
     | throw s!"{f.name}: global {what}: the AIR file has no initial value"
@@ -1678,6 +2061,7 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
       (only a wholly `undefined` global is modelled, as undefined bytes)"
   checkNullConstants f.name f.types f.layouts init
   checkGlobalAliasConstants f init
+  checkLlvmPayloadConstants f init
   if f.globals.any (fun g => hasErrorStorage f.types g.ty) &&
       ((init.constTy?).map (fun t => carriesPointer f t)).getD false &&
       dependsOnErrorGlobal f f.allInsts init then
@@ -1755,6 +2139,19 @@ def check (f : Func) : Except String Unit := do
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
+  -- The 32-bit pointer model (`ZigLean/Mem/Width.lean`) parameterizes pointers, slices,
+  -- `usize` and allocation; the ops below remain 64-bit only.
+  let ptrBytes := ptrBytesOf f.layouts
+  if ptrBytes != 8 then
+    for i in insts do
+      let what? : Option String := match i.op with
+        | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => some "an atomic op"
+        | .tagName _ => some "`@tagName`"
+        | .errorName _ => some "`@errorName`"
+        | .asm .. => some "inline assembly"
+        | _ => none
+      if let some what := what? then
+        throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -1769,9 +2166,13 @@ def check (f : Func) : Except String Unit := do
           checkMemTy f.name f.types f.layouts 0 c f.errorSetBits
   for g in f.globals do
     checkGlobal f g
+    if let some init := g.init then checkNoThreadlocalConstant f init
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
+    if let .runtimeNavPtr g := i.op then checkRuntimeNavPtr f i g
     checkErrorGlobalInstruction errorGlobals f insts i
+    checkIndirectCallTarget f insts i
+    checkFunctionValues f i
     checkUndefOperands f (fun v => match v with
       | .inst id => (insts.find? (·.id == id)).map (·.ty)
       | v => v.constTy?) i
@@ -1782,6 +2183,7 @@ def check (f : Func) : Except String Unit := do
           checkedConstTypes := checkedConstTypes.insert vty
       checkBitPtrConstant f v
       checkNullConstants f.name f.types f.layouts v
+      checkNoThreadlocalConstant f v
       checkPointerConstant f v
         (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
         (fun pa ga => s!"{f.name}: a pointer with `align({pa})` to a global of alignment {ga} is \
@@ -1830,13 +2232,10 @@ def OperandTypes.valTy? (index : OperandTypes) (v : Val) : Option TyId :=
 /-- A normalized operand's type. Bool/void literals carry no file-local ID. -/
 def Func.valTy? (f : Func) (v : Val) : Option TyId := f.operandTypes.valTy? v
 
-private def OperandTypes.calleeFnTy? (index : OperandTypes) (f : Func) (id : InstId) : Option String := do
-  let ty ← index.instructions[id]?
-  let .ptr _ _ child ← f.types[ty]? | none
-  let childTy ← f.types[child]?
-  unless isFnTy childTy do none
-  let .other name := childTy | none
-  pure name
+private def OperandTypes.calleeFnTy? (index : OperandTypes) (f : Func) (callee : Val) :
+    Option String := do
+  unless callee.isIndirectCallee do none
+  fnPtrTyName? f.types (← index.valTy? callee)
 
 /-- Exact argument type agreement between independent local type tables. -/
 def valueCompatible (f target : Func) (v : Val) (expected : TyId)
@@ -1958,7 +2357,7 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
     let some (.ptr "many" _ item) := f.types[pty]? | fail
     unless localTypeCompatible f child item do fail
     let some nty := n.constTy? | fail
-    unless f.types[nty]? == some (.int false 64) do fail
+    unless f.types[nty]? == some (.int false (8 * ptrBytesOf f.layouts)) do fail
     recur pty p
     recur nty n
   | _, _ => fail
@@ -2186,6 +2585,7 @@ private partial def sameSpawnTyCached (source target : Func) (a b : TyId)
       if n == m && s == t then recur x y else pure false
     | some (.vector n x), some (.vector m y) => if n == m then recur x y else pure false
     | some (.optional x), some (.optional y) => recur x y
+    | some (.future x), some (.future y) => recur x y
     | some (.errorUnion sx x), some (.errorUnion sy y) => do
       unless ← recur sx sy do return false
       recur x y
@@ -2220,7 +2620,8 @@ partial def sameSpawnTy (source target : Func) (a b : TyId)
 is copied as a value, including pointer identity. Ownership remains an explicit proof
 obligation on the captured target, not an automatic exclusive transfer. -/
 def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (args : Array Val)
-    (operandIndex : OperandTypes := f.operandTypes) : Except String Unit := do
+    (operandIndex : OperandTypes := f.operandTypes) (futureResult : Option TyId := none) :
+    Except String Unit := do
   unless args.size == k + 1 do
     throw s!"{f.name}: {callee} has {args.size} runtime arguments, expected {k + 1}"
   let tyOf := operandIndex.valTy?
@@ -2236,6 +2637,11 @@ def checkThreadSpawn (f : Func) (worker : Func) (callee : String) (k : Nat) (arg
     completed := cache
     unless compatible do
       throw s!"{f.name}: {callee} argument {index} does not match worker '{worker.name}' parameter {index}; capture the exact runtime parameter type with an explicit cast"
+  if let some r := futureResult then
+    -- `Io.async`: the task's result is the future's `result` (`docs/futures.md`).
+    unless compatibleType f worker r worker.ret do
+      throw s!"{f.name}: {callee} worker '{worker.name}' does not return the Io.Future result type"
+    return
   let validRet := match worker.types[worker.ret]? with
     | some .void | some .noreturn => true
     | some (.int false 8) => callee == "Thread.spawn"
@@ -2277,7 +2683,8 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
   let require (ok : Bool) (what : String) := if ok then pure () else fail what
   let isPtr (size : String) (t : Option Ty) := match t with
     | some (.ptr s ..) => s == size | _ => false
-  let isSize (t : Option Ty) := t == some (.int false 64)
+  let usizeBits := 8 * ptrBytesOf f.layouts
+  let isSize (t : Option Ty) := t == some (.int false usizeBits)
   let isCode (t : Option Ty) := t == some (.int false 32)
   let errorPayload := match result with
     | some (.errorUnion s p) =>
@@ -2307,6 +2714,11 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     unless model.qualifies f.zigVersion do
       fail s!"{model.symbol} qualified Zig {", ".intercalate model.qualifiedVersions.toList}"
   if let some fn := allocFn? callee then
+    -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
+    if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
+        fn == .destroy || fn == .free) then
+      throw s!"{f.name}: model callee '{callee}' is outside the {usizeBits}-bit pointer model \
+        (only create, alloc, alignedAlloc, destroy and free are width-parameterized)"
     count (if fn == .create then 1 else if fn == .remap || fn == .realloc then 3 else 2)
     require (argTy 0 == some .allocator) "allocator argument"
     if fn == .create || fn == .alloc || fn == .alignedAlloc || fn == .allocSentinel || fn == .dupe ||
@@ -2361,12 +2773,15 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
         require (l.hostSize == 0 && l.bitOffset == 0) "ordinary byte slice without packed metadata"
     checkAllocCall f fn args ret index
   else if let some fn := threadFn? callee then
+    if usizeBits != 64 then
+      throw s!"{f.name}: model callee '{callee}' is outside the {usizeBits}-bit pointer model \
+        (thread handles, futexes and Io groups are modelled for 64-bit targets only)"
     match fn with
     | .spawn =>
       count 2
       require (errorPayload == some .thread) "error-union Thread result"
       require (match argTy 0 with | some (.struct "Thread.SpawnConfig" ..) => true | _ => false) "spawn configuration"
-    | .join => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
+    | .join | .detach => count 1; require (argTy 0 == some .thread && unit) "Thread/void"
     | .yield | .spinLoopHint => checkProgressCall f callee fn args ret
     | .groupAsync | .groupConcurrent =>
       count 3
@@ -2400,6 +2815,29 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       count 3
       checkFutex 0 1
       require (isSize (argTy 2) && errorUnit) "timeout/error-union void"
+    | .futureAsync =>
+      -- `Io.async(io, function, args)`: `function` is comptime (`comptime_fn`).
+      count 2
+      require (argTy 0 == some .io) "Io argument"
+      require (match result with | some (.future _) => true | _ => false) "Io.Future result"
+    | .futureAwait | .futureCancel =>
+      count 2
+      let futureResult := match argTy 0 with
+        | some (.ptr "one" false c) => match f.types[c]? with
+          | some (.future r) => some r
+          | _ => none
+        | _ => none
+      require (futureResult.isSome && argTy 1 == some .io) "Future pointer/Io arguments"
+      require (futureResult.any (compatibleType f f · ret)) "Future result"
+    | .checkCancel =>
+      count 1
+      require (argTy 0 == some .io) "Io argument"
+      let canceled := match result with
+        | some (.errorUnion set _) => match f.types[set]? with
+          | some (.errorSet (some names)) => names == #["Canceled"]
+          | _ => false
+        | _ => false
+      require (errorUnit && canceled) "error{Canceled}!void result"
 
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/
@@ -2437,6 +2875,89 @@ def checkFallibleSpawnCalls (funcs : Array Func) : Except String Unit := do
             else
               unless f.zigVersion == "0.16.0" || f.zigVersion == "0.17.0" do
                 throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0 or 0.17.0"
+
+/-- The names of the functions that a direct call in `f` names (translated functions and std
+models alike). -/
+private def Func.callNames (f : Func) : Array String := f.allInsts.filterMap fun i => match i.op with
+  | .call (.func name ..) _ => some name
+  | _ => none
+
+/-- The task functions (`comptime_fn` targets) of the calls in `funcs` to a std model in
+`kinds`. -/
+private def taskTargetsOf (funcs : Array Func) (kinds : List ThreadFn) : List String :=
+  funcs.toList.flatMap fun f => (f.allInsts.filterMap fun i => match i.op with
+    | .call (.func name _ (some sf)) _ =>
+      if (threadFn? name).any kinds.contains then some sf else none
+    | _ => none).toList
+
+/-- The functions of `funcs` that the functions `roots` reach (the roots included): through
+calls (`Func.callees`), and with `viaAsync` also through the tasks of their `Io.async` calls,
+which the `fallible` policy may run on the caller's thread (`Zig.asyncEagerC`). -/
+private def reachableFuncs (funcs : Array Func) (roots : List String) (viaAsync : Bool := false) :
+    Array Func := Id.run do
+  let refs := fnRefs funcs
+  let byName := funcs.foldl (fun m f => m.insert f.name f) ({} : Std.HashMap String Func)
+  let mut todo := roots
+  let mut seen : Std.HashSet String := {}
+  let mut out := #[]
+  while !todo.isEmpty do
+    let name := todo.head!
+    todo := todo.tail!
+    if seen.contains name then continue
+    seen := seen.insert name
+    let some f := byName[name]? | continue
+    out := out.push f
+    let tasks := if viaAsync then taskTargetsOf #[f] [.futureAsync] else []
+    todo := (f.callees refs).toList ++ tasks ++ todo
+  return out
+
+/-- `docs/futures.md` §Cancelation. The qualified future subset observes a `Future.cancel`
+request only at `Io.checkCancel`: `Future.cancel` does not interrupt a task blocked at another
+cancelation point (unlike `Io.Group.cancel`, `docs/std-models.md` §Cancelation), and a nested
+`Future.await` is no cancelation point of the model. A program that cancels a future therefore
+must not reach another cancelation point from an `Io.async` task: a cancelable futex wait (also
+inside `Io.Mutex.lock`, `Io.Condition.wait`, ...), `Io.Group.await` or a nested `Future.await`.
+Programs without `Future.cancel` never request a future cancelation.
+
+`Io.Group.cancel` requests share `Mem.cancels` with `Future.cancel`, but std's `Future.await`
+by a task with a request hands that request to the awaited future (`await` in
+`Io/Threaded.zig`: its cancelable wait fails, the future is canceled, and the request returns
+to the awaiter only if the future did not acknowledge it). The model's `Zig.awaitC` is a plain
+join, so in a program with `Io.Group.cancel` no `Io.Group` task (nor a task it may run inline)
+may await a future. -/
+def checkFutureCancelation (funcs : Array Func) : Except String Unit := do
+  let has (fn : ThreadFn) := funcs.any fun f => f.callNames.any (threadFn? · == some fn)
+  if has .futureCancel then
+    for f in reachableFuncs funcs ((futureTargets funcs).toList.map (·.1)) do
+      for callee in f.callNames do
+        if let some fn := threadFn? callee then
+          if fn == .futexWait || fn == .groupAwait || fn == .futureAwait then
+            throw s!"{f.name}: '{callee}' is a cancelation point that the model does not deliver \
+              a Future.cancel request to; in a program with Future.cancel, Io.async tasks may only \
+              observe cancelation through Io.checkCancel (docs/futures.md)"
+  if has .groupCancel then
+    let groupTasks := taskTargetsOf funcs [.groupAsync, .groupConcurrent]
+    for f in reachableFuncs funcs groupTasks (viaAsync := true) do
+      for callee in f.callNames do
+        if threadFn? callee == some .futureAwait then
+          throw s!"{f.name}: '{callee}' in an Io.Group task of a program with Io.Group.cancel: \
+            std's await hands the task's cancelation request to the awaited future, which the \
+            model does not (docs/futures.md)"
+
+/-- `docs/generated-code.md` §Thread-local storage. `std.Io.Threaded` runs `Io.Group` and
+`Io.async` tasks on a pool of worker threads, each of which runs task after task (`worker` in
+`Io/Threaded.zig`), and a fallback runs a task on its caller's thread. A task's `threadlocal`
+instances are those of whichever thread runs it, holding what earlier tasks left there; the
+model gives each task fresh instances (`Zig.ConcM.tlsThread`). So no function that an `Io` task
+reaches may use `threadlocal` storage (`runtime_nav_ptr`). `Thread.spawn` threads are new OS
+threads and keep their per-thread instances. -/
+def checkIoTaskThreadlocals (funcs : Array Func) : Except String Unit := do
+  let tasks := taskTargetsOf funcs [.groupAsync, .groupConcurrent, .futureAsync]
+  for f in reachableFuncs funcs tasks do
+    if f.allInsts.any (fun i => match i.op with | .runtimeNavPtr _ => true | _ => false) then
+      throw s!"{f.name}: an Io.Group or Io.async task uses `threadlocal` storage; std.Io runs \
+        tasks on pooled worker threads whose instances outlive each task, which the model's \
+        per-task instances do not cover (docs/generated-code.md)"
 
 /-- Preserve reference traversal order within each exact function-type bucket. -/
 private def referenceTargets (refs : Array (String × String)) : Std.HashMap String (Array String) := Id.run do
@@ -2481,7 +3002,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
   let mut signatures : SignaturePairs := {}
   for ((f, index), fileIndex) in (funcs.zip indexes).zipIdx do
     for i in index.insts do
-      if let .call (.inst p) args := i.op then
+      if let .call p args := i.op then if p.isIndirectCallee then
         let some tn := index.calleeFnTy? f p
           | throw s!"{f.name}: inst {i.id}: indirect callee is not a function pointer"
         for callee in targets.getD tn #[] do
@@ -2505,11 +3026,21 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
               | throw s!"{f.name}: the spawned callee '{worker}' has no AIR file (add its name to the filter, docs/std-models.md)"
             checkThreadSpawn f target (if kind == .spawn then "Thread.spawn" else "Io.Group.async")
               k args index
+          if kind == .futureAsync then
+            let some worker := spawnFn
+              | throw s!"{f.name}: a call to '{callee}' has no comptime_fn task"
+            let some (_, target) := lookupFunction worker
+              | throw s!"{f.name}: the Io.async task '{worker}' has no AIR file (add its name to the filter, docs/futures.md)"
+            let some (.future r) := f.types[i.ty]?
+              | throw s!"{f.name}: Io.async has no Io.Future result"
+            checkThreadSpawn f target "Io.async" 1 args index (some r)
         unless functionNames.contains callee || modelSymbols.contains callee || selectedCallees.contains callee do
           if let some reason := rejectedThreadFn? callee then
             throw s!"{f.name}: the callee '{callee}' is outside the subset: {reason}"
           unless modelledStdFn callee do
             throw s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
+  checkFutureCancelation funcs
+  checkIoTaskThreadlocals funcs
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -2521,7 +3052,7 @@ def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
         let items := match i.op with
           | .sliceElemVal s _ => (sliceItem s).toArray
           | .call (.func callee _ spawnFn) args =>
-            if let some k := (threadFn? callee).bind (·.spawnArgs?) then
+            if let some k := (threadFn? callee).bind (·.taskArgs?) then
               if (spawnFn.map mem.contains).getD true then #[] else
               let fields : Array TyId := (((args[k]? : Option Val).bind tyOf).bind fun t =>
                 match f.types[t]? with
@@ -2575,6 +3106,10 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     let packedCheck := cx.checkPackedLayout line i.ty i.op
     log := log.record { (checkDiagnostic file f .packedLayout anchor) with
       category := .unsupportedSemantics } packedCheck
+    -- A padded-width `cmpxchg` or RMW `.Max`/`.Min` also has its own stable code.
+    let paddedCheck := cx.checkPaddedAtomic line i.op
+    log := log.record { (checkDiagnostic file f .paddedAtomic anchor) with
+      category := .unsupportedSemantics } paddedCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -2588,7 +3123,8 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .«try» _ b | .tryPtr _ b => log := (collectInstChecks file f cx b line log).2
     | .line n => line := n
     | _ =>
-      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome && packedCheck.toOption.isSome then
+      if typeCheck.toOption.isSome && volatileCheck.toOption.isSome &&
+          packedCheck.toOption.isSome && paddedCheck.toOption.isSome then
         log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
   return (line, log)
 
@@ -2636,10 +3172,18 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
             { idSpace := .canonical, instruction := some i.id, typeId := some c })
             (checkMemTy f.name f.types f.layouts 0 c f.errorSetBits)
   for (g, id) in f.globals.zipIdx do
-    log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id }) (checkGlobal f g)
+    log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id })
+      (do checkGlobal f g; if let some init := g.init then checkNoThreadlocalConstant f init)
   for i in insts do
+    if let .runtimeNavPtr g := i.op then
+      log := log.record (checkDiagnostic file f .globalFailure
+        { idSpace := .canonical, instruction := some i.id, globalId := some g }) (checkRuntimeNavPtr f i g)
     log := log.record (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) (checkErrorGlobalInstruction errorGlobals f insts i)
+    log := log.record (checkDiagnostic file f .signatureFailure
+      { idSpace := .canonical, instruction := some i.id }) (checkIndirectCallTarget f insts i)
+    log := log.record (checkDiagnostic file f .constantFailure
+      { idSpace := .canonical, instruction := some i.id }) (checkFunctionValues f i)
     log := log.record { (checkDiagnostic file f .constantFailure
       { idSpace := .canonical, instruction := some i.id }) with category := .unsupportedSemantics }
       (checkUndefOperands f index.valTy? i)
@@ -2647,6 +3191,7 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       let result := do
         checkNullConstants f.name f.types f.layouts v
         checkBitPtrConstant f v
+        checkNoThreadlocalConstant f v
         checkPointerConstant f v
           (fun k => s!"{f.name}: a pointer constant without a global ({k}) is outside the subset")
           (fun pa ga => s!"{f.name}: a pointer with align({pa}) to a global of alignment {ga} is outside the subset")
@@ -2709,7 +3254,10 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
           if let some target := worker.bind snapshot.unique then
             log := log.record diagnostic (checkThreadSpawn f target
               (if kind == .spawn then "Thread.spawn" else "Io.Group.async") k args index)
-    | .call (.inst p) args =>
+        if kind == .futureAsync then
+          if let (some target, some (.future r)) := (worker.bind snapshot.unique, f.types[i.ty]?) then
+            log := log.record diagnostic (checkThreadSpawn f target "Io.async" 1 args index (some r))
+    | .call p@(.inst _) args | .call p@(.ptrConst ..) args =>
       match index.calleeFnTy? f p with
       | none => log := log.add { diagnostic with message := "indirect callee is not a function pointer" }
       | some name =>

@@ -17,10 +17,14 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
   those of `ZigLean/Mem/Thread.lean` (`Thread.fork`, `Thread.join`, `checkJoinedByChild`).
 - **Futex.** `wait p e`: if the `u32` at `p` is `e`, the thread waits until a `wake` at `p` (the
   waiters wake in the order they began to wait); else it goes on. A wake gives no happens-before
-  edge (the std code reads the value again with an acquire). The model has no spurious wakeup.
+  edge (the std code reads the value again with an acquire). A wait that would sleep may
+  instead return spuriously: an oracle choice of two options (`spuriousWake`); the thread goes
+  on with the memory before the wait. A sleeping thread leaves the queue only through a wake
+  (or a cancelation request, `Thread.requestCancel`).
   The queue is in `Mem` (`Thread.futexWait`, `Thread.futexWake`).
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
-  joined every thread it spawned (`checkJoinedByChild 0`), so every thread has ended then. If no
+  consumed every handle it owns (`checkJoinedByChild 0`: joined or detached). A joined thread has
+  ended; a detached one may still run, and `main`'s end ends it, as the process exit does. If no
   thread can go on and one has not ended, the run is `.deadlock`.
 - **Catch scope.** `ConcM.tryCatch` handles errors produced by the thread before or after a
   sync op. Errors raised by the scheduler's execution of spawn/join/wait/wake or its end check
@@ -117,6 +121,11 @@ def settle {β : Type} (t : ThreadId) (s : State Tgt α) {n : Nat} (tree : CoN T
     | none => .error none
   | .sync op m k => .ok (.paused ⟨_, op, k⟩, none, { s with mem := m })
 
+/-- The option of the oracle at a futex wait that would sleep with which the wait returns
+spuriously instead (option 0 sleeps). `std.Io.futexWait`, `futexWaitUncancelable` and
+`std.Thread.Futex.wait` permit a spurious return (`docs/std-models.md` §Spurious wakeups). -/
+def spuriousWake : Nat := 1
+
 /-- Thread `t` does its op and runs to its next stop, retaining choices even when it fails or
 has no result. -/
 def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
@@ -142,9 +151,16 @@ def turnTrace {β : Type} (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : 
       let ((), s) ← s.onMem (Thread.join tid)
       settle t s (k () s.mem), s.trace)
   | ⟨d, .wait ptr e, k⟩ =>
-    (do
-      let (sleep, s) ← s.onMem (Thread.futexWait ptr e)
-      if sleep then .ok (.paused ⟨d, .wait ptr e, k⟩, none, s) else settle t s (k () s.mem), s.trace)
+    match s.onMem (Thread.futexWait ptr e) with
+    | .error err => (.error err, s.trace)
+    | .ok (false, s₁) => (settle t s₁ (k () s₁.mem), s.trace)
+    | .ok (true, s₁) =>
+      -- The kernel may return spuriously instead of sleeping (`spuriousWake`): option 1
+      -- goes on with the memory before the wait (the thread is not in the queue).
+      let (c, s₂) := s.choose o 2
+      if c = spuriousWake then (settle t s₂ (k () s₂.mem), s₂.trace)
+      else (.ok (.paused ⟨d, .wait ptr e, k⟩, none, { s₁ with step := s₂.step, trace := s₂.trace }),
+        s₂.trace)
   | ⟨_, .wake ptr n, k⟩ =>
     (do
       let ((), s) ← s.onMem (Thread.futexWake ptr n)

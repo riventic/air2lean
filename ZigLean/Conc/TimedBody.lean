@@ -17,12 +17,12 @@ def fail (error : Error) : TM σ α := StateT.lift (.fail error)
 
 def observeClock (awake : Bool) (construct : BitVec 96 → α) : TimedSched.Program α :=
   if awake then .observe fun now => .done (construct (BitVec.ofNat 96 now.nanoseconds))
-  else .fail .unspecified
+  else .fail .unsupportedTimer
 
 def waitTimeout (p : Ptr) (expected : BitVec 32) (timeout : Option Time.Timeout) :
     TimedSched.Program (Except ErrName Unit) :=
   match timeout with
-  | none => .fail .unspecified
+  | none => .fail .unsupportedTimer
   | some selected => .wait p expected selected (fun _ => .done (.ok ()))
 
 end Zig.TimedBody

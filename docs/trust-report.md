@@ -100,7 +100,7 @@ The mapping from verbatim per-version AIR tags to Op constructors is unproved. s
 
 Type, layout, global and call restrictions are enforced by unproved Lean code; acceptance does not certify that the admitted program is in the modeled subset.
 
-- Components: `Air2Lean/Check.lean`
+- Components: `Air2Lean/Check.lean`, `Air2Lean/AsmContract.lean`
 - Premises: [TRU-02](premises.md#tru-02), [PRF-01](premises.md#prf-01), [PRF-02](premises.md#prf-02)
 - Further evidence (not a check of this stage): `tests/roadmap/input-validation/test_cli.py`
 

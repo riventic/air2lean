@@ -19,9 +19,11 @@ inductive AllocFn where
   | create | destroy | alloc | alignedAlloc | allocSentinel | free | dupe | remap | realloc
   deriving BEq, Repr
 
-/-- `std.Thread.spawn`/`.join`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
+/-- `std.Thread.spawn`/`.join`/`.detach`, modelled like `AllocFn` (`ZigLean/Mem/Thread.lean`). -/
 inductive ThreadFn where
   | spawn | join
+  /-- `Thread.detach` (C07): the handle is consumed and the thread runs on (`Zig.detachC`). -/
+  | detach
   /-- Progress hints: scheduler opportunity, with no fairness guarantee. -/
   | yield | spinLoopHint
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
@@ -33,11 +35,14 @@ inductive ThreadFn where
   | osLock | osUnlock | osTryLock
   /-- `time.Timer.start`, `time.Timer.read`, `Thread.Futex.timedWait`: a clock, which the model
   does not have. `Thread.Futex.Deadline` reaches them only with a timeout, so a call is
-  `.unspecified` at run time (the diff test pins that count), not a rejection. Each has its
+  `.unsupportedTimer` at run time (distinct from `.unspecified`), not a rejection. Each has its
   own runtime signature (`checkModelSignature`). -/
   | timerStart | timerRead | futexTimedWait
   /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
   | groupAsync | groupConcurrent | groupAwait | groupCancel
+  /-- `Io.async`, `Io.Future(T).await`, `Io.Future(T).cancel`, `Io.checkCancel` (0.16.0 only;
+  `ZigLean/Conc/Future.lean`, `docs/futures.md`): a future's task is a thread with a result. -/
+  | futureAsync | futureAwait | futureCancel | checkCancel
   deriving BEq, Repr
 
 /-- What a recognized std name selects: an allocator or thread model, or an explicit
@@ -84,6 +89,10 @@ private def threadModel (symbol : String) (fn : ThreadFn) (deps : Array String)
     (zigVersions : Array String := #[]) : StdModel :=
   { symbol, kind := .thread fn, zigVersions, dependencies := deps.map ("Zig." ++ ·) }
 
+/-- The reason of an async API outside the qualified future subset (`docs/futures.md`). -/
+private def asyncReason (symbol reason : String) : String :=
+  s!"{symbol} is not a qualified async API: {reason} (docs/futures.md)"
+
 /-- The one table of built-in std models. Rows without 0.17.0 are 0.17.0-unqualified on purpose
 (`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
 `time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.16.0 and 0.17.0 no
@@ -102,6 +111,7 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.yield" .yield #["threadYieldC"] through017,
   threadModel "atomic.spinLoopHint" .spinLoopHint #["spinLoopHintC"] through017,
   allocModel "mem.Allocator.realloc" .realloc #["realloc"] #["0.16.0"],
+  threadModel "Thread.detach" .detach #["detachC"] #["0.16.0"],
   threadModel "Thread.spinLoopHint" .spinLoopHint #["spinLoopHintC"],
   threadModel "Io.futexWait" .futexWait #["futexWaitCancelableC"] through017,
   threadModel "Io.futexWaitUncancelable" .futexWaitU #["futexWaitC"] through017,
@@ -111,23 +121,66 @@ def stdModels : Array StdModel := #[
   threadModel "Thread.Mutex.DarwinImpl.lock" .osLock #["osUnfairLockC"],
   threadModel "Thread.Mutex.DarwinImpl.unlock" .osUnlock #["osUnfairUnlockC"],
   threadModel "Thread.Mutex.DarwinImpl.tryLock" .osTryLock #["osUnfairTryLockC"],
-  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unspecified"],
-  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unspecified"],
-  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unspecified"],
+  threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"],
+  threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"],
+  threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"],
   threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] through017,
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] through017,
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] through017,
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] through017,
+  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] #["0.16.0"],
+  threadModel "Io.Future.await" .futureAwait #["awaitC"] #["0.16.0"],
+  threadModel "Io.Future.cancel" .futureCancel #["cancelC"] #["0.16.0"],
+  threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] #["0.16.0"],
+  { symbol := "Io.concurrent",
+    kind := .rejected (asyncReason "Io.concurrent" "its guaranteed unit of concurrency and ConcurrencyUnavailable outcome are not modelled for futures") },
+  { symbol := "Io.recancel",
+    kind := .rejected (asyncReason "Io.recancel" "re-arming an acknowledged cancelation is not modelled") },
+  { symbol := "Io.swapCancelProtection",
+    kind := .rejected (asyncReason "Io.swapCancelProtection" "cancel protection is not modelled") },
+  { symbol := "Io.Select.async",
+    kind := .rejected (asyncReason "Io.Select.async" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.concurrent",
+    kind := .rejected (asyncReason "Io.Select.concurrent" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.await",
+    kind := .rejected (asyncReason "Io.Select.await" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.cancel",
+    kind := .rejected (asyncReason "Io.Select.cancel" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Select.cancelDiscard",
+    kind := .rejected (asyncReason "Io.Select.cancelDiscard" "Select queues task results; only Io.async futures are qualified") },
+  { symbol := "Io.Batch.awaitAsync",
+    kind := .rejected (asyncReason "Io.Batch.awaitAsync" "Io operations and batches are not modelled") },
+  { symbol := "Io.Batch.awaitConcurrent",
+    kind := .rejected (asyncReason "Io.Batch.awaitConcurrent" "Io operations and batches are not modelled") },
+  { symbol := "Io.Batch.cancel",
+    kind := .rejected (asyncReason "Io.Batch.cancel" "Io operations and batches are not modelled") },
+  { symbol := "Io.operate",
+    kind := .rejected (asyncReason "Io.operate" "Io operations and batches are not modelled") },
+  { symbol := "Io.operateTimeout",
+    kind := .rejected (asyncReason "Io.operateTimeout" "Io operations and batches are not modelled") },
+  { symbol := "Io.sleep",
+    kind := .rejected (asyncReason "Io.sleep" "it has no clock") },
   { symbol := "Io.futexWaitTimeout",
-    kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
-  { symbol := "Thread.detach",
-    kind := .rejected "Thread.detach is outside the fork-join subset: every spawned thread must be joined" }]
+    kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" }]
+  -- The cancelation points of the model (`docs/std-models.md` §Cancelation, C05/C08):
+  -- `Io.futexWait` (and the std code over it), `Io.Group.await` and `Io.checkCancel`; the
+  -- requests come from `Io.Group.cancel` and `Io.Future.cancel`. Every other cancelable `std.Io`
+  -- API above is rejected with its reason.
 
 private def stdModelIndex : Std.HashMap String StdModel :=
   stdModels.foldl (fun index m => index.insert m.symbol m) {}
 
-/-- The qualified std name of `name`: an instance `<fn>__anon_<n>` names its generic `<fn>`. -/
-def stdModelBase (name : String) : String := (name.splitOn "__anon_").head!
+/-- The qualified std name of `name`: an instance `<fn>__anon_<n>` names its generic `<fn>`, and
+a method of an instantiated generic type `Io.Future(T).<fn>` or `Io.Select(U).<fn>` names
+`Io.Future.<fn>` or `Io.Select.<fn>` (the type argument is everything up to the last `).`). -/
+def stdModelBase (name : String) : String :=
+  let base := (name.splitOn "__anon_").head!
+  let generic (ty : String) : Option String := do
+    unless base.startsWith (ty ++ "(") do none
+    let parts := base.splitOn ")."
+    unless parts.length ≥ 2 do none
+    some s!"{ty}.{parts.getLast!}"
+  ((generic "Io.Future").orElse fun _ => generic "Io.Select").getD base
 
 /-- The built-in std model (modelled or rejected) that the function `name` is an instance of. -/
 def stdModel? (name : String) : Option StdModel := stdModelIndex[stdModelBase name]?
@@ -142,7 +195,7 @@ def allocFn? (name : String) : Option AllocFn :=
   | _ => none
 
 /-- The `Thread` function that the function `name` is an instance of
-(`Thread.spawn__anon_<n>`, `Thread.join`). -/
+(`Thread.spawn__anon_<n>`, `Thread.join`, `Thread.detach`). -/
 def threadFn? (name : String) : Option ThreadFn :=
   match stdKind? name with
   | some (.thread fn) => some fn

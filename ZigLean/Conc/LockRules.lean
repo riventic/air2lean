@@ -1150,6 +1150,19 @@ theorem Inv.wait {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {b : Bool} (h
       simp [Ne.symm hu0t]
   · exact ⟨Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl), rfl, hspin _⟩
 
+/-- A spurious return of `lock`'s futex wait for `2` by thread `t` (at `wait`, not in the
+queue): `t` goes to `spin` with the memory before the wait. -/
+theorem Inv.spurious {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hi : L.Inv G m)
+    (hph : L.ph (G t) = .wait) (hq : m.waiters.any (·.1 == t) = false) :
+    L.Step t m { m with current := t } ∧ { m with current := t }.current = t ∧
+      L.Inv (upd G t (L.set (G t) .spin Heap.empty)) { m with current := t } := by
+  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+  exact ⟨Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl), rfl,
+    hi.queue (wk := m.woken) hnh hng (by decide) (by decide)
+      (hi.fq.mono (fun w hw => hw) fun w hw => by rw [ph_set_upd, if_neg (ne_of_notQ hq hw)])
+      (wit_keep hi hnh (by decide) fun _ => rfl)⟩
+
 /-- `unlock`'s futex wake of `n ≥ 1` waiters by thread `t` (at `wake`): `t` goes to `out`; a woken
 thread is the new witness of the queue. -/
 theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} (hi : L.Inv G m)
@@ -1251,6 +1264,18 @@ theorem Inv.waitOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} 
       refine ⟨v, hv, ?_, h1, h2⟩
       rw [Array.any_push, hvq]; simp [Ne.symm hvt]
   · exact ⟨rfl, hout _⟩
+
+/-- A spurious return of a futex wait of thread `t` (`away`, not in the queue) at another
+futex: `t` goes to `out` with the memory before the wait. -/
+theorem Inv.spuriousOff {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hi : L.Inv G m)
+    (hph : L.ph (G t) = .away) (hq : m.waiters.any (·.1 == t) = false) :
+    ({ m with current := t } : Mem).current = t ∧
+      L.Inv (upd G t (L.set (G t) .out Heap.empty)) { m with current := t } := by
+  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+  exact ⟨rfl, hi.queue (wk := m.woken) hnh hng (by decide) (by decide)
+    (hi.fq.mono (fun w hw => hw) fun w hw => by rw [ph_set_upd, if_neg (ne_of_notQ hq hw)])
+    (wit_keep hi hnh (by decide) fun h => by rw [hph] at h; cases h)⟩
 
 /-- A futex wake by thread `t` at another futex `p`: the threads at the word stay. -/
 theorem Inv.wakeOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} {n : Nat}
@@ -2085,17 +2110,22 @@ theorem wp_waitOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {io : 
   simp only [he]
   have hiL := hP.lock hi₁
   refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hiL.wait_ok, fun b m' hw => ?_⟩⟩
-  obtain ⟨hst, hb⟩ := hiL.wait (by rw [hg₁]; exact hg) hq hw
-  cases b
-  · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
-    obtain ⟨hcu, hl⟩ := hb
+  have hgo : ∀ m', L.Step t m₁ m' → m'.current = t →
+      L.Inv (upd G₁ t (L.set (G₁ t) .spin Heap.empty)) m' → Q ((), s) G₁ m' k := by
+    intro m' hst hcu hl
     refine h k hk G₁ m' hcu ?_
     have := hP.step (p := .spin) (h := Heap.empty) hi₁ (by rw [hg₁]; exact hok)
       (by rw [hg₁, hg]; decide) hst
       (fun h => absurd h (by rw [hg₁, hg]; decide)) hl
     rwa [hg₁] at this
+  obtain ⟨hst, hb⟩ := hiL.wait (by rw [hg₁]; exact hg) hq hw
+  cases b
+  · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
+    exact hgo m' hst hb.1 hb.2
   · simp only [↓reduceIte] at hb ⊢
-    exact hP.stay hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁, hg]; decide) hst hb
+    obtain ⟨hst', hcu', hl'⟩ := hiL.spurious (by rw [hg₁]; exact hg) hq
+    exact ⟨hP.stay hi₁ (by rw [hg₁]; exact hok) (by rw [hg₁, hg]; decide) hst hb,
+      hgo _ hst' hcu' hl'⟩
 
 /-- `unlock`'s futex wake of one waiter, by thread `t` at `wake` (`g`): it goes on at `out`. -/
 theorem wp_wakeOn (hP : L.FitsOn P U ok) {io : Io} {s : σ} {t : ThreadId} {G : ThreadId → γ}
@@ -2307,16 +2337,20 @@ theorem wp_waitD (hP : L.Fits P U) {s : σ} {t : ThreadId}
   simp only [he]
   have hiL := hP.lock hi₁
   refine ⟨fun _ => hP.live hiL (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hiL.wait_ok, fun b m' hw => ?_⟩⟩
-  obtain ⟨hst, hb⟩ := hiL.wait (by rw [hg₁]; exact hg) hq hw
-  cases b
-  · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
-    obtain ⟨hcu, hl⟩ := hb
+  have hgo : ∀ m', L.Step t m₁ m' → m'.current = t →
+      L.Inv (upd G₁ t (L.set (G₁ t) .spin Heap.empty)) m' → Q ((), s) G₁ m' k := by
+    intro m' hst hcu hl
     refine h k hk G₁ m' hcu ?_
     have := hP.step (p := .spin) (h := Heap.empty) hi₁ (by rw [hg₁, hg]; decide) hst
       (fun h => absurd h (by rw [hg₁, hg]; decide)) hl
     rwa [hg₁] at this
+  obtain ⟨hst, hb⟩ := hiL.wait (by rw [hg₁]; exact hg) hq hw
+  cases b
+  · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
+    exact hgo m' hst hb.1 hb.2
   · simp only [↓reduceIte] at hb ⊢
-    exact hP.stay hi₁ (by rw [hg₁, hg]; decide) hst hb
+    obtain ⟨hst', hcu', hl'⟩ := hiL.spurious (by rw [hg₁]; exact hg) hq
+    exact ⟨hP.stay hi₁ (by rw [hg₁, hg]; decide) hst hb, hgo _ hst' hcu' hl'⟩
 
 /-- `os_unfair_lock_unlock`'s `xchg` of `0` with a release, by the holder `t` (`g`). -/
 theorem wp_xchgRel (hP : L.Fits P U) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G : ThreadId → γ}

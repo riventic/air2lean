@@ -101,7 +101,7 @@ verification. `dependencies` is the project's explicit semantic dependency inven
 automatically inferred proof-dependency closure. Each entry must be unique and name another
 binding in the same registry, a modelled built-in std model qualified for the binding's Zig
 version (for example `mem.Allocator.create`; `mem.Allocator.allocSentinel` needs 0.16.0 or 0.17.0), or
-a Lean identifier. A rejected std name (`Thread.detach`) and any cycle between bindings,
+a Lean identifier. A rejected std name (`Io.futexWaitTimeout`) and any cycle between bindings,
 including a self-dependency, are rejected before output is written.
 
 ## Memory footprints (E01)
@@ -179,10 +179,14 @@ block outside the context and the re-entry blocks unchanged. `call_forbidden` an
 A call through a function pointer is modelled by `dispatch`. It tries the known targets in
 order and throws `.illegal` for any other pointer. This mirrors the emitted indirect call, whose
 fallback arm is the same throw (`applyTwice_illegal` in `Proofs/Layout/Proofs.lean`); the
-correspondence is by inspection, not a theorem about the emitter. By `dispatch_ok`, a
+correspondence is by inspection in general, not a theorem about the emitter. By `dispatch_ok`, a
 successful call ran a known target. `dispatch_unknown` shows that a pointer with no known
 target and no contract never succeeds, so no effects can be assumed for it, empty ones
-included. The registry still rejects address-taken bindings: a callback contract is a Lean-level
+included. `resolve table s impl` selects the targets of signature `s` from the program's
+callable-address table; `resolve_complete`, `resolve_incompatible` and `resolve_unknown` show
+that every declared target of `s` is reachable and that a target of another signature or an
+unknown address throws `.illegal`. `tests/roadmap/indirect-calls/Bridge.lean` proves that a
+fresh emitted indirect call equals `dispatchIn (resolve …)` for every pointer. The registry still rejects address-taken bindings: a callback contract is a Lean-level
 interface for model clients. It is not a registry entry, and the translator does not bind it to
 an emitted indirect call.
 

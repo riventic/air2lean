@@ -12,9 +12,12 @@ runs); they do not replace the theorems. No `native_decide`, no axioms.
 
 open Zig Sync
 
-/-- A few fixed oracles: always the first option, round robin, and two mixes. -/
+/-- A few fixed oracles: always the first option and four mixes. A futex wait may return
+spuriously (C05, `docs/std-models.md` §Spurious wakeups), and the model has no fairness: some
+oracles (plain round robin `fun n => n`, or `n % 2`) keep a waiter spinning on spurious returns
+until the fuel ends, which is a permitted run without a result. These oracles complete. -/
 private def oracles : List (Nat → Nat) :=
-  [fun _ => 0, fun n => n, fun n => n % 3, fun n => (n * 7 + 3) % 5, fun n => (n / 2) % 4]
+  [fun _ => 0, fun n => n % 7, fun n => n % 3, fun n => (n * 7 + 3) % 5, fun n => (n / 2) % 4]
 
 private def completed {α : Type} (r : Result (Except ErrName α × Mem)) (ok : α → Bool) : Bool :=
   match r.run with

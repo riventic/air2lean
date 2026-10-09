@@ -111,11 +111,11 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
   exact ⟨g₀, hg₀, fun child m' hf => WP.pure' (WP.pure' (hk' child m' hf))⟩
 
 /-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
-strict mode, `tid` is a later thread with a valid handle even before it ends, and the join
+strict mode, `tid` has a higher rank (`Proto.rank`) and a valid handle even before it ends, and the join
 does not throw. -/
 theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      (P.strict = true → t < tid ∧ tid < m₁.threads.size ∧ P.joins g ∧
+      (P.strict = true → P.rank t < P.rank tid ∧ tid < m₁.threads.size ∧ P.joins g ∧
         Thread.joinValid m₁ t tid = true) ∧ (P.fin (G₁ tid) →
         (P.strict = true → ∃ m', ((Thread.join tid).run { m₁ with current := t }).run =
           some (.ok ((), m'))) ∧ ∀ m',
@@ -131,7 +131,7 @@ theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ)
 
 /-- A futex wait (`futexWaitC`, the bits `e'` of `e`): the thread stops with the ghost value
 `g`. It begins not in the queue; if it sleeps, it keeps the invariant with `g`; when it goes on,
-`Q` holds. In strict mode it keeps `Live` and does not throw. -/
+`Q` holds, also after a spurious return in place of the sleep (the memory before the wait). In strict mode it keeps `Live` and does not throw. -/
 theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e : ε} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
@@ -140,7 +140,8 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
         (P.strict = true → ∃ b m',
           ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
         ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
-          if b then P.inv G₁ m' else Q ((), s) G₁ m' k)) :
+          if b then P.inv G₁ m' ∧ Q ((), s) G₁ { m₁ with current := t } k
+          else Q ((), s) G₁ m' k)) :
     P.WP t ((futexWaitC io p e : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt)
     (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
@@ -151,7 +152,7 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
   have := ((hc G₁ m₁ hg hi₁).2 hq).2 b m' hr
   cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
   · exact WP.pure' this
-  · exact this
+  · exact ⟨this.1, WP.pure' this.2⟩
 
 /-- A futex wake (`futexWakeC`): the thread stops with the ghost value `g`; `Q` holds after the
 wake. -/
@@ -166,6 +167,9 @@ theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
   refine WP.bind (WP.map (WP.sync fun k hk => ?_))
   obtain ⟨g, hi, hc⟩ := h k hk
   exact ⟨g, hi, fun G₁ m₁ hg hi₁ m' hw => WP.pure' (hc G₁ m₁ hg hi₁ m' hw)⟩
+
+/-- `Thread.isTask`: whether the current thread is an `Io` task; the memory stays. -/
+theorem isTask_run (m : Mem) : (Thread.isTask.run m).run = some (.ok (m.current != 0, m)) := rfl
 
 /-- `Thread.Futex.wait` is the futex wait of `Io.futexWait` (0.15.2 has no `Io`). -/
 theorem threadFutexWaitC_eq (p : Ptr) (e : BitVec 32) :
@@ -282,13 +286,31 @@ theorem storeUndef_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {x : U
   simp only [Array.size_replicate] at ha ⊢
   exact ⟨b, blk, o, ha, hk, rfl⟩
 
+/-- `alloc` with a fresh address: always for a stack block, and for a heap or owned block when
+the policy reuses no address (`Mem.reuseAddr?`; `hk` is `rfl` there). `alloc_ok'` holds for
+every address policy. -/
 theorem alloc_ok {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
-    (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
+    (h : ((alloc kind size align).run m).run = some (.ok (q, m')))
+    (hk : m.reuseAddr? kind size align = none := by rfl) :
     q = ⟨some m.blocks.size, 0⟩ ∧ m' = { m with
       blocks := m.blocks.push
         { bytes := Array.replicate size .undef, align, kind, live := true,
           addr := alignUp m.nextAddr align },
       nextAddr := alignUp m.nextAddr align + size + 1 } := by
+  unfold alloc at h
+  obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨_, m₂, hs, h₂⟩ := MemM.bind_ok h₁
+  have := MemM.set_ok hs
+  subst this
+  obtain ⟨rfl, rfl⟩ := MemM.pure_ok h₂
+  refine ⟨rfl, ?_⟩
+  simp only [Mem.afterAlloc, Mem.newAddr, Mem.newNext, hk]
+
+/-- `alloc` under every address policy: the new block id, and `Mem.afterAlloc`. -/
+theorem alloc_ok' {m m' : Mem} {kind : BlockKind} {size align : Nat} {q : Ptr}
+    (h : ((alloc kind size align).run m).run = some (.ok (q, m'))) :
+    q = ⟨some m.blocks.size, 0⟩ ∧ m' = m.afterAlloc kind size align := by
   unfold alloc at h
   obtain ⟨a₁, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg

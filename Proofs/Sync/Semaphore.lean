@@ -1849,6 +1849,13 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     rw [upd_same] at this
     exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
   · simp only [↓reduceIte] at hl ⊢
+    refine ⟨?_, ?_⟩
+    rotate_left
+    · have hl := hl₁.spuriousOff (t := t) (by change (G₁ t).1.ph = _; exact hph) hq0
+      have := hP.stable G₁ m₁ _ t (G₁ t) hu₁ (Step.cur t m₁ t m₁.woken) rfl rfl (fun h => .inl h)
+        (fun h => by rcases h with h | h <;> exact absurd rfl h)
+      rw [upd_same] at this
+      exact hout _ rfl hl.2 (hs₁.congr rfl rfl rfl rfl rfl rfl) this
     obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hs₁.we.access
     have : ({ m₁ with current := t } : Mem).access S.WE.ptr 4 4 = m₁.access S.WE.ptr 4 4 := rfl
     rw [this, ha₀] at ha
