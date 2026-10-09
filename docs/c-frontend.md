@@ -156,7 +156,7 @@ Corpus: 40 files in `tests/roadmap/c-frontend/corpus/`, one construct family eac
 realistic programs (`strings_loops`, `memcpy_loops`, `linked_list`, `ring_buffer`,
 `sort_callback`, `hash_table`, `malloc_vec`, the goto state machine, the bitfield packet
 parser, `varargs_sum`). Recorded in `tests/roadmap/c-frontend/record.json` with stock Zig
-0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (the exporter of this branch, with the G5 fix), on
+0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (exporter `zig-patch/air-json/json.zig` sha256 066fab37…, with the G5 fix), on
 aarch64-macos.
 
 * **23 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
