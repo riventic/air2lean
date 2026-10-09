@@ -10,7 +10,7 @@ premise was derived. This index covers the committed generated modules.
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 768 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 660 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 661 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 7 | Recorded `abi64-be-v1` big-endian profile |
@@ -62,8 +62,8 @@ premise was derived. This index covers the committed generated modules.
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
 | [TRU-01](premises.md#tru-01) | 3055 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1503 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1503 | Backend lowering and native execution |
+| [TRU-02](premises.md#tru-02) | 1504 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1504 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 20 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
@@ -4152,7 +4152,7 @@ File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, T
 | `DeviceEffectsProofs.withEvent_after` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.status_addr` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
 | `DeviceEffectsProofs.data_addr` | SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
-| `DeviceEffectsProofs.data_ptr` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, DEV-01 |
+| `DeviceEffectsProofs.data_ptr` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.status_read` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.data_write` | PRF-02, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
 | `DeviceEffectsProofs.loop_busy` | PRF-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03, DEV-01 |
