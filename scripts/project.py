@@ -865,6 +865,23 @@ def statement_reference(theorem, definition):
     return definition in deps
 
 
+def trivial_conclusion(theorem, definition):
+    """The reason an audited conclusion that names the root still states no result about it, else None.
+
+    The audit records an equation's right-hand side and no other argument. An `Eq` whose right-hand
+    side is the generated root itself (`root x = root x`, or `root x = root y`) relates the root to
+    itself and fixes no value. A `True` conclusion never gets here (it does not reference the root).
+    Other conclusions are left to the derived strength: they are not called trivial without evidence."""
+    shape = theorem.get('conclusion')
+    if not isinstance(shape, dict):
+        return None
+    args = shape.get('args')
+    if shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1 and isinstance(args[0], dict) \
+            and args[0].get('head') == definition:
+        return f'trivial conclusion: the equation\'s right-hand side is the generated root {definition} itself, so it fixes no result'
+    return None
+
+
 def compiled_olean(bundle, module):
     suffix = '/.lake/build/lib/lean/' + module.replace('.', '/') + '.olean'
     return any(path.endswith(suffix) for path in bundle['compiled'])
@@ -937,6 +954,8 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
         elif not states or bundle['nodes'].get(definition, {}).get('module') not in gen_modules:
             row.update(binding='wrapper_or_unrelated',
                        reason=f'theorem conclusion does not reference generated root definition {definition} in {gen_modules}')
+        elif (trivial := trivial_conclusion(theorem, definition)) is not None:
+            row.update(binding='trivial_conclusion', reason=trivial, **derived_claim(theorem))
         else:
             row.update(binding='direct', reason='audited theorem states its conclusion about the hash-bound generated root definition',
                        audited_assumptions={k: sorted(theorem.get(k) or []) for k in
@@ -1184,7 +1203,9 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
                       'translation artifact; wrapper or True statements do not count even when their proofs mention the root. '
                       'A declared safety/partial/total strength counts only up to the strength scripts/claims.py derives '
                       'from the audited conclusion head (Zig triples, Returns, exact-success equations); an unclassified '
-                      'conclusion such as `root x = root x` derives none. Domains and preconditions are not interpreted '
+                      'conclusion derives none. An equation whose right-hand side is the generated root itself '
+                      '(`root x = root x`) is a trivial_conclusion: it names the root but fixes no result, so it is not '
+                      'a direct goal and cannot reach proved_scoped. Domains and preconditions are not interpreted '
                       'and remain review obligations.',
                       'Functional verification requires every declared goal to be direct and at least one '
                       'partial/total correctness goal; full verification requires total_correctness.',

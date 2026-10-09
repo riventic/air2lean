@@ -276,11 +276,11 @@ def regenerate(fx, a):
     same('Gen.lean', work / 'Gen.lean', ROOT / fx['gen'])
     # 2/4 guarded proof receipt over the tracked tree.
     fresh_audit = fresh_receipt(fx, attempt)
-    # A first run for a new fixture has no committed manifest or pins yet (--initial): the fresh
-    # manifest is then only self-checked, and `install` + `record` create the committed ones.
-    initial = a.initial and not (fx['path'] / 'manifest.json').exists()
-    committed = None if initial else json.loads((fx['path'] / 'manifest.json').read_text())
-    pins = None if initial else json.loads((fx['path'] / 'pins.json').read_text())
+    # --refresh (a new fixture, or an intentional proof change): the fresh manifest is only
+    # self-checked, and `install` + `record` replace the committed manifest and pins.
+    refresh = a.refresh
+    committed = None if refresh else json.loads((fx['path'] / 'manifest.json').read_text())
+    pins = None if refresh else json.loads((fx['path'] / 'pins.json').read_text())
     if committed and fresh_audit != committed['links']['theorems']['value']['compiled_audit']:
         problems.append('fresh compiled theorem audit differs from the committed manifest')
     # 3/4 fresh manifest chaining the fresh export, receipt and native binary.
@@ -397,7 +397,8 @@ def main(argv):
     g.add_argument('--timeout', type=int, default=7200)
     g.add_argument('--lock-wait', type=int, default=14400)
     g.add_argument('--allow-dirty', action='store_true')
-    g.add_argument('--initial', action='store_true', help='first run of a new fixture without a committed manifest')
+    g.add_argument('--refresh', action='store_true',
+                   help='do not compare the fresh theorem audit, native binary and manifest with the committed ones')
     i = sub.add_parser('install', help="copy WORKDIR's verified receipt into the fixture, path-redacted")
     i.add_argument('workdir')
     r = sub.add_parser('record', help='record the fixture manifest from the clean tree and refresh pins.json')
