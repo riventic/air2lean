@@ -324,7 +324,8 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
 
     def commit(self, message):
         self.git("add", "-A")
-        self.git("-c", "user.name=Profile Test", "-c", "user.email=test@example.invalid", "commit", "-qm", message)
+        self.git("-c", "user.name=Profile Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false",
+                 "-c", "core.hooksPath=/dev/null", "commit", "-qm", message)
 
     def assert_checkout_unchanged(self):
         self.assertEqual(self.proof.read_bytes(), BODY)

@@ -29,6 +29,9 @@
 #   AIR2LEAN_CHECK_REPORT_DIR  Profile/input/generated-hash receipts. Default:
 #                         .lake/check-reports/<zig-version>/; actual generated sources are retained.
 #   AIR2LEAN_CHECK_TREE   The check tree, when one is needed. Default: .lake/check-tree/<zig-version>.
+#                         This and AIR2LEAN_CHECK_REPORT_DIR are relative to the repository root.
+#   AIR2LEAN_DIFF_REPORT  Differential summary (scripts/diff.sh), relative to the repository root
+#                         also when the test runs in a check tree. Default: tests/diff/out/report.json.
 #   AIR2LEAN_STAGE_TIMEOUT  Seconds per AIR dump/translation stage (default 3600; 0 disables).
 #                         A timed-out or interrupted stage's process group is stopped.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
@@ -229,4 +232,7 @@ if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
 fi
 
 echo "== differential testing ==" >&2
+AIR2LEAN_DIFF_REPORT=${AIR2LEAN_DIFF_REPORT:-tests/diff/out/report.json}
+case "$AIR2LEAN_DIFF_REPORT" in /*) ;; *) AIR2LEAN_DIFF_REPORT=$repo_root/$AIR2LEAN_DIFF_REPORT ;; esac
+export AIR2LEAN_DIFF_REPORT
 exec scripts/diff.sh

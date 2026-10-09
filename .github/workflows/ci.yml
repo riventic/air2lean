@@ -872,7 +872,7 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          summary="$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)/tests/diff/out/report.json"
+          summary=tests/diff/out/report.json
           out="$RUNNER_TEMP/accounting"
           python3 scripts/accounting.py publish --summary "$summary" \
             --json "$out/accounting.json" --markdown "$out/accounting.md"
@@ -887,16 +887,16 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
-          path: |
-            tests/diff/out/report.json
-            .lake/check-tree/${{ matrix.zig }}/tests/diff/out/report.json
+          path: tests/diff/out/report.json
           if-no-files-found: warn
           retention-days: 30
 
       - name: Typed outcomes and bounded schedule regressions
         if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: |
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"  # The modules check.sh built.
+          summary="$PWD/tests/diff/out/report.json"  # check.sh writes it in the checkout.
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)  # The modules check.sh built.
+          cd "$tree"
           python3 -I -B tests/roadmap/outcome-accounting/test_report.py
           python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
           # Relink against this version's archive produced by the differential gate.
@@ -913,7 +913,7 @@ jobs:
           python3 scripts/diff-report.py compare --summary "$RUNNER_TEMP/schedule-report.json" \
             --root "$PWD" --examples atomics --version "${{ matrix.zig }}" --host "$(uname -s)-$(uname -m)" \
             --schedule-receipts "$RUNNER_TEMP/schedules.json $RUNNER_TEMP/schedule-replay.json"
-          python3 scripts/schedules.py replay --summary tests/diff/out/report.json \
+          python3 scripts/schedules.py replay --summary "$summary" \
             --example threads --function claimOnce --output "$RUNNER_TEMP/witness-replay.json"
           # P08: the relaxed message-passing race replays; limits stay unsolved.
           python3 -I -B tests/roadmap/counterexamples/test_e2e.py tests/diff/.lake/build/bin/schedules
@@ -928,7 +928,8 @@ jobs:
       - name: Build proofs
         if: ${{ !matrix.mutate }}
         run: |
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"  # The modules check.sh built.
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)  # The modules check.sh built.
+          cd "$tree"
           lake build Proofs
           lake env lean tests/roadmap/container-contracts/Clients.lean
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
@@ -1025,13 +1026,15 @@ jobs:
       - name: Tutorials
         if: ${{ !matrix.mutate }}
         run: |
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial
         if: ${{ !matrix.mutate }}
         run: |
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           lake env lean tutorials/memory-safety/Main.lean
           lake env lean tutorials/memory-safety/Controls.lean
 
@@ -1048,7 +1051,8 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           mkdir -p "$RUNNER_TEMP/vcs"
           lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
@@ -1056,21 +1060,24 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           lake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Result.log"
 
       - name: Memory verification condition regressions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
       - name: Verification condition client regressions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
 
       # Reflect committed loop-free translations into the VC AST; loops must request invariants.
@@ -1078,14 +1085,16 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
 
       - name: Verification condition report regressions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           python3 -B scripts/vc-report.py --json \
             --import Proofs.Basic.Gen --import Proofs.Pointers.Gen --import Proofs.Errors.Gen \
             --namespace Basic --namespace Pointers --namespace Errors \
@@ -1126,7 +1135,8 @@ jobs:
           AIR2LEAN_REVIEW_ZIG16: ${{ matrix.zig == '0.16.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
         run: |
-          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
           scripts/review.sh
 
       - name: Weak CAS safety qualification
@@ -1144,7 +1154,8 @@ jobs:
 
       # 0.15.2 on macOS: `Thread.Mutex` is `os_unfair_lock` (tests/golden/0.15.2/threadsync/
       # Gen-darwin.lean). The `threadsync` proofs hold for that translation too: built in a
-      # check tree, so the checkout's Proofs/Threadsync/Gen.lean is never replaced.
+      # check tree, so the checkout's Proofs/Threadsync/Gen.lean is never replaced. These
+      # modules import no other example's translation.
       - name: Build threadsync proofs (macOS translation)
         if: ${{ !matrix.mutate && matrix.zig == '0.15.2' }}
         run: |
@@ -1364,7 +1375,8 @@ jobs:
         env:
           AIR2LEAN_ZIG_VERSION: "0.16.0"
         run: |
-          cd "$(cat .lake/check-reports/0.16.0/build-tree)"
+          tree=$(cat .lake/check-reports/0.16.0/build-tree)
+          cd "$tree"
           lake build Proofs
 
       # 0.15.2's Thread.Mutex is os_unfair_lock here: check.sh selects
@@ -1382,7 +1394,8 @@ jobs:
         env:
           AIR2LEAN_ZIG_VERSION: "0.15.2"
         run: |
-          cd "$(cat .lake/check-reports/0.15.2/build-tree)"
+          tree=$(cat .lake/check-reports/0.15.2/build-tree)
+          cd "$tree"
           lake build Proofs
 
       # As in the test job: no step may modify, delete or add a tracked or unignored file.
