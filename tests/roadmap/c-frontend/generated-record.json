@@ -31,7 +31,7 @@
  },
  "files": {
   "gen_s0": {
-   "source_sha256": "33b7e1da49b150e2db05b3869fd173d073401ef68c6336846076bed2084fab3b",
+   "source_sha256": "1364c8115fde8e00334bc97a844946b19e672d61763ff2b9a7b21fa9ff65aa2f",
    "constructs": [
     "generated"
    ],
@@ -39,73 +39,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      72,
-      134217806,
-      4294967230,
-      2963221415
+      10,
+      12,
+      19,
+      2863270034
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 450,
-     "warnings": [],
-     "demoted_functions": [],
-     "extern_calls": []
-    },
-    "zig_native": {
-     "status": "ok"
-    },
-    "air_export": {
-     "status": "ok",
-     "functions": 3,
-     "std_functions": [],
-     "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
-     ]
-    },
-    "air2lean": {
-     "status": "checked",
-     "codes": {},
-     "diagnostics": [],
-     "diagnostic_count": 0
-    },
-    "lean": {
-     "status": "ok",
-     "gen_lines": 277
-    }
-   },
-   "c_defined_functions": [
-    "entry",
-    "entry_body",
-    "h0"
-   ],
-   "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 583,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
-  },
-  "gen_s1": {
-   "source_sha256": "20df68dbac9dc2cdcc838095824a3e43cd440a3b37a6ad8e9ef11b6bcf577bf1",
-   "constructs": [
-    "generated"
-   ],
-   "stages": {
-    "c_native": {
-     "status": "ok",
-     "expected": [
-      4294961117,
-      16388,
-      4294967281,
-      3097371908
-     ]
-    },
-    "translate_c": {
-     "status": "ok",
-     "lines": 556,
+     "lines": 515,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -130,7 +72,66 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 934
+     "gen_lines": 424
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 648,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s1": {
+   "source_sha256": "7738850deaf05ae26c8b02bd5bc684f691295134e6e81b2d995541b57d9b2ff5",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      55564,
+      23,
+      4294911707,
+      3097427142
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 577,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 1054
     }
    },
    "c_defined_functions": [
@@ -141,7 +142,7 @@
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 689,
+    "lines": 710,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
@@ -262,7 +263,7 @@
    }
   },
   "gen_s12": {
-   "source_sha256": "638c1f276aab3a3ddae30bcb0bcd1ff841217bc7349f367c683608c2ed303c0a",
+   "source_sha256": "53792e0667d169e625c3f34f9b6e95cea757084633425bff0a662e02438379f8",
    "constructs": [
     "generated"
    ],
@@ -270,15 +271,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      37,
-      38,
-      38,
-      3989547437
+      3906888760,
+      3906888746,
+      3906888761,
+      85314976
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 535,
+     "lines": 570,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -303,7 +304,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 766
+     "gen_lines": 752
     }
    },
    "c_defined_functions": [
@@ -314,7 +315,7 @@
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 668,
+    "lines": 703,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
@@ -380,7 +381,7 @@
    }
   },
   "gen_s14": {
-   "source_sha256": "9004da859733c3c12eb31e049ba151c4c35623d4652e903f4fe90decf137d3fc",
+   "source_sha256": "4eedfbd7dcf4111e326e89baf3e88b3e4d4a9aee563c46ab1c217bdccbc2314c",
    "constructs": [
     "generated"
    ],
@@ -388,15 +389,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      214076924,
-      3245139438,
-      1049827867,
-      3025957161
+      214076707,
+      2708268337,
+      1407212036,
+      874680228
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 623,
+     "lines": 601,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -421,7 +422,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 604
+     "gen_lines": 720
     }
    },
    "c_defined_functions": [
@@ -432,7 +433,7 @@
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 756,
+    "lines": 734,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
@@ -555,7 +556,7 @@
    }
   },
   "gen_s17": {
-   "source_sha256": "9f61447a284acd4063e185e600b8f54a81bbbdf68c1efbd5dbd532f928c237c1",
+   "source_sha256": "f54655b8d9764d905ad10b3095bddc4a9d03fcabb1e7b4017226fa78eab326f6",
    "constructs": [
     "generated"
    ],
@@ -563,15 +564,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      83,
-      251,
-      4294962675,
-      416657841
+      234,
+      115,
+      73,
+      2947620280
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 601,
+     "lines": 717,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -596,7 +597,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 746
+     "gen_lines": 833
     }
    },
    "c_defined_functions": [
@@ -607,14 +608,14 @@
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 734,
+    "lines": 850,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
    }
   },
   "gen_s18": {
-   "source_sha256": "7c6229ad302e1159dc04a84cfb720b00e8de4f9797132afb8b00d046463e6e09",
+   "source_sha256": "4cb1b5096a9be5a214f6ca0430df9f8bd33a9685706b4f126685c66f5368d53d",
    "constructs": [
     "generated"
    ],
@@ -726,7 +727,7 @@
    }
   },
   "gen_s2": {
-   "source_sha256": "44964dc952f11ea86f9b98ddd46e55f9a21eb55d809613cd9b466d66f3e1232e",
+   "source_sha256": "4fbdec7823691967aa49a3a97e7953f802e1fe0d316b905bd6f9c97a63f9ea97",
    "constructs": [
     "generated"
    ],
@@ -734,10 +735,10 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      2258169013,
-      2258169009,
-      2258169042,
-      27996347
+      185,
+      41,
+      190,
+      3097427008
      ]
     },
     "translate_c": {
@@ -767,7 +768,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 261
+     "gen_lines": 249
     }
    },
    "c_defined_functions": [
@@ -783,7 +784,7 @@
    }
   },
   "gen_s20": {
-   "source_sha256": "243c58e8d9b3c8049dfa26a3a0997aaebc121edce9a7da607cdae6daeafbaf37",
+   "source_sha256": "70fbd634946ec36ebdee0d0da05b896f5c853976461f3ac1536b304fd0905914",
    "constructs": [
     "generated"
    ],
@@ -791,15 +792,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      6292,
-      6295,
-      4294961004,
-      3097420870
+      129,
+      129,
+      129,
+      129
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 583,
+     "lines": 513,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -809,7 +810,7 @@
     },
     "air_export": {
      "status": "ok",
-     "functions": 4,
+     "functions": 3,
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
@@ -824,19 +825,18 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 899
+     "gen_lines": 372
     }
    },
    "c_defined_functions": [
     "entry",
     "entry_body",
-    "h0",
-    "h1"
+    "h0"
    ],
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 716,
+    "lines": 646,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
@@ -1008,7 +1008,7 @@
    }
   },
   "gen_s24": {
-   "source_sha256": "d08b006d6c80b00ec58245383115999fdf6b4ec79cff338e8fdbd97cf580f0da",
+   "source_sha256": "e981fe65e718dfefce4e07dc64295fd40b4d635f060c58b3402463b98eb40e41",
    "constructs": [
     "generated"
    ],
@@ -1237,7 +1237,7 @@
    }
   },
   "gen_s28": {
-   "source_sha256": "9d4fbd87e8b9b3126b1f41bc09781f6e8e29e9ca526558b39676374f8c64d22d",
+   "source_sha256": "a22db772264f054b6d4fbf8646813e458261ffaa4a57898a94498936dcd5a7a0",
    "constructs": [
     "generated"
    ],
@@ -1245,15 +1245,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      254,
-      252,
-      249,
-      252
+      4922,
+      4920,
+      4925,
+      2863315344
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 528,
+     "lines": 509,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1263,10 +1263,9 @@
     },
     "air_export": {
      "status": "ok",
-     "functions": 1,
+     "functions": 3,
      "std_functions": [],
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).divideByZero",
       "debug.FullPanic((function 'defaultPanic')).outOfBounds"
      ]
     },
@@ -1278,23 +1277,25 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 187
+     "gen_lines": 353
     }
    },
    "c_defined_functions": [
-    "entry"
+    "entry",
+    "h0",
+    "h1"
    ],
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 661,
+    "lines": 642,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
    }
   },
   "gen_s29": {
-   "source_sha256": "e4bd802d80fffac3fa2f259b9b79125f8116d7041f330395d089e305cd857f76",
+   "source_sha256": "8b6e75ece887972e505068fe0ccea9d0873426891f27046d311f2b4b15d97f75",
    "constructs": [
     "generated"
    ],
@@ -1303,9 +1304,9 @@
      "status": "ok",
      "expected": [
       247,
-      11,
-      4294967176,
-      3097427106
+      246,
+      4294967054,
+      305419919
      ]
     },
     "translate_c": {
@@ -1349,7 +1350,7 @@
    }
   },
   "gen_s3": {
-   "source_sha256": "93d94d9878b506d52abb177e27147b6a6d5096f54d87ed788c79459cd3756b3e",
+   "source_sha256": "01ec3a4ab60c1f2adceda429df8d67c8a6bcf31aa7a4d5ff9542e3e5f57692e0",
    "constructs": [
     "generated"
    ],
@@ -1357,15 +1358,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      126,
-      126,
-      126,
-      126
+      164,
+      164,
+      164,
+      164
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 634,
+     "lines": 590,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1390,7 +1391,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 746
+     "gen_lines": 693
     }
    },
    "c_defined_functions": [
@@ -1401,7 +1402,7 @@
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 767,
+    "lines": 723,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
@@ -1466,7 +1467,7 @@
    }
   },
   "gen_s5": {
-   "source_sha256": "7e3a50c80a25ad4fab865e4ed0a88ee76e0ba330d8cc96a092270d9eab200ab2",
+   "source_sha256": "c8778cfd0eb7fc5c368c6a3ddcbcbad2240042b76d08809f6ca16f3dee763783",
    "constructs": [
     "generated"
    ],
@@ -1474,15 +1475,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      3721454160,
-      3721574633,
-      855169,
-      2131919393
+      3431042992,
+      3305300937,
+      1688346029,
+      4205726737
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 497,
+     "lines": 494,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1507,7 +1508,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 424
+     "gen_lines": 437
     }
    },
    "c_defined_functions": [
@@ -1518,7 +1519,7 @@
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 630,
+    "lines": 627,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
@@ -1640,7 +1641,7 @@
    }
   },
   "gen_s8": {
-   "source_sha256": "d2846c102a883b52d5361c9f65d3834669163ebf1e66d92d90fa484274afbbe5",
+   "source_sha256": "a610a3ccc11ba310b569af946a21ad33d6a96fe4ec92cac22d9cf8c73038adaf",
    "constructs": [
     "generated"
    ],
@@ -1648,15 +1649,15 @@
     "c_native": {
      "status": "ok",
      "expected": [
-      4294967106,
-      0,
-      4294967111,
-      552118316
+      152,
+      18207,
+      158,
+      3097427018
      ]
     },
     "translate_c": {
      "status": "ok",
-     "lines": 407,
+     "lines": 468,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1666,63 +1667,10 @@
     },
     "air_export": {
      "status": "ok",
-     "functions": 1,
-     "std_functions": [],
-     "unexported_callees": []
-    },
-    "air2lean": {
-     "status": "checked",
-     "codes": {},
-     "diagnostics": [],
-     "diagnostic_count": 0
-    },
-    "lean": {
-     "status": "ok",
-     "gen_lines": 82
-    }
-   },
-   "c_defined_functions": [
-    "entry"
-   ],
-   "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 540,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
-  },
-  "gen_s9": {
-   "source_sha256": "c9127bb8e1ae03b944280f26b083921ffe8cd77bdef97de62464eefe28f5b121",
-   "constructs": [
-    "generated"
-   ],
-   "stages": {
-    "c_native": {
-     "status": "ok",
-     "expected": [
-      45,
-      47,
-      4294967252,
-      3097427142
-     ]
-    },
-    "translate_c": {
-     "status": "ok",
-     "lines": 515,
-     "warnings": [],
-     "demoted_functions": [],
-     "extern_calls": []
-    },
-    "zig_native": {
-     "status": "ok"
-    },
-    "air_export": {
-     "status": "ok",
-     "functions": 3,
+     "functions": 2,
      "std_functions": [],
      "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
       "debug.FullPanic((function 'defaultPanic')).outOfBounds"
      ]
     },
@@ -1734,18 +1682,77 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 300
+     "gen_lines": 428
     }
    },
    "c_defined_functions": [
     "entry",
-    "entry_body",
     "h0"
    ],
    "libc_symbols": [],
    "translate_c_0.15.2": {
     "status": "ok",
-    "lines": 648,
+    "lines": 601,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s9": {
+   "source_sha256": "7b3c3a3e8342a5855123356fd975e99913ff33f33b965602122099e36f97d069",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      322,
+      320,
+      187,
+      2863311849
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 527,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 4,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 535
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0",
+    "h1"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 660,
     "warnings": [],
     "demoted_functions": [],
     "extern_calls": []
