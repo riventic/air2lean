@@ -136,7 +136,9 @@ interrupt in `OsState.interrupts`, and the thread's next futex wait or sleep del
 start. Delivery forces no `EINTR`: a signal that arrives before the syscall runs the no-op
 handler and is gone, and std re-signals with backoff. For partial correctness the oracle `EINTR`
 of every wait and sleep covers every timing. The pending bit is a hook for liveness arguments
-under a fairness premise. An unknown or ended thread gives `ESRCH`.
+under a fairness premise. An unknown, exited (Linux) or joined (macOS) thread gives `ESRCH`.
+A detached macOS thread stays signalable: the model does not see its end, so a signal to one that
+has ended returns `0`, where POSIX leaves it undefined.
 
 ## Clocks
 

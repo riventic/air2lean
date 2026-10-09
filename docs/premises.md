@@ -669,7 +669,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Statement: A `SIG.IO` to a live thread (std's cancelation of a blocked syscall, with a no-op
   handler installed) wakes the thread if it sleeps in a futex wait, which then returns `EINTR`.
   Otherwise it records a pending interrupt. The thread's next futex wait or sleep delivers it at
-  its start without forcing `EINTR`. An unknown or ended thread gives `ESRCH`. Installing the
+  its start without forcing `EINTR`. An unknown, exited (Linux) or joined (macOS) thread gives
+  `ESRCH`; a detached macOS thread stays signalable, also after it ended. Installing the
   handler has no memory effect. Any other signal is outside the model.
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.interrupt`,
   `Os.Linux.tgkill`, `Os.Darwin.pthread_kill`; implies THR-01.

@@ -3875,6 +3875,7 @@
           "ZigLean/Mem/Owned.lean",
           "ZigLean/Mem/Repr.lean",
           "ZigLean/Mem/Thread.lean",
+          "ZigLean/Os/Env.lean",
           "ZigLean/Os/Futex.lean",
           "ZigLean/Os/Malloc.lean",
           "ZigLean/Os/Thread.lean",
@@ -17271,7 +17272,7 @@
       "ZigLean/Conc/Lock.lean": "37be51baa59ba0731d5051ce7496cf5f0f5148dc1600f48ccae73b285691a095",
       "ZigLean/Conc/LockRules.lean": "9167af8d18f89f5f567c3aa8041c19ae0f53ae9de41d1a87e8429b8394ca37c2",
       "ZigLean/Conc/Logic.lean": "56ef8ab4effde678f82f58911e4b99b7f69372d08a117d8342822ec68362da12",
-      "ZigLean/Conc/OsRules.lean": "147ce7ff696ae27c86b171c40335bbe552d02b743710b592b970772a7922ae5a",
+      "ZigLean/Conc/OsRules.lean": "50624cd54ebc4621b71163f316ac5864b7952c6ef9b2bcdd49f2500156c80384",
       "ZigLean/Conc/Own.lean": "0613e466e1fd64455d0d0cbd3cb44a8a5a7a825d52b8af64b9f22f23be5556df",
       "ZigLean/Conc/Progress.lean": "bc62e7491f3b93772841ec6cf0ea90afb6527ee4d3f2198c0a16d07472481f35",
       "ZigLean/Conc/Sched.lean": "d41b4034664b84881f49fb8f5fa5fccd3487ea9c5229e62e9164f3543657c644",
@@ -17308,7 +17309,7 @@
       "ZigLean/Lemmas.lean": "1fb0ae49b9ea33ad0caadec7bb61378c06539088e95a014e117d91debd491634",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
       "ZigLean/Mem/Alloc.lean": "3764ceb7f6cbffeb9806db02f5d359fba3e9120f93c70d3e6d393bebf60ccfdc",
-      "ZigLean/Mem/Basic.lean": "71ce2bbbabebe23b67c65cc68401db7983499310b8fc2fcfb190174ea2c525ae",
+      "ZigLean/Mem/Basic.lean": "a671c8be08a712df169fda679e84c6446768f799735564ab2597fc2c3373f162",
       "ZigLean/Mem/Enc.lean": "8b1453063bef1205abc178736a3b094b85070dfcaafdfde7b54e73ab852bbeb0",
       "ZigLean/Mem/ErrWidth.lean": "f87beae1b49f34e21ee976278a45fa4e6a9ac102bf34d6255a1dd1b9c5c9ca3b",
       "ZigLean/Mem/ErrWidthLemmas.lean": "85be79a9d04bfc403d30bf3c911d2d12d0c418b54788a6642a4865994f1a2cff",
@@ -17320,10 +17321,10 @@
       "ZigLean/Mem/Thread.lean": "c70ab52aaad07bbcf0080f16660ad970e2c702ced1ba2799ff96400e696fb325",
       "ZigLean/Mem.lean": "f02356fc4ca39444405e63dd54ec7b68615572386142d4c6531db83cf1987f3e",
       "ZigLean/Os/Clock.lean": "e6d921c7fc58204e0138daa5387cb92bb5d9fcf99d8bda3a7544ba0c2baba90a",
-      "ZigLean/Os/Env.lean": "7f28bc0761585b885a9642840b183add541d50375fd40b6aa924b3960d7079a7",
-      "ZigLean/Os/Futex.lean": "44c8fb7fab0fe715a5f56e2f523115ac630f360dcd906bc1d3d910970583c51b",
+      "ZigLean/Os/Env.lean": "5a9e8c07c6bd2c0609b2c6334d94597952e265873362d2b2fd4ebdf8f02e4620",
+      "ZigLean/Os/Futex.lean": "7ebd64f07a1769cec810fd38438c19a9b39a28f60ee32c6e088a888d849befb4",
       "ZigLean/Os/Malloc.lean": "2baa7ece94ddd81d76ed297a958fcfb0861615700a5c81a3b6fda832b2918881",
-      "ZigLean/Os/Thread.lean": "9d2d0b51e0ceb0105cf90678edcc23dabfe34b1f5145f881872cc89ed0302c10",
+      "ZigLean/Os/Thread.lean": "f13298e0eb3f8ef57ebfe1635cb0a5088ee6c04698ac34bb10600b7eb6e86633",
       "ZigLean/Os.lean": "81d13e197770a0cc19b85eb7759a494834d7033868dd1c4dc1a02bd4ac799146",
       "ZigLean/Packed.lean": "bc065fecb418e1105e12d49caeac78940433d598955eb7fcdb0373f8079882a5",
       "ZigLean/PackedLemmas.lean": "80a58950f25a73bdb04020fde3e3ea1b31f0971770972d616dc833329053412c",
@@ -17342,7 +17343,7 @@
       "ZigLean/Sep/Heap.lean": "e5686d1fe72e5e47df44708cff597ab21769c7ac9533c2a8ecb1a3c81c20b584",
       "ZigLean/Sep/Loop.lean": "7603c6e0b212a0bae91f086086fd2596a63a00e4a5c7779698dcf757603cb46c",
       "ZigLean/Sep/LoopTemplate.lean": "a52975a351891ccb223e0f4c19392c1f03bc6d96d1614f9eb84912ff414e980b",
-      "ZigLean/Sep/OsMalloc.lean": "304b89c2128c689881cbe7a1d323cd66f58d91333e1a50137d1db54254cf0b10",
+      "ZigLean/Sep/OsMalloc.lean": "379db8e3260a4bc870f98bf4f350539eedd5283584bdbba58337d2c1fc3114aa",
       "ZigLean/Sep/Owned.lean": "597a9d72c3b36e8c45a858973c6db1e57e213b6bb807f5db80b7333d0a3384b6",
       "ZigLean/Sep/RawAlloc.lean": "82991269216fdd96896e19a69485fb36a8092e9442b46576c0e0339ee82a0806",
       "ZigLean/Sep/Remap.lean": "dfc6cae3d2564f73def3bd6f90a4bdc33e85da755ec2ef5ae6c0e24d84a3d406",
@@ -18168,7 +18169,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7a25b8d574da72c99854ab5480d3b23c4f5c8cf51982202afa0a8cd9cdff797c",
       "Air2Lean/Memory.lean": "70345d0fde16416e388a4ef89fc1be6eca172eff325c0576136608b09a1b9167",
-      "docs/std-models.md": "e5225778dc3dd8dc2a30b750dee3f4d8118e1c425acd3518042c4d2db9d476cb"
+      "docs/std-models.md": "43697e44567820e9b4e79685d9ba8c881618c8494abbd974e26bf1d809056ad4"
     }
   },
   "summary": {
