@@ -2446,6 +2446,7 @@ function cannot reuse the qualified name of a built-in std model. -/
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])
     (profile : Option BuildProfile := none)
     (selectedCallees : Array String := #[]) : Except String Unit := do
+  Identity.checkProgram (funcs.map (·.identities))
   unless models.isEmpty do
     let some profile := profile | throw "external model bindings require a checked program profile"
     ModelRegistry.check models profile funcs

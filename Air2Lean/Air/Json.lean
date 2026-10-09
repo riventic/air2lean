@@ -100,6 +100,8 @@ structure RawFunc where
   types : Array Ty
   layouts : Array Layout
   globals : Array Global
+  /-- The file's identities (`Identity.rewrite`), its own first. -/
+  identities : Array Identity.Record := #[]
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -715,9 +717,14 @@ def parseFunc (j : Json) : Except String RawFunc := do
     globals
   }
 
+/-- `parseFunc` after every identity becomes its module-qualified key (`Identity.rewrite`). -/
+def parseIdentifiedFunc (j : Json) : Except String RawFunc := do
+  let (j, identities) ← (Identity.rewrite j).mapError fun e =>
+    s!"{(j.getObjValAs? String "name").toOption.getD "AIR file"}: {e}"
+  return { ← parseFunc j with identities }
+
 /-- Parse one `<fqn>.json` file's contents (`docs/air-json.md`). -/
 def parseFile (contents : String) : Except String RawFunc := do
-  let j ← StrictJson.parse contents
-  parseFunc j
+  parseIdentifiedFunc (← StrictJson.parse contents)
 
 end Air2Lean.Raw

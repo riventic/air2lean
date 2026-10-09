@@ -2,6 +2,7 @@ import Std.Data.HashMap
 import Std.Data.HashSet
 import Lean.Data.Json
 import Air2Lean.Air.StrictJson
+import Air2Lean.Air.Identity
 
 /-!
 # Stable names of generic instances
@@ -154,12 +155,12 @@ private def renumberAllParsed (texts : Array String)
     current := compressParsed current parsed
   return current
 
-/-- Internal pipeline result: original full names and all rewritten texts, sharing the
-initial parse. Names are captured before any identity marker is renumbered. -/
+/-- Internal pipeline result: original full names (module-qualified keys, `Identity.fileKey`)
+and all rewritten texts, sharing the initial parse. Names are captured before any identity
+marker is renumbered. -/
 def renumberAllWithNames (texts : Array String) : Array String × Array String :=
   let parsed := texts.map fun text => (StrictJson.parse text).toOption
-  let names := parsed.map fun j =>
-    (j.bind fun j => (j.getObjValAs? String "name").toOption).getD ""
+  let names := parsed.map fun j => (j.map Identity.fileKey).getD ""
   (names, renumberAllParsed texts parsed)
 
 /-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/

@@ -18,6 +18,13 @@ HASHED_NAME = re.compile(r"~air2lean-sha256-[0-9a-f]{64}\.json")
 IDENTITY_MARKER = re.compile(r"__(anon|enum|opaque|union|struct)_[0-9]+")
 
 
+def storage_name(name, document):
+    """The exporter's storage identity of a function: `name` in the `root` and `std` modules
+    (and in a legacy export without `module`), else `<module>:<name>`."""
+    module = document.get("module")
+    return name if module in (None, "root", "std") else f"{module}:{name}"
+
+
 def canonical_filename(name):
     """Portable naming for normalized identities, reserving legacy collision suffix space."""
     stem = name.split(".", 1)[0].upper()
@@ -61,6 +68,11 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
         # "runtime" stays observable.
         if type_entry and key == "vector_index" and item is None:
             continue
+        # Module identity (B1, docs/air-json.md §Identity) is checked by translating the
+        # actual export: the generated names and std model bindings depend on it, and the
+        # generated file is compared with its golden. Goldens that predate it compare equal.
+        if key == "comptime_fn_module" or (key == "module" and (root or "func" in value or "name" in value)):
+            continue
         identity = key in ("func", "comptime_fn") or (key == "name" and (root or type_entry))
         if identity:
             result[key] = IDENTITY_MARKER.sub(r"__\1_N", item) if isinstance(item, str) else item
@@ -101,10 +113,10 @@ class ValidationContext:
         if path.name.startswith("~air2lean-sha256-"):
             if not HASHED_NAME.fullmatch(path.name):
                 raise ValueError(f"{path}: malformed reserved AIR filename")
-            expected = "~air2lean-sha256-" + hashlib.sha256(document["name"].encode("utf-8")).hexdigest() + ".json"
+            expected = "~air2lean-sha256-" + hashlib.sha256(storage_name(document["name"], document).encode("utf-8")).hexdigest() + ".json"
             if path.name != expected:
                 raise ValueError(f"{path}: reserved AIR filename does not match full JSON name")
-        name = canonical_filename(value["name"])
+        name = canonical_filename(storage_name(value["name"], document))
         data = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
         return name, data
 

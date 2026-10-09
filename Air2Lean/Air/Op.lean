@@ -1,4 +1,5 @@
 import Std.Data.HashSet
+import Air2Lean.Air.Identity
 
 /-!
 # Internal IR
@@ -613,5 +614,8 @@ structure Func where
   /-- The profile's `error_set_bits` (`--error-limit`): the width of every stored error code.
   Legacy profiles and hand-built functions keep the default 16. -/
   errorSetBits : Nat := 16
+  /-- The identities of the AIR file (`Identity.rewrite`), its own first; `checkProgram`
+  checks them across the program. Hand-built functions have none. -/
+  identities : Array Identity.Record := #[]
 
 end Air2Lean

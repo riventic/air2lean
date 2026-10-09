@@ -3,6 +3,6 @@
 const util = @import("util.zig");
 const other = @import("other");
 
-export fn entry(x: u32) u32 {
+pub export fn entry(x: u32) u32 {
     return util.helper(x) +% other.util.helper(x);
 }

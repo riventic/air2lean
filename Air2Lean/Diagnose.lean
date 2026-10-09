@@ -171,12 +171,12 @@ def inspect (file contents : String) (initial : Log) : FileResult × Log := Id.r
   let .ok json := parsed
     | log := log.record (boundary file none .jsonSyntax .decode .malformedInput) parsed
       return (empty, log.add (skipped file none .normalize "decoded_AIR"))
-  let name := (json.getObjValAs? String "name").toOption
+  let name := (json.getObjValAs? String "name").toOption.map fun _ => Identity.fileKey json
   if (name.map (fun n => decide (n.length > 1024))).getD false then
     log := log.add (boundary file none .inputLimit .decode .resourceLimit "function name exceeds 1024 characters")
     return (empty, log.add (skipped file none .normalize "bounded_function_identity"))
   let unit := { empty with function := name }
-  let decoded := Raw.parseFunc json
+  let decoded := Raw.parseIdentifiedFunc json
   let .ok raw := decoded
     | log := log.record (boundary file name .airDecode .decode .validationFailure) decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))

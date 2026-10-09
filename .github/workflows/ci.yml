@@ -397,7 +397,11 @@ jobs:
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
-        run: bash tests/roadmap/module-identity/check.sh
+        run: |
+          set -euo pipefail
+          lake env lean tests/roadmap/module-identity/Identity.lean
+          bash tests/roadmap/module-identity/check.sh
+          python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed std-name-spoof std-type-spoof
 
       - name: Build optional separation proof tools
         if: ${{ !matrix.mutate }}
