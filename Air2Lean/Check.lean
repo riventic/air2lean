@@ -946,13 +946,16 @@ mutual
 partial def checkInst (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Nat := do
   checkTy cx.fnName cx.types cx.layouts line inst.ty
   cx.checkBitPtrSource line inst.ty inst.op
-  checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
+  let line ← checkOp cx line inst.ty inst.op cx.tryErrorExits[inst.id]?
+  -- Inline asm: A01's operand/effect-contract checks (in `checkOp`, with specific messages) come
+  -- first, then the L13 allowlist.
+  cx.checkAsmEffect line inst.op
+  pure line
 
 partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     (cachedTryExit : Option Bool := none) : Except String Nat := do
   let fnName := cx.fnName
   cx.checkVolatile line ty op
-  cx.checkAsmEffect line op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
   match op with
@@ -3276,10 +3279,6 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     let paddedCheck := cx.checkPaddedAtomic line i.op
     log := log.record { (checkDiagnostic file f .paddedAtomic anchor) with
       category := .unsupportedSemantics } paddedCheck
-    -- L13: inline asm off the reviewed allowlist and not a declared device event.
-    let asmCheck := cx.checkAsmEffect line i.op
-    log := log.record { (checkDiagnostic file f .asmVolatileEffect anchor) with
-      category := .unsupportedSemantics } asmCheck
     match i.op with
     | .block b | .loop b =>
       let result := collectInstChecks file f cx b line log
@@ -3294,9 +3293,14 @@ private partial def collectInstChecks (file : String) (f : Func) (cx : CheckCtx)
     | .line n => line := n
     | _ =>
       if typeCheck.toOption.isSome && volatileCheck.toOption.isSome &&
-          packedCheck.toOption.isSome && paddedCheck.toOption.isSome &&
-          asmCheck.toOption.isSome then
-        log := log.record (checkDiagnostic file f .instructionFailure anchor) (checkOp cx line i.ty i.op)
+          packedCheck.toOption.isSome && paddedCheck.toOption.isSome then
+        let opCheck := checkOp cx line i.ty i.op
+        log := log.record (checkDiagnostic file f .instructionFailure anchor) opCheck
+        -- L13: inline asm that passes A01's operand checks but is off the reviewed allowlist and
+        -- not a declared device event has its own stable code.
+        if opCheck.toOption.isSome then
+          log := log.record { (checkDiagnostic file f .asmVolatileEffect anchor) with
+            category := .unsupportedSemantics } (cx.checkAsmEffect line i.op)
   return (line, log)
 
 structure FunctionChecks where

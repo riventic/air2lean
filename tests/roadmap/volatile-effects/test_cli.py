@@ -368,11 +368,16 @@ def check_asm(binary, tmp, air):
             for flags, expected in (((), default), (("--device-contract", TSC_CONTRACT), device)):
                 result = invoke(binary, "--diagnostics-json", air, *flags)
                 assert result.stderr == "", result.stderr
-                found = [d for d in json.loads(result.stdout)["diagnostics"]
-                         if d["code"] == "ASM_VOLATILE_EFFECT"]
-                assert len(found) == expected, (version, name, flags, result.stdout)
+                diagnostics = json.loads(result.stdout)["diagnostics"]
+                found = [d for d in diagnostics if d["code"] == "ASM_VOLATILE_EFFECT"]
+                # A `memory` clobber off A01's registry fails A01's operand check first
+                # (INSTRUCTION_FAILURE, `Air2Lean/AsmContract.lean`), before the allowlist.
+                clobber = [d for d in diagnostics if d["code"] == "INSTRUCTION_FAILURE" and
+                           "'memory' clobber" in d["message"]]
                 assert all((d["phase"], d["category"]) == ("check", "unsupported_semantics") and
                            d["anchor"]["instruction"] is not None for d in found), found
+                found += clobber
+                assert len(found) == expected, (version, name, flags, result.stdout)
                 out.write_text("KEEP\n")
                 result = invoke(binary, air, "-o", out, "--namespace", "Asm", *flags)
                 if expected:
