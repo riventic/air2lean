@@ -86,7 +86,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) |
 | Device effects | [DEV-01](#dev-01) |
-| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) |
+| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) |
@@ -452,8 +452,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: Selected operations (f128 multiply/divide, `@mulAdd`, f80→f16, version-specific
   rounding) follow ported compiler-rt functions instead of correctly rounded IEEE results.
-- Derived from: `ZigLean.Float.CompilerRt`; tokens `Rt016`, `mulRt`, `RtChk`; header `float_semantics: compiler-rt`.
+- Derived from: `ZigLean.Float.CompilerRt`; tokens `Rt016`, `mulRt`, `RtChk`, `…Xf3`, `fmaRtFused`; header `float_semantics: compiler-rt`.
 - Sources: [floats.md](floats.md#--float-semantics-ieee--compiler-rt).
+
+<a id="mth-04"></a>
+### MTH-04 — aarch64 float lowering
+
+- Kind: environment.
+- Statement: The translation targets aarch64-macos, whose float lowering differs from
+  x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3` division;
+  before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f16`/`f32`/`f64` is a fused
+  instruction. The rules are read from the Zig 0.16.0 LLVM backend and compiler_rt sources and
+  checked by the macOS differential test; no other aarch64 target is qualified.
+- Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
+- Sources: [floats.md](floats.md#targets).
 
 ## Inline assembly
 

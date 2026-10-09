@@ -288,16 +288,14 @@ class GraphTests(unittest.TestCase):
             ('mul_spec', ['Zig.Float.mulRt'], IEEE, 'float-semantics-mismatch'),
             ('mul_spec', ['Zig.Float.mulRt'], ABSTRACT, 'float-semantics-mismatch'),
             ('nat_spec', ['Nat.add'], IEEE, 'stale-float-semantics-label'),
-            # An aarch64-only rule (docs/floats.md §Targets) needs aarch64-macos in the label.
-            ('div_spec', ['Zig.Float.divXf3'], dict(RT, targets=['x86_64-linux']), 'float-semantics-mismatch'),
         ]
         for name, dependencies, entry, trust in cases:
             with self.subTest(name=name, entry=entry):
                 report = self.report(self.raw([(name, dependencies)]), self.labels(**{name: entry}))
                 self.assertEqual(self.classes(report), [(name, trust)])
 
-    def test_aarch64_rules_pass_with_an_aarch64_label(self):
-        for targets in (['aarch64-macos'], BOTH):
+    def test_labels_record_targets(self):
+        for targets in (['aarch64-macos'], ['x86_64-linux'], BOTH):
             with self.subTest(targets=targets):
                 report = self.report(self.raw([('div_spec', ['Zig.Float.divXf3'])]),
                                      self.labels(div_spec=dict(RT, targets=targets)))

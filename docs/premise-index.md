@@ -5,11 +5,11 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2366 theorems in 135 files.
+2369 theorems in 135 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 649 | Legacy 64-bit little-endian reference model |
+| [PRF-01](premises.md#prf-01) | 650 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 452 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
@@ -34,23 +34,24 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-04](premises.md#ord-04) | 495 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 73 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
-| [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
+| [MTH-01](premises.md#mth-01) | 76 | Executable IEEE-754 float model |
+| [MTH-02](premises.md#mth-02) | 25 | Opaque libm transcendentals |
+| [MTH-03](premises.md#mth-03) | 18 | Version-specific compiler-rt float semantics |
+| [MTH-04](premises.md#mth-04) | 12 | aarch64 float lowering |
 | [ASM-01](premises.md#asm-01) | 5 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 5 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2234 | Zig value and safety semantics |
+| [SEM-01](premises.md#sem-01) | 2235 | Zig value and safety semantics |
 | [SEM-02](premises.md#sem-02) | 1888 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1066 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2366 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1119 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1119 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 29 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 2369 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1120 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1120 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 30 | Reviewed opaque, extern and runtime-redirection policy |
 | [DEV-01](premises.md#dev-01) | 19 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -317,7 +318,7 @@ File premises: PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Floatops/Proofs.lean`
 
-File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
+File premises: PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
 
 | Theorem | Premises |
 |---|---|
@@ -333,17 +334,20 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, T
 | `op64_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op80_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op128_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `opSpec_other` | MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-04 |
+| `opSpec_other` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |
 | `sel_lt` | TRU-01 |
-| `op16_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-04 |
+| `op16_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `softF80Chk_floorRtLegacy` | MTH-01, MTH-03, MTH-04, TRU-01 |
+| `softF80Chk_ceilRtLegacy` | MTH-01, MTH-03, MTH-04, TRU-01 |
+| `op80_spec_aarch64` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |
 | `sel_cases128` | TRU-01 |
-| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `divExact64_spec` | PRF-01, MTH-01, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Floats/Dot.lean`

@@ -30,7 +30,9 @@ SEMANTICS = ('ieee', 'compiler-rt', 'abstract-spec')
 TARGETS = ('aarch64-macos', 'x86_64-linux')
 AARCH64 = 'aarch64-macos'
 # The model functions that only an aarch64 translation calls (docs/floats.md §Targets). A
-# theorem that reaches one concerns aarch64 rules, so its label must list aarch64-macos.
+# theorem that names one concerns aarch64 rules, so its label must list aarch64-macos. This is a
+# source check: a theorem stated for one target reaches both targets' rules through the target
+# detection (`floatopsTarget`) in its premise, so the dependency closure cannot decide it.
 AARCH64_ONLY = frozenset('Zig.Float.' + n for n in (
     'softF80Chk', 'divXf3', 'divTruncXf3', 'divFloorXf3', 'fmaFused', 'fmaRtFused', 'sqrtF80ViaF64'))
 CORRESPONDENCE = 'model'
@@ -38,7 +40,7 @@ NOT_CLAIMED = 'not_claimed'
 FLOAT_MODULE = 'ZigLean.Float'
 OPS_MODULE = 'ZigLean.Float.Ops'
 RT_MODULE = 'ZigLean.Float.CompilerRt'
-FLOAT, OPS, RT, A64 = 1, 2, 4, 8
+FLOAT, OPS, RT = 1, 2, 4
 MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9!?']*(\.[A-Za-z_][A-Za-z_0-9!?']*)*")
 # Lean-generated companions of a declaration: equation, injectivity, sizeOf, sparse-case
@@ -155,14 +157,12 @@ def is_auxiliary(name):
     return bool(AUXILIARY.search(name)) or any(GENERATED_PART.fullmatch(part) for part in name.split('.'))
 
 
-def own_flags(module, name=None):
+def own_flags(module):
     bits = FLOAT if module == FLOAT_MODULE or module.startswith(FLOAT_MODULE + '.') else 0
     if module == OPS_MODULE:
         bits |= OPS
     if module == RT_MODULE:
         bits |= RT
-    if name in AARCH64_ONLY:
-        bits |= A64
     return bits
 
 
@@ -208,7 +208,7 @@ def closure_flags(nodes):
                     for member in members:
                         component[member] = name
                     for member in members:
-                        bits |= own_flags(nodes[member]['module'], member)
+                        bits |= own_flags(nodes[member]['module'])
                         for child in nodes[member]['dependencies']:
                             if component.get(child) != name:
                                 bits |= flags[child]
@@ -268,8 +268,6 @@ def label_theorems(nodes, theorems, modules, registry):
             issue(name, module, 'float-semantics-mismatch', 'compiler-rt label without a compiler-rt helper dependency')
         elif semantics == 'abstract-spec' and bits & (OPS | RT):
             issue(name, module, 'float-semantics-mismatch', 'abstract-spec label but depends on float operation semantics')
-        elif bits & A64 and AARCH64 not in entry['targets']:
-            issue(name, module, 'float-semantics-mismatch', 'depends on aarch64-only float rules but its label omits ' + AARCH64)
         text = label_text(entry)
         labels[text] = labels.get(text, 0) + 1
         record = {'scope': 'stated', 'label': text, 'semantics': semantics, 'targets': entry['targets']}

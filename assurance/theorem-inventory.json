@@ -132,49 +132,56 @@
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every selector `sel : u8` and every `a b c : f16`: `op16` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+      "domain": "every selector `sel : u8` and every `a b c : f16`: `op16` is `opSpec floatopsTarget sel`, where `floatopsTarget` is the translation's target (`@mulAdd`: compiler_rt on x86_64, the fused instruction on aarch64; selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md §Targets)"
     },
     {
       "name": "op32_spec",
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every selector `sel : u8` and every `a b c : f32`: `op32` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+      "domain": "every selector `sel : u8` and every `a b c : f32`: `op32` is `opSpec floatopsTarget sel`, where `floatopsTarget` is the translation's target (`@mulAdd`: compiler_rt on x86_64, the fused instruction on aarch64; selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md §Targets)"
     },
     {
       "name": "op64_spec",
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every selector `sel : u8` and every `a b c : f64`: `op64` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+      "domain": "every selector `sel : u8` and every `a b c : f64`: `op64` is `opSpec floatopsTarget sel`, where `floatopsTarget` is the translation's target (`@mulAdd`: compiler_rt on x86_64, the fused instruction on aarch64; selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md §Targets)"
     },
     {
       "name": "op80_spec",
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every selector and every `a b c : f80` with `a` not a pseudo-denormal (a noncanonical encoding that legacy floor/ceil misread): `op80` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+      "domain": "x86_64 translations only (premise `floatopsTarget = .x86_64`; x87 `f80`): every selector and every `a b c : f80` with `a` not a pseudo-denormal (a noncanonical encoding that legacy floor/ceil misread): `op80` is `opSpec .x86_64 sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op80_spec_aarch64",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "aarch64 translations only (premise `floatopsTarget = .aarch64`; soft-float `f80`): every selector and every `a b c : f80`: `op80` is `opSpec80A64 op128Profile sel` (`.unspecified` on a noncanonical operand of a soft-float routine, `__divxf3` division, and on 0.14.1/0.15.2 `@sqrt` through `f64`); sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md §Targets)"
     },
     {
       "name": "op128_spec",
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every `a b c : f128` and every selector except 3, 5, 6 and 9 (`/`, `@divTrunc`, `@divFloor`, `@sqrt`: they call a different model function per Zig version; `op128_spec_full` covers them): `op128` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+      "domain": "every `a b c : f128` and every selector except 3, 5, 6 and 9 (`/`, `@divTrunc`, `@divFloor`, `@sqrt`: they call a different model function per Zig version; `op128_spec_full` covers them): `op128` is `opSpec floatopsTarget sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
     },
     {
       "name": "op128_spec_full",
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every selector `sel : u8` and every `a b c : f128`: `op128` is `opSpec128 op128Profile sel`, where `op128Profile` is the profile whose helpers the translation calls (`legacy` on 0.14.1/0.15.2: `Float.divRt`, `Float.sqrtF128ViaF64`; `v016` on 0.16.0: `Float.divRt016`, IEEE `Float.sqrt`) and every other selector is `opSpec sel`; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md §Per-version differences)"
+      "domain": "every selector `sel : u8` and every `a b c : f128`: `op128` is `opSpec128 floatopsTarget op128Profile sel`, where `op128Profile` is the profile whose helpers the translation calls (`legacy` on 0.14.1/0.15.2: `Float.divRt`, `Float.sqrtF128ViaF64`; `v016` on 0.16.0: `Float.divRt016`, IEEE `Float.sqrt`) and every other selector is `opSpec floatopsTarget sel`; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md §Per-version differences)"
     },
     {
       "name": "op128_eq_opSpec_of_special",
       "module": "Proofs.Floatops.Proofs",
       "example": "floatops",
       "scope": "sequential",
-      "domain": "every selector and every `a b c : f128` with `a` NaN, infinite or zero, or with `b` NaN, infinite or zero and a selector other than 9 (`@sqrt`): `op128` is `opSpec sel` (IEEE division and `@sqrt`) on every profile; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md)"
+      "domain": "every selector and every `a b c : f128` with `a` NaN, infinite or zero, or with `b` NaN, infinite or zero and a selector other than 9 (`@sqrt`): `op128` is `opSpec floatopsTarget sel` (IEEE division and `@sqrt`) on every profile and target; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md)"
     },
     {
       "name": "divExact64_spec",
