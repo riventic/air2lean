@@ -1,0 +1,3128 @@
+{
+ "schema": 1,
+ "kind": "air2lean-c-frontend-coverage",
+ "inputs": [
+  [
+   0,
+   0
+  ],
+  [
+   1,
+   2
+  ],
+  [
+   4294967295,
+   7
+  ],
+  [
+   305419896,
+   2863311530
+  ]
+ ],
+ "translate_c_target": "x86_64-linux-musl",
+ "air_target": "-target x86_64-linux -mcpu=baseline",
+ "std_filter": [
+  "zig.c_translation."
+ ],
+ "tools": {
+  "zig_native": "0.16.0",
+  "zig_air": "0.16.0",
+  "zig_native_0152": "0.15.2"
+ },
+ "files": {
+  "arrays_2d": {
+   "source_sha256": "50c37c1438b98fe476d32e539675747a7a5f4a0f620dd8700f010c3e4ba54c64",
+   "constructs": [
+    "multi-dim arrays"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      9,
+      99,
+      189,
+      572662277
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 390,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "arrays_2d_native.zig:29:30: error: expected type '[3]c_uint', found 'comptime_int'\n    row.*[@as(c_int, 2)] +%= 9;\n                             ^\nreferenced by:\n    test.c_frontend_native: arrays_2d_native.zig:394:54\n"
+    },
+    "air_export": {
+     "status": "failed",
+     "files": 0,
+     "log": "...    }, {\n              %277 = break(%242, @void_value)\n            }) node_offset:37:9 to :37:14\n          }) node_offset:37:9 to :37:14\n          %251 = repeat() node_offset:37:9 to :37:14\n        }) node_offset:37:9 to :37:14\n        %278 = ensure_result_used(%242) node_offset:37:9 to :37:14\n        %279 = restore_err_ret_index_unconditional(%235) node_offset:34:5 to :34:5\n        %280 = break(%235, @void_value)\n      }) node_offset:34:5 to :34:5\n      %281 = dbg_stmt(33, 5)\n      %282 = decl_val(\"trace\") token_offset:41:13 to :41:18\n      %283 = dbg_stmt(33, 18)\n      %284 = call(.auto, %282, [\n        {\n          %285 = dbg_stmt(33, 19)\n          %286 = extended(ptr_cast_full(ptr_cast, align_cast, %284, %86)) node_offset:41:19 to :41:43\n          %287 = break_inline(%284, %286)\n        },\n      ]) node_offset:41:13 to :41:44\n      %288 = int(7)\n      %289 = as_node(@c_uint_type, %288) node_offset:41:60 to :41:61\n      %290 = mulwrap(%284, %289) node_offset:41:13 to :41:62\n      %291 = load(%229) node_offset:41:67 to :41:68\n      %292 = addwrap(%290, %291) node_offset:41:12 to :41:68\n      %293 = restore_err_ret_index_unconditional(.none) node_offset:41:5 to :41:68\n      %294 = dbg_stmt(33, 5)\n      %295 = ret_node(%292) node_offset:41:5 to :41:68\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t arrays_2d.zig\n\n\nthread 51100070 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "trace"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 526,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "bitfield_packet": {
+   "source_sha256": "23600fedb5b5bc98324453f528df604ba31facd15475b89be28667ba4c38fb27",
+   "constructs": [
+    "bitfields",
+    "libc string"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      3,
+      212984,
+      113874
+     ]
+    },
+    "translate_c": {
+     "status": "demoted",
+     "lines": 428,
+     "warnings": [
+      "bitfield_packet.c:12:10: unable to translate function, demoted to extern",
+      "bitfield_packet.c:17:23: member access of demoted record",
+      "bitfield_packet.c:18:21: member access of demoted record",
+      "bitfield_packet.c:5:14: struct demoted to opaque type - has bitfield"
+     ],
+     "demoted_functions": [
+      "entry"
+     ],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "error: undefined symbol: _entry\n    note: referenced by $HOME/.cache/zig/o/df71bf66fb5dd877c83b90f414869c93/test_zcu.o:_bitfield_packet_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/df71bf66fb5dd877c83b90f414869c93/test_zcu.o:_bitfield_packet_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/df71bf66fb5dd877c83b90f414869c93/test_zcu.o:_bitfield_packet_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/df71bf66fb5dd877c83b90f414869c93/test_zcu.o:_bitfield_packet_native.test.c_frontend_native\n"
+    },
+    "air_export": {
+     "status": "failed",
+     "files": 0,
+     "log": ""
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "demoted",
+    "lines": 569,
+    "warnings": [
+     "bitfield_packet.c:12:10: unable to translate function, demoted to extern",
+     "bitfield_packet.c:15:16: local variable has opaque type",
+     "bitfield_packet.c:5:14: struct demoted to opaque type - has bitfield"
+    ],
+    "demoted_functions": [
+     "entry"
+    ],
+    "extern_calls": []
+   }
+  },
+  "bitfields": {
+   "source_sha256": "6c939f138833d00225b5b6046ac29899b2edaa4537f66065e8d1f89e04742735",
+   "constructs": [
+    "bitfields"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      16,
+      789,
+      16775183,
+      16590980
+     ]
+    },
+    "translate_c": {
+     "status": "demoted",
+     "lines": 356,
+     "warnings": [
+      "bitfields.c:11:6: member access of demoted record",
+      "bitfields.c:3:14: struct demoted to opaque type - has bitfield",
+      "bitfields.c:9:10: unable to translate function, demoted to extern"
+     ],
+     "demoted_functions": [
+      "entry"
+     ],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "error: undefined symbol: _entry\n    note: referenced by $HOME/.cache/zig/o/59d76fa3c920e17deb5f1017e089d743/test_zcu.o:_bitfields_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/59d76fa3c920e17deb5f1017e089d743/test_zcu.o:_bitfields_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/59d76fa3c920e17deb5f1017e089d743/test_zcu.o:_bitfields_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/59d76fa3c920e17deb5f1017e089d743/test_zcu.o:_bitfields_native.test.c_frontend_native\n"
+    },
+    "air_export": {
+     "status": "failed",
+     "files": 0,
+     "log": ""
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [
+    "memset"
+   ],
+   "translate_c_0.15.2": {
+    "status": "demoted",
+    "lines": 491,
+    "warnings": [
+     "bitfields.c:10:18: local variable has opaque type",
+     "bitfields.c:3:14: struct demoted to opaque type - has bitfield",
+     "bitfields.c:9:10: unable to translate function, demoted to extern"
+    ],
+    "demoted_functions": [
+     "entry"
+    ],
+    "extern_calls": []
+   }
+  },
+  "bool_logic": {
+   "source_sha256": "8c3900204213f54cae5a064b594af3275bfd571ce76d237033568d8d72e68c32",
+   "constructs": [
+    "short-circuit/_Bool"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      165,
+      282,
+      242,
+      130
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 380,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 166
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "touch"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 514,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "casts": {
+   "source_sha256": "c14593dce2e84ea304e862b7e18b53193ca6b073d8facfa09a9ec93cca3e6cf9",
+   "constructs": [
+    "integer casts",
+    "object-representation casts"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      8,
+      2147484662,
+      1854178087
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 510,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "INSTRUCTION_FAILURE": 2
+     },
+     "diagnostics": [
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "casts.entry",
+       "message": "casts.entry: near line 29: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "casts.entry",
+       "message": "casts.entry: near line 31: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 649,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "enums": {
+   "source_sha256": "ef18918a3a24986ace771738b33109ea56bd095d5b622faaba690b145b384f1d",
+   "constructs": [
+    "enums",
+    "switch"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      43,
+      33,
+      33,
+      44
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 392,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 8,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 377
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "weight"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 517,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "expressions": {
+   "source_sha256": "34f74be4a87f927327db40a2a015c20e40126d38b24b5519db459146523ca78a",
+   "constructs": [
+    "side-effecting expressions"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      17,
+      44,
+      161,
+      44
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 408,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 161
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 544,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "float_basic": {
+   "source_sha256": "8067057e22d5a0de605f413c114113e250b61a784204389b2aac0d9670bb8dea",
+   "constructs": [
+    "floating point"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      3,
+      169,
+      30057
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 370,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 86
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 503,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "func_pointers": {
+   "source_sha256": "8a4d98aabab654c5ef6f762394332f7dab54a67cd0774187eac41b8dd7da6efa",
+   "constructs": [
+    "function pointers"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      1,
+      4294967293,
+      3887740766
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 405,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 5,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 205
+    }
+   },
+   "c_defined_functions": [
+    "add",
+    "apply",
+    "entry",
+    "mul",
+    "sub"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 538,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "globals": {
+   "source_sha256": "240be98a7fc9051ae17763fa9f3881f15781eac80b797d020064e9d5272270cb",
+   "constructs": [
+    "globals"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      19,
+      71,
+      138,
+      1431655773
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 396,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 173
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 529,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "goto_cleanup": {
+   "source_sha256": "c792edca4580e4177aaeceb220f5ebadd019dacc54a380f06212fe7f931b3ab9",
+   "constructs": [
+    "goto"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      7,
+      2800,
+      11
+     ]
+    },
+    "translate_c": {
+     "status": "demoted",
+     "lines": 367,
+     "warnings": [
+      "goto_cleanup.c:4:17: unable to translate function, demoted to extern",
+      "goto_cleanup.c:6:27: TODO goto"
+     ],
+     "demoted_functions": [
+      "run"
+     ],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "error: undefined symbol: _run\n    note: referenced by $HOME/.cache/zig/o/3816d327bf80b08a901e87fbd80daf6e/test_zcu.o:_goto_cleanup_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/3816d327bf80b08a901e87fbd80daf6e/test_zcu.o:_goto_cleanup_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/3816d327bf80b08a901e87fbd80daf6e/test_zcu.o:_goto_cleanup_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/3816d327bf80b08a901e87fbd80daf6e/test_zcu.o:_goto_cleanup_native.test.c_frontend_native\n    note: referenced 4 more times\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "goto_cleanup.entry",
+       "message": "goto_cleanup.entry: constant of unsupported type Air2Lean.Ty.other \"fn (c_uint) callconv(.c) c_uint\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "goto_cleanup.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "run",
+    "step"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "demoted",
+    "lines": 502,
+    "warnings": [
+     "goto_cleanup.c:4:17: unable to translate function, demoted to extern",
+     "goto_cleanup.c:6:22: TODO implement translation of stmt class GotoStmtClass"
+    ],
+    "demoted_functions": [
+     "run"
+    ],
+    "extern_calls": []
+   }
+  },
+  "goto_state_machine": {
+   "source_sha256": "99dade758ab27ac5ec4e4dafd37256f3a0e4db8cba0a6b28bbb0eb07f3aa95db",
+   "constructs": [
+    "goto"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      1002,
+      2001,
+      3008
+     ]
+    },
+    "translate_c": {
+     "status": "demoted",
+     "lines": 374,
+     "warnings": [
+      "goto_state_machine.c:2:17: unable to translate function, demoted to extern",
+      "goto_state_machine.c:4:1: TODO goto"
+     ],
+     "demoted_functions": [
+      "scan"
+     ],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "error: undefined symbol: _scan\n    note: referenced by $HOME/.cache/zig/o/e509507ae4b5f57936cb753d1bdaf5ff/test_zcu.o:_goto_state_machine_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/e509507ae4b5f57936cb753d1bdaf5ff/test_zcu.o:_goto_state_machine_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/e509507ae4b5f57936cb753d1bdaf5ff/test_zcu.o:_goto_state_machine_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/e509507ae4b5f57936cb753d1bdaf5ff/test_zcu.o:_goto_state_machine_native.test.c_frontend_native\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "goto_state_machine.entry",
+       "message": "goto_state_machine.entry: constant of unsupported type Air2Lean.Ty.other \"fn ([*c]const u8, c_uint) callconv(.c) c_uint\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "goto_state_machine.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "scan"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "demoted",
+    "lines": 508,
+    "warnings": [
+     "goto_state_machine.c:2:17: unable to translate function, demoted to extern",
+     "goto_state_machine.c:4:1: TODO implement translation of stmt class LabelStmtClass"
+    ],
+    "demoted_functions": [
+     "scan"
+    ],
+    "extern_calls": []
+   }
+  },
+  "hash_table": {
+   "source_sha256": "fb7c2932d842e6bd9f0fed8181707a5e3348678f2ab6d69a527df30ba6786de5",
+   "constructs": [
+    "realistic",
+    "structs+pointers"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      1422978064,
+      3491695634,
+      2859503509,
+      4201872858
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 596,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "runtime_error",
+     "log": "1/1 hash_table_native.test.c_frontend_native...error: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/a6a1e692b253d513ed9fc6cca2e374e0/test --seed=0xad5fb554\n"
+    },
+    "air_export": {
+     "status": "failed",
+     "files": 1,
+     "log": "...1) node_offset:91:25 to :91:28\n          %473 = dbg_stmt(16, 28)\n          %474 = field_ptr_load(%471, \"value\") node_offset:91:25 to :91:34\n          %475 = store_node(%469, %474) node_offset:91:17 to :91:34\n          %476 = dbg_stmt(17, 17)\n          %477 = decl_val(\"true\") token_offset:92:24 to :92:31\n          %478 = cmp_neq(%477, @zero) node_offset:92:24 to :92:36\n          %479 = restore_err_ret_index_unconditional(.none) node_offset:92:17 to :92:36\n          %480 = dbg_stmt(17, 17)\n          %481 = ret_node(%478) node_offset:92:17 to :92:36\n        }, {\n          %482 = break(%467, @void_value)\n        }) node_offset:90:13 to :90:15\n      }) node_offset:90:13 to :90:15\n      %483 = ensure_result_used(%467) node_offset:90:13 to :90:15\n      %484 = dbg_stmt(19, 9)\n      %485 = extended(dbg_empty_stmt())\n      %486 = break(%405, @void_value)\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t hash_table.zig\n\n  in hash_table.zig\n    > %405 = block({%413..%486}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %403 = condbr(%402, {%405..%487}, {%488}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %404 = block({%399..%403}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %398 = loop({%404, %406}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %391 = block({%392..%491}) node_offset:83:5 to :83:5\n\nthread 51131549 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "fnv",
+    "get",
+    "put"
+   ],
+   "libc_symbols": [
+    "memset"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 731,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "initializers": {
+   "source_sha256": "2d494ebbb0a68ddc5833107fad586451a612ed7a9aed039f137e745913940a4d",
+   "constructs": [
+    "designated/compound initializers"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      32,
+      134,
+      973,
+      2984
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 409,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "mem.zeroes__anon_1064",
+      "mem.zeroes__anon_194"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "CALLEE_MISSING": 2,
+      "PROGRAM_FAILURE": 1
+     },
+     "diagnostics": [
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "initializers.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "initializers.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": null,
+       "message": "initializers.entry: the callee 'mem.zeroes__anon_1' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
+      }
+     ],
+     "diagnostic_count": 3
+    }
+   },
+   "c_defined_functions": [
+    "area",
+    "entry"
+   ],
+   "libc_symbols": [
+    "memset"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 545,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "inline_static": {
+   "source_sha256": "183c8aa1945272f4a0c5677547480f8311d54b5f43861eccbf3fce7e6fa8621b",
+   "constructs": [
+    "static inline"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      2425265557,
+      4102830508,
+      3260582857,
+      527778826
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 380,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 86
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "mix",
+    "rotl"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 513,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "int_promotion": {
+   "source_sha256": "8056d8002a6951a3367dd3af7372b0a0ac5d1ba6d1aa5dbb1632349dfd453696",
+   "constructs": [
+    "integer promotions"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      65536,
+      65559,
+      132653,
+      107674
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 382,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 118
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 515,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "libc_stdio": {
+   "source_sha256": "78e0fee5c2ea1d6b349dc80f4a85fa00a47b8ecd4b282fd6ce0cd85574e7f5c0",
+   "constructs": [
+    "libc stdio",
+    "variadic call"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      30200,
+      30200,
+      121100,
+      180908
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 611,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": [
+      "isalpha",
+      "isdigit",
+      "snprintf"
+     ]
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "libc_stdio.entry",
+       "message": "libc_stdio.entry: constant of unsupported type Air2Lean.Ty.other \"fn (noalias [*c]u8, usize, noalias [*c]const u8, ...) callconv(.c) c_int\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "libc_stdio.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [
+    "isalpha",
+    "isdigit",
+    "snprintf"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 712,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": [
+     "asprintf",
+     "clearerr",
+     "clearerr_unlocked",
+     "ctermid",
+     "cuserid",
+     "dprintf",
+     "fclose",
+     "fdopen",
+     "feof",
+     "feof_unlocked",
+     "ferror",
+     "ferror_unlocked",
+     "fflush",
+     "fflush_unlocked",
+     "fgetc",
+     "fgetc_unlocked",
+     "fgetln",
+     "fgetpos",
+     "fgets",
+     "fileno",
+     "fileno_unlocked",
+     "flockfile",
+     "fmemopen",
+     "fopen",
+     "fprintf",
+     "fputc",
+     "fputc_unlocked",
+     "fputs",
+     "fread",
+     "fread_unlocked",
+     "freopen",
+     "fscanf",
+     "fseek",
+     "fseeko",
+     "fsetpos",
+     "ftell",
+     "ftello",
+     "ftrylockfile",
+     "funlockfile",
+     "fwrite",
+     "fwrite_unlocked",
+     "getc",
+     "getc_unlocked",
+     "getchar",
+     "getchar_unlocked",
+     "getdelim",
+     "getline",
+     "getw",
+     "isalnum_l",
+     "isalpha",
+     "isalpha_l",
+     "isascii",
+     "isblank_l",
+     "iscntrl_l",
+     "isdigit",
+     "isdigit_l",
+     "isgraph_l",
+     "islower_l",
+     "isprint_l",
+     "ispunct_l",
+     "isspace_l",
+     "isupper_l",
+     "isxdigit_l",
+     "open_memstream",
+     "pclose",
+     "perror",
+     "popen",
+     "printf",
+     "putc",
+     "putc_unlocked",
+     "putchar",
+     "putchar_unlocked",
+     "puts",
+     "putw",
+     "remove",
+     "rename",
+     "renameat",
+     "rewind",
+     "scanf",
+     "setbuf",
+     "setbuffer",
+     "setlinebuf",
+     "setvbuf",
+     "snprintf",
+     "sprintf",
+     "sscanf",
+     "tempnam",
+     "tmpfile",
+     "tmpnam",
+     "toascii",
+     "tolower_l",
+     "toupper_l",
+     "ungetc",
+     "vasprintf",
+     "vdprintf",
+     "vfprintf",
+     "vfscanf",
+     "vprintf",
+     "vscanf",
+     "vsnprintf",
+     "vsprintf",
+     "vsscanf"
+    ]
+   }
+  },
+  "libc_stdlib": {
+   "source_sha256": "5a720923edab283c46081363c8d201733a868516cb1a8b157d25205828a8eb47",
+   "constructs": [
+    "libc stdlib",
+    "function pointers"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      50,
+      1150,
+      9651,
+      7106
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 540,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": [
+      "abs",
+      "calloc",
+      "free",
+      "malloc",
+      "qsort"
+     ]
+    },
+    "zig_native": {
+     "status": "runtime_error",
+     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 51136316 panic: integer overflow\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10252a91b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:124:10: 0x1024ecbbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n$REPO/.scratch/heavy/libc_stdlib/libc_stdlib_native.zig:545:57: 0x1024eca8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$HOME/.cache/air2lean/host-0.16.0/lib/compiler/test_runner.zig:291:25: 0x10252b277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0xa7a3e560\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "INSTRUCTION_FAILURE": 2,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "libc_stdlib.cmp",
+       "message": "libc_stdlib.cmp: near line 6: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "libc_stdlib.cmp",
+       "message": "libc_stdlib.cmp: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "libc_stdlib.entry",
+       "message": "libc_stdlib.entry: constant of unsupported type Air2Lean.Ty.other \"fn (usize) callconv(.c) ?*anyopaque\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "libc_stdlib.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 4
+    }
+   },
+   "c_defined_functions": [
+    "cmp",
+    "entry"
+   ],
+   "libc_symbols": [
+    "calloc",
+    "free",
+    "malloc",
+    "qsort"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 677,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": [
+     "__ctype_get_mb_cur_max",
+     "abs",
+     "calloc",
+     "free",
+     "malloc",
+     "qsort"
+    ]
+   }
+  },
+  "libc_string": {
+   "source_sha256": "d7d3e805e3444cca8d8d84bfa3ace33d80a5b7771e66f16cebeaede316ea905e",
+   "constructs": [
+    "libc string"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      40111,
+      40111,
+      40111,
+      40111
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 444,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": [
+      "memcmp",
+      "memcpy",
+      "memset",
+      "strchr",
+      "strcmp",
+      "strlen"
+     ]
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).exactDivisionRemainder",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "libc_string.entry",
+       "message": "libc_string.entry: constant of unsupported type Air2Lean.Ty.other \"fn (?*anyopaque, c_int, usize) callconv(.c) ?*anyopaque\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "libc_string.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [
+    "memcmp",
+    "memcpy",
+    "memset",
+    "strchr",
+    "strcmp",
+    "strlen"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 583,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": [
+     "memcmp",
+     "memcpy",
+     "memset",
+     "strchr",
+     "strcmp",
+     "strlen"
+    ]
+   }
+  },
+  "linked_list": {
+   "source_sha256": "acc9202d31e3e8617ea686cc5201505e616dd0811b6cedd81dd2f05edd0ac311",
+   "constructs": [
+    "realistic",
+    "structs+pointers"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      0,
+      340,
+      2405181552
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 443,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 4,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "INSTRUCTION_FAILURE": 1,
+      "PREREQUISITE_SKIPPED": 1,
+      "STRUCTURE_FAILURE": 1
+     },
+     "diagnostics": [
+      {
+       "code": "STRUCTURE_FAILURE",
+       "phase": "check",
+       "category": "malformed_input",
+       "function": "linked_list.entry",
+       "message": "linked_list.entry: global has no initial value"
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "check",
+       "category": "skipped_prerequisite",
+       "function": "linked_list.entry",
+       "message": "not inspected: prerequisite failed"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "linked_list.remove_if_odd",
+       "message": "linked_list.remove_if_odd: near line 4: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      }
+     ],
+     "diagnostic_count": 3
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "push",
+    "remove_if_odd",
+    "reverse"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 583,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "loops": {
+   "source_sha256": "b0370fd2b9b8afb273ba8e230f1a9a071f69af26b09920cb40765c68081ab3eb",
+   "constructs": [
+    "loops/break/continue"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      72,
+      79,
+      52,
+      1431655795
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 400,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 281
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 533,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "macros": {
+   "source_sha256": "0f50cf101327cffd3581919152ec547cfc213116626b5dbd5d6b351a98e0f9ae",
+   "constructs": [
+    "macros"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      12,
+      21,
+      65041,
+      2863325940
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 387,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 82
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 523,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "malloc_vec": {
+   "source_sha256": "ac269403b88b3362da31447972c58e86d82c28d89647a98b7833fc6e5eb0e3a9",
+   "constructs": [
+    "libc stdlib",
+    "realistic"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      645657712,
+      654625177,
+      631085587,
+      832538480
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 561,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": [
+      "free",
+      "realloc"
+     ]
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 2,
+      "PREREQUISITE_SKIPPED": 2
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "malloc_vec.entry",
+       "message": "malloc_vec.entry: constant of unsupported type Air2Lean.Ty.other \"fn (?*anyopaque) callconv(.c) void\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "malloc_vec.entry",
+       "message": "not inspected: prerequisite failed"
+      },
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "malloc_vec.vec_push",
+       "message": "malloc_vec.vec_push: constant of unsupported type Air2Lean.Ty.other \"fn (?*anyopaque, usize) callconv(.c) ?*anyopaque\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "malloc_vec.vec_push",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 4
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "vec_push"
+   ],
+   "libc_symbols": [
+    "free",
+    "memset",
+    "realloc"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 695,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": [
+     "__ctype_get_mb_cur_max",
+     "free",
+     "realloc"
+    ]
+   }
+  },
+  "memcpy_loops": {
+   "source_sha256": "5f4a5774268ccba0a8297aa5818af8e30dd116161790b54a533973d074066f91",
+   "constructs": [
+    "realistic",
+    "void* byte loops"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      187360325,
+      1940558945,
+      826776234,
+      3049557595
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 488,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 4,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "CALLEE_BLOCKED": 4,
+      "INSTRUCTION_FAILURE": 12
+     },
+     "diagnostics": [
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 14: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 14: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 15: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 15: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 16: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "memcpy_loops.entry: near line 16: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.my_memcpy",
+       "message": "memcpy_loops.my_memcpy: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.my_memcpy",
+       "message": "memcpy_loops.my_memcpy: near line 10: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.my_memmove",
+       "message": "memcpy_loops.my_memmove: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.my_memmove",
+       "message": "memcpy_loops.my_memmove: near line 10: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "memcpy_loops.my_memset",
+       "message": "memcpy_loops.my_memset: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "memcpy_loops.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      }
+     ],
+     "diagnostic_count": 16
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "my_memcpy",
+    "my_memmove",
+    "my_memset"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 632,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "ptr_arith": {
+   "source_sha256": "528b0861626594e860c1196dc63fb24ceff7c0cc7abc34b1455811358065c1f2",
+   "constructs": [
+    "pointer arithmetic"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      94,
+      129,
+      189,
+      2958755158
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 392,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).exactDivisionRemainder",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "guard_failed",
+     "log": "$REPO/.scratch/heavy2/ptr_arith/Check.lean:202:0: error: Expression\n  successful (StateT.run' (entry 0#32 0#32) mem0) == some 94#32\ndid not evaluate to `true`\n$REPO/.scratch/heavy2/ptr_arith/Check.lean:203:0: error: Expression\n  successful (StateT.run' (entry 1#32 2#32) mem0) == some 129#32\ndid not evaluate to `true`\n$REPO/.scratch/heavy2/ptr_arith/Check.lean:204:0: error: Expression\n  successful (StateT.run' (entry 4294967295#32 7#32) mem0) == some 189#32\ndid not evaluate to `true`\n$REPO/.scratch/heavy2/ptr_arith/Check.lean:205:0: error: Expression\n  successful (StateT.run' (entry 305419896#32 2863311530#32) mem0) == some 2958755158#32\ndid not evaluate to `true`\n"
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "sum_range"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 528,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "ptr_int_casts": {
+   "source_sha256": "2532afa6dccc46597700069b132549921b0287cd502913fca5b00f2011512cd7",
+   "constructs": [
+    "pointer<->integer casts"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      751,
+      756,
+      764,
+      1737076411
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 516,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "PREREQUISITE_SKIPPED": 1,
+      "STRUCTURE_FAILURE": 1
+     },
+     "diagnostics": [
+      {
+       "code": "STRUCTURE_FAILURE",
+       "phase": "check",
+       "category": "malformed_input",
+       "function": "ptr_int_casts.entry",
+       "message": "ptr_int_casts.entry: global has no initial value"
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "check",
+       "category": "skipped_prerequisite",
+       "function": "ptr_int_casts.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 663,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "recursion": {
+   "source_sha256": "7af1244ef43f2cf919f175036f4c88ed2b9035d85fc01bb9f3d7865bc68b1b2f",
+   "constructs": [
+    "recursion"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      1000,
+      1004,
+      7,
+      2
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 380,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 5,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 187
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "fib",
+    "gcd",
+    "is_even",
+    "is_odd"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 513,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "ring_buffer": {
+   "source_sha256": "3e08cc7a2e5481109f649474a973c774dae47b4815f9b0d747bf8b9cb09e03ab",
+   "constructs": [
+    "realistic",
+    "structs+pointers"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      326,
+      364,
+      345,
+      1906252408
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 441,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "ring_buffer_native.zig:26:9: error: expected type '[8]c_uint', found 'c_uint'\n    ] = v;\n        ^\nreferenced by:\n    entry: ring_buffer_native.zig:66:34\n    test.c_frontend_native: ring_buffer_native.zig:445:56\nring_buffer_native.zig:35:21: error: expected type 'c_uint', found '[8]c_uint'\n    out.* = r.*.data[\n            ~~~~~~~~^\n"
+    },
+    "air_export": {
+     "status": "failed",
+     "files": 1,
+     "log": "...:23:18\n        %120 = load(%109) node_offset:23:13 to :23:24\n        %121 = typeof(%120) node_offset:23:13 to :23:24\n        %122 = as_node(%121, @one) node_offset:23:23 to :23:24\n        %123 = addwrap(%120, %122) node_offset:23:13 to :23:24\n        %124 = store_node(%109, %123) node_offset:23:13 to :23:24\n        %125 = dbg_stmt(12, 13)\n        %126 = extended(restore_err_ret_index(%104.none) node_offset:24:24 to :24:27\n        %127 = break(%104, %114)\n      }) node_offset:20:10 to :20:10\n      %128 = decl_val(\"CAP\") token_offset:25:15 to :25:18\n      %129 = as_node(@c_uint_type, @one) node_offset:25:34 to :25:35\n      %130 = subwrap(%128, %129) node_offset:25:15 to :25:36\n      %131 = bit_and(%104, %130) node_offset:25:12 to :25:12\n      %132 = dbg_stmt(7, 13)\n    > %133 = elem_ptr_node(%103, %131) node_offset:19:5 to :19:5\n      %134 = load(%73) node_offset:26:9 to :26:10\n      %135 = store_node(%133, %134) node_offset:26:7 to :26:10\n      %136 = dbg_stmt(15, 5)\n      %137 = decl_val(\"true\") token_offset:27:12 to :27:19\n      %138 = cmp_neq(%137, @zero) node_offset:27:12 to :27:24\n      %139 = restore_err_ret_index_unconditional(.none) node_offset:27:5 to :27:24\n      %140 = dbg_stmt(15, 5)\n      %141 = ret_node(%138) node_offset:27:5 to :27:24\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t ring_buffer.zig\n\n\nthread 51149372 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "ring_pop",
+    "ring_push"
+   ],
+   "libc_symbols": [
+    "memset"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 567,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "setjmp_longjmp": {
+   "source_sha256": "b691a51feed68a938ff1bc2470a317e84b011958ed9d89f8e27054c439925dfd",
+   "constructs": [
+    "setjmp/longjmp"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      1006,
+      1000,
+      1003,
+      1003
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 405,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": [
+      "longjmp",
+      "setjmp"
+     ]
+    },
+    "zig_native": {
+     "status": "mismatch",
+     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0xe5665fa7\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).noreturnReturned"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 2,
+      "PREREQUISITE_SKIPPED": 2
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "setjmp_longjmp.check",
+       "message": "setjmp_longjmp.check: constant of unsupported type Air2Lean.Ty.other \"fn ([*c]setjmp_longjmp.struct___jmp_buf_tag, c_int) callconv(.c) noreturn\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "setjmp_longjmp.check",
+       "message": "not inspected: prerequisite failed"
+      },
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "setjmp_longjmp.entry",
+       "message": "setjmp_longjmp.entry: constant of unsupported type Air2Lean.Ty.other \"fn ([*c]setjmp_longjmp.struct___jmp_buf_tag) callconv(.c) c_int\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "setjmp_longjmp.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 4
+    }
+   },
+   "c_defined_functions": [
+    "check",
+    "entry"
+   ],
+   "libc_symbols": [
+    "longjmp",
+    "setjmp"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 537,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": [
+     "longjmp",
+     "setjmp"
+    ]
+   }
+  },
+  "signed_ops": {
+   "source_sha256": "d7e8af49e11fa622ebbbb1e14b0a534cd528ec99b37ca7e561bbeb87a4daefee",
+   "constructs": [
+    "signed arithmetic"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      4294842285,
+      4294842638,
+      4294953834,
+      4294957737
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 384,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [
+      "zig.c_translation.helpers.signedRemainder__anon_1146"
+     ],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).integerOverflow",
+      "debug.assert"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "CALLEE_MISSING": 2,
+      "PROGRAM_FAILURE": 1
+     },
+     "diagnostics": [
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "zig.c_translation.helpers.signedRemainder__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "CALLEE_MISSING",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "zig.c_translation.helpers.signedRemainder__anon_1",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": null,
+       "message": "zig.c_translation.helpers.signedRemainder__anon_1: the callee 'debug.assert' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)"
+      }
+     ],
+     "diagnostic_count": 3
+    }
+   },
+   "c_defined_functions": [
+    "clamp_small",
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 517,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "sort_callback": {
+   "source_sha256": "88b360c03c85aed2621c7a7d88e50e162320007ab08028730b17cc7bbc3cd111",
+   "constructs": [
+    "realistic",
+    "function pointers",
+    "void* byte loops"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      31523876,
+      2158659971,
+      1984728858
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 450,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "runtime_error",
+     "log": "1/1 sort_callback_native.test.c_frontend_native...thread 51152718 panic: integer overflow\n$REPO/.scratch/heavy/sort_callback/sort_callback_native.zig:72:32: 0x10271f097 in by_value (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n$REPO/.scratch/heavy/sort_callback/sort_callback_native.zig:57:50: 0x1026e0dd3 in isort (test)\n            while ((j > @as(usize, 0)) and (cmp.?(@ptrCast(@alignCast(b + ((j -% @as(usize, 1)) *% size))), @ptrCast(@alignCast(b + (j *% size)))) > @as(c_int, 0))) : (j -%= 1) {\n                                                 ^\n$HOME/.cache/air2lean/host-0.16.0/lib/compiler/test_runner.zig:291:25: 0x10271fca3 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/e3b87d06e8052d9ef4d921354089aa53/test --seed=0xe293cd1c\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 4,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "CALLEE_BLOCKED": 1,
+      "INSTRUCTION_FAILURE": 6
+     },
+     "diagnostics": [
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "sort_callback.by_value",
+       "message": "sort_callback.by_value: near line 6: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "sort_callback.by_value",
+       "message": "sort_callback.by_value: near line 8: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "sort_callback.entry",
+       "message": "sort_callback.entry: near line 15: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "sort_callback.isort",
+       "message": "sort_callback.isort: near line 10: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "sort_callback.isort",
+       "message": "sort_callback.isort: near line 18: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "INSTRUCTION_FAILURE",
+       "phase": "check",
+       "category": "validation_failure",
+       "function": "sort_callback.isort",
+       "message": "sort_callback.isort: near line 18: a pointer cast has unresolved or cyclic symbolic storage provenance"
+      },
+      {
+       "code": "CALLEE_BLOCKED",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "sort_callback.entry",
+       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
+      }
+     ],
+     "diagnostic_count": 7
+    }
+   },
+   "c_defined_functions": [
+    "by_value",
+    "entry",
+    "isort",
+    "swap_bytes"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 594,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "static_locals": {
+   "source_sha256": "7118fbe1f6e8daeeeca5fa585c95d63413eaa7a16a3ecb84d992cd683f827680",
+   "constructs": [
+    "static locals"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      8,
+      17,
+      111,
+      79
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 400,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 160
+    }
+   },
+   "c_defined_functions": [
+    "counter",
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 533,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "string_literals": {
+   "source_sha256": "0801e0291b9d9a0c2fe647fa3e8f0fef3c6f62e9bffedbeb1a0e800a5ce43925",
+   "constructs": [
+    "string literals"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      788,
+      681,
+      890,
+      792
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 384,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 153
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "length"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 517,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "strings_loops": {
+   "source_sha256": "29b465a9b6a369815b0efe052d340d085a319b6f95b6fb5080a808875f96b574",
+   "constructs": [
+    "realistic",
+    "pointer arithmetic"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      1397,
+      3396,
+      8379,
+      3361
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 442,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 5,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).exactDivisionRemainder",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 422
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "my_strcmp",
+    "my_strcpy",
+    "my_strlen",
+    "my_strrev"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 575,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "struct_layout": {
+   "source_sha256": "56f4e4ff826ee5bb598c624627473edd4098c8b4e35dd2c7b7e2e763d5f40132",
+   "constructs": [
+    "struct layout"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      12937,
+      12943,
+      12949,
+      2042509005
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 535,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "struct_layout_native.zig:42:77: error: no member named 'a' in '[2]struct_layout_native.struct_inner'\n    return (((@as(u32, @bitCast(@as(c_int, @as(c_int, o.*.in[@as(c_int, 0)].a)))) +% o.*.in[@as(c_int, 0)].b) +% @as(u32, @bitCast(@as(c_int, @as(c_int, o.*.in[@as(c_int, 1)].c))))) +% @as(u32, @truncate(o.*.wide))) +% @as(u32, o.*.tag);\n                                                                            ^\nreferenced by:\n    entry: struct_layout_native.zig:74:18\n    test.c_frontend_native: struct_layout_native.zig:539:58\n"
+    },
+    "air_export": {
+     "status": "failed",
+     "files": 1,
+     "log": "...6) node_offset:42:154 to :42:177\n      %148 = as_node(@c_int_type, %147) node_offset:42:143 to :42:178\n      %149 = bitcast(@u32_type, %148) node_offset:42:123 to :42:180\n      %150 = as_node(@u32_type, %149) node_offset:42:123 to :42:180\n      %151 = addwrap(%137, %150) node_offset:42:14 to :42:181\n      %152 = load(%110) node_offset:42:205 to :42:206\n      %153 = validate_deref(%152) node_offset:42:205 to :42:208\n      %154 = dbg_stmt(4, 208)\n      %155 = field_ptr_load(%152, \"wide\") node_offset:42:205 to :42:213\n      %156 = dbg_stmt(4, 195)\n      %157 = truncate(@u32_type, %155) node_offset:42:195 to :42:214\n      %158 = as_node(@u32_type, %157) node_offset:42:195 to :42:214\n      %159 = addwrap(%151, %158) node_offset:42:13 to :42:215\n      %160 = load(%110) node_offset:42:229 to :42:230\n      %161 = validate_deref(%160) node_offset:42:229 to :42:232\n      %162 = dbg_stmt(4, 232)\n      %163 = field_ptr_load(%160, \"tag\") node_offset:42:229 to :42:236\n      %164 = as_node(@u32_type, %163) node_offset:42:229 to :42:236\n      %165 = addwrap(%159, %164) node_offset:42:12 to :42:237\n      %166 = restore_err_ret_index_unconditional(.none) node_offset:42:5 to :42:237\n      %167 = dbg_stmt(4, 5)\n      %168 = ret_node(%165) node_offset:42:5 to :42:237\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t struct_layout.zig\n\n\nthread 51157014 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "total"
+   ],
+   "libc_symbols": [
+    "memcpy",
+    "memset"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 678,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "switch_fallthrough": {
+   "source_sha256": "c6379c3ca86b545f7c0fddaca216f5ba4e6c0298ab69fbdad57b424d83101e9e",
+   "constructs": [
+    "switch fallthrough"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      888,
+      819,
+      8444,
+      965
+     ]
+    },
+    "translate_c": {
+     "status": "demoted",
+     "lines": 400,
+     "warnings": [
+      "switch_fallthrough.c:15:17: unable to translate function, demoted to extern",
+      "switch_fallthrough.c:21:5: TODO complex switch"
+     ],
+     "demoted_functions": [
+      "duff_sum"
+     ],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "error: undefined symbol: _duff_sum\n    note: referenced by $HOME/.cache/zig/o/4bd92c9d23e9ce06f661a9d33e81b755/test_zcu.o:_switch_fallthrough_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/4bd92c9d23e9ce06f661a9d33e81b755/test_zcu.o:_switch_fallthrough_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/4bd92c9d23e9ce06f661a9d33e81b755/test_zcu.o:_switch_fallthrough_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/4bd92c9d23e9ce06f661a9d33e81b755/test_zcu.o:_switch_fallthrough_native.test.c_frontend_native\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "switch_fallthrough.entry",
+       "message": "switch_fallthrough.entry: constant of unsupported type Air2Lean.Ty.other \"fn ([*c]const u8, c_uint) callconv(.c) c_uint\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "switch_fallthrough.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "duff_sum",
+    "entry",
+    "fall"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "demoted",
+    "lines": 535,
+    "warnings": [
+     "switch_fallthrough.c:15:17: unable to translate function, demoted to extern",
+     "switch_fallthrough.c:21:5: TODO complex switch"
+    ],
+    "demoted_functions": [
+     "duff_sum"
+    ],
+    "extern_calls": []
+   }
+  },
+  "switch_simple": {
+   "source_sha256": "cf4878674ab930e85bee7f083aa7f3f72194735e9c738a92e67b37be5f0074a9",
+   "constructs": [
+    "switch"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      50,
+      24,
+      44,
+      2042495562
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 383,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 72
+    }
+   },
+   "c_defined_functions": [
+    "classify",
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 514,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "unions": {
+   "source_sha256": "5daf23455dbb89bd2c18c577c2a94cad0dfc29478dabcf4f5f9d8cb6814bcd5a",
+   "constructs": [
+    "unions"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      0,
+      8,
+      66299,
+      3168736536
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 404,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 162
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "eval"
+   ],
+   "libc_symbols": [
+    "memset"
+   ],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 533,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "varargs_sum": {
+   "source_sha256": "7c1772146f96a66f82c8fb22d7f9a7549f01c068ab57ab570ff30f62b77eb42a",
+   "constructs": [
+    "variadic definition"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      7,
+      13,
+      5,
+      1971191291
+     ]
+    },
+    "translate_c": {
+     "status": "demoted",
+     "lines": 375,
+     "warnings": [
+      "varargs_sum.c:4:17: TODO unable to translate variadic function, demoted to extern"
+     ],
+     "demoted_functions": [
+      "sum"
+     ],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "compile_error",
+     "log": "error: undefined symbol: _sum\n    note: referenced by $HOME/.cache/zig/o/d45b1179d2de689705c7f09afe079e83/test_zcu.o:_varargs_sum_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/d45b1179d2de689705c7f09afe079e83/test_zcu.o:_varargs_sum_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/d45b1179d2de689705c7f09afe079e83/test_zcu.o:_varargs_sum_native.test.c_frontend_native\n    note: referenced by $HOME/.cache/zig/o/d45b1179d2de689705c7f09afe079e83/test_zcu.o:_varargs_sum_native.test.c_frontend_native\n    note: referenced 8 more times\n"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "rejected",
+     "codes": {
+      "AIR_DECODE": 1,
+      "PREREQUISITE_SKIPPED": 1
+     },
+     "diagnostics": [
+      {
+       "code": "AIR_DECODE",
+       "phase": "decode",
+       "category": "validation_failure",
+       "function": "varargs_sum.entry",
+       "message": "varargs_sum.entry: constant of unsupported type Air2Lean.Ty.other \"fn (c_int, ...) callconv(.c) c_uint\""
+      },
+      {
+       "code": "PREREQUISITE_SKIPPED",
+       "phase": "normalize",
+       "category": "skipped_prerequisite",
+       "function": "varargs_sum.entry",
+       "message": "not inspected: prerequisite failed"
+      }
+     ],
+     "diagnostic_count": 2
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "sum"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "demoted",
+    "lines": 520,
+    "warnings": [
+     "varargs_sum.c:4:17: TODO unable to translate variadic function, demoted to extern"
+    ],
+    "demoted_functions": [
+     "sum"
+    ],
+    "extern_calls": []
+   }
+  },
+  "wide_ints": {
+   "source_sha256": "7eaebecdde3500a5c8dbc32c387aadd3f8ab2d95a10430c5d32ebc339e1d5aec",
+   "constructs": [
+    "64-bit arithmetic"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      4066559817,
+      3299624546,
+      1372092916,
+      2516400830
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 497,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 128
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 633,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  }
+ },
+ "summary": {
+  "files": 40,
+  "stage_status": {
+   "c_native": {
+    "ok": 40
+   },
+   "translate_c": {
+    "demoted": 6,
+    "ok": 34
+   },
+   "zig_native": {
+    "compile_error": 9,
+    "mismatch": 1,
+    "ok": 27,
+    "runtime_error": 3
+   },
+   "air_export": {
+    "failed": 6,
+    "ok": 34
+   },
+   "air2lean": {
+    "checked": 18,
+    "rejected": 16
+   },
+   "lean": {
+    "guard_failed": 1,
+    "ok": 17
+   }
+  },
+  "headline": {
+   "air2lean": 12,
+   "air_export": 4,
+   "lean": 1,
+   "lean_ok": 17,
+   "translate_c": 6
+  },
+  "rejection_codes_by_file": {
+   "AIR_DECODE": 9,
+   "CALLEE_BLOCKED": 2,
+   "CALLEE_MISSING": 2,
+   "INSTRUCTION_FAILURE": 5,
+   "PREREQUISITE_SKIPPED": 11,
+   "PROGRAM_FAILURE": 2,
+   "STRUCTURE_FAILURE": 2
+  },
+  "outcome_by_construct": {
+   "64-bit arithmetic": {
+    "lean_ok": 1
+   },
+   "bitfields": {
+    "translate_c": 2
+   },
+   "designated/compound initializers": {
+    "air2lean": 1
+   },
+   "enums": {
+    "lean_ok": 1
+   },
+   "floating point": {
+    "lean_ok": 1
+   },
+   "function pointers": {
+    "air2lean": 2,
+    "lean_ok": 1
+   },
+   "globals": {
+    "lean_ok": 1
+   },
+   "goto": {
+    "translate_c": 2
+   },
+   "integer casts": {
+    "air2lean": 1
+   },
+   "integer promotions": {
+    "lean_ok": 1
+   },
+   "libc stdio": {
+    "air2lean": 1
+   },
+   "libc stdlib": {
+    "air2lean": 2
+   },
+   "libc string": {
+    "air2lean": 1,
+    "translate_c": 1
+   },
+   "loops/break/continue": {
+    "lean_ok": 1
+   },
+   "macros": {
+    "lean_ok": 1
+   },
+   "multi-dim arrays": {
+    "air_export": 1
+   },
+   "object-representation casts": {
+    "air2lean": 1
+   },
+   "pointer arithmetic": {
+    "lean": 1,
+    "lean_ok": 1
+   },
+   "pointer<->integer casts": {
+    "air2lean": 1
+   },
+   "realistic": {
+    "air2lean": 4,
+    "air_export": 2,
+    "lean_ok": 1
+   },
+   "recursion": {
+    "lean_ok": 1
+   },
+   "setjmp/longjmp": {
+    "air2lean": 1
+   },
+   "short-circuit/_Bool": {
+    "lean_ok": 1
+   },
+   "side-effecting expressions": {
+    "lean_ok": 1
+   },
+   "signed arithmetic": {
+    "air2lean": 1
+   },
+   "static inline": {
+    "lean_ok": 1
+   },
+   "static locals": {
+    "lean_ok": 1
+   },
+   "string literals": {
+    "lean_ok": 1
+   },
+   "struct layout": {
+    "air_export": 1
+   },
+   "structs+pointers": {
+    "air2lean": 1,
+    "air_export": 2
+   },
+   "switch": {
+    "lean_ok": 2
+   },
+   "switch fallthrough": {
+    "translate_c": 1
+   },
+   "unions": {
+    "lean_ok": 1
+   },
+   "variadic call": {
+    "air2lean": 1
+   },
+   "variadic definition": {
+    "translate_c": 1
+   },
+   "void* byte loops": {
+    "air2lean": 2
+   }
+  },
+  "libc_symbols": {
+   "calloc": 1,
+   "free": 2,
+   "isalpha": 1,
+   "isdigit": 1,
+   "longjmp": 1,
+   "malloc": 1,
+   "memcmp": 1,
+   "memcpy": 2,
+   "memset": 8,
+   "qsort": 1,
+   "realloc": 1,
+   "setjmp": 1,
+   "snprintf": 1,
+   "strchr": 1,
+   "strcmp": 1,
+   "strlen": 1
+  },
+  "zig_extern_calls": {
+   "abs": 1,
+   "calloc": 1,
+   "free": 2,
+   "isalpha": 1,
+   "isdigit": 1,
+   "longjmp": 1,
+   "malloc": 1,
+   "memcmp": 1,
+   "memcpy": 1,
+   "memset": 1,
+   "qsort": 1,
+   "realloc": 1,
+   "setjmp": 1,
+   "snprintf": 1,
+   "strchr": 1,
+   "strcmp": 1,
+   "strlen": 1
+  }
+ }
+}

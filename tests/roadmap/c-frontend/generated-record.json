@@ -1,0 +1,1789 @@
+{
+ "schema": 1,
+ "kind": "air2lean-c-frontend-coverage",
+ "inputs": [
+  [
+   0,
+   0
+  ],
+  [
+   1,
+   2
+  ],
+  [
+   4294967295,
+   7
+  ],
+  [
+   305419896,
+   2863311530
+  ]
+ ],
+ "translate_c_target": "x86_64-linux-musl",
+ "air_target": "-target x86_64-linux -mcpu=baseline",
+ "std_filter": [
+  "zig.c_translation."
+ ],
+ "tools": {
+  "zig_native": "0.16.0",
+  "zig_air": "0.16.0",
+  "zig_native_0152": "0.15.2"
+ },
+ "files": {
+  "gen_s0": {
+   "source_sha256": "33b7e1da49b150e2db05b3869fd173d073401ef68c6336846076bed2084fab3b",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      72,
+      134217806,
+      4294967230,
+      2963221415
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 450,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 277
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 583,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s1": {
+   "source_sha256": "20df68dbac9dc2cdcc838095824a3e43cd440a3b37a6ad8e9ef11b6bcf577bf1",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      4294961117,
+      16388,
+      4294967281,
+      3097371908
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 556,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 934
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "h0",
+    "h1"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 689,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s10": {
+   "source_sha256": "0f9b28768d92d78831d0e52a8cff7a5cd0054f8c5cde28ddd05eb030f73fd32b",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      5719,
+      3052,
+      4294967167,
+      3097427029
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 388,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 103
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 521,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s11": {
+   "source_sha256": "dd2210070daaa1de70887329278f8503d92eb1e8868f4f8c0e62ed1f8dc8cca5",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      23,
+      21,
+      16,
+      2863311549
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 505,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 98
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 638,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s12": {
+   "source_sha256": "638c1f276aab3a3ddae30bcb0bcd1ff841217bc7349f367c683608c2ed303c0a",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      37,
+      38,
+      38,
+      3989547437
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 535,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 766
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 668,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s13": {
+   "source_sha256": "2c66040e53cccf9d65e983ce39ca859b6bfca306204c88c935695ecf4cb2b761",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      17399,
+      1237445202,
+      17331,
+      269751817
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 528,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 576
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 661,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s14": {
+   "source_sha256": "9004da859733c3c12eb31e049ba151c4c35623d4652e903f4fe90decf137d3fc",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      214076924,
+      3245139438,
+      1049827867,
+      3025957161
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 623,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 604
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "h0",
+    "h1"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 756,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s15": {
+   "source_sha256": "39b0449e380b8898d7ed518d4a46da401cc926ac7aec4cdffbe5299358f2f740",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      80,
+      4294947264,
+      4294967126,
+      3097427074
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 468,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 380
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 601,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s16": {
+   "source_sha256": "ee8ef8630d92c3d4ea036c7094d47bc5ee9e029b5b434893722f5db13e6527a1",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      179,
+      176,
+      4294967115,
+      3097427041
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 425,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 271
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 558,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s17": {
+   "source_sha256": "9f61447a284acd4063e185e600b8f54a81bbbdf68c1efbd5dbd532f928c237c1",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      83,
+      251,
+      4294962675,
+      416657841
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 601,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 746
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 734,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s18": {
+   "source_sha256": "7c6229ad302e1159dc04a84cfb720b00e8de4f9797132afb8b00d046463e6e09",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      68,
+      268435565,
+      268435366,
+      470594948
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 389,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 144
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 522,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s19": {
+   "source_sha256": "fa56df58da1e1ba7e195ff1fd31d5139ecece929e796a4dbef131cb16f94e04d",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      68,
+      223,
+      4294967133,
+      4286383167
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 390,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 163
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 523,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s2": {
+   "source_sha256": "44964dc952f11ea86f9b98ddd46e55f9a21eb55d809613cd9b466d66f3e1232e",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      2258169013,
+      2258169009,
+      2258169042,
+      27996347
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 398,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 261
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 531,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s20": {
+   "source_sha256": "243c58e8d9b3c8049dfa26a3a0997aaebc121edce9a7da607cdae6daeafbaf37",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      6292,
+      6295,
+      4294961004,
+      3097420870
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 583,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 4,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 899
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0",
+    "h1"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 716,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s21": {
+   "source_sha256": "09c4c3b75019bc8ed32b25da8f75592c310aeee48fae942d1ef7ddc3c955156e",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      38330,
+      38331,
+      4294928965,
+      305447874
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 409,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 65
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 542,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s22": {
+   "source_sha256": "e8c978f4a808fbfaa25da2ccad4ff48d33cadd6bddcb47cb8bbec470f707dc00",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      238,
+      238,
+      4294967063,
+      1431656116
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 403,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 43
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 536,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s23": {
+   "source_sha256": "8827951259857f9b9891c007ed1ad1cc4b31341aae2c9e93624b50715131b5bf",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      149,
+      4294967233,
+      150,
+      1702657014
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 386,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 109
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 519,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s24": {
+   "source_sha256": "d08b006d6c80b00ec58245383115999fdf6b4ec79cff338e8fdbd97cf580f0da",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      167,
+      167,
+      167,
+      167
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 508,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 569
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 641,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s25": {
+   "source_sha256": "7f6df2a3f0dce59759e6ed36e1deed7af317bf6bc2cc42202c4f804fc1d63e9d",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      54527,
+      54524,
+      215,
+      2863278712
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 382,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 72
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 515,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s26": {
+   "source_sha256": "01ce5d46f547e0d18b58294af16507c734fe82b141ddf2509365398edefeea3d",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      57,
+      58,
+      4294967233,
+      3097427179
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 391,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 121
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 524,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s27": {
+   "source_sha256": "2461420b0f08fe5aaf4e1f6a399a5cc3c9424ac6089e47e521b2caf97ed6a74a",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      4294967189,
+      1773939489,
+      4061344143,
+      759536071
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 443,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 189
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 576,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s28": {
+   "source_sha256": "9d4fbd87e8b9b3126b1f41bc09781f6e8e29e9ca526558b39676374f8c64d22d",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      254,
+      252,
+      249,
+      252
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 528,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 187
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 661,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s29": {
+   "source_sha256": "e4bd802d80fffac3fa2f259b9b79125f8116d7041f330395d089e305cd857f76",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      247,
+      11,
+      4294967176,
+      3097427106
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 406,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 190
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 539,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s3": {
+   "source_sha256": "93d94d9878b506d52abb177e27147b6a6d5096f54d87ed788c79459cd3756b3e",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      126,
+      126,
+      126,
+      126
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 634,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 746
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "h0",
+    "h1"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 767,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s4": {
+   "source_sha256": "ccabafd60a28f6eb1c3b4cc3bbd1bfa2184184c7725ca836bd52aeb79d20886d",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      249,
+      34,
+      216,
+      770926239
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 458,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 288
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 591,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s5": {
+   "source_sha256": "7e3a50c80a25ad4fab865e4ed0a88ee76e0ba330d8cc96a092270d9eab200ab2",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      3721454160,
+      3721574633,
+      855169,
+      2131919393
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 497,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 424
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 630,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s6": {
+   "source_sha256": "996d3f156419fd3be5fa6c24c27133377fc0887986018fcbcd0f795717af028c",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      200,
+      203,
+      4294967088,
+      1431656082
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 404,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).divideByZero",
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 227
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 537,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s7": {
+   "source_sha256": "1a0046f4b1b704c244c18c5500298a5ac777aa0c8127b4b26588c62e09385867",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      12,
+      15,
+      4294967284,
+      3097427166
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 386,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 2,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 95
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 519,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s8": {
+   "source_sha256": "d2846c102a883b52d5361c9f65d3834669163ebf1e66d92d90fa484274afbbe5",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      4294967106,
+      0,
+      4294967111,
+      552118316
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 407,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 1,
+     "std_functions": [],
+     "unexported_callees": []
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 82
+    }
+   },
+   "c_defined_functions": [
+    "entry"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 540,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  },
+  "gen_s9": {
+   "source_sha256": "c9127bb8e1ae03b944280f26b083921ffe8cd77bdef97de62464eefe28f5b121",
+   "constructs": [
+    "generated"
+   ],
+   "stages": {
+    "c_native": {
+     "status": "ok",
+     "expected": [
+      45,
+      47,
+      4294967252,
+      3097427142
+     ]
+    },
+    "translate_c": {
+     "status": "ok",
+     "lines": 515,
+     "warnings": [],
+     "demoted_functions": [],
+     "extern_calls": []
+    },
+    "zig_native": {
+     "status": "ok"
+    },
+    "air_export": {
+     "status": "ok",
+     "functions": 3,
+     "std_functions": [],
+     "unexported_callees": [
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+     ]
+    },
+    "air2lean": {
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 300
+    }
+   },
+   "c_defined_functions": [
+    "entry",
+    "entry_body",
+    "h0"
+   ],
+   "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 648,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   }
+  }
+ },
+ "summary": {
+  "files": 30,
+  "stage_status": {
+   "c_native": {
+    "ok": 30
+   },
+   "translate_c": {
+    "ok": 30
+   },
+   "zig_native": {
+    "ok": 30
+   },
+   "air_export": {
+    "ok": 30
+   },
+   "air2lean": {
+    "checked": 30
+   },
+   "lean": {
+    "ok": 30
+   }
+  },
+  "headline": {
+   "lean_ok": 30
+  },
+  "rejection_codes_by_file": {},
+  "outcome_by_construct": {
+   "generated": {
+    "lean_ok": 30
+   }
+  },
+  "libc_symbols": {},
+  "zig_extern_calls": {}
+ }
+}
