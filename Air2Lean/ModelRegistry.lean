@@ -361,6 +361,11 @@ def checkDependencies (models : Array ModelBinding) : Except String Unit := do
         reached := reached.insert d
         frontier := frontier ++ ((bindings[d]?.map (·.dependencies)).getD #[]).filter bindings.contains
 
+/-- The module of the callee whose identity key is `key` (`Func.identities`, B1), or `none` for
+a legacy export without module identity. -/
+def calleeModule (funcs : Array Func) (key : String) : Option String :=
+  funcs.findSome? fun f => (f.identities.find? (·.key == key)).bind (·.module)
+
 /-- All registry entries must bind an actual direct call and cannot override AIR/built-ins.
 Function pointers and concurrent clients remain outside this selected extension fragment. -/
 def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array Func) :
@@ -381,6 +386,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
     unless m.profile == profile do throw s!"model '{m.symbol}': exact profile/version mismatch"
     if functionNames.contains m.symbol || (stdModel? m.symbol).isSome then
       throw s!"model '{m.symbol}' conflicts with translated AIR or a built-in model"
+    if let some reason := projectStdBinding? m.symbol (calleeModule funcs m.symbol) then throw reason
     if addressTaken.contains m.symbol then
       throw s!"model '{m.symbol}': address-taken/indirect bindings are outside the extension API"
     let sites := calls.getD m.symbol #[]
@@ -424,7 +430,8 @@ def template (profile : BuildProfile) (funcs : Array Func) : Except String Json 
     let values := valueTypeIndex f.types insts
     for i in insts do
       if let .call (.func name false none) args := i.op then
-        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome do
+        unless names.contains name || funcs.any (·.name == name) || (stdModel? name).isSome ||
+            (projectStdBinding? name (calleeModule funcs name)).isSome do
           names := names.push name
           let (params, ret) ← signatureWith f values args i.ty
           entries := entries.push <| Json.mkObj [("symbol", .str name),

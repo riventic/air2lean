@@ -73,6 +73,8 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
 - [THR-02](../../docs/premises.md#thr-02): `Thread.spawn` always succeeds under the default
   `available` policy.
 - [THR-05](../../docs/premises.md#thr-05): the futex under the mutex is a model.
+- [IOM-01](../../docs/premises.md#iom-01): the `std.Io` parameter is the model `Io`, not
+  whatever `Io` a caller passes (no cancellation, no inline `async`, no spurious wakeup).
 - [THR-08](../../docs/premises.md#thr-08): the protocol (rely-guarantee / CSL) proof rules.
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
   [ORD-03](../../docs/premises.md#ord-03), [ORD-04](../../docs/premises.md#ord-04): the RC11

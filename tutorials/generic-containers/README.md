@@ -65,6 +65,10 @@ lake env lean tutorials/generic-containers/Negative.lean   # must fail
 - [ALC-01](../../docs/premises.md#alc-01), [ALC-02](../../docs/premises.md#alc-02),
   [ALC-03](../../docs/premises.md#alc-03): one modelled allocator; `OutOfMemory` is decided by
   the allocation policy (the theorem holds for every policy); the remap policy.
+- [ALC-09](../../docs/premises.md#alc-09): the `std.mem.Allocator` parameter is the model
+  allocator, not whatever allocator a caller passes. The theorem holds for callers whose
+  allocator behaves as the model (fresh disjoint blocks; `page_allocator`'s in-place
+  `remap` and a `FixedBufferAllocator` over visible memory do not).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.

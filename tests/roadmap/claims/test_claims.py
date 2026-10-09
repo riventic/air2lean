@@ -166,6 +166,22 @@ class ClassifyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     claims.load_heads(path)
 
+    def test_caller_obligations_follow_the_kernel_graph(self):
+        """W1: a claim about a function with an Allocator parameter names ALC-09 (and only then)."""
+        report = copy.deepcopy(FIXTURE)
+        first, second = report['theorems'][0]['name'], report['theorems'][1]['name']
+        # `Lists.push` carries `-- air2lean-premises: {"ALC-09":[0]}` in Proofs/Lists/Gen.lean.
+        report['nodes'] = [{'name': first, 'module': 'Proofs.Lists.Proofs', 'kind': 'theorem',
+                            'dependencies': ['Lists.push']},
+                           {'name': 'Lists.push', 'module': 'Proofs.Lists.Gen', 'kind': 'definition',
+                            'dependencies': []},
+                           {'name': second, 'module': 'Proofs.Lists.Proofs', 'kind': 'theorem',
+                            'dependencies': []}]
+        theorems = classified(report)
+        self.assertEqual(theorems[first]['caller_obligations'], ['ALC-09'])
+        self.assertEqual(theorems[second]['caller_obligations'], [])
+        self.assertEqual(classified(FIXTURE)[first]['caller_obligations'], [])
+
     def test_malformed_shapes_support_nothing(self):
         eq = {'statement': {'head': {'name': 'Eq', 'module': 'Init.Prelude'}}}
         for shape in (None, 3, {}, {'head': None}, {'head': 'Eq'}, {'head': 'Eq', 'args': 'x'},

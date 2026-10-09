@@ -5,7 +5,7 @@ A std function that an example calls is one of these:
 | Kind | How | Where |
 |---|---|---|
 | Translated | Its AIR is written and translated like user code, so the diff test checks it too. | its name prefix in `examples/<ex>/filter` |
-| Modelled | Not translated. A call to it is a call to a Lean model. | `Air2Lean/StdModels.lean` (`stdModels`), `ZigLean/Mem/Alloc.lean` |
+| Modelled | Not translated. A call to it is a call to a Lean model. Only for the Zig versions its row lists. | `Air2Lean/StdModels.lean` (`stdModels`), `ZigLean/Mem/Alloc.lean` |
 | Panic handler | A noreturn call: a `Zig.Error` constructor. | `panicErrorFor?` (`docs/generated-code.md` §Panics) |
 
 `Check.lean` rejects a call to a function that has no AIR file and no model.
@@ -14,6 +14,74 @@ A model or panic handler matches only a function of the `std` module, and the sp
 types (`mem.Allocator`, `Thread`, `Io`) only std types: the translator looks them up by a
 module-qualified key ([AIR JSON §Identity](air-json.md#identity)). A user `Thread.zig` with a
 `spawn` is user code (`root:Thread.spawn`), never the `Thread.spawn` model.
+
+## Version qualification
+
+Every modelled row of `stdModels` lists the Zig versions it is qualified for, each with the
+std file that defines the symbol and that file's SHA-256 at review (`StdReview`). A version
+that is not listed is rejected (`<symbol> qualified Zig <versions>; no reviewed std source for
+Zig <version>`), so a new Zig release (0.17 changes `Allocator.create` and grows `Io`) never
+inherits a model silently. Qualifying a version means reading that version's definition
+against the model and adding its hash; `tests/roadmap/models/test_std_sources.py` recomputes
+every hash from the std sources that are present.
+
+| Rows | std file | Zig versions |
+|---|---|---|
+| `mem.Allocator.create`, `destroy`, `alloc`, `alignedAlloc`, `free`, `dupe`, `remap` | `mem/Allocator.zig` | 0.14.1, 0.15.2, 0.16.0 |
+| `mem.Allocator.allocSentinel`, `realloc` | `mem/Allocator.zig` | 0.16.0 |
+| `Thread.spawn`, `join`, `yield` | `Thread.zig` | 0.14.1, 0.15.2, 0.16.0 |
+| `atomic.spinLoopHint` | `atomic.zig` | 0.14.1, 0.15.2, 0.16.0 |
+| `Io.futexWait`, `futexWaitUncancelable`, `futexWake`, `Io.Group.async`, `concurrent`, `await`, `cancel` | `Io.zig` | 0.16.0 |
+| `Thread.Futex.wait`, `wake`, `timedWait` | `Thread/Futex.zig` | 0.14.1, 0.15.2 |
+| `Thread.Mutex.DarwinImpl.lock`, `unlock`, `tryLock` | `Thread/Mutex.zig` | 0.14.1, 0.15.2 |
+| `time.Timer.start`, `read` | `time.zig` | 0.14.1, 0.15.2 |
+
+Between the reviewed versions the allocator wrappers differ only in alignment types
+(`?u29` → `?Alignment`), sentinel absorption and result-type spelling; spawn and join are
+unchanged; `Thread.yield` on Windows changed, which the model already covers by keeping
+`SystemCannotYield`. `std.Thread.spinLoopHint` is not a declaration in any reviewed version,
+so its historical boundary name is now a rejected row.
+
+## Caller-supplied allocator and Io
+
+A parameter of type `std.mem.Allocator` or `std.Io` is an interface in Zig: the caller picks
+the implementation. The translation replaces it by the one model (`Zig.Allocator`,
+`Zig.Io`), so a theorem about the function is a theorem about callers that pass an allocator
+or `Io` that behaves as that model. The generated code records this caller obligation: the
+line before each `def` whose parameter contains an `Allocator` or an `Io` (directly, or through
+a pointer, slice, optional, error union, struct, union or tuple) is
+
+```lean
+-- air2lean-premises: {"ALC-09":[0]}
+def push (p0 : Zig.Allocator) (p1 : Option (Zig.Ptr)) (p2 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+```
+
+with the indices of those parameters. `scripts/premises.py` adds the premise
+([ALC-09](premises.md#alc-09), [IOM-01](premises.md#iom-01)) to every theorem that reaches the
+definition, in the source index and in the kernel-graph `compiled` derivation. Nothing else in
+the generated code changes.
+
+The model's outcomes do not include every real std implementation. For the allocator
+examples, `tests/roadmap/model-inclusion` runs the same functions natively with
+`std.heap.page_allocator`, `FixedBufferAllocator`, `ArenaAllocator` and `DebugAllocator`,
+and the `Io` examples with `Io.Threaded` (multi- and single-threaded), and requires each native
+result to be one of the model's outcomes over the allocation policies (or schedules; a native
+hang must be a model deadlock). The known divergences of the
+[models audit](architecture-audit/models.md) (D-ALLOC-ALIAS, D-ALLOC-REMAP, D-IO-INLINE,
+D-IO-CANCEL, and D-IO-CONCURRENT, which this gate found: `global_single_threaded` makes
+`Group.concurrent` return `error.ConcurrencyUnavailable`, outside the default `available`
+policy) are listed in its `expected.json` as expected failures with reason and link; any other
+native result outside the model fails the gate, and so does a known divergence that no longer
+diverges. The model outcomes are a subset of the policies and schedules (the harness's 1 MiB
+request cap and the first four failing attempts), so an inclusion is real; a native result of
+an input above the cap is reported as unevaluated. `evidence.json` records each row (example,
+implementation, function): runs, included, the native results, and its status.
+
+```sh
+AIR2LEAN_EXAMPLES="lists sync iogroup" AIR2LEAN_ZIG=<stock 0.16.0> scripts/diff.sh  # builds difftest
+bash tests/roadmap/model-inclusion/check.sh      # writes evidence.json
+python3 -B tests/roadmap/model-inclusion/inclusion.py validate   # CI: no toolchain
+```
 
 ## `examples/<ex>/filter`
 
@@ -64,7 +132,7 @@ The coordinator kernel-checked these definitions at `853cef53211d08a62e368739160
 [the policy report](allocation-policy-report.json) records the selected local profile and
 remaining qualification/review gates.
 
-The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules. Its first argument is the allocation that fails (legacy null/index), or
+The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules (a mirror of the model, not a std allocator; see [Caller-supplied allocator and Io](#caller-supplied-allocator-and-io) for the real-allocator check). Its first argument is the allocation that fails (legacy null/index), or
 `{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields
 use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
 JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is

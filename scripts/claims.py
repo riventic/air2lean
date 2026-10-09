@@ -294,10 +294,18 @@ def audited_theorems(report: dict) -> dict:
     return audited
 
 
+def caller_obligations(report: dict) -> dict:
+    """W1: a theorem over a function with a caller-supplied Allocator/Io parameter is about
+    callers that pass the model one (docs/premises.md ALC-09, IOM-01); the claim names that
+    premise. Theorem name -> premise IDs."""
+    return MARKERS.caller_obligations(report, ROOT) if isinstance(report.get('nodes'), list) else {}
+
+
 def classify(report: dict, heads: dict | None = None) -> dict:
     audited = audited_theorems(report)
     heads = load_heads() if heads is None else heads
     nodes = nodes_of(report)
+    obligations = caller_obligations(report)
     theorems = []
     for theorem in audited.values():
         found = assess(theorem, heads, audited=audited, nodes=nodes)
@@ -307,6 +315,7 @@ def classify(report: dict, heads: dict | None = None) -> dict:
                          'claim_class': found['claim_class'], 'derived_strength': found['strength'],
                          'type_strength': found['type_strength'], 'bound': found['bound'],
                          'witnesses': found['witnesses'], 'caps': found['caps'],
+                         'caller_obligations': obligations.get(theorem['name'], []),
                          'allowed': theorem.get('allowed') is True})
     return {'schema_version': 1, 'theorems': sorted(theorems, key=lambda t: t['name'])}
 
@@ -326,12 +335,13 @@ def declares_scoped(domain) -> bool:
 
 
 def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *, definition: str,
-               heads: dict | None = None, generated=(), allowed=(), nodes=None) -> dict:
+               heads: dict | None = None, generated=(), allowed=(), nodes=None, obligations=None) -> dict:
     """`theorems` are the audit's theorem entries by name; `definition` is the root's generated
     definition, which the theorem's conclusion must be about."""
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
               'derived_strength': None, 'claim_class': None, 'bound': None, 'domain': goal['domain'],
-              'derived_domain': None, 'binding': None, 'caps': []}
+              'derived_domain': None, 'binding': None, 'caps': [],
+              'caller_obligations': (obligations or {}).get(goal['theorem'], [])}
     theorem = theorems.get(goal['theorem'])
     if theorem is None:
         return {**result, 'status': 'rejected',
@@ -375,14 +385,17 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
 
 
 def _sibling(name, filename=None):
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / (filename or f'{name}.py'))
+    spec = importlib.util.spec_from_file_location('claims_' + name,
+                                                  Path(__file__).resolve().parent / (filename or f'{name}.py'))
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
+    sys.modules[spec.name] = module  # dataclasses resolve annotations through sys.modules
     spec.loader.exec_module(module)
     return module
 
 
 OUTCOMES = _sibling('outcomes')
+MARKERS = _sibling('premise_markers')
 REPO = ROOT
 
 
@@ -432,6 +445,7 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     theorems = audited_theorems(report)
     heads = load_heads()
     nodes = nodes_of(report)
+    obligations = caller_obligations(report)
     current = _sibling('diff_report', 'diff-report.py').source_hashes(REPO) if diffs else {}
     for path in diffs:
         current_evidence(project, path, current)
@@ -443,14 +457,17 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
         generated = generated_definitions(nodes, {module}) if module else set()
         roots.append({'id': root['id'], 'outcomes': counts,
                       'goals': [check_goal(goal, theorems, counts, definition=definition, heads=heads,
-                                           generated=generated, allowed=root['assumptions'], nodes=nodes)
+                                           generated=generated, allowed=root['assumptions'], nodes=nodes,
+                                           obligations=obligations)
                                 for goal in root['goals']]})
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
             'scope': 'Strength is derived from the registered conclusion head (module and fingerprint) and capped '
                      'without non-vacuity and (partial) liveness witnesses. The conclusion must be about the root '
                      'definition; hypotheses may not mention generated definitions or claim heads; a scoped derived '
-                     'domain needs a domain declared `scoped: ...`. Differential outcomes (when supplied) can only '
+                     'domain needs a domain declared `scoped: ...`. caller_obligations lists the premises '
+                     '(ALC-09, IOM-01) under which a claim about a function with an Allocator or Io parameter '
+                     'holds: the caller passes the model one. Differential outcomes (when supplied) can only '
                      'refuse absence claims: capped, fuel-bounded, unsupported, unsupported-timer or unspecified '
                      'outcomes and observed failures reject a goal; error returns do not. Summaries must be bound to '
                      'the current tree (source/runner fingerprints and case hash) or the check fails. outcomes is '

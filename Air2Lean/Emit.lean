@@ -2893,6 +2893,45 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++
      ["  match e with"] ++ matchLines)
 
+/-- Whether a value of type `root` contains a `target` (`Ty.allocator`, `Ty.io`): the type itself,
+or one reached through a pointer, array, vector, optional, error-union payload, struct, union or
+tuple field. -/
+def tyReaches (types : Array Ty) (target : Ty) (root : TyId) : Bool := Id.run do
+  let mut seen : Std.HashSet TyId := {}
+  let mut todo := #[root]
+  while !todo.isEmpty do
+    let id := todo.back!
+    todo := todo.pop
+    if seen.contains id then continue
+    seen := seen.insert id
+    match types[id]? with
+    | some t =>
+      if t == target then return true
+      todo := todo ++ match t with
+        | .ptr _ _ c | .array _ c _ | .vector _ c | .optional c | .errorUnion _ c => #[c]
+        | .struct _ _ fs | .union _ _ _ fs => fs.map (·.2)
+        | .tuple fs => fs
+        | _ => #[]
+    | none => pure ()
+  return false
+
+/-- The caller obligations of `f`'s signature (W1; `docs/premises.md` ALC-09, IOM-01): the
+indices of the parameters that contain a `std.mem.Allocator` or a `std.Io`. The translation
+replaces whatever allocator or Io a caller passes by the single std model, so a theorem about
+`f` holds only for callers that pass one that behaves as that model. -/
+def interfacePremises (f : Func) : Array (String × Array Nat) :=
+  #[("ALC-09", Ty.allocator), ("IOM-01", Ty.io)].filterMap fun (premise, target) =>
+    let params := (Array.range f.params.size).filter fun i => tyReaches f.types target f.params[i]!
+    if params.isEmpty then none else some (premise, params)
+
+/-- The `-- air2lean-premises:` marker line before a function's `def` (`scripts/premises.py`
+derives the premise for every theorem that reaches the definition), or `""`. -/
+def interfacePremiseMarker (f : Func) : String :=
+  let premises := interfacePremises f
+  if premises.isEmpty then "" else
+    "-- air2lean-premises: " ++ (Lean.Json.mkObj (premises.toList.map fun (premise, params) =>
+      (premise, Lean.toJson params))).compress ++ "\n"
+
 def emitFunctionHeader (fc : FCtx) (leanName : String) (paramTys : Array TyId)
     (retTy : TyId) : String :=
   let paramsStr := String.intercalate " "
@@ -2987,7 +3026,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   { types := [localsStr, exitStr]
     agains := (loops.map (emitAgainDef fc)).toList
     loops := (loops.map (emitLoopDef fc)).toList
-    defn := emitFunctionHeader fc leanName f.params f.ret ++ functionBody
+    defn := interfacePremiseMarker f ++ emitFunctionHeader fc leanName f.params f.ret ++ functionBody
     body := functionBody
     ctx := fc }
 

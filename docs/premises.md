@@ -40,6 +40,11 @@ the tool:
 4. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
    header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
+   Adds the caller obligations of every generated definition reached: the translator writes
+   `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
+   parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
+   in `generated_markers` are accepted (`scripts/premise_markers.py` reads them), and a malformed marker or one that is not directly
+   above a `def` fails the check.
 5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
 
 The check fails if a runtime module with declarations has no mapping, if any ID is not
@@ -80,7 +85,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) [PRF-05](#prf-05) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) |
+| Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
@@ -255,6 +261,42 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   and provenance mode; the default path `Mem.reuseAddr?`/`ProvenanceMode.strict` that every
   `alloc`/`@ptrFromInt` unfolds to is not a token).
 - Sources: [address-reuse.md](address-reuse.md), `tests/roadmap/address-reuse`.
+
+<a id="alc-09"></a>
+### ALC-09 — Caller-supplied `Allocator` behaves as the std model
+
+- Kind: environment.
+- Statement: a translated function with a parameter that contains a `std.mem.Allocator` is
+  proved for the single model allocator of ALC-01, not for the allocator a caller passes. A
+  theorem about it holds for a caller only if that allocator behaves as the model: every
+  successful allocation is a fresh block, disjoint from all memory the caller can see; failures
+  are `OutOfMemory` attempts of ALC-02; `remap` and `realloc` succeed only as ALC-03 and ALC-05
+  allow; a free ends exactly that block. `std.heap.page_allocator` (its in-place shrinking
+  `remap` of non-byte items, D-ALLOC-REMAP), a `FixedBufferAllocator` or arena over
+  caller-visible memory (D-ALLOC-ALIAS), and user-written allocators are not covered.
+  `tests/roadmap/model-inclusion` records which real std allocators stay within the model's
+  outcomes for the allocator examples.
+- Derived from: the `-- air2lean-premises:` marker of a reached generated definition
+  (`generated_markers`); implies ALC-01.
+- Sources: [std-models.md](std-models.md#caller-supplied-allocator-and-io), [architecture audit](architecture-audit/models.md), `Air2Lean/Emit.lean` (`interfacePremises`).
+
+## Io interface
+
+<a id="iom-01"></a>
+### IOM-01 — Caller-supplied `Io` behaves as the std model
+
+- Kind: environment.
+- Statement: a translated function with a parameter that contains a `std.Io` is proved for
+  the single model `Zig.Io` (THR-02, THR-04, THR-05), not for the `Io` implementation a
+  caller passes. A theorem about it holds for a caller only if that `Io` behaves as the model:
+  every `Group.async` and `Group.concurrent` task is a new thread under the selected spawn
+  policy, `Group.cancel` waits like `Group.await`, a futex wait returns only after a wake and
+  never with `error.Canceled`. `Io.Threaded.global_single_threaded` and other `Io`s that run
+  `async` inline (D-IO-INLINE), cancellation (D-IO-CANCEL), spurious futex wakeups, and
+  user-written `Io`s are not covered.
+- Derived from: the `-- air2lean-premises:` marker of a reached generated definition
+  (`generated_markers`).
+- Sources: [std-models.md](std-models.md#caller-supplied-allocator-and-io), [architecture audit](architecture-audit/models.md), `Air2Lean/Emit.lean` (`interfacePremises`).
 
 ## Thread creation and scheduling
 
@@ -760,4 +802,5 @@ Each report below, and the premises a reader must accept to rely on it, is check
 | Weak CAS gate ([weak-cas.md](weak-cas.md)) | ORD-01, ORD-04, TRU-03 |
 | Timed scheduler qualification (`tests/roadmap/deadline-futex/foundation-qualified-v4.json`) | TMR-02, THR-05 |
 | Model registry evidence ([external-models.md](external-models.md)) | EXT-01, EXT-02 |
+| Model inclusion evidence (`tests/roadmap/model-inclusion/evidence.json`, [std-models.md](std-models.md#caller-supplied-allocator-and-io)) | ALC-09, IOM-01, TRU-03 |
 | Float probe (`scripts/floatprobe.sh`, [floats.md](floats.md)) | MTH-01, MTH-02, MTH-03, TRU-03 |

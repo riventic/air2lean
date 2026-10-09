@@ -1442,6 +1442,30 @@
         {
           "path": "tests/roadmap/inventory/test_inventory.py",
           "anchor": "def test_model_recognition_is_not_verification"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "modelled row without reviewed Zig versions"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "no reviewed std source for Zig 0.17.0"
+        },
+        {
+          "path": "tests/roadmap/models/StdModels.lean",
+          "anchor": "hand-models std code"
+        },
+        {
+          "path": "tests/roadmap/model-inclusion/test_inclusion.py",
+          "anchor": "def test_judge"
+        },
+        {
+          "path": "tests/roadmap/model-inclusion/test_inclusion.py",
+          "anchor": "def test_io_hang_needs_a_model_deadlock"
+        },
+        {
+          "path": "tests/roadmap/model-inclusion/test_inclusion.py",
+          "anchor": "def test_cap_limited_input_is_unevaluated_not_included"
         }
       ],
       "mutants": [
@@ -1449,9 +1473,29 @@
           "name": "std-model-rejected-row-recognized",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
+        },
+        {
+          "name": "inclusion-new-divergence-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inclusion-stale-known-divergence-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inclusion-hang-included-by-race",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "inclusion-cap-limited-counted-included",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
         }
       ],
-      "note": "The Lean rejection cases run in scripts/model-contracts.sh; the designated mutant is Python-side (the coverage inventory reading the std model table). No Lean-side mutant of the table checks exists yet."
+      "note": "The Lean rejection cases run in scripts/model-contracts.sh; the designated mutant is Python-side (the coverage inventory reading the std model table). No Lean-side mutant of the table checks exists yet. W2/W4 rejections (unreviewed Zig version, registry std binding) are Lean negative tests in StdModels.lean; the W3 model-inclusion checker has Python-side mutants."
     },
     "P01": {
       "categories": [
@@ -2293,6 +2337,30 @@
         {
           "path": "tests/roadmap/premises/test_premises.py",
           "anchor": "def test_compiled_unresolved_dependency_fails"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_interface_marker_reaches_theorems"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_interface_marker_fails_closed"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_interface_marker"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_caller_obligations_follow_the_kernel_graph"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_caller_obligations_reach_users_transitively"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_misplaced_marker_fails"
         }
       ],
       "mutants": [
@@ -2303,6 +2371,36 @@
         },
         {
           "name": "premises-compiled-runtime-module-unmapped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-interface-marker-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-interface-marker-misplaced-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-compiled-interface-marker-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "claims-caller-obligations-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premises-caller-obligations-not-transitive",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "invariant-transfer"
+        },
+        {
+          "name": "premise-markers-misplaced-accepted",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "invariant-transfer"
         }

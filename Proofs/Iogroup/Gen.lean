@@ -139,6 +139,7 @@ def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lock
     pure .rep27)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Mutex_lock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
@@ -223,6 +224,7 @@ def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt I
     pure .rep23)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Mutex_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     match ← ((do
@@ -292,6 +294,7 @@ inductive Io_Mutex_unlockExit where
   | br3 (v : Io_Mutex_State)
   | br7
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 0)
@@ -348,6 +351,7 @@ structure addLocals where
 inductive addExit where
   | ret
 
+-- air2lean-premises: {"IOM-01":[0]}
 def add (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure (p0.add 16)
@@ -407,6 +411,7 @@ def groupConcurrent.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM 
     pure .rep13)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[0]}
 def groupConcurrent (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 24 8
   let s8 ← Zig.allocStack 16 8
@@ -469,6 +474,7 @@ def groupCounter.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt
     pure .rep13)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[0]}
 def groupCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 24 8
   let s8 ← Zig.allocStack 16 8

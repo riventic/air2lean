@@ -185,6 +185,13 @@ jobs:
           # F2/S1/H1: one theorem universe, kernel replay records and report freshness (no Lean).
           python3 -B tests/roadmap/theorem-universe/test_universe.py -v
 
+      # W3: the real-allocator/Io inclusion checker and its committed evidence (the native and
+      # model runs are local: tests/roadmap/model-inclusion/check.sh).
+      - name: Model inclusion evidence
+        run: |
+          python3 -B tests/roadmap/model-inclusion/test_inclusion.py
+          python3 -B tests/roadmap/model-inclusion/inclusion.py validate
+
       # Offline: tutorial layout, README sections and premise lists match the index.
       - name: Tutorial layout regressions
         run: python3 -B -m unittest discover -s tests/roadmap/tutorials -v
@@ -704,6 +711,7 @@ jobs:
         run: |
           python3 tests/roadmap/models/test_gate.py
           python3 -B tests/roadmap/models/test_external_contracts.py
+          python3 -B tests/roadmap/models/test_std_sources.py
           scripts/model-contracts.sh
 
       # E03: selected environment-operation contract and its write-all client; the

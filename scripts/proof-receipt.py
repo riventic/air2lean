@@ -29,7 +29,8 @@ OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
           'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
-          'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py')
+          'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
+          'scripts/premise_markers.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 
 
@@ -278,6 +279,7 @@ def module_file(module):
 def helper(name):
     spec = importlib.util.spec_from_file_location('receipt_' + name, ROOT / 'scripts' / (name + '.py'))
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve annotations through sys.modules
     spec.loader.exec_module(module)
     return module
 
@@ -480,6 +482,15 @@ def float_labels(audit):
     return dict(audit['float_semantics'], theorems=dict(sorted(labels.items())))
 
 
+def caller_obligations(audit):
+    """W1: theorems whose kernel closure reaches a generated definition with a caller-supplied
+    Allocator/Io parameter, with those premises (docs/premises.md ALC-09, IOM-01)."""
+    try:
+        return helper('premise_markers').caller_obligations(audit, ROOT)
+    except (OSError, ValueError, KeyError) as error:
+        raise ValueError('caller obligations: ' + str(error)) from error
+
+
 def seal(attempt):
     attempt = physical(attempt)
     plan = plan_for(attempt)
@@ -515,12 +526,12 @@ def seal(attempt):
     demand(not plan['revision']['tracked_dirty'] or plan['allow_dirty'], 'tracked changes: a release receipt needs a clean tree')
     # The audit's float-semantics summary (recomputed by audit_ok) states which semantics the
     # numerical theorems concern; it never claims binary/native correspondence.
-    write_new(attempt / 'receipt.json', {'schema': 2, 'status': 'audited', 'authentication': 'not_attested',
+    write_new(attempt / 'receipt.json', {'schema': 3, 'status': 'audited', 'authentication': 'not_attested',
               'proof_scope': 'selected compiled Lean theorem dependency policy only',
               'source_correspondence': 'not_attested', 'native_adequacy': 'not_attested',
               'attempt': str(attempt), 'theorem_count': audit['theorem_count'],
               'float_semantics': float_labels(audit), 'kernel_replay': replay_summary(audit),
-              'tree': tree_state(plan),
+              'tree': tree_state(plan), 'caller_obligations': caller_obligations(audit),
               'artifacts': inventory([attempt / n for n in ('plan.json', *OUTPUTS, 'guard.json', 'guard.log')])})
 
 
@@ -529,8 +540,8 @@ def verify(attempt):
     receipt = load(attempt / 'receipt.json')
     demand(set(receipt) == {'schema', 'status', 'authentication', 'proof_scope', 'source_correspondence',
                           'native_adequacy', 'attempt', 'theorem_count', 'float_semantics', 'kernel_replay',
-                          'tree', 'artifacts'} and
-           type(receipt['schema']) is int and receipt['schema'] == 2 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
+                          'tree', 'caller_obligations', 'artifacts'} and
+           type(receipt['schema']) is int and receipt['schema'] == 3 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
            and receipt['authentication'] == receipt['source_correspondence'] == receipt['native_adequacy'] == 'not_attested'
            and receipt['proof_scope'] == 'selected compiled Lean theorem dependency policy only',
            'invalid receipt')
@@ -544,6 +555,8 @@ def verify(attempt):
     demand(receipt['kernel_replay'] == replay_summary(audit) and receipt['tree'] == tree_state(plan)
            and (not plan['revision']['tracked_dirty'] or plan['allow_dirty']),
            'receipt kernel replay or tree state differs from the audit')
+    demand(receipt['caller_obligations'] == caller_obligations(audit),
+           'receipt caller obligations differ from the audited theorems and generated markers')
     demand(after['context'] == context(plan) and after['compiled'] == compiled(plan)
            and after['profiles'] == profiles(), 'receipt stale')
     audit_ok(plan, audit)

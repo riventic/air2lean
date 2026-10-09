@@ -19,6 +19,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
+from premise_markers import GeneratedMarkers, markers as premise_markers, module_path as generated_path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path("assurance/premises.json")
@@ -115,7 +116,7 @@ def load_config(path: Path) -> dict:
     if config.get("schema_version") != 1:
         raise ValueError("unsupported premise configuration schema")
     for key in ("catalog", "index", "universal", "theorem_roots", "import_roots", "excluded", "generated_imports",
-                "generated_premises", "profiles", "float_semantics", "source_axiom",
+                "generated_premises", "generated_markers", "profiles", "float_semantics", "source_axiom",
                 "runtime_modules", "rules", "implies"):
         if key not in config:
             raise ValueError(f"premise configuration lacks {key}")
@@ -130,6 +131,7 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
     """Every (location, premise ID) mentioned by the configuration."""
     found = [("universal", p) for p in config["universal"]]
     found += [("generated_premises", p) for p in config["generated_premises"]]
+    found += [("generated_markers", p) for p in config["generated_markers"]]
     found += [(f"profiles.{k}", p) for k, p in config["profiles"].items()]
     found += [(f"float_semantics.{k}", p) for k, ps in config["float_semantics"].items() for p in ps]
     found += [("source_axiom", p) for p in config["source_axiom"]]
@@ -230,6 +232,7 @@ class Decl:
     binders: dict = field(default_factory=dict)
     dot_ctors: set = field(default_factory=set)
     targets: list | None = None
+    markers: dict = field(default_factory=dict)  # premise ID -> parameter indices
 
 
 @dataclass
@@ -240,6 +243,7 @@ class LeanFile:
     imports: list[str]
     header: str
     decls: list[Decl] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     resolved_imports: list["LeanFile"] = field(default_factory=list)
     gate_generated: bool = False
 
@@ -291,6 +295,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
     lean = LeanFile(path, rel.as_posix(), module_name(rel),
                     [m.group(1) for m in re.finditer(r"^import\s+(\S+)", text, re.M)],
                     profile_header(raw))
+    markers, lean.errors = premise_markers(raw, lean.rel)
     items: list[list] = []  # [keyword, first line, lines]
     for number, line in enumerate(text.split("\n"), 1):
         if line and not line[0].isspace():
@@ -357,7 +362,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 decl.binders.setdefault(name, set()).add(head)
             if keyword in {"theorem", "lemma", "example"}:
                 decl.statement = statement_of(body)
+            if keyword == "def" and number in markers:
+                decl.markers = markers.pop(number)
             lean.decls.append(decl)
+    # A marker that does not sit directly above a `def` would silently drop its premise.
+    lean.errors += [f"{lean.rel}:{number - 1}: air2lean-premises marker does not precede a def"
+                    for number in markers]
     return lean
 
 
@@ -436,6 +446,9 @@ def load_repository(root: Path, config: dict) -> Repository:
         if rel in files:
             continue
         lean = files[rel] = parse_file(path, root)
+        errors += lean.errors
+        errors += [f"{rel}: air2lean-premises marker names {p}, not a generated_markers premise"
+                   for d in lean.decls for p in d.markers if p not in config["generated_markers"]]
         for module in lean.imports:
             target = resolve_import(module, lean, root, config["import_roots"])
             if target is not None:
@@ -564,6 +577,12 @@ def close(config: dict, via: dict[str, list[str]]) -> dict[str, list[str]]:
     return via
 
 
+def apply_markers(via: dict, name: str, markers: dict) -> None:
+    """A reached generated definition's caller obligations (W1): its marker's premises."""
+    for premise, params in markers.items():
+        via.setdefault(premise, []).append(f"marker on {name} (parameters {', '.join(map(str, params))})")
+
+
 def apply_rules(config: dict, via: dict, tokens, scope: str) -> None:
     for rule in config["rules"]:
         if rule["scope"] != scope:
@@ -585,6 +604,7 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     def visit(target: Decl) -> None:
         if target.name:
             tokens.add(target.name)  # as in the kernel graph, rules also see resolved names
+        apply_markers(via, target.name, target.markers)
         if target.file.runtime:
             runtime.add(target.file.module)
             seen.add(id(target))
@@ -629,7 +649,7 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
 
 
 def premise_key(pid: str) -> tuple:
-    order = ["PRF", "ALC", "THR", "ORD", "TMR", "MTH", "ASM", "SEM", "EXT", "TRU"]
+    order = ["PRF", "ALC", "IOM", "THR", "ORD", "TMR", "MTH", "ASM", "SEM", "EXT", "TRU"]
     prefix = pid.split("-")[0]
     return (order.index(prefix) if prefix in order else len(order), pid)
 
@@ -756,6 +776,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
     nodes = {n["name"]: n for n in report["nodes"]}
     errors, theorems, skipped = [], [], 0
     profiles: dict[str, tuple[list[str], str]] = {}
+    markers = GeneratedMarkers(root)
     # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
     # source comparison use the user-facing name so module paths cannot trigger token rules.
     def user(name: str) -> str:
@@ -798,6 +819,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                     via.setdefault(premise, []).append(f"axiom {name}")
             if module.split(".")[-1] == "Gen":
                 generated.add(module)
+                apply_markers(via, user(name), markers.of(module, user(name)))
             pending.extend(node["dependencies"])
         for axiom in theorem.get("axioms", ()):
             if axiom not in STANDARD_AXIOMS:
@@ -813,7 +835,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         apply_rules(config, via, {user(n) for n in nodes[theorem["name"]]["dependencies"]}, "statement")
         for module in sorted(generated):
             if module not in profiles:
-                path = root / Path(*module.split(".")).with_suffix(".lean")
+                path = generated_path(root, module)
                 if path.is_file():
                     header = profile_header(path.read_text())
                     profiles[module] = profile_premises(config, LeanFile(path, module, module, [], header))
@@ -832,6 +854,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                 if entry["source_gaps"]:
                     entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
         theorems.append(entry)
+    errors += markers.errors
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,

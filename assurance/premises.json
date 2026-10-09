@@ -34,6 +34,10 @@
     "EnvStd16.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.16.0 std I/O AIR into EnvStd16/Gen.lean with the ENV-03 registry."
   },
   "generated_premises": ["TRU-02"],
+  "generated_markers": {
+    "ALC-09": "Air2Lean/Emit.lean interfacePremiseMarker: a parameter type contains std.mem.Allocator (Ty.allocator).",
+    "IOM-01": "Air2Lean/Emit.lean interfacePremiseMarker: a parameter type contains std.Io (Ty.io)."
+  },
   "profiles": {
     "absent": "PRF-01",
     "legacy-abi64-le": "PRF-01",
@@ -206,7 +210,7 @@
     "ALC-05": ["ALC-01", "ALC-03"],
     "ALC-06": ["ALC-01", "ALC-03"],
     "ALC-07": ["ALC-01", "ALC-02"],
-    "ALC-08": ["ALC-01"],
+    "ALC-09": ["ALC-01"],
     "THR-02": ["THR-01"],
     "THR-03": ["THR-01"],
     "THR-04": ["THR-02"],

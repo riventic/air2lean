@@ -153,6 +153,52 @@ MUTANTS = {
         '                errors.append(f"{theorem[\'name\']}: runtime module {module} has no premise mapping")\n',
         '                pass\n', PREMISES, 'premises',
         ('CompiledTests.test_compiled_unmapped_module_and_axiom',)),
+    # D03 (W1): a generated def's Allocator/Io caller obligation must reach every theorem using it.
+    'premises-interface-marker-dropped': (
+        'scripts/premises.py', '        apply_markers(via, target.name, target.markers)\n', '',
+        PREMISES, 'premises', ('FixtureTests.test_interface_marker_reaches_theorems',)),
+    # D03 (W1): a marker that is not directly above a def must fail, not silently vanish.
+    'premises-interface-marker-misplaced-accepted': (
+        'scripts/premises.py',
+        '    lean.errors += [f"{lean.rel}:{number - 1}: air2lean-premises marker does not precede a def"\n'
+        '                    for number in markers]\n', '',
+        PREMISES, 'premises', ('FixtureTests.test_interface_marker_fails_closed',)),
+    # D03 (W1): the kernel-graph reader of generated markers fails closed on a misplaced marker.
+    'premise-markers-misplaced-accepted': (
+        'scripts/premise_markers.py',
+        '            errors.append(f"{rel}:{number - 1}: air2lean-premises marker does not precede a def")\n',
+        '            pass\n', PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
+    # D03 (W1): the kernel-graph derivation applies the same markers.
+    'premises-compiled-interface-marker-dropped': (
+        'scripts/premises.py', '                apply_markers(via, user(name), markers.of(module, user(name)))\n', '',
+        PREMISES, 'premises', ('CompiledTests.test_compiled_interface_marker',)),
+    # E04 (W3): a native result outside the model that is not a known divergence must fail.
+    'inclusion-new-divergence-ignored': (
+        'tests/roadmap/model-inclusion/inclusion.py', "            if r['status'] == 'fail':\n",
+        "            if False:\n", 'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_judge',)),
+    # E04 (W3): a known divergence that no longer diverges is stale, not silently passing.
+    'inclusion-stale-known-divergence-accepted': (
+        'tests/roadmap/model-inclusion/inclusion.py', "        elif r['status'] == 'pass':\n",
+        "        elif False:\n", 'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_judge',)),
+    # E04 (W3): a data race admits any value, but a native hang needs a model deadlock.
+    'inclusion-hang-included-by-race': (
+        'tests/roadmap/model-inclusion/inclusion.py', "(m == ILLEGAL and t != DEADLOCK)",
+        "(m == ILLEGAL)", 'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_io_hang_needs_a_model_deadlock',)),
+    # E04 (W3): an input the capped model cannot evaluate is never counted as included.
+    'inclusion-cap-limited-counted-included': (
+        'tests/roadmap/model-inclusion/inclusion.py',
+        "                        None if json.loads(group[0]).get('ok') == OUT_OF_MEMORY else False\n",
+        "                        True if json.loads(group[0]).get('ok') == OUT_OF_MEMORY else False\n",
+        'tests/roadmap/model-inclusion/test_inclusion.py', 'inclusion', ('Inclusion.test_cap_limited_input_is_unevaluated_not_included',)),
+    # D03 (W1): a claim about a function with an Allocator/Io parameter names its premise.
+    'claims-caller-obligations-dropped': (
+        'scripts/claims.py', "                         'caller_obligations': obligations.get(theorem['name'], []),\n",
+        "                         'caller_obligations': [],\n", 'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_caller_obligations_follow_the_kernel_graph',)),
+    # D03 (W1): receipts and claims derive caller obligations from the kernel graph transitively.
+    'premises-caller-obligations-not-transitive': (
+        'scripts/premise_markers.py', "        pending += [(user, premise) for user in reverse.get(name, ())]\n", '',
+        PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
         'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch'):\n",

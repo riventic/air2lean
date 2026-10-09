@@ -43,6 +43,12 @@ def main : IO Unit := do
     | _ =>
       require (!m.dependencies.isEmpty && m.dependencies.all (·.startsWith "Zig."))
         s!"{m.symbol}: modelled row without ZigLean dependencies"
+      -- W2: every modelled row lists its reviewed versions; no row is "every version".
+      require (!m.reviewed.isEmpty) s!"{m.symbol}: modelled row without reviewed Zig versions"
+      require (m.zigVersions.toList.eraseDups.length == m.zigVersions.size) s!"{m.symbol}: duplicate reviewed version"
+      require (m.reviewed.all fun r => r.sha256.length == 64 && !r.file.isEmpty) s!"{m.symbol}: malformed std review"
+    -- A Zig version without a reviewed std source (0.17 in progress) is never qualified.
+    require (!m.qualifies "0.17.0") s!"{m.symbol}: qualified for unreviewed Zig 0.17.0"
     -- The typed projections agree with the row, including anonymous instances.
     for name in #[m.symbol, m.symbol ++ "__anon_7"] do
       require ((stdModel? name).map (·.symbol) == some m.symbol) s!"{name}: lookup"
@@ -89,6 +95,12 @@ def main : IO Unit := do
     "Io.Future.await qualified Zig 0.16.0"
   expectError (checkProgram #[caller f "client" "Io.concurrent__anon_1"])
     "Io.concurrent is not a qualified async API"
+  -- An empty review list qualifies nothing (it never means "every audited version").
+  require (!({ symbol := "mem.Allocator.create", kind := .alloc .create } : StdModel).qualifies "0.16.0")
+    "empty review list qualified a version"
+  expectError (checkProgram #[{ caller f "client" "mem.Allocator.create__anon_1" with zigVersion := "0.17.0" }])
+    "no reviewed std source for Zig 0.17.0"
+  expectError (checkProgram #[caller f "client" "Thread.spinLoopHint"]) "is not a std declaration"
   -- A translated function cannot reuse a built-in std model name.
   for name in #["Thread.join", "Thread.spawn__anon_4", "Thread.detach", "mem.Allocator.free__anon_9"] do
     expectError (checkProgram #[f, { f with name }]) s!"{name}: translated function conflicts with built-in std model"
@@ -110,6 +122,35 @@ def main : IO Unit := do
   for symbol in #["mem.Allocator.create", "Thread.detach", "Io.Group.async"] do
     expectError (ModelRegistry.check #[{ model with symbol }] raw.profile #[caller f "client" symbol])
       s!"model '{symbol}' conflicts with translated AIR or a built-in model"
+  -- W4: a project binding in a std namespace is an OS primitive or rejected.
+  for symbol in #["fmt.format", "heap.PageAllocator.alloc", "mem.Allocator.resize", "Io.Threaded.async",
+      "posix.read", "array_list.Aligned(u8,null).append__anon_3"] do
+    expectError (ModelRegistry.check #[{ model with symbol }] raw.profile #[caller f "client" symbol])
+      s!"model '{symbol}' hand-models std code"
+  for symbol in #["os.linux.read", "posix.mmap"] do
+    require (projectStdBinding? symbol).isNone s!"{symbol}: OS primitive refused"
+    let _ ← get <| ModelRegistry.check #[{ model with symbol }] raw.profile #[caller f "client" symbol]
+  -- A user module's names never trigger the std rule (the registry example binds `project.*`).
+  for symbol in #["project.identity", "lists.helper", "client.posix.read", "mempool.alloc"] do
+    require (projectStdBinding? symbol).isNone s!"{symbol}: user-module name refused as std"
+  -- Module identity (B1) decides: a user root module named like a std namespace is user code, a
+  -- std-module callee is std code whatever its name. Without module identity (legacy export) the
+  -- std namespace match refuses it (fail closed).
+  require (projectStdBinding? "posix.helper").isSome "std namespace match without module identity"
+  require (projectStdBinding? "posix.helper" (some "root")).isNone "root-module posix.helper refused as std"
+  require (projectStdBinding? "fmt.format" (some "std")).isSome "std-module fmt.format accepted"
+  require (projectStdBinding? "mempool.alloc" (some "std")).isSome "std module decides, not the name"
+  let rootPosix : Func := { caller f "client" "posix.helper" with
+    identities := #[{ key := "client", module := some "root", name := "client" },
+                    { key := "posix.helper", module := some "root", name := "posix.helper" }] }
+  let _ ← get <| ModelRegistry.check #[{ model with symbol := "posix.helper" }] raw.profile #[rootPosix]
+  let stdPosix : Func := { rootPosix with
+    identities := #[{ key := "client", module := some "root", name := "client" },
+                    { key := "posix.helper", module := some "std", name := "posix.helper" }] }
+  expectError (ModelRegistry.check #[{ model with symbol := "posix.helper" }] raw.profile #[stdPosix])
+    "model 'posix.helper' hand-models std code"
+  require ((ModelRegistry.template raw.profile #[caller f "client" "fmt.format"]).toOption.map
+    (·.getObjValD "models") == some (.arr #[])) "template offered a std function"
   -- Same-name project binding with an incompatible second call site.
   let wide : Func := { caller f "wide" "project.identity" with
     types := #[.int false 16, .noreturn], layouts := #[{size := some 2, align := some 2}, {}] }

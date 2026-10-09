@@ -70,6 +70,10 @@ lake env lean tutorials/allocation-failure/Negative.lean   # must fail
 - [ALC-02](../../docs/premises.md#alc-02): `OutOfMemory` is decided by `Mem.allocPolicy`. The
   theorem quantifies over every policy, but the policy is not a resource guarantee of the
   host: a real allocator may fail in other places, which the model also allows.
+- [ALC-09](../../docs/premises.md#alc-09): the `std.mem.Allocator` parameter is the model
+  allocator, not whatever allocator a caller passes. The theorem holds for callers whose
+  allocator behaves as the model (fresh disjoint blocks; `page_allocator`'s in-place
+  `remap` and a `FixedBufferAllocator` over visible memory do not).
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.
