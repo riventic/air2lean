@@ -420,6 +420,37 @@ theorem add32 {a b : Nat} (ha : a < 512) (hb : b < 256) :
 
 /-! ## The client -/
 
+theorem tc_ex {α γ : Type} {A₀ : Nat} {g : Array Byte} {P : γ → Assn} {c : MemM α}
+    {Post : α → Assn}
+    (ht : ∀ a, TotalTriple (fun h => (P a ∗ guard A₀ g) h ∧ cov h) c Post) :
+    TotalTriple (fun h => (Assn.ex P ∗ guard A₀ g) h ∧ cov h) c Post := by
+  rintro m hP hF hd hm ⟨⟨h₁, h₂, hd₁, rfl, ⟨a, hp⟩, hg⟩, hc⟩ hst
+  exact ht a m _ hF hd hm ⟨⟨h₁, h₂, hd₁, rfl, hp, hg⟩, hc⟩ hst
+
+theorem flat_size (n : Nat) (v : BitVec 8) : ((Array.replicate n (Enc.encode v)).flatten).size = n := by
+  rw [Array.size_flatten_replicate, LawfulEnc.size_encode, show Enc.size (BitVec 8) = 1 from rfl,
+    Nat.mul_one]
+
+theorem fitsI {s1 : Ptr} {A₀ Ac n : Nat} (hn : n ≤ 64) : Wrap.Fits (I s1 A₀ Ac) n 0 := by
+  intro _ _
+  show 12 + 2 ^ 0 + n ≤ 2 ^ 64
+  omega
+
+/-- Leave with the code `k`: the client's other bytes are given up. -/
+theorem leave {s1 : Ptr} {A₀ Ac : Nat} {g : Array Byte} {Cur : Assn} {v : BitVec 8} (h0 : s1.off = 0)
+    (k : BitVec 32) (hk : Res v k) (hcur : ∀ h, Cur h → ((I s1 A₀ Ac).own ∗ junk) h) :
+    TotalTriple (fun h => (Cur ∗ guard A₀ g) h ∧ cov h) (free s1 >>= fun _ => pure k)
+      (fun r => ⌜Res v r⌝ ∗ junk) :=
+  tc_exit (TotalTriple.conseq (exit_free (X := junk ∗ guard A₀ g) h0 k hk)
+    (fun h hp => sep_assoc (sep_mono hcur (fun _ x => x) hp)) (fun _ _ x => x))
+
+theorem prefix_byte {bs' bs4 : Array Byte} {j : Nat} (h : bs'.extract 0 4 = bs4) (hj : j + 1 ≤ 4) :
+    bs'.extract j (j + 1) = bs4.extract j (j + 1) := by
+  rw [← h, Array.extract_extract]; simp [Nat.min_eq_left hj]
+
+theorem own_junk {J : AllocInv} {X : Assn} {h : Heap} (hp : (J.own ∗ X) h) : (J.own ∗ junk) h :=
+  sep_mono (fun _ x => x) (fun _ _ => trivial) hp
+
 abbrev g3 (bs : Array Byte) : Array Byte := (bs.extract 12 16).extract 1 ((bs.extract 12 16).size)
 
 /-- Entry: the allocator is set up on `buffer[0..12]`, the client keeps `buffer[13..16]`, and
@@ -469,7 +500,218 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
   refine TotalTriple.bind (TotalTriple.frame (store_struct (A₀ := A₀) h0 hAc)) fun _ => ?_
   refine TotalTriple.conseq (P := fun h => ((I s1 A₀ Ac).own ∗ guard A₀ (g3 bs)) h ∧ cov h) ?_
     (fun h hp => entry hs hA hblk hp) (fun _ _ x => x)
-  trace_state
-  sorry
+  have hg : 0 < (g3 bs).size := by simp [g3, hs]
+  -- `a.alloc(u8, 4)`
+  refine tc_bind (Cur := (I s1 A₀ Ac).own) (F := emp) hg
+    (Wrap.allocSlice_spec (spec s1 A₀ Ac) 1 0 4 (by decide) (by decide) (fitsI (by decide)))
+    (fun h hp => sep_emp.mpr hp) fun r => ?_
+  cases r with
+  | error e =>
+    simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, Zig.unwrapErr, Norm.lift_pure,
+      pure_bind]
+    exact leave h0 1 (by simp [Res]) fun h hp => by
+      simp only [Wrap.sliceResult] at hp
+      obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
+      exact own_junk (sep_mono (fun _ x => x) (fun _ _ => trivial) hp)
+  | ok x =>
+  simp only [Bool.not_false, ↓reduceIte, Zig.unwrapPayload, Norm.lift_pure, pure_bind]
+  simp only [Wrap.sliceResult, Nat.one_mul]
+  refine tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hx4 => ?_
+  rw [Wrap.owned_pos (by simp)]
+  -- `@memset(s, v)`
+  refine tc_bind (P := granted (I s1 A₀ Ac) x.ptr 0 (Array.replicate 4 .undef))
+    (F := (I s1 A₀ Ac).own) hg (granted_memset v (by rw [hx4]; simp))
+    (fun h hp => by obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp); sep_from hp) fun _ => ?_
+  rw [hx4]
+  -- `a.realloc(s, 8)`
+  refine tc_bind (P := (I s1 A₀ Ac).own ∗ Wrap.owned (I s1 A₀ Ac) 0 x.ptr
+      (Array.replicate 4 (Enc.encode v)).flatten) (F := emp) hg
+    (Wrap.realloc_spec (spec s1 A₀ Ac) 1 0 x 8 _ (by decide) (by decide) (by decide)
+      (by rw [flat_size, hx4]; rfl) (by rw [flat_size]; decide) (fitsI (by decide))
+      (grantSep' s1 A₀ Ac 0))
+    (fun h hp => by
+      rw [Wrap.owned_pos (by rw [flat_size]; decide)]
+      refine sep_emp.mpr ?_
+      simpa using (show ((I s1 A₀ Ac).own ∗ granted (I s1 A₀ Ac) x.ptr 0
+        (Array.replicate (BitVec.toNat (4 : BitVec 64)) (Enc.encode v)).flatten) h by sep_from hp)) fun r => ?_
+  cases r with
+  | error e =>
+    simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, Zig.unwrapErr, Norm.lift_pure,
+      pure_bind]
+    exact leave h0 2 (by simp [Res]) fun h hp => by
+      simp only [Wrap.reallocResult] at hp
+      obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
+      exact own_junk (sep_mono (fun _ x => x) (fun _ _ => trivial) (sep_assoc hp))
+  | ok t =>
+  simp only [Bool.not_false, ↓reduceIte, Zig.unwrapPayload, Norm.lift_pure, pure_bind]
+  let J := I s1 A₀ Ac
+  let bs4 := (Array.replicate 4 (Enc.encode v)).flatten
+  simp only [Wrap.reallocResult, Nat.one_mul]
+  refine tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun ht8 => ?_
+  refine tc_pre (Cur' := Assn.ex fun bs' : Array Byte => ⌜bs'.size = 8 ∧ keepsPrefix bs4 bs'⌝ ∗
+      (J.own ∗ granted J t.ptr 0 bs')) (fun h hp => ?_) ?_
+  · obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
+    obtain ⟨bs', hp⟩ := sep_ex_right.mp (sep_emp.mp hp)
+    obtain ⟨hf, hp⟩ := sep_lift_right.mp hp
+    refine ⟨bs', sep_lift.mpr ⟨hf, ?_⟩⟩
+    rw [Wrap.owned_pos (by have := hf.1; simp at this; omega)] at hp
+    exact hp
+  refine tc_ex fun bs' => tc_pure (fun h hp => (sep_lift.mp hp).1) fun ⟨hb8, hkp⟩ => ?_
+  refine tc_pre (Cur' := J.own ∗ granted J t.ptr 0 bs') (fun h hp => (sep_lift.mp hp).2) ?_
+  have hpre4 : bs'.extract 0 4 = bs4 := by
+    have := hkp; unfold keepsPrefix at this
+    rw [flat_size, hb8] at this
+    rw [this]; exact Array.extract_eq_self_of_le (by show bs4.size ≤ 8; simp only [bs4, flat_size]; decide)
+  rw [ht8, if_pos (by decide)]
+  -- `t[7] = v +% 1`
+  refine tc_bind (P := granted J t.ptr 0 bs') (F := J.own) hg
+    (granted_store (Zig.addWrap v 1) 7 (by decide) (by rw [hb8]; decide) (Nat.one_dvd _)
+      (Nat.one_dvd _)) (fun h hp => sep_comm hp) fun _ => ?_
+  rw [show (7 : BitVec 64).toNat = 7 from rfl]
+  have hw : (Enc.encode (Zig.addWrap v 1)).size = 1 := LawfulEnc.size_encode (Zig.addWrap v 1)
+  have hb2 : (writeBytes bs' 7 (Enc.encode (Zig.addWrap v 1))).size = 8 := by
+    rw [writeBytes_size _ _ _ (by rw [hw, hb8] <;> omega), hb8]
+  have hv0 : (writeBytes bs' 7 (Enc.encode (Zig.addWrap v 1))).extract 0 1 = Enc.encode v := by
+    rw [show (1 : Nat) = 0 + 1 from rfl, extract_writeBytes_lt _ _ (by decide) (by rw [hw, hb8] <;> omega),
+      prefix_byte hpre4 (by decide)]
+    exact byte_at v 4 0 (by decide)
+  have hv3 : (writeBytes bs' 7 (Enc.encode (Zig.addWrap v 1))).extract 3 4 = Enc.encode v := by
+    rw [show (4 : Nat) = 3 + 1 from rfl, extract_writeBytes_lt _ _ (by decide) (by rw [hw, hb8] <;> omega),
+      prefix_byte hpre4 (by decide)]
+    exact byte_at v 4 3 (by decide)
+  have hv7 : (writeBytes bs' 7 (Enc.encode (Zig.addWrap v 1))).extract 7 8 =
+      Enc.encode (Zig.addWrap v 1) := by
+    have := extract_writeBytes_in bs' (Enc.encode (Zig.addWrap v 1)) 7 7 1
+      (by rw [hw, hb8] <;> omega) (Nat.le_refl 7) (by rw [hw] <;> omega)
+    rw [show (7 : Nat) + 1 = 8 from rfl, Nat.sub_self, Nat.zero_add] at this
+    rw [this, show (1 : Nat) = (Enc.encode (Zig.addWrap v 1)).size from hw.symm, Array.extract_size]
+  generalize writeBytes bs' 7 (Enc.encode (Zig.addWrap v 1)) = b2 at hb2 hv0 hv3 hv7 ⊢
+  -- `a.alloc(u8, 64)`: out of memory for this buffer, but the specification allows both
+  refine tc_bind (P := J.own) (F := granted J t.ptr 0 b2) hg
+    (Wrap.allocSlice_spec (spec s1 A₀ Ac) 1 0 64 (by decide) (by decide) (fitsI (by decide)))
+    (fun h hp => sep_comm hp) fun r => ?_
+  cases r with
+  | ok big =>
+    simp only [Bool.not_false, ↓reduceIte, Norm.lift_pure, pure_bind]
+    simp only [Wrap.sliceResult, Nat.one_mul]
+    refine tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hbig => ?_
+    refine tc_bind (P := J.own ∗ Wrap.owned J 0 big.ptr (Array.replicate 64 .undef))
+      (F := granted J t.ptr 0 b2) hg
+      (Wrap.free_spec (spec s1 A₀ Ac) 1 0 big _ (by decide) (by rw [hbig]; rfl) (by decide))
+      (fun h hp => (sep_lift.mp (sep_assoc hp)).2) fun _ => ?_
+    exact leave h0 3 (by simp [Res]) fun h hp => own_junk (sep_mono (fun _ x => x)
+      (fun _ _ => trivial) hp)
+  | error e =>
+  simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, Zig.unwrapErr, Norm.lift_pure,
+    pure_bind]
+  refine tc_pre (Cur' := J.own ∗ granted J t.ptr 0 b2) (fun h hp => by
+    simp only [Wrap.sliceResult] at hp
+    obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
+    exact hp) ?_
+  rw [if_pos (by decide)]
+  refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
+    (granted_load0 (w := v) (al := 1) (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
+      (by rw [show Enc.size (BitVec 8) = 1 from rfl, hv0]; exact decode_byte v))
+    (fun h hp => sep_comm hp) fun x₀ => tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1)
+      fun hx₀ => ?_
+  subst x₀
+  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide)]
+  refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
+    (granted_load (w := v) (al := 1) 3 (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
+      (Nat.one_dvd _) (by rw [show Enc.size (BitVec 8) = 1 from rfl]; exact hv3 ▸ decode_byte v))
+    (fun h hp => by obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp); exact hp) fun x₃ =>
+      tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hx₃ => ?_
+  subst x₃
+  rw [intCast_byte, Norm.lift_pure, pure_bind, add32 (by have := v.isLt; omega) v.isLt,
+    Norm.lift_pure, pure_bind, if_pos (by decide)]
+  refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
+    (granted_load (w := Zig.addWrap v 1) (al := 1) 7 (by decide) (by rw [hb2]; decide)
+      (Nat.one_dvd _) (Nat.one_dvd _)
+      (by rw [show Enc.size (BitVec 8) = 1 from rfl]; exact hv7 ▸ decode_byte _))
+    (fun h hp => by obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp); exact hp) fun x₇ =>
+      tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hx₇ => ?_
+  subst x₇
+  rw [intCast_byte, Norm.lift_pure, pure_bind,
+    add32 (by have := v.isLt; omega) (Zig.addWrap v 1).isLt, Norm.lift_pure, pure_bind]
+  -- `a.free(t)`
+  refine tc_bind (P := J.own ∗ Wrap.owned J 0 t.ptr b2) (F := emp) hg
+    (Wrap.free_spec (spec s1 A₀ Ac) 1 0 t b2 (by decide) (by rw [hb2, ht8]; rfl)
+      (by rw [hb2]; decide))
+    (fun h hp => by
+      obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
+      rw [Wrap.owned_pos (by rw [hb2]; decide)]
+      exact sep_emp.mpr (sep_comm hp)) fun _ => ?_
+  -- `fba.reset()`
+  refine TotalTriple.bind (TotalTriple.conseq (reset_step (A₀ := A₀) (Ac := Ac) (g := g3 bs) hblk)
+    (fun h ⟨hp, hc⟩ => ⟨sep_mono (fun _ x => sep_emp.mp x) (fun _ x => x) hp, hc⟩)
+    (fun _ _ x => x)) fun _ => ?_
+  -- `a.alloc(u8, 12)` after the reset
+  refine TotalTriple.bind (TotalTriple.frame (R := guard A₀ (g3 bs))
+    (Wrap.allocSlice_spec (spec s1 A₀ Ac) 1 0 12 (by decide) (by decide) (fitsI (by decide))))
+    fun r => ?_
+  have hexit : ∀ (k : BitVec 32), Res v k → ∀ X : Assn,
+      TotalTriple ((J.own ∗ X) ∗ guard A₀ (g3 bs)) (free s1 >>= fun _ => pure k)
+        (fun r => ⌜Res v r⌝ ∗ junk) := fun k hk X =>
+    TotalTriple.conseq (exit_free (X := junk) h0 k hk) (fun h hp => own_junk (sep_assoc hp))
+      (fun _ _ x => x)
+  cases r with
+  | error e =>
+    simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, Norm.lift_pure, pure_bind]
+    refine TotalTriple.conseq (hexit 4 (by simp [Res]) emp) (fun h hp => ?_) (fun _ _ x => x)
+    simp only [Wrap.sliceResult] at hp
+    obtain ⟨h₁, h₂, hd, rfl, hp₁, hg'⟩ := hp
+    exact ⟨h₁, h₂, hd, rfl, sep_emp.mpr (sep_lift.mp hp₁).2, hg'⟩
+  | ok u =>
+  simp only [Bool.not_false, ↓reduceIte, Norm.lift_pure, pure_bind]
+  simp only [Wrap.sliceResult, Nat.one_mul]
+  refine TotalTriple.of_pure (fun h hp => by
+    obtain ⟨h₁, -, -, -, hp₁, -⟩ := hp; exact (sep_lift.mp hp₁).1) fun hu => ?_
+  rw [hu, if_pos (by decide), Wrap.owned_pos (by simp)]
+  refine TotalTriple.conseq (P := granted J u.ptr 0 (Array.replicate 12 .undef) ∗
+    (J.own ∗ guard A₀ (g3 bs))) ?_ (fun h hp => by
+      obtain ⟨h₁, h₂, hd, rfl, hp₁, hg'⟩ := hp
+      have hp₂ : ((J.own ∗ granted J u.ptr 0 (Array.replicate 12 .undef)) ∗ guard A₀ (g3 bs))
+          (h₁ ∪ h₂) := ⟨h₁, h₂, hd, rfl, (sep_lift.mp hp₁).2, hg'⟩
+      sep_from hp₂) (fun _ _ x => x)
+  refine TotalTriple.bind (TotalTriple.frame (granted_store (J := J) v 11 (by decide)
+    (by rw [Array.size_replicate]; decide) (Nat.one_dvd _) (Nat.one_dvd _))) fun _ => ?_
+  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl]
+  have hw : (Enc.encode v).size = 1 := LawfulEnc.size_encode v
+  have hv11 : (writeBytes (Array.replicate 12 .undef) 11 (Enc.encode v)).extract 11 12 =
+      Enc.encode v := by
+    have := extract_writeBytes_in (Array.replicate 12 .undef) (Enc.encode v) 11 11 1
+      (by rw [hw] <;> simp) (Nat.le_refl 11) (by rw [hw] <;> omega)
+    rw [show (11 : Nat) + 1 = 12 from rfl, Nat.sub_self, Nat.zero_add] at this
+    rw [this, show (1 : Nat) = (Enc.encode v).size from hw.symm, Array.extract_size]
+  have hsz : (writeBytes (Array.replicate 12 .undef) 11 (Enc.encode v)).size = 12 := by
+    rw [writeBytes_size _ _ _ (by rw [hw] <;> simp)]; simp
+  generalize writeBytes (Array.replicate 12 .undef) 11 (Enc.encode v) = b3 at hv11 hsz ⊢
+  refine TotalTriple.bind (TotalTriple.frame (granted_load (J := J) (w := v) (al := 1) 11
+    (by decide) (by rw [hsz]; decide) (Nat.one_dvd _) (Nat.one_dvd _)
+    (by rw [show Enc.size (BitVec 8) = 1 from rfl]; exact hv11 ▸ decode_byte v))) fun x₁₁ => ?_
+  refine TotalTriple.conseq (P := ⌜x₁₁ = v⌝ ∗ (granted J u.ptr 0 b3 ∗ (J.own ∗ guard A₀ (g3 bs))))
+    ?_ (fun h hp => sep_assoc hp) (fun _ _ x => x)
+  refine TotalTriple.lift fun hx => ?_
+  subst x₁₁
+  -- `buffer[15] = u[11]`: the client's own byte
+  have hgs : (g3 bs).size = 3 := by simp [g3, hs]
+  rw [show (⟨some 0, 15⟩ : Ptr) = guardp.add ((2 : Nat) : Int) from rfl]
+  refine TotalTriple.bind (TotalTriple.conseq (TotalTriple.frame
+      (R := granted J u.ptr 0 b3 ∗ J.own)
+      (Region.storeItemIn (p := guardp) (A := A₀) (S := 16) (K := .global) (a := 1)
+        (bs := g3 bs) (o := 2) (al := 1) v (by decide) (by rw [hgs]; decide) (Nat.one_dvd _)
+        (Nat.one_dvd _)))
+    (fun h hp => by unfold guard at hp; sep_from hp) (fun _ _ x => x)) fun _ => ?_
+  -- `a.free(u)`
+  refine TotalTriple.bind (TotalTriple.conseq (TotalTriple.frame
+      (R := regionIn guardp A₀ 16 .global 1 (writeBytes (g3 bs) 2 (Enc.encode v)))
+      (Wrap.free_spec (spec s1 A₀ Ac) 1 0 u b3 (by decide) (by rw [hsz, hu]; rfl)
+        (by rw [hsz]; decide)))
+    (fun h hp => by rw [Wrap.owned_pos (by rw [hsz]; decide)]; sep_from hp)
+    (fun _ _ x => x)) fun _ => ?_
+  have hres : Res v (BitVec.ofNat 32 (v.toNat + v.toNat + (Zig.addWrap v 1).toNat)) := by
+    right; right; right; right; rfl
+  exact TotalTriple.conseq (exit_free (X := junk) h0 _ hres) (fun h hp => own_junk hp)
+    (fun _ _ x => x)
 
 end AllocFba.Client
