@@ -25,10 +25,13 @@ value, here the `Nat` `k` with byte alignment `2 ^ k`; `ret_addr` is unconstrain
 
 `memory` must be the whole last granted region (`memory.len` is its length, which is positive)
 with the alignment it was allocated with: the precondition `granted I memory.ptr k bs`. The
-token `I.tok p n k` is the allocator's evidence that it issued the `n`-byte region at `p` with
-alignment `k` (a fact about the buffer it lies in, the rest of a page mapping, …). It is part of
-the specification because a free of a region that the allocator did not issue is illegal in
-Zig even if the caller owns the bytes.
+token `I.tok p n k A S K` is the allocator's evidence that it issued the `n`-byte region at `p`
+with alignment `k` from the block with address `A`, size `S` and kind `K` (a fact about the
+buffer it lies in, the rest of a page mapping, …). It is part of the specification because a free
+of a region that the allocator did not issue is illegal in Zig even if the caller owns the bytes,
+and it sees the region's block so that it can pin which block a `free` releases (a page
+allocator unmaps the whole mapping). `alloc`, `resize` and `remap` need `I.fits n k`: an
+allocator may panic on a request beyond its arithmetic range.
 -/
 
 namespace Zig
@@ -127,15 +130,22 @@ structure RawVTable where
   free : Ptr → Slice → Nat → BitVec 64 → MemM Unit
 
 /-- An allocator invariant: `own` is the allocator's state and the memory it has not handed
-out; `tok p n k` is its evidence that it issued the `n`-byte region at `p` with alignment
-`2 ^ k`. Both are arbitrary assertions, so a token may own memory (the rest of a page). -/
+out; `tok p n k A S K` is its evidence that it issued the `n`-byte region at `p` with alignment
+`2 ^ k`, in the block with address `A`, size `S` and kind `K`. Both are arbitrary assertions, so
+a token may own memory (the rest of a page) and pin the block it was cut from (a page
+allocator's `munmap` of the whole mapping). `fits n k`: a request of `n` bytes with alignment
+`2 ^ k` is within the allocator's arithmetic range; a larger one may panic (Zig's
+`FixedBufferAllocator` overflows `end_index + n`). -/
 structure AllocInv where
   own : Assn
-  tok : Ptr → Nat → Nat → Assn
+  tok : Ptr → Nat → Nat → Nat → Nat → BlockKind → Assn
+  fits : Nat → Nat → Prop := fun _ _ => True
 
-/-- A region that `I`'s allocator granted: the bytes at a `2 ^ k`-aligned `p`, and the token. -/
+/-- A region that `I`'s allocator granted: the bytes at a `2 ^ k`-aligned `p` in some block, and
+the token, which sees the block. -/
 def granted (I : AllocInv) (p : Ptr) (k : Nat) (bs : Array Byte) : Assn :=
-  region p (2 ^ k) bs ∗ I.tok p bs.size k
+  Assn.ex fun A => Assn.ex fun S => Assn.ex fun K =>
+    regionIn p A S K (2 ^ k) bs ∗ I.tok p bs.size k A S K
 
 /-- `new` keeps the common prefix of `old` (both read up to the shorter length). -/
 def keepsPrefix (old new : Array Byte) : Prop := new.extract 0 old.size = old.extract 0 new.size
@@ -161,12 +171,12 @@ def remapPost (I : AllocInv) (p : Ptr) (k : Nat) (bs : Array Byte) (n : Nat) : O
 logic `L`, with invariant `I` (module doc). -/
 structure AllocSpec (L : Logic) (vt : RawVTable) (ctx : Ptr) (I : AllocInv) : Prop where
   alloc : ∀ (len : BitVec 64) (k : Nat) (ra : BitVec 64), 0 < len.toNat → k < 64 →
-    L.T I.own (vt.alloc ctx len k ra) (allocPost I len.toNat k)
+    I.fits len.toNat k → L.T I.own (vt.alloc ctx len k ra) (allocPost I len.toNat k)
   resize : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte), k < 64 →
-    0 < n.toNat → s.len.toNat = bs.size → 0 < bs.size →
+    0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size → 0 < bs.size →
     L.T (I.own ∗ granted I s.ptr k bs) (vt.resize ctx s k n ra) (resizePost I s.ptr k bs n.toNat)
   remap : ∀ (s : Slice) (k : Nat) (n ra : BitVec 64) (bs : Array Byte), k < 64 →
-    0 < n.toNat → s.len.toNat = bs.size → 0 < bs.size →
+    0 < n.toNat → I.fits n.toNat k → s.len.toNat = bs.size → 0 < bs.size →
     L.T (I.own ∗ granted I s.ptr k bs) (vt.remap ctx s k n ra) (remapPost I s.ptr k bs n.toNat)
   free : ∀ (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array Byte), k < 64 →
     s.len.toNat = bs.size → 0 < bs.size →
@@ -175,9 +185,9 @@ structure AllocSpec (L : Logic) (vt : RawVTable) (ctx : Ptr) (I : AllocInv) : Pr
 /-- A total allocator is a partial one. -/
 theorem AllocSpec.toPartial {L : Logic} {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
     (h : AllocSpec L vt ctx I) : AllocSpec Logic.partial vt ctx I where
-  alloc len k ra h1 h2 := L.toPartial (h.alloc len k ra h1 h2)
-  resize s k n ra bs h1 h2 h3 h4 := L.toPartial (h.resize s k n ra bs h1 h2 h3 h4)
-  remap s k n ra bs h1 h2 h3 h4 := L.toPartial (h.remap s k n ra bs h1 h2 h3 h4)
+  alloc len k ra h1 h2 h3 := L.toPartial (h.alloc len k ra h1 h2 h3)
+  resize s k n ra bs h1 h2 h3 h4 h5 := L.toPartial (h.resize s k n ra bs h1 h2 h3 h4 h5)
+  remap s k n ra bs h1 h2 h3 h4 h5 := L.toPartial (h.remap s k n ra bs h1 h2 h3 h4 h5)
   free s k ra bs h1 h2 h3 := L.toPartial (h.free s k ra bs h1 h2 h3)
 
 /-- The spec only depends on the runs of the entries: an allocator with the same runs from
@@ -189,9 +199,9 @@ theorem AllocSpec.congr {L : Logic} {vt vt' : RawVTable} {ctx : Ptr} {I : AllocI
     (hm : ∀ s k n ra m, m.Seq → (vt'.remap ctx s k n ra).run m = (vt.remap ctx s k n ra).run m)
     (hf : ∀ s k ra m, m.Seq → (vt'.free ctx s k ra).run m = (vt.free ctx s k ra).run m) :
     AllocSpec L vt' ctx I where
-  alloc len k ra h1 h2 := L.congr (ha len k ra) (h.alloc len k ra h1 h2)
-  resize s k n ra bs h1 h2 h3 h4 := L.congr (hr s k n ra) (h.resize s k n ra bs h1 h2 h3 h4)
-  remap s k n ra bs h1 h2 h3 h4 := L.congr (hm s k n ra) (h.remap s k n ra bs h1 h2 h3 h4)
+  alloc len k ra h1 h2 h3 := L.congr (ha len k ra) (h.alloc len k ra h1 h2 h3)
+  resize s k n ra bs h1 h2 h3 h4 h5 := L.congr (hr s k n ra) (h.resize s k n ra bs h1 h2 h3 h4 h5)
+  remap s k n ra bs h1 h2 h3 h4 h5 := L.congr (hm s k n ra) (h.remap s k n ra bs h1 h2 h3 h4 h5)
   free s k ra bs h1 h2 h3 := L.congr (hf s k ra) (h.free s k ra bs h1 h2 h3)
 
 end Zig

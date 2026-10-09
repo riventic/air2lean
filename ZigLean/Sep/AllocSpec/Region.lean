@@ -231,17 +231,17 @@ theorem flatten_replicate_single (x : Byte) (n : Nat) :
 
 theorem enc_size_byte : Enc.size (BitVec 8) = 1 := rfl
 
-/-- `@memset(region, undefined)` of all `n` bytes. -/
-theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
-    TotalTriple (region p a bs) (memset (α := BitVec 8) 1 p n none)
-      (fun _ => region p a (Array.replicate n.toNat .undef)) := by
+/-- `@memset(region, undefined)` of all `n` bytes, in the region's block. -/
+theorem memsetUndefIn {n : BitVec 64} (hn : n.toNat = bs.size) :
+    TotalTriple (regionIn p A S K a bs) (memset (α := BitVec 8) 1 p n none)
+      (fun _ => regionIn p A S K a (Array.replicate n.toNat .undef)) := by
   intro m hP hF hd hm hp hst
   by_cases h0 : n.toNat = 0
   · have hbs : bs = #[] := Array.eq_empty_of_size_eq_zero (by omega)
     subst hbs
     refine ⟨(), m, hP, ?_, hd, hm, by rw [h0]; exact hp, hst⟩
     simp [memset, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
-  obtain ⟨A, S, K, hA, hK, hb⟩ := hp
+  obtain ⟨hA, hK, hb⟩ := hp
   let bs' : Array Byte :=
     (Array.replicate n.toNat (Array.replicate (Enc.size (BitVec 8)) Byte.undef)).flatten
   have hs' : bs' = Array.replicate n.toNat .undef := by
@@ -255,7 +255,7 @@ theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := 1)
     (bs' := bs') hb hm hd hp0 (by omega) (by omega) ha0 hst hK
   rw [writeBytes_all hsz] at hb'
-  refine ⟨(), m', h', ?_, hd', hm', ⟨A, S, K, hA, hK, hs' ▸ hb'⟩, hst'⟩
+  refine ⟨(), m', h', ?_, hd', hm', ⟨hA, hK, hs' ▸ hb'⟩, hst'⟩
   have e : n.toNat * Enc.size (BitVec 8) = bs'.size := by
     rw [hsz, enc_size_byte, Nat.mul_one]; exact hn
   have hne : ¬ Enc.size (BitVec 8) = 0 := by rw [enc_size_byte]; decide
@@ -263,20 +263,39 @@ theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
   simp only [memset, h0, hne, or_self, ↓reduceIte, zig_unfold, e, hacc, ExceptT.bindCont]
   exact hrun
 
-/-- A store of an item `v` at byte `o` of a region, aligned to `al`. -/
-theorem storeItem {T : Type} [Enc T] [LawfulEnc T] {o al : Nat} (v : T) (hpos : 0 < Enc.size T)
-    (ho : o + Enc.size T ≤ bs.size) (hal : al ∣ a) (halo : al ∣ o) :
-    TotalTriple (region p a bs) (store al (p.add o) v)
-      (fun _ => region p a (writeBytes bs o (Enc.encode v))) := by
+/-- `@memset(region, undefined)` of all `n` bytes. -/
+theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
+    TotalTriple (region p a bs) (memset (α := BitVec 8) 1 p n none)
+      (fun _ => region p a (Array.replicate n.toNat .undef)) := by
   intro m hP hF hd hm hp hst
-  obtain ⟨A, S, K, hA, hK, hb⟩ := hp
+  obtain ⟨A, S, K, hp⟩ := hp
+  obtain ⟨v, m', hQ, hr, hd', hm', hq, hs'⟩ := memsetUndefIn hn m hP hF hd hm hp hst
+  exact ⟨v, m', hQ, hr, hd', hm', ⟨A, S, K, hq⟩, hs'⟩
+
+/-- A store of an item `v` at byte `o` of a region, aligned to `al`, in the region's block. -/
+theorem storeItemIn {T : Type} [Enc T] [LawfulEnc T] {o al : Nat} (v : T) (hpos : 0 < Enc.size T)
+    (ho : o + Enc.size T ≤ bs.size) (hal : al ∣ a) (halo : al ∣ o) :
+    TotalTriple (regionIn p A S K a bs) (store al (p.add o) v)
+      (fun _ => regionIn p A S K a (writeBytes bs o (Enc.encode v))) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨hA, hK, hb⟩ := hp
   have hw := LawfulEnc.size_encode v
   have ha : (A + p.off.toNat + o) % al = 0 :=
     Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero hA)) halo)
   obtain ⟨m', hrun, hst', h', hd', hm', hb'⟩ :=
     bytesAt_store (q := p.add o) (k := o) (a := al) (bs' := Enc.encode v) hb hm hd rfl
       (by omega) (by omega) ha hst hK
-  exact ⟨(), m', h', hrun, hd', hm', ⟨A, S, K, hA, hK, hb'⟩, hst'⟩
+  exact ⟨(), m', h', hrun, hd', hm', ⟨hA, hK, hb'⟩, hst'⟩
+
+/-- A store of an item `v` at byte `o` of a region, aligned to `al`. -/
+theorem storeItem {T : Type} [Enc T] [LawfulEnc T] {o al : Nat} (v : T) (hpos : 0 < Enc.size T)
+    (ho : o + Enc.size T ≤ bs.size) (hal : al ∣ a) (halo : al ∣ o) :
+    TotalTriple (region p a bs) (store al (p.add o) v)
+      (fun _ => region p a (writeBytes bs o (Enc.encode v))) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨A, S, K, hp⟩ := hp
+  obtain ⟨u, m', hQ, hr, hd', hm', hq, hs'⟩ := storeItemIn v hpos ho hal halo m hP hF hd hm hp hst
+  exact ⟨u, m', hQ, hr, hd', hm', ⟨A, S, K, hq⟩, hs'⟩
 
 theorem writeBytes_zero_empty (bs : Array Byte) : writeBytes bs 0 #[] = bs := by
   simp [writeBytes]
@@ -289,14 +308,15 @@ theorem memmoveZero {P : Assn} {d s : Ptr} {sz da sa : Nat} {n : BitVec 64}
   have : n.toNat = 0 ∨ sz = 0 := Nat.mul_eq_zero.mp h0
   simp [memmove, this, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
 
-/-- `@memcpy` of `n` items of `sz` bytes from the region `src` to the start of the region `dst`
+/-- `@memcpy`, in the regions' blocks, of `n` items of `sz` bytes from the region `src` to the start of the region `dst`
 (two separate regions). -/
-theorem memcpy {d s : Ptr} {a' da sa sz : Nat} {bd bsrc : Array Byte} {n : BitVec 64}
+theorem memcpyIn {d s : Ptr} {A' S' : Nat} {K' : BlockKind} {a' da sa sz : Nat}
+    {bd bsrc : Array Byte} {n : BitVec 64}
     (hnd : n.toNat * sz ≤ bd.size) (hns : n.toNat * sz ≤ bsrc.size) (hda : da ∣ a)
     (hsa : sa ∣ a') :
-    TotalTriple (region d a bd ∗ region s a' bsrc) (memmove sz da sa d s n)
-      (fun _ => region d a (writeBytes bd 0 (bsrc.extract 0 (n.toNat * sz))) ∗
-        region s a' bsrc) := by
+    TotalTriple (regionIn d A S K a bd ∗ regionIn s A' S' K' a' bsrc) (memmove sz da sa d s n)
+      (fun _ => regionIn d A S K a (writeBytes bd 0 (bsrc.extract 0 (n.toNat * sz))) ∗
+        regionIn s A' S' K' a' bsrc) := by
   intro m hP hF hd hm hp hst
   by_cases h0 : n.toNat = 0 ∨ sz = 0
   · have e : n.toNat * sz = 0 := by rcases h0 with h | h <;> simp [h]
@@ -304,7 +324,7 @@ theorem memcpy {d s : Ptr} {a' da sa sz : Nat} {bd bsrc : Array Byte} {n : BitVe
     · simp [memmove, h0, StateT.run, pure, StateT.pure, ExceptT.pure, ExceptT.mk]
     · rw [e]; simpa [writeBytes_zero_empty] using hp
   have hpos : 0 < n.toNat * sz := Nat.mul_pos (by omega) (by omega)
-  obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨A, S, K, hA, hK, hb₁⟩, ⟨A', S', K', hA', hK', hb₂⟩⟩ := hp
+  obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨hA, hK, hb₁⟩, ⟨hA', hK', hb₂⟩⟩ := hp
   obtain ⟨hd₁F, hd₂F⟩ := Heap.disjoint_union_left.mp hd
   have hm₁ : m.heap = h₁ ∪ (h₂ ∪ hF) := by rw [hm, Heap.union_assoc]
   have hdd₁ : Heap.Disjoint h₁ (h₂ ∪ hF) := Heap.disjoint_union_right.mpr ⟨hd₁₂, hd₁F⟩
@@ -328,8 +348,8 @@ theorem memcpy {d s : Ptr} {a' da sa sz : Nat} {bd bsrc : Array Byte} {n : BitVe
     (bs' := src) hb₁ hmr hdd₁ (hp0 d) (by omega) (by omega) haD (hst.recordAt _ _ _ _) hK
   obtain ⟨hd'₂, hd'F⟩ := Heap.disjoint_union_right.mp hd'
   refine ⟨(), m', h' ∪ h₂, ?_, Heap.disjoint_union_left.mpr ⟨hd'F, hd₂F⟩,
-    by rw [hm', Heap.union_assoc], ⟨h', h₂, hd'₂, rfl, ⟨A, S, K, hA, hK, ?_⟩,
-      ⟨A', S', K', hA', hK', hb₂⟩⟩, hst'⟩
+    by rw [hm', Heap.union_assoc], ⟨h', h₂, hd'₂, rfl, ⟨hA, hK, ?_⟩,
+      ⟨hA', hK', hb₂⟩⟩, hst'⟩
   · have hl := loadBytes_run hacc₂ (noRace_of_singleThread hst.single b₂
       (s.off.toNat + 0) (n.toNat * sz) AccessKind.read)
     rw [hx₂] at hl
@@ -339,6 +359,22 @@ theorem memcpy {d s : Ptr} {a' da sa sz : Nat} {bd bsrc : Array Byte} {n : BitVe
       ExceptT.bind, ExceptT.mk, ExceptT.bindCont, hacc, hl, pure, ExceptT.pure, Option.bind_some]
     exact hrun
   · simpa [src] using hb'
+
+/-- `@memcpy` of `n` items of `sz` bytes from the region `src` to the start of the region `dst`
+(two separate regions). -/
+theorem memcpy {d s : Ptr} {a' da sa sz : Nat} {bd bsrc : Array Byte} {n : BitVec 64}
+    (hnd : n.toNat * sz ≤ bd.size) (hns : n.toNat * sz ≤ bsrc.size) (hda : da ∣ a)
+    (hsa : sa ∣ a') :
+    TotalTriple (region d a bd ∗ region s a' bsrc) (memmove sz da sa d s n)
+      (fun _ => region d a (writeBytes bd 0 (bsrc.extract 0 (n.toNat * sz))) ∗
+        region s a' bsrc) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨h₁, h₂, hd₁₂, rfl, ⟨A, S, K, hr₁⟩, ⟨A', S', K', hr₂⟩⟩ := hp
+  obtain ⟨u, m', hQ, hr, hd', hm', hq, hs'⟩ :=
+    memcpyIn (A := A) (S := S) (K := K) (A' := A') (S' := S') (K' := K') hnd hns hda hsa
+      m _ hF hd hm ⟨h₁, h₂, hd₁₂, rfl, hr₁, hr₂⟩ hst
+  obtain ⟨q₁, q₂, hdq, rfl, hq₁, hq₂⟩ := hq
+  exact ⟨u, m', q₁ ∪ q₂, hr, hd', hm', ⟨q₁, q₂, hdq, rfl, ⟨A, S, K, hq₁⟩, ⟨A', S', K', hq₂⟩⟩, hs'⟩
 
 end Region
 
