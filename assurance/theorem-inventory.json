@@ -598,16 +598,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "ad405c71ed9b9aa49f1925351e8767ea37083ed8",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:47:25.819046+00:00",
-      "elapsed_seconds": 77.116,
+      "started_utc": "2026-10-09T06:35:47.753704+00:00",
+      "elapsed_seconds": 20.113,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "9842025a73580ec461d85970cf014673edde5d0d940f18092ddd6a86dbfe241d",
+      "log_sha256": "29332f3914265c3a5561c379e629d38adfcbbd08a1f2dcca750fb1465703950f",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -631,19 +631,19 @@
         },
         "floatops": {
           "path": "tests/golden/0.15.2/floatops/Gen.lean",
-          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
+          "sha256": "3ecabef85897c64c684ca4599e178a8af18e57ba1b1eff3f71afa588793de571"
         },
         "lists": {
           "path": "tests/golden/0.15.2/lists/Gen.lean",
-          "sha256": "30f55d0d7f0be88be77a286521fe2cc132cb8fba7c5922cb6045f8d9f2213e7e"
+          "sha256": "e0eb48daf1a1e1a4a88377e6040db72cf6a95e0d083701bacad53111949915cc"
         },
         "slices": {
           "path": "tests/golden/0.15.2/slices/Gen.lean",
-          "sha256": "71a1ce6fe3468faf207c604e9e0f5ea8491de1fde1a5fe09da20d098d1485969"
+          "sha256": "ee0597a4d82df51bd1c6dcbe690c9432fa9fb12157b32d10ef7eb0318aeaadce"
         },
         "threads": {
           "path": "tests/golden/0.15.2/threads/Gen.lean",
-          "sha256": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6"
+          "sha256": "41eefd540c89d055bca1d9eaabc386c4a48e4082067b596b2ac5a15069556728"
         }
       },
       "sources": {
@@ -651,12 +651,12 @@
         "Proofs.Atomics.Proofs": "318624484e7d5ec9ddaec10c4c66065d9e21a9c0bb03f05be007885d22448c76",
         "Proofs.Atomics.Relaxed": "561920c5823e70690898d3fbf294fd52acf0e41f50389ec93df1e0d09fab506b",
         "Proofs.Atomics.Stack": "1d9bcbdd9a703a3bca2db7a4efd6b1b3f0d1b5950497956979567c716c5b1c38",
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811",
-        "Proofs.Lists.Append": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
+        "Proofs.Floatops.Proofs": "ec2bbce6044ad4171cb523bb8bf6dffca9fdae18d1df1c8d919d59e46b5f35e2",
+        "Proofs.Lists.Append": "240cf4e5c759e1aeff2990bdb250f8777cac3a155fc1a5eef89bb64d033ec2f1",
         "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
         "Proofs.Lists.Sep": "9a129dabbd683e4e5a25d7341d1f580ddf9ab13db92b0cbc89ac99cccbba6ece",
         "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
-        "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
+        "Proofs.Slices.Sep": "2c517cf5935fb2ff5530a2d376e43dd3a6fbb416c9dcd8855e8acc99405356bb",
         "Proofs.Threads.Counter": "a9cff3d6a39ef6485fe4e98e1f75ab683a34c653185d46b940c9f55826c78bcd",
         "Proofs.Threads.Disjoint": "c7aa2e3287845975545e6fc8a66a4e0d8c3723651cf0345c324e72037ae5cf75",
         "Proofs.Threads.Proofs": "d121763d40da793d1b7a86e63963106c6524e91c114ff55c104c6a825cfc2c4c"
@@ -726,16 +726,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "ad405c71ed9b9aa49f1925351e8767ea37083ed8",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:49:57.984663+00:00",
-      "elapsed_seconds": 120.414,
+      "started_utc": "2026-10-09T06:36:33.709504+00:00",
+      "elapsed_seconds": 7.716,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "61d8643dae1d411f68285788ad9a5a9abb656f4f36f1164e1df1d680db90f459",
+      "log_sha256": "d4bd1a93c6939cff99ccba8cab4db417088b98d5d0fa4a4608ae0001f457ee1a",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -743,11 +743,11 @@
       "gens": {
         "floatops": {
           "path": "tests/golden/0.14.1/floatops/Gen.lean",
-          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
+          "sha256": "3ecabef85897c64c684ca4599e178a8af18e57ba1b1eff3f71afa588793de571"
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811"
+        "Proofs.Floatops.Proofs": "ec2bbce6044ad4171cb523bb8bf6dffca9fdae18d1df1c8d919d59e46b5f35e2"
       }
     },
     "committed-linux-all": {
@@ -761,16 +761,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
+        "head": "ad405c71ed9b9aa49f1925351e8767ea37083ed8",
         "tracked_dirty": false
       },
-      "started_utc": "2026-10-08T11:44:30.836275+00:00",
-      "elapsed_seconds": 83.9,
+      "started_utc": "2026-10-09T06:29:50.193271+00:00",
+      "elapsed_seconds": 341.794,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "18088dbfb715181add8fed0d7c50120b2b996164b1fe1ac8e34aac6ae14acbbb",
+      "log_sha256": "122023745cc979ecf5c0c7c932027e5250ed556b22593f038490b49d7b3832aa",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.Proofs",
@@ -848,7 +848,7 @@
         },
         "floatops": {
           "path": "Proofs/Floatops/Gen.lean",
-          "sha256": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b"
+          "sha256": "e62bd7cf8e64da6d32df75cb4da87f6464eff6b5e47e00668d2860741c9b7f7a"
         },
         "floats": {
           "path": "Proofs/Floats/Gen.lean",
@@ -860,11 +860,11 @@
         },
         "layout": {
           "path": "Proofs/Layout/Gen.lean",
-          "sha256": "e0a8f28a43219f93deb8f952bf44784208c919eb88fe51257531eeea877ba9f1"
+          "sha256": "bc6477a0289e38258a9f83523023a5add7a86ccab94d690cd4175d4293f5d948"
         },
         "lists": {
           "path": "Proofs/Lists/Gen.lean",
-          "sha256": "520ff98e46d69bd2c3ff80ac2a64a25dfc5758a43c638c7064d71567109e804d"
+          "sha256": "541d926324888b703e96cc86fbb8692a15b7025800f3e81b03f043210c6ca92c"
         },
         "options": {
           "path": "Proofs/Options/Gen.lean",
@@ -880,7 +880,7 @@
         },
         "slices": {
           "path": "Proofs/Slices/Gen.lean",
-          "sha256": "d8ca92d93311be85f639d3fc8c88434a3ad3537d63e189dafc3672509d843271"
+          "sha256": "d73d1b6697d7e054ed45f5f16e06779fc87905f3c6905dfa506006efdaff7315"
         },
         "sync": {
           "path": "Proofs/Sync/Gen.lean",
@@ -888,7 +888,7 @@
         },
         "threads": {
           "path": "Proofs/Threads/Gen.lean",
-          "sha256": "b5ac3b4a94333e74d74bb447df2c573d9f7a05fbe3651aeb3923f5db7028adb6"
+          "sha256": "41eefd540c89d055bca1d9eaabc386c4a48e4082067b596b2ac5a15069556728"
         },
         "threadsync": {
           "path": "Proofs/Threadsync/Gen.lean",
@@ -914,14 +914,14 @@
         "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
         "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
         "Proofs.Errors.Proofs": "cf02a423505740739045d46a3b300dcb3c8cfe6280fe8d02f94cfe8e3dff2e69",
-        "Proofs.Floatconv.Proofs": "74c841aaf6e2c2101c28a224ce47349033a057cd622838ec21dea9de7d0f86ce",
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811",
+        "Proofs.Floatconv.Proofs": "d615e8a60cfb927990ce7e589679ae22022cfbb576e22cfcc759eb3455d3dd1a",
+        "Proofs.Floatops.Proofs": "ec2bbce6044ad4171cb523bb8bf6dffca9fdae18d1df1c8d919d59e46b5f35e2",
         "Proofs.Floats.Dot": "95722a0cd7d03107754a1b5ac39513d020ae24d5e9f4765c660fe92012c1eb95",
         "Proofs.Floats.Proofs": "ab76fbbe34b9184ae5495c738d5e39892fb26ca1f0c7dcb5c2a642369530707c",
         "Proofs.Iogroup.Counter": "d733c9426e17453d9cac1410668a1bcf4788f8dcd7063665fddb0ea83231913f",
         "Proofs.Layout.Mem": "c04519a3c46c700cb17f8d2d48102efd62350cdfa85aef04ccd1da73cc9e57aa",
         "Proofs.Layout.Proofs": "3dfe05e047c209dce54c9fcbb323c39ca6ea410a993a25da2ec5cbe749d3e006",
-        "Proofs.Lists.Append": "0dc045373adead544441ce5bd2654f8dc3419c56d4ca405d7f7b88ae8135742d",
+        "Proofs.Lists.Append": "240cf4e5c759e1aeff2990bdb250f8777cac3a155fc1a5eef89bb64d033ec2f1",
         "Proofs.Lists.Container": "ff3fb0be95f667795cac72ca8c32df66d7306d1142ed1243e005f1ce90e02f6a",
         "Proofs.Lists.Cost": "c9226361679fd2fa33c8407768c7449492df4e4b9c2f2f773d608f04743e92e1",
         "Proofs.Lists.Policy": "ac275fe67274d15c721c843bca73db7d031540d2ec3661951163d7a4bbf7e41e",
@@ -931,7 +931,7 @@
         "Proofs.Pointers.Sep": "ccd7983856010a36c64f41b332769c18470b0dceecf7b6e9bc1087af341d4b28",
         "Proofs.Recursion.Proofs": "9fb582b84b77d054fa9a231f0fcf2bf27456c4506c06625fe020df1c2f9d4961",
         "Proofs.Slices.Proofs": "311683ec22650c82aaa8d306f9862d0f9a7f1b5c723a466a87a096234190fa2d",
-        "Proofs.Slices.Sep": "4b28b544082382938d8f64e6b174e4adad7dd858922e43b9ed3cdf6a8624c8a0",
+        "Proofs.Slices.Sep": "2c517cf5935fb2ff5530a2d376e43dd3a6fbb416c9dcd8855e8acc99405356bb",
         "Proofs.Sync.Contracts": "a7fb6a95dcea12acacd1ceb239aca63029cd95ad3dc9b8822680378d5f2e035f",
         "Proofs.Sync.Handoff": "0294c1b3a15ca4531fbf6c8fadc86db928d8a9ff2f24c145d97ac216cefac71d",
         "Proofs.Sync.Lock": "12cbfd329e9a8ed7c4cda2cb155ffbd060413dbbfd079d39f8888b3fe8e77209",
@@ -968,16 +968,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "ad405c71ed9b9aa49f1925351e8767ea37083ed8",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:45:54.829892+00:00",
-      "elapsed_seconds": 85.343,
+      "started_utc": "2026-10-09T06:35:32.086751+00:00",
+      "elapsed_seconds": 13.591,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "03c70400cdd891c3d5233c0f4558239dfa0f2e9a3391c8264b4645d7607a42f2",
+      "log_sha256": "4663d48b3a597905f56654fff2138c9153583e1f4423eba9aa713b903e94f8b9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -985,11 +985,11 @@
       "gens": {
         "floatops": {
           "path": "Proofs/Floatops/Gen.lean",
-          "sha256": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b"
+          "sha256": "e62bd7cf8e64da6d32df75cb4da87f6464eff6b5e47e00668d2860741c9b7f7a"
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811"
+        "Proofs.Floatops.Proofs": "ec2bbce6044ad4171cb523bb8bf6dffca9fdae18d1df1c8d919d59e46b5f35e2"
       }
     },
     "0.15.2-linux-floatops": {
@@ -1007,16 +1007,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "ad405c71ed9b9aa49f1925351e8767ea37083ed8",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:51:58.602474+00:00",
-      "elapsed_seconds": 0.743,
+      "started_utc": "2026-10-09T06:36:07.950411+00:00",
+      "elapsed_seconds": 25.676,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1da3d4b5d1490b1f93d33eaf23cfbc54e3d75898f4cd2487824e5881ddc9fa3d",
+      "log_sha256": "5a389664b491a77bc94782811b013cd3b46dc9bdc017c6d5489df92117dd43ef",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1024,11 +1024,11 @@
       "gens": {
         "floatops": {
           "path": "tests/golden/0.15.2/floatops/Gen.lean",
-          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
+          "sha256": "3ecabef85897c64c684ca4599e178a8af18e57ba1b1eff3f71afa588793de571"
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "27f1798d0340752934e7a01a8621dab2331ec8b37c8e3fc5eb8d3c9e00077811"
+        "Proofs.Floatops.Proofs": "ec2bbce6044ad4171cb523bb8bf6dffca9fdae18d1df1c8d919d59e46b5f35e2"
       }
     },
     "c14-sync-contracts-linux": {
@@ -1042,16 +1042,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "e998cf5ea20bab8da53c9e362849a8f47814ccab",
-        "tracked_dirty": false
+        "head": "ad405c71ed9b9aa49f1925351e8767ea37083ed8",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-08T11:47:20.363328+00:00",
-      "elapsed_seconds": 5.333,
+      "started_utc": "2026-10-09T06:35:45.759803+00:00",
+      "elapsed_seconds": 1.896,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d57f8af79cca54b8058a4624843f51df02c86f5bd572bccad23f532ee2db2d0a",
+      "log_sha256": "8ebf638350c1ea8cdb6b19c22ca89b12342924543aac71a618bdc5a584cd7d4e",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
