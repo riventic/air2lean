@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "extern_calls.greetLen",
+ "module": "root",
+ "src": {
+  "file": "extern_calls.zig",
+  "module": "extern_calls",
+  "decl_line": 22
+ },
  "params": [
   0
  ],
@@ -54,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -75,7 +82,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 4,
@@ -96,7 +104,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 18
   },
   {
    "id": 6,
@@ -107,7 +116,8 @@
      "id": 7,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 23
     },
     {
      "id": 8,
@@ -173,7 +183,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 18
   },
   {
    "id": 13,
@@ -194,7 +205,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 15,
@@ -343,6 +355,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": true,
    "sentinel_byte": "0",
    "host_size": 0,

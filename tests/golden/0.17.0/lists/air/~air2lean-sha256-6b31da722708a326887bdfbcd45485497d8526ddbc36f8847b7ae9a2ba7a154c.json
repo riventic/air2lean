@@ -405,6 +405,7 @@
       "ty": 18,
       "func": "mem.Allocator.remap__func_3",
       "module": "std",
+      "instance_key": "fdce5ddbfdcf0812aba0ef8ba84607e161e5e9056e44961b49bdf9bf982e82cc",
       "noreturn": false
      },
      "args": [
@@ -634,6 +635,7 @@
     "ty": 24,
     "func": "mem.Allocator.alignedAlloc__func_4",
     "module": "std",
+    "instance_key": "0b20c0554625a49a7f76b7a87bc73f4d54f95367d628d1cd9325382835688edc",
     "noreturn": false
    },
    "args": [

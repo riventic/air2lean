@@ -36,6 +36,7 @@
  },
  "name": "mem.Allocator.dupeSentinel__anon_11280",
  "module": "std",
+ "instance_key": "294b7c9823bd7a920bd4318aabd9bece440acf1ac48a33be7063bcd50f025fa4",
  "params": [
   0,
   1
@@ -186,6 +187,7 @@
     "ty": 11,
     "func": "mem.Allocator.alloc__anon_8758",
     "module": "std",
+    "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
     "noreturn": false
    },
    "args": [
@@ -1088,6 +1090,7 @@
         "ty": 25,
         "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_9229",
         "module": "std",
+        "instance_key": "1459dd027f9da3b39ee94bd2218d5a090eaba2b99f58f03696bdd91af2d96a1e",
         "noreturn": true
        },
        "args": [

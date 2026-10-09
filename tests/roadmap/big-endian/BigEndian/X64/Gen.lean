@@ -76,8 +76,8 @@ instance : Zig.Enc P where
     let b : BitVec 32 ← Zig.Enc.decode bs
     Zig.Packed.ofBits? b
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure byteOfF64Locals where
   v : Zig.Ptr
@@ -311,7 +311,7 @@ inductive u16FromStoredBytesExit where
   | ret (v : BitVec 16)
 
 def u16FromStoredBytes (p0 : BitVec 8) (p1 : BitVec 8) : Zig.MemM (BitVec 16) := do
-  let s2 ← Zig.allocStack 2 1
+  let s2 ← Zig.allocStack 2 2
   let e ← ((do
     let i2 ← pure (← get).v
     let i3 ← pure (i2.elem 1 (0 : BitVec 64))

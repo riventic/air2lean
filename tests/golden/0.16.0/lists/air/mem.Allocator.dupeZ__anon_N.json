@@ -36,6 +36,7 @@
  },
  "name": "mem.Allocator.dupeZ__anon_11266",
  "module": "std",
+ "instance_key": "ad013b83a6438d6899b7b3f0810c84369882f5df90246d68508992e0ce1c9349",
  "params": [
   0,
   1
@@ -112,6 +113,7 @@
     "ty": 6,
     "func": "mem.Allocator.dupeSentinel__anon_11280",
     "module": "std",
+    "instance_key": "294b7c9823bd7a920bd4318aabd9bece440acf1ac48a33be7063bcd50f025fa4",
     "noreturn": false
    },
    "args": [

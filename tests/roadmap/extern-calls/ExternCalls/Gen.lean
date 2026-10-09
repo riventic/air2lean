@@ -4,8 +4,8 @@ import ZigLean
 
 namespace ExternCalls
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: a constant
   (Zig.Enc.encode ((#v[(101 : BitVec 8), (120 : BitVec 8), (116 : BitVec 8), (101 : BitVec 8), (114 : BitVec 8), (110 : BitVec 8), (32 : BitVec 8), (99 : BitVec 8), (97 : BitVec 8), (108 : BitVec 8), (108 : BitVec 8), (115 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 13) : Vector (BitVec 8) 13), 1, .constGlobal),
   -- 1: a constant

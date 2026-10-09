@@ -191,8 +191,8 @@ def air2lean_model_1_footprint : Zig.External.Footprint ((BitVec 32) × (Zig.Ptr
 
 theorem air2lean_model_1_evidence : air2lean_model_1_contract.Holds .total [Zig.Error.illegal] .tracked _root_.Zig.Env.Linux.read ∧ air2lean_model_1_contract.Respects air2lean_model_1_footprint := _root_.Zig.Env.Linux.readEvidence
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure os_linux_errnoLocals where
   deriving Inhabited

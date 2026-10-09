@@ -15,8 +15,8 @@ instance : Zig.Enc View where
   encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.first), (8, Zig.Enc.encode v.rest)]
   decode bs := do pure { first := ← Zig.Enc.decodeAt bs 0, rest := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure atLocals where
   deriving Inhabited

@@ -191,6 +191,7 @@
     "ty": 7,
     "func": "mem.Allocator.alloc__func_741",
     "module": "std",
+    "instance_key": "9d65d080a5ef59d3c17bc3cc5ce0414cbca26ef13f5a094ea557dfa831a56fb8",
     "noreturn": false
    },
    "args": [
@@ -861,6 +862,7 @@
     "ty": 18,
     "func": "mem.Allocator.free__func_5",
     "module": "std",
+    "instance_key": "10fd68fdc68d8b81a413f20dbd1cba275510ac1696ca4428ce2b7b597a7103aa",
     "noreturn": false
    },
    "args": [

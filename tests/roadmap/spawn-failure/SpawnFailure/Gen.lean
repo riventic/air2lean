@@ -32,8 +32,8 @@ instance : Zig.Enc Io_Group where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.token), (8, Zig.Enc.encode v.state)]
   decode bs := do pure { token := ← Zig.Enc.decodeAt bs 0, state := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 /-- The spawn targets of the program; fields are captured by value. -/
 inductive Tgt where

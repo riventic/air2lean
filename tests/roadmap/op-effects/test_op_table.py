@@ -202,7 +202,7 @@ class CliTests(unittest.TestCase):
         translated, lean, _ = self.run_cli(through('bitcast'))
         self.assertEqual(translated.returncode, 0, translated.stderr)
         self.assertIn('def r_f  : Zig.MemM (BitVec 32)', lean)
-        self.assertIn('def mem0 (ext : ExternInit) : Zig.Mem', lean)
+        self.assertIn('def mem0 (σ : Zig.Placement) (ext : ExternInit) : Zig.Mem', lean)
 
 
 if __name__ == '__main__':

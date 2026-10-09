@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "libc_ref.memset",
+ "module": "root",
+ "src": {
+  "file": "libc_ref.zig",
+  "module": "extern_calls",
+  "decl_line": 5
+ },
  "params": [
   0,
   1,
@@ -96,7 +102,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 7,
@@ -112,7 +119,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 22
   },
   {
    "id": 9,
@@ -139,7 +147,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 12,
@@ -190,7 +199,8 @@
          "id": 18,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 4
+         "line": 4,
+         "column": 12
         },
         {
          "id": 19,
@@ -249,7 +259,8 @@
            "id": 24,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 30
           },
           {
            "id": 25,
@@ -265,7 +276,8 @@
            "id": 26,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 34
           },
           {
            "id": 27,
@@ -307,7 +319,8 @@
            "id": 30,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 40
           },
           {
            "id": 31,
@@ -318,7 +331,8 @@
            "id": 33,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 22
           },
           {
            "id": 34,
@@ -334,7 +348,8 @@
            "id": 35,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 4
+           "line": 4,
+           "column": 24
           },
           {
            "id": 36,
@@ -407,7 +422,8 @@
    "id": 42,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 43,
@@ -429,6 +445,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -456,6 +473,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -474,6 +492,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -501,6 +520,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -529,6 +549,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

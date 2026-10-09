@@ -21,8 +21,8 @@ def air2lean_device : Zig.Device := { name := "uart", regs := [
   { name := "status", addr := 268435456, bits := 32, access := .read },
   { name := "data", addr := 268435460, bits := 32, access := .write }] }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure clearStatusLocals where
   deriving Inhabited

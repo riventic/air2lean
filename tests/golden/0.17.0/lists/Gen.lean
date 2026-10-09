@@ -62,8 +62,8 @@ instance : Zig.Enc array_list_Aligned_u32_null where
   encode v := Zig.Enc.fields 32 [(0, Zig.Enc.encode v.items), (16, Zig.Enc.encode v.capacity), (24, Zig.Enc.encode v.pointer_stability)]
   decode bs := do pure { items := ← Zig.Enc.decodeAt bs 0, capacity := ← Zig.Enc.decodeAt bs 16, pointer_stability := ← Zig.Enc.decodeAt bs 24 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: a constant
   (Zig.Enc.encode ((#v[] : Vector (BitVec 32) 0) : Vector (BitVec 32) 0), 4, .constGlobal)]
 
@@ -151,6 +151,7 @@ inductive array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit where
   | br63
   | br75
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : Zig.Allocator) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     let i3 ← pure (p0.add 24)
@@ -207,7 +208,7 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : 
               else (do
                 throw .outOfBounds)) : Zig.MM array_list_Aligned_u32_null_ensureTotalCapacityPreciseLocals array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit) with
             | .br52 => (do
-              let i57 ← pure (⟨i48, i49⟩ : Zig.Slice)
+              let i57 ← Zig.callM (Zig.checkSliceEnd i46.len (0 : BitVec 64) i49 0 >>= fun _ => pure (⟨i48, i49⟩ : Zig.Slice))
               let i58 ← pure (p0.add 0)
               let i59 ← Zig.load (Zig.Slice) 8 i58
               let i60 ← pure i57.len
@@ -232,7 +233,7 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : 
                   else (do
                     throw .panic)) : Zig.MM array_list_Aligned_u32_null_ensureTotalCapacityPreciseLocals array_list_Aligned_u32_null_ensureTotalCapacityPreciseExit) with
                 | .br75 => (do
-                  Zig.callM (Zig.memmove 4 4 4 i57.ptr i68 i57.len)
+                  Zig.callM (Zig.memcpy 4 4 4 i57.ptr i68 i57.len i59.len)
                   let _i81 ← Zig.callM (Zig.Allocator.free p1 4 i16)
                   let i82 ← pure (p0.add 0)
                   let i83 ← pure (i82.add 0)
@@ -261,6 +262,7 @@ inductive array_list_Aligned_u32_null_ensureTotalCapacityExit where
   | ret (v : Except Zig.ErrName (Unit))
   | br3
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_ensureTotalCapacity (p0 : Zig.Ptr) (p1 : Zig.Allocator) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
@@ -332,6 +334,7 @@ structure array_list_Aligned_u32_null_addOneLocals where
 inductive array_list_Aligned_u32_null_addOneExit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_addOne (p0 : Zig.Ptr) (p1 : Zig.Allocator) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     let i2 ← pure (p0.add 0)
@@ -357,6 +360,7 @@ structure array_list_Aligned_u32_null_appendLocals where
 inductive array_list_Aligned_u32_null_appendExit where
   | ret (v : Except Zig.ErrName (Unit))
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_append (p0 : Zig.Ptr) (p1 : Zig.Allocator) (p2 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     let i3 ← Zig.callM (array_list_Aligned_u32_null_addOne p0 p1)
@@ -377,6 +381,7 @@ structure array_list_Aligned_u32_null_clearAndFreeLocals where
 inductive array_list_Aligned_u32_null_clearAndFreeExit where
   | ret
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_clearAndFree (p0 : Zig.Ptr) (p1 : Zig.Allocator) : Zig.MemM (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 24)
@@ -400,6 +405,7 @@ structure array_list_Aligned_u32_null_deinitLocals where
 inductive array_list_Aligned_u32_null_deinitExit where
   | ret
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_deinit (p0 : Zig.Ptr) (p1 : Zig.Allocator) : Zig.MemM (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 24)
@@ -422,6 +428,7 @@ inductive array_list_Aligned_u32_null_toOwnedSliceExit where
   | br32
   | br44
 
+-- air2lean-premises: {"ALC-09":[1]}
 def array_list_Aligned_u32_null_toOwnedSlice (p0 : Zig.Ptr) (p1 : Zig.Allocator) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
   let e ← ((do
     let i2 ← Zig.load (array_list_Aligned_u32_null) 8 p0
@@ -477,7 +484,7 @@ def array_list_Aligned_u32_null_toOwnedSlice (p0 : Zig.Ptr) (p1 : Zig.Allocator)
             else (do
               throw .panic)) : Zig.MM array_list_Aligned_u32_null_toOwnedSliceLocals array_list_Aligned_u32_null_toOwnedSliceExit) with
           | .br44 => (do
-            Zig.callM (Zig.memmove 4 4 4 v23.ptr i37 v23.len)
+            Zig.callM (Zig.memcpy 4 4 4 v23.ptr i37 v23.len i28.len)
             let _i50 ← Zig.callM (array_list_Aligned_u32_null_clearAndFree p0 p1)
             let i51 ← pure (v23)
             let i52 ← pure ((.ok i51) : Except Zig.ErrName (Zig.Slice))
@@ -531,6 +538,7 @@ structure dupeLocals where
 inductive dupeExit where
   | ret (v : Except Zig.ErrName (Zig.Slice))
 
+-- air2lean-premises: {"ALC-09":[0]}
 def dupe (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
   let e ← ((do
     let i2 ← Zig.callM (Zig.Allocator.dupe p0 1 1 1 p1)
@@ -539,10 +547,10 @@ def dupe (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Z
   match e with
   | .ret v => pure v
 
-structure mem_Allocator_dupeSentinel__anon_1Locals where
+structure mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals where
   deriving Inhabited
 
-inductive mem_Allocator_dupeSentinel__anon_1Exit where
+inductive mem_Allocator_dupeSentinel__anon_294b7c9823bdExit where
   | ret (v : Except Zig.ErrName (Zig.Slice))
   | br15
   | br24
@@ -551,7 +559,8 @@ inductive mem_Allocator_dupeSentinel__anon_1Exit where
   | br59
   | br67
 
-def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
+-- air2lean-premises: {"ALC-09":[0]}
+def mem_Allocator_dupeSentinel__anon_294b7c9823bd (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
   let e ← ((do
     let i2 ← pure p1.len
     let i3 ← Zig.add false i2 (1 : BitVec 64)
@@ -572,9 +581,9 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
         if i14 then (do
           pure .br15)
         else (do
-          throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
+          throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
       | .br15 => (do
-        let i20 ← pure (⟨i11, i12⟩ : Zig.Slice)
+        let i20 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i12 0 >>= fun _ => pure (⟨i11, i12⟩ : Zig.Slice))
         let i21 ← pure i20.len
         let i22 ← pure p1.len
         let i23 ← pure (i21 == i22)
@@ -582,7 +591,7 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
           if i23 then (do
             pure .br24)
           else (do
-            throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
+            throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
         | .br24 => (do
           let i29 ← pure p1.ptr
           let i30 ← pure i20.ptr
@@ -595,9 +604,9 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
             if i35 then (do
               pure .br36)
             else (do
-              throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
+              throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
           | .br36 => (do
-            Zig.callM (Zig.memmove 1 1 1 i20.ptr i29 i20.len)
+            Zig.callM (Zig.memcpy 1 1 1 i20.ptr i29 i20.len p1.len)
             let i42 ← pure p1.len
             let i43 ← pure v5.len
             let i44 ← pure (Zig.lt false i42 i43)
@@ -605,7 +614,7 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
               if i44 then (do
                 pure .br45)
               else (do
-                throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
+                throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
             | .br45 => (do
               let i50 ← pure (v5.ptr.elem 1 i42)
               Zig.store (α := BitVec 8) 1 i50 (0 : BitVec 8)
@@ -620,16 +629,16 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
                 if i58 then (do
                   pure .br59)
                 else (do
-                  throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
+                  throw .outOfBounds)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
               | .br59 => (do
-                let i64 ← pure (⟨i54, i55⟩ : Zig.Slice)
-                let i65 ← Zig.callM (Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
+                let i64 ← Zig.callM (Zig.checkSliceEnd v5.len (0 : BitVec 64) i55 1 >>= fun _ => pure (⟨i54, i55⟩ : Zig.Slice))
+                let i65 ← Zig.callM (Zig.checkSentinelIndex i64 i55 >>= fun _ => Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
                 let i66 ← pure ((0 : BitVec 8) == i65)
                 match ← ((do
                   if i66 then (do
                     pure .br67)
                   else (do
-                    throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit) with
+                    throw .panic)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit) with
                 | .br67 => (do
                   let i72 ← pure ((.ok i64) : Except Zig.ErrName (Zig.Slice))
                   pure (.ret i72))
@@ -638,7 +647,7 @@ def mem_Allocator_dupeSentinel__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Z
             | e => pure e)
           | e => pure e)
         | e => pure e)
-      | e => pure e)) : Zig.MM mem_Allocator_dupeSentinel__anon_1Locals mem_Allocator_dupeSentinel__anon_1Exit).run' (default : mem_Allocator_dupeSentinel__anon_1Locals)
+      | e => pure e)) : Zig.MM mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals mem_Allocator_dupeSentinel__anon_294b7c9823bdExit).run' (default : mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -669,7 +678,7 @@ def dupeZLen.loop11 (i3 : Zig.Slice) : Zig.MM dupeZLenLocals dupeZLenExit := do
       else (do
         throw .outOfBounds)) : Zig.MM dupeZLenLocals dupeZLenExit) with
     | .br16 => (do
-      let i21 ← Zig.callM (Zig.load (BitVec 8) 1 (i3.ptr.elem 1 i13))
+      let i21 ← Zig.callM (Zig.checkSentinelIndex i3 i13 >>= fun _ => Zig.load (BitVec 8) 1 (i3.ptr.elem 1 i13))
       let i22 ← pure (i21 != (0 : BitVec 8))
       if i22 then (do
         let i24 ← pure ((← get).n)
@@ -683,9 +692,10 @@ def dupeZLen.loop11 (i3 : Zig.Slice) : Zig.MM dupeZLenLocals dupeZLenExit := do
     pure .rep11)
   | e => pure e
 
+-- air2lean-premises: {"ALC-09":[0]}
 def dupeZLen (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
-    let i2 ← Zig.callM (mem_Allocator_dupeSentinel__anon_1 p0 p1)
+    let i2 ← Zig.callM (mem_Allocator_dupeSentinel__anon_294b7c9823bd p0 p1)
     match i2 with
     | .error _ => (do
       let i4 ← Zig.callR (Zig.unwrapErr i2)
@@ -729,7 +739,7 @@ def evens.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i2 : Zig.Ptr) (i6 : BitVe
     let i12 ← pure (i6)
     let i13 ← pure (Zig.lt false i11 i12)
     if i13 then (do
-      let i15 ← Zig.callM (Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9))
+      let i15 ← Zig.callM (Zig.checkIndex p1 i9 >>= fun _ => Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9))
       match ← ((do
         let i17 ← Zig.rem false i15 (2 : BitVec 32)
         let i18 ← pure (i17 == (0 : BitVec 32))
@@ -757,6 +767,7 @@ def evens.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i2 : Zig.Ptr) (i6 : BitVe
     pure .rep8)
   | e => pure e
 
+-- air2lean-premises: {"ALC-09":[0]}
 def evens (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
   let s2 ← Zig.allocStack 32 8
   let e ← ((do
@@ -813,6 +824,7 @@ def freeAll.loop5 (p0 : Zig.Allocator) : Zig.MM freeAllLocals freeAllExit := do
     pure .rep5)
   | e => pure e
 
+-- air2lean-premises: {"ALC-09":[0]}
 def freeAll (p0 : Zig.Allocator) (p1 : Option (Zig.Ptr)) : Zig.MemM (Unit) := do
   let e ← ((do
     modify (fun s => { s with p := p1 })
@@ -831,6 +843,7 @@ structure pushLocals where
 inductive pushExit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
 
+-- air2lean-premises: {"ALC-09":[0]}
 def push (p0 : Zig.Allocator) (p1 : Option (Zig.Ptr)) (p2 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     let i3 ← Zig.callM (Zig.Allocator.create p0 16 8)
@@ -975,7 +988,7 @@ def listSum.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i6 : BitVec 64) : Zig.M
     let i12 ← pure (i6)
     let i13 ← pure (Zig.lt false i11 i12)
     if i13 then (do
-      let i15 ← Zig.callM (Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9))
+      let i15 ← Zig.callM (Zig.checkIndex p1 i9 >>= fun _ => Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9))
       let i16 ← pure ((← get).head)
       let i17 ← Zig.callM (push p0 i16 i15)
       match i17 with
@@ -998,6 +1011,7 @@ def listSum.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i6 : BitVec 64) : Zig.M
     pure .rep8)
   | e => pure e
 
+-- air2lean-premises: {"ALC-09":[0]}
 def listSum (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     modify (fun s => { s with head := none })
@@ -1066,7 +1080,7 @@ def sumRange.loop33 (i3 : Zig.Slice) (i31 : BitVec 64) : Zig.MM sumRangeLocals s
     let i37 ← pure (i31)
     let i38 ← pure (Zig.lt false i36 i37)
     if i38 then (do
-      let i40 ← Zig.callM (Zig.load (BitVec 32) 4 (i3.ptr.elem 4 i34))
+      let i40 ← Zig.callM (Zig.checkIndex i3 i34 >>= fun _ => Zig.load (BitVec 32) 4 (i3.ptr.elem 4 i34))
       let i41 ← pure ((← get).s)
       let i42 ← Zig.intCast false false 64 i40
       let i43 ← Zig.add false i41 i42
@@ -1099,6 +1113,7 @@ def sumRange.loop12 (i3 : Zig.Slice) (i10 : BitVec 64) : Zig.MM sumRangeLocals s
     pure .rep12)
   | e => pure e
 
+-- air2lean-premises: {"ALC-09":[0]}
 def sumRange (p0 : Zig.Allocator) (p1 : BitVec 64) : Zig.MemM (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     let i2 ← Zig.callM (Zig.Allocator.alloc p0 4 4 p1)

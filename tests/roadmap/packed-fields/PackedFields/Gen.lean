@@ -93,8 +93,8 @@ instance : Zig.Enc Word where
   encode v := v.bytes.toArray
   decode bs := pure ⟨Zig.Raw.ofArray 4 bs⟩
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: packed_fields.reg
   (Array.replicate (Zig.Enc.size (Reg)) .undef, 4, .global),
   -- 1: packed_fields.word

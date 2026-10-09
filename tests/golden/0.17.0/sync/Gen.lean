@@ -213,8 +213,8 @@ structure Thread_SpawnConfig where
   allocator : Option (Zig.Allocator)
   deriving Repr, Inhabited, DecidableEq
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 /-- The spawn targets of the program. -/
 inductive Tgt where
@@ -287,6 +287,7 @@ def Io_Condition_signal.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Cond
     pure .rep11)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Condition_signal (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i3 ← pure (p0.add 0)
@@ -337,6 +338,7 @@ inductive Io_Mutex_unlockExit where
   | br3 (v : Io_Mutex_State)
   | br7
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 0)
@@ -404,6 +406,7 @@ def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt I
     pure .rep23)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Mutex_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     match ← ((do
@@ -541,6 +544,7 @@ def Io_Condition_waitUncancelable.loop22 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.
     | e => pure e)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Condition_waitUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i4 ← pure (p0.add 4)
@@ -579,6 +583,7 @@ inductive Io_Event_setExit where
   | ret
   | br3
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Event_set (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← Zig.atomicRmwAsC Zig.RmwOp.xchg Zig.AtomicOrder.release 4 p0 Io_Event.is_set
@@ -628,6 +633,7 @@ def Io_Event_waitUncancelable.loop17 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt I
     pure .rep17)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Event_waitUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     match ← ((do
@@ -700,6 +706,7 @@ def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lock
     pure .rep27)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Mutex_lock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   let e ← ((do
     match ← ((do
@@ -811,6 +818,7 @@ def Io_RwLock_lockSharedUncancelable.loop8 (p0 : Zig.Ptr) : Zig.CM Tgt Io_RwLock
     pure .rep8)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_RwLock_lockSharedUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i3 ← pure (p0.add 0)
@@ -863,6 +871,7 @@ def Io_Semaphore_waitUncancelable.loop5 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tg
     pure .rep5)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Semaphore_waitUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 8)
@@ -902,6 +911,7 @@ inductive Io_RwLock_lockUncancelableExit where
   | ret
   | br8
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_RwLock_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 0)
@@ -933,6 +943,7 @@ structure Io_RwLock_unlockLocals where
 inductive Io_RwLock_unlockExit where
   | ret
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_RwLock_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 0)
@@ -949,6 +960,7 @@ structure Io_Semaphore_postLocals where
 inductive Io_Semaphore_postExit where
   | ret
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_Semaphore_post (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 8)
@@ -973,6 +985,7 @@ inductive Io_RwLock_unlockSharedExit where
   | br8 (v : Bool)
   | br4
 
+-- air2lean-premises: {"IOM-01":[1]}
 def Io_RwLock_unlockShared (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i2 ← pure (p0.add 0)
@@ -1010,6 +1023,7 @@ structure producerLocals where
 inductive producerExit where
   | ret
 
+-- air2lean-premises: {"IOM-01":[0]}
 def producer (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     let i1 ← pure (p0.add 16)
@@ -1066,6 +1080,7 @@ def handoff.loop24 (p0 : Zig.Io) (i1 : Zig.Ptr) : Zig.CM Tgt handoffLocals hando
     pure .rep24)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[0]}
 def handoff (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 40 8
   let e ← ((do
@@ -1152,6 +1167,7 @@ def work.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt workLocals workExit := do
     pure .rep4)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[0]}
 def work (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     modify (fun s => { s with local1 := (0 : BitVec 64) })
@@ -1171,6 +1187,7 @@ structure mutexCounterLocals where
 inductive mutexCounterExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def mutexCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 24 8
   let e ← ((do
@@ -1206,6 +1223,7 @@ structure readSharedLocals where
 inductive readSharedExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def readShared (p0 : Zig.Ptr) : Zig.ConcM Tgt (BitVec 32) := do
   let e ← ((do
     let i1 ← pure (p0.add 16)
@@ -1263,6 +1281,7 @@ def writer.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt writerLocals writerExit := do
     pure .rep4)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[0]}
 def writer (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     modify (fun s => { s with local1 := (0 : BitVec 64) })
@@ -1282,6 +1301,7 @@ structure rwLockReadLocals where
 inductive rwLockReadExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def rwLockRead (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 64 8
   let e ← ((do
@@ -1319,6 +1339,7 @@ structure rwLockSnapshotPairLocals where
 inductive rwLockSnapshotPairExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def rwLockSnapshotPair (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 64 8
   let e ← ((do
@@ -1396,6 +1417,7 @@ def semWork.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt semWorkLocals semWorkExit := do
     pure .rep4)
   | e => pure e
 
+-- air2lean-premises: {"IOM-01":[0]}
 def semWork (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   let e ← ((do
     modify (fun s => { s with local1 := (0 : BitVec 64) })
@@ -1415,6 +1437,7 @@ structure semaphoreCounterLocals where
 inductive semaphoreCounterExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def semaphoreCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 48 8
   let e ← ((do

@@ -98,6 +98,12 @@ FIXTURES = [
      ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
     ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",
      ["--namespace", "FuzzS19", "--prefix", "fuzz_s19."], "exact"),
+    # G1 extern calls: the 0.16.0 translation (check.sh) and the trusted-base binding.
+    ("tests/roadmap/extern-calls/ExternCalls/Gen.lean", "tests/roadmap/extern-calls/air/0.16.0",
+     ["--namespace", "ExternCalls", "--prefix", "extern_calls."], "exact"),
+    ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
+     ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
+      "tests/roadmap/extern-calls/registry.json"], "exact"),
     ("tests/roadmap/futures/Futures/Gen.lean", "tests/roadmap/futures/air/0.16.0",
      ["--namespace", "Futures", "--prefix", "futures."], "exact"),
     ("tests/roadmap/loop-tactics/nested/Nested/Gen.lean", "tests/roadmap/loop-tactics/nested/air",
@@ -245,6 +251,20 @@ def compose(dirs, destination, version):
             doc = json.loads(path.read_text(encoding="utf-8"))
             layer.setdefault(IDENTITY.sub(r"__\1_N", doc["name"]), []).append((path.name, doc))
         chosen.update(layer)
+    # A non-Linux host's own export (`air-<os>`) that replaces every function keeps its
+    # schema-12 profile: its translation depends on the target (aarch64 floats, fix-target-floats),
+    # as check.sh's does on that host.
+    docs = [doc for entries in chosen.values() for _, doc in entries]
+    last = dirs[-1].name if dirs else ""
+    if (last.startswith("air-") and last != "air-linux" and docs
+            and all(doc.get("schema") == 12 for doc in docs)
+            and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1
+            and set(chosen) =={IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
+                                for p in dirs[-1].glob("*.json")}):
+        for entries in chosen.values():
+            for name, doc in entries:
+                (destination / name).write_text(json.dumps(doc), encoding="utf-8")
+        return
     for entries in chosen.values():
         for name, doc in entries:
             doc = {k: v for k, v in doc.items() if k != "profile"}

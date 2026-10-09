@@ -14,8 +14,8 @@ def air2lean_model_0 (p0 : BitVec 32) : Zig.MemM (BitVec 32) := _root_.ExternMod
 -- Explicit imported-model assumption; reported in air2lean-models.
 axiom air2lean_model_0_evidence : air2lean_model_0_contract.Holds .total [Zig.Error.illegal] .preserves _root_.ExternModel.abs
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure absSumLocals where
   deriving Inhabited

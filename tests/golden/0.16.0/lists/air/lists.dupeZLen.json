@@ -118,6 +118,7 @@
     "ty": 7,
     "func": "mem.Allocator.dupeZ__anon_11266",
     "module": "std",
+    "instance_key": "ad013b83a6438d6899b7b3f0810c84369882f5df90246d68508992e0ce1c9349",
     "noreturn": false
    },
    "args": [
@@ -582,6 +583,7 @@
     "ty": 20,
     "func": "mem.Allocator.free__anon_11139",
     "module": "std",
+    "instance_key": "0ba161b45e0aeddab3b1d9d8bab41bdca5061367062dee942e9e5ef2528144b5",
     "noreturn": false
    },
    "args": [

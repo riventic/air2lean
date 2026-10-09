@@ -375,6 +375,7 @@
             "ty": 11,
             "func": "mem.Allocator.destroy__func_742",
             "module": "std",
+            "instance_key": "a9add1f02861e6e04dd843cfdd85691447b92afd2b4b7bd84c040a4cf93a070a",
             "noreturn": false
            },
            "args": [

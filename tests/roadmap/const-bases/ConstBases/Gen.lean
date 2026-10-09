@@ -28,10 +28,10 @@ instance : Zig.Enc Holder where
   encode v := Zig.Enc.fields 32 [(0, Zig.Enc.encode v.head), (12, Zig.Enc.encode v.maybe), (20, (letI : Zig.Enc (Except Zig.ErrName (Vector (BitVec 8) 3)) := Zig.errorUnionEnc (⟨#["Bad"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Vector (BitVec 8) 3))); Zig.Enc.encode v.res)), (8, Zig.Enc.encode v.tail)]
   decode bs := do pure { head := ← Zig.Enc.decodeAt bs 0, maybe := ← Zig.Enc.decodeAt bs 12, res := ← (letI : Zig.Enc (Except Zig.ErrName (Vector (BitVec 8) 3)) := Zig.errorUnionEnc (⟨#["Bad"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Vector (BitVec 8) 3))); Zig.Enc.decodeAt bs 20), tail := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: const_bases.table
-  (Zig.Enc.encode (({ head := (1 : BitVec 64), maybe := (some ({ tag := (85 : BitVec 16), bytes := (#v[(10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8)] : Vector (BitVec 8) 4) } : Cell)), res := (.ok (#v[(20 : BitVec 8), (21 : BitVec 8), (22 : BitVec 8)] : Vector (BitVec 8) 3) : Except Zig.ErrName (Vector (BitVec 8) 3)), tail := (99 : BitVec 32) } : Holder) : Holder), 8, .constGlobal)]
+  (Zig.Enc.encode (({ head := (1 : BitVec 64), maybe := (some ({ tag := (85 : BitVec 16), bytes := (#v[(10 : BitVec 8), (11 : BitVec 8), (12 : BitVec 8), (13 : BitVec 8)] : Vector (BitVec 8) 4) } : Cell)), res := (.ok (#v[(20 : BitVec 8), (21 : BitVec 8), (22 : BitVec 8)] : Vector (BitVec 8) 3) : Except Zig.ErrName (Vector (BitVec 8) 3)), tail := (99 : BitVec 32) } : Holder) : Holder), 1, .constGlobal)]
 
 structure maybeBytePtrLocals where
   deriving Inhabited
