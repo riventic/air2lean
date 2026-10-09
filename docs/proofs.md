@@ -31,12 +31,14 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 | `Triple.load`, `Triple.store` | `pts p a v` before and after (`0 < Enc.size T`; `store` needs `LawfulEnc T`) |
 | `Triple.alloc`, `Triple.free` | a new block with undefined bytes; `free` needs every byte of the block, from offset 0 |
 | `Triple.create`, `Triple.destroy` | the allocator (`ZigLean/Sep/Alloc.lean`): `newBlock` is a new `.heap` block or `error.OutOfMemory` and no bytes; `destroy` needs the whole `.heap` block |
+| `Triple.arr_ptrProject` | `&xs[i]` of an owned array, `i ≤ len`: the checked pointer formation `ptrProject` (MM-3) returns `p.elem size i` and keeps `arr p xs` |
 | `loop_sep_spec`, `loop_sep_ghost` | a `Zig.loop` with an invariant that is an assertion (below) |
 
 A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`. Unlike `Triple`, a `*_run` lemma is not wrapped: it takes `Mem.Seq m` as an explicit hypothesis and returns `Mem.Seq m'` as part of its conclusion, so a hand-written proof that calls one directly (`Proofs/Lists/Sep.lean`, `Proofs/Pointers/Proofs.lean`, `Proofs/Slices/Sep.lean`) threads it from one call to the next, starting from `singleThread_empty`.
 
 | Lemma | Operation | After |
 |---|---|---|
+| `bytesAt_ptrProject_run`, `arr_ptrProject_run` | `ptrProject p (·.add k)` with `k ≤ bs.size` / `ptrProject p (·.elem size i)` with `i ≤ len` (every generated derived pointer) | `p.add k` / `p.elem size i`, memory unchanged; `ptrProject_block_run` from a block of known size, `ptrProject_cases` (formed or `.illegal`) |
 | `pts_load_run` | `load T a p` | the value, memory unchanged |
 | `pts_store_run` | `store a p w` | `pts p a w` in a new `h'`; `hF` unchanged |
 | `arr_load_run`, `arr_store_run` | item `i` of `arr p vs` | `vs[i]`; `arr p (vs.set i w)` |
@@ -81,7 +83,7 @@ A walk over a linked list ends because the rest of the list gets shorter, and th
 |---|---|
 | Protocol (`Conc.Proto`) | A ghost value per thread (only the proof sees it); an invariant `inv G m` on the ghost values of all threads and the memory; the ghost values `init tgt g` that a new thread can start with (the spawner picks one, so it can give the thread a part of what it owns); `fin g` of a thread that ended. |
 | One thread (`Proto.Safe`) | Rely–guarantee: at each stop the thread picks its new ghost value and shows `inv`; when it goes on, it knows only `inv` and its own ghost value. A run between two stops keeps the number of threads. A `join` of thread `u` gives `fin (G u)`. |
-| Rules (`Proto.WP`) | `pure'`, `bind`, `liftMem`, `sync`, `loop`; for generated code (`ZigLean/Conc/Lemmas.lean`) `liftM`, `callMC`, `callRC`, `callRC_ok`, `callC`, `pickC`, `spawnC`, `joinC`, `futexWaitC`, `futexWakeC`, `map`. The post gets the depth that is left: each loop repeat passes a sync op (the depth gets smaller) or makes a measure smaller, so a spin-wait needs no measure. |
+| Rules (`Proto.WP`) | `pure'`, `bind`, `liftMem`, `sync`, `loop`; for generated code (`ZigLean/Conc/Lemmas.lean`) `liftM`, `callMC`, `callMC_ptrProject` (a derived pointer, from `ptrProject_run`, `BlkAt.ptrProject_run`, `bytesAt_ptrProject_sub`/`_block` or `TTriple.ptrProjectAt`), `callRC`, `callRC_ok`, `callC`, `pickC`, `spawnC`, `joinC`, `futexWaitC`, `futexWakeC`, `map`. The post gets the depth that is left: each loop repeat passes a sync op (the depth gets smaller) or makes a measure smaller, so a spin-wait needs no measure. |
 | Strict mode | No error leaf; a `MemM` step needs a proof that it does not throw (`liftM`/`callMC`/`callRC` take it); a `join` must be of a later thread that exists and was not joined, and `Proto.joins` holds of the joining thread's ghost value; a `pick` knows its choice is in range. A spawned thread and `main` must end with every thread they spawned joined (`joinedAll`). |
 | Futex | The futex queue is in the memory (`Mem.waiters`, `Mem.woken`), so `inv` can name it. A wait begins with the thread not in the queue; a wait that sleeps keeps `inv` with the thread's ghost value. In strict mode each wait keeps `Live`: if the thread sleeps, not every thread has ended (`fin`), sleeps, or waits at a join (`joins`). |
 | No deadlock (`ready_ne`) | A thread that cannot go on waits at a join of a later thread that has not ended, or sleeps at a futex. The chain of joins goes up the thread ids, so it ends at a sleeping thread, and its `Live` excludes that every thread waits. |

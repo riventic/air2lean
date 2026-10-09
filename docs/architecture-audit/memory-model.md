@@ -20,16 +20,16 @@ fix lands; the fixture then becomes an agreement test.
 |---|---|---|---|
 | MM-1 | Block addresses are a fixed, deterministic layout, and the model exposes them | SOUNDNESS | reproduced (`addrOfLocal`, `crossDistance`) |
 | MM-2 | Address-dependent safety checks (`@alignCast`, `@ptrFromInt` alignment) are decided by the model layout | SOUNDNESS | reproduced (`overAlign`) |
-| MM-3 | Pointer arithmetic outside the allocation is accepted, but LLVM sees `getelementptr inbounds` poison | SOUNDNESS | reproduced (`oobCompare`) |
+| MM-3 | Pointer arithmetic outside the allocation is accepted, but LLVM sees `getelementptr inbounds` poison | SOUNDNESS | reproduced (`oobCompare`); fixed |
 | MM-4 | `==` on ordinary pointers is structural; `@intFromPtr`, order and C-pointer `==` use addresses | SOUNDNESS | reproduced (`eqVsAddr`) |
 | MM-5 | The stack has no bound | SOUNDNESS | native crash reproduced (`depth`) |
-| MM-6 | Emitter placeholders (`panic!`, `pure default`) are successful no-ops in the logic | FAIL-OPEN | kernel theorems (`PanicDefault.lean`) |
-| MM-7 | The ReleaseFast premise ("no model throw ⇒ no illegal behaviour") is false | FAIL-OPEN | follows from MM-2, MM-3, MM-5 |
+| MM-6 | Emitter placeholders (`panic!`, `pure default`) are successful no-ops in the logic | FAIL-OPEN | kernel theorems (`PanicDefault.lean`); fixed |
+| MM-7 | The ReleaseFast premise ("no model throw ⇒ no illegal behaviour") is false | FAIL-OPEN | follows from MM-2, MM-3, MM-5; qualified |
 | MM-8 | The Sep layer exports allocation-order address facts | FAIL-OPEN | code-read (`alloc_run`) |
 | MM-9 | Stale-pointer and address-reuse semantics | FAIL-OPEN (known, M05) | partly on `codex/roadmap-address-reuse` |
 | MM-10 | Fixed-buffer allocations do not alias their buffer | HARDENING | code-read |
 | MM-11 | Pointer bytes read as integers and integer bytes read as pointers are `.unspecified` | HARDENING | code-read |
-| MM-12 | Zero-length accesses and address-zero projections need a live block | HARDENING (known, L05) | code-read, on `codex/roadmap-null-projection` |
+| MM-12 | Zero-length accesses and (before MM-3) address-zero projections need a live block | HARDENING (known, L05) | code-read, on `codex/roadmap-null-projection` |
 | MM-13 | Value-level tagged-union retagging fills the new payload with `default` | HARDENING | code-read |
 | MM-14 | Race footprint and dead blocks grow without bound in single-threaded runs | HARDENING | measured |
 | MM-15 | Model `@memcpy` copies like `@memmove`; it relies on the ReleaseSafe alias check in AIR | control (agrees) | reproduced (`memcpyOverlap`) |
@@ -55,8 +55,8 @@ against the exporter's `abi_size`/`abi_align` in `Check.lean`); 64-bit little-en
 | `crossOrder` | `1` | `1` (agrees here; layout-dependent) |
 | `overAlign` | `2` | `panic: incorrect alignment` |
 | `oobCompare(1)` | `1` | `1` |
-| `oobCompare(2^63)` | `1` | `0` |
-| `oobPtrCompare(2^63)` | `1` | `0` |
+| `oobCompare(2^63)` | `1` (now `.illegal`, MM-3 fixed) | `0` |
+| `oobPtrCompare(2^63)` | `1` (now `.illegal`, MM-3 fixed) | `0` |
 | `depth(1000)` / `depth(10^7)` | `1000` / no bound in the model | `1000` / `Segmentation fault` (stack overflow) |
 | `memcpyOverlap(4)` / `(1)` | `1` / `.panic` (AIR alias check) | `1` / `panic: @memcpy arguments alias` |
 
@@ -64,8 +64,9 @@ against the exporter's `abi_size`/`abi_align` in `Check.lean`); 64-bit little-en
 closed term; the model is deterministic, so any proof method gives the same value), for
 example `overAlign_never_panics`. The native build violates each.
 
-`check.sh` reproduced both columns from a fresh `lake build` of this branch (second native
-run: `addrOfLocal` 6102688727; the other native values are stable).
+`check.sh` reproduced both columns from a fresh `lake build` of the audit branch (second native
+run: `addrOfLocal` 6102688727; the other native values are stable). The model values of the two
+`2^63` rows are the audit's; with MM-3 fixed, check.sh asserts `error Zig.Error.illegal` for them.
 
 ---
 
@@ -127,11 +128,39 @@ and `false` natively in ReleaseSafe. Neither Zig's safety checks nor the model's
 catch it.
 
 **Fix (one mechanism): checked pointer formation.** Replace the pure `Ptr.add` in generated
-code with a `MemM` operation, `ptrOffset`. It throws `.illegal` unless the result stays in `[0,
+code with a `MemM` operation (`ptrOffset` here, `Zig.ptrProject` as implemented). It throws `.illegal` unless the result stays in `[0,
 size]` of the pointer's block. For a provenance-free pointer (`block = none`), only offset 0 is
 allowed. This is CompCert's "weakly valid pointer" rule. It also gives L05's address-zero
 projection a principled rule: offset 0 is defined and any other offset is illegal, matching
 `inbounds`.
+
+**Status: fixed** (`codex/fix-mm-failclosed`). The operation is `Zig.ptrProject p project`
+(`ZigLean/Mem/Basic.lean`): the same pointer is always allowed; any other result throws
+`.illegal` unless base and result lie in `[0, size]` of the base's block (`Mem.inBounds`, one
+past the end included). Liveness is not required, as in LLVM's LangRef. 0.14.1, 0.15.2 and
+0.16.0 lower `ptr_add`/`ptr_sub`, `ptr_elem_ptr`/`slice_elem_ptr`, `struct_field_ptr`, the
+slice field pointers and `unwrap_errunion_payload_ptr` to `getelementptr inbounds` (`gepStruct`
+inbounds); `@fieldParentPtr` lowers to `ptrtoint`/`sub nuw`/`inttoptr` and is modelled with the
+same rule, since the langref makes it illegal behaviour when the argument is not that field. The
+emitter (`FCtx.projectExpr`) writes `pure p` for a constant offset 0. L05's
+`ptrProjectNullable` is gone: projections from a C/allowzero base use `ptrProject`
+(`ptrProjectNonnull` when the result type is nonnullable), so a nonzero offset from a
+provenance-free address, including address zero, is now `.illegal`. Slicing forms `ptr + start`
+before Sema's `start <= end` check, so an out-of-allocation start is `.illegal` in the model
+where native ReleaseSafe panics (conservative). The audit fixture is an agreement test:
+`oobCompare(1)` is `1` in both, and `oobCompare(2^63)`, `oobPtrCompare(2^63)` are `.illegal`.
+Residual: `Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer after a checked access
+to the error code, without a bounds check of their own (`docs/build-modes.md`).
+
+Deliberate over-approximations (each `.illegal` where native Zig may be defined; conservative
+for no-illegal proofs, wrong for outcome reports and native diffs): an out-of-allocation result is
+`.illegal` when formed, while LLVM's poison is only illegal behaviour when used (the slicing
+case above); a nonzero offset from a provenance-free address that an object outside the model
+owns (MMIO, a `@ptrFromInt` register window) is `.illegal`, since the model has no such object;
+`Ptr.elem` reads a `usize` index as unsigned, so `p + n` with `n ≥ 2^63` (a wrapped negative
+offset that LLVM's signed GEP index would keep in bounds) is `.illegal`; and an offset-0
+projection from address zero into a nonnullable result type (0.14.1/0.15.2 `&p.*.f` of a
+`[*c]T`) is `.illegal` although no `getelementptr` is emitted.
 
 ### MM-4. Two pointer equalities
 
@@ -142,7 +171,7 @@ callee's block covers `n` (so `p1 = ⟨none, n⟩`), then `p2 = @ptrFromInt(n)` 
 ⟨some b, k⟩`). In the model, `p1 == p2` is false and `@intFromPtr(p1) == @intFromPtr(p2)` is
 true. No execution of the compiled program gives that combination, and natively the result is
 `3` deterministically, whatever the layout. The same split shows for a pointer computed past one
-block that numerically reaches another (once MM-3 is fixed, that case is `.illegal`).
+block that numerically reaches another (with MM-3 fixed, forming that pointer is `.illegal`).
 
 **Fix:** one pointer equality, by address (`ptrEqAddr`) for every pointer kind. Together with
 MM-1, cross-block equality then depends on `σ` and is provable only from `WF`, as in Zig.
@@ -201,14 +230,14 @@ that ReleaseSafe does not check. It does not. MM-3 (inbounds poison) and MM-5 (s
 are illegal behaviour with no model throw. MM-2 is a ReleaseSafe panic that the model reports as
 success, so even the safe build disagrees.
 
-**Fix:** qualify the premise in `build-modes.md` and `premises.md`: it holds only for programs
+**Fix:** qualify the premise in `build-modes.md` (and the README): it holds only for programs
 with no address observation, no out-of-allocation pointer arithmetic, and bounded stack.
 Restore it after MM-1, MM-3 and MM-5. This is a documentation change and a claim downgrade, not
 a model change.
 
 **Status: qualified** (`codex/fix-mm-failclosed`). `docs/build-modes.md` lists the open
-exceptions (MM-1/MM-2, MM-3, MM-5, float `@divExact`) under the premise, and the README sentence
-names them.
+exceptions (MM-1/MM-2, MM-5, float `@divExact`) under the premise, and the README sentence
+names them. MM-3 is fixed on the same branch and listed there as fixed, with its residual.
 
 ### MM-8. Sep exports allocation-order address facts
 
@@ -256,9 +285,12 @@ bytes read as a pointer go through `ptrFromAddr`.
 ### MM-12. Zero-length accesses, address-zero projections (known: L05)
 
 `Mem.access p 0 _` still needs a live block and in-bounds offset. `memset`/`memmove`/`readSlice`
-exempt `n = 0`; any other zero-sized access that reaches `Mem.access` does not. Projections from address zero are
-`.illegal` even for offset 0 (`ROADMAP.md` L05; `codex/roadmap-null-projection`). Both are
-conservative. MM-3's `ptrOffset` rule (offset 0 always allowed) gives the consistent answer.
+exempt `n = 0`; any other zero-sized access that reaches `Mem.access` does not. Before MM-3,
+projections from address zero were `.illegal` even for offset 0 (`ROADMAP.md` L05;
+`codex/roadmap-null-projection`). Both are conservative. MM-3's `ptrOffset` rule (offset 0 always
+allowed) gives the consistent answer: with MM-3 fixed (`Zig.ptrProject`), an offset-0 projection
+from address zero is defined, except into a nonnullable result type (`ptrProjectNonnull`); the
+zero-length access rule is unchanged.
 
 ### MM-13. Value-level union retagging
 
@@ -293,7 +325,7 @@ other export mode is ever admitted, `@memcpy` needs its own overlap → `.illega
 
 1. MM-6 (small, closes a fail-open translation path).
 2. MM-7 (documentation and claim downgrade, immediate).
-3. MM-3 `ptrOffset` (local to `Ptr.add` emission and `Mem`).
+3. MM-3 `ptrOffset` (local to `Ptr.add` emission and `Mem`; done as `Zig.ptrProject`).
 4. MM-1 placement oracle, with MM-4 (address equality) and MM-8 (Sep lemma), folding in M05.
    This is the largest change: `mem0` and every generated statement become parametric.
 5. MM-5 stack budget, or at minimum the premise.

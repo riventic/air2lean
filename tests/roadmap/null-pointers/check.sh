@@ -19,7 +19,7 @@ lake build ZigLean air2lean ZigLean.Mem.NullLemmas
 # proof-only storage/projection rules (outside the ZigLean umbrella) are built explicitly.
 lake env lean --run tests/roadmap/null-pointers/Generate.lean "$work/generated"
 for name in cNull cNonNull allowzeroAddress allowzeroManyAddress cZero cCast cUnwrap cLoad cEqual \
-    storeLoad storedIsNull allowzeroStoreLoad nodeNext nodeVal nodeRoundTrip arrayItem \
+    storeLoad storedIsNull allowzeroStoreLoad nodeNext nodeNextNonnull nodeVal nodeRoundTrip arrayItem \
     cAdd cIndex cElem toOptional fromOptional; do
   [ -f "$work/generated/$name.lean" ] || { echo "missing semantic fixture $name" >&2; exit 1; }
   lake env lean "$work/generated/$name.lean"

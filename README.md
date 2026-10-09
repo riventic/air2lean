@@ -180,7 +180,7 @@ Unsupported features include `threadlocal` globals, `extern` globals other than 
 | `std.mem.Allocator` (a model with allocation failure), heap memory, std code such as `ArrayListUnmanaged` | |
 | inline asm, register operands only, as opaque functions (x86_64 only) | |
 
-Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs, except for the known gaps (address observation, out-of-allocation pointers, stack overflow); the premise, those exceptions and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
+Overflow, out-of-bounds access and `unreachable` become `throw`, not undefined behaviour. So does an access to memory that `ReleaseSafe` does not check (a dead block, out of bounds, misaligned): `throw .illegal`. Under the stated target and model assumptions, a proof that a function never throws in this model also shows that its `ReleaseFast` build has no illegal behaviour on those inputs, except for the known gaps (address observation, stack overflow, an inexact float `@divExact`); the premise, those exceptions and its qualification status are in [docs/build-modes.md](docs/build-modes.md). A Zig error (`error.Name`) is a return value, not a panic — it never goes through `Zig.Error`.
 
 ## What a proof covers
 

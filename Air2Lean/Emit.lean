@@ -1145,12 +1145,18 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
 /-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
 def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
-/-- A projection `project` (`(·.add off)`, `(·.elem size i)`) of the pointer `base`, whose
-term is `p`. From a C/allowzero base it is `Zig.ptrProjectNullable`: address zero is illegal
-behaviour; otherwise `pure (p.project)`. -/
-def FCtx.projectExpr (fc : FCtx) (base : Val) (p project : String) : String :=
-  if fc.nullableVal base then s!"{fc.callMName} (Zig.ptrProjectNullable {p} (·.{project}))"
-  else s!"pure ({p}.{project})"
+/-- A derived pointer: the projection `project` (a `Ptr → Ptr` term such as `·.add off`,
+`·.elem size i`, `·.elemSub size i`) of the pointer `base`, whose term is `p`, with result type `result`. It is
+`Zig.ptrProject` (`getelementptr inbounds`: `.illegal` unless base and result are in bounds of
+the base's block; MM-3), and the base itself for a constant offset 0 (`zero`; no instruction
+natively). From a C/allowzero base whose result the compiler types as a nonnullable pointer
+(Zig ≤0.15 `struct_field_ptr`) it is `Zig.ptrProjectNonnull`: address zero is also illegal. -/
+def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String)
+    (zero : Bool := false) : String :=
+  if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
+    s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
+  else if zero then s!"pure {p}"
+  else s!"{fc.callMName} (Zig.ptrProject {p} ({project}))"
 
 /-- Bind the exact pointee's dictionary at a memory boundary. -/
 def FCtx.pointeeStorageExpr (fc : FCtx) (ptr : Val) (expr : String) : String :=
@@ -2040,7 +2046,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .isErrPtr true _ => s!"{isErr} ({payload}) {a} {rv p}"
       | .isErrPtr false _ => s!"(!·) <$> {isErr} ({payload}) {a} {rv p}"
       | .errPayloadPtr true _ => s!"{errOp fc.errBits "errSetOk"} ({payload}) {a} {rv p}"
-      | .errPayloadPtr false _ => s!"pure ({errOp fc.errBits "errPayloadPtr"} ({payload}) {rv p})"
+      | .errPayloadPtr false _ =>
+        fc.projectExpr p inst.ty (rv p) s!"{errOp fc.errBits "errPayloadPtr"} ({payload})"
       | _ => s!"{code} ({payload}) {a} {rv p}"
     let expr := match fc.pointeeOf p with
       | .errorUnion _ child => fc.storageExpr child expr
@@ -2086,7 +2093,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if fc.isMemPtr base then
       -- A bit-pointer points to the host integer: the base's own address.
       let off := if fc.hostSize inst.ty != 0 then 0 else fc.fieldOffset base idx
-      let (env, l) := bindLet fc env inst.id (fc.projectExpr base (rv base) s!"add {off}")
+      let (env, l) := bindLet fc env inst.id
+        (fc.projectExpr base inst.ty (rv base) s!"·.add {off}" (zero := off == 0))
       (env, some l)
     else (env, none)
   | .fieldParentPtr fieldPtr idx =>
@@ -2094,7 +2102,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A bit-pointer points to the host integer: the parent's own address.
       let bitPtr := ((fc.valTyId? fieldPtr).map fc.hostSize).getD 0 != 0
       let off := if bitPtr then 0 else fc.fieldOffsetOfPtrTy inst.ty idx
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
+      let (env, l) := bindLet fc env inst.id
+        (fc.projectExpr fieldPtr inst.ty (rv fieldPtr) s!"·.add (-{off})" (zero := off == 0))
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
@@ -2220,11 +2229,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .ptrAdd sub p n =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let f := if sub then "elemSub" else "elem"
-    let (env, l) := bindLet fc env inst.id (fc.projectExpr p (rv p) s!"{f} {size} {rv n}"); (env, some l)
+    let (env, l) := bindLet fc env inst.id
+      (fc.projectExpr p inst.ty (rv p) s!"·.{f} {size} {rv n}" (zero := size == 0 || n matches .int _ 0))
+    (env, some l)
   | .elemPtr p i =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
-    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.elem {size} {rv i})"
-      else fc.projectExpr p (rv p) s!"elem {size} {rv i}"
+    let base := if fc.isSlice p then s!"{rv p}.ptr" else rv p
+    let expr := fc.projectExpr p inst.ty base s!"·.elem {size} {rv i}"
+      (zero := size == 0 || i matches .int _ 0)
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
@@ -2239,7 +2251,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure (⟨{ptr}, {len}⟩ : Zig.Slice)"; (env, some l)
   | .sliceFieldPtr len p =>
     if fc.isMemPtr p then
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.add {if len then 8 else 0})"
+      let (env, l) := bindLet fc env inst.id (fc.projectExpr p inst.ty (rv p) "·.add 8" (zero := !len))
       (env, some l)
     else (env, none)
   | .memset dst v =>

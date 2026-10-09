@@ -115,7 +115,7 @@ inductive delayExit where
 
 def delay (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     let i3 ← Zig.load (BitVec 32) 4 i2
     let i4 ← Zig.add false i3 p1
     Zig.store (α := BitVec 32) 4 i2 i4
@@ -131,7 +131,7 @@ inductive dueOfExit where
 
 def dueOf (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add 4)
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 4))
     pure (.ret i1)) : Zig.MM dueOfLocals dueOfExit).run' (default : dueOfLocals)
   match e with
   | .ret v => pure v
@@ -217,11 +217,11 @@ inductive setOptJobExit where
 def setOptJob (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
     let i2 ← Zig.optSetSome (Job) p0
-    let i3 ← pure (i2.add 0)
+    let i3 ← pure i2
     Zig.store (α := BitVec 32) 4 i3 p1
-    let i5 ← pure (i2.add 4)
+    let i5 ← Zig.callM (Zig.ptrProject i2 (·.add 4))
     Zig.store (α := BitVec 32) 4 i5 (2 : BitVec 32)
-    let i7 ← pure (i2.add 8)
+    let i7 ← Zig.callM (Zig.ptrProject i2 (·.add 8))
     Zig.store (α := BitVec 8) 1 i7 (3 : BitVec 8)
     pure .ret) : Zig.MM setOptJobLocals setOptJobExit).run' (default : setOptJobLocals)
   match e with

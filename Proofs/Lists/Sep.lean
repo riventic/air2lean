@@ -62,10 +62,10 @@ variable {m : Mem} {h hF : Heap} {p : Ptr} {v : BitVec 32} {q : Option Ptr}
 /-- The operations on a node that the list functions run: a load of `next` and of `val`, a store
 of `next`, and `destroy`. -/
 theorem node_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) :
-    ∃ m', (load (Option Ptr) 8 (p.add 0)).run m = pure (q, m') ∧ m'.heap = h ∪ hF ∧
+    ∃ m', (load (Option Ptr) 8 p).run m = pure (q, m') ∧ m'.heap = h ∪ hF ∧
       m'.Seq := by
   obtain ⟨h0, A, hA, hb⟩ := hn
-  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p.add 0) (k := 0) (n := 8) (a := 8)
+  obtain ⟨b, blk, hacc, -, -, -, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     hb hm (by simp) (by decide) (by rw [nodeBytes_size]; decide) (by simp [h0]; omega)
   simp only [h0, Int.toNat_zero, Nat.zero_add] at hacc hx
   have hv' : Enc.decode (blk.bytes.extract 0 (0 + Enc.size (Option Ptr))) = pure q := by
@@ -89,14 +89,20 @@ theorem node_val_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hst : m.Seq) 
 
 theorem node_set_next_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hst : m.Seq) (q' : Option Ptr) :
-    ∃ m', (store 8 (p.add 0) q').run m = pure ((), m') ∧ m'.Seq ∧
+    ∃ m', (store 8 p q').run m = pure ((), m') ∧ m'.Seq ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ node p v q' h' := by
   obtain ⟨h0, A, hA, hb⟩ := hn
-  obtain ⟨m', hr, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 8)
+  obtain ⟨m', hr, hst', h', hd', hm', hb'⟩ := bytesAt_store (q := p) (k := 0) (a := 8)
     (bs' := Enc.encode q') hb hm hd (by simp) (by rw [enc_next_size]; decide)
     (by rw [enc_next_size, nodeBytes_size]; decide) (by simp [h0]; omega) hst (by decide)
   rw [nodeBytes_set_next] at hb'
   exact ⟨m', hr, hst', h', hd', hm', h0, A, hA, hb'⟩
+
+/-- Forming a pointer into a node (`&n.val`, one past it included) leaves memory as it is. -/
+theorem node_ptrProject_run (hn : node p v q h) (hm : m.heap = h ∪ hF) {k : Nat} (hk : k ≤ 16) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) := by
+  obtain ⟨-, A, -, hb⟩ := hn
+  exact bytesAt_ptrProject_run hb hm (by rw [nodeBytes_size]; omega) (by rw [nodeBytes_size]; decide)
 
 theorem node_free_run (hn : node p v q h) (hm : m.heap = h ∪ hF) (hd : Heap.Disjoint h hF)
     (hst : m.Seq) (a : Allocator) :
@@ -215,13 +221,18 @@ theorem push_total (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
       (by rw [enc_val_size]; simp) (by simp [h0]; omega) hst₁ (by decide)
     have hw : (writeBytes (Array.replicate 16 Byte.undef) 8 (Enc.encode v)).size = 16 := by
       rw [writeBytes_size _ _ _ (by rw [enc_val_size]; simp)]; simp
-    obtain ⟨m₃, hs₂, hst₃, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p.add 0) (k := 0) (a := 8)
+    obtain ⟨m₃, hs₂, hst₃, h₃, hd₃, hm₃, hb₃⟩ := bytesAt_store (q := p) (k := 0) (a := 8)
       (bs' := Enc.encode q) hb₂ hm₂ hd₂ (by simp) (by rw [enc_next_size]; decide)
       (by rw [enc_next_size, hw]; decide) (by simp [h0]; omega) hst₂ (by decide)
+    have hb0 : m₁.inBounds p = true := by
+      simpa using bytesAt_inBounds hb hm₁ (k := 0) (by simp) (by simp)
+    have hb8 : m₁.inBounds (p.add 8) = true := by
+      simpa using bytesAt_inBounds hb hm₁ (k := 8) (by simp) (by simp)
+    have hpr := ptrProject_add_run (m := m₁) (off := 8) hb0 hb8
     rw [nodeBytes_new] at hb₃
     refine ⟨.ok p, m₃, h₃, ?_, hd₃, hm₃, ⟨h0, A, hA, hb₃⟩, hst₃⟩
-    simp only [StateT.run] at hs₁ hs₂
-    simp [push, zig_unfold, hc, Zig.store, hs₁, hs₂]
+    simp only [StateT.run] at hs₁ hs₂ hpr
+    simp [push, zig_unfold, hc, Zig.store, hpr, hs₁, hs₂]
 
 theorem push_spec (a : Allocator) (q : Option Ptr) (v : BitVec 32) :
     Triple emp (push a q v) (pushed v q) :=

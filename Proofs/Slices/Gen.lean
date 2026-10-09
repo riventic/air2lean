@@ -108,7 +108,7 @@ def bumpAt (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM bumpAtLocals bumpAtExit) with
     | .br3 => (do
-      let i8 ← pure (p0.elem 1 p1)
+      let i8 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 p1))
       let i9 ← Zig.load (BitVec 8) 1 i8
       let i10 ← pure (Zig.addWrap i9 (1 : BitVec 8))
       Zig.store (α := BitVec 8) 1 i8 i10
@@ -178,8 +178,8 @@ def copy (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
     | .br5 => (do
       let i10 ← pure p1.ptr
       let i11 ← pure p0.ptr
-      let i12 ← pure (i10.elem 1 i2)
-      let i13 ← pure (i11.elem 1 i2)
+      let i12 ← Zig.callM (Zig.ptrProject i10 (·.elem 1 i2))
+      let i13 ← Zig.callM (Zig.ptrProject i11 (·.elem 1 i2))
       let i14 ← Zig.callM (Zig.ptrLe i12 i11)
       let i15 ← Zig.callM (Zig.ptrLe i13 i10)
       let i16 ← pure (i14 || i15)
@@ -209,7 +209,7 @@ inductive copyWithinExit where
 def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 64) : Zig.MemM (Unit) := do
   let e ← ((do
     let i4 ← pure p0.ptr
-    let i5 ← pure (i4.elem 4 p1)
+    let i5 ← Zig.callM (Zig.ptrProject i4 (·.elem 4 p1))
     let i6 ← Zig.add false p1 p3
     let i7 ← pure p0.len
     let i8 ← pure (Zig.le false i6 i7)
@@ -221,7 +221,7 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
     | .br9 => (do
       let i14 ← pure (⟨i5, p3⟩ : Zig.Slice)
       let i15 ← pure p0.ptr
-      let i16 ← pure (i15.elem 4 p2)
+      let i16 ← Zig.callM (Zig.ptrProject i15 (·.elem 4 p2))
       let i17 ← Zig.add false p2 p3
       let i18 ← pure p0.len
       let i19 ← pure (Zig.le false i17 i18)
@@ -410,7 +410,7 @@ def localArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
       else (do
         throw .outOfBounds)) : Zig.MM localArrLocals localArrExit) with
     | .br5 => (do
-      let i10 ← pure (i1.elem 1 i3)
+      let i10 ← Zig.callM (Zig.ptrProject i1 (·.elem 1 i3))
       let i11 ← Zig.load (BitVec 8) 1 i10
       let i12 ← Zig.add false i11 (1 : BitVec 8)
       Zig.store (α := BitVec 8) 1 i10 i12
@@ -432,8 +432,8 @@ inductive prevItemExit where
 
 def prevItem (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (p0.elem 4 (2 : BitVec 64))
-    let i2 ← pure (i1.elemSub 4 (1 : BitVec 64))
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.elem 4 (2 : BitVec 64)))
+    let i2 ← Zig.callM (Zig.ptrProject i1 (·.elemSub 4 (1 : BitVec 64)))
     let i3 ← Zig.callM (Zig.load (BitVec 32) 4 (i2.elem 4 (0 : BitVec 64)))
     pure (.ret i3)) : Zig.MM prevItemLocals prevItemExit).run' (default : prevItemLocals)
   match e with
@@ -488,7 +488,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
             else (do
               throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
           | .br36 => (do
-            let i41 ← pure (p0.ptr.elem 4 i33)
+            let i41 ← Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 i33))
             let i42 ← pure ((← get).j)
             let i43 ← pure p0.len
             let i44 ← pure (Zig.lt false i42 i43)
@@ -509,7 +509,7 @@ def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
                 else (do
                   throw .outOfBounds)) : Zig.MM reverseLocals reverseExit) with
               | .br55 => (do
-                let i60 ← pure (p0.ptr.elem 4 i52)
+                let i60 ← Zig.callM (Zig.ptrProject p0.ptr (·.elem 4 i52))
                 Zig.store (α := BitVec 32) 4 i60 i32
                 pure .br23)
               | e => pure e)
@@ -564,7 +564,7 @@ inductive secondExit where
 
 def second (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (p0.elem 4 (1 : BitVec 64))
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.elem 4 (1 : BitVec 64)))
     let i2 ← Zig.callM (Zig.load (BitVec 32) 4 (i1.elem 4 (0 : BitVec 64)))
     pure (.ret i2)) : Zig.MM secondLocals secondExit).run' (default : secondLocals)
   match e with
@@ -584,23 +584,23 @@ def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
   let s15 ← Zig.allocStack 5 1
   let e ← ((do
     let i1 ← pure (← get).x
-    let i2 ← pure (i1.add 0)
-    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i2 ← pure i1
+    let i3 ← pure i2
     let i4 ← pure (Zig.trunc 8 p0)
     Zig.store (α := BitVec 8) 1 i3 i4
-    let i6 ← pure (i2.elem 1 (1 : BitVec 64))
+    let i6 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (1 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i6 (2 : BitVec 8)
-    let i8 ← pure (i2.elem 1 (2 : BitVec 64))
+    let i8 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (2 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i8 (3 : BitVec 8)
-    let i10 ← pure (i2.elem 1 (3 : BitVec 64))
+    let i10 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (3 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i10 (0 : BitVec 8)
-    let i12 ← pure (i1.add 4)
+    let i12 ← Zig.callM (Zig.ptrProject i1 (·.add 4))
     Zig.store (α := BitVec 8) 1 i12 (7 : BitVec 8)
     let i14 ← Zig.load (Tag) 1 i1
     let i15 ← pure (← get).local15
     Zig.store (α := Tag) 1 i15 i14
     let i17 ← pure (i15)
-    let i18 ← pure (i17.add 0)
+    let i18 ← pure i17
     let i19 ← pure (Zig.le false p0 (3 : BitVec 64))
     match ← ((do
       if i19 then (do
@@ -611,7 +611,7 @@ def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
       let i25 ← Zig.callM (Zig.load (BitVec 8) 1 (i18.elem 1 p0))
       let i26 ← Zig.callR (Zig.vindex (#v[(120 : BitVec 8), (121 : BitVec 8), (122 : BitVec 8), (0 : BitVec 8)] : Vector (BitVec 8) 4) p0)
       let i27 ← pure (Zig.addWrap i25 i26)
-      let i28 ← pure (i17.add 4)
+      let i28 ← Zig.callM (Zig.ptrProject i17 (·.add 4))
       let i29 ← Zig.load (BitVec 8) 1 i28
       let i30 ← pure (Zig.addWrap i27 i29)
       pure (.ret i30))
@@ -634,7 +634,7 @@ inductive subZExit where
 def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slice) := do
   let e ← ((do
     let i3 ← pure p0.ptr
-    let i4 ← pure (i3.elem 1 p1)
+    let i4 ← Zig.callM (Zig.ptrProject i3 (·.elem 1 p1))
     let i5 ← pure (Zig.le false p1 p2)
     match ← ((do
       if i5 then (do
@@ -732,7 +732,7 @@ def sumMid (p0 : Zig.Slice) : Zig.MemM (BitVec 32) := do
     let i1 ← pure p0.len
     let i2 ← Zig.sub false i1 (1 : BitVec 64)
     let i3 ← pure p0.ptr
-    let i4 ← pure (i3.elem 4 (1 : BitVec 64))
+    let i4 ← Zig.callM (Zig.ptrProject i3 (·.elem 4 (1 : BitVec 64)))
     let i5 ← pure (Zig.le false (1 : BitVec 64) i2)
     match ← ((do
       if i5 then (do

@@ -16,9 +16,10 @@ runtime umbrella (as `ZigLean.VecMem`). The runtime operations are in `ZigLean/M
 * `nullablePtrEnc_decode_zero`: zero bytes read as `Ptr.null` (no allocation is invented).
 * `load_store_null`: storing null and loading it back gives null; the access premises are the
   usual ones for the *storage* location, never for address zero.
-* `ptrProjectNullable_ok`/`projected_access_block`: a projection from a nonnull base is the
-  plain offset; an access through any projection succeeds only inside a live block of the
-  base's own provenance, so a projection never acquires an allocation.
+* `ptrProjectNonnull_ok`/`projected_access_block`: a nonnullable-typed projection from a
+  nonnull base is ordinary pointer formation (`ptrProject`, whose rules are in
+  `ZigLean.Mem.Lemmas`); an access through any projection succeeds only inside a live block of
+  the base's own provenance, so a projection never acquires an allocation.
 -/
 
 namespace Zig
@@ -85,13 +86,13 @@ theorem ptrIsNull_nonzero {m : Mem} {p : Ptr} {addr : Int}
   simp [hz, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     StateT.pure]
 
-/-- A projection whose base address is nonzero is exactly the projected pointer; memory is
-unchanged. -/
-theorem ptrProjectNullable_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr → Ptr)
+/-- A nonnullable-typed projection whose base address is nonzero is pointer formation
+(`ptrProject`); memory is unchanged by the null test. -/
+theorem ptrProjectNonnull_ok {m : Mem} {p : Ptr} {addr : Int} (project : Ptr → Ptr)
     (ha : (ptrAddr p).run m = pure (addr, m)) (hz : addr ≠ 0) :
-    (ptrProjectNullable p project).run m = pure (project p, m) := by
+    (ptrProjectNonnull p project).run m = (ptrProject p project).run m := by
   have hn := ptrIsNull_nonzero ha hz
-  simp only [ptrProjectNullable, StateT.run_bind, hn]
+  simp only [ptrProjectNonnull, StateT.run_bind, hn]
   simp [pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
     StateT.pure]
 

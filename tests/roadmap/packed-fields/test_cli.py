@@ -85,7 +85,7 @@ def check(binary, tmp):
     # Host width 3 (LLVM) and 4 (x86_64); `inner.c` at byte 1 of the host; `undefined` per bit.
     assert "Zig.storeBits (α := BitVec 4) 3 4 0 i0 (5 : BitVec 4)" in text
     assert "Zig.storeBits (α := BitVec 4) 4 4 0 i0 (9 : BitVec 4)" in text
-    assert "let i3 ← pure (i2.add 1)\n    Zig.store (α := BitVec 8) 1 i3 (171 : BitVec 8)" in text
+    assert "let i3 ← Zig.callM (Zig.ptrProject i2 (·.add 1))\n    Zig.store (α := BitVec 8) 1 i3 (171 : BitVec 8)" in text
     assert "Zig.storeUndefBits 4 3 4 4 i1" in text
     # The local with an `undefined` field store is a stack block, never a defaulted `Locals` value.
     assert "def localUndef  : Zig.MemM (BitVec 4) := do\n  let s0 ← Zig.allocStack 4 4" in text

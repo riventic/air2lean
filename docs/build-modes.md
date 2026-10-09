@@ -56,9 +56,6 @@ behaviour without a model throw, so "the ReleaseSafe model does not throw" does 
   `@intFromPtr`, pointer order and the address-dependent safety checks (`@alignCast`, the
   alignment check of `@ptrFromInt`) are decided by that layout, not by the native one. A model
   run can pass an alignment check that panics natively, or the reverse.
-- **Form a pointer outside its allocation** (MM-3). LLVM lowers `ptr_add`, `ptr_sub`, element
-  and field pointers to `getelementptr inbounds`. A result outside `[base, base+size]` of the
-  allocation is poison, but the model accepts any offset.
 - **Overflow the stack** (MM-5). The model has no stack bound; deep recursion or large frames
   return normally in the model and crash natively.
 - **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
@@ -66,6 +63,15 @@ behaviour without a model throw, so "the ReleaseSafe model does not throw" does 
 
 The premise holds only for programs that do none of these. Each item is lifted when its fix
 lands.
+
+**Fixed.** Forming a pointer outside its allocation (MM-3): LLVM lowers `ptr_add`, `ptr_sub`,
+element, field and `@fieldParentPtr` pointers to `getelementptr inbounds`, and a result outside
+`[base, base+size]` of the allocation is poison. Generated code now forms these pointers with
+`Zig.ptrProject`, which throws `.illegal` there (offset 0 is always allowed). Residual: the
+payload pointer of a pointer-form `try` and of `errunion_payload_ptr_set`
+(`Zig.tryPayloadPtr`, `Zig.errSetOk`) is formed after a checked access to the error code but
+not bounds-checked itself; it leaves the allocation only for an error union pointer that
+addresses a truncated object (a pointer cast), and every access through it is still checked.
 
 `scripts/diff.sh` also builds its libm and asm helper archives with `-OReleaseFast`,
 as Zig builds compiler_rt. These are test oracles, not a claimed program build.

@@ -43,17 +43,17 @@ def nullablePtrEnc : Enc Ptr where
   decode bs :=
     if bs.extract 0 8 == Array.replicate 8 (.int 0) then pure Ptr.null else Enc.decode bs
 
-/-- A field or element projection (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`, `ptr_sub`)
-whose base is a C/allowzero pointer. Address zero is `.illegal`; the compiler inserts no
-safety check. This is a deliberate over-approximation: native Zig is defined for some of these
-projections (an offset-0 field pointer emits no `getelementptr`, `allowzero` makes address 0 a
-valid address, and the langref places the illegal behaviour at the dereference). It is
-conservative for proofs that nothing is illegal, but wrong for outcome reports and native
-differential comparisons, which see `.illegal` where the native program is defined. A nonnull
-base is projected unchanged. Nonnull does not establish provenance, lifetime, bounds or alignment: a later
-access through the result still needs `Mem.access`'s premises for the base's block. -/
-def ptrProjectNullable (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := do
-  if ← ptrIsNull p then throw .illegal else pure (project p)
+/-- A projection of a C/allowzero base (`struct_field_ptr`, `ptr_elem_ptr`, `ptr_add`,
+`ptr_sub`) is pointer formation, `ptrProject` (`ZigLean/Mem/Basic.lean`), as from any other base.
+The compiler inserts no null check. A constant offset 0 is the base itself, also at address
+zero; any other offset from a pointer without a block (address zero, a `@ptrFromInt` address no
+block covers) is `.illegal`, because LLVM's `getelementptr inbounds` needs an allocated object
+(native ReleaseSafe builds fold `p + n == null` to `p == null`). This variant is for a result
+that the compiler types as a nonnullable pointer: Zig 0.14.1 and 0.15.2 type `&p.*.field` of a
+`[*c]T` or `*allowzero T` as `*F`, not `*allowzero F` (0.16.0 keeps `allowzero`). Address zero
+must not become a `*F`, so every offset from address zero is `.illegal` here. -/
+def ptrProjectNonnull (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := do
+  if ← ptrIsNull p then throw .illegal else ptrProject p project
 
 /-- A C/allowzero pointer coerced or cast to an ordinary optional pointer (`?*T`): address
 zero becomes the explicit `none`; any other value becomes `some` of the same pointer. -/
@@ -86,9 +86,21 @@ theorem null_unwrap (m : Mem) :
 theorem raw_address_access (m : Mem) (off : Int) (n a : Nat) :
     m.access ⟨none, off⟩ n a = throw .illegal := by rfl
 
-/-- A projection from address zero is illegal behaviour; it cannot reach an object. -/
-theorem null_project (m : Mem) (project : Ptr → Ptr) :
-    (ptrProjectNullable Ptr.null project).run m = throw .illegal := by rfl
+/-- A zero-offset projection of address zero is address zero; memory is unchanged. -/
+theorem null_project_zero (m : Mem) (project : Ptr → Ptr) (h : project Ptr.null = Ptr.null) :
+    (ptrProject Ptr.null project).run m = pure (Ptr.null, m) := by
+  simp [ptrProject, StateT.run, h]
+
+/-- A nonzero-offset projection from address zero is illegal behaviour; it cannot reach an
+object. -/
+theorem null_project (m : Mem) (project : Ptr → Ptr) (h : project Ptr.null ≠ Ptr.null) :
+    (ptrProject Ptr.null project).run m = throw .illegal := by
+  simp only [ptrProject, StateT.run]
+  rw [if_neg (by simp only [Ptr.null] at h; simp [h, Mem.inBounds, Ptr.null])]
+
+/-- A projection typed as a nonnullable pointer never yields address zero. -/
+theorem null_project_nonnull (m : Mem) (project : Ptr → Ptr) :
+    (ptrProjectNonnull Ptr.null project).run m = throw .illegal := by rfl
 
 /-- Every pointer derived from address zero by an offset still has no block: an access
 through it fails, for every size and alignment. -/

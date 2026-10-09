@@ -546,7 +546,7 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
       let i2 ← (letI : Zig.Enc (Except Zig.ErrName (BitVec 8)) := Zig.errorUnionEnc (⟨#["Empty", "TooBig"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 8))); Zig.load (Except Zig.ErrName (BitVec 8)) 2 p0)
       let i3 ← pure (Zig.isNonErr i2)
       if i3 then (do
-        let i5 ← pure (Zig.errPayloadPtr (BitVec 8) p0)
+        let i5 ← Zig.callM (Zig.ptrProject p0 (Zig.errPayloadPtr (BitVec 8)))
         let i6 ← Zig.load (BitVec 8) 1 i5
         let i7 ← pure (Zig.addWrap i6 (1 : BitVec 8))
         Zig.store (α := BitVec 8) 1 i5 i7
@@ -641,11 +641,11 @@ def bumpPair (p0 : Zig.Ptr) (p1 : BitVec 6) : Zig.MemM (BitVec 3) := do
   let e ← ((do
     let i2 ← Zig.Packed.ofBits? (α := Pair) p1
     Zig.store (α := Pair) 1 p0 i2
-    let i4 ← pure (p0.add 0)
+    let i4 ← pure p0
     let i5 ← Zig.loadBits (BitVec 3) 1 1 3 i4
     let i6 ← pure (Zig.addWrap i5 (1 : BitVec 3))
     Zig.storeBits (α := BitVec 3) 1 1 3 i4 i6
-    let i8 ← pure (p0.add 0)
+    let i8 ← pure p0
     let i9 ← Zig.loadBits (BitVec 3) 1 1 0 i8
     pure (.ret i9)) : Zig.MM bumpPairLocals bumpPairExit).run' (default : bumpPairLocals)
   match e with
@@ -672,7 +672,7 @@ inductive ctlModeExit where
 
 def ctlMode (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.loadBits (Mode) 1 1 1 i1
     let i3 ← pure (Mode.toBits i2)
     let i4 ← Zig.intCast false false 8 i3
@@ -753,7 +753,7 @@ def growCircle (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     let i2 ← pure (Shape.tag i1)
     match ← ((do
       if i2 == ShapeTag.circle then (do
-        let i12 ← pure (p0.add 0)
+        let i12 ← pure p0
         let i13 ← Zig.load (BitVec 32) 4 i12
         let i14 ← pure (Zig.addWrap i13 (1 : BitVec 32))
         Zig.store (α := BitVec 32) 4 i12 i14
@@ -797,7 +797,7 @@ def headerLen (p0 : Zig.Slice) : Zig.MemM (Option (BitVec 16)) := do
       let i8 ← pure p0.ptr
       let i9 ← pure (i8)
       match ← ((do
-        let i11 ← pure (i9.add 0)
+        let i11 ← pure i9
         let i12 ← Zig.load (BitVec 32) 1 i11
         let i13 ← pure (i12 != (1280461121 : BitVec 32))
         if i13 then (do
@@ -805,7 +805,7 @@ def headerLen (p0 : Zig.Slice) : Zig.MemM (Option (BitVec 16)) := do
         else (do
           pure .br10)) : Zig.MM headerLenLocals headerLenExit) with
       | .br10 => (do
-        let i17 ← pure (i9.add 4)
+        let i17 ← Zig.callM (Zig.ptrProject i9 (·.add 4))
         let i18 ← Zig.load (BitVec 16) 1 i17
         let i19 ← pure (some i18)
         pure (.ret i19))
@@ -823,7 +823,7 @@ inductive incCountExit where
 
 def incCount (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.loadBits (BitVec 4) 1 1 4 i1
     let i3 ← pure (Zig.addWrap i2 (1 : BitVec 4))
     Zig.storeBits (α := BitVec 4) 1 1 4 i1 i3
@@ -840,11 +840,11 @@ inductive isOkExit where
 
 def isOk (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     let i2 ← Zig.loadBits (Bool) 1 1 0 i1
     match ← ((do
       if i2 then (do
-        let i5 ← pure (p0.add 0)
+        let i5 ← pure p0
         let i6 ← Zig.loadBits (Bool) 1 1 1 i5
         let i7 ← pure (!i6)
         pure (.br3 i7))
@@ -865,7 +865,7 @@ inductive laneSetExit where
 
 def laneSet (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i2 ← pure (p0.elem 4 (2 : BitVec 64))
+    let i2 ← Zig.callM (Zig.ptrProject p0 (·.elem 4 (2 : BitVec 64)))
     Zig.store (α := BitVec 32) 4 i2 p1
     let i4 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (1 : BitVec 64)))
     let i5 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (2 : BitVec 64)))
@@ -914,18 +914,18 @@ def maskStore (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let s2 ← Zig.allocStack 16 16
   let e ← ((do
     let i2 ← pure (← get).local2
-    let i3 ← pure (i2.elem 4 (0 : BitVec 64))
+    let i3 ← pure i2
     let i4 ← pure (p1 &&& (255 : BitVec 32))
     Zig.store (α := BitVec 32) 4 i3 i4
-    let i6 ← pure (i2.elem 4 (1 : BitVec 64))
+    let i6 ← Zig.callM (Zig.ptrProject i2 (·.elem 4 (1 : BitVec 64)))
     let i7 ← pure (Zig.shr false p1 (8 : BitVec 5))
     let i8 ← pure (i7 &&& (255 : BitVec 32))
     Zig.store (α := BitVec 32) 4 i6 i8
-    let i10 ← pure (i2.elem 4 (2 : BitVec 64))
+    let i10 ← Zig.callM (Zig.ptrProject i2 (·.elem 4 (2 : BitVec 64)))
     let i11 ← pure (Zig.shr false p1 (16 : BitVec 5))
     let i12 ← pure (i11 &&& (255 : BitVec 32))
     Zig.store (α := BitVec 32) 4 i10 i12
-    let i14 ← pure (i2.elem 4 (3 : BitVec 64))
+    let i14 ← Zig.callM (Zig.ptrProject i2 (·.elem 4 (3 : BitVec 64)))
     let i15 ← pure (Zig.shr false p1 (24 : BitVec 5))
     Zig.store (α := BitVec 32) 4 i14 i15
     let i17 ← pure (i2)
@@ -985,7 +985,7 @@ def numInt (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
       else (do
         throw .panic)) : Zig.MM numIntLocals numIntExit) with
     | .br4 => (do
-      let i9 ← pure (p0.add 0)
+      let i9 ← pure p0
       let i10 ← Zig.load (BitVec 32) 4 i9
       pure (.ret i10))
     | e => pure e) : Zig.MM numIntLocals numIntExit).run' (default : numIntLocals)
@@ -1005,12 +1005,12 @@ def setNum (p0 : Zig.Ptr) (p1 : Bool) (p2 : BitVec 32) : Zig.MemM (Unit) := do
     match ← ((do
       if p1 then (do
         Zig.store (α := NumTag) 1 (p0.add 4) NumTag.int
-        let i6 ← pure (p0.add 0)
+        let i6 ← pure p0
         Zig.store (α := BitVec 32) 4 i6 p2
         pure .br3)
       else (do
         Zig.store (α := NumTag) 1 (p0.add 4) NumTag.small
-        let i10 ← pure (p0.add 0)
+        let i10 ← pure p0
         let i11 ← pure (Zig.trunc 8 p2)
         Zig.store (α := BitVec 8) 1 i10 i11
         pure .br3)) : Zig.MM setNumLocals setNumExit) with
@@ -1049,7 +1049,7 @@ inductive parentOfXExit where
 
 def parentOfX (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add (-(0 : Int)))
+    let i1 ← pure p0
     pure (.ret i1)) : Zig.MM parentOfXLocals parentOfXExit).run' (default : parentOfXLocals)
   match e with
   | .ret v => pure v
@@ -1062,7 +1062,7 @@ inductive parentOfYExit where
 
 def parentOfY (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   let e ← ((do
-    let i1 ← pure (p0.add (-(4 : Int)))
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add (-4)))
     pure (.ret i1)) : Zig.MM parentOfYLocals parentOfYExit).run' (default : parentOfYLocals)
   match e with
   | .ret v => pure v
@@ -1174,7 +1174,7 @@ inductive setCircleExit where
 def setCircle (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   let e ← ((do
     Zig.store (α := ShapeTag) 1 (p0.add 4) ShapeTag.circle
-    let i3 ← pure (p0.add 0)
+    let i3 ← pure p0
     Zig.store (α := BitVec 32) 4 i3 p1
     pure .ret) : Zig.MM setCircleLocals setCircleExit).run' (default : setCircleLocals)
   match e with
@@ -1188,9 +1188,9 @@ inductive setHalfExit where
 
 def setHalf (p0 : Zig.Ptr) (p1 : BitVec 16) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     Zig.store (α := BitVec 16) 2 i2 p1
-    let i4 ← pure (p0.add 0)
+    let i4 ← pure p0
     let i5 ← Zig.load (BitVec 32) 4 i4
     pure (.ret i5)) : Zig.MM setHalfLocals setHalfExit).run' (default : setHalfLocals)
   match e with
@@ -1222,9 +1222,9 @@ inductive setNibExit where
 
 def setNib (p0 : Zig.Ptr) (p1 : BitVec 4) : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     Zig.store (α := BitVec 4) 1 i2 p1
-    let i4 ← pure (p0.add 0)
+    let i4 ← pure p0
     let i5 ← Zig.load (BitVec 4) 1 i4
     pure (.ret i5)) : Zig.MM setNibLocals setNibExit).run' (default : setNibLocals)
   match e with
@@ -1238,9 +1238,9 @@ inductive setRegFlagsExit where
 
 def setRegFlags (p0 : Zig.Ptr) (p1 : Flags) : Zig.MemM (BitVec 8) := do
   let e ← ((do
-    let i2 ← pure (p0.add 0)
+    let i2 ← pure p0
     Zig.store (α := Flags) 1 i2 p1
-    let i4 ← pure (p0.add 0)
+    let i4 ← pure p0
     let i5 ← Zig.load (BitVec 8) 1 i4
     pure (.ret i5)) : Zig.MM setRegFlagsLocals setRegFlagsExit).run' (default : setRegFlagsLocals)
   match e with
@@ -1389,7 +1389,7 @@ def writeTable (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       else (do
         throw .outOfBounds)) : Zig.MM writeTableLocals writeTableExit) with
     | .br3 => (do
-      let i8 ← pure ((⟨some 3, 0⟩ : Zig.Ptr).elem 4 p0)
+      let i8 ← Zig.callM (Zig.ptrProject (⟨some 3, 0⟩ : Zig.Ptr) (·.elem 4 p0))
       let i9 ← pure (i8)
       Zig.store (α := BitVec 32) 4 i9 p1
       let i11 ← Zig.callR (Zig.vindex (#v[(10 : BitVec 32), (20 : BitVec 32), (30 : BitVec 32)] : Vector (BitVec 32) 3) p0)

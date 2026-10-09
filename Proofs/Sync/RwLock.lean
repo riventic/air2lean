@@ -1653,7 +1653,6 @@ theorem mloop_body (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) {sx : S} 
   have hxs : (x.setM .spin).isMx := by simpa using hx
   unfold Io_Mutex_lockUncancelable.loop23
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [show (WM.ptr.add 0).add 0 = WM.ptr from rfl]
   refine WP.bind (wp_rmwAs (W := WM) hi (wat (fun _ _ h => h.2.1.wm) (by simp [gA]))
     (fun G₁ m₁ _ hi₁ b hb => (mdec hi₁.2.1 (hist_pos hi₁.2.1.wm) hb).imp fun _ h => h.1)
     fun k hk G₁ m₁ m' old r hg₁ hi₁ hd hv hU hh hacq hw' hop => ?_)
@@ -1750,7 +1749,6 @@ theorem mlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) (hxc : x.
     simp only [StateT.run_pure]
     refine WP.pure' ?_
     exact WP.pure' ⟨hd', hc', hi'⟩
-  rw [show (WM.ptr.add 0).add 0 = WM.ptr from rfl]
   refine WP.bind (wp_casAs (W := WM) hi (wat (fun _ _ h => h.2.1.wm) (by simp [gA]))
     (fun G₁ m₁ _ hi₁ j hj b hb => (mdec hi₁.2.1 hj hb).imp fun _ h => h.1)
     fun k₁ hk₁ G₁ m₁ m' hg₁ hi₁ hw' hop => ⟨fun hv hU hh => ?_, fun j b r hne hd hj hv hh => ?_⟩)
@@ -1982,7 +1980,6 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  rw [show (WM.ptr.add 0).add 0 = WM.ptr from rfl]
   refine WP.bind (wp_rmwAs (W := WM) hi (wat (fun _ _ h => h.2.1.wm) (by simp [gA]))
     (fun G₁ m₁ _ hi₁ b hb => (mdec hi₁.2.1 (hist_pos hi₁.2.1.wm) hb).imp fun _ h => h.1)
     fun k hk G₁ m₁ m' old r hg₁ hi₁ hd hv hU hh hacq hw' hop => ?_)
@@ -2372,9 +2369,27 @@ theorem sold {G : ThreadId → Gh S} {m : Mem} (hu : U G m) {old : BitVec 64}
     (hv : (last (WS.hist m)).Val old) : old = sv3 (G 1).2.2.wb (G 1).2.2.ib (G 0).2.2.rb :=
   val_eq hv hu.slast
 
-theorem wsptr : (bPtr.add 16).add 0 = WS.ptr := rfl
-theorem wmptr : (bPtr.add 16).add 32 = WM.ptr := rfl
-theorem semptr : (bPtr.add 16).add 8 = semPtr := rfl
+theorem wsptr : bPtr.add 16 = WS.ptr := rfl
+theorem wmptr : WS.ptr.add 32 = WM.ptr := rfl
+
+/-- A pointer into the 64-byte block 0 (`BlkOk`) is formed (`ptrProject`, MM-3). -/
+theorem BlkOk.proj {m : Mem} (h : BlkOk m) {p : Ptr} {k : Nat} (hb : p.block = some 0)
+    (h0 : 0 ≤ p.off) (hk : p.off + k ≤ 64) : (ptrProject p (·.add k)).run m = pure (p.add k, m) := by
+  obtain ⟨blk, hblk, -, hsz, -⟩ := h
+  exact ptrProject_add_run (inBounds_of hb hblk h0 (by omega))
+    (inBounds_of hb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
+
+/-- `BlkOk.proj` from the protocol invariant: a field pointer of the `RwLock` (`WS.ptr`) is
+formed (`ptrProject`, MM-3). -/
+theorem projWS {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m) {k : Nat} (hk : k ≤ 48) :
+    (ptrProject WS.ptr (·.add k)).run m = pure (WS.ptr.add k, m) :=
+  hi.2.1.blk.proj rfl (by decide) (by simp [Word.ptr, WS]; omega)
+
+/-- The same for a field pointer of the outer block (`bPtr`). -/
+theorem projB {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m) {k : Nat} (hk : k ≤ 64) :
+    (ptrProject bPtr (·.add k)).run m = pure (bPtr.add k, m) :=
+  hi.2.1.blk.proj rfl (by decide) (by simp [bPtr]; omega)
+theorem semptr : WS.ptr.add 8 = semPtr := rfl
 
 /-- `lock` of the `RwLock` by the writer at `wo k`: it owns `n`. -/
 theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId → Gh S}
@@ -2386,7 +2401,7 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  rw [wsptr, wmptr]
+  rw [wsptr]
   refine WP.bind (wp_rmw (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
     fun k₁ hk₁ G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' hop => ?_)
   have hu₁ := hi₁.2.1
@@ -2412,6 +2427,8 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
       rw [hg1] at hp
       exact ⟨hn, hp, car_rmw hp hs hok hu₁.ws hop hh⟩
   -- the mutex
+  refine WP.bind (WP.callMC_ptrProject (projWS hi₂ (k := 32) (by decide)) ?_)
+  rw [wmptr]
   refine WP.bind (WP.callC (WP.mono ?_ (mlock_spec hE (t := 1) (x := .wa k .cas) rfl rfl hi₂)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
   -- `state += is_writing -% writer`
@@ -2484,8 +2501,9 @@ theorem wlock_spec (hE : E.Spec) {k : Nat} (hk : k < 2) {io : Io} {G : ThreadId 
           (by simp [hasP, hg3, Ph.isWs]))
     rw [hold', htest]
     simp only [hr1, decide_true, ↓reduceIte, StateT.run_bind]
+    refine WP.bind (WP.bind (WP.callMC_ptrProject (projWS hi₅ (k := 8) (by decide)) ?_))
     rw [semptr]
-    refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (hE.wait k G₃ m₄ k₃ io hi₅ hop₄.current))))
+    refine WP.bind (WP.callC (WP.mono ?_ (hE.wait k G₃ m₄ k₃ io hi₅ hop₄.current)))
     rintro _ G₄ m₅ d₄ ⟨hd₄, hc₅, h, hnk, hi₆⟩
     simp only [StateT.run_pure]
     exact WP.pure' (WP.pure' (WP.pure' ⟨by omega, hc₅, h, hnk, hi₆⟩))
@@ -2516,7 +2534,7 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  rw [wsptr, wmptr]
+  rw [wsptr]
   refine WP.bind (wp_rmw (W := WS) hi (wat (fun _ _ h => h.2.1.ws) (by simp [gA]))
     fun k₁ hk₁ G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' hop => ?_)
   have hu₁ := hi₁.2.1
@@ -2549,6 +2567,8 @@ theorem wunlock_spec (hE : E.Spec) {k : Nat} {hn : Heap} (hp : NPts k hn) {io : 
       (by rfl) (fun _ => ⟨hn, by rw [upd_self]; exact hp, hcl⟩)
       (lws_lose hi₁ hop hg₁ (by simp [hasP, upd_self, gA, Ph.isWs]) (by simp [hasP, hg1, Ph.isWs]))
   simp only [StateT.run_pure]
+  refine WP.bind (WP.callMC_ptrProject (projWS hi₂ (k := 32) (by decide)) ?_)
+  rw [wmptr]
   refine WP.bind (WP.callC (WP.mono ?_ (munlock_spec hE (t := 1) (x := .wr k .holds)
     (.inr ⟨rfl, k, .holds, by rw [upd_self]; rfl⟩) rfl hi₂)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
@@ -2807,11 +2827,14 @@ theorem wloop_body (hE : E.Spec) (s : writerLocals) (G : ThreadId → Gh S) (m :
   · rename_i hlt
     have hlt' : s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
-    rw [show bPtr.add 0 = bPtr from rfl]
     -- `io`, the lock
+    refine WP.bind (WP.callMC_ptrProject (projB hi (k := 16) (by decide)) ?_)
+    dsimp only
     refine WP.bind (wp_io hE hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (wlock_spec hE hlt' hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h, -, hi₂⟩
+    refine WP.bind (WP.callMC_ptrProject (projB hi₂ (k := 56) (by decide)) ?_)
+    dsimp only
     rw [show bPtr.add 56 = nPtr from rfl]
     -- the load of `n`
     have hk2 : ∀ h' : Heap, (upd G₂ 1 (gA (.wn s.local1.toNat) h' default) 1).2.2.cnt =
@@ -2838,6 +2861,8 @@ theorem wloop_body (hE : E.Spec) (s : writerLocals) (G : ThreadId → Gh S) (m :
     -- `io`, the unlock
     have htl₄ : 1 < m₄.threads.size :=
       (hi₄.1.live 1 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).1
+    refine WP.bind (WP.callMC_ptrProject (projB hi₄ (k := 16) (by decide)) ?_)
+    dsimp only
     refine WP.bind (wp_io hE hi₄ hc₄ htl₄ fun m₅ hc₅ ht₅ hi₅ => ?_)
     refine WP.bind (WP.callC (WP.mono ?_ (wunlock_spec hE hp₄ hi₅)))
     rintro _ G₃ m₆ d₃ ⟨hd₃, hc₆, hi₆⟩
@@ -3155,6 +3180,7 @@ theorem lockS_spec (hE : E.Spec) {j : Bool} {io : Io} {G : ThreadId → Gh S} {m
   · -- the slow path: the mutex, `state += reader`, the unlock
     have hi₄ := inv_lsl hE hi₃
     simp only [StateT.run_bind]
+    refine WP.bind (WP.callMC_ptrProject (projWS hi₄ (k := 32) (by decide)) ?_)
     rw [wmptr]
     refine WP.bind (WP.callC (WP.mono ?_ (mlock_spec hE (t := 0) (x := .sl j .cas) rfl rfl hi₄)))
     rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₅⟩
@@ -3188,6 +3214,8 @@ theorem lockS_spec (hE : E.Spec) {j : Bool} {io : Io} {G : ThreadId → Gh S} {m
         (by rw [upd0_1]; exact hpn)
         (fun hc' => absurd hc'.1 (by rw [upd_self]; simp [gA, Ph.mustN]))
         (lws_gain hi₆ hop hg₄ hc hpn hsn' ho (by simp [hasP, upd_self, upd0_1, gA, Ph.gave]))
+    refine WP.bind (WP.callMC_ptrProject (projWS hi₇ (k := 32) (by decide)) ?_)
+    rw [wmptr]
     refine WP.bind (WP.callC (WP.mono ?_ (munlock_spec hE (t := 0) (x := .sr j .holds)
       (.inl ⟨rfl, j, .holds, by rw [upd_self]; rfl⟩) rfl hi₇)))
     rintro _ G₅ m₆ d₅ ⟨hd₅, hc₆, hi₈⟩
@@ -3338,8 +3366,9 @@ theorem unlockS_spec (hE : E.Spec) {j : Bool} {h : Heap} {io : Io} {G : ThreadId
     simp only [↓reduceIte, StateT.run_pure, pure_bind]
     rw [htest2]
     simp only [hi1, decide_true, ↓reduceIte, StateT.run_bind]
+    refine WP.bind (WP.bind (WP.callMC_ptrProject (projWS hi₂ (k := 8) (by decide)) ?_))
     rw [semptr]
-    refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (hE.post h G₁ m' k₁ io hi₂ hop.current))))
+    refine WP.bind (WP.callC (WP.mono ?_ (hE.post h G₁ m' k₁ io hi₂ hop.current)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hi₃⟩
     have hf₃ := hi₃.2.1.flags
     rw [upd_self, upd0_1] at hf₃
@@ -3365,12 +3394,15 @@ theorem readS_spec (hE : E.Spec) {j : Bool} {G : ThreadId → Gh S} {m : Mem} {d
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  rw [show bPtr.add 0 = bPtr from rfl]
   have htl : 0 < m.threads.size :=
     (hi.1.live 0 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).1
+  refine WP.bind (WP.callMC_ptrProject (projB hi (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (wp_io hE hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
   refine WP.bind (WP.callC (WP.mono ?_ (lockS_spec hE hi₁)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h, hi₂⟩
+  refine WP.bind (WP.callMC_ptrProject (projB hi₂ (k := 56) (by decide)) ?_)
+  dsimp only
   rw [show bPtr.add 56 = nPtr from rfl]
   -- the value of `n`
   have hu₂ := hi₂.2.1
@@ -3382,6 +3414,8 @@ theorem readS_spec (hE : E.Spec) {j : Bool} {G : ThreadId → Gh S} {m : Mem} {d
     fun m₃ h₃ hc₃ ht₃ hi₃ => ?_)
   have htl₃ : 0 < m₃.threads.size :=
     (hi₃.1.live 0 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).1
+  refine WP.bind (WP.callMC_ptrProject (projB hi₃ (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (wp_io hE hi₃ hc₃ htl₃ fun m₄ hc₄ ht₄ hi₄ => ?_)
   refine WP.bind (WP.callC (WP.mono ?_ (unlockS_spec hE hi₄)))
   rintro _ G₅ m₅ d₅ ⟨hd₅, hc₅, hi₅⟩
@@ -4494,12 +4528,42 @@ theorem main_spec (io : Io) (d : Nat) :
     ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁)
     fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
+  -- `&shared.rw`, formed in bounds of `io`'s bytes (`ptrProject`, MM-3)
+  have hs₂' : h₂.Sub m₂.heap := by simpa [upd_self] using ho₂.sub 0
+  have hwI : (writeBytes ((Array.replicate 64 Byte.undef).extract 0 16) 0 (Enc.encode io)).size = 16 := by
+    rw [writeBytes_size _ _ _ (by simp [enc_io])]; exact hsI
+  have pr₂ : (ptrProject bPtr (·.add 16)).run m₂ = pure (bPtr.add 16, m₂) := by
+    obtain ⟨hx, hy, dxy, hxy, hbx, -⟩ := F₂
+    rw [hxy] at hs₂'
+    exact bytesAt_ptrProject_sub hbx (Heap.sub_union_left.trans hs₂') (k := 16) (by rw [hwI]; exact Nat.le_refl _) (by rw [hwI]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₂ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 16) (A := A) (S := 64) (K := .stack)
     (k := 0) (a := 8) rw0 (by rw [rw_size]; rfl) rfl (by decide)
     (by rw [hsS]; decide) (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
     (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
     fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
+  -- `&shared.n`, formed in bounds (`ptrProject`, MM-3)
+  have hs₃' : h₃.Sub m₃.heap := by simpa [upd_self] using ho₃.sub 0
+  have pr₃ : (ptrProject bPtr (·.add 56)).run m₃ = pure ((bPtr.add 16).add 40, m₃) := by
+    obtain ⟨hx, hy, dxy, hxy, hbx, hyy⟩ := F₃
+    obtain ⟨hz, hw, dzw, hzw, -, hww⟩ := hyy
+    obtain ⟨hn, hp', dnp, hnw, hbn, -⟩ := hww
+    rw [hxy] at hs₃'
+    have hsy : hy.Sub m₃.heap := (Heap.sub_union_right dxy).trans hs₃'
+    rw [hzw] at hsy
+    have hsw : hw.Sub m₃.heap := (Heap.sub_union_right dzw).trans hsy
+    rw [hnw] at hsw
+    have i0 : m₃.inBounds bPtr = true := by
+      simpa using bytesAt_inBounds_sub hbx (Heap.sub_union_left.trans hs₃') (k := 0) (by simp)
+        (by rw [hwI]; decide)
+    have i56 : m₃.inBounds ((bPtr.add 16).add 40) = true := by
+      simpa using bytesAt_inBounds_sub hbn (Heap.sub_union_left.trans hsw) (k := 0) (by simp)
+        (by simp)
+    exact ptrProject_add_run i0 i56
+  refine WP.bind (WP.callMC_ptrProject pr₃ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (bPtr.add 16).add 40) (A := A) (S := 64)
     (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsN]; decide)
     (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₃

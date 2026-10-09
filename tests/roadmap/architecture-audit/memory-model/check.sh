@@ -2,9 +2,9 @@
 # Architecture audit 2/6 (memory model): reproduce the counterexamples of
 # docs/architecture-audit/memory-model.md. Each fixture is exported to AIR (patched compiler,
 # ReleaseSafe), translated, run in Lean from the generated `mem0`, and compared with the
-# native ReleaseSafe build. The script asserts that the model and native results DIFFER as
-# recorded (the findings are open). When a structural fix lands, the matching assertion
-# fails and the fixture should be turned into an agreement test.
+# native ReleaseSafe build. For the open findings the script asserts that the model and native
+# results DIFFER as recorded; when a structural fix lands, the matching assertion fails and the
+# fixture becomes an agreement test (MM-3, MM-6).
 #
 #   AIR2LEAN_AUDIT_ZIG_AIR=/opt/dev/air2lean-build/zig-air-0.16.0/bin/zig \
 #   AIR2LEAN_AUDIT_ZIG_NATIVE=$HOME/.cache/air2lean/host-0.16.0/zig \
@@ -67,9 +67,15 @@ echo "--- model"; cat "$L"; echo "--- native"; grep -v '^ \|^/\|^???\|^\s*\^' "$
 
 L=$work/oob_ptr.lean.txt N=$work/oob_ptr.native.txt
 echo "--- model"; cat "$L"; echo "--- native"; cat "$N"
-# MM-3: inbounds-GEP poison: native folds the comparison, the model compares addresses.
-[ "$(field 'oobCompare(2^63)' "$L")" = 1 ] && [ "$(field 'oobCompare(2^63)' "$N")" = 0 ] ||
-  { echo 'MM-3 no longer diverges' >&2; exit 1; }
+# MM-3 (fixed): in-bounds pointer arithmetic agrees; a pointer formed outside its allocation is
+# `.illegal` in the model (`Zig.ptrProject`), as the inbounds-GEP result is poison natively,
+# so every native answer refines it.
+[ "$(field 'oobCompare(1)' "$L")" = 1 ] && [ "$(field 'oobCompare(1)' "$N")" = 1 ] ||
+  { echo 'MM-3: in-bounds pointer arithmetic disagrees' >&2; exit 1; }
+for k in 'oobCompare(2^63)' 'oobPtrCompare(2^63)'; do
+  [ "$(field "$k" "$L")" = 'error Zig.Error.illegal' ] ||
+    { echo "MM-3: $k is not illegal behaviour in the model" >&2; exit 1; }
+done
 
 # The model facts above are theorems (kernel + `native_decide`).
 sed '/^-- Appended to the fresh/,$d' "$work/memmodel.lean" > "$work/thm.lean"
@@ -82,4 +88,4 @@ lake env lean "$here/PanicDefault.lean"
 python3 tests/roadmap/emitter-placeholders/test_cli.py "$translator"
 lake env lean --run tests/roadmap/emitter-placeholders/Gate.lean
 
-echo "memory-model audit counterexamples reproduced (MM-1, MM-2, MM-3, MM-4); MM-6 fixed"
+echo "memory-model audit counterexamples reproduced (MM-1, MM-2, MM-4); MM-3, MM-6 fixed"

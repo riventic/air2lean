@@ -537,7 +537,7 @@ def itemTy (types : Array Ty) (pty : TyId) : Option TyId :=
 
 /-- Nullable pointer slicing, bulk memory operations and parent recovery are not part of the
 qualified fragment. Field/element projections and pointer arithmetic are
-(`Zig.ptrProjectNullable`). Cast to a nonnullable pointer after a null check first. -/
+(`Zig.ptrProject`, `Zig.ptrProjectNonnull`). Cast to a nonnullable pointer after a null check first. -/
 def CheckCtx.rejectNullableProjection (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   if (cx.valTy? ptr |>.map (nullablePtrTy cx.types cx.layouts) |>.getD false) then
     cx.fail line "nullable pointer slicing, bulk memory operations and parent-pointer recovery require a nonnull cast first (outside the qualified pointer fragment)"

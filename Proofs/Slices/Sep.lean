@@ -51,6 +51,8 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := arr_memmove_run (d := d) (s := s) (n := n) (a := 4) hp
     hm hdj (by decide) (by decide) (by decide) hd hs hst
   refine ⟨(), m', h', ?_, hd', hm', hp', hst'⟩
+  have hpd := arr_ptrProject_run (i := d) hp hm (by omega)
+  have hps := arr_ptrProject_run (i := s) hp hm (by omega)
   have hl := sl.len.isLt
   have hdo : d.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
   have hso : s.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
@@ -59,10 +61,10 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   have hsl : (s.toNat + n.toNat) % 18446744073709551616 ≤ sl.len.toNat := by
     rw [Nat.mod_eq_of_lt (by omega)]; omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
-  rw [e4] at hr
-  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
+  rw [e4] at hr hpd hps
+  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr hpd hps
   simp (config := { maxSteps := 1000000 }) [copyWithin, zig_unfold, Zig.add, Zig.le, BitVec.ule,
-    hdo, hso, hdl, hsl, hr]
+    hdo, hso, hdl, hsl, hr, hpd, hps]
 
 /-- `@memset` of a whole slice: every item becomes `v`. -/
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :
@@ -112,8 +114,10 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
     obtain ⟨m₂, s₂, hst₂, h₂, hd₂, hm₂, hw₂⟩ :=
       arr_store_run (a := 4) (i := s.j) hw₁ hm₁ hd₁ (by decide) (by decide) (by decide)
         (by simpa using hjn) hst₁ ws[s.i.toNat]
-    rw [e4] at l1 l2 s₁ s₂
-    simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at l1 l2 s₁ s₂
+    have f1 := arr_ptrProject_run (i := s.i) hw hmA (by omega)
+    have f2 := arr_ptrProject_run (i := s.j) hw₁ hm₁ (by simp; omega)
+    rw [e4] at l1 l2 s₁ s₂ f1 f2
+    simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at l1 l2 s₁ s₂ f1 f2
     have hil : s.i.toNat < sl.len.toNat := by omega
     have hjl : s.j.toNat < sl.len.toNat := by omega
     have hio : s.i.uaddOverflow 1#64 = false := by simp [BitVec.uaddOverflow]; omega
@@ -121,7 +125,7 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
     refine ⟨.rep15, { { s with i := s.i + 1#64 } with j := s.j - 1#64 }, m₂, h₂, ?_, hd₂, hm₂, hst₂,
       ?_⟩
     · simp [reverse.loop15, zig_unfold, Zig.lt, BitVec.ult, Zig.add, Zig.sub, hlt, hil, hjl, l1, l2,
-        s₁, s₂, hio, hjo]
+        s₁, s₂, hio, hjo, f1, f2]
     · have hi1 : (s.i + 1#64).toNat = s.i.toNat + 1 := by
         rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
       have hj1 : (s.j - 1#64).toNat = s.j.toNat - 1 := by

@@ -522,6 +522,34 @@ addresses in the model, which can differ from the compiled code. -/
 def ptrLt (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) < (← ptrAddr b)))
 def ptrLe (a b : Ptr) : MemM Bool := do pure (decide ((← ptrAddr a) ≤ (← ptrAddr b)))
 
+/-! ## Pointer formation -/
+
+/-- `p` is in bounds of its block in `m`: a byte of it or one past its end. The block may be
+dead (LLVM: being in bounds of a deallocated object is enough). A pointer without a block is in
+bounds of nothing. -/
+def Mem.inBounds (m : Mem) (p : Ptr) : Bool :=
+  match p.block with
+  | none => false
+  | some b =>
+    match m.blocks[b]? with
+    | none => false
+    | some blk => decide (0 ≤ p.off ∧ p.off ≤ blk.bytes.size)
+
+/-- A derived pointer: `project p`, an offset of `p` in its block (`struct_field_ptr`,
+`ptr_add`, `ptr_sub`, `ptr_elem_ptr`, `slice_elem_ptr`, `@fieldParentPtr`, a slice's length
+field, an error union's payload). Zig's LLVM backend (0.14.1, 0.15.2, 0.16.0) lowers all but
+`@fieldParentPtr` to `getelementptr inbounds`, which is poison unless the base and the result
+are in bounds of the base's allocation (`Mem.inBounds`, one past the end included), and to no
+instruction for a constant offset 0. `@fieldParentPtr` (`ptrtoint`/`sub nuw`/`inttoptr`) is
+illegal behaviour unless its operand is that field of a parent; the same rule rejects the
+out-of-allocation part of that, not a wrong field of an in-bounds parent. So the same pointer is always allowed, also without a block (address zero, a
+`@ptrFromInt` address); any other result throws `.illegal` unless both lie in `[0, size]` of
+`p`'s block (`docs/architecture-audit/memory-model.md`, MM-3). The address is not observed. -/
+def ptrProject (p : Ptr) (project : Ptr → Ptr) : MemM Ptr := fun m =>
+  let q := project p
+  if q = p ∨ (q.block = p.block ∧ m.inBounds p ∧ m.inBounds q) then pure (q, m)
+  else throw .illegal
+
 /-! ## Globals -/
 
 /-- `m` with one more global block: `bytes` at the next free address, aligned to `align`.

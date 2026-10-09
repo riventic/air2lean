@@ -144,13 +144,22 @@ example : valueIn (zeros 8) (Nullable.allowzeroStoreLoad block0 Zig.Ptr.null) = 
     (storageHelpers ++ "example : failureIn (zeros 16) (Nullable.nodeNext Zig.Ptr.null) .illegal = true := by native_decide
 example : failureIn (zeros 16) (Nullable.nodeNext ⟨none, 4096⟩) .illegal = true := by native_decide
 example : valueIn (zeros 16) (Nullable.nodeNext block0) = some Zig.Ptr.null := by native_decide")
-    ["Zig.ptrProjectNullable"]
+    -- Field 0: a constant offset 0 is the base itself (no `getelementptr`, no projection).
+    ["let i1 ← pure p0"]
+  -- The same field with a nonnullable result type (0.14.1/0.15.2 typing): address zero must not
+  -- become a `*[*c]u8`, so even offset 0 is checked (`ptrProjectNonnull`), not `pure p0`.
+  writeCase dir "nodeNextNonnull" (file "nodeNextNonnull" (storageTypes) #[8] 2
+    (argInsts [8] ++ #[inst 1 "struct_field_ptr" 6 #[ref 0] [("index", num 0)],
+      inst 2 "load" 2 #[ref 1], inst 3 "ret" 4 #[ref 2]]))
+    (storageHelpers ++ "example : failureIn (zeros 16) (Nullable.nodeNextNonnull Zig.Ptr.null) .illegal = true := by native_decide
+example : valueIn (zeros 16) (Nullable.nodeNextNonnull block0) = some Zig.Ptr.null := by native_decide")
+    ["Zig.ptrProjectNonnull p0 (·.add 0)"]
   writeCase dir "nodeVal" (file "nodeVal" (storageTypes) #[8] 1
     (argInsts [8] ++ #[inst 1 "struct_field_ptr" 2 #[ref 0] [("index", num 1)],
       inst 2 "load" 1 #[ref 1], inst 3 "ret" 4 #[ref 2]]))
     (storageHelpers ++ "example : failureIn (zeros 16) (Nullable.nodeVal Zig.Ptr.null) .illegal = true := by native_decide
 example : valueIn (zeros 16) (Nullable.nodeVal block0) = some 0#8 := by native_decide")
-    ["Zig.ptrProjectNullable"]
+    ["Zig.ptrProject"]
   writeCase dir "nodeRoundTrip" (file "nodeRoundTrip" (storageTypes) #[13, 1] 7
     (argInsts [13, 1] ++ #[inst 2 "aggregate_init" 7 #[nullVal 2, ref 1],
       inst 3 "store" 4 #[ref 0, ref 2], inst 4 "load" 7 #[ref 0],
@@ -166,17 +175,28 @@ example : (bytesAfter (zeros 16) (Nullable.nodeRoundTrip block0 9)).map (·.extr
     (storageHelpers ++ "example : valueIn (zeros 16) (Nullable.arrayItem block0 1) = some Zig.Ptr.null := by native_decide
 example : failureIn (zeros 16) (Nullable.arrayItem block0 2) .illegal = true := by native_decide")
     ["Zig.nullablePtrEnc"]
-  -- Projections from a C pointer: nonnull precondition, then the existing access rule.
+  -- Projections from a C pointer are pointer formation (`Zig.ptrProject`, MM-3): offset 0 is
+  -- the base; any other offset needs a block that holds base and result (LLVM's
+  -- `getelementptr inbounds`), so none from address zero or a provenance-free address.
   writeCase dir "cAdd" (file "cAdd" (types) #[2, 0] 2
     (argInsts [2, 0] ++ #[inst 2 "ptr_add" 2 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
     "example : failure (Nullable.cAdd Zig.Ptr.null 1) .illegal = true := by native_decide
-example : value (Nullable.cAdd ⟨none, 100⟩ 2) = some ⟨none, 102⟩ := by native_decide"
-    ["Zig.ptrProjectNullable"]
+example : value (Nullable.cAdd Zig.Ptr.null 0) = some Zig.Ptr.null := by native_decide
+example : failure (Nullable.cAdd ⟨none, 100⟩ 2) .illegal = true := by native_decide
+private def liveAdd : Zig.MemM Zig.Ptr := do
+  let p ← Zig.alloc .heap 2 1
+  Nullable.cAdd p 2
+example : value liveAdd = some ⟨some 0, 2⟩ := by native_decide
+private def pastAdd : Zig.MemM Zig.Ptr := do
+  let p ← Zig.alloc .heap 2 1
+  Nullable.cAdd p 3
+example : failure pastAdd .illegal = true := by native_decide"
+    ["Zig.ptrProject"]
   -- `&p[i]` keeps the projection; a load through it (`p[i]`) is `cElem`'s item access.
   writeCase dir "cIndex" (file "cIndex" (types) #[2, 0] 5
     (argInsts [2, 0] ++ #[inst 2 "ptr_elem_ptr" 5 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
     "example : failure (Nullable.cIndex Zig.Ptr.null 0) .illegal = true := by native_decide
-example : value (Nullable.cIndex ⟨none, 4096⟩ 3) = some ⟨none, 4099⟩ := by native_decide
+example : failure (Nullable.cIndex ⟨none, 4096⟩ 3) .illegal = true := by native_decide
 example : failure (do Zig.load (BitVec 8) 1 (← Nullable.cIndex ⟨none, 4096⟩ 0)) .illegal = true := by native_decide
 private def liveIndex : Zig.MemM (BitVec 8) := do
   let p ← Zig.alloc .heap 2 1
@@ -187,7 +207,7 @@ private def pastEnd : Zig.MemM (BitVec 8) := do
   let p ← Zig.alloc .heap 2 1
   Zig.load (BitVec 8) 1 (← Nullable.cIndex p 2)
 example : failure pastEnd .illegal = true := by native_decide"
-    ["Zig.ptrProjectNullable"]
+    ["Zig.ptrProjectNonnull"]
   writeCase dir "cElem" (file "cElem" (types) #[2, 0] 1
     (argInsts [2, 0] ++ #[inst 2 "ptr_elem_val" 1 #[ref 0, ref 1], inst 3 "ret" 4 #[ref 2]]))
     "example : failure (Nullable.cElem Zig.Ptr.null 0) .illegal = true := by native_decide
@@ -258,4 +278,4 @@ example : value (Nullable.fromOptional (some ⟨none, 5⟩)) = some ⟨none, 5�
   let ts := #[intTy 64, intTy 8, (ptrTy "c" 1).setObjVal! "volatile" (.bool true), boolTy, nrTy]
   reject (file "volatileNullable" ts #[2] 2
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "ret" 4 #[ref 0]]) "volatile nullable pointers"
-  IO.println "nullable pointer source pipeline: 21 generated cases; adjacent rejections checked"
+  IO.println "nullable pointer source pipeline: 22 generated cases; adjacent rejections checked"

@@ -60,6 +60,48 @@ theorem Ptr.elem_eq (p : Ptr) (size : Nat) (i : BitVec 64) :
     p.elem size i = p.add ((size * i.toNat : Nat) : Int) := by
   simp [Ptr.elem, Ptr.add]
 
+/-- Owned bytes put every offset from their first byte to one past their last in bounds of
+the block (pointer formation, `ptrProject`). -/
+theorem bytesAt_inBounds {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {k : Nat} (hk : k ≤ bs.size)
+    (hpos : 0 < bs.size) : m.inBounds (p.add k) = true := by
+  by_cases hlt : k < bs.size
+  · obtain ⟨b, blk, hacc, -⟩ :=
+      bytesAt_access (q := p.add k) (k := k) (n := 1) (a := 1) hb hm rfl (by omega) (by omega)
+        (Nat.mod_one _)
+    simpa using inBounds_of_access hacc 0 (by omega)
+  · obtain ⟨b, blk, hacc, -⟩ :=
+      bytesAt_access (q := p.add ((k - 1 : Nat) : Int)) (k := k - 1) (n := 1) (a := 1) hb hm rfl (by omega)
+        (by omega) (Nat.mod_one _)
+    have := inBounds_of_access hacc 1 (Nat.le_refl _)
+    rwa [Ptr.add_add, show ((k - 1 : Nat) : Int) + ((1 : Nat) : Int) = (k : Int) by omega] at this
+
+/-- Forming a pointer `k` bytes into owned bytes (`struct_field_ptr` and the like; one past the
+end included) succeeds and leaves memory as it is (`ptrProject`, MM-3). -/
+theorem bytesAt_ptrProject_run {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hb : bytesAt p A S K bs h) (hm : m.heap = h ∪ hF) {k : Nat} (hk : k ≤ bs.size)
+    (hpos : 0 < bs.size) : (ptrProject p (·.add k)).run m = pure (p.add k, m) :=
+  ptrProject_add_run (by simpa using bytesAt_inBounds hb hm (k := 0) (by omega) hpos)
+    (bytesAt_inBounds hb hm hk hpos)
+
+/-- Forming the pointer to item `i ≤ vs.length` of an owned array (`ptr_add`,
+`ptr_elem_ptr`, `slice_elem_ptr`; one past the end included) succeeds and leaves memory as it is
+(`ptrProject`, MM-3). -/
+theorem arr_ptrProject_run {p : Ptr} {vs : List T} {i : BitVec 64} (hp : arr p vs h)
+    (hm : m.heap = h ∪ hF) (hi : i.toNat ≤ vs.length) :
+    (ptrProject p (·.elem (Enc.size T) i)).run m = pure (p.elem (Enc.size T) i, m) := by
+  by_cases hz : Enc.size T * i.toNat = 0
+  · have he : p.elem (Enc.size T) i = p := by rw [Ptr.elem_eq, hz]; simp
+    rw [he]; exact ptrProject_same (fun x => x.elem (Enc.size T) i) he
+  obtain ⟨A, S, K, bs, -, hsz, -, hb, -⟩ := hp
+  have hpos : 0 < bs.size := by
+    rw [hsz]; exact Nat.pos_of_ne_zero fun h0 => hz (by
+      rcases Nat.mul_eq_zero.mp h0 with h1 | h1 <;> simp_all)
+  have hle : Enc.size T * i.toNat ≤ bs.size := by rw [hsz]; exact Nat.mul_le_mul_left _ hi
+  apply ptrProject_run _ rfl
+  · simpa using bytesAt_inBounds hb hm (k := 0) (by omega) hpos
+  · rw [Ptr.elem_eq]; exact bytesAt_inBounds hb hm hle hpos
+
 theorem pts_load_run {p : Ptr} {a : Nat} {v : T} (hp : pts p a v h) (hm : m.heap = h ∪ hF)
     (hn : 0 < Enc.size T) (hst : m.Seq) :
     ∃ m', (load T a p).run m = pure (v, m') ∧ m'.heap = h ∪ hF ∧ m'.Seq := by
@@ -398,6 +440,13 @@ theorem Triple.store [LawfulEnc T] {p : Ptr} {a : Nat} {v : T} (hn : 0 < Enc.siz
   Triple.of_run fun _ _ _ hd hm hp hs => by
     obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := pts_store_run hp hm hd hn hs w
     exact ⟨(), m', h', hr, hd', hm', hp', hst'⟩
+
+/-- `&xs[i]` of an owned array, `i ≤ len` (`ptrProject`, MM-3). -/
+theorem Triple.arr_ptrProject {p : Ptr} {xs : List T} {i : BitVec 64} (hi : i.toNat ≤ xs.length) :
+    Triple (arr p xs) (ptrProject p (·.elem (Enc.size T) i))
+      (fun q => ⌜q = p.elem (Enc.size T) i⌝ ∗ arr p xs) :=
+  Triple.of_run fun m hP _ hd hm hp hs =>
+    ⟨_, m, hP, arr_ptrProject_run hp hm hi, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hs⟩
 
 end Rules
 

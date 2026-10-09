@@ -30,6 +30,9 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Iogroup Assn
 
 namespace Iogroup.GroupCounter
 
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+attribute [local irreducible] Proto.WP
+
 /-- Where a thread is, outside the lock's code. -/
 inductive Ph where
   | none
@@ -196,7 +199,13 @@ theorem fits : L.Fits proto U :=
   ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
 
 /-- The word: `L.ptr`. -/
-theorem mptr : ((cPtr.add 16).add 0).add 0 = L.ptr := rfl
+theorem mptr : cPtr.add 16 = L.ptr := rfl
+
+/-- A field pointer of the 24-byte `Counter` (block 0) is formed (`ptrProject`, MM-3). -/
+theorem projC {m : Mem} (hb : BlkOk m) {k : Nat} (hk : k ≤ 24) :
+    (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := hb
+  exact ptrProject_block_run hb rfl (by decide) (by simp [cPtr, hsz]; omega)
 
 /-! ## `lock` -/
 
@@ -625,13 +634,16 @@ theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind]
-  rw [show cPtr.add 0 = cPtr from rfl]
+  refine WP.bind (WP.callMC_ptrProject (projC hi.2.blk (k := 16) (by decide)) ?_)
+  dsimp only
   -- the read of `io`
   refine WP.bind (wp_io hi hc ht hjt fun m₁ hc₁ ht₁ hi₁ => ?_)
   -- `lock`
   refine WP.bind (WP.callC (WP.mono ?_ (lock_spec t (gTask false) rfl _ G m₁ d hi₁)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
   have hi₂' : proto.inv (upd G₂ t (gHold false hL)) m₂ := hi₂
+  refine WP.bind (WP.callMC_ptrProject (projC hi₂'.2.blk (k := 20) (by decide)) ?_)
+  dsimp only
   -- the load of the counter
   refine WP.bind (wp_cntLoad hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
   have hx₂ : (fun u => (upd G₂ t (gHold false hL) u).2) t = .task false := by
@@ -656,6 +668,8 @@ theorem add_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     rw [hv₃, hsucc, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hS3]) fun m₄ hQ' hc₄ ht₄ hi₄ => ?_)
   -- the read of `io`
   have hl₄ := hi₄.1.live t (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))
+  refine WP.bind (WP.callMC_ptrProject (projC hi₄.2.blk (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (wp_io hi₄ hc₄ hl₄.1 hl₄.2 fun m₅ hc₅ ht₅ hi₅ => ?_)
   -- `unlock`
   refine WP.bind (WP.callC (WP.mono ?_ (unlock_spec t (gHold true hQ') rfl _ G₂ m₅ d₂ hi₅)))
@@ -1295,12 +1309,26 @@ theorem main_spec (io : Io) (d : Nat) :
     (by decide)).frame.frame) ho₂ hc₂ (by rw [hs₂.threads, hs₁.threads]; decide)
     (by rw [upd_self]; exact F₂) fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
+  -- `&counter.mutex` (`ptrProject`, MM-3): owned `io` bytes of the 24-byte block
+  have hs₃' : h₃.Sub m₃.heap := by simpa [upd_self] using ho₃.sub 0
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left F₃ hs₃'
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left Fc hsc
+  refine WP.bind (WP.callMC_ptrProject (bytesAt_ptrProject_block Fc hsc (k := 16)
+    (by rw [writeBytes_size _ _ _ (by simp [enc_io, hsI])]; omega) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := cPtr.add 16) (A := A) (S := 24)
     (K := .stack) (k := 0) (a := 4) mutex0 (by rw [enc_mutex, enc_u32]; rfl) rfl (by decide)
     (by rw [hsW]; decide) (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL.frame) ho₃
     (hs₃.current.trans hc₂) (by rw [hs₃.threads, hs₂.threads, hs₁.threads]; decide)
     (by rw [upd_self]; exact F₃) fun _ m₄ h₄ _ ho₄ F₄ hs₄ _ _ => ?_)
   rw [upd_upd] at ho₄
+  -- `&counter.count` (`ptrProject`, MM-3): owned `io` bytes of the 24-byte block
+  have hs₄' : h₄.Sub m₄.heap := by simpa [upd_self] using ho₄.sub 0
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left F₄ hs₄'
+  obtain ⟨_, Fc, hsc⟩ := sep_sub_left Fc hsc
+  refine WP.bind (WP.callMC_ptrProject (bytesAt_ptrProject_block Fc hsc (k := 20)
+    (by rw [writeBytes_size _ _ _ (by simp [enc_io, hsI])]; omega) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 16).add 4) (A := A) (S := 24)
     (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsC]; decide)
     (by simp [cPtr, Ptr.add]; omega) (by decide)).frameL.frameL.frame) ho₄
@@ -1358,6 +1386,8 @@ theorem main_spec (io : Io) (d : Nat) :
   simp only [StateT.run_bind]
   -- the counter holds 3
   obtain ⟨own, rest, ho, hp, hsz, hja, hbk, hb1, hio⟩ := inv_final hi₁₁
+  refine WP.bind (WP.callMC_ptrProject (projC hbk (k := 20) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned (TTriple.load (p := cPtr.add 20) (a := 4)
     (v := BitVec.ofNat 32 3) (by decide)).frame ho hc₁₁ (by rw [hsz]; decide) hp
     fun a m₁₂ hQ hr ho' hq hs₁₂ _ _ => ?_)
