@@ -53,6 +53,10 @@
       ],
       "abi_size": 2,
       "abi_align": 1
+    },
+    {
+      "k": "other",
+      "name": "fn (struct { u8, u8 }, u8) u8"
     }
   ],
   "body": [
@@ -60,22 +64,22 @@
       "id": 0,
       "tag": "arg",
       "ty": 2,
-      "param": 0,
-      "args": []
+      "param": 0
     },
     {
       "id": 1,
       "tag": "arg",
       "ty": 0,
-      "param": 1,
-      "args": []
+      "param": 1
     },
     {
       "id": 2,
       "tag": "call",
       "ty": 0,
       "callee": {
-        "func": "project.tupleSelect"
+        "ty": 3,
+        "func": "project.tupleSelect",
+        "noreturn": false
       },
       "args": [
         {

@@ -139,9 +139,30 @@ def toJson (p : BuildProfile) : Json :=
     ("float_mode", .str p.floatMode), ("error_set_bits", Lean.toJson p.errorSetBits),
     ("error_layout", .str p.errorLayout), ("error_tracing", Lean.toJson p.errorTracing), ("export_stage", .str p.exportStage)]
 
-/-- Exact agreement includes schema, Zig version, CPU feature order, and all build facts. -/
-def checkProgram (profiles : Array BuildProfile) (expected : Option String := none) :
-    Except String BuildProfile := do
+/-- The (build mode, backend) pairs that `assurance/build-modes.json` qualifies. -/
+def qualifiedBuilds : List (String × String) := [("ReleaseSafe", "stage2_llvm")]
+
+def qualified (p : BuildProfile) : Bool := qualifiedBuilds.contains (p.buildMode, p.backend)
+
+/-- Admission (deny by default): a legacy profile needs `--profile legacy-abi64-le`, and a
+current profile outside `qualifiedBuilds` needs `--allow-unqualified-build-mode`, which the
+generated header records (`Air2Lean/Main.lean`). -/
+def admit (p : BuildProfile) (expected : Option String) (allowUnqualified : Bool) :
+    Except String Unit := do
+  if p.name == legacyName && expected != some legacyName then
+    throw s!"AIR schema {p.schema} has no target profile: translating it assumes an \
+      unverified 64-bit little-endian ABI; pass --profile {legacyName} to accept that \
+      assumption explicitly (docs/profiles.md)"
+  if p.name == currentName && !p.qualified && !allowUnqualified then
+    throw s!"build mode {p.buildMode} with backend {p.backend} is not qualified \
+      (docs/build-modes.md); only {qualifiedBuilds} AIR is translated by default. \
+      Pass --allow-unqualified-build-mode to translate it anyway; the generated header \
+      records the opt-in"
+
+/-- Exact agreement includes schema, Zig version, CPU feature order, and all build facts.
+The agreed profile must then pass `admit`. -/
+def checkProgram (profiles : Array BuildProfile) (expected : Option String := none)
+    (allowUnqualified : Bool := false) : Except String BuildProfile := do
   let some first := profiles[0]? | throw "no AIR profiles supplied"
   if let some expected := expected then
     unless first.name == expected do
@@ -154,6 +175,7 @@ def checkProgram (profiles : Array BuildProfile) (expected : Option String := no
         let other := current.getObjValD key
         unless value == other do
           throw s!"mixed AIR profiles: field '{key}' differs ({value.compress} vs {other.compress})"
+  admit first expected allowUnqualified
   pure first
 
 end BuildProfile

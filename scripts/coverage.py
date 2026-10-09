@@ -297,6 +297,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',
+    'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
 }
 
 
@@ -565,14 +566,14 @@ def lean_section(text, name):
 
 
 def normalizer_rules(text):
-    """Diagnostic gates around normalizeOp's tag table: fast-math suffix and call prefix."""
+    """Diagnostic gates around normalizeOp's tag table: the fast-math suffix. Every other tag,
+    including each call tag, is an explicit arm or an unknown-tag rejection."""
     body = lean_section(text, 'normalizeOp')
     fast = re.findall(r'if raw\.tag\.endsWith "([^"]+)" then\s*\n\s*throw', body)
-    call = re.findall(r'if tag\.startsWith "([^"]+)" then', body)
-    if len(fast) != 1 or len(call) != 1 or not re.search(r'if raw\.unsupported then\s*\n\s*throw', body) \
-            or 'unknown AIR tag' not in body:
-        raise ValueError('normalizeOp: fast-math, exporter-marker, call-prefix or unknown-tag gate not found')
-    return fast[0], call[0]
+    if len(fast) != 1 or not re.search(r'if raw\.unsupported then\s*\n\s*throw', body) \
+            or 'unknown AIR tag' not in body or 'startsWith' in body:
+        raise ValueError('normalizeOp: fast-math, exporter-marker or unknown-tag gate not found, or a tag prefix rule')
+    return fast[0]
 
 
 def emission_arms(text):
@@ -745,7 +746,7 @@ def generate(version, source, os_name='linux'):
         for tag in air_tags(json.loads(cache.text(p))):
             test_tags.setdefault(tag, set()).add(str(p.relative_to(ROOT)))
     minor = version_minor(version)
-    fast_suffix, call_prefix = normalizer_rules(normalizer_source)
+    fast_suffix = normalizer_rules(normalizer_source)
     emitted, erased = emission_arms(cache.text(ROOT/'Air2Lean/Emit.lean'))
     export_reasons = {
         'explicit-arm': 'Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified.',
@@ -759,8 +760,7 @@ def generate(version, source, os_name='linux'):
     for tag in universe['air_tags']:
         export_status = exporter_status(tag, decode, minor, exporter)
         rejection_reason = rejection_reasons.get(tag)
-        is_call = tag not in norms and tag.startswith(call_prefix)
-        ops = norms.get(tag, ['call'] if is_call else [])
+        ops = norms.get(tag, [])
         unemitted = [op for op in ops if op not in emitted]
         request = None
         if tag.endswith(fast_suffix):
@@ -772,7 +772,7 @@ def generate(version, source, os_name='linux'):
             disposition = 'rejected-exporter-unsupported' if tag in exporter_reasons else FORBIDDEN
         elif export_status not in ('explicit-arm', 'fallback-named-decoder'):
             disposition = FORBIDDEN
-        elif tag not in norms and not is_call:
+        elif tag not in norms:
             disposition = 'rejected-unknown-tag'
         elif not ops or unemitted:
             disposition = FORBIDDEN
@@ -792,8 +792,8 @@ def generate(version, source, os_name='linux'):
             'missing-dispatch-arm: ' + ', '.join(unemitted) if disposition == FORBIDDEN and unemitted else 'not-reached'
         tags.append(apply_override('tags', {'tag': tag, 'disposition': disposition,
                      'exporter': {'status': export_status, 'reason': export_reasons[export_status]},
-                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'call-prefix-branch' if is_call else 'unknown-tag-rejection', 'constructors': ops},
-                     'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
+                     'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'unknown-tag-rejection', 'constructors': ops},
+                     'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
                      'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},

@@ -54,7 +54,8 @@ def union_layout(bits, psize, palign):
 
 def ptr(child, align):
     return {"k": "ptr", "size": "one", "const": False, "child": child, "ptr_align": align,
-            "volatile": False, "allowzero": False, "sentinel": False, "host_size": 0,
+            "volatile": False, "allowzero": False, "address_space": "generic",
+            "sentinel": False, "host_size": 0,
             "abi_size": 8, "abi_align": 8}
 
 

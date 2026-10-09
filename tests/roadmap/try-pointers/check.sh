@@ -31,7 +31,7 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/TryPointers"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-"$translator" tests/roadmap/try-pointers/air/0.16.0 -o "$work/TryPointers/Gen.lean" \
+"$translator" tests/roadmap/try-pointers/air/0.16.0 --profile legacy-abi64-le -o "$work/TryPointers/Gen.lean" \
   --namespace TryPointers --prefix try_pointers.
 if [ -f tests/roadmap/try-pointers/integration-qualification.json ]; then
   python3 scripts/normalize-generated.py report "$work/TryPointers/Gen.lean" \

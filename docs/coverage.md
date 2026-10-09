@@ -132,10 +132,11 @@ semantic support claims.
   only resolves `Compat.vNN` tests; an explicit arm still needs operand and
   nested helper review. A version label that is not `0.N.P` keeps every branch,
   and a tag stays forbidden unless they agree.
-* **Normalization:** explicit tag branches, the call-prefix branch, fast-math
+* **Normalization:** explicit tag branches (each call tag is one), fast-math
   and runtime-reason rejections, and unknown-tag rejection are recorded with
-  their returned constructors. The fast-math suffix, call prefix and the
-  unsupported-marker and unknown-tag gates are read from `normalizeOp`.
+  their returned constructors. The fast-math suffix and the unsupported-marker
+  and unknown-tag gates are read from `normalizeOp`, which must have no tag
+  prefix rule.
 * **Parser and checker:** generic schema parsing and conditional type/layout
   checking are source references. They do not establish acceptance of all
   operands or all representations of a tag.

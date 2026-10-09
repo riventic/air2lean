@@ -78,7 +78,7 @@ if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-thread-tuples.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/ThreadTuples"
-"$translator" tests/roadmap/thread-tuples/air/0.16.0 -o "$work/ThreadTuples/Gen.lean" \
+"$translator" tests/roadmap/thread-tuples/air/0.16.0 --profile legacy-abi64-le -o "$work/ThreadTuples/Gen.lean" \
   --namespace ThreadTuples --prefix thread_tuples.
 python3 scripts/normalize-generated.py report "$work/ThreadTuples/Gen.lean" \
   tests/roadmap/thread-tuples/air/0.16.0 "$work/generated-report.json"

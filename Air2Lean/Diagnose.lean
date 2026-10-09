@@ -14,6 +14,7 @@ structure CheckArgs where
   profile : Option String := none
   limit : Nat := 256
   spawnPolicy : SpawnSemantics := .available
+  allowUnqualified : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -23,6 +24,8 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     unless p == BuildProfile.legacyName || p == BuildProfile.currentName do throw "invalid --profile"
     if out.profile.isSome then throw "duplicate --profile"
     parseOptions rest { out with profile := some p } spawnPolicySeen
+  | "--allow-unqualified-build-mode" :: rest =>
+    parseOptions rest { out with allowUnqualified := true } spawnPolicySeen
   | "--diagnostic-limit" :: value :: rest =>
     let some limit := value.toNat? | throw "--diagnostic-limit must be an integer"
     unless 1 ≤ limit && limit ≤ 4096 do throw "--diagnostic-limit must be from 1 through 4096"
@@ -32,7 +35,7 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     let spawnPolicy ← parseSpawnPolicy value
     parseOptions rest { out with spawnPolicy } true
   | ["--spawn-policy"] => throw "missing value for --spawn-policy"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --diagnostic-limit and --spawn-policy; emission flags are incompatible"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit and --spawn-policy; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -40,7 +43,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--spawn-policy available|fallible]"
 
 structure FileResult where
   file : String
@@ -374,7 +377,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
       let baseline := firstProfile.getD profile
       firstProfile := some baseline
       log := log.record (boundary file result.1.function .profileFailure .profile .validationFailure)
-        (BuildProfile.checkProgram #[baseline, profile] a.profile)
+        (BuildProfile.checkProgram #[baseline, profile] a.profile a.allowUnqualified)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
   return (units, collectProgram units log a.spawnPolicy)

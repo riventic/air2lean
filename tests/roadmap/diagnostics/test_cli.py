@@ -125,8 +125,12 @@ def decode(result, expected_status=None):
     return report
 
 
+# Every fixture here is synthetic schema-11 AIR: it needs the explicit legacy profile.
+LEGACY = ["--profile", "legacy-abi64-le"]
+
+
 def invoke(binary, air, *flags):
-    return subprocess.run([str(binary), "--diagnostics-json", str(air), *flags],
+    return subprocess.run([str(binary), "--diagnostics-json", str(air), *LEGACY, *flags],
                           capture_output=True, text=True, timeout=15, check=False)
 
 
@@ -234,7 +238,7 @@ def run(binary, baseline=None):
         assert len(failures) == 2, report
         assert all(d["anchor"]["id_space"] == "canonical" and d["anchor"]["nearest_dbg_line"] == 42 for d in failures)
         assert not report["complete"] and not report["truncated"]
-        default = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Diagnostics"],
+        default = subprocess.run([str(binary), str(air), "-o", str(output), "--namespace", "Diagnostics", *LEGACY],
                                  text=True, capture_output=True, timeout=15)
         assert default.returncode == 1 and output.read_text() == "sentinel\n"
         checks += 2
@@ -304,7 +308,7 @@ def run(binary, baseline=None):
             assert_policy_rejection(rejected, marker)
             output.write_text("sentinel\n")
             emitted = subprocess.run([str(binary), str(air), "--spawn-policy", "fallible", "-o", str(output),
-                                      "--namespace", "Diagnostics"],
+                                      "--namespace", "Diagnostics", *LEGACY],
                                      text=True, capture_output=True, timeout=15)
             assert emitted.returncode == 1 and marker in emitted.stderr and output.read_text() == "sentinel\n"
             checks += 3
@@ -323,7 +327,8 @@ def run(binary, baseline=None):
         if baseline is not None:
             reference = directory / "Reference.lean"
             for executable, destination in ((baseline, reference), (binary, output)):
-                emitted = subprocess.run([str(executable), str(air), "-o", str(destination), "--namespace", "Diagnostics"],
+                emitted = subprocess.run([str(executable), str(air), "-o", str(destination), "--namespace", "Diagnostics",
+                                          *LEGACY],
                                          text=True, capture_output=True, timeout=15)
                 assert emitted.returncode == 0, emitted.stderr
             assert output.read_bytes() == reference.read_bytes(), "default successful emission changed"

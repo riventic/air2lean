@@ -73,8 +73,9 @@ def mutate(doc):
 
 def translate(binary, air, work, label, ex, *flags, source_map=True):
     out = work / f'{label}.lean'
+    # The committed golden AIR is schema 11: its translation needs the explicit legacy profile.
     command = [str(binary), str(air), '-o', str(out), '--namespace', ex.capitalize(),
-               '--prefix', ex + '.', *flags]
+               '--prefix', ex + '.', '--profile', 'legacy-abi64-le', *flags]
     sidecar = work / f'{label}.source-map.json'
     if source_map: command += ['--source-map-json', str(sidecar)]
     result = subprocess.run(command, capture_output=True, timeout=300)

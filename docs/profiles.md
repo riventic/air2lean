@@ -47,8 +47,15 @@ model assumption, not recovered target/build information. Target triple, ABI,
 backend, CPU, build mode, float mode and export stage are reported as `unverified`;
 error tracing is reported as `null`. The model still assumes 64-bit pointers,
 little-endian bytes and 16-bit error codes. Explicit big-endian metadata is
-rejected even for legacy exports. No flag is required for existing translation
-scripts or old fixtures.
+rejected even for legacy exports. Because nothing checks the target, legacy AIR is
+denied by default: the translator (and `--diagnostics-json`) accepts it only with an
+explicit `--profile legacy-abi64-le`. Scripts that translate committed schema-11 goldens
+pass the flag; `scripts/project.py` passes it for a legacy manifest profile.
+
+Schema-12 profiles are admitted only for a qualified build mode and backend
+([build-modes.md](build-modes.md): `ReleaseSafe` with `stage2_llvm`). Other profiles need
+`--allow-unqualified-build-mode`, which the generated header records as
+`"admission": "unqualified-build-mode"`.
 
 One translation must use identical profiles, including schema, Zig version,
 CPU/features (including their array order), build mode and error tracing. Legacy

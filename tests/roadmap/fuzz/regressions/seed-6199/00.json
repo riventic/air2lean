@@ -1,6 +1,7 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-gnu",
@@ -8,7 +9,7 @@
   "endian": "little",
   "abi": "gnu",
   "zig_version": "0.16.0",
-  "backend": "s",
+  "backend": "stage2_llvm",
   "cpu": "x",
   "features": [],
   "build_mode": "ReleaseSafe",
@@ -64,7 +65,12 @@
    "k": "ptr",
    "size": "slice",
    "const": true,
-   "child": 0
+   "child": 0,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0
   },
   {
    "k": "int",

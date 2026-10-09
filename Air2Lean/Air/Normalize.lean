@@ -370,13 +370,13 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let toOperand (o : Raw.RawAsmOperand) : AsmOperand :=
       { constraint := o.constraint, name := o.name, ref := o.ref }
     return .asm a.source a.isVolatile a.clobbers (a.outputs.map toOperand) (a.inputs.map toOperand)
-  | tag =>
-    if tag.startsWith "call" then
-      let some callee := raw.callee
-        | throw s!"{fnName}: inst {raw.id}: '{tag}' needs 'callee'"
-      return .call callee raw.args
-    else
-      throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (not in the tag table)"
+  -- The four call tags differ only in tail-call and inlining hints. Any other `call*` tag
+  -- is unknown: a future tag with other semantics fails closed.
+  | "call" | "call_always_tail" | "call_never_tail" | "call_never_inline" =>
+    let some callee := raw.callee
+      | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs 'callee'"
+    return .call callee raw.args
+  | tag => throw s!"{fnName}: inst {raw.id}: unknown AIR tag '{tag}' (not in the tag table)"
 
 partial def normalizeInst (fnName : String) (raw : Raw.RawInst) : Except String Inst := do
   -- The exporter deliberately omits ty for temporary inferred allocations. Preserve

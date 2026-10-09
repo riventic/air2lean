@@ -184,6 +184,10 @@ structure Layout where
   /-- The type entry has a `vector_index` field (`null` for a packed field pointer). An older
   export has none, so its bit-pointers may be lane pointers. -/
   vectorIndexExported : Bool := false
+  /-- Semantic attributes of the type entry that the translator does not model, with a value
+  other than the one it accepts (`Air2Lean/Air/Schema.lean` `unmodeledAttrs`): a non-generic
+  pointer address space, a comptime field. `Check.checkTy` rejects a used type with any. -/
+  unmodeled : Array String := #[]
   deriving Repr, Inhabited, BEq
 
 /-- A lane pointer (`*align(a:0:n:i) T`, `&v[i]`), which the checker rejects. -/

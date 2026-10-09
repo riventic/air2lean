@@ -37,9 +37,9 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 
 | Field | Meaning |
 |---|---|
-| `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata; schema 1–11 select the named `legacy-abi64-le` assumptions. Unsupported/future schemas fail closed. |
+| `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata and is decoded against the [schema table](#schema-table) (deny by default). Schemas 1–11 select the named `legacy-abi64-le` assumptions, which the translator accepts only with an explicit `--profile legacy-abi64-le`. Unsupported/future schemas fail closed. |
 | `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
-| `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted under the named little-endian reference-target assumption; their target has not been verified. Schema 12 also requires `profile.endian`. |
+| `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The current translator rejects explicit non-little-endian targets. Legacy schema 1–11 files without this field are accepted, behind `--profile legacy-abi64-le`, under the named little-endian reference-target assumption; their target has not been verified. Schema 12 requires the field and `profile.endian`. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
 | `body` | main body (AIR `getMainBody`) |
@@ -52,6 +52,76 @@ shapes. Aggregate constants must have the exact number and types of their items;
 error-union and union payloads must match their child type. Presence markers such as `undef`,
 `null` and shuffle `u` must be literal `true`. Supplied flags such as `noreturn`, `volatile`
 and `unsupported` must be booleans. A reference or shuffle lane has exactly one value form.
+Integer and enum constants must fit their type (and an exhaustive enum constant must name a
+declared tag) when they are decoded.
+
+## Schema table
+
+`Air2Lean/Air/Schema.lean` lists, for every object kind of a schema-12 file, its keys:
+required or optional, and the JSON shape of each value. The decoder validates the whole file
+against it first. A key outside the table, a missing required key, or a value of another
+shape rejects the file, so an absent flag never defaults and an attribute that a newer
+exporter adds is never ignored. The exporter (`zig-patch/air-json/json.zig`) and the table
+change together; the tables below and in §Type, §Inst, §Ref and §Global are the same
+contract in prose.
+
+| Object | Required keys | Optional keys |
+|---|---|---|
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `ret`, `body`, `types` | `globals`, `module`¹ |
+| `profile` | all fields of the example above ([profiles](profiles.md)) | — |
+| every type | `k` | `abi_size`, `abi_align` |
+| `int` / `float` | `signed`, `bits` / `bits` | — |
+| `ptr` | `size` (`one`, `many`, `slice`, `c`), `const`, `child`, `volatile`, `allowzero`, `address_space`, `sentinel`, `host_size` | `ptr_align`, `sentinel_byte`, `bit_offset`, `vector_index` |
+| `array` / `vector` | `len`, `child` (+ `sentinel` for `array`) | — |
+| `optional` / `error_union` | `child` / `error`, `payload` | — |
+| `error_set` | — | `errors`, `any: true`, `inferred: true` |
+| `struct` / `union` | `name`, `layout` (`auto`, `extern`, `packed`) | `module`¹, `no_fields: true`, `fields`; `union`: `tag`, `safety_tag` |
+| `tuple` / `enum` | `fields` / `name`, `tag`, `exhaustive`, `fields` | `enum`: `module`¹ |
+| `other` | `name` | — |
+| struct or tuple field | `ty` | `name`, `offset`, `comptime: true` |
+| union / enum field | `name`, `ty` / `name`, `value` | — |
+| instruction | `id`, `tag`, `ty`, the payload keys of its tag (§Inst) | — |
+| unsupported instruction | `id`, `tag`, `unsupported: true` | `ty` |
+| `Ref` | exactly one form of §Ref with its keys (`ty` for every constant form) | `module`¹, `comptime_fn`, `comptime_fn_module` (`func`), `utag` (`uval`) |
+| pointer constant target | `off` and one of `global`, `null: true`, `unsupported` | `payload_base: true` (with `global`) |
+| shuffle lane | one of `a`, `b`, `u: true`, `v` | — |
+| switch case | `items`, `ranges`, `body` | — |
+| asm operand | `constraint`, `name` | `ref` |
+| named global (`nav`) | `name`, `ty`, `const`, `threadlocal`, `extern` | `module`¹, `init` |
+| unnamed global (`uav`) | `ty`, `const`, `init` | — |
+
+¹ The module identity keys of the module-identity change (`Schema.moduleRequired`). They are
+optional until that exporter change is integrated, and then required in schema 12.
+
+Each instruction tag has one payload entry (`instPayload`), following the exporter's
+`writeInst`: for example `args` for every `bin_op`, `un_op` and `ty_op` tag, `callee` and
+`args` for the four `call*` tags, `body` for blocks, `then`/`else` for `cond_br`. A tag
+without an entry is accepted only as `"unsupported": true`, which the normalizer rejects.
+
+**Semantic attributes.** The table also names the type attributes that the translator does
+not model, with the one value it accepts:
+
+| Kind | Attribute | Accepted value |
+|---|---|---|
+| `ptr` | `address_space` | `"generic"` (`*addrspace(.gs) T` is outside the subset) |
+| `struct`, `tuple` field | `comptime` | absent (`false`): a comptime field has no runtime storage |
+
+Another value is recorded in the type's layout facts, and the checker rejects every type that
+a function uses (a parameter, result, instruction, constant or global type, or a type reached
+through their fields and pointees) with such an attribute. Unused entries of the type table
+do not reject the file. Independently, the checker rejects a non-packed struct or tuple whose
+nonzero-sized fields overlap or extend beyond the type's `abi_size`, which also catches a
+comptime field in an export that predates the `comptime` marker.
+
+Schemas 1–11 predate the table and keep the historical reader (absent flags default to
+`false`), behind the explicit legacy opt-in. Their goldens remain comparable with fresh
+exports: `scripts/normalize-air.py` treats `"address_space": "generic"` like an absent field.
+
+**Build-mode admission.** Only the build mode and backend pairs that
+[build-modes.md](build-modes.md) qualifies (`ReleaseSafe` with `stage2_llvm`) are translated
+by default. Any other profile needs `--allow-unqualified-build-mode`; the generated header's
+`-- air2lean-profile:` record then carries `"admission": "unqualified-build-mode"`, which the
+check reports and proof receipts copy with the rest of the header.
 
 ## Type
 
@@ -62,14 +132,14 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `int` | `signed: bool`, `bits: int` |
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
-| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `sentinel: bool`, optional `sentinel_byte: decimal string` (0.16.0 exports only: exact comptime sentinel for a u8 pointer; required by the byte allocSentinel model), `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11), `vector_index: null\|int\|"runtime"` (present when `host_size` is nonzero or the pointer is a vector lane pointer: `null` for a packed field pointer, else the lane index of `&v[i]` into a bit-packed vector, whose `host_size` is the lane count, not bytes; `"runtime"` on 0.14.1/0.15.2 only. The translator rejects lane pointers. An export without the field cannot tell the two apart, so the translator accepts a bit-pointer without it only as the result of a `struct_field_ptr` of a packed struct or union, never as a parameter, constant, load result or other value) |
+| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `address_space: string` (the `std.builtin.AddressSpace` tag; the translator accepts only `generic`), `sentinel: bool`, optional `sentinel_byte: decimal string` (0.16.0 exports only: exact comptime sentinel for a u8 pointer; required by the byte allocSentinel model), `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11), `vector_index: null\|int\|"runtime"` (present when `host_size` is nonzero or the pointer is a vector lane pointer: `null` for a packed field pointer, else the lane index of `&v[i]` into a bit-packed vector, whose `host_size` is the lane count, not bytes; `"runtime"` on 0.14.1/0.15.2 only. The translator rejects lane pointers. An export without the field cannot tell the two apart, so the translator accepts a bit-pointer without it only as the result of a `struct_field_ptr` of a packed struct or union, never as a parameter, constant, load result or other value) |
 | `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
 | `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9). The checked subset permits integer, float and bool lanes. Pointer vectors and nonidentity vector bitcasts are rejected. |
 | `optional` | `child: id` |
 | `error_union` | `error: id` (the error set type), `payload: id` |
 | `error_set` | `errors: [string]` (sorted error names), `any: true` for `anyerror`, or `inferred: true` for an inferred set (`!T`) that is not resolved yet when the file is written |
-| `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id, offset: int}]` (`offset`: the field's byte offset; missing for a packed struct, and if the layout is not known; schema 5) |
-| `tuple` | `fields: [{ty: id, offset: int}]` |
+| `struct` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `fields: [{name, ty: id, offset: int}]` (`offset`: the field's byte offset; missing for a packed struct, and if the layout is not known; schema 5). A comptime field also has `comptime: true`; the translator rejects it. |
+| `tuple` | `fields: [{ty: id, offset: int}]`, plus `comptime: true` on a comptime field (a comptime-known tuple item) |
 | `enum` | `name: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
 | `union` | `name: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `safety_tag: id` (the hidden tag enum of a bare union in a safe build; schema 11), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
 | `struct`, `union` without known fields | `name`, `layout`, `no_fields: true` in place of the fields (schema 7). 0.16.0 knows the fields of a container only when its layout is wanted; a container that is only behind a pointer (`mem.Allocator.VTable`) can have none. The reader makes it `other`. |

@@ -29,7 +29,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Basic",
       "prefix": "basic.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Basic/Gen.lean",
       "proof_modules": [
         "Proofs.Basic.Arith",
@@ -111,7 +114,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Slices",
       "prefix": "slices.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "tests/golden/0.15.2/slices/Gen.lean",
       "proof_modules": [
         "Proofs.Slices.Gen",
@@ -190,7 +196,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Layout",
       "prefix": "layout.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Layout/Gen.lean",
       "proof_modules": [
         "Proofs.Layout.Gen",
@@ -269,7 +278,10 @@
       "air_zig_version": "0.16.0",
       "namespace": "Vectors",
       "prefix": "vectors.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Vectors/Gen.lean",
       "proof_modules": [
         "Proofs.Vectors.CheckedAdd",
@@ -348,7 +360,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Variants",
       "prefix": "variants.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "Proofs/Variants/Gen.lean",
       "proof_modules": [
         "Proofs.Variants.Gen",
@@ -427,6 +442,8 @@
       "namespace": "Floatops",
       "prefix": "floatops.",
       "translate_args": [
+        "--profile",
+        "legacy-abi64-le",
         "--float-semantics",
         "compiler-rt"
       ],
@@ -507,7 +524,10 @@
       "air_zig_version": "0.15.2",
       "namespace": "Threadsync",
       "prefix": "threadsync.",
-      "translate_args": [],
+      "translate_args": [
+        "--profile",
+        "legacy-abi64-le"
+      ],
       "reference_gen": "tests/golden/0.15.2/threadsync/Gen-darwin.lean",
       "proof_modules": [
         "Proofs.Threadsync.Deadline",

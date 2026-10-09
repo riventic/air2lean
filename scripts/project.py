@@ -540,7 +540,9 @@ def translate(manifest, limits, data, report, translator, staging):
         for index, name in enumerate(root['air']):
             (air_dir / f'{index:06d}.json').write_bytes(data[name])
         output = rootdir / 'Gen.lean'
-        argv = [str(translator), str(air_dir), '-o', str(output), '--namespace', root['namespace'], '--prefix', root['prefix'], '--float-semantics', manifest['float_semantics'], '--spawn-policy', spawn_policy(manifest)]
+        # A legacy manifest profile is the explicit opt-in that legacy AIR needs.
+        legacy = ['--profile', 'legacy-abi64-le'] if (report.get('profile') or {}).get('name') == 'legacy-abi64-le' else []
+        argv = [str(translator), str(air_dir), '-o', str(output), '--namespace', root['namespace'], '--prefix', root['prefix'], *legacy, '--float-semantics', manifest['float_semantics'], '--spawn-policy', spawn_policy(manifest)]
         child_limits = dict(limits, max_output_bytes=min(limits['max_output_bytes'],
                             limits['max_total_output_bytes'] - generated_bytes,
                             limits['max_total_output_bytes'] - log_bytes))
@@ -650,7 +652,7 @@ def verify_spawn_policy(manifest, stored):
         positions = []
         i = 2
         while i < len(argv):
-            if argv[i] not in ('-o', '--namespace', '--prefix', '--float-semantics', '--spawn-policy') or i + 1 >= len(argv):
+            if argv[i] not in ('-o', '--namespace', '--prefix', '--float-semantics', '--spawn-policy', '--profile') or i + 1 >= len(argv):
                 raise Invalid('invalid artifact translation argv')
             if argv[i] == '--spawn-policy':
                 positions.append(i)

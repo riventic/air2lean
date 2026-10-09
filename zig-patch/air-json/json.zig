@@ -1554,6 +1554,10 @@ const W = struct {
                 try w.j.write(info.flags.is_volatile);
                 try w.field("allowzero");
                 try w.j.write(info.flags.is_allowzero);
+                // Every pointer names its address space (`generic` for ordinary memory), so
+                // `*addrspace(.gs) T` cannot be read as a generic pointer.
+                try w.field("address_space");
+                try w.j.write(@tagName(info.flags.address_space));
                 try w.field("sentinel");
                 try w.j.write(info.sentinel != .none);
                 // allocSentinel(u8, n, s): the result pointer type contains the exact
@@ -1675,6 +1679,11 @@ const W = struct {
                     }
                     try w.field("ty");
                     try w.writeTypeRef(ty.fieldType(i, zcu));
+                    // A comptime field has no runtime storage (its offset overlaps others).
+                    if (ty.structFieldIsComptime(i, zcu)) {
+                        try w.field("comptime");
+                        try w.j.write(true);
+                    }
                     if (offsets) {
                         try w.field("offset");
                         try w.j.write(ty.structFieldOffset(i, zcu));

@@ -37,6 +37,10 @@
     },
     {
       "k": "noreturn"
+    },
+    {
+      "k": "other",
+      "name": "fn (u8) u8"
     }
   ],
   "body": [
@@ -44,15 +48,16 @@
       "id": 0,
       "tag": "arg",
       "ty": 0,
-      "param": 0,
-      "args": []
+      "param": 0
     },
     {
       "id": 1,
       "tag": "call",
       "ty": 0,
       "callee": {
-        "func": "project.identity"
+        "ty": 2,
+        "func": "project.identity",
+        "noreturn": false
       },
       "args": [
         {

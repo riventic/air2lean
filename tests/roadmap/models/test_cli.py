@@ -145,7 +145,9 @@ def main(executable):
         invoke(["--model-registry", str(registry)])
         assert out.read_text() == text
         deep = json.loads(fixture.read_text())
-        deep["types"] = [deep["types"][0]] + [{"k": "optional", "child": i - 1} for i in range(1, 65)] + [{"k": "noreturn"}]
+        deep["types"] = ([deep["types"][0]] + [{"k": "optional", "child": i - 1} for i in range(1, 65)] +
+                         [{"k": "noreturn"}, deep["types"][-1]])
+        deep["body"][1]["callee"]["ty"] = 66
         deep["params"], deep["ret"] = [64], 64
         deep["body"][0]["ty"] = deep["body"][1]["ty"] = 64
         deep["body"][2]["ty"] = 65
@@ -167,10 +169,12 @@ def main(executable):
         # A source AIR mutation of only the byte qualifier must reject the old binding.
         sentinel = json.loads(fixture.read_text())
         sentinel["types"].append({"k": "ptr", "size": "slice", "const": False,
-            "child": 0, "abi_size": 16, "abi_align": 8, "ptr_align": 1,
+            "child": 0, "abi_size": 16, "abi_align": 8, "ptr_align": 1, "volatile": False,
+            "allowzero": False, "address_space": "generic", "host_size": 0,
             "sentinel": True, "sentinel_byte": "0"})
-        sentinel["params"], sentinel["ret"] = [2], 2
-        sentinel["body"][0]["ty"] = sentinel["body"][1]["ty"] = 2
+        slice_ty = len(sentinel["types"]) - 1
+        sentinel["params"], sentinel["ret"] = [slice_ty], slice_ty
+        sentinel["body"][0]["ty"] = sentinel["body"][1]["ty"] = slice_ty
         (air / "client.json").write_text(json.dumps(sentinel))
         invoke(["--model-registry-template"])
         sentinel_data = json.loads(out.read_text())
@@ -184,9 +188,9 @@ def main(executable):
         for value in ("42", None):
             mutated = copy.deepcopy(sentinel)
             if value is None:
-                del mutated["types"][2]["sentinel_byte"]
+                del mutated["types"][slice_ty]["sentinel_byte"]
             else:
-                mutated["types"][2]["sentinel_byte"] = value
+                mutated["types"][slice_ty]["sentinel_byte"] = value
             (air / "client.json").write_text(json.dumps(mutated))
             fail(sentinel_data, "incompatible signature/layout")
 
