@@ -44,7 +44,9 @@ def profile_for_air(doc):
     if (type(schema) is not int or not 1 <= schema <= 12 or
             not isinstance(version, str) or version not in VERSIONS):
         raise ValueError("unsupported AIR schema or zig_version")
-    if "target_endian" in doc and doc["target_endian"] != "little":
+    # Big endian needs a schema-12 profile of a qualified big-endian target (below, T03).
+    if "target_endian" in doc and not (doc["target_endian"] == "little" or
+                                       (doc["target_endian"] == "big" and schema == 12)):
         raise ValueError("target_endian is outside the little-endian memory model")
     if schema < 12:
         if "profile" in doc:
@@ -60,20 +62,27 @@ def profile_for_air(doc):
     string_fields = RAW_FIELDS - {"pointer_bits", "error_set_bits", "error_tracing", "features"}
     if any(not isinstance(p[k], str) or not p[k] for k in string_fields):
         raise ValueError("profile string fields must not be empty or malformed")
-    # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos or
-    # 32-bit wasm32-freestanding/wasm32-wasi pointers, and a 1..32-bit error integer.
-    if (p["name"] != "abi64-le-v1" or p["zig_version"] != version or
+    # As `BuildProfile.collect` (Air2Lean/Air/Profile.lean): 64-bit x86_64-linux/aarch64-macos,
+    # 32-bit wasm32-freestanding/wasm32-wasi pointers or the 64-bit big-endian s390x-linux model
+    # (named `abi64-be-v1` by the translator), and a 1..32-bit error integer.
+    big = p["endian"] == "big"
+    if (p["name"] not in ("abi64-le-v1", "abi64-be-v1" if big else "abi64-le-v1") or
+            p["zig_version"] != version or
             type(p["pointer_bits"]) is not int or p["pointer_bits"] not in (32, 64) or
-            p["endian"] != "little" or type(p["error_set_bits"]) is not int or
+            p["endian"] not in ("little", "big") or type(p["error_set_bits"]) is not int or
             not 0 < p["error_set_bits"] <= 32):
         raise ValueError("incompatible target profile")
+    if "target_endian" in doc and doc["target_endian"] != p["endian"]:
+        raise ValueError("incompatible target profile: target_endian differs from profile.endian")
     triple = p["target_triple"].split("-")
     target = (triple[0], triple[1].split(".")[0]) if len(triple) == 3 else None
     if (len(triple) != 3 or triple[2].split(".")[0] != p["abi"] or
-            target not in {("x86_64", "linux"), ("aarch64", "macos"),
+            target not in {("x86_64", "linux"), ("aarch64", "macos"), ("s390x", "linux"),
                            ("wasm32", "freestanding"), ("wasm32", "wasi")}):
         raise ValueError("target triple is outside the supported model ABI scope")
     if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
+        raise ValueError("incompatible target profile")
+    if big != (target == ("s390x", "linux")) or (big and p["backend"] != "stage2_llvm"):
         raise ValueError("incompatible target profile")
     fs = p["features"]
     if (not isinstance(fs, list) or any(not isinstance(f, str) or not f for f in fs) or
@@ -83,7 +92,7 @@ def profile_for_air(doc):
             p["float_mode"] != "per-instruction" or p["error_layout"] != "type-table" or
             p["export_stage"] != "analyzed-air"):
         raise ValueError("unsupported build/profile claim")
-    return dict(p, schema=schema)
+    return dict(p, schema=schema, name="abi64-be-v1" if big else p["name"])
 
 
 # Audited Zig 0.15.2/0.16.0 x86_64 baseline models, including sse2's sse dependency.
