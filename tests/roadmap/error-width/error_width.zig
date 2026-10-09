@@ -36,3 +36,14 @@ pub fn setPayload(cell: *Failure!u8, x: u8) bool {
 pub fn loadUnion(cell: *Failure!u8) Failure!u8 {
     return cell.*;
 }
+
+// Compiler export: `build-obj` analyzes only referenced functions, so reference each one.
+comptime {
+    _ = &storeError;
+    _ = &storeOptional;
+    _ = &loadOptional;
+    _ = &unionTry8;
+    _ = &unionTry64;
+    _ = &setPayload;
+    _ = &loadUnion;
+}

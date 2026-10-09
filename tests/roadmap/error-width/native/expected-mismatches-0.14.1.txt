@@ -1,0 +1,36 @@
+lim255 | model: enc le_code 0
+lim255 | model: enc roundtrip 0
+lim255 | model: bound count 255
+lim255 | model: bound above 256 panic
+lim255 | model: bound max 255 ok
+lim255 | native: enc le_code 1
+lim255 | native: enc roundtrip 1
+lim255 | native: bound count 253
+lim255 | native: bound above 254 panic
+lim255 | native: bound max 255 panic
+lim1000 | model: enc le_code 0
+lim1000 | model: enc roundtrip 0
+lim1000 | native: enc le_code 1
+lim1000 | native: enc roundtrip 1
+lim65534 | model: bound count 65534
+lim65534 | model: bound above 65535 panic
+lim65534 | native: bound count 32767
+lim65534 | native: bound above 32768 panic
+lim65535 | model: bound count 65535
+lim65535 | model: bound above 65536 panic
+lim65535 | model: bound max 65535 ok
+lim65535 | native: bound count 32767
+lim65535 | native: bound above 32768 panic
+lim65535 | native: bound max 65535 panic
+lim65536 | model: enc defined 4
+lim65536 | model: bound count 65536
+lim65536 | model: bound above 65537 panic
+lim65536 | native: enc defined 3
+lim65536 | native: bound count 65535
+lim65536 | native: bound above 65536 panic
+lim100000 | model: enc defined 4
+lim100000 | model: bound count 70000
+lim100000 | model: bound above 70001 panic
+lim100000 | native: enc defined 3
+lim100000 | native: bound count 65535
+lim100000 | native: bound above 65536 panic

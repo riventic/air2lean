@@ -1,0 +1,262 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 17,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "error_width.setPayload",
+ "src": {
+  "file": "error_width.zig",
+  "module": "error_width",
+  "decl_line": 31
+ },
+ "params": [
+  0,
+  1
+ ],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "wrap_errunion_payload",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 16
+  },
+  {
+   "id": 6,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 7,
+     "tag": "load",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 0
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "tag": "is_non_err",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 7
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "tag": "cond_br",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 8
+      }
+     ],
+     "then": [
+      {
+       "id": 9,
+       "tag": "unwrap_errunion_payload",
+       "ty": 1,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 10,
+       "tag": "br",
+       "ty": 5,
+       "target": 6,
+       "args": [
+        {
+         "ty": 2,
+         "val": "false"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 11,
+       "tag": "unwrap_errunion_err",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 12,
+       "tag": "unwrap_errunion_err",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 13,
+       "tag": "br",
+       "ty": 5,
+       "target": 6,
+       "args": [
+        {
+         "ty": 2,
+         "val": "true"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 16,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 6
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "error_union",
+   "error": 6,
+   "payload": 1,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Bad",
+    "Other"
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}
