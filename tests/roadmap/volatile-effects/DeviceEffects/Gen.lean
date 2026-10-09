@@ -134,7 +134,7 @@ def writeAll.loop6 (p0 : Zig.Ptr) (p1 : Zig.Slice) (i4 : BitVec 64) : Zig.MM wri
     let i10 ← pure (i4)
     let i11 ← pure (Zig.lt false i9 i10)
     if i11 then (do
-      let i13 ← Zig.callM (Zig.load (BitVec 8) 1 (p1.ptr.elem 1 i7))
+      let i13 ← Zig.callM (Zig.checkIndex p1 i7 >>= fun _ => Zig.load (BitVec 8) 1 (p1.ptr.elem 1 i7))
       let _i14 ← Zig.callM (putc p0 i13)
       pure .br8)
     else (do

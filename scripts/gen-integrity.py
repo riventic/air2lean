@@ -87,6 +87,8 @@ FIXTURES = [
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
      ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
+    ("tests/roadmap/illegal-behavior/Gen.lean", "tests/roadmap/illegal-behavior/air",
+     ["--namespace", "IllegalBehavior", "--prefix", "ib."], "exact"),
     ("tests/roadmap/const-locals/ConstLocals/Gen.lean", "tests/roadmap/const-locals/air/0.16.0",
      ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
     ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",
@@ -129,6 +131,10 @@ FIXTURES = [
 
 # Reviewed generated-looking files that are not current translator output.
 EXCEPTIONS = {
+    "tests/roadmap/architecture-audit/claims/AuditClaims/Gen.lean":
+        "hand-written stand-in for a generated root in the claims audit counterexamples "
+        "(docs/architecture-audit/claims.md); compiled only by that audit's build.sh into a "
+        "private olean directory, imported by no shipped module",
     "tests/roadmap/try-pointers/origin/TryPointers/Gen.lean":
         "historical translator output retained byte-for-byte as a provenance input "
         "(tests/roadmap/try-pointers/README.md); check-artifacts.py pins its hash and no "

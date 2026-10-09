@@ -290,7 +290,7 @@ def roundTrip (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
         else (do
           throw .panic)) : Zig.MM roundTripLocals roundTripExit) with
       | .br10 => (do
-        let i15 ← Zig.callM (Zig.ptrFromAddr (i1).toNat)
+        let i15 ← Zig.callM (Zig.checkAddr 4 true (i1).toNat >>= fun _ => Zig.ptrFromAddr (i1).toNat)
         let i16 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i15)))
         let i17 ← pure (Zig.addWrap i16 (1 : BitVec 64))
         pure (.ret i17))

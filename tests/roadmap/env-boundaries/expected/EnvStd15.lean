@@ -454,7 +454,7 @@ def fs_File_readAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_readA
             else (do
               throw .outOfBounds)) : Zig.MM fs_File_readAllLocals fs_File_readAllExit) with
           | .br27 => (do
-            let i32 ← pure (⟨i16, i24⟩ : Zig.Slice)
+            let i32 ← Zig.callM (Zig.checkSliceEnd p1.len i14 i24 0 >>= fun _ => pure (⟨i16, i24⟩ : Zig.Slice))
             let i33 ← Zig.callM (fs_File_read p0 i32)
             match i33 with
             | .error _ => (do
@@ -666,7 +666,7 @@ def fs_File_writeAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_writ
           else (do
             throw .outOfBounds)) : Zig.MM fs_File_writeAllLocals fs_File_writeAllExit) with
         | .br27 => (do
-          let i32 ← pure (⟨i16, i24⟩ : Zig.Slice)
+          let i32 ← Zig.callM (Zig.checkSliceEnd p1.len i14 i24 0 >>= fun _ => pure (⟨i16, i24⟩ : Zig.Slice))
           let i33 ← Zig.callM (fs_File_write p0 i32)
           match i33 with
           | .error _ => (do

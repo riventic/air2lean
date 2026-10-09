@@ -59,6 +59,7 @@ structure awaitErrorLocals where
 inductive awaitErrorExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitError (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
@@ -93,6 +94,7 @@ structure awaitOwnedLocals where
 inductive awaitOwnedExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitOwned (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let s2 ← Zig.allocStack 4 4
   let s4 ← Zig.allocStack 8 8
@@ -131,6 +133,7 @@ structure awaitTwiceLocals where
 inductive awaitTwiceExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitTwice (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
@@ -153,6 +156,7 @@ structure awaitValueLocals where
 inductive awaitValueExit where
   | ret (v : BitVec 32)
 
+-- air2lean-premises: {"IOM-01":[0]}
 def awaitValue (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do
@@ -172,6 +176,7 @@ structure cancellableLocals where
 inductive cancellableExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def cancellable (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let e ← ((do
     let i2 ← Zig.checkCancelC p0
@@ -194,6 +199,7 @@ structure cancelValueLocals where
 inductive cancelValueExit where
   | ret (v : Except Zig.ErrName (BitVec 32))
 
+-- air2lean-premises: {"IOM-01":[0]}
 def cancelValue (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   let s2 ← Zig.allocStack 16 8
   let e ← ((do

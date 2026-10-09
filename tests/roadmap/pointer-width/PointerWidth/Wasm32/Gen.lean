@@ -104,7 +104,7 @@ def copy4 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
         else (do
           throw .panic)) : Zig.MM copy4Locals copy4Exit) with
       | .br19 => (do
-        Zig.callM (Zig.memmoveOf 1 1 1 i11 p1 (4 : BitVec 32))
+        Zig.callM (Zig.memcpyOf 1 1 1 i11 p1 (4 : BitVec 32) (4 : BitVec 32))
         pure .ret)
       | e => pure e)
     | e => pure e) : Zig.MM copy4Locals copy4Exit).run' (default : copy4Locals)
@@ -149,6 +149,7 @@ structure releaseLocals where
 inductive releaseExit where
   | ret
 
+-- air2lean-premises: {"ALC-09":[0]}
 def release (p0 : Zig.Allocator) (p1 : Zig.Slice32) : Zig.MemM (Unit) := do
   let e ← ((do
     let _i2 ← Zig.callM (Zig.Allocator.freeOf p0 4 p1)
@@ -205,6 +206,7 @@ structure zerosLocals where
 inductive zerosExit where
   | ret (v : Except Zig.ErrName (Zig.Slice32))
 
+-- air2lean-premises: {"ALC-09":[0]}
 def zeros (p0 : Zig.Allocator) (p1 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Zig.Slice32)) := do
   let e ← ((do
     let i2 ← Zig.callM (Zig.Allocator.allocOf .w32 p0 4 4 p1)
