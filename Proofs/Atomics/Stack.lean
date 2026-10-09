@@ -1,5 +1,6 @@
 import ZigLean.Conc.WeakCasLemmas
 import Proofs.Atomics.MessagePassing
+import ZigLean.Mem.Witness
 
 /-!
 # `stackPush` over all schedules: a lock-free stack
@@ -2021,5 +2022,38 @@ overflow, under every schedule. -/
 theorem stackPush_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
     (Sched.run dispatch fuel o stackPush mem0).run ≠ some (.error e) :=
   proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+
+/-! ## Non-vacuity witnesses
+
+`memW` is `main`'s memory before its spawns as `main_spec` builds it: the `Stack` (head 0,
+`next[0] = 0`) and the two `PushCtx`, so `pre_inv` gives the invariant. -/
+
+/-- A `stack` block of 16 bytes at `addr`. -/
+def blkW (bs : Array Byte) (addr : Nat) : Block :=
+  { bytes := bs ++ Array.replicate (16 - bs.size) .undef, align := 8, kind := .stack, live := true,
+    addr }
+
+def memW : Mem :=
+  { blocks := #[blkW (Enc.encode (0 : BitVec 32) ++ Enc.encode (0 : BitVec 32)) 4096,
+      blkW (Enc.encode sPtr ++ Enc.encode (1 : BitVec 32)) 8192,
+      blkW (Enc.encode sPtr ++ Enc.encode (2 : BitVec 32)) 12288],
+    nextAddr := 12288 + 17 }
+
+theorem memW_inv : Inv G0 memW :=
+  pre_inv ⟨⟨rfl, rfl, rfl, rfl, fun _ h => by simp [memW] at h⟩, ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩,
+      ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩, ⟨_, rfl, rfl, by decide +kernel, rfl, rfl⟩⟩
+    (by with_unfolding_all rfl) (by with_unfolding_all rfl)
+    (fun u hu => by rcases hu with rfl | rfl <;> exact ⟨by decide +kernel, by with_unfolding_all rfl⟩)
+
+nonvacuity_witness ctxS_dec := ⟨G0, memW, 1, memW_inv, .inl rfl, trivial⟩
+nonvacuity_witness ctxN_dec := ⟨G0, memW, 1, memW_inv, .inl rfl, trivial⟩
+
+nonvacuity_witness decode_stack :=
+  ⟨Array.replicate 16 (.int 0), 0, 0, 0, 0, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+
+nonvacuity_witness u32_blk :=
+  ⟨Witness.mem1 (Enc.encode (0 : BitVec 32)), Witness.blk (Enc.encode (0 : BitVec 32)), 0, 0, rfl,
+    by with_unfolding_all rfl, trivial⟩
 
 end Atomics.Stack
