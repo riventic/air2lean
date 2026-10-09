@@ -139,7 +139,7 @@ jobs:
           python3 -m unittest discover -s tests/roadmap/target-matrix -v
           python3 scripts/target-matrix.py check
 
-      # Offline fixture repositories; runs before check.sh rewrites committed Gen.lean files.
+      # Offline fixture repositories.
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
@@ -154,7 +154,7 @@ jobs:
       - name: Semantic fingerprint classification regressions
         run: python3 -I -B tests/roadmap/stable-generation/test_fingerprints.py
 
-      # Before check.sh replaces the committed Proofs/<Ex>/Gen.lean files the index describes.
+      # Offline, over the committed Proofs/<Ex>/Gen.lean files the index describes.
       - name: Theorem premise reference and index
         run: |
           python3 -B tests/roadmap/premises/test_premises.py
@@ -166,9 +166,9 @@ jobs:
       - name: Tutorial layout regressions
         run: python3 -B -m unittest discover -s tests/roadmap/tutorials -v
 
-      # Offline, before check.sh replaces the committed Gen.lean files whose hashes it compares:
-      # every listed theorem has a current recorded check per translation, and no document
-      # labels a single-step or single-schedule theorem as holding under every schedule.
+      # Offline, over the committed Gen.lean files whose hashes it compares: every listed
+      # theorem has a current recorded check per translation, and no document labels a
+      # single-step or single-schedule theorem as holding under every schedule.
       - name: Theorem inventory scope and check results
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
@@ -218,7 +218,6 @@ jobs:
           python3 -B scripts/build-modes.py check
 
       # Inspect checksum-pinned pristine sources even when a patched compiler is cached.
-      # Run before check.sh replaces committed generated proof modules.
       - name: Check compiler-derived coverage inventory
         if: ${{ !matrix.mutate }}
         run: |
@@ -340,10 +339,13 @@ jobs:
           ./elan-init --default-toolchain none -y
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
+      # Not the check trees (scripts/check-tree.py): each run derives them from this cache.
       - name: Cache Lake build (root package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .lake
+          path: |
+            .lake
+            !.lake/check-tree
           key: lake-root-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache Lake build (tests/diff package)
@@ -358,8 +360,8 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
-      # Before check.sh rewrites Proofs/<Ex>/Gen.lean: every tracked generated module must be
-      # the current translator's output for its committed AIR (docs/generated-code.md).
+      # Every tracked generated module must be the current translator's output for its
+      # committed AIR (docs/generated-code.md).
       - name: Generated modules are fresh translations of committed AIR
         run: |
           python3 -B tests/roadmap/gen-integrity/test_gen_integrity.py
@@ -370,7 +372,7 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/perf-budgets/timing_cli.py --air2lean "$PWD/.lake/build/bin/air2lean"
 
-      # Before check.sh rewrites Proofs/<Ex>/Gen.lean: the sidecar flag must leave them byte-identical.
+      # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
         if: ${{ !matrix.mutate }}
         run: python3 -I -B tests/roadmap/stable-generation/test_cli.py "$PWD/.lake/build/bin/air2lean"
@@ -840,6 +842,9 @@ jobs:
           bash tests/roadmap/try-pointers/aliases/check.sh --export "$fresh/air"
           python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
 
+      # Never writes a tracked file. A translation that differs from the committed module
+      # (another version's or OS's) is built and tested in a check tree; the steps below that
+      # build this version's proofs run in .lake/check-reports/<version>/build-tree.
       - name: Golden AIR, translate, build, differential test
         if: ${{ !matrix.mutate }}
         env:
@@ -867,7 +872,7 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          summary=tests/diff/out/report.json
+          summary="$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)/tests/diff/out/report.json"
           out="$RUNNER_TEMP/accounting"
           python3 scripts/accounting.py publish --summary "$summary" \
             --json "$out/accounting.json" --markdown "$out/accounting.md"
@@ -882,13 +887,16 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
-          path: tests/diff/out/report.json
+          path: |
+            tests/diff/out/report.json
+            .lake/check-tree/${{ matrix.zig }}/tests/diff/out/report.json
           if-no-files-found: warn
           retention-days: 30
 
       - name: Typed outcomes and bounded schedule regressions
         if: ${{ !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: |
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"  # The modules check.sh built.
           python3 -I -B tests/roadmap/outcome-accounting/test_report.py
           python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
           # Relink against this version's archive produced by the differential gate.
@@ -915,11 +923,12 @@ jobs:
           python3 tests/roadmap/outcome-accounting/test_native.py "$RUNNER_TEMP/outcome-native"
           python3 tests/roadmap/outcome-accounting/test_parent_oom.py "$(command -v zig)"
 
-      # After check.sh, Proofs/<Ex>/Gen.lean holds this version's translation: the proofs must
-      # hold for it too (0.14.1 has its own `layout`, `variants` and `floatops` translations).
+      # The proofs must hold for this version's translation too (0.14.1 has its own `layout`,
+      # `variants` and `floatops` translations): built where check.sh built it.
       - name: Build proofs
         if: ${{ !matrix.mutate }}
         run: |
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"  # The modules check.sh built.
           lake build Proofs
           lake env lean tests/roadmap/container-contracts/Clients.lean
           if [ "${{ matrix.full }}" = "true" ] && [ "${{ matrix.zig }}" = "0.16.0" ]; then
@@ -1011,14 +1020,18 @@ jobs:
         run: lake env lean tests/roadmap/outcome-taxonomy/Taxonomy.lean
 
       # Every tutorial: Main.lean and the solved exercise elaborate, the negative control fails
-      # with its expected error. `lake build Proofs` above built the imported modules.
+      # with its expected error. `lake build Proofs` above built the imported modules. This and
+      # the Lean steps below that import proof modules run where check.sh built them.
       - name: Tutorials
         if: ${{ !matrix.mutate }}
-        run: python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
+        run: |
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          python3 -B scripts/tutorials.py check --results "$RUNNER_TEMP/tutorials"
 
       - name: Memory-safety tutorial
         if: ${{ !matrix.mutate }}
         run: |
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           lake env lean tutorials/memory-safety/Main.lean
           lake env lean tutorials/memory-safety/Controls.lean
 
@@ -1030,11 +1043,12 @@ jobs:
           AIR2LEAN_BITOPS_OUT_DIR: ${{ runner.temp }}/air2lean-bitops
         run: tests/roadmap/bitops/check.sh
 
-      # Check source-linked VCs against the pointer translation selected by check.sh.
+      # Check source-linked VCs against the pointer translation that check.sh built.
       - name: Build optional verification conditions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           mkdir -p "$RUNNER_TEMP/vcs"
           lake build ZigLean.VC Proofs.Pointers.Gen Proofs.Basic.Gen Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
 
@@ -1042,18 +1056,21 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           lake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Result.log"
 
       - name: Memory verification condition regressions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
       - name: Verification condition client regressions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           lake env lean tests/roadmap/vcs/Clients.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Clients.log"
 
       # Reflect committed loop-free translations into the VC AST; loops must request invariants.
@@ -1061,12 +1078,14 @@ jobs:
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           lake env lean tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
 
       - name: Verification condition report regressions
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
           python3 -B scripts/vc-report.py --json \
             --import Proofs.Basic.Gen --import Proofs.Pointers.Gen --import Proofs.Errors.Gen \
             --namespace Basic --namespace Pointers --namespace Errors \
@@ -1106,7 +1125,9 @@ jobs:
           AIR2LEAN_REVIEW_ZIG15: ${{ matrix.zig == '0.15.2' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_ZIG16: ${{ matrix.zig == '0.16.0' && format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig) || '' }}
           AIR2LEAN_REVIEW_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
-        run: scripts/review.sh
+        run: |
+          cd "$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)"
+          scripts/review.sh
 
       - name: Weak CAS safety qualification
         if: ${{ !matrix.mutate && matrix.zig == '0.16.0' }}
@@ -1122,14 +1143,15 @@ jobs:
         run: scripts/no-sorry.sh
 
       # 0.15.2 on macOS: `Thread.Mutex` is `os_unfair_lock` (tests/golden/0.15.2/threadsync/
-      # Gen-darwin.lean). The `threadsync` proofs hold for that translation too.
+      # Gen-darwin.lean). The `threadsync` proofs hold for that translation too: built in a
+      # check tree, so the checkout's Proofs/Threadsync/Gen.lean is never replaced.
       - name: Build threadsync proofs (macOS translation)
         if: ${{ !matrix.mutate && matrix.zig == '0.15.2' }}
         run: |
-          cp Proofs/Threadsync/Gen.lean "$RUNNER_TEMP/Gen-linux.lean"
-          cp tests/golden/0.15.2/threadsync/Gen-darwin.lean Proofs/Threadsync/Gen.lean
+          python3 scripts/check-tree.py create .lake/check-tree/0.15.2-darwin \
+            --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-darwin.lean
+          cd .lake/check-tree/0.15.2-darwin
           lake build Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff
-          cp "$RUNNER_TEMP/Gen-linux.lean" Proofs/Threadsync/Gen.lean
 
       - name: Mutation check
         if: matrix.mutate
@@ -1204,12 +1226,21 @@ jobs:
             fi
           done
           # END proof receipt compiler stash
-          # check.sh may rewrite Gen.lean profile headers of the selected translation, so the
-          # tree can be dirty; the receipt records that permission (tree.dirty_allowed) and a
-          # release claim must not rely on such a receipt.
-          AIR2LEAN_RECEIPT_ALLOW_DIRTY=1 bash tests/roadmap/proof-receipts/check.sh \
+          # No step writes a tracked file, so the receipt binds a clean tree (no --allow-dirty;
+          # release consumers refuse a receipt that recorded that permission).
+          bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
+
+      # Verification must not change its own inputs: no step may modify, delete or add a
+      # tracked or unignored file (build outputs and tool downloads are gitignored).
+      - name: Checkout unchanged by verification
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
 
   # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
   # (assurance/target-matrix.json, docs/target-matrix.md). One job without a matrix, since
@@ -1299,7 +1330,9 @@ jobs:
       - name: Cache Lake build (macOS root package)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .lake
+          path: |
+            .lake
+            !.lake/check-tree
           key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
 
       - name: Cache Lake build (macOS tests/diff package)
@@ -1316,7 +1349,8 @@ jobs:
 
       # Fresh Darwin AIR export, compared with the goldens and their air-darwin/Gen-darwin
       # overrides, translated, built and differentially tested against native Zig (host-listed
-      # float differences count as `host`, scripts/diff.sh). Rewrites Proofs/<Ex>/Gen.lean.
+      # float differences count as `host`, scripts/diff.sh). Never writes a tracked file: a
+      # translation that differs from the committed module is built in a check tree.
       - name: macOS golden AIR, translate, differential test (0.16.0)
         env:
           AIR2LEAN_CI: "1"
@@ -1329,10 +1363,9 @@ jobs:
       - name: macOS proofs (0.16.0)
         env:
           AIR2LEAN_ZIG_VERSION: "0.16.0"
-        run: lake build Proofs
-
-      - name: Restore committed translations (0.16.0)
-        run: git checkout -- Proofs
+        run: |
+          cd "$(cat .lake/check-reports/0.16.0/build-tree)"
+          lake build Proofs
 
       # 0.15.2's Thread.Mutex is os_unfair_lock here: check.sh selects
       # tests/golden/0.15.2/threadsync/Gen-darwin.lean and the proofs build against it natively.
@@ -1348,7 +1381,18 @@ jobs:
       - name: macOS proofs (0.15.2)
         env:
           AIR2LEAN_ZIG_VERSION: "0.15.2"
-        run: lake build Proofs
+        run: |
+          cd "$(cat .lake/check-reports/0.15.2/build-tree)"
+          lake build Proofs
+
+      # As in the test job: no step may modify, delete or add a tracked or unignored file.
+      - name: Checkout unchanged by verification (macOS)
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
 
       # The Darwin dumps are the source of tests/golden/<version>/<ex>/air-darwin/ overrides.
       - name: Upload the dumped Darwin AIR

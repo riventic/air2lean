@@ -5,6 +5,12 @@
 #   3. build the generated Lean
 #   4. differential-test it against the real Zig behaviour (scripts/diff.sh)
 #
+# It never writes a tracked file. Steps 3-4 run in the checkout when every committed
+# Proofs/<Ex>/Gen.lean already holds the new translation (identical after the first-line profile
+# record), else in a check tree (scripts/check-tree.py): a copy of the checkout with the new
+# translations in place of the committed ones. Its path is written to
+# $AIR2LEAN_CHECK_REPORT_DIR/build-tree; later steps that build this version's proofs run there.
+#
 # Usage: check.sh
 # Env:
 #   AIR2LEAN_ZIG_VERSION  Zig version: selects the per-version goldens and the default patched zig.
@@ -12,7 +18,7 @@
 #   AIR2LEAN_ZIG_AIR      Patched zig (zig-patch/build.sh output). Default: zig-air-$AIR2LEAN_ZIG_VERSION/bin/zig
 #   AIR2LEAN_CI           If 1: fail when the committed translation differs from the new translator
 #                         output: tests/golden/<version>/<ex>/Gen.lean if it exists, else
-#                         Proofs/<Ex>/Gen.lean.
+#                         Proofs/<Ex>/Gen.lean; and when Proofs/ differs from HEAD at all.
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs to check. Default: every dir in examples/
 #                         (not `asm` on a host that is not x86_64).
 #                         Also forwarded (via the environment) to scripts/diff.sh at the end.
@@ -22,6 +28,7 @@
 #                         from there, and the translator makes that OS's Gen.lean from them.
 #   AIR2LEAN_CHECK_REPORT_DIR  Profile/input/generated-hash receipts. Default:
 #                         .lake/check-reports/<zig-version>/; actual generated sources are retained.
+#   AIR2LEAN_CHECK_TREE   The check tree, when one is needed. Default: .lake/check-tree/<zig-version>.
 #   AIR2LEAN_STAGE_TIMEOUT  Seconds per AIR dump/translation stage (default 3600; 0 disables).
 #                         A timed-out or interrupted stage's process group is stopped.
 #   AIR2LEAN_DIFF         If 0: skip step 4. For a Zig version whose std cannot build the diff
@@ -71,10 +78,13 @@ else
   source "$repo_root/scripts/example-selection.sh"
   examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
 fi
-restore_gen=""
 gen_targets=()
+replacements=()
+report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
+rm -f "$report_dir/build-tree"  # Written only once this run has selected its modules.
 if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
-  python3 scripts/normalize-generated.py proof-status "$examples"
+  # The checkout's modules are compared with HEAD's and may be built: they must be HEAD's.
+  python3 scripts/normalize-generated.py proof-status
 fi
 
 for ex in $examples; do
@@ -122,7 +132,6 @@ for ex in $examples; do
   fi
   generated="$cmp_dir/Gen.lean"
   workflow_run_stage lake exe air2lean "$air_dir" -o "$generated" --namespace "$Ex" --prefix "$ex." $translate_args
-  report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
   mkdir -p "$report_dir"
   report="$report_dir/$ex.json"
   python3 scripts/normalize-generated.py report "$generated" "$air_dir" "$cmp_dir/report.json"
@@ -181,38 +190,36 @@ for ex in $examples; do
   # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/).
   gen_golden="tests/golden/$zig_version/$ex/Gen-$(uname -s | tr '[:upper:]' '[:lower:]').lean"
   [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
-  if [ -f "$gen_golden" ]; then
-    # The committed Proofs/<Ex>/Gen.lean is overwritten in either mode: always say so (below).
-    restore_gen="$restore_gen Proofs/$Ex/Gen.lean"
-  fi
-  if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
-    # Before replacement, reject any staged, untracked or working-tree proof-body
-    # changes. Only a header matching this checked translation may differ from HEAD.
-    python3 scripts/normalize-generated.py tracked "Proofs/$Ex/Gen.lean" "$generated" "$report"
-    if [ -f "$gen_golden" ]; then
-      python3 scripts/normalize-generated.py compare "$gen_golden" "$generated" "$report"
-    else
-      git show "HEAD:Proofs/$Ex/Gen.lean" > "$cmp_dir/committed.lean"
-      if ! python3 scripts/normalize-generated.py compare "$cmp_dir/committed.lean" "$generated" "$report"; then
-        diff -u "$cmp_dir/committed.lean" "$generated" >&2 || true
-        echo "error: committed Proofs/$Ex/Gen.lean differs from the translator output; commit the new file" >&2
-        exit 1
-      fi
+  [ -f "$gen_golden" ] || gen_golden="Proofs/$Ex/Gen.lean"
+  # Generated comparisons skip only the first-line profile record (host-specific: the target
+  # triple names the kernel and libc versions); the committed files are canonical bodies.
+  if ! python3 scripts/normalize-generated.py compare "$gen_golden" "$generated" "$report"; then
+    if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
+      diff -u "$gen_golden" "$generated" >&2 || true
+      echo "error: committed $gen_golden differs from the translator output; commit the new file" >&2
+      exit 1
     fi
+    echo "note: $gen_golden is not this translation; to commit it: cp $report_dir/$ex.Gen.lean $gen_golden" >&2
   fi
-  # Preserve the real validated profile header in the artifact compiled by the proof gate.
-  # Atomic replacement: an interruption leaves the previous complete Gen.lean in place.
-  workflow_publish --overwrite "$generated" "Proofs/$Ex/Gen.lean"
+  # Build and test the new translation: the checkout's module only when it is the same one.
+  if ! python3 scripts/normalize-generated.py compare "Proofs/$Ex/Gen.lean" "$generated" "$report" 2>/dev/null; then
+    replacements+=(--replace "Proofs/$Ex/Gen.lean=$report_dir/$ex.Gen.lean")
+  fi
 
   rm -rf "$air_dir" "$cmp_dir"
   air_dir='' cmp_dir=''
 done
 
-if [ -n "$restore_gen" ]; then
-  echo "note: these files hold the Zig $zig_version translation:$restore_gen. Restore the committed ones with: git checkout --$restore_gen" >&2
-fi
-
 [ "${#gen_targets[@]}" -gt 0 ] || { echo "error: no examples selected" >&2; exit 1; }
+tree=$repo_root
+if [ "${#replacements[@]}" -gt 0 ]; then
+  tree=${AIR2LEAN_CHECK_TREE:-$repo_root/.lake/check-tree/$zig_version}
+  echo "== check tree $tree: this translation in place of committed modules (${replacements[*]}) ==" >&2
+  python3 "$repo_root/scripts/check-tree.py" create "$tree" "${replacements[@]}"
+  tree=$(cd -- "$tree" && pwd)
+fi
+printf '%s\n' "$tree" > "$report_dir/build-tree"
+cd "$tree"
 echo "== building Lean ==" >&2
 lake build "${gen_targets[@]}"
 

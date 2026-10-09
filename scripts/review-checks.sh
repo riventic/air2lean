@@ -168,6 +168,13 @@ else
 fi
 EOF
 chmod +x "$check/bin/zig" "$check/bin/lake"
+# check.sh builds a translation that differs from the committed module in a check tree, a copy
+# of the tracked files: the fixture is a repository whose committed module is the valid source.
+cp "$repo_root/scripts/check-tree.py" "$check/scripts/"
+printf 'def valid := 1\n' >"$check/Proofs/Basic/Gen.lean"
+git -C "$check" init -q
+git -C "$check" add -A
+git -C "$check" -c user.name=review -c user.email=review@example.invalid commit -qm fixture
 expect_failure "generated Lean checked with diff disabled" "invalid generated Lean rejected" \
   env PATH="$check/bin:$PATH" AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic \
   AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 AIR2LEAN_OUT_DIR= GENERATED_SOURCE=invalid bash "$check/scripts/check.sh"

@@ -14,8 +14,8 @@ successful run for a required translation, has an all-schedules scope without a 
 over every fuel and oracle, when a document or Lean doc comment says "every schedule" of a
 theorem whose scope is narrower, when a theorem of a proved-examples table is not listed,
 or when docs/theorem-inventory.md is stale. `write` regenerates that document's table.
-`swap-build` builds modules against other translation files and restores the committed
-ones. `record` adds a build-guard report of such a build to the inventory, after
+`swap-build` builds modules against other translation files in a check tree, never
+replacing the committed ones. `record` adds a build-guard report of such a build to the inventory, after
 scripts/gen-integrity.py attests that each translation file it records is a fresh translation
 of its committed AIR. See
 docs/theorem-inventory.md.
@@ -25,10 +25,10 @@ from __future__ import annotations
 import argparse
 import functools
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
-import signal
 import subprocess
 import sys
 
@@ -384,29 +384,24 @@ def check(root: Path = ROOT, write: bool = False) -> list[str]:
 # ----------------------------------------------------------------------------- build and record
 
 def swap_build(root: Path, swaps: list[str], modules: list[str]) -> int:
-    """`lake build modules` with `Proofs/<Ex>/Gen.lean` replaced; the originals are restored."""
-    pairs = []
+    """`lake build modules` with `Proofs/<Ex>/Gen.lean` replaced, in a check tree
+    (scripts/check-tree.py): the checkout's files are never written."""
+    replacements = []
     for spec in swaps:
         example, _, src = spec.partition('=')
         target = root / 'Proofs' / example.capitalize() / 'Gen.lean'
         if not src or not (root / src).is_file() or not target.is_file():
             raise Error(f'bad --swap {spec!r}: want <example>=<translation file>')
-        pairs.append((example, Path(src), target))
-    saved = {target: target.read_bytes() for _, _, target in pairs}
-
-    def stop(signum, _frame):
-        raise SystemExit(128 + signum)
-    previous = {s: signal.signal(s, stop) for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+        replacements.append(f'{target.relative_to(root)}={root / src}')
+        print(f'{SWAP_PREFIX}{example} {src} {sha256(root / src)}', flush=True)
+    spec = importlib.util.spec_from_file_location('check_tree', Path(__file__).with_name('check-tree.py'))
+    check_tree = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check_tree)
     try:
-        for example, src, target in pairs:
-            target.write_bytes((root / src).read_bytes())
-            print(f'{SWAP_PREFIX}{example} {src} {sha256(root / src)}', flush=True)
-        return subprocess.run(['lake', 'build', *modules], cwd=root).returncode
-    finally:
-        for target, data in saved.items():
-            target.write_bytes(data)
-        for s, handler in previous.items():
-            signal.signal(s, handler)
+        tree = check_tree.create(root / '.lake/check-tree/theorem-inventory', replacements, root)
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        raise Error(f'check tree: {error}')
+    return subprocess.run(['lake', 'build', *modules], cwd=tree).returncode
 
 
 def portable(root: Path, arg: str) -> str:

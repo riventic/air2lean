@@ -94,7 +94,7 @@ if [ "${1:-}" = --inside ]; then
   fi
   lake build
   scripts/check.sh
-  lake build Proofs
+  (cd "$(cat ".lake/check-reports/$version/build-tree")" && lake build Proofs)
   exit 0
 fi
 

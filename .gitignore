@@ -10,6 +10,13 @@ zig-out/
 # air2lean
 tests/diff/out/
 zig-air-*/
+__pycache__/
+*.pyc
+# CI tool downloads in the checkout (.github/workflows/ci.yml, scripts/local-ci.sh)
+/host-zig/
+/host-zig.tar.xz
+/elan.tar.gz
+/elan-init
 
 # Generated external-contract regression artifacts
 tests/roadmap/models/Generated.lean
