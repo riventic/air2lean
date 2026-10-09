@@ -12,7 +12,7 @@ case row) onto these outcomes. Names agree with the preflight `outcomes` record 
 | `nondeterministic_valid` | model `value` chosen by a schedule search | none |
 | `error_return` | model `error_return` (a Zig `E!T` error is a returned value) | none |
 | `panic` | model `model_panic` | `no-panic`, `guaranteed-return` |
-| `illegal_behavior` | model `illegal` (unchecked undefined behavior) | both |
+| `illegal_behavior` | model `illegal` (illegal behavior that no safety check catches; [illegal-behavior.md](illegal-behavior.md)) | both |
 | `unspecified_behavior` | model `unspecified`, including the no-clock timer path ([TMR-01](premises.md#tmr-01)) | both |
 | `deadlock` | model `deadlock` | both |
 | `divergence` | `bounded_no_result` or a search with a no-result branch: scheduler fuel ran out; divergence is not established | both |

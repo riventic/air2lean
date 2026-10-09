@@ -101,7 +101,7 @@ These rows have no claim beyond it.
   their retained 0.16.0 AIR (`air/`, `probe-air/`), the translation, `Cases.lean` on the
   generated functions, and `Runtime.lean` on the runtime ops.
 - Native: `native.zig` prints what a ReleaseSafe and a ReleaseFast build return for each input
-  class (`native/*.txt`). The differential harness (`scripts/diff.sh`) counts every
+  class (`native/*.txt`; [build-modes.md](build-modes.md)). The differential harness (`scripts/diff.sh`) counts every
   `.illegal` row as an `illegal` exclusion in every mode, so it compares none of them:
   `tests/diff/floatops/unspecified.txt` pins `divExact64`.
 - `tests/roadmap/architecture-audit/trust-chain/check.py unchecked-memcpy --require-fixed`.

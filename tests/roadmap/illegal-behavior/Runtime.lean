@@ -17,7 +17,7 @@ def errOf {α : Type} (r : Result α) : Option Error :=
 
 def memErr {α : Type} (x : MemM α) : Option Error := errOf ((x.run {}).map Prod.fst)
 
-def f64 (bits : Nat) : F64 := Float.ofBits (BitVec.ofNat 64 bits)
+def f64 (bits : Nat) : F64 := Zig.Float.ofBits (BitVec.ofNat 64 bits)
 def one : F64 := f64 0x3FF0000000000000
 def two : F64 := f64 0x4000000000000000
 def three : F64 := f64 0x4008000000000000
@@ -32,23 +32,23 @@ def check (name : String) (ok : Bool) : IO Unit :=
 
 def floatCases : IO Unit := do
   -- `@divExact` with safety: the truncated quotient, `.illegal` when inexact, NaN left to Sema.
-  check "6/3 safe" (((Float.divExactTrunc six three (Float.div six three)).run.bind
-    Except.toOption).map Float.bits == some two.bits)
-  check "2^-1074/1 safe" (errOf (Float.divExactTrunc tiny one (Float.div tiny one)) == some .illegal)
-  check "3/2 safe" (errOf (Float.divExactTrunc three two (Float.div three two)) == some .illegal)
-  check "1/0 safe" (errOf (Float.divExactTrunc one zero (Float.div one zero)) == some .illegal)
-  check "0/0 safe passes NaN" (errOf (Float.divExactTrunc zero zero (Float.div zero zero)) == none)
-  check "inf/2 safe" (errOf (Float.divExactTrunc inf two (Float.div inf two)) == none)
+  check "6/3 safe" (((Zig.Float.divExactTrunc six three (Zig.Float.div six three)).run.bind
+    Except.toOption).map Zig.Float.bits == some two.bits)
+  check "2^-1074/1 safe" (errOf (Zig.Float.divExactTrunc tiny one (Zig.Float.div tiny one)) == some .illegal)
+  check "3/2 safe" (errOf (Zig.Float.divExactTrunc three two (Zig.Float.div three two)) == some .illegal)
+  check "1/0 safe" (errOf (Zig.Float.divExactTrunc one zero (Zig.Float.div one zero)) == some .illegal)
+  check "0/0 safe passes NaN" (errOf (Zig.Float.divExactTrunc zero zero (Zig.Float.div zero zero)) == none)
+  check "inf/2 safe" (errOf (Zig.Float.divExactTrunc inf two (Zig.Float.div inf two)) == none)
   -- `@divExact` without safety: NaN too.
-  check "6/3 unsafe" (errOf (Float.divExactChk six three (Float.div six three)) == none)
-  check "2^-1074/1 unsafe" (errOf (Float.divExactChk tiny one (Float.div tiny one)) == some .illegal)
-  check "0/0 unsafe" (errOf (Float.divExactChk zero zero (Float.div zero zero)) == some .illegal)
+  check "6/3 unsafe" (errOf (Zig.Float.divExactChk six three (Zig.Float.div six three)) == none)
+  check "2^-1074/1 unsafe" (errOf (Zig.Float.divExactChk tiny one (Zig.Float.div tiny one)) == some .illegal)
+  check "0/0 unsafe" (errOf (Zig.Float.divExactChk zero zero (Zig.Float.div zero zero)) == some .illegal)
   -- `@intFromFloat` of NaN: unchecked with or without safety.
-  check "NaN to int safe" (errOf (Float.toInt true 32 true nan) == some .illegal)
-  check "NaN to int unsafe" (errOf (Float.toInt true 32 false nan) == some .illegal)
-  check "inf to int safe" (errOf (Float.toInt true 32 true inf) == some .overflow)
-  check "inf to int unsafe" (errOf (Float.toInt true 32 false inf) == some .illegal)
-  check "2^31 to int unsafe" (errOf (Float.toInt true 32 false (f64 0x41E0000000000000)) == some .illegal)
+  check "NaN to int safe" (errOf (Zig.Float.toInt true 32 true nan) == some .illegal)
+  check "NaN to int unsafe" (errOf (Zig.Float.toInt true 32 false nan) == some .illegal)
+  check "inf to int safe" (errOf (Zig.Float.toInt true 32 true inf) == some .overflow)
+  check "inf to int unsafe" (errOf (Zig.Float.toInt true 32 false inf) == some .illegal)
+  check "2^31 to int unsafe" (errOf (Zig.Float.toInt true 32 false (f64 0x41E0000000000000)) == some .illegal)
 
 def intCases : IO Unit := do
   check "divExact 7/2" (errOf (divExact true (7 : BitVec 32) 2) == some .illegal)

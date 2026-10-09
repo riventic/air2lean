@@ -6,7 +6,7 @@
 #     emitter-output mutants of mutations.py, each of which Cases.lean must reject.
 # Optional: AIR2LEAN_ZIG_AIR=patched-0.16/bin/zig re-exports the AIR and compares it with air/;
 # AIR2LEAN_ZIG=stock 0.16.0 zig reruns native.zig in ReleaseSafe and ReleaseFast and compares
-# its output with native/<mode>.txt.
+# its rows with native/<mode>.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -52,7 +52,10 @@ if [ -n "${AIR2LEAN_ZIG:-}" ]; then
     "$AIR2LEAN_ZIG" build-exe "-O$mode" -mcpu=baseline -femit-bin="$work/native-$mode" \
       --dep ib -Mroot="$here/native.zig" -Mib="$here/ib.zig"
     "$work/native-$mode" 2> "$work/$mode.txt"
-    cmp "$work/$mode.txt" "$here/native/$mode.txt"
+    # The values are illegal behaviour (LLVM poison in places), so only the rows must agree; a
+    # changed value is reported, not failed.
+    cmp <(cut -d' ' -f1,2 "$work/$mode.txt") <(cut -d' ' -f1,2 "$here/native/$mode.txt")
+    diff "$here/native/$mode.txt" "$work/$mode.txt" || echo "note: $mode values differ from native/$mode.txt"
   done
 fi
 python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed unchecked-memcpy

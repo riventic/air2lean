@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2338 theorems in 133 files.
+2342 theorems in 136 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -37,19 +37,19 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-01](premises.md#mth-01) | 73 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
-| [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
+| [ASM-01](premises.md#asm-01) | 5 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2209 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1865 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2213 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1866 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2338 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2342 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-04](premises.md#tru-04) | 29 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 
@@ -2026,6 +2026,31 @@ File premises: ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01
 | `example@L8` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
 | `example@L15` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
 | `example@L19` | ALC-01, ALC-02, ALC-07, SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/architecture-audit/trust-chain/comptime-field/ComptimeField.lean`
+
+File premises: SEM-01, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `Audit.mk_k_zero` | SEM-01, TRU-01 |
+
+## `tests/roadmap/architecture-audit/trust-chain/reduce-bool-handedit/PanicDefault.lean`
+
+File premises: SEM-01, SEM-02, TRU-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L9` | SEM-01, TRU-01 |
+| `example@L14` | SEM-01, SEM-02, TRU-01 |
+
+## `tests/roadmap/architecture-audit/trust-chain/volatile-asm/SameTick.lean`
+
+File premises: ASM-01, SEM-01, TRU-01, TRU-04
+
+| Theorem | Premises |
+|---|---|
+| `Audit.sameTick_true` | ASM-01, SEM-01, TRU-01, TRU-04 |
 
 ## `tests/roadmap/bitops/Bitset.lean`
 

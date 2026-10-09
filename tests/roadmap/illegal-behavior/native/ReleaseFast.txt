@@ -1,0 +1,14 @@
+divExactSafe tiny/1 0000000000000001
+divExactSafe 3/2 3ff8000000000000
+divExactSafe 1/0 7ff0000000000000
+divExactUnsafe tiny/1 0000000000000001
+divExactUnsafe 3/2 3ff8000000000000
+divExactLanes 0000000000000001 3ff8000000000000
+divExactIntUnsafe 7/2 00000003
+shlExactUnsafe 0x80000000<<1 00000000
+shl24Unsafe 1<<24 000000
+shr24Unsafe 0x800000>>31 000000
+toIntSafe nan 00000000
+toIntUnsafe nan 00000000
+toIntUnsafe 2^31 00000000
+copyOverlapUnsafe 0101020304060708
