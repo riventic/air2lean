@@ -209,7 +209,7 @@ Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` po
 | `ty` | type ID of the value |
 | `const` | `false` only for a `var` |
 | `threadlocal`, `extern` | a named global only. A `threadlocal` global is also listed when a `runtime_nav_ptr` names it. |
-| `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
+| `init` | the initial value, a Ref. Missing for an `extern`, and if the value cannot be resolved when the file is written: from 0.16.0 `Compat.navInfo` resolves a pending value first (Sema resolves only the type of a global whose address a function takes), so it is missing only when that analysis fails or is already in progress; before 0.16.0, if Sema has not resolved it yet. |
 
 `runtime_nav_ptr` (0.15.2+, `ty_nav`) has no `args`; `global` is the global's entry in
 `globals` (an additive field of the current exporter). Zig emits it for a `threadlocal var`, an
