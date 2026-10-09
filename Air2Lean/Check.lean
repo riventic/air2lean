@@ -146,6 +146,15 @@ private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
   | .error => (errorCapabilityScan types id 1024).map (·.2)
   | .unknown => none
 
+/-- The item type of nested arrays (`[n][m]T` gives `T`); any other type is its own. -/
+private def arrayItemTy (types : Array Ty) (id : TyId) : TyId := Id.run do
+  let mut t := id
+  for _ in [:256] do
+    match types[t]? with
+    | some (.array _ child _) => t := child
+    | _ => return t
+  return t
+
 /-- A pointer cast that would view `Allocator`/`Thread`/`Io` storage through another type. -/
 private def symbolicViewMsg : String :=
   "a pointer cast to or from storage with a symbolic model encoding (std.mem.Allocator, \
@@ -931,8 +940,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
               hasErrorStorage cx.types source != hasErrorStorage cx.types target ||
               ((sourceCap || targetCap) && source != target) then
             cx.fail line "a pointer cast exposing symbolic error storage as numeric or opaque bytes requires finalized error ordinals and is outside the finite error-storage fragment"
-          if source != target && (typeReach cx.types source == .symbolic ||
-              typeReach cx.types target == .symbolic) then
+          -- Array decay (`*[n]T` to `[*]T`) keeps the item type, so it keeps the decoder.
+          if arrayItemTy cx.types source != arrayItemTy cx.types target &&
+              (typeReach cx.types source == .symbolic || typeReach cx.types target == .symbolic) then
             cx.fail line symbolicViewMsg
       | none, some target =>
         unless hasErrorCapability cx.types target == some false do

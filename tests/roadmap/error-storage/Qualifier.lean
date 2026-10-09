@@ -7,10 +7,6 @@ private def get (out : Except String α) : IO α := match out with
   | .error message => throw (IO.userError message)
 private def require (test : Bool) (why : String) : IO Unit :=
   unless test do throw (IO.userError why)
-private def reject (f : Func) : IO Unit :=
-  match check f with
-  | .ok _ => throw (IO.userError "accepted a representation-changing recursive cast")
-  | .error _ => pure ()
 
 def main : IO Unit := do
   -- Exact retained schema-11 list client; neither AIR nor historical Gen is rewritten.
@@ -41,11 +37,19 @@ def main : IO Unit := do
     match checkOp cx 4 wrapInst.ty wrapInst.op with
     | .ok _ => throw (IO.userError "accepted a representation-changing optional wrap")
     | .error _ => pure ()
+  -- The wrapper exception matters where the general rules reject: an error-free recursive
+  -- `lists.Node` has capability `false` (G2, a least fixpoint), so the negatives give `Node`
+  -- an error field. A cyclic error-bearing graph keeps the strict acyclic walk (L10).
+  let errNode := f.types.set! 25 (.struct "lists.Node" "auto" #[("val", 17), ("next", 5)])
+  let errCx := {wrapCx with types := errNode}
+  discard (get <| checkOp errCx 4 wrapInst.ty wrapInst.op)
   let wrapLayout := f.layouts[5]!
-  rejectWrap {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with ptrAlign := some 4}}
-  rejectWrap {wrapCx with layouts := f.layouts.set! 5 {wrapLayout with sentinel := true}}
-  rejectWrap {wrapCx with types := f.types.set! 5 (.optional 26)}
-  rejectWrap {wrapCx with types := f.types.set! 14 (.ptr "many" false 25)}
+  rejectWrap {errCx with layouts := f.layouts.set! 5 {wrapLayout with ptrAlign := some 4}}
+  rejectWrap {errCx with layouts := f.layouts.set! 5 {wrapLayout with sentinel := true}}
+  rejectWrap {errCx with types := errNode.set! 5 (.optional 26)}
+  rejectWrap {errCx with types := errNode.set! 14 (.ptr "many" false 25)}
+  -- G2: the same const/many conversions of the error-free recursive graph are accepted.
+  discard (get <| checkOp {wrapCx with types := f.types.set! 5 (.optional 26)} 4 wrapInst.ty wrapInst.op)
   IO.println "retained four optional wrapper negatives passed"
   let sourceType : Option Ty := f.types[5]?
   let some (Ty.optional sourcePointer) := sourceType
@@ -60,14 +64,25 @@ def main : IO Unit := do
   -- Full callee-closure generation/proofs are checked by ROOT affected gates;
   -- this exact retained client control checks every per-function instruction.
   -- The exception requires identical complete layouts, including pointer alignment.
+  -- Checked on the qualifier cast alone (raw inst66), with the error-bearing `Node` above (see the wrapper controls).
+  let some qualInst := insts.find? (fun i => i.ty == 21 && i.op matches .bitcast _)
+    | throw (IO.userError "retained qualifier instruction missing")
+  let qualCx : CheckCtx := {errCx with instTys := insts.map fun i => (i.id, i.ty)}
+  discard (get <| checkOp qualCx 4 qualInst.ty qualInst.op)
+  let rejectQual (cx : CheckCtx) : IO Unit := do
+    match checkOp cx 4 qualInst.ty qualInst.op with
+    | .ok _ => throw (IO.userError "accepted a representation-changing recursive cast")
+    | .error _ => pure ()
   let original := f.layouts[targetPointer]!
-  reject {f with layouts := f.layouts.set! targetPointer {original with ptrAlign := some 4}}
-  reject {f with layouts := f.layouts.set! targetPointer {original with sentinel := true}}
-  reject {f with layouts := f.layouts.set! targetPointer {original with hostSize := 8, bitOffset := 1}}
+  rejectQual {qualCx with layouts := f.layouts.set! targetPointer {original with ptrAlign := some 4}}
+  rejectQual {qualCx with layouts := f.layouts.set! targetPointer {original with sentinel := true}}
+  rejectQual {qualCx with layouts := f.layouts.set! targetPointer {original with hostSize := 8, bitOffset := 1}}
   -- Same child alone is insufficient: a one/many conversion is not const-only.
-  reject {f with types := f.types.set! targetPointer (.ptr "many" true 25)}
+  rejectQual {qualCx with types := errNode.set! targetPointer (.ptr "many" true 25)}
   -- No blanket identical-child exception: unchanged constness still requires the scan.
-  reject {f with types := f.types.set! targetPointer (.ptr "one" false 25)}
+  rejectQual {qualCx with types := errNode.set! targetPointer (.ptr "one" false 25)}
+  -- G2: the error-free recursive list graph needs no exception.
+  discard (get <| check {f with types := f.types.set! targetPointer (.ptr "one" false 25)})
   IO.println "retained recursive list qualifier controls passed"
   -- Exact observed 0.15 dupe shape: distinct e![]u8 IDs, identical finite domain/payload.
   let duplicateTypes : Array Ty := #[.int false 8, .errorSet (some #["OutOfMemory"]), .errorSet (some #["OutOfMemory"]), .ptr "slice" false 0, .errorUnion 1 3, .errorUnion 2 3]
