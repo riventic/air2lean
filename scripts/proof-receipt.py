@@ -298,7 +298,8 @@ def context(plan):
         demand(not path.endswith(('.lean', '.json', '.toml', '.py', '.sh')), 'untracked build input: ' + path)
     demand(all(module_file(m) in names for m in plan['modules']), 'selected module source is not tracked')
     toolchain = physical(plan['toolchain'])
-    tools = inventory([toolchain / 'bin/lean', toolchain / 'bin/lake', Path(sys.executable).resolve()])
+    tools = inventory([toolchain / 'bin/lean', toolchain / 'bin/lake', toolchain / 'bin/leanchecker',
+                       Path(sys.executable).resolve()])
     return {'revision': revision(), 'sources': source_inventory(names),
             'tools': tools, 'lean_library': inventory(tree(toolchain / 'lib/lean'))}
 
@@ -343,8 +344,9 @@ def profiles():
 def plan_for(attempt):
     attempt = physical(attempt)
     plan = load(attempt / 'plan.json')
-    demand(set(plan) == {'schema', 'root', 'attempt', 'toolchain', 'profile', 'lock', 'modules', 'scope', 'python', 'revision', 'sources', 'guard'},
+    demand(set(plan) == {'schema', 'root', 'attempt', 'toolchain', 'profile', 'lock', 'modules', 'scope', 'python', 'revision', 'sources', 'guard', 'allow_dirty'},
            'unknown plan fields')
+    demand(type(plan['allow_dirty']) is bool, 'invalid plan dirty-tree flag')
     demand(type(plan['schema']) is int and plan['schema'] == 1 and plan['root'] == str(ROOT)
            and plan['attempt'] == str(attempt), 'plan root/attempt mismatch')
     demand(plan['scope'] in ('all-shipped-modules', 'explicit-modules') and plan['modules'] == sorted(set(plan['modules']))
@@ -400,6 +402,18 @@ def audit_ok(plan, audit):
             own, standard = ROOT / '.lake/build/lib/lean' / relative, Path(plan['toolchain']) / 'lib/lean' / relative
             demand(own.is_file() or standard.is_file(), 'audit module artifact missing: ' + module)
             validated_modules.add(module)
+    # S1: the kernel re-checked every non-toolchain module of the audited closure, with the
+    # planned toolchain's own leanchecker; H1: the audit is bound to the planned revision.
+    replay = audit['kernel_replay']
+    toolchain = Path(plan['toolchain'])
+    demand(replay['status'] == 'pass' and replay['reused'] == [] and set(plan['modules']) <= set(replay['modules'])
+           and replay['tool_sha256'] == fingerprint(toolchain / 'bin/leanchecker')['sha256']
+           and replay['lean_sha256'] == fingerprint(toolchain / 'bin/lean')['sha256']
+           and replay['toolchain'] == audit['lean_toolchain'], 'kernel replay missing, failed or from another toolchain')
+    freshness = mapping(audit.get('freshness'), 'audit freshness')
+    demand(freshness.get('revision') == plan['revision']
+           and mapping(freshness.get('lake_trace_check'), 'trace check').get('status') == 'up-to-date',
+           'audit is not bound to the planned revision and current Lake traces')
     extractor = mapping(audit['extractor'], 'audit extractor')
     for key, path in [('source_sha256', ROOT / 'tools/Assurance.lean'),
                       ('olean_sha256', ROOT / '.lake/build/lib/lean/tools/Assurance.olean'),
@@ -449,6 +463,16 @@ def evidence_matches(rows, paths):
                'guard identity mismatch: ' + actual['path'])
 
 
+def replay_summary(audit):
+    """Receipt copy of the audit's kernel replay: tool identity and replayed module digest."""
+    replay = audit['kernel_replay']
+    return {key: replay[key] for key in ('tool', 'tool_sha256', 'lean_sha256', 'toolchain', 'modules_sha256', 'status')}
+
+
+def tree_state(plan):
+    return dict(plan['revision'], dirty_allowed=plan['allow_dirty'])
+
+
 def float_labels(audit):
     """Receipt copy of the audit's float-semantics summary plus each stated theorem's label."""
     labels = {t['name']: t['float_semantics']['label'] for t in audit['theorems']
@@ -479,7 +503,8 @@ def seal(attempt):
     ps = shutil.which('ps')
     demand(ps is not None, 'guard observer tool missing')
     evidence_matches(guard['tools'], [plan['python'], plan['python'], Path(ps).resolve(),
-                                    Path(plan['toolchain']) / 'bin/lean', Path(plan['toolchain']) / 'bin/lake'])
+                                    Path(plan['toolchain']) / 'bin/lean', Path(plan['toolchain']) / 'bin/lake',
+                                    Path(plan['toolchain']) / 'bin/leanchecker'])
     logfile = fingerprint(attempt / 'guard.log')
     demand(guard['log'] == logfile['path'] and guard['log_sha256'] == logfile['sha256']
            and guard['log_bytes'] == logfile['bytes'], 'guard log mismatch')
@@ -487,13 +512,15 @@ def seal(attempt):
            and before == after['context'] == context(plan), 'source context stale')
     demand(after['compiled'] == compiled(plan) and after['profiles'] == profiles(), 'compiled/profile context stale')
     audit_ok(plan, audit)
+    demand(not plan['revision']['tracked_dirty'] or plan['allow_dirty'], 'tracked changes: a release receipt needs a clean tree')
     # The audit's float-semantics summary (recomputed by audit_ok) states which semantics the
     # numerical theorems concern; it never claims binary/native correspondence.
     write_new(attempt / 'receipt.json', {'schema': 2, 'status': 'audited', 'authentication': 'not_attested',
               'proof_scope': 'selected compiled Lean theorem dependency policy only',
               'source_correspondence': 'not_attested', 'native_adequacy': 'not_attested',
               'attempt': str(attempt), 'theorem_count': audit['theorem_count'],
-              'float_semantics': float_labels(audit),
+              'float_semantics': float_labels(audit), 'kernel_replay': replay_summary(audit),
+              'tree': tree_state(plan),
               'artifacts': inventory([attempt / n for n in ('plan.json', *OUTPUTS, 'guard.json', 'guard.log')])})
 
 
@@ -501,7 +528,8 @@ def verify(attempt):
     attempt = physical(attempt)
     receipt = load(attempt / 'receipt.json')
     demand(set(receipt) == {'schema', 'status', 'authentication', 'proof_scope', 'source_correspondence',
-                          'native_adequacy', 'attempt', 'theorem_count', 'float_semantics', 'artifacts'} and
+                          'native_adequacy', 'attempt', 'theorem_count', 'float_semantics', 'kernel_replay',
+                          'tree', 'artifacts'} and
            type(receipt['schema']) is int and receipt['schema'] == 2 and receipt['status'] == 'audited' and receipt['attempt'] == str(attempt)
            and receipt['authentication'] == receipt['source_correspondence'] == receipt['native_adequacy'] == 'not_attested'
            and receipt['proof_scope'] == 'selected compiled Lean theorem dependency policy only',
@@ -513,6 +541,9 @@ def verify(attempt):
     # audit_ok below recomputes the audit labels, which never claim binary correspondence.
     demand(receipt['float_semantics'] == float_labels(audit),
            'receipt float-semantics labels differ from the audit or claim binary correspondence')
+    demand(receipt['kernel_replay'] == replay_summary(audit) and receipt['tree'] == tree_state(plan)
+           and (not plan['revision']['tracked_dirty'] or plan['allow_dirty']),
+           'receipt kernel replay or tree state differs from the audit')
     demand(after['context'] == context(plan) and after['compiled'] == compiled(plan)
            and after['profiles'] == profiles(), 'receipt stale')
     audit_ok(plan, audit)
@@ -530,6 +561,8 @@ def main():
     parser.add_argument('--guard', type=Path, default=ROOT / 'scripts/build-guard.py')
     parser.add_argument('--guard-sha256')
     parser.add_argument('--module', action='append', default=[])
+    parser.add_argument('--allow-dirty', action='store_true',
+                        help='audit a tree with uncommitted tracked changes; recorded in the receipt')
     parser.add_argument('--lock', type=Path, default=Path(os.environ.get('AIR2LEAN_BUILD_LOCK',
                                                               str(Path.home() / '.cache/air2lean/build.lock'))))
     a = parser.parse_args()
@@ -552,7 +585,9 @@ def main():
                     'toolchain': str(physical(a.toolchain)), 'profile': a.profile, 'lock': str(physical(a.lock)),
                     'modules': modules, 'scope': 'explicit-modules' if a.module else 'all-shipped-modules',
                     'python': str(Path(sys.executable).resolve()), 'revision': revision(),
-                    'sources': source_inventory(), 'guard': guard}
+                    'sources': source_inventory(), 'guard': guard, 'allow_dirty': a.allow_dirty}
+            demand(not plan['revision']['tracked_dirty'] or a.allow_dirty,
+                   'tracked changes: commit them or pass --allow-dirty (recorded in the receipt)')
             attempt.mkdir(mode=0o700)
             write_new(attempt / 'plan.json', plan)
         elif a.action == 'worker':

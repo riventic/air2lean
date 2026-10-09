@@ -1397,7 +1397,8 @@ def audit_goal(root, goal, theorems, nodes, modules):
 
 def run_claims(tools, manifest_path, audit_path, staging):
     out = staging / 'claims.json'
-    result = subprocess.run([sys.executable, str(tools['claims']), 'check', str(manifest_path),
+    # The audit was produced in this run, so a dirty tree is recorded in claims.json, not refused.
+    result = subprocess.run([sys.executable, str(tools['claims']), 'check', str(manifest_path), '--allow-dirty',
                              '--assurance', str(audit_path), '--output', str(out)],
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=600)
     try:

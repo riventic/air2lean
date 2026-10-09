@@ -638,17 +638,23 @@ def is_excluded(config: dict, rel: str) -> bool:
     return any(rel.startswith(prefix) for prefix in config["excluded"])
 
 
+THEOREM_KINDS = {"theorem", "lemma", "example"}
+
+
+def theorem_files(repo: Repository) -> list[LeanFile]:
+    """The indexed theorem files. scripts/theorem_universe.py compiles and audits exactly these."""
+    roots = tuple(f"{r}/" for r in repo.config["theorem_roots"])
+    return [repo.files[rel] for rel in sorted(repo.files)
+            if rel.startswith(roots) and not is_excluded(repo.config, rel)
+            and any(d.kind in THEOREM_KINDS for d in repo.files[rel].decls)]
+
+
 def build_index(repo: Repository) -> tuple[list[dict], list[str]]:
     errors: list[str] = []
     entries = []
-    roots = tuple(f"{r}/" for r in repo.config["theorem_roots"])
-    for rel in sorted(repo.files):
-        lean = repo.files[rel]
-        if not rel.startswith(roots) or is_excluded(repo.config, rel):
-            continue
-        theorems = [d for d in lean.decls if d.kind in {"theorem", "lemma", "example"}]
-        if not theorems:
-            continue
+    for lean in theorem_files(repo):
+        rel = lean.rel
+        theorems = [d for d in lean.decls if d.kind in THEOREM_KINDS]
         names = set()
         for theorem in theorems:
             if theorem.kind == "example":

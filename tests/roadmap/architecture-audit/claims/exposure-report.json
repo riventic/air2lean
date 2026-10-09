@@ -1,0 +1,1065 @@
+{
+ "schema_version": 1,
+ "source": "tests/roadmap/architecture-audit/claims/build.sh",
+ "theorems": [
+  {
+   "name": "AuditClaims.asm_divmod_total",
+   "module": "AuditClaims.AsmTotal",
+   "axioms": [
+    "propext",
+    "Quot.sound"
+   ],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "HOr.hOr"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHOrOfOrOp",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "Asm.airAsm_3653072158",
+    "Asm.divmod",
+    "BitVec.instHShiftLeftNat",
+    "BitVec.instOfNat",
+    "BitVec.instOrOp",
+    "BitVec.setWidth",
+    "ExceptT.instMonad",
+    "HOr.hOr",
+    "HShiftLeft.hShiftLeft",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Prod.fst",
+    "Prod.snd",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHOrOfOrOp",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "Asm.airAsm_3653072158",
+    "Asm.divmod",
+    "BitVec.instHShiftLeftNat",
+    "BitVec.instOfNat",
+    "BitVec.instOrOp",
+    "BitVec.setWidth",
+    "ExceptT.instMonad",
+    "HOr.hOr",
+    "HShiftLeft.hShiftLeft",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Prod.fst",
+    "Prod.snd",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [
+    "Asm.airAsm_3653072158",
+    "String.Internal.append"
+   ],
+   "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.mk",
+    "Array.push",
+    "Array.size",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
+    "Nat.land",
+    "Nat.lor",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.shiftLeft",
+    "Nat.shiftRight",
+    "Nat.sub",
+    "String.Internal.append",
+    "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat",
+    "panicCore"
+   ],
+   "compiler_redirections": [
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str",
+    "Nat.repr"
+   ],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.ground_instance",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "OfNat.ofNat"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.hyp_is_claim",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "HAdd.hAdd"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHAdd",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHAdd",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.root_ignored",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "Function.const"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Function.const",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Function.const",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.root_in_post",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [
+    "propext",
+    "Quot.sound"
+   ],
+   "conclusion": {
+    "head": "Zig.TotalTriple"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "Unit",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "StateT.instMonad",
+    "Unit.unit",
+    "Zig.Error",
+    "Zig.Mem",
+    "Zig.MemM",
+    "Zig.Result",
+    "Zig.TotalTriple",
+    "Zig.Assn.emp",
+    "Zig.Assn.lift"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "Unit",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "StateT.instMonad",
+    "Unit.unit",
+    "Zig.Error",
+    "Zig.Mem",
+    "Zig.MemM",
+    "Zig.Result",
+    "Zig.TotalTriple",
+    "Zig.Assn.emp",
+    "Zig.Assn.lift"
+   ],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.get!Internal",
+    "Array.getInternal",
+    "Array.mk",
+    "Array.push",
+    "Array.size",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
+    "Nat.land",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.shiftRight",
+    "Nat.sub",
+    "String.Internal.append",
+    "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat",
+    "panicCore"
+   ],
+   "compiler_redirections": [
+    "Array.anyM",
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str",
+    "Nat.repr"
+   ],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.spin_partial",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [
+    "propext",
+    "Quot.sound"
+   ],
+   "conclusion": {
+    "head": "Zig.Triple"
+   },
+   "statement_dependencies": [
+    "False",
+    "Unit",
+    "AuditClaims.spin",
+    "Zig.Heap",
+    "Zig.Triple",
+    "Zig.Assn.emp"
+   ],
+   "conclusion_dependencies": [
+    "False",
+    "Unit",
+    "AuditClaims.spin",
+    "Zig.Heap",
+    "Zig.Triple",
+    "Zig.Assn.emp"
+   ],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.get!Internal",
+    "Array.getInternal",
+    "Array.mk",
+    "Array.push",
+    "Array.size",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
+    "Nat.land",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.shiftRight",
+    "Nat.sub",
+    "String.Internal.append",
+    "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat",
+    "panicCore"
+   ],
+   "compiler_redirections": [
+    "Array.anyM",
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str",
+    "Nat.repr"
+   ],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.spoofed_total",
+   "module": "AuditClaims.Shadow",
+   "axioms": [],
+   "conclusion": {
+    "head": "Zig.TotalTriple"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "False",
+    "Nat",
+    "True",
+    "instOfNatNat",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "OfNat.ofNat",
+    "Zig.TotalTriple"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "False",
+    "Nat",
+    "True",
+    "instOfNatNat",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "OfNat.ofNat",
+    "Zig.TotalTriple"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.total_false_pre",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [
+    "propext",
+    "Quot.sound"
+   ],
+   "conclusion": {
+    "head": "Zig.TotalTriple"
+   },
+   "statement_dependencies": [
+    "False",
+    "Unit",
+    "AuditClaims.spin",
+    "Zig.Assn",
+    "Zig.Heap",
+    "Zig.TotalTriple"
+   ],
+   "conclusion_dependencies": [
+    "False",
+    "Unit",
+    "AuditClaims.spin",
+    "Zig.Heap",
+    "Zig.TotalTriple"
+   ],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.get!Internal",
+    "Array.getInternal",
+    "Array.mk",
+    "Array.push",
+    "Array.size",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
+    "Nat.land",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.shiftRight",
+    "Nat.sub",
+    "String.Internal.append",
+    "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat",
+    "panicCore"
+   ],
+   "compiler_redirections": [
+    "Array.anyM",
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str",
+    "Nat.repr"
+   ],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "AuditClaims.unchecked_total",
+   "module": "AuditClaims.Unchecked",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "OfNat.ofNat"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [
+    "AuditClaims.unchecked_total"
+   ],
+   "allowed": false
+  },
+  {
+   "name": "AuditClaims.unsat_pre",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound"
+   ],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "HAdd.hAdd"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHAdd",
+    "instLTNat",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "BitVec.toNat",
+    "ExceptT.instMonad",
+    "GT.gt",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHAdd",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.mk",
+    "Array.push",
+    "Array.size",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
+    "ByteArray.size",
+    "Char.ofNatAux",
+    "Int.add",
+    "Int.decEq",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.ediv",
+    "Int.emod",
+    "Int.mul",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.div",
+    "Nat.gcd",
+    "Nat.gcd._unary",
+    "Nat.land",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.shiftRight",
+    "Nat.sub",
+    "String.Internal.append",
+    "String.ofByteArray",
+    "String.ofList",
+    "String.toByteArray",
+    "String.utf8ByteSize",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat",
+    "panicCore"
+   ],
+   "compiler_redirections": [
+    "Lean.Name.anonymous",
+    "Lean.Name.num",
+    "Lean.Name.str",
+    "Nat.repr"
+   ],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "_private.AuditClaims.AsmTotal.0.ExceptT.bindCont.match_1.eq_1",
+   "module": "AuditClaims.AsmTotal",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "head": null
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "Eq",
+    "Except",
+    "Except.error",
+    "Except.ok",
+    "ExceptT.bindCont.match_1"
+   ],
+   "conclusion_dependencies": [
+    "Eq",
+    "Except.ok",
+    "ExceptT.bindCont.match_1"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true
+  },
+  {
+   "name": "_private.AuditClaims.AsmTotal.0.ExceptT.bindCont.match_1.eq_2",
+   "module": "AuditClaims.AsmTotal",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "head": null
+     }
+    ],
+    "head": "Eq"
+   },
+   "statement_dependencies": [
+    "Eq",
+    "Except",
+    "Except.error",
+    "Except.ok",
+    "ExceptT.bindCont.match_1"
+   ],
+   "conclusion_dependencies": [
+    "Eq",
+    "Except.error",
+    "ExceptT.bindCont.match_1"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true
+  }
+ ],
+ "generated_nodes": {
+  "Asm.divmod": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "definition"
+  },
+  "AuditClaims.root": {
+   "module": "AuditClaims.Gen",
+   "kind": "definition"
+  },
+  "AuditClaims.spin": {
+   "module": "AuditClaims.Gen",
+   "kind": "definition"
+  }
+ }
+}

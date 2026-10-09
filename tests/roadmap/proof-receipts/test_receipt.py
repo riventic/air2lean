@@ -92,6 +92,7 @@ class ReceiptTests(unittest.TestCase):
         self.names.sort()
         self.put(self.tc / 'bin/lean', b'mock compiler bytes; never executed')
         self.put(self.tc / 'bin/lake', b'mock build bytes; never executed')
+        self.put(self.tc / 'bin/leanchecker', b'mock kernel replay bytes; never executed')
         self.put(self.tc / 'bin/ps', b'mock observer bytes; never executed')
         (self.tc / 'bin/ps').chmod(0o700)
         self.put(self.tc / 'lib/lean/Init.olean', b'mock imported kernel artifact')
@@ -99,6 +100,7 @@ class ReceiptTests(unittest.TestCase):
         self.lock.write_text('')
         self.patchroot = mock.patch.object(r, 'ROOT', self.root)
         self.patchroot.start()
+        self.dirty = False
         self.patchgit = mock.patch.object(r, 'git', side_effect=self.git)
         self.patchgit.start()
         self.patchenv = mock.patch.dict(os.environ, {'PATH': str(self.tc / 'bin'), 'LEAN_NUM_THREADS': '1'}, clear=True)
@@ -107,7 +109,10 @@ class ReceiptTests(unittest.TestCase):
                      'profile': 'mock-selected-generated-state', 'lock': str(self.lock), 'modules': ['Proofs.One'],
                      'scope': 'explicit-modules', 'python': str(Path(sys.executable).resolve()),
                      'revision': r.revision(), 'sources': r.source_inventory(self.names),
-                     'guard': r.fingerprint(self.root / 'scripts/build-guard.py')}
+                     'guard': r.fingerprint(self.root / 'scripts/build-guard.py'), 'allow_dirty': False}
+        self.attempt_files()
+
+    def attempt_files(self):
         self.write('plan.json', self.plan)
         self.make_audit()
         self.before = r.context(self.plan)
@@ -136,7 +141,7 @@ class ReceiptTests(unittest.TestCase):
         if args == ('rev-parse', 'HEAD'):
             return b'0123456789abcdef0123456789abcdef01234567\n'
         if args == ('status', '--porcelain', '--untracked-files=no'):
-            return b''
+            return b' M Proofs/One.lean\n' if self.dirty else b''
         if args == ('ls-files', '-z'):
             return ('\0'.join(self.names) + '\0').encode()
         if args == ('ls-files', '--others', '--exclude-standard', '-z'):
@@ -157,7 +162,10 @@ class ReceiptTests(unittest.TestCase):
                'nodes': [{'name': 'Example.checked', 'module': 'Proofs.One', 'kind': 'theorem',
                           'dependencies': [], 'unsafe': False}],
                'theorems': [{'name': 'Example.checked', 'module': 'Proofs.One', 'axioms': []}]}
+        raw['kernel_replay'] = self.replay(['Proofs.One'])
         audit = auditor.apply_policy(raw, auditor.load_policy(self.root / 'assurance/policy.json'))
+        audit['freshness'] = {'revision': self.plan['revision'], 'artifacts': [],
+                              'lake_trace_check': {'modules': ['Proofs.One'], 'status': 'up-to-date'}}
         audit.update(scope='explicit-modules', build_checked=True,
                      policy_sha256=r.fingerprint(self.root / 'assurance/policy.json')['sha256'],
                      lean_toolchain=(self.root / 'lean-toolchain').read_text().strip())
@@ -167,6 +175,16 @@ class ReceiptTests(unittest.TestCase):
               'lean_toolchain_sha256': r.fingerprint(self.root / 'lean-toolchain')['sha256'],
               'lake_config_sha256': r.fingerprint(self.root / 'lakefile.toml')['sha256']}
         self.write('audit.json', audit)
+
+    def replay(self, modules, **changes):
+        """The kernel-replay record scripts/assumptions.py writes after the toolchain's leanchecker."""
+        return dict({'schema_version': 1, 'tool': 'leanchecker',
+                     'tool_sha256': r.fingerprint(self.tc / 'bin/leanchecker')['sha256'],
+                     'lean_sha256': r.fingerprint(self.tc / 'bin/lean')['sha256'],
+                     'toolchain': (self.root / 'lean-toolchain').read_text().strip(), 'modules': modules,
+                     'modules_sha256': r.hashlib.sha256(''.join(m + '\n' for m in modules).encode()).hexdigest(),
+                     'reused': [], 'rejected': [],
+                     'status': 'pass'}, **changes)
 
     def good_guard(self):
         (self.attempt / 'guard.log').write_text('mock actual-audit summary\n')
@@ -181,7 +199,8 @@ class ReceiptTests(unittest.TestCase):
                 'outputs': [r.fingerprint(self.attempt / p) for p in r.OUTPUTS],
                 'pins': [r.fingerprint(self.root / p) for p in ('lean-toolchain', 'zig-patch/versions.toml')],
                 'guard': self.plan['guard'], 'tools': [r.fingerprint(p) for p in
-                  (self.plan['python'], self.plan['python'], self.tc / 'bin/ps', self.tc / 'bin/lean', self.tc / 'bin/lake')],
+                  (self.plan['python'], self.plan['python'], self.tc / 'bin/ps', self.tc / 'bin/lean', self.tc / 'bin/lake',
+                   self.tc / 'bin/leanchecker')],
                 'log': log['path'], 'log_sha256': log['sha256'], 'log_bytes': log['bytes']}
 
     def refresh_guard(self):
@@ -332,6 +351,61 @@ class ReceiptTests(unittest.TestCase):
         self.assertFalse((self.attempt / 'receipt.json').exists())
         self.assertEqual(sorted(p.name for p in self.attempt.iterdir()),
                          ['after.json', 'audit.json', 'before.json', 'guard.json', 'guard.log', 'plan.json'])
+
+    def test_receipt_requires_kernel_replay_by_planned_toolchain(self):
+        audit = r.load(self.attempt / 'audit.json')
+        auditor = r.helper('assumptions')
+        policy = auditor.load_policy(self.root / 'assurance/policy.json')
+        for label, replay in [('tool', self.replay(['Proofs.One'], tool_sha256='0' * 64)),
+                              ('lean', self.replay(['Proofs.One'], lean_sha256='0' * 64)),
+                              ('reused', self.replay(['Proofs.One'], reused=['Proofs.One'])),
+                              ('rejected', self.replay(['Proofs.One'], status='fail',
+                                                       rejected=[{'module': 'Proofs.One', 'output': 'bad'}]))]:
+            with self.subTest(label=label):
+                tampered = dict(audit, kernel_replay=replay)
+                tampered.update(auditor.apply_policy(tampered, policy))
+                self.write('audit.json', tampered)
+                self.refresh_guard()
+                self.rejected()
+        missing = {k: v for k, v in audit.items() if k != 'kernel_replay'}
+        self.write('audit.json', missing)
+        self.refresh_guard()
+        self.rejected()
+        self.write('audit.json', dict(audit, freshness=dict(audit['freshness'], revision={'head': 'other', 'tracked_dirty': False})))
+        self.refresh_guard()
+        self.rejected()
+        self.write('audit.json', audit)
+        self.refresh_guard()
+        r.seal(self.attempt)
+        receipt = r.load(self.attempt / 'receipt.json')
+        self.assertEqual(receipt['kernel_replay']['status'], 'pass')
+        self.assertEqual(receipt['tree'], {'head': self.plan['revision']['head'], 'tracked_dirty': False,
+                                           'dirty_allowed': False})
+        self.assertEqual(r.verify(self.attempt)['status'], 'current')
+        (self.attempt / 'receipt.json').write_text(json.dumps({k: v for k, v in receipt.items() if k != 'kernel_replay'}))
+        with self.assertRaisesRegex(ValueError, 'invalid receipt'):
+            r.verify(self.attempt)
+
+    def test_dirty_tree_receipt_needs_recorded_permission(self):
+        self.dirty = True
+        self.plan['revision'] = r.revision()
+        self.plan['sources'] = r.source_inventory(self.names)
+        self.attempt_files()
+        self.rejected()
+        self.plan['allow_dirty'] = True
+        self.attempt_files()
+        r.seal(self.attempt)
+        self.assertEqual(r.load(self.attempt / 'receipt.json')['tree']['dirty_allowed'], True)
+        self.assertEqual(r.verify(self.attempt)['status'], 'current')
+        fresh = self.base / 'dirty-attempt'
+        arguments = ['proof-receipt.py', 'prepare', str(fresh), '--toolchain', str(self.tc),
+                     '--profile', 'dirty', '--module', 'Proofs.One', '--lock', str(self.lock)]
+        with mock.patch.object(r.sys, 'argv', arguments):
+            self.assertEqual(r.main(), 2)
+        self.assertFalse(fresh.exists())
+        with mock.patch.object(r.sys, 'argv', arguments + ['--allow-dirty']):
+            self.assertEqual(r.main(), 0)
+        self.assertIs(r.load(fresh / 'plan.json')['allow_dirty'], True)
 
     def test_historical_profile_is_not_relabelled(self):
         self.assertEqual(self.after['profiles']['Proofs/One/Gen.lean']['scope'], 'legacy-or-unannotated')
@@ -580,6 +654,7 @@ class ReceiptTests(unittest.TestCase):
         audit['nodes'][-1]['module'] = []
         with self.assertRaises(ValueError): r.audit_ok(self.plan, audit)
         audit['nodes'][-1]['module'] = 'Missing'
+        audit['kernel_replay'] = self.replay(['Missing', 'Proofs.One'])
         audit.update(auditor.apply_policy(audit, auditor.load_policy(self.root / 'assurance/policy.json')))
         with mock.patch.object(r.Path, 'is_file', observed), self.assertRaises(ValueError):
             r.audit_ok(self.plan, audit)

@@ -11,13 +11,62 @@ release artifact. Exit codes are 0 for an allowed report, 1 for a policy violati
 for a build, extraction, or policy error. Errors replace an old successful report with an
 error report; they do not leave stale success evidence at that output path.
 
-`scripts/no-sorry.sh` remains a separate source-level gate. Run both:
+`scripts/no-sorry.sh` remains a separate source-level gate. Run all three:
 
 ```sh
 scripts/no-sorry.sh
 scripts/assumptions.sh --output .lake/assurance/assumptions.json
+python3 scripts/theorem_universe.py audit --output-dir .lake/theorem-universe \
+  --shipped .lake/assurance/assumptions.json
 tests/roadmap/assurance/check.sh
 ```
+
+## Kernel replay (S1)
+
+An elaborator option such as `debug.skipKernelTC` (or a metaprogram that edits the
+environment) writes declarations the kernel never checked into the olean, and
+`collectAxioms` then reports nothing. The audit therefore replays every module of the
+audited dependency closure that does not ship with the toolchain (`Init`, `Std`, `Lean`,
+`Lake`) through the pinned toolchain's own `leanchecker`, and records the result as
+`kernel_replay` (tool and `lean` SHA-256, `lean-toolchain`, the replayed module list and its
+digest, rejections). A declaration in a rejected module is `kernel-replay-rejected`, one in a
+module outside the replayed set is `kernel-replay-missing`; either fails the report. A toolchain
+module shadowed by a project olean is an error. Proof receipts require a passing, uncached replay
+by the planned toolchain's `leanchecker` and copy its summary into `receipt.json`; receipts
+without it are not current. Replaying the shipped scope takes about 40 s on 8 cores (about
+280 s of CPU; `AIR2LEAN_REPLAY_JOBS` sets the parallelism, default `min(4, cores)`).
+`--replay-cache FILE` lets the theorem-universe run skip modules whose olean bytes passed
+earlier in the same build; receipts reject reused replays.
+
+`no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
+`set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
+`extern` and `implemented_by` outside the reviewed counts in `assurance/kernel-escapes.json`.
+
+## One theorem universe (F2)
+
+`scripts/theorem_universe.py` defines the theorem universe once: the shipped `ZigLean/` and
+`Proofs/` modules plus every module `docs/premise-index.md` indexes (`premises.theorem_files`:
+tutorials, case studies, `tests/roadmap` theorem directories). Lean exits 0 on
+`declaration uses 'sorry'`, so `audit` compiles each indexed module outside the Lake targets
+to an olean under `--output-dir`, fails on any `sorry` warning (examples never reach an olean),
+and runs this audit (axiom policy, `sorryAx`, kernel replay) over all of them, packing modules
+that do not share declaration names into one extractor run. `--shipped REPORT` also requires a
+passing, replayed all-shipped-modules report. A file that imports a module generated at gate
+time is listed in `GATES`; its gate script runs `theorem_universe.py gate` on its copy. `lake env` searches
+`.lake/build/lib/lean` before the universe libraries, so the audit refuses to run while a
+non-Lake top-level name there (the `tests/` fixture oleans of `tests/roadmap/claims` and
+`tests/roadmap/assurance`) could shadow a universe module; CI removes that directory first.
+
+## Freshness (H1)
+
+Each report records `freshness`: the Git revision and whether tracked files were dirty, the
+SHA-256 of every replayed module's olean (and of its source for Lake modules), and Lake's trace
+check (`lake --rehash build --no-build` over the Lake-built modules, also under `--no-build`, so
+a stale olean fails the audit). `claims.py check` recomputes these digests and refuses a report
+from another revision, a changed artifact, or a dirty report or tree unless `--allow-dirty` is
+given (recorded in its output). `proof-receipt.py prepare` refuses a dirty tree unless
+`--allow-dirty` (`AIR2LEAN_RECEIPT_ALLOW_DIRTY=1` for `tests/roadmap/proof-receipts/check.sh`);
+the receipt records `tree.dirty_allowed`.
 
 The regression command compiles intentionally untrusted fixtures outside the shipped
 source scope. It checks that a clean wrapper importing a hidden `sorry` fails, a new

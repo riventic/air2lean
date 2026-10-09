@@ -37,8 +37,9 @@ CHECK
     lake env lean -R "$work/generated" -o "${source%.lean}.olean" "$source"
   done
   # Invariant/measure proofs about the fresh generated nested dispatch machine.
-  LEAN_PATH="$work/generated:$(lake env printenv LEAN_PATH)" \
-    lake env lean tests/roadmap/dispatch/CountdownProof.lean
+  # Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
+  python3 -B scripts/theorem_universe.py gate tests/roadmap/dispatch/CountdownProof.lean \
+    --root tests/roadmap/dispatch --lean-path "$work/generated" --output-dir "$work/universe"
   python3 tests/roadmap/dispatch/mutations.py "$work/generated" "$work/mutants"
 fi
 if [ "$native" = 0 ]; then echo 'dispatch synthetic and kernel-proof regressions passed'; exit 0; fi

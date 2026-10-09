@@ -182,6 +182,8 @@ jobs:
         run: |
           python3 -B tests/roadmap/premises/test_premises.py
           python3 -B scripts/premises.py check
+          # F2/S1/H1: one theorem universe, kernel replay records and report freshness (no Lean).
+          python3 -B tests/roadmap/theorem-universe/test_universe.py -v
 
       # Offline: tutorial layout, README sections and premise lists match the index.
       - name: Tutorial layout regressions
@@ -1262,9 +1264,35 @@ jobs:
         env:
           LEAN_NUM_THREADS: "1"
         run: |
-          rm -f "$RUNNER_TEMP/air2lean-assumptions.json"
-          scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json"
+          rm -f "$RUNNER_TEMP/air2lean-assumptions.json" "$RUNNER_TEMP/kernel-replay-cache.json"
+          # S1: also replays every shipped module through the toolchain's leanchecker; the cache
+          # lets the theorem-universe step below skip byte-identical modules of this build.
+          time scripts/assumptions.sh --output "$RUNNER_TEMP/air2lean-assumptions.json" \
+            --replay-cache "$RUNNER_TEMP/kernel-replay-cache.json"
           python3 scripts/float-semantics.py check-report "$RUNNER_TEMP/air2lean-assumptions.json"
+
+      # F2: every module docs/premise-index.md indexes (tutorials, case studies, tests/roadmap
+      # theorem directories) is compiled and audited like the shipped scope: sorryAx, axiom
+      # policy and kernel replay. Exit codes alone accept `sorry`. The three files that need a
+      # gate-time translation are audited by their gates (theorem_universe.py GATES).
+      - name: Theorem universe audit
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+        run: |
+          # Fixture oleans that later steps (claims, assurance) compile into the cached Lake
+          # library; `lake env` searches it first, so they would shadow `tests.roadmap.*` modules.
+          rm -rf .lake/build/lib/lean/tests
+          time python3 -B scripts/theorem_universe.py audit --output-dir "$RUNNER_TEMP/theorem-universe" \
+            --shipped "$RUNNER_TEMP/air2lean-assumptions.json" --replay-cache "$RUNNER_TEMP/kernel-replay-cache.json"
+
+      # Architecture audit 4/6 counterexamples: S1 (kernel bypass), F2 and H1 must stay fixed.
+      - name: Architecture-audit claim fixtures
+        if: ${{ matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          LEAN_NUM_THREADS: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: tests/roadmap/architecture-audit/claims/check.sh --require-fixed --finding S1 --finding F2 --finding H1
 
       # Same premise tables over the kernel dependency graph of the audited translation.
       # --strict: the committed source index must cover every kernel-derived premise (D03).
@@ -1473,7 +1501,8 @@ jobs:
           AIR2LEAN_WEAK_CAS_ARTIFACT_DIR: ${{ runner.temp }}/weak-cas-qualification
         run: scripts/weak-cas.sh full
 
-      - name: Check for sorry/admit/native_decide
+      # Source scan over the theorem universe: placeholders and kernel escape hatches.
+      - name: Check for sorry/admit/native_decide and kernel escape hatches
         if: matrix.full
         run: scripts/no-sorry.sh
 
@@ -1574,7 +1603,10 @@ jobs:
             fi
           done
           # END proof receipt compiler stash
-          bash tests/roadmap/proof-receipts/check.sh \
+          # check.sh may rewrite Gen.lean profile headers of the selected translation, so the
+          # tree can be dirty; the receipt records that permission (tree.dirty_allowed) and a
+          # release claim must not rely on such a receipt.
+          AIR2LEAN_RECEIPT_ALLOW_DIRTY=1 bash tests/roadmap/proof-receipts/check.sh \
             --guard "$guard" --guard-sha256 "$guard_sha" \
             "$receipt_parent/attempt" "$lean_toolchain" ci-linux-0.16-all-shipped
           # I06 end to end: coverage over this genuine receipt, the real translator and a real I07 manifest.

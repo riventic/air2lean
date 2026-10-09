@@ -39,6 +39,9 @@ PROJECT_CHECK = 'tests/roadmap/project-check/test_check.py'
 ACCOUNTING = 'tests/roadmap/host-accounting/test_accounting.py'
 TUTORIALS = 'tests/roadmap/tutorials/test_tutorials.py'
 DIAGNOSTICS = 'tests/roadmap/project-diagnostics/test_project_diagnostics.py'
+UNIVERSE = 'tests/roadmap/theorem-universe/test_universe.py'
+RECEIPTS = 'tests/roadmap/proof-receipts/test_receipt.py'
+POLICY = 'tests/roadmap/assurance/test_policy.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -203,6 +206,43 @@ MUTANTS = {
     'diagnostics-source-span-unchecked': (
         'scripts/project-diagnostics.py', "        demand(valid_span(d), 'invalid source span')\n", '',
         DIAGNOSTICS, 'adapter', ('AdapterTests.test_invalid_protocol_controls',)),
+    # V04/S1: a module the kernel replay rejected must not be trusted (debug.skipKernelTC oleans).
+    'audit-kernel-replay-rejection-ignored': (
+        'scripts/assumptions.py', '        if node["module"] in rejected:\n', '        if False:\n',
+        POLICY, 'audit', ('PolicyTests.test_kernel_replay_rejection_fails_dependent_theorems',)),
+    # V04/S1: a project module outside the replayed set must not be trusted.
+    'audit-unreplayed-module-trusted': (
+        'scripts/assumptions.py',
+        '        elif needs_replay(node["module"]) and node["module"] not in replayed:\n', '        elif False:\n',
+        POLICY, 'audit', ('PolicyTests.test_module_outside_replay_is_not_trusted',)),
+    # V04/S1: a changed Lake olean invalidates every cached replay (its dependents may break).
+    'audit-replay-cache-ignores-digest': (
+        'scripts/assumptions.py', '        passed = {}  # Another build: a reused module could depend on a changed one.\n',
+        '        pass\n',
+        UNIVERSE, 'assumptions', ('ReplayTests.test_cache_reuses_only_identical_passed_lake_oleans',)),
+    # V04/H1: a report whose recorded artifacts changed is stale.
+    'audit-freshness-digest-unchecked': (
+        'scripts/assumptions.py',
+        'if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):', 'if False:',
+        UNIVERSE, 'assumptions', ('FreshnessTests.test_changed_artifact_or_revision_is_stale',)),
+    # V04/F2: `declaration uses 'sorry'` fails compilation of an indexed module (examples too).
+    'universe-sorry-warning-ignored': (
+        'scripts/theorem_universe.py', '    if SORRY_WARNING in result.stdout:\n', '    if False:\n',
+        UNIVERSE, 'universe', ('UniverseTests.test_compile_rejects_sorry_warnings',)),
+    # V04/S1: the source scan rejects debug.skipKernelTC and set_option debug.*.
+    'universe-kernel-bypass-unscanned': (
+        'scripts/theorem_universe.py', 'if bypass := FORBIDDEN.search(line):', 'if bypass := None:',
+        UNIVERSE, 'universe', ('UniverseTests.test_scan_rejects_kernel_bypass_and_placeholders',)),
+    # I07/H1: a release receipt from a dirty tree needs the recorded --allow-dirty.
+    'receipt-dirty-tree-accepted': (
+        'scripts/proof-receipt.py',
+        "    demand(not plan['revision']['tracked_dirty'] or plan['allow_dirty'], 'tracked changes: a release receipt needs a clean tree')\n",
+        '', RECEIPTS, 'r', ('ReceiptTests.test_dirty_tree_receipt_needs_recorded_permission',)),
+    # V04/S1: the receipt's kernel replay must come from the planned toolchain's leanchecker.
+    'receipt-replay-tool-unchecked': (
+        'scripts/proof-receipt.py',
+        "and replay['tool_sha256'] == fingerprint(toolchain / 'bin/leanchecker')['sha256']", '',
+        RECEIPTS, 'r', ('ReceiptTests.test_receipt_requires_kernel_replay_by_planned_toolchain',)),
 }
 
 

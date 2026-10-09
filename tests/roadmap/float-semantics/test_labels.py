@@ -234,7 +234,12 @@ class GraphTests(unittest.TestCase):
         return registry
 
     def report(self, raw, registry):
-        return audit.apply_policy(raw, self.policy, registry)
+        # Every project module of the fixture graph passed kernel replay.
+        modules = sorted({*raw['modules'], *(n['module'] for n in raw['nodes'] if audit.needs_replay(n['module']))})
+        replay = {'schema_version': 1, 'tool': 'leanchecker', 'tool_sha256': '0' * 64, 'lean_sha256': '1' * 64,
+                  'toolchain': 'leanprover/lean4:test', 'modules': modules,
+                  'modules_sha256': audit.modules_digest(modules), 'reused': [], 'rejected': [], 'status': 'pass'}
+        return audit.apply_policy(dict(raw, kernel_replay=replay), self.policy, registry)
 
     def classes(self, report):
         return sorted((v['name'], v['trust_class']) for v in report['violations'])

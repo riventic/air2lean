@@ -246,13 +246,21 @@ def main(argv=None) -> int:
     check_cmd.add_argument('--diff', type=Path, action='append', default=[],
                            help='diff-report summary JSON bound to the current tree; its outcomes can only '
                                 'refuse absence claims')
+    check_cmd.add_argument('--allow-dirty', action='store_true',
+                           help='accept a report or tree with uncommitted tracked changes (recorded in the output)')
     for cmd in (report_cmd, check_cmd):
         cmd.add_argument('--assurance', type=Path, required=True, help='scripts/assumptions.py report')
         cmd.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
     try:
         report = json.loads(args.assurance.read_text())
-        result = classify(report) if args.command == 'report' else check(args.manifest, report, args.diff)
+        if args.command == 'report':
+            result = classify(report)
+        else:
+            # A claim is only as current as its evidence: recompute the report's source/olean
+            # digests and revision binding instead of trusting `status: pass` (H1).
+            freshness = _sibling('assumptions').verify_fresh(report, args.allow_dirty)
+            result = dict(check(args.manifest, report, args.diff), freshness=freshness)
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f'claims error: {error}', file=sys.stderr)
         return 2

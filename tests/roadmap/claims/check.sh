@@ -31,7 +31,8 @@ def run(strength, theorem='ClaimFixture.diverge_partial'):
                            'assumptions': [], 'exclusions': []}]}
     path = out / f'{theorem.rsplit(".", 1)[1]}-{strength}.json'
     path.write_text(json.dumps(manifest))
-    return subprocess.run([sys.executable, 'scripts/claims.py', 'check', str(path),
+    # A regression fixture, not a release claim: CI's selected translation may dirty the tree.
+    return subprocess.run([sys.executable, 'scripts/claims.py', 'check', str(path), '--allow-dirty',
                            '--assurance', str(out / 'assurance.json')], capture_output=True, text=True)
 accepted, rejected = run('partial_correctness'), run('total_correctness')
 assert accepted.returncode == 0, accepted.stderr

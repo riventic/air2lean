@@ -1,6 +1,7 @@
 """Offline I03 project check regressions: stub translator, Lake and audit; real guard and claims."""
 import copy
 import fcntl
+import importlib.util
 import hashlib
 import json
 import os
@@ -12,6 +13,11 @@ import threading
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'scripts' / 'project.py'
+_AUDIT_SPEC = importlib.util.spec_from_file_location('assumptions', SCRIPT.parent / 'assumptions.py')
+_auditor = importlib.util.module_from_spec(_AUDIT_SPEC)
+_AUDIT_SPEC.loader.exec_module(_auditor)
+# claims.py binds the audit to this checkout's revision (H1); the stub audit records it.
+FRESH_REVISION = _auditor.git_revision()
 GENERATED = 'namespace Example\ndef root := 0\nend Example\n'
 LAKE = '''import json, os, pathlib, sys
 with open(os.environ['STUB_LOG'], 'a') as log:
@@ -92,7 +98,9 @@ class CheckTests(unittest.TestCase):
     def write_audit(self, status='pass'):
         self.fixture.write_text(json.dumps({'schema_version': 1, 'status': status, 'theorems': self.theorems,
                                             'nodes': self.nodes, 'theorem_count': len(self.theorems), 'violations': [],
-                                            'policy_sha256': '0' * 64, 'lean_toolchain': 'leanprover/lean4:v4.34.0'}))
+                                            'policy_sha256': '0' * 64, 'lean_toolchain': 'leanprover/lean4:v4.34.0',
+                                            'freshness': {'revision': FRESH_REVISION, 'artifacts': [],
+                                                          'lake_trace_check': {'modules': [], 'status': 'up-to-date'}}}))
 
     def run_check(self, name='a', *extra):
         result = subprocess.run([sys.executable, str(SCRIPT), 'check', str(self.path), '--translator', str(self.translator),

@@ -18,6 +18,9 @@ SPEC = importlib.util.spec_from_file_location('claims', SCRIPT)
 claims = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(claims)
 FIXTURE = json.loads((Path(__file__).parent / 'fixture-report.json').read_text())
+AUDIT_SPEC = importlib.util.spec_from_file_location('assumptions', ROOT / 'scripts' / 'assumptions.py')
+assumptions = importlib.util.module_from_spec(AUDIT_SPEC)
+AUDIT_SPEC.loader.exec_module(assumptions)
 
 EXPECTED = {
     'ClaimFixture.diverge_partial': ('correct-if-returned', 'partial_correctness'),
@@ -136,7 +139,14 @@ class ManifestTests(unittest.TestCase):
         self.base = Path(self.temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.report = self.base / 'assurance.json'
-        self.report.write_text(json.dumps(FIXTURE))
+        # A report bound (H1) to this checkout's revision and to one artifact digest.
+        self.olean = self.base / 'Fixture.olean'
+        self.olean.write_bytes(b'compiled fixture')
+        self.fixture = dict(FIXTURE, freshness={
+            'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+            'artifacts': [{'module': 'Fixture', 'olean': str(self.olean),
+                           'olean_sha256': assumptions.file_sha256(self.olean), 'source': None, 'source_sha256': None}]})
+        self.report.write_text(json.dumps(self.fixture))
 
     def manifest(self, goals):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
@@ -154,8 +164,9 @@ class ManifestTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)],
                               capture_output=True, text=True, timeout=30)
 
-    def check(self, goals):
-        result = self.cli('check', self.manifest(goals), '--assurance', self.report)
+    def check(self, goals, flags=('--allow-dirty',)):
+        # The checkout under test may have uncommitted changes; refusal tests pass no flag.
+        result = self.cli('check', self.manifest(goals), '--assurance', self.report, *flags)
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
     def test_matching_and_weaker_goals_accepted(self):
@@ -232,7 +243,7 @@ class ManifestTests(unittest.TestCase):
         code, result, _ = self.check([('ret_total', 'safety')])
         self.assertEqual(code, 1)
         self.assertIn('absent', result['roots'][0]['goals'][0]['reason'])
-        report = copy.deepcopy(FIXTURE)
+        report = copy.deepcopy(self.fixture)
         for theorem in report['theorems']:
             theorem['allowed'] = False
         self.report.write_text(json.dumps(report))
@@ -245,9 +256,42 @@ class ManifestTests(unittest.TestCase):
         code, _, err = self.check([('ClaimFixture.ret_total', 'safety')])
         self.assertEqual(code, 2)
         self.assertIn('claims error', err)
-        self.report.write_text(json.dumps(FIXTURE))
+        self.report.write_text(json.dumps(self.fixture))
         code, _, _ = self.check([('ClaimFixture.ret_total', 'proved')])
         self.assertEqual(code, 2)
+
+    def test_report_must_be_fresh_for_this_tree(self):
+        goal = [('ClaimFixture.ret_total', 'total_correctness')]
+        code, result, err = self.check(goal)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(result['freshness']['artifacts'], 1)
+        cases = {'no freshness binding': {k: v for k, v in self.fixture.items() if k != 'freshness'},
+                 'revision': dict(self.fixture, freshness=dict(self.fixture['freshness'],
+                                                               revision={'head': '0' * 40, 'tracked_dirty': False})),
+                 'trace check': dict(self.fixture, freshness=dict(self.fixture['freshness'], lake_trace_check={}))}
+        for reason, report in cases.items():
+            with self.subTest(reason=reason):
+                self.report.write_text(json.dumps(report))
+                code, _, err = self.check(goal)
+                self.assertEqual(code, 2)
+                self.assertIn(reason, err)
+        self.report.write_text(json.dumps(self.fixture))
+        self.olean.write_bytes(b'recompiled fixture')
+        code, _, err = self.check(goal)
+        self.assertEqual(code, 2)
+        self.assertIn('stale', err)
+
+    def test_dirty_report_needs_explicit_recorded_permission(self):
+        goal = [('ClaimFixture.ret_total', 'total_correctness')]
+        dirty = copy.deepcopy(self.fixture)
+        dirty['freshness']['revision']['tracked_dirty'] = True
+        self.report.write_text(json.dumps(dirty))
+        code, _, err = self.check(goal, flags=())
+        self.assertEqual(code, 2)
+        self.assertIn('--allow-dirty', err)
+        code, result, err = self.check(goal)
+        self.assertEqual(code, 0, err)
+        self.assertEqual((result['freshness']['tracked_dirty'], result['freshness']['dirty_allowed']), (True, True))
 
     def test_report_command(self):
         result = self.cli('report', '--assurance', self.report)
