@@ -1529,7 +1529,7 @@
       "id": "sync",
       "description": "golden sync example (26 AIR files, Zig 0.16.0)",
       "air": [
-        "tests/golden/sync/air"
+        "tests/golden/0.16.0/sync/air"
       ],
       "air_zig_version": "0.16.0",
       "namespace": "Sync",
