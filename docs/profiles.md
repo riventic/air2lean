@@ -265,15 +265,17 @@ remains absent. The native probe records a bounded candidate for T04/T05/T06.
 - f80/f128 layout and results, including NaN and subnormal edges;
 - `c_longdouble`;
 - L09 vector layouts;
-- atomic widths, alignment and results, and the 128-bit atomic limit.
+- atomic widths, alignment and results, the 128-bit atomic limit, every `@atomicRmw`
+  operation, the accepted orderings, `bool`/enum/pointer/float cells, and threaded litmus tests.
 
 The output must equal that profile's versioned expected file
-(`tests/roadmap/aarch64-abi/expected/0.16.0/`). A wrong host or an unrecorded Zig version
+(`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
 is `excluded`, which exits non-zero and never counts as a match. `tests/roadmap/aarch64-abi/Model.lean`
 kernel-checks each profile's layout table against the model and compares the file's float
-and atomic results with it. Four declared divergences are reported and not counted as
-matches: soft-float f80 unnormal and pseudo-denormal handling, and padding-sensitive `u24`/`u40`
-cmpxchg. These are ABI-only profiles. aarch64-linux AIR is still rejected by
+and atomic results with it. Six declared divergences (eight before Zig 0.16.0) are reported and
+not counted as matches: soft-float f80 unnormal and pseudo-denormal handling, padding-sensitive
+`u24`/`u40` cmpxchg, signed `Max` of a negative `i24`/`i40` cell, and (before 0.16.0)
+f64-precision `@sqrt` of f80 and f128. These are ABI-only profiles. aarch64-linux AIR is still rejected by
 `BuildProfile.parse`.
 
 ## Byte order (big endian)
