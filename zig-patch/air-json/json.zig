@@ -308,8 +308,27 @@ const Compat = struct {
     /// A global's type, flags and initial value. 0.16.0 keeps them in `Nav.resolved`; before
     /// 0.16.0, `Nav.status` has them, and the value of a `var` is a `variable` key that holds the
     /// initial value.
-    fn navInfo(zcu: *Zcu, nav_index: InternPool.Nav.Index) NavInfo {
+    ///
+    /// From 0.16.0, taking a global's address resolves only its type; Sema queues its value
+    /// (`ensureNavValAnalysisQueued`) for later in the same update. A body written before then
+    /// would lack the initial value, so this resolves it now, as `Sema.ensureNavResolved(.fully)`
+    /// would: the same analysis, only earlier. A failure is already a registered compile error;
+    /// the value then stays absent and air2lean rejects the global.
+    fn navInfo(pt: Zcu.PerThread, nav_index: InternPool.Nav.Index) NavInfo {
+        const zcu = pt.zcu;
         const ip = &zcu.intern_pool;
+        if (v16) {
+            if (ip.getNav(nav_index).resolved) |r| if (r.value == .none and !r.is_extern_decl) {
+                const unit: InternPool.AnalUnit = .wrap(.{ .nav_val = nav_index });
+                if (!zcu.analysis_in_progress.contains(unit)) {
+                    const reason: Zcu.DependencyReason = .{
+                        .src = zcu.navSrcLoc(nav_index),
+                        .type_layout_reason = undefined,
+                    };
+                    pt.ensureNavValUpToDate(nav_index, &reason) catch {};
+                }
+            };
+        }
         const nav = ip.getNav(nav_index);
         if (v16) {
             const r = nav.resolved.?;
@@ -1504,7 +1523,7 @@ const W = struct {
                     if (!sizedLayout(zcu, child)) return .{ .unsupported = "payload_layout" };
                     const root_ty = switch (g) {
                         .nav => |nav| blk: {
-                            const info = Compat.navInfo(zcu, nav);
+                            const info = Compat.navInfo(w.pt, nav);
                             if (info.init == null or info.is_extern or info.is_threadlocal)
                                 return .{ .unsupported = "payload_unbacked" };
                             break :blk Type.fromInterned(info.ty);
@@ -1640,7 +1659,7 @@ const W = struct {
         try w.j.beginObject();
         switch (g) {
             .nav => |nav| {
-                const info = Compat.navInfo(zcu, nav);
+                const info = Compat.navInfo(w.pt, nav);
                 try w.field("name");
                 try w.j.write(ip.getNav(nav).fqn.toSlice(ip));
                 try w.field("ty");

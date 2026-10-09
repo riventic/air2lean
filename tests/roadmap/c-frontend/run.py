@@ -48,10 +48,16 @@ from zig_gen import INPUTS, lean_checks  # noqa: E402  (Q01 inputs and #guard em
 SCHEMA = 1
 TC_TARGET = "x86_64-linux-musl"
 AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
-# std code that translate-c output calls is translated from its AIR like user code. Wider
-# prefixes (`mem.zeroes`, `debug.assert`) also select std's own unrelated instances and fail
-# them, so other std callees stay CALLEE_MISSING (docs/c-frontend.md, gap G6).
+# std code that translate-c output calls is translated from its AIR like user code. The export
+# starts from the C module and `zig.c_translation.`, adds the base name of every callee that
+# still has no AIR file (`mem.zeroes`, `debug.assert`, ...) until none is left, and then keeps
+# only the functions reachable from the C module: a prefix such as `mem.asBytes` also selects
+# std's own unrelated instances (docs/c-frontend.md, G6). Panic handlers are not exported:
+# air2lean classifies them by exact name (`Air2Lean/Sem.lean`).
 STD_FILTER = ["zig.c_translation."]
+STD_ROUNDS = 4
+PANIC_CALLEE = re.compile(r"^debug\.(FullPanic\(|defaultPanic$)")
+ANON = re.compile(r"__anon_\d+$")
 STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "lean"]
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
 WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
@@ -237,36 +243,63 @@ def stage_zig_native(zig, zig_file, expected, work):
     return {"status": status, "log": tail(out)}
 
 
-def stage_air_export(zig_air, zig_file, stem, work):
-    air = work / "air"
+def air_refs(doc):
+    """The functions one AIR file calls or takes the address of (every `"func"` name)."""
+    refs, stack = set(), [doc]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if isinstance(node.get("func"), str):
+                refs.add(node["func"])
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return refs
+
+
+def export_air(zig_air, zig_file, prefixes, air, work):
+    """One patched-compiler export; returns (ok, {name: (path, refs)}, log)."""
     shutil.rmtree(air, ignore_errors=True)
     air.mkdir()
-    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join([stem + "."] + STD_FILTER))
+    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join(prefixes))
     code, out = run([zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
                      *AIR_TARGET, str(zig_file)], TIMEOUT["air"], cwd=work, env=env)
     (work / "air_export.log").write_text(out)
-    files = sorted(air.glob("*.json"))
-    incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
-    if code != 0 or incomplete or not files:
-        return {"status": "failed", "files": len(files), "log": tail(out)}, None
-    callees, names = set(), set()
-    for f in files:
+    docs = {}
+    for f in sorted(air.glob("*.json")):
         doc = json.loads(f.read_text())
-        names.add(doc.get("name", f.stem))
-        stack = [doc.get("body", [])]
-        while stack:
-            node = stack.pop()
-            if isinstance(node, dict):
-                callee = node.get("callee")
-                if isinstance(callee, dict) and isinstance(callee.get("func"), str):
-                    callees.add(callee["func"])
-                stack.extend(node.values())
-            elif isinstance(node, list):
-                stack.extend(node)
-    external = sorted(c for c in callees - names)
-    std = sorted(n for n in names if not n.startswith(stem + "."))
-    return {"status": "ok", "functions": len(files), "std_functions": std,
-            "unexported_callees": external}, air
+        docs[doc.get("name", f.stem)] = (f, air_refs(doc))
+    incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
+    return code == 0 and not incomplete and bool(docs), docs, out
+
+
+def stage_air_export(zig_air, zig_file, stem, work):
+    air = work / "air"
+    prefixes = [stem + "."] + STD_FILTER
+    for _ in range(STD_ROUNDS):
+        ok, docs, out = export_air(zig_air, zig_file, prefixes, air, work)
+        if not ok:
+            return {"status": "failed", "files": len(docs), "log": tail(out)}, None
+        added = sorted({ANON.sub("", c) for _, refs in docs.values() for c in refs
+                        if c not in docs and not PANIC_CALLEE.match(c)} - set(prefixes))
+        if not added:
+            break
+        prefixes += added
+    # Keep the closure of the C module's functions; drop std instances it never reaches.
+    live, todo = set(), [n for n in docs if n.startswith(stem + ".")]
+    while todo:
+        name = todo.pop()
+        if name in docs and name not in live:
+            live.add(name)
+            todo.extend(docs[name][1])
+    for name, (f, _) in docs.items():
+        if name not in live:
+            f.unlink()
+    callees = {c for name in live for c in docs[name][1]}
+    return {"status": "ok", "functions": len(live),
+            "std_functions": sorted(ANON.sub("", n) for n in live if not n.startswith(stem + ".")),
+            "std_prefixes": prefixes[1 + len(STD_FILTER):],
+            "unexported_callees": sorted(callees - live)}, air
 
 
 def stage_air2lean(binary, air):
