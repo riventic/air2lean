@@ -246,6 +246,14 @@ proofs, but it makes outcome reports and native diffs wrong. **Fix:** PNVI-ae-st
 exposure: a `ptrFrag` read as an integer yields its address under the MM-1 oracle. Integer
 bytes read as a pointer go through `ptrFromAddr`.
 
+**Status: fixed on `codex/fix-mm-hardening`.** `load` decodes with `decodeLoad`: a decode that
+is `.unspecified` and meets pointer bytes is retried with each pointer byte read as the byte of
+its pointer's address (`exposeBytes`, the block's `addr` plus the offset). `Enc Ptr` reads eight
+integer bytes as the pointer to that address without a block (an access through it is
+`.illegal`); resolving it to a live block like `ptrFromAddr` is left to the placement model
+(TODO in `ZigLean/Mem/Enc.lean`). Atomic loads, `readSlice` and byte locals keep the strict
+decode. Regression: `tests/roadmap/memory-hardening/Bytes.lean`.
+
 ### MM-12. Zero-length accesses, address-zero projections (known: L05)
 
 `Mem.access p 0 _` still needs a live block and in-bounds offset. `memset`/`memmove`/`readSlice`

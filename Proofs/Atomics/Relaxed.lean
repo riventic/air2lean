@@ -199,7 +199,7 @@ theorem step_ctx {G : ThreadId → Gh} {m m' : Mem} {o : Nat} {q q₀ : Ptr} (hi
   rw [ho] at hdec
   have hx : blk.bytes.extract o (o + Enc.size Ptr) = Enc.encode q₀ := by
     have := hq; unfold curBytes at this; rw [hblk] at this; exact this
-  rw [hx, LawfulEnc.decode_encode] at hdec
+  rw [hx, decodeLoad_of_decode (LawfulEnc.decode_encode _)] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   rw [ho]
   exact ⟨hdec.symm, rfl, hi.record ht hcs (by decide)⟩

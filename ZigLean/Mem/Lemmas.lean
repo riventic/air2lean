@@ -15,6 +15,35 @@ namespace Zig
 
 attribute [zig_unfold] callM callR
 
+/-! ## Pointer bytes as integers (MM-11) -/
+
+/-- A load's decode is the plain decode whenever that succeeds. -/
+theorem decodeLoad_of_decode {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte} {v : α}
+    (h : Enc.decode bs = pure v) : decodeLoad blocks bs = pure v := by
+  unfold decodeLoad; rw [h]; rfl
+
+/-- `decodeLoad_of_decode` in `ExceptT.run` form. -/
+theorem decodeLoad_run_of_decode {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte}
+    {v : α} (h : (Enc.decode bs : Result α).run = some (.ok v)) :
+    (decodeLoad blocks bs : Result α).run = some (.ok v) :=
+  decodeLoad_of_decode h
+
+/-- A successful load decode: the plain decode, or (pointer bytes read as an integer) the decode
+of the bytes with the pointer bytes exposed as addresses. -/
+theorem decodeLoad_ok {α : Type} [Enc α] {blocks : Array Block} {bs : Array Byte} {v : α}
+    (h : (decodeLoad blocks bs).run = some (.ok v)) :
+    (Enc.decode bs : Result α).run = some (.ok v) ∨
+      ((Enc.decode bs : Result α).run = some (.error .unspecified) ∧
+        (Enc.decode (exposeBytes blocks bs) : Result α).run = some (.ok v)) := by
+  unfold decodeLoad at h
+  simp only [ExceptT.run_mk] at h
+  split at h
+  · rename_i heq
+    split at h
+    · exact .inr ⟨heq, h⟩
+    · cases h
+  · exact .inl h
+
 /-! ## Stack budget (MM-5) -/
 
 /-- Without a stack budget (`stackLimit = none`, every generated `mem0`), a frame is charged
@@ -422,8 +451,9 @@ theorem load_run {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId
     (hnr : NoRace m b o (Enc.size α) .read) :
     (load α a p).run m = pure (v, m.recordAt b o (Enc.size α) .read) := by
   simp only [load, StateT.run_bind, loadBytes_run h hnr]
-  simp [hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind, ExceptT.bindCont, StateT.run,
-    liftM, monadLift, MonadLift.monadLift, StateT.lift]
+  simp [decodeLoad_of_decode hv, pure, ExceptT.pure, ExceptT.mk, bind, ExceptT.bind,
+    ExceptT.bindCont, StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, get, getThe,
+    MonadStateOf.get, StateT.get]
 
 theorem store_run {α : Type} [Enc α] [LawfulEnc α] {m : Mem} {p : Ptr} {a : Nat} {b : BlockId}
     {blk : Block} {o : Nat} (v : α) (h : m.access p (Enc.size α) a = pure (b, blk, o))
@@ -527,7 +557,7 @@ memory is the input with the read recorded (`Mem.recordAt`). -/
 theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
     (h : (load α a p).run m = pure (v, m')) :
     ∃ b blk o, m.access p (Enc.size α) a = pure (b, blk, o) ∧
-      Enc.decode (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
+      decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) = pure v ∧
       m' = m.recordAt b o (Enc.size α) .read := by
   simp only [load, loadBytes, recordAccess, StateT.run, bind, StateT.bind, get, getThe,
     MonadStateOf.get, StateT.get, liftM, monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind,
@@ -547,7 +577,7 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
       cases h
     | none, hr, h =>
       simp only [ExceptT.bindCont, Option.bind_some, StateT.set, pure, ExceptT.pure, ExceptT.mk] at h
-      generalize hd2 : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
+      generalize hd2 : (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size α)) : Result α) = d at h
       match d, hd2, h with
       | none, _, h => simp at h
       | some (.error _), _, h =>
@@ -556,6 +586,11 @@ theorem load_inv {α : Type} [Enc α] {m m' : Mem} {p : Ptr} {a : Nat} {v : α}
         simp only [ExceptT.bindCont, Option.bind_some] at h
         obtain ⟨rfl, rfl⟩ := h
         exact ⟨b, blk, o, rfl, hd2, rfl⟩
+
+/-- A load of the bytes of a value of a lawful encoding decodes the value. -/
+@[simp] theorem decodeLoad_encode {α : Type} [Enc α] [LawfulEnc α] (blocks : Array Block) (v : α) :
+    decodeLoad blocks (Enc.encode v) = pure v :=
+  decodeLoad_of_decode (LawfulEnc.decode_encode v)
 
 instance : LawfulEnc Bool where
   size_encode _ := rfl

@@ -222,12 +222,14 @@ theorem loadBytes_ok {m m' : Mem} {p : Ptr} {n a : Nat} {kind : AccessKind} {bs 
 theorem load_ok {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T}
     (h : ((load T a p).run m).run = some (.ok (v, m'))) :
     ∃ b blk o, m.access p (Enc.size T) a = pure (b, blk, o) ∧ NoRace m b o (Enc.size T) .read ∧
-      (Enc.decode (blk.bytes.extract o (o + Enc.size T)) : Result T).run = some (.ok v) ∧
+      (decodeLoad m.blocks (blk.bytes.extract o (o + Enc.size T)) : Result T).run = some (.ok v) ∧
       m' = m.recordAt b o (Enc.size T) .read := by
   unfold load at h
   obtain ⟨bs, m₁, hl, h₁⟩ := MemM.bind_ok h
   obtain ⟨b, blk, o, ha, hnr, rfl, rfl⟩ := loadBytes_ok hl
-  obtain ⟨hd, rfl⟩ := MemM.lift_ok h₁
+  obtain ⟨m₂, m₃, hg, h₂⟩ := MemM.bind_ok h₁
+  obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
+  obtain ⟨hd, rfl⟩ := MemM.lift_ok h₂
   exact ⟨b, blk, o, ha, hnr, hd, rfl⟩
 
 theorem accessW_pure {m : Mem} {p : Ptr} {n a : Nat} {r : BlockId × Block × Nat}

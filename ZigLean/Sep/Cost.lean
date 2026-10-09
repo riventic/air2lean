@@ -126,23 +126,8 @@ theorem store_cost {α : Type} [Enc α] {a : Nat} {p : Ptr} {v : α} {m m' : Mem
 /-- A load never allocates or frees. -/
 theorem load_cost {α : Type} [Enc α] {a : Nat} {p : Ptr} {v : α} {m m' : Mem}
     (h : (load α a p).run m = pure (v, m')) : m.SameAllocs m' := by
-  cases ha : m.access p (Enc.size α) a with
-  | none => simp [load, loadBytes, zig_unfold, ha] at h
-  | some r =>
-    cases r with
-    | error e => simp [load, loadBytes, zig_unfold, ha] at h; cases h
-    | ok r =>
-      obtain ⟨b, blk, o⟩ := r
-      by_cases hnr : NoRace m b o (Enc.size α) .read
-      · simp only [load, StateT.run_bind, loadBytes_run ha hnr] at h
-        cases hd : (Enc.decode (blk.bytes.extract o (o + Enc.size α)) : Result α) with
-        | none => simp [zig_unfold, hd] at h
-        | some r => cases r with
-          | error e => simp [zig_unfold, hd] at h; cases h
-          | ok w => simp [zig_unfold, hd] at h; cases h; exact ⟨rfl, rfl⟩
-      · unfold NoRace at hnr
-        obtain ⟨err, herr⟩ := Option.ne_none_iff_exists'.mp hnr
-        simp [load, loadBytes, recordAccess, zig_unfold, ha, herr] at h; cases h
+  obtain ⟨_, _, _, -, -, rfl⟩ := load_inv h
+  exact ⟨rfl, rfl⟩
 
 /-- The number of blocks a successful allocation result adds: one, or none for an error. -/
 def allocated {α : Type} : Except ErrName α → Nat

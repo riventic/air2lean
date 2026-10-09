@@ -501,7 +501,7 @@ theorem step_ctx {T : Type} [Enc T] {G : ThreadId → Gh} {m m' : Mem} {u o a : 
   cases hacc
   have hx : blk.bytes.extract o (o + Enc.size T) = curBytes m u o (Enc.size T) := by
     unfold curBytes; rw [hb₂]; rfl
-  rw [hx, hq] at hdec
+  rw [hx, decodeLoad_of_decode hq] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   exact ⟨hdec.symm, rfl, hi.record ht hact (fun _ h => by cases h) (.inr (.inr (.inr (.inr ⟨hu, rfl⟩))))⟩
 
@@ -1512,7 +1512,7 @@ theorem step_rd {G : ThreadId → Gh} {m m' : Mem} {k : Nat} {v w : BitVec 32} (
   have hx : (Enc.decode (blk.bytes.extract (4 + 4 * k) (4 + 4 * k + Enc.size (BitVec 32))) :
       Result (BitVec 32)).run = some (.ok w) := by
     have := hn; unfold NextAt U32At curBytes at this; rw [hb₀] at this; exact this
-  rw [hx] at hdec
+  rw [decodeLoad_run_of_decode hx] at hdec
   simp only [Option.some.injEq, Except.ok.injEq] at hdec
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide
   exact ⟨hdec.symm, rfl, hi.record ht (.inl hc) (fun _ h => by cases h) (.inr (.inr (.inr (.inl ⟨rfl, rfl, hc, hg⟩))))⟩
@@ -1628,7 +1628,7 @@ theorem step_whole {G : ThreadId → Gh} {m m' : Mem} {s : Stack} {w0 w1 w2 : Bi
   rw [hacc₀] at hacc
   cases hacc
   obtain ⟨v, hd⟩ := whole_dec hi hb₀ hn0 hn1 hn2
-  rw [hd] at hdec
+  rw [decodeLoad_of_decode hd] at hdec
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq] at hdec
   subst hdec
   have ht : m.current < m.threads.size := by rw [hc, ld_size hi.thr hg]; decide

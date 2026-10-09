@@ -454,11 +454,47 @@ class Enc (α : Type) where
   encode : α → Array Byte
   decode : Array Byte → Result α
 
+/-- The address of `p` over the blocks `blocks` (`ptrAddr`), if its block exists. -/
+def addrIn (blocks : Array Block) (p : Ptr) : Option Int :=
+  match p.block with
+  | none => some p.off
+  | some b => (blocks[b]?).map fun blk => blk.addr + p.off
+
+/-- `bs` with every pointer byte replaced by the byte of its pointer's address
+(little-endian, two's complement in 64 bits): the bytes as an integer read sees them (MM-11). A
+pointer byte whose block does not exist stays. -/
+def exposeBytes (blocks : Array Block) (bs : Array Byte) : Array Byte :=
+  bs.map fun
+    | .ptrFrag q i =>
+      match addrIn blocks q with
+      | some a => .int (BitVec.ofNat 8 ((BitVec.ofInt 64 a).toNat >>> (8 * i.val)))
+      | none => .ptrFrag q i
+    | b => b
+
+/-- The byte is a pointer byte. -/
+def Byte.isPtrFrag : Byte → Bool
+  | .ptrFrag .. => true
+  | _ => false
+
+/-- The decode of a load (MM-11, PNVI-ae style exposure): `Enc.decode bs`, except that a decode
+that is `.unspecified` and meets pointer bytes is retried with the pointer bytes read as their
+addresses (`exposeBytes`, over the memory's `blocks`). So the bytes of a pointer read as an
+integer (`asBytes(&p)`, a `*usize` cast of `&p`) give its address, as in Zig. A value that mixes
+a pointer and integer bytes holding a pointer then decodes its pointer from the address, without
+a block. Integer bytes read as a pointer give a pointer without a block (`Enc Ptr`). -/
+def decodeLoad {α : Type} [Enc α] (blocks : Array Block) (bs : Array Byte) : Result α :=
+  ExceptT.mk <|
+    match (Enc.decode bs : Result α).run with
+    | some (.error .unspecified) =>
+      if bs.any Byte.isPtrFrag then (Enc.decode (exposeBytes blocks bs) : Result α).run
+      else some (.error .unspecified)
+    | r => r
+
 /-- `load`/`store` take the alignment of the pointer type (`*align(N) T`), which can differ from
 the type's own alignment. -/
 def load (α : Type) [Enc α] (align : Nat) (p : Ptr) : MemM α := do
   let bs ← loadBytes p (Enc.size α) align
-  Enc.decode bs
+  decodeLoad (← get).blocks bs
 
 def store {α : Type} [Enc α] (align : Nat) (p : Ptr) (v : α) : MemM Unit :=
   storeBytes p align (Enc.encode v)
