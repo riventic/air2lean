@@ -116,6 +116,8 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
     unless (Endian.ofString? endian).isSome do
       report s!"profile.endian '{endian}' is outside the little/big-endian memory model"
   let abi ← take? (strField p "abi")
+  -- The qualified target's byte order, which names the profile (`nameOf`).
+  let mut targetEndian : Option Endian := none
   if let some triple := targetTriple then
     -- Zig triples have arch-os-abi components (version suffixes are permitted).
     match triple.splitOn "-" with
@@ -126,6 +128,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       match Target.find? arch (os.splitOn ".").head! with
       | none => report s!"profile.target_triple: outside the {Target.scope} model ABI scope"
       | some target =>
+        targetEndian := some target.endian
         if let some pointerBits := pointerBits then
           unless pointerBits == target.pointerBits do
             report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
@@ -137,9 +140,10 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   if let (.ok te, some endian) := (j.getObjVal? "target_endian", endian) then
     unless (match te.getStr? with | .ok s => s == endian | .error _ => false) do
       report "target_endian differs from profile.endian"
-  -- The exporter names the profile by its byte order (`nameOf`), validated above.
+  -- The exporter names the profile by its target's byte order (`nameOf`); without a qualified
+  -- target, by the declared one. A conflicting `endian` was reported above.
   if let some name := name then
-    let want := nameOf ((endian.bind Endian.ofString?).getD .little)
+    let want := nameOf (((targetEndian <|> endian.bind Endian.ofString?)).getD .little)
     unless name == want do report s!"unsupported profile '{name}' (want '{want}')"
   if let some profileVersion ← take? (strField p "zig_version") then
     unless profileVersion == zigVersion do

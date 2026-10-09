@@ -192,22 +192,18 @@ def bigEndian (d : Dialect) : Bool := d.endian == .big
 
 def bitCast (d : Dialect) : ZigVersion.BitCast := d.version.bitCast
 
-/-- Runtime safety checks are on (`Debug`, `ReleaseSafe`); `none` for an unverified build mode. -/
-def safety (d : Dialect) : Option Bool :=
-  match d.buildMode with
-  | "Debug" | "ReleaseSafe" => some true
-  | "ReleaseFast" | "ReleaseSmall" => some false
-  | _ => none
-
 /-- The backend bit-packs vector lanes in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`,
 `tests/roadmap/vector-layouts`); other backends lay lanes out differently. -/
 def packedVectorLanes (d : Dialect) : Bool := d.backend == Target.llvmBackend
 
+/-- The architectures with native lane-pointer evidence (`tests/roadmap/vector-layouts`). -/
+def lanePtrArchs : List String := ["x86_64", "aarch64"]
+
 /-- `normalize` makes a comptime lane pointer into a bit-packed vector a bit-pointer into the
-vector's integer (`lanePtrLayout`): LLVM's layout, checked natively only on x86_64 and aarch64
+vector's integer (`lanePtrLayout`): LLVM's layout, checked natively only on `lanePtrArchs`
 and only for the versions with `ZigVersion.lanePtrEvidence`. -/
 def lanePtrBitPtrs (d : Dialect) : Bool :=
-  d.packedVectorLanes && d.version.lanePtrEvidence && ["x86_64", "aarch64"].contains d.arch
+  d.packedVectorLanes && d.version.lanePtrEvidence && lanePtrArchs.contains d.arch
 
 /-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
 instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`

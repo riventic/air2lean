@@ -21,6 +21,8 @@ REGISTRY = "Air2Lean/Air/Dialect.lean"
 # and paths that mention a version (`"… Zig 0.17.0's …"`, `"air/0.16.0/…"`) are prose, not keys.
 VERSION = re.compile(r"\d+\.\d+(\.\d+)?")
 # The registry's spelling of each version: `| v0_17_0 => "0.17.0"`.
+# A character literal that may hold a double quote (`'"'`, `'\\"'`), not a string delimiter.
+CHAR_LITERAL = re.compile(r"'(?:\\.|\")'")
 REGISTRY_ENTRY = re.compile(r'\|\s*\.?v(\d+)_(\d+)_(\d+)\s*=>\s*"(\d+\.\d+\.\d+)"')
 
 
@@ -49,8 +51,9 @@ def string_literals(text):
             j = text.find("\n", i)
             i = n if j < 0 else j
             continue
-        if c == "'" and i + 2 < n and text[i + 1] == '"' and text[i + 2] == "'":
-            i += 3  # the character literal '"'
+        char = CHAR_LITERAL.match(text, i)
+        if char:  # '"' or an escaped character such as '\"'
+            i = char.end()
             continue
         if c == '"':
             start, j = line, i + 1

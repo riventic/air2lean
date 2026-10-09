@@ -194,7 +194,7 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
     (whole : Except String Func) (initial : Log) : Array Inst × Log := Id.run do
   let name := some canonical.name
   let context := boundary file name .normalizationFailure .normalize .validationFailure
-  if !supportedVersions.contains canonical.zigVersion then
+  if (ZigVersion.ofString? canonical.zigVersion).isNone then
     return (#[], initial.record { context with fatal := true } whole)
   let mut log := initial
   let mut calls : Array Inst := #[]
