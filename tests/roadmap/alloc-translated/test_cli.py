@@ -103,13 +103,14 @@ def main(binary):
             error_set["errors"] = [e for e in error_set["errors"] if e != "OutOfMemory"]
     reject(binary, mutated, "model callee 'posix.mmap' has an incompatible", "page.")
 
-    # A weak compare-exchange of a pointer value stays outside the subset.
+    # A weak compare-exchange of the pointer hint is a pointer atomic of the thread model
+    # (C09, `Zig.cmpxchgWeakPtrC`), as in std mode.
     mutated = json.loads(json.dumps(page))
     m = find(mutated, "heap.PageAllocator.map.json")
     for inst in walk(m["body"]):
         if inst.get("tag") == "cmpxchg_strong":
             inst["tag"] = "cmpxchg_weak"
-    reject(binary, mutated, "an atomic op on a type other than an integer", "page.")
+    accept(binary, mutated, "page.")
 
     # The integer sentinel: only a nonzero, aligned address is admitted.
     for address, in ((0,), (3,)):

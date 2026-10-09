@@ -106,13 +106,15 @@ theorem alloc_no_triple_at_start (L : Logic) (c : Ptr) (ra : BitVec 64) (P : Ass
   rw [alloc_args] at ht
   exact no_error_of_triple (L.toPartial ht) hd (by rw [odd_heap]; exact hm) hp odd_seq alloc_odd
 
-/-- So no allocator invariant that holds at program start satisfies `AllocSpec`, in any logic. -/
+/-- So no allocator invariant that holds at program start and admits a 1-byte request satisfies
+`AllocSpec`, in any logic. -/
 theorem not_allocSpec_at_start (L : Logic) (c : Ptr) (I : AllocInv)
-    (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ mem0.heap = hP ∪ hF ∧ I.own hP) :
+    (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ mem0.heap = hP ∪ hF ∧ I.own hP) (hfit : I.fits 1 0) :
     ¬ AllocSpec L vt c I := by
   intro hs
   obtain ⟨hP, hF, hd, hm, hp⟩ := hI
-  exact alloc_no_triple_at_start L c 0 I.own _ hd hm hp (hs.alloc 1 0 0 (by decide) (by decide))
+  exact alloc_no_triple_at_start L c 0 I.own _ hd hm hp
+    (hs.alloc 1 0 0 (by decide) (by decide) hfit)
 
 /-! ## O1: the hint points into a dead block -/
 

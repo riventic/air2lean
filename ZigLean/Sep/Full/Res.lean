@@ -429,6 +429,11 @@ theorem up_emp : up Assn.emp r ↔ emp r := by
     exact this
   · rintro ⟨h, hk⟩; exact ⟨by rw [h]; rfl, hk⟩
 
+theorem up_ex {γ : Type} {P : γ → Assn} : up (Assn.ex P) r ↔ ∃ x, up (P x) r := by
+  constructor
+  · rintro ⟨⟨x, h⟩, hk⟩; exact ⟨x, h, hk⟩
+  · rintro ⟨x, h, hk⟩; exact ⟨⟨x, h⟩, hk⟩
+
 /-- An atomic word's bytes, as legacy owned bytes. -/
 theorem abytesAt_bytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {tg : Option (Nat × Nat)} (h : abytesAt p A S K bs tg r) : bytesAt p A S K bs r.heap.erase := by

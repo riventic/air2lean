@@ -22,7 +22,7 @@ part and a frame. Everything in `Mem` outside the live bytes is unconstrained.
 The theorems are in `tests/roadmap/alloc-translated/PageObstruction.lean` (checked by
 `check.sh`, axioms `propext`, `Classical.choice`, `Quot.sound`):
 
-* `not_allocSpec_at_start : ∀ L c I, (∃ split of mem0's heap with I.own) → ¬ AllocSpec L vt c I`
+* `not_allocSpec_at_start : ∀ L c I, (∃ split of mem0's heap with I.own) → I.fits 1 0 → ¬ AllocSpec L vt c I`
   — the analogue of `Static.not_allocSpec`. `vt` is assembled from the translated entry
   functions (not read from the generated vtable global); `alloc` (a `ConcM` function: it reaches
   sync ops at the atomics) is the scheduler's run of one thread (fuel 16, oracle `0`).

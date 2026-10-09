@@ -56,11 +56,6 @@ theorem FTriple.fact {c : MemM α} {S : α → FAssn} (hφ : ∀ r, P r → φ)
 theorem FTriple.of_false {c : MemM α} {S : α → FAssn} (h : ∀ r, P r → False) : FTriple P c S :=
   FTriple.fact h fun f => f.elim
 
-theorem up_ex {γ : Type} {P : γ → Assn} : up (Assn.ex P) r ↔ ∃ x, up (P x) r := by
-  constructor
-  · rintro ⟨⟨x, h⟩, hk⟩; exact ⟨x, h, hk⟩
-  · rintro ⟨x, h, hk⟩; exact ⟨⟨x, h⟩, hk⟩
-
 theorem sep_left_comm (h : (P ⋆ (Q ⋆ R)) r) : (Q ⋆ (P ⋆ R)) r :=
   sep_assoc (sep_mono_left (fun _ h => sep_comm h) (sep_assoc' h))
 
