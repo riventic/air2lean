@@ -12,10 +12,10 @@
   "stock_compiler_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "qualification": "Retained fresh AIR of a passed --full spawn-failure qualification (Zig 0.16.0); every file hash below equals that report's artifact record. Re-export and refresh this record when spawn_failure.zig changes. The strict-schema exporter (pointer address_space) re-exported these files byte-identical to the committed ones; the hashes are of that export.",
   "air_sha256": {
-    "spawn_failure.groupAsync.json": "6f99184e905b629b42c001ae5c4803e28a15d6d1438174192f035020a6a05f49",
-    "spawn_failure.groupConcurrent.json": "e5b17749040dd0e5a9531afaf47615a40dd885b6fa4115bbc2ce2e3b4483f3e3",
-    "spawn_failure.threadCatch.json": "58b9ef9cbad6d57f43e429343ad1d284f8c757e32753ab6550a632574ba080be",
-    "spawn_failure.threadPair.json": "48f14f4fe3a72448f4c092f578bddb49f66e1359307a414c7dd242661f1c53b4",
-    "spawn_failure.writeWorker.json": "1ddc49355852f2fcc9282ebaa44f0e011f8bd27f5b77bd3e47f8d745f4315f1f"
+    "spawn_failure.groupAsync.json": "fff829db9742bff4c568927bb4bb35fef8a9f1629f2e609f6c853453462d565a",
+    "spawn_failure.groupConcurrent.json": "a302a45c6b3034bd141359b29ac451de8a4dbb14b95c9a50c3c8c8000ac4759c",
+    "spawn_failure.threadCatch.json": "97b475dc14746f203f5e4e204404e594e5abcbaf10fe1fe3e0b5972560c59141",
+    "spawn_failure.threadPair.json": "03b375b15fe07d05ae9f732591195f34f08cdf4a44412cef3cbfb640d2bb0f8b",
+    "spawn_failure.writeWorker.json": "a854b6e881dc81a1ec10bf1366d97ee28116d03611832557886f3fafe658b92d"
   }
 }

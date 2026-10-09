@@ -105,6 +105,9 @@ def cases : IO Unit := do
   -- Residual gap: the range's end never reaches the AIR (docs/illegal-behavior.md row 27).
   check "forRange 3/5 (gap: returns a value)" (errOf (forRange (arr 3) 5)) none
   check "parentOf lone u32" (memErr (do let x ← alloc .heap 4 4; parentOf x)) (some .illegal)
+  -- The parent pointer is in bounds (pointer formation, MM-3, passes), but no 8-byte `S` fits.
+  check "parentOf u32 at offset 4 of 6 bytes"
+    (memErr (do let x ← alloc .heap 6 4; parentOf (x.add 4))) (some .illegal)
   check "parentOf field b of an S"
     (memErr (do let p ← alloc .heap 8 4; parentOf (p.add 4))) none
 

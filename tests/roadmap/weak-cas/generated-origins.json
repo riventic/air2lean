@@ -43,7 +43,7 @@
     "tests/golden/0.16.0/atomics/air-linux/atomics.twoPlusTwoW.json": "e0d6cb231e88c485f111da1262a09495088145c3c741f706d8968715b1296fdd",
     "tests/golden/0.16.0/sync/air-linux/sync.handoff.json": "8437112e35773b38b4790103fbe5bf42404ddb78371d59fd07201120fa5d2582",
     "tests/golden/0.16.0/sync/air-linux/sync.mutexCounter.json": "fa31145994cbefeb749133e1d13ca94d298a00d145674a096a8087b78f58e4f8",
-    "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json": "99a5bb13b22e4e904764316709b83ac1b8ce242533ce7b6431e88f280eb8c6e1",
+    "tests/golden/0.16.0/sync/air-linux/sync.rwLockRead.json": "26cfdd1757d3379c786cddfdab01f5f6b40d1057f54cb9e26c8d5a36b0993725",
     "tests/golden/0.16.0/sync/air-linux/sync.semaphoreCounter.json": "f6aa5519de698d7c1019cee426e40c8559c618de94cbd675d5dab44c03898420",
     "tests/golden/atomics/air/atomic.Value(u32).init.json": "852983fbe510395e8d3e0e2f2a3486906827ecacc25a9ee676beb48038e4ea85",
     "tests/golden/atomics/air/atomics.mpWriter.json": "1b54563d7145f75dd32589506a54a1d6e3fc8b1130eaf0857e9d0666d1f2c013",

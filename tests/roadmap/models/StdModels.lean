@@ -47,8 +47,11 @@ def main : IO Unit := do
       require (!m.reviewed.isEmpty) s!"{m.symbol}: modelled row without reviewed Zig versions"
       require (m.zigVersions.toList.eraseDups.length == m.zigVersions.size) s!"{m.symbol}: duplicate reviewed version"
       require (m.reviewed.all fun r => r.sha256.length == 64 && !r.file.isEmpty) s!"{m.symbol}: malformed std review"
-    -- A Zig version without a reviewed std source (0.17 in progress) is never qualified.
-    require (!m.qualifies "0.17.0") s!"{m.symbol}: qualified for unreviewed Zig 0.17.0"
+    -- A Zig version qualifies exactly when the row has a reviewed std source for it (the 0.17.0
+    -- audit, docs/std-models.md); an unreviewed release is never qualified.
+    require (m.qualifies "0.17.0" == m.reviewed.any (·.zigVersion == "0.17.0"))
+      s!"{m.symbol}: 0.17.0 qualification without its reviewed std source"
+    require (!m.qualifies "0.18.0") s!"{m.symbol}: qualified for unreviewed Zig 0.18.0"
     -- The typed projections agree with the row, including anonymous instances.
     for name in #[m.symbol, m.symbol ++ "__anon_7"] do
       require ((stdModel? name).map (·.symbol) == some m.symbol) s!"{name}: lookup"
@@ -89,18 +92,24 @@ def main : IO Unit := do
   -- A row qualifies exactly its reviewed versions: a newer Zig is listed per row.
   let qualifies (symbol version : String) : Bool := ((stdModel? symbol).map (·.qualifies version)).getD false
   for v in #["0.14.1", "0.15.2", "0.16.0"] do
-    require (qualifies "Thread.Futex.wait" v && qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
+    require (qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
+  -- `std.Thread.Futex` is removed in 0.16.0: reviewed for 0.14.1 and 0.15.2 only.
+  for v in #["0.14.1", "0.15.2"] do
+    require (qualifies "Thread.Futex.wait" v) s!"{v}: Thread.Futex qualification"
+  require (!qualifies "Thread.Futex.wait" "0.16.0") "Thread.Futex.wait: not qualified for 0.16.0"
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
     require (qualifies symbol "0.17.0") s!"{symbol}: audited for 0.17.0"
   for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
     require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
-  require (qualifies "Io.futexWaitTimeout" "0.17.0") "a rejection holds in every version"
+  -- A rejection row qualifies no version; it is rejected in every version.
+  require (!qualifies "Io.futexWaitTimeout" "0.17.0" && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
+    "a rejection holds in every version"
   -- C07 detach and the C08 future API are audited for 0.16.0 only.
   for symbol in #["Thread.detach", "Io.async", "Io.checkCancel"] do
     require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
   expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])
-    "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2, 0.16.0"
+    "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2"
   expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
     "mem.Allocator.realloc qualified Zig 0.16.0"
   expectError (checkProgram #[{ caller f "client" "Thread.detach" with zigVersion := "0.15.2" }])
@@ -113,8 +122,8 @@ def main : IO Unit := do
   -- An empty review list qualifies nothing (it never means "every audited version").
   require (!({ symbol := "mem.Allocator.create", kind := .alloc .create } : StdModel).qualifies "0.16.0")
     "empty review list qualified a version"
-  expectError (checkProgram #[{ caller f "client" "mem.Allocator.create__anon_1" with zigVersion := "0.17.0" }])
-    "no reviewed std source for Zig 0.17.0"
+  expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.16.0" }])
+    "no reviewed std source for Zig 0.16.0"
   expectError (checkProgram #[caller f "client" "Thread.spinLoopHint"]) "is not a std declaration"
   -- A translated function cannot reuse a built-in std model name.
   for name in #["Thread.join", "Thread.spawn__anon_4", "Thread.detach", "mem.Allocator.free__anon_9"] do

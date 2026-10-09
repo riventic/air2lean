@@ -128,7 +128,7 @@ FUNCTIONS = {
 def document(bits, name, params, ret, body):
     return {"schema": 12, "zig_version": "0.16.0", "target_endian": "little",
             "profile": dict(PROFILE, error_set_bits=bits),
-            "name": f"error_width.{name}", "params": params, "ret": ret, "body": body,
+            "name": f"error_width.{name}", "module": "root", "params": params, "ret": ret, "body": body,
             "types": types_for(bits)}
 
 

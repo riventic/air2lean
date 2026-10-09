@@ -357,7 +357,12 @@ MUTANTS = {
 def load_test_module(path):
     spec = importlib.util.spec_from_file_location('q02_mutant_target_' + Path(path).stem, ROOT / path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # A test may import a sibling helper (proof-receipts: `rss_budget`), as when run as a script.
+    sys.path.insert(0, str((ROOT / path).parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str((ROOT / path).parent))
     return module
 
 
