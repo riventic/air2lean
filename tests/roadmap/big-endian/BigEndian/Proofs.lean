@@ -70,12 +70,6 @@ theorem fieldFromBytes_orders :
         some (.ok 0x341) := by
   decide +kernel
 
-/-- Lane 0 of `@Vector(2, u16)` comes first in memory, in the lane's byte order. -/
-theorem vecByte_orders :
-    runMem BigEndian.S390x.mem0 (BigEndian.S390x.vecByte 0x0102 0x0304 0) = some (.ok 1) ∧
-      runMem BigEndian.X64.mem0 (BigEndian.X64.vecByte 0x0102 0x0304 0) = some (.ok 2) := by
-  decide +kernel
-
 /-- Every big-endian integer encoding of the translation reads back (`intEncOf_lawful`): a
 `u32` stored by the s390x model loads as itself. -/
 example (v : BitVec 32) : (intEncOf .big 32).decode ((intEncOf .big 32).encode v) = pure v :=

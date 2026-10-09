@@ -19,8 +19,13 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "big_endian.vecLane0FromBytes",
+ "name": "reject.vecLane0FromBytes",
  "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 15
+ },
  "params": [
   0
  ],
@@ -36,7 +41,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -114,7 +120,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 27
   },
   {
    "id": 9,
@@ -141,7 +148,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 12,
@@ -160,7 +168,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 13
   },
   {
    "id": 14,
@@ -190,7 +199,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 17,

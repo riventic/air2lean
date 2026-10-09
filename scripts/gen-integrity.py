@@ -86,7 +86,7 @@ FIXTURES = [
     ("tests/roadmap/asm-effects/AsmEffects/Gen.lean", "tests/roadmap/asm-effects/air/0.16.0",
      ["--namespace", "AsmEffects", "--prefix", "asm_effects."], "exact"),
     ("tests/roadmap/const-bases/ConstBases/Gen.lean", "tests/roadmap/const-bases/air/0.16.0",
-     ["--namespace", "ConstBases", "--prefix", "const_bases."], "exact"),
+     ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/const-locals/ConstLocals/Gen.lean", "tests/roadmap/const-locals/air/0.16.0",
      ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
     ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",
@@ -272,7 +272,11 @@ class Translator:
                 for src in (sorted(source.glob("*.json")) if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"
-            result = subprocess.run([self.binary, str(air), "-o", str(out), *case.args],
+            # Schema-11 (legacy) AIR translates only with the explicit legacy profile opt-in
+            # (docs/profiles.md), as each fixture's own check passes it.
+            legacy = ["--profile", "legacy-abi64-le"] if "--profile" not in case.args and all(
+                json.loads(f.read_bytes()).get("schema", 0) < 12 for f in air.glob("*.json")) else []
+            result = subprocess.run([self.binary, str(air), "-o", str(out), *legacy, *case.args],
                                     capture_output=True, text=True)
             if result.returncode != 0 or not out.is_file():
                 message = (result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
