@@ -18,6 +18,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -65,6 +66,18 @@ def guarded(workdir, name, command, timeout, lock_wait):
     subprocess.run(cmd, check=True)
 
 
+def record_manifest(out, air_dir, receipt, binary, stock):
+    """`artifact-manifest.py manifest` of the fixture's example: the fixture source, the given AIR,
+    receipt and stock-Zig native build (x86_64-linux, ReleaseSafe, baseline)."""
+    code = am.manifest_main(['manifest', str(out), '--example', EXAMPLE, '--zig-version', VERSION,
+                             '--source', 'assurance/provenance/src', '--air-dir', str(air_dir),
+                             '--receipt', str(receipt), '--native-binary', str(binary),
+                             '--native-compiler', str(Path(stock).absolute()),
+                             '--native-compiler-version', VERSION, '--native-target', 'x86_64-linux',
+                             '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline'])
+    am.demand(code == 0, 'could not record the manifest ' + str(out))
+
+
 def regenerate(a):
     work = Path(os.path.abspath(a.workdir))
     am.demand(not work.exists(), 'WORKDIR must not exist: ' + str(work))
@@ -108,12 +121,7 @@ def regenerate(a):
     # 3/4 fresh manifest chaining the fresh export, receipt and native binary.
     pins = json.loads((FIXTURE / 'pins.json').read_text())
     manifest_path = work / 'manifest.json'
-    native_args = ['--native-binary', native / 'provenance', '--native-compiler', stock,
-                   '--native-compiler-version', VERSION, '--native-target', 'x86_64-linux',
-                   '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline']
-    code = am.manifest_main(['manifest', str(manifest_path), '--example', EXAMPLE, '--zig-version', VERSION,
-                             '--source', 'assurance/provenance/src', '--air-dir', str(air), '--receipt', str(attempt), *map(str, native_args)])
-    am.demand(code == 0, 'could not record the fresh manifest')
+    record_manifest(manifest_path, air, attempt, native / 'provenance', stock)
     fresh = json.loads(manifest_path.read_text())
     if fresh['links']['native']['value']['compiler_sha256'] == committed['links']['native']['value']['compiler_sha256']:
         if fresh['links']['native']['value']['binary_sha256'] != pins['native_binary_sha256']:
@@ -142,7 +150,7 @@ def redact(value, prefixes):
         return {k: redact(v, prefixes) for k, v in value.items()}
     if isinstance(value, list):
         return [redact(v, prefixes) for v in value]
-    if isinstance(value, str) and value.startswith('/'):
+    if isinstance(value, str) and len(value) > 1 and value.startswith('/') and not any(c.isspace() for c in value):
         for prefix, placeholder in prefixes:
             if value == prefix or value.startswith(prefix + '/'):
                 return placeholder + value[len(prefix):]
@@ -158,11 +166,18 @@ def install(a):
     prefixes = [(str(attempt), '<attempt>'), (str(am.physical(ROOT)), '<repo>'), (str(ROOT), '<repo>'),
                 (str(am.physical(Path.home())), '~'), (str(Path.home()), '~')]
     target = FIXTURE / 'receipt'
+    # Read and redact everything first, so a failure leaves the committed fixture untouched.
+    texts = {name: json.dumps(redact(am.load(attempt / name), prefixes), sort_keys=True, separators=(',', ':')) + '\n'
+             for name in RECEIPT_COPY}
     for path in target.iterdir():
-        path.unlink()
-    for name in RECEIPT_COPY:
-        data = redact(am.load(attempt / name), prefixes)
-        (target / name).write_text(json.dumps(data, sort_keys=True, separators=(',', ':')) + '\n')
+        am.demand(path.is_file() and not path.is_symlink(), 'unexpected entry in the receipt fixture: ' + str(path))
+    for name, text in texts.items():
+        staged = target / (name + '.partial')
+        staged.write_text(text)
+        os.replace(staged, target / name)
+    for path in target.iterdir():
+        if path.name not in texts:
+            path.unlink()
     print('installed a path-redacted copy of %s into %s' % (attempt, target.relative_to(ROOT)))
     return 0
 
@@ -170,18 +185,15 @@ def install(a):
 def record(a):
     """Record assurance/provenance/manifest.json from the (clean) tree and refresh pins.json."""
     work = Path(os.path.abspath(a.workdir))
+    stock = shutil.which(a.stock_zig) if os.sep not in a.stock_zig else a.stock_zig
+    am.demand(stock is not None and Path(stock).is_file(), 'stock Zig not found: ' + a.stock_zig)
+    # Recorded beside the run, then moved over the fixture: a failure keeps the committed manifest.
+    staged = work / 'fixture-manifest.json'
+    staged.unlink(missing_ok=True)
+    record_manifest(staged, 'assurance/provenance/air', 'assurance/provenance/receipt', work / 'native' / 'provenance', stock)
     path = FIXTURE / 'manifest.json'
-    if path.exists():
-        path.unlink()
-    code = am.manifest_main(['manifest', str(path), '--example', EXAMPLE, '--zig-version', VERSION,
-                             '--source', 'assurance/provenance/src', '--air-dir', 'assurance/provenance/air',
-                             '--receipt', 'assurance/provenance/receipt',
-                             '--native-binary', str(work / 'native' / 'provenance'),
-                             '--native-compiler', str(Path(a.stock_zig).absolute()),
-                             '--native-compiler-version', VERSION, '--native-target', 'x86_64-linux',
-                             '--native-mode', 'ReleaseSafe', '--native-cpu', 'baseline'])
-    am.demand(code == 0, 'could not record the fixture manifest')
-    manifest = json.loads(path.read_text())
+    os.replace(staged, path)
+    manifest = am.load(path)
     links = manifest['links']
     pins = {'note': 'Reviewer pins for assurance/provenance/manifest.json (scripts/provenance-evidence.py). '
                     'Update only with a regenerated, reviewed manifest.',

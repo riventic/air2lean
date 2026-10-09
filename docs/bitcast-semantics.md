@@ -103,8 +103,9 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
   the array have identical encodings. So a ≤0.16 fact stated through memory carries over to the
   0.17 translation in this case. `tests/roadmap/bitcast-017/BitCastReal/Runtime.lean` applies
   it to translated real 0.17 AIR.
-- `decode_boolVec`: the model's `@Vector(n, bool)` memory decoder is `toBools` of the packed
-  integer, so the bool-vector layout already follows the logical order.
+- `decode_boolVec`, `decode_boolVec_bits`: the model's `@Vector(n, bool)` memory decoder
+  (`Vec.packedEnc` with 1-bit lanes) gives lane `i` bit `i` of the packed integer, as `toBools`
+  does, so the bool-vector layout already follows the logical order.
 
 ## Evidence
 

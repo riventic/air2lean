@@ -156,7 +156,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     if l.isLanePtr && !l.laneBitPtr then
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
-        Zig 0.14.1-0.16.0 profile for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
+        profile of Zig {String.intercalate ", " lanePtrVersions} for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -596,7 +596,7 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
     | cx.fail line "an atomic op through a value that is not a pointer"
   let some c := ptrChild cx.types pty
     | cx.fail line "an atomic op through a value that is not a pointer"
-  if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
+  if laneBitPtrTy cx.layouts pty then
     cx.fail line "an atomic op through a vector lane pointer is outside the subset"
   if atomicPtrPointee cx.types cx.layouts c then
     match rmw with
@@ -667,15 +667,17 @@ def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String
 def CheckCtx.lanePtr (cx : CheckCtx) (line : Nat) (ty : TyId) (ptr idx : Val) :
     Except String Unit := do
   let pty ← cx.memPtrTy line ptr
-  let some (.vector n e) := (ptrChild cx.types pty).bind (cx.types[·]?)
+  let some vec := ptrChild cx.types pty
+    | cx.fail line "a lane pointer that does not point into a vector"
+  let some (.vector n e) := cx.types[vec]?
     | cx.fail line "a lane pointer that does not point into a vector"
   let l := cx.layouts[ty]?.getD {}
   let lane := match idx with | .int _ k => if k ≥ 0 then some k.toNat else none | _ => none
-  let w := match cx.types[e]? with | some (.int _ bits) => bits | some .bool => 1 | _ => 0
-  unless ptrChild cx.types ty == some e && lane.isSome && l.vectorIndex == lane &&
+  let w := ((cx.types[e]?).bind laneBits?).getD 0
+  unless ptrChild cx.types ty == some e && l.vectorIndex == lane &&
       lane.any (· < n) && l.hostSize == (n * w + 7) / 8 do
     cx.fail line "a lane pointer whose type does not match its vector and comptime lane"
-  checkMemTy cx.fnName cx.types cx.layouts line (ptrChild cx.types pty).get!
+  checkMemTy cx.fnName cx.types cx.layouts line vec cx.errBits
 
 /-- The size of the type `id` is in the AIR file (pointer arithmetic, `@memcpy`). -/
 def CheckCtx.knownSize (cx : CheckCtx) (line : Nat) (id : TyId) : Except String Unit :=
@@ -1242,10 +1244,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- `undefined` to a packed struct field: `Zig.storeUndefBits` makes only the field's bits
     -- undefined (a local with such a store is a stack block: `escapingAllocs`). A vector lane
     -- (`Zig.storeLane`) has no undefined-bits store.
-    if let .undef _ := v then
-      if let some pty := cx.valTy? ptr then
-        if (cx.layouts[pty]?.map (·.laneBitPtr)).getD false then
-          cx.fail line "a store of `undefined` to a vector lane is outside the subset"
+    if v matches .undef _ && (cx.valTy? ptr).any (laneBitPtrTy cx.layouts) then
+      cx.fail line "a store of `undefined` to a vector lane is outside the subset"
     pure line
   | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
@@ -1281,7 +1281,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .memset p _ => cx.rejectNullableProjection line p; cx.itemAccess line p; pure line
   | .ptrAdd _ p _ | .elemPtr p _ =>
     if let .elemPtr _ idx := op then
-      if (cx.layouts[ty]?.map (·.laneBitPtr)).getD false then
+      if laneBitPtrTy cx.layouts ty then
         cx.lanePtr line ty p idx
         return line
     -- The result is a pointer to an item: its child is the item type.
@@ -2017,7 +2017,7 @@ private partial def fixedGlobalOrigin? (f : Func) (insts : Array Inst) (v : Val)
     | .elemPtr p n =>
       let (g, off) ← fixedGlobalOrigin? f insts p (fuel - 1)
       -- A lane pointer is the vector's address (`CheckCtx.lanePtr`).
-      if (f.layouts[i.ty]?.map (·.laneBitPtr)).getD false then return (g, off)
+      if laneBitPtrTy f.layouts i.ty then return (g, off)
       let .int _ k := n | none
       if k < 0 then none else
       let (_, child) ← globalAliasPointer? f i.ty
@@ -3332,6 +3332,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
           else if !modelledStdFn callee then
             issues := issues.push (issue .callee
               s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)")
+  -- Needs the whole program (before the memory items, as `checkProgram` always reported them): every task an `Io.async` reaches (`checkFutureCancelation`).
+  if let .error message := checkFutureCancelation funcs then
+    issues := issues.push { kind := .futureCancel, message }
+  if let .error message := checkIoTaskThreadlocals funcs then
+    issues := issues.push { kind := .ioTaskThreadlocal, message }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -3356,11 +3361,6 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         for c in items do
           if let .error message := checkMemTy f.name f.types f.layouts 0 c f.errorSetBits then
             issues := issues.push { kind := .memory, function := f.name, instruction := i.id, message }
-  -- Needs the whole program: every task an `Io.async` reaches (`checkFutureCancelation`).
-  if let .error message := checkFutureCancelation funcs then
-    issues := issues.push { kind := .futureCancel, message }
-  if let .error message := checkIoTaskThreadlocals funcs then
-    issues := issues.push { kind := .ioTaskThreadlocal, message }
   return issues
 
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])

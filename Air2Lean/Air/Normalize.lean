@@ -426,7 +426,7 @@ checker rejects. -/
 def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
   match l.vectorIndex, types[child]? with
   | some lane, some t =>
-    let w := match t with | .int _ bits => bits | .bool => 1 | _ => 0
+    let w := (laneBits? t).getD 0
     if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize then l
     else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
   | _, _ => l
@@ -445,7 +445,7 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   -- A lane pointer into a bit-packed vector (`tests/roadmap/vector-layouts/lanes.zig`) becomes
   -- a bit-pointer into the vector's integer, as LLVM lays it out; checked natively only on
   -- these targets, and not for Zig 0.17.0, whose lane pointers have no native evidence yet.
-  let laneTarget := llvm && ["0.14.1", "0.15.2", "0.16.0"].contains raw.zigVersion &&
+  let laneTarget := llvm && lanePtrVersions.contains raw.zigVersion &&
     ["x86_64", "aarch64"].contains ((raw.profile.targetTriple.splitOn "-").headD "")
   let layouts := raw.layouts.mapIdx fun i l =>
     let l := { l with ptrBytes }

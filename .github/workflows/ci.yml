@@ -1542,6 +1542,10 @@ jobs:
           set -euo pipefail
           repo_root=$(python3 -c 'from pathlib import Path; print(Path.cwd().resolve())')
           cd "$repo_root"
+          # check.sh left this host's profile-headed translations in Proofs/<Ex>/Gen.lean. With
+          # AIR2LEAN_CI=1 it already failed on any body that differs from the committed module, so
+          # only the header is discarded here; the receipt binds the committed modules.
+          git checkout -- Proofs
           temp_root=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")
           lean_executable=$(elan which lean)
           lean_toolchain=$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve(strict=True).parent.parent)' "$lean_executable")
@@ -1921,8 +1925,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B tests/roadmap/bitops-native/gen.py --check
+          # Every version runs; the step fails afterwards if any did.
+          failed=""
           for version in 0.16.0 0.15.2 0.14.1; do
             python3 -B tests/roadmap/bitops-native/qualify.py native --version "$version" \
               --zig "$RUNNER_TEMP/host-zig-$version/zig" --target aarch64-linux \
-              --evidence "tests/roadmap/bitops-native/evidence/$version.json"
+              --evidence "tests/roadmap/bitops-native/evidence/$version.json" || failed="$failed $version"
           done
+          [ -z "$failed" ] || { echo "native aarch64-linux bit-operation mismatch on:$failed" >&2; exit 1; }
