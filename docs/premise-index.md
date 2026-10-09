@@ -5,51 +5,51 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2341 theorems in 133 files.
+2355 theorems in 133 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 648 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 437 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 656 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 439 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
-| [ALC-01](premises.md#alc-01) | 71 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 71 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 17 | Byte remap policy |
+| [ALC-01](premises.md#alc-01) | 72 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 72 | Allocation failure and request-cap policy |
+| [ALC-03](premises.md#alc-03) | 18 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 4 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1256 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1261 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 125 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 13 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 811 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 63 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1057 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1062 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 1019 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1019 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1021 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1021 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 358 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 495 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 73 | Executable IEEE-754 float model |
-| [MTH-02](premises.md#mth-02) | 24 | Opaque libm transcendentals |
+| [MTH-02](premises.md#mth-02) | 25 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2212 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1868 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1060 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 58 | Total-correctness statements |
-| [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
+| [SEM-01](premises.md#sem-01) | 2226 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1882 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1071 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 62 | Total-correctness statements |
+| [SEM-05](premises.md#sem-05) | 24 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2341 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1103 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1103 | Backend lowering and native execution |
-| [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
+| [TRU-01](premises.md#tru-01) | 2355 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1113 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1113 | Backend lowering and native execution |
+| [TRU-04](premises.md#tru-04) | 29 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 
@@ -232,6 +232,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.main_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Atomics.Stack.memW_inv` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Basic/Arith.lean`
 
@@ -341,7 +342,7 @@ File premises: PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, T
 | `sel_cases128` | TRU-01 |
 | `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `divExact64_spec` | PRF-01, MTH-01, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `divExact64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Floats/Dot.lean`
 
@@ -460,6 +461,8 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 | `setNum_spec` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `bump_ok_spec` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `writeTable_illegal` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `numInt_pre` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `bump_pre` | PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Layout/Proofs.lean`
 
@@ -534,6 +537,7 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, S
 | `Lists.linkedAdd_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.ptrOk_of_buf` | SEM-01, SEM-02, TRU-01 |
 | `Lists.arrayAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.alist_empty` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Cost.lean`
 
@@ -585,6 +589,7 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `Lists.reverse_step` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.list_nil_empty` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.push_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.push_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
@@ -619,8 +624,8 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `maxPtr_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `delay_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `delay_overflow` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L199` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L214` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L200` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L215` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Pointers/Sep.lean`
 
@@ -630,6 +635,8 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 |---|---|
 | `swap_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `swap_self_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `swap_pre` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `swap_self_pre` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Recursion/Proofs.lean`
 
@@ -671,7 +678,7 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `subZ_start` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `copy_len` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `tag_bytes` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L85` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L86` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Slices/Sep.lean`
 
@@ -685,6 +692,9 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 | `fill_sep` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `reverse_step` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `reverse_spec` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `counter_pre` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `arr32_pre` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `arr8_pre` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Contracts.lean`
 
@@ -1191,6 +1201,7 @@ File premises: PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, S
 | `Sync.RwLockContract.read_with_facts` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockContract.load_pair_owned` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.RwLockContract.load_pair_frame` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.RwLockContract.pts_w32` | THR-01, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.RwLockContract.held_snapshot_wp` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockContract.held_pair_wp` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockContract.joined_of_phase` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1501,6 +1512,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Counter.dispatch_spec` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.parallelCounter_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.parallelCounter_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threads.Counter.cntAt_cntMem` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
 ## `Proofs/Threads/Disjoint.lean`
 
@@ -1528,6 +1540,8 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Disjoint.main_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.disjoint_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.disjoint_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.flagW_pre` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.front_pre` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 
 ## `Proofs/Threads/Proofs.lean`
 
@@ -1535,9 +1549,9 @@ File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, T
 
 | Theorem | Premises |
 |---|---|
-| `example@L29` | SEM-01, SEM-02, TRU-01 |
 | `example@L30` | SEM-01, SEM-02, TRU-01 |
 | `example@L31` | SEM-01, SEM-02, TRU-01 |
+| `example@L32` | SEM-01, SEM-02, TRU-01 |
 | `Zig.noRace_of_atomic` | SEM-01, SEM-02, TRU-01 |
 | `Zig.readOpts_zero` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Zig.Phase.ofBits_toBits` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
@@ -2210,11 +2224,11 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, S
 | `ContainerClients.addAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `ContainerClients.addEvens_spec` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `ContainerClients.linked_addAll` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addAll` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addAll` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `ContainerClients.linked_addAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `ContainerClients.linked_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `example@L176` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `ContainerClients.linked_build` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
