@@ -106,6 +106,16 @@ for at most `count` bytes and stores them through the checked memory model. `clo
 log. A descriptor that is negative or not open is `.illegal`. This is stricter than the
 kernel, which returns `EBADF` or acts on a reused descriptor.
 
+These are the only std names bound here, and they are OS primitives. No std function above
+them has a model. The registry matches them by their AIR name. Two pending changes affect
+this. A project registry may bind std names only from the OS-primitive allowlist
+(`codex/fix-model-premises`), and that allowlist contains these three. Module-qualified
+identity (`codex/fix-module-identity`) will qualify the names in the template, so
+`fill_registry.py` must then match the std module identity. On libc targets (macOS),
+`posix.system` is `std.c`, whose `write`/`read`/`close` are `extern "c"` functions. Binding
+them needs the extern-call registry support (`codex/extern-calls`). Until then, no libc
+target is covered.
+
 ## Translated std I/O
 
 `tests/roadmap/env-boundaries/` holds two sources and their committed AIR closures

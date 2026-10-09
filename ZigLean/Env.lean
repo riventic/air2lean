@@ -1,9 +1,10 @@
 /-!
 # Selected environment-operation interface (E03)
 
-An opt-in boundary for handle-based reads/writes, partial success, enumerated errors,
-cleanup and two distinct clocks. It is absent from the runtime umbrella and no translated
-Zig call targets it. Every environment-dependent result is a field of `Ops` over an
+A boundary for handle-based reads/writes, partial success, enumerated errors, cleanup and
+two distinct clocks. `Zig.Mem` carries one installed `Host`; translated code reaches it only
+through the registry-bound Linux primitives of `ZigLean/Env/Linux.lean` (ENV-03), never
+through a built-in call. Every environment-dependent result is a field of `Ops` over an
 arbitrary state `σ`; `σ` may hold an oracle stream, so the model fixes no host behavior.
 `Contract` is the only knowledge a client gets about those results. No correspondence to
 an operating system, CPython or browser host import is claimed; see
