@@ -46,7 +46,7 @@ def lockPost (P : Proto Tgt γ) (L : Lock γ) (t : ThreadId) (g : γ) (D : Nat)
 
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex (a stop, so the depth gets smaller). -/
-theorem loop23_body (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
+theorem loop23_body (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hok : ok g) (D : Nat) (io : Io) (s : Io_Mutex_lockUncancelableLocals) (G : ThreadId → γ) (m : Mem)
     (d : Nat) (h : lockInv P L t g D s G m d) :
     P.WP t ((Io_Mutex_lockUncancelable.loop23 p io).run s) (fun r G' m' d' =>
@@ -81,7 +81,7 @@ theorem loop23_body (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.p
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
-theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
+theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧
@@ -96,7 +96,7 @@ theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.p
   -- the loop, from `spin`
   have hloop : ∀ G₃ m₃ d₃, lockInv P L t g d default G₃ m₃ d₃ →
       P.WP t ((do
-          let __do_lift ← loop (Io_Mutex_lockUncancelable.loop23 p io)
+          let __do_lift ← loop (Io_Mutex_lockUncancelable.loop23 L.ptr io)
             Io_Mutex_lockUncancelable.again23
           match __do_lift with
           | Io_Mutex_lockUncancelableExit.br22 => pure Io_Mutex_lockUncancelableExit.ret
@@ -111,7 +111,7 @@ theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.p
     intro G₃ m₃ d₃ h₃
     simp only [StateT.run_bind]
     refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
-      (loop23_body hP hp hS t g hok d io) default G₃ m₃ d₃ h₃))
+      (loop23_body hP rfl hS t g hok d io) default G₃ m₃ d₃ h₃))
     rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hL, hi'⟩
     simp only [StateT.run_pure]
     refine WP.pure' ?_
@@ -139,7 +139,7 @@ theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.p
     exact hloop G₂ m₂ k₂ ⟨by omega, hc₂, hi₂⟩
 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
-theorem unlock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
+theorem unlock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧
@@ -165,7 +165,7 @@ theorem unlock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L
     exact WP.pure' ⟨by omega, hc₂, hi₂⟩
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `hL`. -/
-theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c)
+theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c)
     (t : ThreadId) (g : γ) (hg : L.ph g = .out) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧
@@ -173,7 +173,7 @@ theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS
   lock_specOn hP.on hp hS t g hg trivial io G m d hi
 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
-theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c)
+theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : p = L.ptr) (hS : mutexS.c = L.c)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧

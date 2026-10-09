@@ -401,6 +401,16 @@ theorem TTriple.loadAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
       Mem.Owns.recordAt hc ho, StepIn.recordAt hc hd hn hin hbs⟩
     funext l; rw [Mem.heap_recordAt]; exact congrFun hm l
 
+/-- Forming a pointer `k` bytes into owned bytes (one past the end included; `ptrProject`,
+MM-3): no access, the memory does not change. -/
+theorem TTriple.ptrProjectAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {k : Nat}
+    (hk : k ≤ bs.size) (hpos : 0 < bs.size) :
+    TTriple (bytesAt p A S K bs) (ptrProject p (·.add k))
+      (fun r => ⌜r = p.add k⌝ ∗ bytesAt p A S K bs) :=
+  TTriple.of_run fun m hP _ hd hm hb _ ho =>
+    ⟨p.add k, m, hP, bytesAt_ptrProject_run hb hm hk hpos, hd, hm, sep_lift.mpr ⟨rfl, hb⟩, ho,
+      StepIn.refl m _⟩
+
 /-- A store of the bytes `bs'` at byte `k` of owned bytes. -/
 theorem TTriple.storeBytesAt {p q : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {k a : Nat} (bs' : Array Byte) (hq : q = p.add k) (hn : 0 < bs'.size)

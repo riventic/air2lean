@@ -42,6 +42,111 @@ theorem access_of {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block}
     m.access p n a = pure (b, blk, p.off.toNat) := by
   simp [Mem.access, hb, hblk, hl, h0, hn, ha]
 
+/-! ### Pointer formation (`ptrProject`, MM-3) -/
+
+@[simp] theorem Ptr.add_zero (p : Ptr) : p.add 0 = p := by cases p; simp [Ptr.add]
+
+@[simp] theorem Ptr.add_block (p : Ptr) (n : Int) : (p.add n).block = p.block := rfl
+
+theorem Ptr.add_off (p : Ptr) (n : Int) : (p.add n).off = p.off + n := rfl
+
+@[simp] theorem Ptr.elem_block (p : Ptr) (size : Nat) (i : BitVec 64) :
+    (p.elem size i).block = p.block := rfl
+
+@[simp] theorem Ptr.elemSub_block (p : Ptr) (size : Nat) (i : BitVec 64) :
+    (p.elemSub size i).block = p.block := rfl
+
+theorem Ptr.add_add (p : Ptr) (x y : Int) : (p.add x).add y = p.add (x + y) := by
+  simp [Ptr.add, Int.add_assoc]
+
+theorem inBounds_iff {m : Mem} {p : Ptr} : m.inBounds p = true ↔
+    ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ 0 ≤ p.off ∧ p.off ≤ blk.bytes.size := by
+  unfold Mem.inBounds
+  split
+  · rename_i h; simp [h]
+  · rename_i b h
+    split
+    · rename_i hk; simp [h, hk]
+    · rename_i blk hk; simp [h, hk]
+
+theorem inBounds_of {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} (hb : p.block = some b)
+    (hblk : m.blocks[b]? = some blk) (h0 : 0 ≤ p.off) (hn : p.off ≤ blk.bytes.size) :
+    m.inBounds p = true :=
+  inBounds_iff.mpr ⟨b, blk, hb, hblk, h0, hn⟩
+
+/-- A pointer that an access of `n` bytes succeeds at is in bounds (so is `n` bytes later). -/
+theorem inBounds_of_access {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) (k : Nat) (hk : k ≤ n) :
+    m.inBounds (p.add k) = true := by
+  obtain ⟨hb, hblk, -, h0, hn, -⟩ := access_eq h
+  exact inBounds_of (b := b) (blk := blk) hb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega)
+
+/-- A derived pointer equal to its base is the base, in every memory (no instruction natively). -/
+theorem ptrProject_same {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : project p = p) :
+    (ptrProject p project).run m = pure (p, m) := by
+  simp [ptrProject, StateT.run, h]
+
+/-- A derived pointer in bounds of its base's block (base included) is formed; memory is
+unchanged. -/
+theorem ptrProject_run {m : Mem} {p : Ptr} (project : Ptr → Ptr)
+    (hb : (project p).block = p.block) (hp : m.inBounds p = true)
+    (hq : m.inBounds (project p) = true) :
+    (ptrProject p project).run m = pure (project p, m) := by
+  simp [ptrProject, StateT.run, hb, hp, hq]
+
+/-- The identity projection (a zero offset after simplification) is the base. -/
+@[simp] theorem ptrProject_id (p : Ptr) (m : Mem) : ptrProject p (fun x => x) m = pure (p, m) := by
+  simp [ptrProject]
+
+/-- `ptrProject_run` for a byte offset. -/
+theorem ptrProject_add_run {m : Mem} {p : Ptr} {off : Int} (hp : m.inBounds p = true)
+    (hq : m.inBounds (p.add off) = true) :
+    (ptrProject p (·.add off)).run m = pure (p.add off, m) :=
+  ptrProject_run (·.add off) rfl hp hq
+
+/-- A byte offset of a pointer into block `b` that stays within its bytes is formed. -/
+theorem ptrProject_block_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
+    {p : Ptr} {k : Nat} (hp : p.block = some b) (h0 : 0 ≤ p.off) (hk : p.off + k ≤ blk.bytes.size) :
+    (ptrProject p (·.add k)).run m = pure (p.add k, m) :=
+  ptrProject_add_run (inBounds_of hp hb h0 (by omega))
+    (inBounds_of hp hb (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega))
+
+/-- Any other derived pointer is illegal behaviour (`getelementptr inbounds` poison). -/
+theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : project p ≠ p)
+    (hout : ¬ ((project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true)) :
+    (ptrProject p project).run m = throw .illegal := by
+  simp only [ptrProject, StateT.run]
+  rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
+
+/-- Pointer formation never changes memory and keeps the base's block. -/
+theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
+    (h : (ptrProject p project).run m = pure (q, m')) : q.block = p.block ∧ m' = m := by
+  by_cases hs : project p = p
+  · rw [ptrProject_same project hs] at h
+    simp [pure, StateT.pure, ExceptT.pure, ExceptT.mk] at h; obtain ⟨rfl, rfl⟩ := h; simp
+  · by_cases hc : (project p).block = p.block ∧ m.inBounds p = true ∧ m.inBounds (project p) = true
+    · rw [ptrProject_run project hc.1 hc.2.1 hc.2.2] at h
+      simp [pure, StateT.pure, ExceptT.pure, ExceptT.mk] at h; obtain ⟨rfl, rfl⟩ := h
+      exact ⟨hc.1, rfl⟩
+    · rw [ptrProject_illegal project hs hc] at h; cases h
+
+/-- Pointer formation either succeeds without a change to memory or is illegal behaviour. -/
+theorem ptrProject_cases (p : Ptr) (project : Ptr → Ptr) (m : Mem) :
+    (ptrProject p project).run m = pure (project p, m) ∨
+      (ptrProject p project).run m = throw .illegal := by
+  simp only [ptrProject, StateT.run]
+  split
+  · exact .inl rfl
+  · exact .inr rfl
+
+/-- A pointer that formation returned is the projection; memory is unchanged. -/
+theorem ptrProject_ok {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
+    (h : (ptrProject p project).run m = pure (q, m')) : q = project p ∧ m' = m := by
+  simp only [ptrProject, StateT.run] at h
+  split at h
+  · cases h; exact ⟨rfl, rfl⟩
+  · cases h
+
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
   simp [writeBytes]; omega

@@ -247,6 +247,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 
 | Theorem | Premises |
 |---|---|
+| `Atomics.Stack.Inv.proj` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.JoinLe.grow` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.Inv.grow` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.growsAt_current` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
@@ -313,6 +314,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.step_whole` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.whole_noErr` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.main_end` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Atomics.Stack.Pre.proj` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.pre_store` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.pre_store_noErr` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Atomics.Stack.pre_inv` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
@@ -626,7 +628,8 @@ File premises: PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, S
 | `Iogroup.GroupCounter.blk1_step` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Iogroup.GroupCounter.stable` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Iogroup.GroupCounter.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Iogroup.GroupCounter.mptr` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Iogroup.GroupCounter.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Iogroup.GroupCounter.projC` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.loop23_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.lock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.unlock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -690,7 +693,7 @@ File premises: PRF-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Layout/Proofs.lean`
 
-File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -705,13 +708,13 @@ File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `applyOp_oob` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `applyTwice_illegal` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `twice_spec` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `headerLen_short` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `headerLen_run` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `headerLen_spec` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `headerLen_short` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `headerLen_run` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `headerLen_spec` | PRF-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Append.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -751,14 +754,14 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, T
 | `Lists.heap3` | SEM-01, SEM-02, TRU-01 |
 | `Lists.heap4` | SEM-01, SEM-02, TRU-01 |
 | `Lists.dec_u64` | SEM-01, SEM-02, TRU-01 |
-| `Lists.addOneAssumeCapacity_run` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.addOneAssumeCapacity_run` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `Lists.Ptr.elem_zero` | SEM-01, SEM-02, TRU-01 |
 | `Lists.ptrOk_mono` | SEM-01, SEM-02, TRU-01 |
-| `Lists.precise_run` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Lists.precise_run` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Lists.addSat_toNat` | SEM-01, TRU-01 |
-| `Lists.ensure_run` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.append_cost_run` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.append_run` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.ensure_run` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.append_cost_run` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.append_run` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Bounded.lean`
 
@@ -773,44 +776,44 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, T
 
 ## `Proofs/Lists/Container.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.linkedAdd_spec` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.linkedAdd_spec` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `Lists.ptrOk_of_buf` | SEM-01, SEM-02, TRU-01 |
-| `Lists.arrayAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.arrayAdd_spec` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Cost.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.push_cost` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.push_cost_of_run` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.pushAll_cost` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.pushAll_capacity` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_count_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_cost` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_count_unique` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.sum_count_capacity` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_cost` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.push_cost_of_run` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.pushAll_cost` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.pushAll_capacity` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_count_step` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_cost` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_count_unique` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.sum_count_capacity` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_count_step` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `Lists.freeAll_cost` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.append_capacity` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.append_capacity` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Policy.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `Lists.appendEach_run` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `Lists.appendEach_anyPolicy` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.appendEach_run` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `Lists.appendEach_anyPolicy` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Lists/Sep.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -826,6 +829,7 @@ File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `Lists.node_next_run` | SEM-01, SEM-02, TRU-01 |
 | `Lists.node_val_run` | SEM-01, SEM-02, TRU-01 |
 | `Lists.node_set_next_run` | SEM-01, SEM-02, TRU-01 |
+| `Lists.node_ptrProject_run` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Lists.node_free_run` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
 | `Lists.node_next_total` | SEM-01, SEM-02, SEM-04, TRU-01 |
 | `Lists.node_set_next_total` | SEM-01, SEM-02, SEM-04, TRU-01 |
@@ -854,7 +858,7 @@ File premises: PRF-01, SEM-01, SEM-03, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Pointers/Proofs.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
@@ -862,15 +866,16 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `extract_writeBytes32_disjoint` | SEM-01, SEM-02, TRU-01 |
 | `swap_run` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `swap_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `dueOf_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `dueOf_spec` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `dueOf_oob` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `same_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `maxPtr_none_left` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `maxPtr_none_right` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `maxPtr_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `delay_spec` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `delay_overflow` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L199` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L214` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L211` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L226` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Pointers/Sep.lean`
 
@@ -962,9 +967,10 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 | `lenOr_none` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `lenOr_some` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `subZ_start` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `subZ_oob` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `copy_len` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `tag_bytes` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `example@L85` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `example@L105` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Slices/Sep.lean`
 
@@ -1007,6 +1013,10 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Handoff.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Handoff.projP` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.projB` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.projWE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.projE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.R_none` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Handoff.own_none` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.off_own` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1154,6 +1164,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.enc_mutex` | PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.word_init` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Sync.Handoff.enc_io` | THR-01, SEM-01, SEM-02, TRU-01 |
+| `Sync.Handoff.projF` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Sync.Handoff.allLe_one` | THR-01, THR-05, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Sync.Handoff.inv_start` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.inv_spawn` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1235,6 +1246,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.MutexCounter.stable` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.fits` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.mptr` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.projC` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.shape_work` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.shape_upd` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.pts_none` | SEM-01, SEM-02, SEM-03, TRU-01 |
@@ -1416,7 +1428,10 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.sold` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.RwLockRead.wsptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Sync.RwLockRead.wmptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
-| `Sync.RwLockRead.semptr` | SEM-01, SEM-02, TRU-01 |
+| `Sync.RwLockRead.BlkOk.proj` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Sync.RwLockRead.projWS` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.projB` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.semptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Sync.RwLockRead.wlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.not_both` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.wunlock_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1545,6 +1560,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.SemCounter.hU_p` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.sum_le` | PRF-02, THR-01, THR-05, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.sum_succ` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.projC` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.loop4_body` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.work_spec` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.inv_end` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1572,6 +1588,12 @@ File premises: PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, S
 | `Sync.Sem.ptr_mutex` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Sem.ptr_state` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Sync.Sem.ptr_epoch` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Sync.Sem.Inv.proj` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Sync.Sem.Fits.proj` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.ws_epoch` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
+| `Sync.Sem.Fits.projE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.projCE` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Sem.Fits.projS` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Sem.ptr_ne` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Sem.apS` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Sync.Sem.apE` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
@@ -1761,6 +1783,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Counter.load_n` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.load_cnt` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.ctx_load_noErr` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threads.Counter.proj_ctx` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.load_n_noErr` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.load_cnt_noErr` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.cnt_loc` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1811,8 +1834,8 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 
 | Theorem | Premises |
 |---|---|
-| `Threads.Disjoint.writeFlag_eq` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `Threads.Disjoint.writeFlag_spec` | PRF-01, THR-01, THR-08, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.writeFlag_eq` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `Threads.Disjoint.writeFlag_spec` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Disjoint.enc_ptr` | SEM-01, SEM-02, TRU-01 |
 | `Threads.Disjoint.enc_u32` | SEM-01, SEM-02, TRU-01 |
 | `Threads.Disjoint.ctxBytes_one` | SEM-01, SEM-02, TRU-01 |
@@ -1879,6 +1902,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, T
 | `Threadsync.HO.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Threadsync.HO.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.HO.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Threadsync.HO.projB` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Threadsync.HO.R_none` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Threadsync.HO.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.HO.off_own` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -2033,7 +2057,6 @@ File premises: PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 
 | Theorem | Premises |
 |---|---|
-| `Threadsync.add0` | SEM-01, SEM-02, TRU-01 |
 | `Threadsync.ThreadMutexOps.tryLock_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.ThreadMutexOps.loop16_body` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.ThreadMutexOps.lockSlow_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -2055,6 +2078,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, S
 | `Threadsync.MutexCounter.stable` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.mptr` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.MutexCounter.projC` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Threadsync.MutexCounter.shape_work` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.shape_upd` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.pts_none` | SEM-01, SEM-02, SEM-03, TRU-01 |
@@ -2096,6 +2120,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, T
 | `Threadsync.WG.stable` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Threadsync.WG.fits` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.mptr` | THR-01, THR-05, THR-08, SEM-01, SEM-02, SEM-03, TRU-01 |
+| `Threadsync.WG.projB` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Threadsync.WG.R_none` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Threadsync.WG.own_none` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.off_own` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -2144,7 +2169,6 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, T
 | `Threadsync.WG.task_rank` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.wake_q` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01 |
 | `Threadsync.WG.evptr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
-| `Threadsync.WG.evptr4` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Threadsync.WG.set_eq` | PRF-01, THR-01, THR-05, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.set_spec` | PRF-01, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.dbg_true` | PRF-01, SEM-01, TRU-01, TRU-02, TRU-03 |
@@ -2620,21 +2644,21 @@ File premises: PRF-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 ## `tests/roadmap/container-contracts/Clients.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `ContainerClients.addAll_spec` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `ContainerClients.addAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.addEvens_spec` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.linked_addAll` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addAll` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.linked_addAll_total` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.linked_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.addAll_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.addEvens_spec` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_addAll` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addAll` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_addAll_total` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addAll_total` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.array_addEvens` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 | `example@L176` | ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `ContainerClients.linked_build` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `ContainerClients.linked_build` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/deadline-cases/Contracts.lean`
 
@@ -3196,16 +3220,16 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 ## `tests/roadmap/loop-tactics/Queue.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `Lists.Queue.lseg_snoc` | SEM-01, SEM-02, TRU-01 |
 | `Lists.Queue.lseg_none` | SEM-01, SEM-02, TRU-01 |
-| `Lists.Queue.sum_step` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `Lists.Queue.sum_loop_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `Lists.Queue.sum_total` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `example@L130` | PRF-01, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_step` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_loop_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `Lists.Queue.sum_total` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `example@L133` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/loop-tactics/Recursion.lean`
 
@@ -3372,15 +3396,15 @@ File premises: SEM-01, SEM-02, SEM-03, TRU-01
 
 ## `tests/roadmap/packed-fields/PackedFields/Proofs.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `PackedFieldsClients.setA_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `PackedFieldsClients.innerC_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `PackedFieldsClients.innerCKeepsA_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerC_ok` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerCKeepsA_ok` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.setInner_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `PackedFieldsClients.innerPartial_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `PackedFieldsClients.innerPartial_undefined` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.undefKeepsA_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.undefField_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `PackedFieldsClients.signedS_ok` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
@@ -3477,7 +3501,7 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
 |---|---|
 | `generated_at_array` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `generated_bumpAt_array` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `example@L94` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L119` | PRF-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/proof-tools/Clients.lean`
 
@@ -3836,13 +3860,13 @@ File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 ## `tests/roadmap/undef-operands/UndefOperands/Proofs.lean`
 
-File premises: PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
 | `UndefOperandsClients.localA_defined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `UndefOperandsClients.localB_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
-| `UndefOperandsClients.recLen_defined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.localB_undefined` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `UndefOperandsClients.recLen_defined` | PRF-01, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 | `UndefOperandsClients.recMid_undefined` | PRF-01, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/vcs/Clients.lean`
@@ -4108,19 +4132,19 @@ File premises: THR-01, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, T
 
 ## `tutorials/allocation-failure/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `AllocationFailure.push_failure_keeps_heap` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocationFailure.push_failure_keeps_heap` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/allocation-failure/Solution.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `AllocationFailure.push_success_adds_node` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `AllocationFailure.push_success_adds_node` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/concurrent-clients/Main.lean`
 
@@ -4191,19 +4215,19 @@ File premises: PRF-01, SEM-01, TRU-01, TRU-02, TRU-03
 
 ## `tutorials/generic-containers/Main.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `GenericContainers.append_success` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `GenericContainers.append_success` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/generic-containers/Solution.lean`
 
-File premises: PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
+File premises: PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03
 
 | Theorem | Premises |
 |---|---|
-| `GenericContainers.append_failure` | PRF-01, ALC-01, ALC-02, ALC-03, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
+| `GenericContainers.append_failure` | PRF-01, ALC-01, ALC-02, ALC-03, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-05, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Controls.lean`
 
@@ -4212,10 +4236,10 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, T
 | Theorem | Premises |
 |---|---|
 | `MemorySafety.Controls.create_ok` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Controls.push_ok` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.push_ok` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.node_cell` | SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.access_dead` | SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.push_free` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.loop_throw` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `MemorySafety.Controls.doubleFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.useAfterFree_illegal` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
@@ -4224,9 +4248,9 @@ File premises: PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, T
 | `MemorySafety.Controls.useAfterFree_reuse` | PRF-01, ALC-01, ALC-02, ALC-08, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `MemorySafety.Controls.default_seq` | SEM-01, SEM-02, TRU-01 |
 | `MemorySafety.Controls.default_room` | ALC-01, ALC-02, SEM-01, SEM-02, TRU-01 |
-| `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
-| `MemorySafety.Controls.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.doubleFree_unsafe` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.useAfterFree_unsafe` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
+| `MemorySafety.Controls.forgetFree_unsafe` | PRF-01, ALC-01, ALC-02, THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `tutorials/memory-safety/Main.lean`
 

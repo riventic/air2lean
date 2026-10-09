@@ -44,6 +44,8 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   obtain ⟨m', hr, hst', h', hd', hm', hp'⟩ := arr_memmove_run (d := d) (s := s) (n := n) (a := 4) hp
     hm hdj (by decide) (by decide) (by decide) hd hs hst
   refine ⟨(), m', h', ?_, hd', hm', hp', hst'⟩
+  have hpd := arr_ptrProject_run (i := d) hp hm (by omega)
+  have hps := arr_ptrProject_run (i := s) hp hm (by omega)
   have hl := sl.len.isLt
   have hdo : d.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
   have hso : s.uaddOverflow n = false := by simp [BitVec.uaddOverflow]; omega
@@ -52,10 +54,10 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
   have hsl : (s.toNat + n.toNat) % 18446744073709551616 ≤ sl.len.toNat := by
     rw [Nat.mod_eq_of_lt (by omega)]; omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
-  rw [e4] at hr
-  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr
+  rw [e4] at hr hpd hps
+  simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr hpd hps
   simp (config := { maxSteps := 1000000 }) [copyWithin, zig_unfold, Zig.add, Zig.le, BitVec.ule,
-    hdo, hso, hdl, hsl, hr]
+    hdo, hso, hdl, hsl, hr, hpd, hps]
 
 /-- `@memset` of a whole slice: every item becomes `v`. -/
 theorem fill_sep (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat = vs.length) :
@@ -95,11 +97,13 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
     have hjo : Zig.sub false s.j 1 = pure (s.j - 1) := by simp [Zig.sub, BitVec.usubOverflow]; omega
     sep_unfold [reverse.loop15, hlt,
       show s.i.toNat < sl.len.toNat by omega, show s.j.toNat < sl.len.toNat by omega]
-    sep_steps [hio, hjo]
-    sep_ret
-    intro _ hw₂
     have hjn : s.j.toNat < ws.length := by omega
     have hin : s.i.toNat < ws.length := by omega
+    sep_steps [hio, hjo] using TotalTriple.arr_ptrProject (p := sl.ptr) (xs := ws) (i := s.i) (by omega),
+      TotalTriple.arr_ptrProject (p := sl.ptr) (xs := ws.set s.i.toNat ws[s.j.toNat]) (i := s.j)
+        (by simp; omega)
+    sep_ret
+    intro _ hw₂
     have hi1 : (s.i + 1).toNat = s.i.toNat + 1 := by
       rw [BitVec.toNat_add_of_lt (by simp; have := s.j.isLt; omega)]; simp
     have hj1 : (s.j - 1).toNat = s.j.toNat - 1 := by

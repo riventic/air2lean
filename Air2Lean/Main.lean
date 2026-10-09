@@ -355,6 +355,12 @@ private def run (args : List String) : IO UInt32 := do
               (header ++ parts.render a.ns, parts)
             let declNames := parts.declNames
             times := { times with emit := emitNs }
+            let kinds := placeholdersIn src
+            unless kinds.isEmpty do
+              return ← die s!"EMITTER_PLACEHOLDER: the input reached emitter arms that the checker \
+                should exclude ({"; ".intercalate (kinds.extract 0 8).toList}); nothing was written. \
+                This is a translator bug: please report the AIR input."
+            -- Fail closed: a 32-bit translation uses only width-parameterized runtime names.
             -- Fail closed: a 32-bit translation uses only width-parameterized runtime names.
             if profile.pointerBits != 64 then
               if let some name := width64Leak src then

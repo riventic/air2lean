@@ -14,22 +14,22 @@ generated `<Fn>Exit` inductive (`ret` / `br<targetId>` / `rep<targetId>`, one co
 distinct branch target reachable in the function), and the function itself as a
 `Zig.M <Fn>Locals <Fn>Exit` do-block wrapped by a top-level `def` that unwraps `.ret`.
 
-Assumes its input already passed `Check.lean`: it does not re-validate the subset, and reaches
-for `throw .panic` / a `default`-typed placeholder at the handful of spots that are otherwise
-statically impossible (an exit other than `.ret` leaving a function's outermost body, an
-unresolved name).
+Assumes its input already passed `Check.lean`: it does not re-validate the subset. An arm that
+`Check.lean` makes unreachable writes `placeholder`, never a term with a value: a `panic!` or a
+`default` is a successful no-op in the logic (`docs/architecture-audit/memory-model.md`, MM-6).
+`emitWithNamesChecked` (the CLI's entry point) rejects any output that contains one, and the
+placeholder does not elaborate either. An exit other than `.ret` leaving a function's outermost
+body is `throw .panic`.
 -/
 
 namespace Air2Lean
 
-/-- Is `op` a terminator: the one instruction that ends its containing body (`docs/air-json.md`
-/ `PLAN.md`)? A noreturn call counts (the `unreach` Sema emits right after it is dead code). -/
-def isTerminating (op : Op) : Bool :=
-  match op with
-  | .br .. | .switchDispatch .. | .«repeat» .. | .ret .. | .unreach | .trap | .condBr .. | .switchBr .. => true
-  | .retLoad _ => true
-  | .call (.func _ noreturn ..) _ => noreturn
-  | _ => false
+/-- The identifier of an emitter placeholder. It is bound nowhere, so generated Lean that still
+contains one does not elaborate; `emitWithNamesChecked` rejects it before writing. -/
+def placeholderMarker : String := "air2lean_emitter_placeholder"
+
+/-- The term an emitter arm writes for input that `Check.lean` should have rejected (MM-6). -/
+def placeholder (what : String) : String := s!"({placeholderMarker} {what.quote})"
 
 /-! ## Name mangling (`docs/generated-code.md` §Names) -/
 
@@ -817,9 +817,15 @@ def FCtx.targetTy (fc : FCtx) (target : InstId) : Ty :=
   | some (_, t) => fc.tyOfId t
   | none => .void
 
-partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val) : String :=
+/-- The term of the operand `v`. An `undefined` operand is outside the subset
+(`checkUndefOperands`) and resolves to a `placeholder`, except under `undefFill`: the value of a
+store whose undefined bytes are written separately (`undefByteRanges`), or that no read observes
+(`deadUndefStores`), where `undefined` is filler (`0`, `false`, `default`). -/
+partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Val)
+    (undefFill : Bool := false) : String :=
+  let resolve (v : Val) := fc.resolveVal env v undefFill
   match v with
-  | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD s!"(panic! \"air2lean: unbound inst {id}\")"
+  | .inst id => (env.find? (·.1 == id)).map (·.2) |>.getD (placeholder s!"unbound inst {id}")
   | .int tid n =>
     match fc.tyOfId tid with
     | .struct _ "packed" _ =>
@@ -832,16 +838,17 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
   | .bool b => if b then "true" else "false"
   | .void => "()"
   | .undef tid =>
+    if !undefFill then placeholder "an `undefined` operand" else
     match fc.tyOfId tid with
     | .int _ b => s!"(0#{b})"
     | .bool => "false"
     | _ => "default"
   | .func name .. => (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
   | .optNull _ => "none"
-  | .optSome _ v => s!"(some {fc.resolveVal env v})"
+  | .optSome _ v => s!"(some {resolve v})"
   | .err _ name => name.quote
   | .errUnionErr tid name => s!"(.error {name.quote} : {fc.emitTyOf tid})"
-  | .errUnionOk tid p => s!"(.ok {fc.resolveVal env p} : {fc.emitTyOf tid})"
+  | .errUnionOk tid p => s!"(.ok {resolve p} : {fc.emitTyOf tid})"
   | .enumTag tid v =>
     let e := fc.emitTyOf tid
     match fc.tyOfId tid with
@@ -849,7 +856,7 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
       match fields.find? (·.2 == v) with
       | some (f, _) => s!"{e}.{fc.memberName (fc.tyOfId tid) f}"
       | none => s!"({e}.{fc.helperName (fc.tyOfId tid) "mk"} (BitVec.ofInt {fc.tyBits tag} ({v})))"
-    | _ => "default" -- unreachable: `Json.lean` builds `enumTag` only for an enum type
+    | _ => placeholder "an enum constant of another type"
   | .unionVal tid idx p =>
     let u := fc.emitTyOf tid
     match fc.tyOfId tid with
@@ -857,17 +864,17 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
       match fields[idx]? with
       | some (_, fty) =>
         fc.storageExpr fty (rawUnionInit u layout ((fc.layouts[tid]?.bind (·.size)).getD 0)
-          (fc.resolveVal env p) (fc.emitTyOf fty))
-      | none => "default"
+          (resolve p) (fc.emitTyOf fty))
+      | none => placeholder "a union constant with no such field"
     | .union _ _ _ fields =>
       match fields[idx]? with
       | some (f, fty) =>
         if fc.tyOfId fty == .void then s!"{u}.{fc.memberName (fc.tyOfId tid) f}"
-        else s!"({u}.{fc.memberName (fc.tyOfId tid) f} {fc.resolveVal env p})"
-      | none => "default"
-    | _ => "default" -- unreachable: `Json.lean` builds `unionVal` only for a union type
+        else s!"({u}.{fc.memberName (fc.tyOfId tid) f} {resolve p})"
+      | none => placeholder "a union constant with no such field"
+    | _ => placeholder "a union constant of another type"
   | .agg tid elems =>
-    let items (xs : Array Val) := ", ".intercalate (xs.map (fc.resolveVal env)).toList
+    let items (xs : Array Val) := ", ".intercalate (xs.map resolve).toList
     match fc.tyOfId tid with
     -- A sentinel is the last item of the value (`Ty.array`).
     | .array len _ s =>
@@ -877,20 +884,20 @@ partial def FCtx.resolveVal (fc : FCtx) (env : Array (InstId × String)) (v : Va
     | .struct _ _ fields =>
       let fm := fc.memberLookup (fc.tyOfId tid)
       let assigns := (fields.zip elems).toList.map fun ((f, _), e) =>
-        s!"{fm f} := {fc.resolveVal env e}"
+        s!"{fm f} := {resolve e}"
       s!"(\{ {", ".intercalate assigns} } : {fc.emitTyOf tid})"
     | .tuple _ => if elems.isEmpty then "()" else s!"({items elems})"
-    | _ => "default" -- unreachable: the exporter writes `elems` only for these types
+    | _ => placeholder "an aggregate constant of another type"
   | .ptrConst _ g off => s!"(⟨some {fc.globalIds[g]!}, {off}⟩ : Zig.Ptr)"
   | .ptrNull _ => "Zig.Ptr.null"
-  | .ptrOther .. => "(panic! \"air2lean: a pointer constant without a global\")"
+  | .ptrOther .. => placeholder "a pointer constant without a global"
   | .sliceConst _ p len => s!"(⟨{fc.resolveVal env p}, {fc.resolveVal env len}⟩ : {sliceTyName fc.ptrBits})"
 
 def FCtx.resolveCallee (fc : FCtx) (v : Val) : Bool × String :=
   match v with
   | .func name noreturn .. =>
     (noreturn, (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name)
-  | _ => (false, "panic! \"air2lean: indirect calls are outside the subset\"")
+  | _ => (false, placeholder "an indirect call")
 
 
 /-- A right-associated tuple projection, empty for the single-field representation. -/
@@ -1119,7 +1126,7 @@ def FCtx.loadPlace (fc : FCtx) (v : Val) : String :=
       match step with
       | .field f => s!"({e}).{f}"
       | .ufield u g _ => s!"(← {fc.callRName} ({u}.{g} {e}))"
-  | none => "(panic! \"air2lean: load through a pointer that is not a place\")"
+  | none => placeholder "load through a pointer that is not a place"
 
 /-- `base` with the value `old` at `path` replaced by `new old`. -/
 def setPath (path : List PathStep) (new : String → String) (base : String) : String :=
@@ -1136,7 +1143,7 @@ def FCtx.modifyPlace (fc : FCtx) (ptr : Val) (new : String → String) : String 
   match fc.place? ptr with
   | some (field, path) =>
     s!"modify (fun s => \{ s with {field} := {setPath path.toList new s!"s.{field}"} })"
-  | none => "(panic! \"air2lean: store through a pointer that is not a place\")"
+  | none => placeholder "store through a pointer that is not a place"
 
 /-- The statement that writes `v` to a place. -/
 def FCtx.storePlace (fc : FCtx) (ptr : Val) (v : String) : String :=
@@ -1234,7 +1241,7 @@ def FCtx.itemsOf (fc : FCtx) (v : Val) (rv : String) : String × String :=
   if fc.isSlice v then (s!"{rv}.ptr", s!"{rv}.len")
   else match fc.pointeeOf v with
     | .array len .. | .vector len _ => (rv, s!"({len} : BitVec {fc.ptrBits})")
-    | _ => (rv, "(panic! \"air2lean: items of a pointer without a length\")")
+    | _ => (rv, placeholder "items of a pointer without a length")
 
 /-- `v` is a pointer to memory: not a place. -/
 def FCtx.isMemPtr (fc : FCtx) (v : Val) : Bool :=
@@ -1247,17 +1254,18 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
 /-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
 def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
-/-- A projection `project` (`(·.add off)`, `(·.elem size i)`) of the pointer `base`, whose
-term is `p`, with result type `result`. From a C/allowzero base it is
-`Zig.ptrProjectNullable` (a zero offset keeps address zero; a nonzero offset from it is illegal
-behaviour) when the result is again C/allowzero, and `Zig.ptrProjectNonnull` (address zero is
-illegal behaviour) when the compiler types the result as a nonnullable pointer (Zig ≤0.15
-`struct_field_ptr`); otherwise `pure (p.project)`. -/
-def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String) : String :=
-  if fc.nullableVal base then
-    let f := if nullablePtrTy fc.types fc.layouts result then "ptrProjectNullable" else "ptrProjectNonnull"
-    s!"{fc.callMName} (Zig.{f} {p} (·.{project}))"
-  else s!"pure ({p}.{project})"
+/-- A derived pointer: the projection `project` (a `Ptr → Ptr` term such as `·.add off`,
+`·.elem size i`, `·.elemSub size i`) of the pointer `base`, whose term is `p`, with result type `result`. It is
+`Zig.ptrProject` (`getelementptr inbounds`: `.illegal` unless base and result are in bounds of
+the base's block; MM-3), and the base itself for a constant offset 0 (`zero`; no instruction
+natively). From a C/allowzero base whose result the compiler types as a nonnullable pointer
+(Zig ≤0.15 `struct_field_ptr`) it is `Zig.ptrProjectNonnull`: address zero is also illegal. -/
+def FCtx.projectExpr (fc : FCtx) (base : Val) (result : TyId) (p project : String)
+    (zero : Bool := false) : String :=
+  if fc.nullableVal base && !nullablePtrTy fc.types fc.layouts result then
+    s!"{fc.callMName} (Zig.ptrProjectNonnull {p} ({project}))"
+  else if zero then s!"pure {p}"
+  else s!"{fc.callMName} (Zig.ptrProject {p} ({project}))"
 
 /-- Bind the exact pointee's dictionary at a memory boundary. -/
 def FCtx.pointeeStorageExpr (fc : FCtx) (ptr : Val) (expr : String) : String :=
@@ -1952,14 +1960,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .min => s!"Zig.Vec.reduceM Zig.Float.minChk {rv a}"
         | .max => s!"Zig.Vec.reduceM Zig.Float.maxChk {rv a}"
         | .and | .or | .xor =>
-          "(panic! \"air2lean: bitwise @reduce of a float vector\")"
+          placeholder "bitwise @reduce of a float vector"
       else if fc.tyOfId child == .bool then
         -- A `bool` vector: the safety checks of a vector op (`cmp_vector`, then `reduce .Or`).
         match op with
         | .and => s!"pure (Zig.Vec.reduce (· && ·) {rv a})"
         | .or => s!"pure (Zig.Vec.reduce (· || ·) {rv a})"
         | .xor => s!"pure (Zig.Vec.reduce (· ^^ ·) {rv a})"
-        | _ => "(panic! \"air2lean: arithmetic @reduce of a bool vector\")"
+        | _ => placeholder "arithmetic @reduce of a bool vector"
       else
         let sgn := if fc.tySigned child then "true" else "false"
         match op with
@@ -1980,8 +1988,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .b idx =>
         match b with
         | some bv => s!"{rv bv}.lanes[{idx}]!"
-        | none => "(panic! \"air2lean: shuffle mask reads 'b' with no second source\")"
-      | .undef => "default"
+        | none => placeholder "shuffle mask reads 'b' with no second source"
+      | .undef => placeholder "an `undefined` shuffle lane"
       | .value v => rv v
     let items := ", ".intercalate (mask.map laneText).toList
     let (env, l) := bindLet fc env inst.id s!"pure ((⟨#v[{items}]⟩ : {fc.emitTyOf inst.ty}))"
@@ -2196,7 +2204,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | .ptr .. => s!"(·.isSome) <$> {fc.loadMem p (rv p)}"
         | .errorSet (some names) => s!"{errOp fc.errBits "optionalErrorIsSome"} {emitErrorDomain names} {fc.ptrAlign p} {rv p}"
         | ct => fc.storageExpr c s!"Zig.optIsSome ({emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types ct}) {rv p}"
-      | _ => "(panic! \"air2lean: is_null_ptr of a non-optional\")"
+      | _ => placeholder "is_null_ptr of a non-optional"
     let expr := if isNull then s!"(!·) <$> {some'}" else some'
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .optPayloadPtr set p =>
@@ -2211,7 +2219,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- `Zig.errIsErrAt` & co. (`ZigLean/Mem/Enc.lean`) take the payload type.
     let payload := match fc.pointeeOf p with
       | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
-      | _ => "(panic! \"air2lean: an error-union pointer op on another type\")"
+      | _ => placeholder "an error-union pointer op on another type"
     let a := fc.ptrAlign p
     let domain := match fc.pointeeOf p with
       | .errorUnion set _ => match fc.tyOfId set with
@@ -2228,7 +2236,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .isErrPtr true _ => s!"{isErr} ({payload}) {a} {rv p}"
       | .isErrPtr false _ => s!"(!·) <$> {isErr} ({payload}) {a} {rv p}"
       | .errPayloadPtr true _ => s!"{errOp fc.errBits "errSetOk"} ({payload}) {a} {rv p}"
-      | .errPayloadPtr false _ => s!"pure ({errOp fc.errBits "errPayloadPtr"} ({payload}) {rv p})"
+      | .errPayloadPtr false _ =>
+        fc.projectExpr p inst.ty (rv p) s!"{errOp fc.errBits "errPayloadPtr"} ({payload})"
       | _ => s!"{code} ({payload}) {a} {rv p}"
     let expr := match fc.pointeeOf p with
       | .errorUnion _ child => fc.storageExpr child expr
@@ -2262,7 +2271,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         | none => expr
       | _, some (u, f, true) => s!"pure {u}.{fc.memberName (fc.tyOfId inst.ty) f}"
       | _, some (u, f, false) => s!"pure ({u}.{fc.memberName (fc.tyOfId inst.ty) f} {rv a})"
-      | _, none => "(panic! \"air2lean: union_init of a non-union type\")"
+      | _, none => placeholder "union_init of a non-union type"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .runtimeNavPtr g =>
     -- The current thread's instance of the `threadlocal` global whose key (the block of the
@@ -2278,7 +2287,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     if fc.isMemPtr base then
       -- A bit-pointer points to the host integer: the base's own address.
       let off := if fc.hostSize inst.ty != 0 then 0 else fc.fieldOffset base idx
-      let (env, l) := bindLet fc env inst.id (fc.projectExpr base inst.ty (rv base) s!"add {off}")
+      let (env, l) := bindLet fc env inst.id
+        (fc.projectExpr base inst.ty (rv base) s!"·.add {off}" (zero := off == 0))
       (env, some l)
     else (env, none)
   | .fieldParentPtr fieldPtr idx =>
@@ -2286,7 +2296,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       -- A bit-pointer points to the host integer: the parent's own address.
       let bitPtr := ((fc.valTyId? fieldPtr).map fc.hostSize).getD 0 != 0
       let off := if bitPtr then 0 else fc.fieldOffsetOfPtrTy inst.ty idx
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv fieldPtr}.add (-({off} : Int)))"
+      let (env, l) := bindLet fc env inst.id
+        (fc.projectExpr fieldPtr inst.ty (rv fieldPtr) s!"·.add (-{off})" (zero := off == 0))
       (env, some l)
     else (env, none)
   | .setUnionTag ptr tag =>
@@ -2300,11 +2311,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         let ty := emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tagTy)
         let align := Nat.min (fc.ptrAlign ptr) ((fc.layouts[tagTy]?.bind (·.align)).getD 1)
         (env, some s!"Zig.store (α := {ty}) {align} ({rv ptr}.add {to}) {rv tag}")
-      | _ => (env, some "(panic! \"air2lean: set_union_tag of a non-union\")")
+      | _ => (env, some (placeholder "set_union_tag of a non-union"))
     else
     match fc.unionFieldOfTag? (fc.pointeeOf ptr) tag with
     | some (u, f, _) => (env, some (fc.modifyPlace ptr fun old => s!"({u}.{fc.helperName (fc.pointeeOf ptr) s!"setTag_{f}"} {old})"))
-    | none => (env, some "(panic! \"air2lean: set_union_tag with an unknown tag\")")
+    | none => (env, some (placeholder "set_union_tag with an unknown tag"))
   | .load ptr =>
     if let some (field, off) := fc.bytePlace? ptr then
       -- A byte local: a whole copy keeps its bytes, a typed read decodes only the bytes read.
@@ -2368,17 +2379,19 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
             (undefByteRanges fc.types fc.layouts · v)
           match ranges with
           | some ranges =>
-            let bytes := ranges.foldl (init := s!"Zig.Enc.encode ({rv v} : {ty})") fun acc (off, len) =>
+            let bytes := ranges.foldl (init := s!"Zig.Enc.encode ({fc.resolveVal env v (undefFill := true)} : {ty})") fun acc (off, len) =>
               s!"(Zig.writeBytes ({acc}) {off} (Array.replicate {len} .undef))"
             (env, some (fc.pointeeStorageExpr ptr s!"Zig.storeBytes {rv ptr} {align} {bytes}"))
-          | none => (env, some "(panic! \"air2lean: a store of a partly undefined value\")")
+          | none => (env, some (placeholder "a store of a partly undefined value"))
         else
         if host != 0 then
           let f := if ptrTy?.any fc.laneBitPtr then "Zig.storeLane"
             else fc.bitsFn "storeBits"
           (env, some s!"{f} (α := {ty}) {host} {align} {bitOff} {rv ptr} {rv v}")
         else (env, some (fc.pointeeStorageExpr ptr s!"Zig.store (α := {ty}) {align} {rv ptr} {rv v}"))
-    else (env, some (fc.storePlace ptr (rv v)))
+    -- A wholly `undefined` value reaches a place only as a store no read observes
+    -- (`deadUndefStores`; any other is a stack block or a byte local): filler.
+    else (env, some (fc.storePlace ptr (fc.resolveVal env v (undefFill := v matches .undef _))))
   -- An atomic op is a sync op: the oracle picks the message or the place, and another thread can
   -- run first (`ZigLean/Conc/Call.lean`).
   | .atomicLoad ptr order =>
@@ -2426,7 +2439,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .ptrAdd sub p n =>
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let f := if sub then fc.widthFn "elemSub" "elemSubOf" else fc.widthFn "elem" "elemOf"
-    let (env, l) := bindLet fc env inst.id (fc.projectExpr p inst.ty (rv p) s!"{f} {size} {rv n}"); (env, some l)
+    let (env, l) := bindLet fc env inst.id
+      (fc.projectExpr p inst.ty (rv p) s!"·.{f} {size} {rv n}" (zero := size == 0 || n matches .int _ 0))
+    (env, some l)
   -- `&v[i]` of a bit-packed vector: the vector's address; the lane is in the type.
   | .elemPtr p i =>
     if fc.laneBitPtr inst.ty then
@@ -2434,8 +2449,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
     let size := fc.sizeOf ((ptrChild fc.types inst.ty).getD 0)
     let elem := fc.widthFn "elem" "elemOf"
-    let expr := if fc.isSlice p then s!"pure ({rv p}.ptr.{elem} {size} {rv i})"
-      else fc.projectExpr p inst.ty (rv p) s!"{elem} {size} {rv i}"
+    let base := if fc.isSlice p then s!"{rv p}.ptr" else rv p
+    let expr := fc.projectExpr p inst.ty base s!"·.{elem} {size} {rv i}"
+      (zero := size == 0 || i matches .int _ 0)
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrElemVal p i =>
     let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.loadItem p (rv p) (rv i)})"
@@ -2453,7 +2469,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .sliceFieldPtr len p =>
     if fc.isMemPtr p then
       -- The length follows the pointer: `Zig.PtrWidth.bytes` (`ZigLean/Mem/Width.lean`).
-      let (env, l) := bindLet fc env inst.id s!"pure ({rv p}.add {if len then fc.ptrBits / 8 else 0})"
+      let (env, l) := bindLet fc env inst.id
+        (fc.projectExpr p inst.ty (rv p) s!"·.add {fc.ptrBits / 8}" (zero := !len))
       (env, some l)
     else (env, none)
   | .memset dst v =>
@@ -2617,7 +2634,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
               (env, ls ++ [s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {proj k}"])
             else (env, ls ++ [fc.storePlace ptr (proj k)])
       (env, some ("\n".intercalate lines))
-  | _ => (env, some s!"-- air2lean: unexpected op in straight-line position (inst {inst.id})")
+  | _ => (env, some (placeholder s!"unexpected op in straight-line position (inst {inst.id})"))
 
 
 /-- A lane-wise op on vectors: its operands, and the same op with other operands. `arith`,
@@ -2700,7 +2717,7 @@ dropped. -/
 partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) : String :=
   let fc := fc.prepareInstUses.prepareBranchTargets
   match insts with
-  | [] => "pure default"
+  | [] => placeholder "a body without a terminator"
   | inst :: rest =>
     if isTerminating inst.op then
       emitTerminator fc env inst
@@ -2755,7 +2772,7 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
       | .tryPtr p errBody =>
         let payload := match fc.pointeeOf p with
           | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
-          | _ => "(panic! \"air2lean: try_ptr of a non-error-union pointer\")"
+          | _ => placeholder "try_ptr of a non-error-union pointer"
         let errStr := emitStmts fc env errBody.toList
         let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
         let restStr := emitStmts fc (env.push (inst.id, vname)) rest
@@ -2817,8 +2834,8 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
     let (_, calleeName) := fc.resolveCallee callee
     match panicErrorFor? calleeName with
     | some ctor => s!"throw {ctor}"
-    | none => s!"(panic! \"air2lean: unchecked noreturn callee {calleeName}\")"
-  | _ => "pure default"
+    | none => placeholder s!"unchecked noreturn callee {calleeName}"
+  | _ => placeholder "a terminator of another kind"
 
 /-- Shared case selection, with loop-switch state supplied independently of SSA captures. -/
 partial def emitSwitch (fc : FCtx) (env : Array (InstId × String)) (v : Val)
@@ -3669,9 +3686,9 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
   let f := site.function
   let ret := site.ret
   -- Checked call sites use the same first-occurrence type resolver as registry validation.
-  let ids : Array TyId := match ModelRegistry.argumentTypeIds site.values site.args with
-    | .ok ids => ids
-    | .error error => panic! s!"air2lean: unchecked model arguments: {error}"
+  let ids : Array TyId ← match ModelRegistry.argumentTypeIds site.values site.args with
+    | .ok ids => pure ids
+    | .error error => return placeholder s!"unchecked model arguments: {error}"
   let tys : Array String := ids.map fun (id : TyId) => emitTy structNames f.types f.types[id]!
   let result := emitTy structNames f.types f.types[ret]!
   let argsTy := if tys.isEmpty then "Unit" else
@@ -3883,6 +3900,26 @@ def emitWithNames (funcs : Array Func) (ns : String) (prefix_ : String)
     String × Array (String × String) :=
   let p := emitParts funcs prefix_ floatSemantics models spawnSemantics proofApi device
   (p.render ns, p.declNames)
+
+/-- The kinds of the placeholders in the generated source `src`, deduplicated, in order. -/
+def placeholdersIn (src : String) : Array String :=
+  ((src.splitOn s!"{placeholderMarker} \"").drop 1).foldl (init := #[]) fun acc part =>
+    let what := (part.splitOn "\"").head!
+    if acc.contains what then acc else acc.push what
+
+/-- `emitWithNames`, failing closed: output that contains a `placeholder` (an arm the checker
+did not exclude) is a translation error, never a Lean term that succeeds (MM-6). -/
+def emitWithNamesChecked (funcs : Array Func) (ns : String) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false) :
+    Except String (String × Array (String × String)) := do
+  let out := emitWithNames funcs ns prefix_ floatSemantics models spawnSemantics proofApi
+  let kinds := placeholdersIn out.1
+  unless kinds.isEmpty do
+    throw s!"EMITTER_PLACEHOLDER: the input reached emitter arms that the checker should \
+      exclude ({"; ".intercalate (kinds.extract 0 8).toList}); nothing was written. This is a \
+      translator bug: please report the AIR input."
+  pure out
 
 /-- `emitWithNames`'s Lean source only. -/
 def emit (funcs : Array Func) (ns : String) (prefix_ : String)

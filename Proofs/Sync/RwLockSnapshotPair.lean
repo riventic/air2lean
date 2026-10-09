@@ -15,6 +15,9 @@ open Sync.RwLockRead
 
 namespace Sync.RwLockSnapshotPair
 
+-- As in `Proofs/Sync/RwLock.lean`: unification must not unfold `WP` into the program.
+attribute [local irreducible] Proto.WP
+
 /-- Instantiation of the reusable same-hold contract for the second client's snapshot
 fragment. This is a real ownership/WP contract, not by itself a theorem of the new
 exported `rwLockSnapshotPair`: the program proof below additionally composes its
@@ -82,12 +85,42 @@ theorem main_spec (io : Io) (d : Nat) :
     ho₁' hc₁ (by rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁)
     fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
+  -- `&shared.rw`, formed in bounds of `io`'s bytes (`ptrProject`, MM-3)
+  have hs₂' : h₂.Sub m₂.heap := by simpa [upd_self] using ho₂.sub 0
+  have hwI : (writeBytes ((Array.replicate 64 Byte.undef).extract 0 16) 0 (Enc.encode io)).size = 16 := by
+    rw [writeBytes_size _ _ _ (by simp [enc_io])]; exact hsI
+  have pr₂ : (ptrProject bPtr (·.add 16)).run m₂ = pure (bPtr.add 16, m₂) := by
+    obtain ⟨hx, hy, dxy, hxy, hbx, -⟩ := F₂
+    rw [hxy] at hs₂'
+    exact bytesAt_ptrProject_sub hbx (Heap.sub_union_left.trans hs₂') (k := 16) (by rw [hwI]; exact Nat.le_refl _) (by rw [hwI]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₂ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := bPtr.add 16) (A := A) (S := 64) (K := .stack)
     (k := 0) (a := 8) rw0 (by rw [rw_size]; rfl) rfl (by decide)
     (by rw [hsS]; decide) (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
     (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
     fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
+  -- `&shared.n`, formed in bounds (`ptrProject`, MM-3)
+  have hs₃' : h₃.Sub m₃.heap := by simpa [upd_self] using ho₃.sub 0
+  have pr₃ : (ptrProject bPtr (·.add 56)).run m₃ = pure ((bPtr.add 16).add 40, m₃) := by
+    obtain ⟨hx, hy, dxy, hxy, hbx, hyy⟩ := F₃
+    obtain ⟨hz, hw, dzw, hzw, -, hww⟩ := hyy
+    obtain ⟨hn, hp', dnp, hnw, hbn, -⟩ := hww
+    rw [hxy] at hs₃'
+    have hsy : hy.Sub m₃.heap := (Heap.sub_union_right dxy).trans hs₃'
+    rw [hzw] at hsy
+    have hsw : hw.Sub m₃.heap := (Heap.sub_union_right dzw).trans hsy
+    rw [hnw] at hsw
+    have i0 : m₃.inBounds bPtr = true := by
+      simpa using bytesAt_inBounds_sub hbx (Heap.sub_union_left.trans hs₃') (k := 0) (by simp)
+        (by rw [hwI]; decide)
+    have i56 : m₃.inBounds ((bPtr.add 16).add 40) = true := by
+      simpa using bytesAt_inBounds_sub hbn (Heap.sub_union_left.trans hsw) (k := 0) (by simp)
+        (by simp)
+    exact ptrProject_add_run i0 i56
+  refine WP.bind (WP.callMC_ptrProject pr₃ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (bPtr.add 16).add 40) (A := A) (S := 64)
     (K := .stack) (k := 0) (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsN]; decide)
     (by simp [bPtr, Ptr.add]; omega) (by decide)).frame.frameL.frameL) ho₃
@@ -109,8 +142,12 @@ theorem main_spec (io : Io) (d : Nat) :
   obtain ⟨rfl, hc₆, hi₆⟩ := inv_spawn hi₅ hg₁ hf
   -- One acquire, both actual generated plain loads, then release.
   simp only [StateT.run_bind, pure_bind]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₆ (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.callC (WP.mono ?_ (lockS_spec spec₀ hi₆)))
   rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, h, hi₂⟩
+  refine WP.bind (WP.callMC_ptrProject (projB hi₂ (k := 56) (by decide)) ?_)
+  dsimp only
   rw [show bPtr.add 56 = nPtr from rfl]
   have hW := w_isW hi₂.2.1 (by rw [upd_self]; simp [gA])
   rw [upd0_1] at hW
@@ -118,9 +155,14 @@ theorem main_spec (io : Io) (d : Nat) :
   refine WP.bind (wp_n spec₀ (y := .sh false) hi₂ hc₂ rfl (.inl rfl)
     (TTriple.load (by decide)) fun m₃ h₃ hc₃ ht₃ hi₃ => ?_)
   simp only [StateT.run_bind, pure_bind]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₃ (k := 56) (by decide)) ?_)
+  dsimp only
+  rw [show bPtr.add 56 = nPtr from rfl]
   refine WP.bind (wp_n spec₀ (y := .sh false) hi₃ hc₃ rfl (.inl rfl)
     (TTriple.load (by decide)) fun m₄ h₄ hc₄ ht₄ hi₄ => ?_)
   simp only [StateT.run_bind, pure_bind]
+  refine WP.bind (WP.callMC_ptrProject (projB hi₄ (k := 16) (by decide)) ?_)
+  dsimp only
   refine WP.bind (WP.callC (WP.mono ?_ (unlockS_spec spec₀ hi₄)))
   rintro _ G₅ m₅ d₅ ⟨hd₅, hc₅, hi₅⟩
   -- the join

@@ -125,7 +125,13 @@ theorem fits : L.Fits proto U :=
   ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
 
 /-- The word: `L.ptr`. -/
-theorem mptr : cPtr.add 0 = L.ptr := rfl
+theorem mptr : cPtr = L.ptr := rfl
+
+/-- `&counter.n` (block 0, 8 bytes) is formed (`ptrProject`, MM-3). -/
+theorem projC {m : Mem} (hb : BlkOk m) {k : Nat} (hk : k ≤ 8) :
+    (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := hb
+  exact ptrProject_block_run hb rfl (by decide) (by simp [cPtr, hsz]; omega)
 
 /-! ## The threads and the heap -/
 
@@ -359,6 +365,8 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
       hi)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
     have hi₂' : proto.inv (upd G₂ t (gHold s.local1.toNat hL)) m₂ := hi₂
+    refine WP.bind (WP.callMC_ptrProject (projC hi₂'.2.blk (k := 4) (by decide)) ?_)
+    dsimp only
     -- the load of the counter
     refine WP.bind (wp_cntLoad hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
     have hx₂ : (fun u => (upd G₂ t (gHold s.local1.toNat hL) u).2) t = .work s.local1.toNat := by

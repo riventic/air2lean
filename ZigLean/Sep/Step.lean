@@ -156,6 +156,13 @@ theorem arr_load {xs : List T} {i : BitVec 64} (hn : 0 < Enc.size T)
   obtain ⟨m', hr, hm', hs''⟩ := arr_load_run hp hm hn ha hs hi hs'
   exact ⟨_, m', hP, hr, hd, hm', sep_lift.mpr ⟨rfl, hp⟩, hs''⟩
 
+/-- `&xs[i]` of an owned array, `i ≤ len`: checked pointer formation (`ptrProject`, MM-3). -/
+theorem arr_ptrProject {xs : List T} {i : BitVec 64} (hi : i.toNat ≤ xs.length) :
+    TotalTriple (arr p xs) (ptrProject p (·.elem (Enc.size T) i))
+      (fun q => ⌜q = p.elem (Enc.size T) i⌝ ∗ arr p xs) := by
+  intro m hP hF hd hm hp hs'
+  exact ⟨_, m, hP, arr_ptrProject_run hp hm hi, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hs'⟩
+
 theorem load_bind {v : T} {f : T → MemM β} (hn : 0 < Enc.size T)
     (k : TotalTriple (pts p a v ∗ R) (f v) Q) :
     TotalTriple (pts p a v ∗ R) (Zig.load T a p >>= f) Q :=

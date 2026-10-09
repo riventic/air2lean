@@ -139,9 +139,21 @@ theorem swap_spec (m : Mem) (p q : Ptr) (x y : BitVec 32) {b c : BlockId} {blk b
       refine ⟨_, _, _, swap_run hx hy h₁ h₂, access_store_other x hq₃ hp₃ (Ne.symm hbc), hyw,
         access_store_same x hq₃ hq₃, decode_writeBytes32 blk'.bytes o' x (by omega)⟩
 
-/-- `&j.due`: the offset of `due` in `Job` is 4 (the compiler's layout). -/
-theorem dueOf_spec (j : Ptr) (m : Mem) : (dueOf j).run m = pure (j.add 4, m) := by
-  simp [dueOf, zig_unfold]
+/-- `&j.due`: the offset of `due` in `Job` is 4 (the compiler's layout). Forming the pointer
+needs `j` and `j + 4` in bounds of `j`'s block (`getelementptr inbounds`, `ptrProject`). -/
+theorem dueOf_spec (j : Ptr) (m : Mem) (hj : m.inBounds j = true)
+    (hj4 : m.inBounds (j.add 4) = true) : (dueOf j).run m = pure (j.add 4, m) := by
+  have hp := ptrProject_add_run hj hj4
+  simp only [StateT.run] at hp
+  simp [dueOf, zig_unfold, hp]
+
+/-- Out of bounds, `&j.due` is illegal behaviour (LLVM poison), not a pointer. -/
+theorem dueOf_oob (j : Ptr) (m : Mem) (h : m.inBounds (j.add 4) = false) :
+    (dueOf j).run m = throw .illegal := by
+  have hne : j.add 4 ≠ j := by intro he; have := congrArg Ptr.off he; simp [Ptr.add_off] at this; omega
+  have hp := ptrProject_illegal (m := m) (·.add 4) hne (by simp [h])
+  simp only [StateT.run] at hp
+  simp [dueOf, zig_unfold, hp]
 
 /-- Pointer equality is equality of block and offset. -/
 theorem same_spec (p q : Ptr) (m : Mem) : (same p q).run m = pure (decide (p = q), m) := by
@@ -167,11 +179,11 @@ theorem maxPtr_spec {m₁ m₂ : Mem} (p q : Ptr) (m : Mem) (x y : BitVec 32)
 /-- `delay` adds `d` to the job's `duration` (at offset 0). `NoRace` for the read (`hnr1`) and the
 write (`hnr2`) is an explicit hypothesis, as in `swap_spec`. -/
 theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Block} {o : Nat}
-    (hj : m.access (j.add 0) 4 4 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
+    (hj : m.access j 4 4 = pure (b, blk, o)) (hK : blk.kind ≠ .constGlobal)
     (hxv : Enc.decode (blk.bytes.extract o (o + 4)) = pure x) (h : x.toNat + d.toNat < 2 ^ 32)
     (hnr1 : NoRace m b o 4 .read) (hnr2 : NoRace (m.recordAt b o 4 .read) b o 4 .write) :
     ∃ m' blk', (delay j d).run m = pure ((), m') ∧
-      m'.access (j.add 0) 4 4 = pure (b, blk', o) ∧
+      m'.access j 4 4 = pure (b, blk', o) ∧
       Enc.decode (blk'.bytes.extract o (o + 4)) = pure (x + d) := by
   have hj0 := (access_eq hj).2.2.2.1
   have hjn := (access_eq hj).2.2.2.2.1
@@ -179,7 +191,7 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
   have hx := load_run hj hxv hnr1
   have hsz : Enc.size (BitVec 32) = 4 := rfl
   rw [hsz] at hx
-  have hj₁ : (m.recordAt b o 4 .read).access (j.add 0) 4 4 = pure (b, blk, o) :=
+  have hj₁ : (m.recordAt b o 4 .read).access j 4 4 = pure (b, blk, o) :=
     access_recordAt.trans hj
   have hs := store_run (x + d) hj₁ hK hnr2
   refine ⟨_, _, ?_, access_store_same (x + d) hj₁ hj₁, decode_writeBytes32 blk.bytes o (x + d) ?_⟩
@@ -190,7 +202,7 @@ theorem delay_spec (j : Ptr) (m : Mem) (x d : BitVec 32) {b : BlockId} {blk : Bl
 
 /-- A sum that does not fit in `u32` is the safety panic `integerOverflow`. -/
 theorem delay_overflow {m₁ : Mem} (j : Ptr) (m : Mem) (x d : BitVec 32)
-    (hx : (load (BitVec 32) 4 (j.add 0)).run m = pure (x, m₁)) (h : 2 ^ 32 ≤ x.toNat + d.toNat) :
+    (hx : (load (BitVec 32) 4 j).run m = pure (x, m₁)) (h : 2 ^ 32 ≤ x.toNat + d.toNat) :
     (delay j d).run m = throw .overflow := by
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hx
   simp [delay, zig_unfold, hx, Zig.add, BitVec.uaddOverflow, h]
@@ -222,6 +234,6 @@ example :
     (m₁ := (Mem.ofGlobals [(Enc.encode (4294967295 : BitVec 32), 4, .global)]).recordAt 0 0 4 .read)
     _ _ 4294967295 1
   · simp [load, loadBytes, recordAccess, Mem.ofGlobals, Mem.addGlobal, Mem.access,
-      Mem.recordAt, alignUp, Enc.size, intSize, intAlign, Ptr.add, LawfulEnc.size_encode,
+      Mem.recordAt, alignUp, Enc.size, intSize, intAlign, LawfulEnc.size_encode,
       hfull, LawfulEnc.decode_encode, raceAt, set, MonadStateOf.set, StateT.set, zig_unfold]
   · decide

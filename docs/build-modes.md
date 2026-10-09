@@ -58,6 +58,33 @@ The records state this as an exception of the premise.
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
 
+**Known exceptions (open).** The premise needs the model to throw on every illegal behaviour
+that ReleaseSafe does not check. The memory-model audit
+([architecture-audit/memory-model.md](architecture-audit/memory-model.md), MM-7) found illegal
+behaviour without a model throw, so "the ReleaseSafe model does not throw" does not yet imply
+"no illegal behaviour" for programs that do any of the following:
+
+- **Observe addresses** (MM-1, MM-2). Blocks sit at a fixed, deterministic model layout.
+  `@intFromPtr`, pointer order and the address-dependent safety checks (`@alignCast`, the
+  alignment check of `@ptrFromInt`) are decided by that layout, not by the native one. A model
+  run can pass an alignment check that panics natively, or the reverse.
+- **Overflow the stack** (MM-5). The model has no stack bound; deep recursion or large frames
+  return normally in the model and crash natively.
+- **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
+  quotient, so the model returns a value (being fixed on `codex/fix-unchecked-illegal`).
+
+The premise holds only for programs that do none of these. Each item is lifted when its fix
+lands.
+
+**Fixed.** Forming a pointer outside its allocation (MM-3): LLVM lowers `ptr_add`, `ptr_sub`,
+element, field and `@fieldParentPtr` pointers to `getelementptr inbounds`, and a result outside
+`[base, base+size]` of the allocation is poison. Generated code now forms these pointers with
+`Zig.ptrProject`, which throws `.illegal` there (offset 0 is always allowed). Residual: the
+payload pointer of a pointer-form `try` and of `errunion_payload_ptr_set`
+(`Zig.tryPayloadPtr`, `Zig.errSetOk`) is formed after a checked access to the error code but
+not bounds-checked itself; it leaves the allocation only for an error union pointer that
+addresses a truncated object (a pointer cast), and every access through it is still checked.
+
 `scripts/diff.sh` also builds its libm and asm helper archives with `-OReleaseFast`,
 as Zig builds compiler_rt. These are test oracles, not a claimed program build.
 

@@ -30,6 +30,9 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn
 
 namespace Sync.MutexCounter
 
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+attribute [local irreducible] Proto.WP
+
 /-- Where a thread is, outside the lock's code. -/
 inductive Ph where
   | none
@@ -135,7 +138,14 @@ theorem fits : L.Fits proto U :=
   ⟨fun _ _ => Iff.rfl, fun _ h => h.1, fun _ h => h.1, stable⟩
 
 /-- The word: `L.ptr`. -/
-theorem mptr : ((cPtr.add 16).add 0).add 0 = L.ptr := rfl
+theorem mptr : cPtr.add 16 = L.ptr := rfl
+
+/-- A field pointer of the 24-byte `Counter` (block 0, `BlkOk`) is formed (`ptrProject`,
+MM-3). -/
+theorem projC {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {k : Nat} (hk : k ≤ 24) :
+    (ptrProject cPtr (·.add k)).run m = pure (cPtr.add k, m) := by
+  obtain ⟨blk, hb, -, hsz, -⟩ := hi.2.blk
+  exact ptrProject_block_run hb rfl (by decide) (by simp [cPtr, hsz]; omega)
 
 /-! ## The threads and the heap -/
 
@@ -421,7 +431,8 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
   · rename_i hlt
     have hlt' : s.local1.toNat < 2 := by simpa [lt, BitVec.ult] using hlt
     simp only [StateT.run_bind, bind_assoc]
-    rw [show cPtr.add 0 = cPtr from rfl]
+    refine WP.bind (WP.callMC_ptrProject (projC hi (k := 16) (by decide)) ?_)
+    dsimp only
     -- the read of `io`
     refine WP.bind (wp_io hi hc htl fun m₁ hc₁ ht₁ hi₁ => ?_)
     -- `lock`
@@ -429,6 +440,8 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
       m₁ d hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, hL, hi₂⟩
     have hi₂' : proto.inv (upd G₂ t (gHold s.local1.toNat hL)) m₂ := hi₂
+    refine WP.bind (WP.callMC_ptrProject (projC hi₂' (k := 20) (by decide)) ?_)
+    dsimp only
     -- the load of the counter
     refine WP.bind (wp_cntLoad hi₂' hc₂ fun m₃ hQ hc₃ ht₃ hi₃ => ?_)
     have hx₂ : (fun u => (upd G₂ t (gHold s.local1.toNat hL) u).2) t = .work s.local1.toNat := by
@@ -454,6 +467,8 @@ theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Me
     -- the read of `io`
     have htl₄ : t < m₄.threads.size :=
       (hi₄.1.live t (by rw [upd_self]; exact (by decide : LPh.holds ≠ LPh.gone))).1
+    refine WP.bind (WP.callMC_ptrProject (projC hi₄ (k := 16) (by decide)) ?_)
+    dsimp only
     refine WP.bind (wp_io hi₄ hc₄ htl₄ fun m₅ hc₅ ht₅ hi₅ => ?_)
     -- `unlock`
     refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl t (gHold (s.local1.toNat + 1) hQ') rfl _ G₂
@@ -711,12 +726,38 @@ theorem main_spec (io : Io) (d : Nat) :
     (by rw [hsI]; decide) (by simp [cPtr]; omega) (by decide)).frame) ho₁' hc₁ (by
       rw [hs₁.threads]; decide) (by rw [upd_self]; exact F₁) fun _ m₂ h₂ _ ho₂ F₂ hs₂ _ _ => ?_)
   rw [upd_upd] at ho₂
+  have hwI : (writeBytes ((Array.replicate 24 Byte.undef).extract 0 16) 0 (Enc.encode io)).size = 16 := by
+    rw [writeBytes_size _ _ _ (by simp [enc_io])]; exact hsI
+  have pr₂ : (ptrProject cPtr (·.add 16)).run m₂ = pure (cPtr.add 16, m₂) := by
+    have hs₂' : h₂.Sub m₂.heap := by simpa [upd_self] using ho₂.sub 0
+    obtain ⟨hx, hy, dxy, hxy, hbx, -⟩ := F₂
+    rw [hxy] at hs₂'
+    exact bytesAt_ptrProject_sub hbx (Heap.sub_union_left.trans hs₂') (k := 16)
+      (by rw [hwI]; exact Nat.le_refl _) (by rw [hwI]; decide)
+  refine WP.bind (WP.callMC_ptrProject pr₂ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt' (p := cPtr.add 16) (A := A) (S := 24) (K := .stack) (k := 0) (a := 4) mutex0
     (by rw [enc_mutex, enc_u32]; rfl) rfl (by decide)
     (by rw [hsW]; decide) (by simp [cPtr, Ptr.add]; omega) (by decide)).frame.frameL) ho₂
     (hs₂.current.trans hc₁) (by rw [hs₂.threads, hs₁.threads]; decide) (by rw [upd_self]; exact F₂)
     fun _ m₃ h₃ _ ho₃ F₃ hs₃ _ _ => ?_)
   rw [upd_upd] at ho₃
+  have pr₃ : (ptrProject cPtr (·.add 20)).run m₃ = pure ((cPtr.add 16).add 4, m₃) := by
+    have hs₃' : h₃.Sub m₃.heap := by simpa [upd_self] using ho₃.sub 0
+    obtain ⟨hx, hy, dxy, hxy, hbx, hyy⟩ := F₃
+    obtain ⟨hz, hw, dzw, hzw, -, hbw⟩ := hyy
+    rw [hxy] at hs₃'
+    have hsy : hy.Sub m₃.heap := (Heap.sub_union_right dxy).trans hs₃'
+    rw [hzw] at hsy
+    have i0 : m₃.inBounds cPtr = true := by
+      simpa using bytesAt_inBounds_sub hbx (Heap.sub_union_left.trans hs₃') (k := 0) (by simp)
+        (by rw [hwI]; decide)
+    have i20 : m₃.inBounds ((cPtr.add 16).add 4) = true := by
+      simpa using bytesAt_inBounds_sub hbw ((Heap.sub_union_right dzw).trans hsy) (k := 0)
+        (by simp) (by rw [hsC]; decide)
+    exact ptrProject_add_run i0 i20
+  refine WP.bind (WP.callMC_ptrProject pr₃ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned ((TTriple.storeAt (p := (cPtr.add 16).add 4) (A := A) (S := 24) (K := .stack) (k := 0)
     (a := 4) (0 : BitVec 32) rfl (by decide) (by rw [hsC]; decide) (by simp [cPtr, Ptr.add]; omega)
     (by decide)).frameL.frameL) ho₃ (hs₃.current.trans (hs₂.current.trans hc₁))
@@ -850,7 +891,14 @@ theorem main_spec (io : Io) (d : Nat) :
     Heap.disjoint_union_right.mpr ⟨(Heap.disjoint_union_right.mp hd).1.symm, hdLW⟩
   have heq : own₉ 0 ∪ (hL ∪ L.wordH m₉) = hL ∪ (own₉ 0 ∪ L.wordH m₉) :=
     Heap.union_left_comm (Heap.disjoint_union_right.mp hd).1
-  -- the load of the counter
+  -- the counter's pointer, then its load
+  have pr₉ : (ptrProject cPtr (·.add 20)).run m₉ = pure (cPtr.add 20, m₉) := by
+    obtain ⟨blk₀, hblk₀, -, hsz₀, -⟩ := hi₈.2.blk
+    have hb₉ : m₉.blocks = m₈.blocks := by rw [hm₉]
+    exact ptrProject_block_run (by rw [hb₉]; exact hblk₀) rfl (by decide)
+      (by simp [cPtr, hsz₀])
+  refine WP.bind (WP.callMC_ptrProject pr₉ ?_)
+  dsimp only
   refine WP.bind (WP.liftM_owned (TTriple.load (p := cPtr.add 20) (a := 4) (v := BitVec.ofNat 32 4)
     (by decide)).frame ho hc₉ (by rw [hs₉]; decide)
     (by rw [upd_self, heq]; exact ⟨hL, _, hd', rfl, hR4, rfl⟩) fun a m₁₀ hQ hr ho' hq hs₁₀ _ _ => ?_)
