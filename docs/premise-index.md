@@ -5,12 +5,12 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2356 theorems in 133 files.
+2374 theorems in 134 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
-| [PRF-01](premises.md#prf-01) | 657 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 440 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-01](premises.md#prf-01) | 667 | Legacy 64-bit little-endian reference model |
+| [PRF-02](premises.md#prf-02) | 446 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 18 | Gate-time generated module |
 | [ALC-01](premises.md#alc-01) | 73 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 73 | Allocation failure and request-cap policy |
@@ -19,36 +19,36 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-05](premises.md#alc-05) | 0 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
-| [THR-01](premises.md#thr-01) | 1263 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 128 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1281 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 144 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
-| [THR-04](premises.md#thr-04) | 13 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 812 | Futex model |
+| [THR-04](premises.md#thr-04) | 14 | `Io.Group` tasks are model threads |
+| [THR-05](premises.md#thr-05) | 822 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 63 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1063 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1080 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 1024 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1024 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 360 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 497 | Weak CAS spurious failure |
-| [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
+| [ORD-01](premises.md#ord-01) | 1040 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1040 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 371 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 507 | Weak CAS spurious failure |
+| [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 73 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 25 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2227 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1883 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1071 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 2244 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1900 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1088 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 65 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 25 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2356 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1115 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1115 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 2374 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1131 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1131 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 29 | Reviewed opaque, extern and runtime-redirection policy |
 | [ENV-01](premises.md#env-01) | 10 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
@@ -233,6 +233,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, S
 | `Atomics.Stack.main_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.stackPush_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Atomics.Stack.stackPush_completes` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Atomics.Stack.memW_inv` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Basic/Arith.lean`
@@ -447,6 +448,7 @@ File premises: PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, S
 | `Iogroup.GroupCounter.main_spec` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.groupCounter_spec` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.groupCounter_safe` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Iogroup.GroupCounter.groupCounter_completes` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Iogroup.GroupCounter.groupCounter_reclaim` | PRF-01, THR-01, THR-02, THR-04, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Layout/Mem.lean`
@@ -876,6 +878,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Handoff.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.handoff_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Handoff.handoff_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Handoff.handoff_completes` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Lock.lean`
 
@@ -938,6 +941,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.Mailbox.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Mailbox.mailbox_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.Mailbox.mailbox_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.Mailbox.mailbox_completes` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Mutex.lean`
 
@@ -975,6 +979,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.MutexCounter.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.mutexCounter_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.MutexCounter.mutexCounter_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.MutexCounter.mutexCounter_completes` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Proofs.lean`
 
@@ -1189,6 +1194,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockRead.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.rwLockRead_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.rwLockRead_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockRead.rwLockRead_completes` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/RwLockContract.lean`
 
@@ -1217,6 +1223,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.RwLockSnapshotPair.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockSnapshotPair.snapshotPair_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockSnapshotPair.snapshotPair_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.RwLockSnapshotPair.snapshotPair_completes` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/SemCounter.lean`
 
@@ -1273,6 +1280,7 @@ File premises: PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, O
 | `Sync.SemCounter.main_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.semaphoreCounter_spec` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.SemCounter.semaphoreCounter_safe` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Sync.SemCounter.semaphoreCounter_completes` | PRF-02, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Sync/Semaphore.lean`
 
@@ -1457,7 +1465,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Counter.noRace_b0` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.noRace_b1` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.noRace_b2` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
-| `Threads.Counter.recordAt_clock` | SEM-01, SEM-02, TRU-01 |
+| `Threads.Counter.recordAt_clock` | THR-01, THR-08, SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.fpOk_step` | SEM-01, SEM-02, TRU-01 |
 | `Threads.Counter.ex_recordAt` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.inv_frame` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
@@ -1512,6 +1520,7 @@ File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, S
 | `Threads.Counter.dispatch_spec` | PRF-01, THR-01, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.parallelCounter_spec` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.parallelCounter_safe` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threads.Counter.parallelCounter_completes` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threads.Counter.cntAt_cntMem` | THR-01, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 
 ## `Proofs/Threads/Disjoint.lean`
@@ -1738,6 +1747,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, T
 | `Threadsync.HO.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.HO.handoff_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.HO.handoff_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.HO.handoff_completes` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Threadsync/Lock.lean`
 
@@ -1792,6 +1802,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, S
 | `Threadsync.MutexCounter.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.mutexCounter_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.MutexCounter.mutexCounter_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.MutexCounter.mutexCounter_completes` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Threadsync/WaitGroup.lean`
 
@@ -1918,6 +1929,7 @@ File premises: PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, T
 | `Threadsync.WG.main_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.waitGroup_spec` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Threadsync.WG.waitGroup_safe` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `Threadsync.WG.waitGroup_completes` | PRF-01, THR-01, THR-02, THR-05, THR-08, ORD-01, ORD-02, ORD-04, TMR-01, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Variants/Proofs.lean`
 
@@ -2857,6 +2869,19 @@ File premises: SEM-01, SEM-02, SEM-03, SEM-04, TRU-01
 | `example@L35` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `example@L40` | SEM-01, SEM-02, SEM-04, TRU-01 |
 | `example@L47` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+
+## `tests/roadmap/proof-tools/Unroll.lean`
+
+File premises: PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03
+
+| Theorem | Premises |
+|---|---|
+| `counter_completes` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L22` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L28` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L34` | PRF-01, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-03, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
+| `example@L40` | TRU-01 |
+| `example@L44` | THR-01, SEM-01, SEM-02, SEM-03, TRU-01 |
 
 ## `tests/roadmap/resize-remap/Kernel.lean`
 
