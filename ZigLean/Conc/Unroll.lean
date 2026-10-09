@@ -83,7 +83,6 @@ namespace Unroll
 inductive Sel where
   | approx
   | exact
-  deriving DecidableEq
 
 instance instPartialOrderSel : PartialOrder Sel where
   rel x y := x = .approx ∨ x = y
@@ -196,11 +195,11 @@ def solveMono (goal : MVarId) : MetaM Unit := do
     todo := gs ++ rest
 
 /-- `fun s => e'` where `e'` is `e` with its loops cut after `k` iterations at `s = approx`
-(`expandCore`), and a proof that it is monotone. At `exact` it is `e` (by unfolding). -/
-def expand (k : Nat) (e : Expr) : MetaM (Expr × Expr) := do
+(`expandCore`, unfolding the definitions in `runs`), and a proof that it is monotone. At `exact`
+it is `e` (by unfolding). -/
+def expand (runs : NameSet) (k : Nat) (e : Expr) : MetaM (Expr × Expr) := do
   let f ← withLocalDeclD `s (mkConst ``Sel) fun s => do
-    let e' ← expandCore (← loopRunners e.getUsedConstants) (mkNatLit k) s e
-    mkLambdaFVars #[s] e'
+    mkLambdaFVars #[s] (← expandCore runs (mkNatLit k) s e)
   let ty ← inferType e
   let inst ← synthInstance (← mkAppM ``PartialOrder #[ty])
   let goal ← mkFreshExprMVar
@@ -558,8 +557,9 @@ elab "unroll_sched " k:num : tactic => withMainContext do
   let_expr Eq _ lhs _ := ty | throwError "unroll_sched: the goal is not an equation"
   unless lhs.isAppOfArity ``Witness.okVal 1 && lhs.appArg! == run do
     throwError "unroll_sched: expected `Witness.okVal (Sched.run …) = _`"
-  let (fD, hD) ← expand k.getNat args[2]!
-  let (fP, hP) ← expand k.getNat args[5]!
+  let runs ← loopRunners (args[2]!.getUsedConstants ++ args[5]!.getUsedConstants)
+  let (fD, hD) ← expand runs k.getNat args[2]!
+  let (fP, hP) ← expand runs k.getNat args[5]!
   let approx := mkConst ``Sel.approx
   let le (h : Expr) := mkApp3 h approx (mkConst ``Sel.exact) (mkConst ``approx_le)
   let cut := mkAppN run.getAppFn (args.set! 2 (mkApp fD approx) |>.set! 5 (mkApp fP approx))
