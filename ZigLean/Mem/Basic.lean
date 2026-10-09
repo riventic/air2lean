@@ -255,6 +255,18 @@ structure OwnedAlloc where
   starts : List (BlockId × Nat) := []
   deriving DecidableEq, Repr, Inhabited
 
+/-- The kernel's and libc's per-process state that the trusted OS thread primitives keep
+(`ZigLean/Os/`, `docs/os-threads.md`). Only those models read or write it. -/
+structure OsState where
+  /-- The threads with a pending interrupt (`tgkill`/`pthread_kill` of `SIG.IO`, premise OSG-01). -/
+  interrupts : Array ThreadId := #[]
+  /-- The number of clock reads so far: the index of the next one into the clock oracle
+  (premise OSK-01). -/
+  clockReads : Nat := 0
+  /-- Each thread's libc `errno` cell (macOS `__error()`), made at its first use. -/
+  errno : Array (ThreadId × BlockId) := #[]
+  deriving Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The lowest address that the next block can get. Never 0. -/
@@ -293,6 +305,8 @@ structure Mem where
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
   spawnLimit : Option Nat := none
+  /-- The state of the trusted OS thread primitives (`ZigLean/Os/`). -/
+  os : OsState := {}
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
