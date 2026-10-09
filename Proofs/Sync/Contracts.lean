@@ -58,12 +58,10 @@ structure MutexContract (lockOp unlockOp : Ptr → Io → ConcM Tgt Unit) : Prop
     ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat), P.inv (upd G t g) m →
     P.WP t (lockOp L.ptr io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d
-  /-- `unlock` by the holder `t`, the current thread: it goes to `out` and the lock owns the
-  resource again. -/
+  /-- `unlock` by the holder `t`: it goes to `out` and the lock owns the resource again. -/
   unlock : ∀ {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
     {ok : γ → Prop}, L.FitsOn P U ok → L.c = 2 → ∀ (t : ThreadId) (g : γ), L.ph g = .holds →
     ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat), P.inv (upd G t g) m →
-    m.current = t →
     P.WP t (unlockOp L.ptr io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d
 
@@ -75,8 +73,8 @@ theorem ptr_add0 (p : Ptr) : (p.add 0).add 0 = p := by
 theorem mutex : MutexContract Io_Mutex_lockUncancelable Io_Mutex_unlock where
   lock hP hc t g hg hok io G m d hi :=
     MutexOps.lock_specOn hP (ptr_add0 _) (by rw [hc]; rfl) t g hg hok io G m d hi
-  unlock hP hc t g hg hok io G m d hi hcur :=
-    MutexOps.unlock_specOn hP (ptr_add0 _) (by rw [hc]; rfl) t g hg hok io G m d hi hcur
+  unlock hP hc t g hg hok io G m d hi :=
+    MutexOps.unlock_specOn hP (ptr_add0 _) (by rw [hc]; rfl) t g hg hok io G m d hi
 
 /-- The lock invariant, as a client sees it: the holder's resource satisfies `L.R`. -/
 theorem MutexContract.held_res {γ : Type} {L : Lock γ} {G : ThreadId → γ} {m : Mem}

@@ -1,12 +1,13 @@
 import Proofs.Sync.Gen
 import Proofs.Threadsync.Lock
 
-/-! Owner check of a mutex unlock (`Thread.mutexOwnerCheck`) on the translated std code: an
-unlock by a thread that did not make the most recent successful acquire is `.illegal`; the
-holder's unlock of a contended lock (a waiter wrote the word) is not. The translated
-`Io.Mutex` (0.16.0, `Proofs/Sync/Gen.lean`) and `Thread.Mutex` (0.15.2, `Proofs/Threadsync/Gen.lean`:
-`FutexImpl` on Linux, `DarwinImpl` with `Gen-darwin.lean` on macOS). Run with
-`lake env lean --run tests/review/MutexOwner.lean`. -/
+/-! Owner check of a mutex unlock (`Thread.mutexOwnerCheck`) on the translated std code. For
+`Thread.Mutex` (0.15.2, `Proofs/Threadsync/Gen.lean`: `FutexImpl` on Linux, `DarwinImpl` with
+`Gen-darwin.lean` on macOS), an unlock by a thread that did not make the most recent successful
+acquire is `.illegal`; the holder's unlock of a contended lock (a waiter wrote the word) is not.
+`Io.Mutex` (0.16.0, `Proofs/Sync/Gen.lean`) has no owner: an unlock of the held mutex by another
+thread runs as std does (`.ok`), and an unlock of an unlocked one reaches std's `unreachable`. Run
+with `lake env lean --run tests/review/MutexOwner.lean`. -/
 
 open Zig
 
@@ -49,17 +50,23 @@ private def oracles : Array (Nat → Nat) :=
   #[fun _ => 0, fun i => (i + 1) % 3, fun i => (2 * i + 2) % 3, fun i => i % 2,
     fun i => (i / 2) % 2, fun i => if i % 3 == 0 then 1 else 0, fun i => (i / 3) % 3]
 
-/-- The two regressions under several schedule oracles. `waiterWrites`: some oracle makes the
-spawned thread write the held word (`xchg`/`swap` of the contended value) before `main`'s unlock. -/
+/-- The regressions under several schedule oracles. `owned`: a cross-thread unlock is `.illegal`
+(else it ends `.ok`). `waiterWrites`: some oracle makes the spawned thread write the held word
+(`xchg`/`swap` of the contended value) before `main`'s unlock. `double`: the error of a double
+unlock. -/
 private def run {T : Type} (label : String) (lock unlock : Ptr → ConcM T Unit)
-    (dispatch : T → ConcM T Unit) (other foreign : Ptr → T) (waiterWrites : Bool) : IO Unit := do
+    (dispatch : T → ConcM T Unit) (other foreign : Ptr → T) (owned waiterWrites : Bool)
+    (double : Error) : IO Unit := do
   let res := fun (o : Nat → Nat) (f : Bool) =>
     (Sched.runTrace ⟨.any, .available⟩ dispatch 5000 o
       (prog lock unlock (if f then foreign else other) f) {}).1.map (·.map Prod.fst)
   let mut wrote := false
   for k in [0:oracles.size] do
     let o := oracles[k]!
-    check s!"{label}: cross-thread unlock (oracle {k})" (res o true) (some (.error .illegal))
+    let r := res o true
+    if owned then check s!"{label}: cross-thread unlock (oracle {k})" r (some (.error .illegal))
+    else unless r.any (·.toBool) do
+      throw (IO.userError s!"{label}: cross-thread unlock (oracle {k}): expected .ok, got {reprStr r}")
     match res o false with
     | some (.ok n) => wrote := wrote || n > 2
     | none =>
@@ -70,15 +77,16 @@ private def run {T : Type} (label : String) (lock unlock : Ptr → ConcM T Unit)
     throw (IO.userError s!"{label}: no oracle made the waiter write the held word")
   check s!"{label}: double unlock" ((Sched.runTrace ⟨.any, .available⟩ dispatch 200 (fun _ => 0)
     (do let p ← ConcM.liftMem (alloc .heap 4 4); ConcM.liftMem (store 4 p (0#32))
-        lock p; unlock p; unlock p; pure 7) {}).1.map (·.map Prod.fst)) (some (.error .illegal))
+        lock p; unlock p; unlock p; pure 7) {}).1.map (·.map Prod.fst)) (some (.error double))
 
-/-- `Io.Mutex`: `.work p` locks and unlocks, `.producer p` only unlocks. -/
+/-- `Io.Mutex`: `.work p` locks and unlocks, `.producer p` only unlocks. No owner: a
+cross-thread unlock is legal; a double unlock reaches `unreachable` (`.unlocked => unreachable`). -/
 private def ioMutex : IO Unit :=
   let lock := fun p => Sync.Io_Mutex_lockUncancelable p ⟨⟩
   let unlock := fun p => Sync.Io_Mutex_unlock p ⟨⟩
   run "Io.Mutex" lock unlock
     (fun | .work p => do lock p; unlock p | .producer p => unlock p | _ => pure ())
-    .work .producer true
+    .work .producer false true .unreachable
 
 /-- `Thread.Mutex`: `.work p` locks and unlocks, `.producer p` only unlocks. -/
 private def threadMutex : IO Unit :=
@@ -86,7 +94,7 @@ private def threadMutex : IO Unit :=
     (fun | .work p => do Threadsync.Thread_Mutex_lock p; Threadsync.Thread_Mutex_unlock p
          | .producer p => Threadsync.Thread_Mutex_unlock p | _ => pure ())
     -- a waiter writes the word on Linux (`FutexImpl`); `os_unfair_lock`'s waiters only read it
-    .work .producer (Threadsync.mutexC != 1)
+    .work .producer true (Threadsync.mutexC != 1) .illegal
 
 /-- The holder of a word from its messages (`ALoc.holder`): a waiter's write over a held word
 keeps the holder; an unlock clears it; the next acquire names its writer. -/

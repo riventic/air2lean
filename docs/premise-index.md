@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-2370 theorems in 135 files.
+2369 theorems in 135 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -20,17 +20,17 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [ALC-08](premises.md#alc-08) | 95 | Thread-safe allocator in concurrent code |
-| [THR-01](premises.md#thr-01) | 1276 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 1275 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 127 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 92 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 14 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 825 | Futex model |
+| [THR-05](premises.md#thr-05) | 824 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 62 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1077 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1076 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 6 | Eventually cooperative schedule (progress premise) |
-| [ORD-01](premises.md#ord-01) | 1034 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1034 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1033 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1033 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 368 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 506 | Weak CAS spurious failure |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
@@ -40,14 +40,14 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-03](premises.md#mth-03) | 15 | Version-specific compiler-rt float semantics |
 | [ASM-01](premises.md#asm-01) | 4 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 4 | Instruction behavior as an explicit hypothesis |
-| [SEM-01](premises.md#sem-01) | 2241 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 1897 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2240 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 1896 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1073 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 57 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 23 | Model step and allocation counts are not time or memory measurements |
 | [EXT-01](premises.md#ext-01) | 25 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 2370 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 2369 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1131 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1131 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 28 | Reviewed opaque, extern and runtime-redirection policy |
@@ -1016,7 +1016,6 @@ File premises: PRF-02, ALC-08, THR-01, THR-02, THR-03, THR-05, THR-08, ORD-01, O
 | `Sync.RwLockRead.wp_weakCas` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.wp_rmwAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
 | `Sync.RwLockRead.wp_casAs` | PRF-02, THR-01, THR-05, THR-08, ORD-01, ORD-02, ORD-03, ORD-04, SEM-01, SEM-02, SEM-03, TRU-01, TRU-02, TRU-03 |
-| `Sync.RwLockRead.MLast.congr` | THR-01, THR-05, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, TRU-01 |
 | `Sync.RwLockRead.Ph.mp_setM` | TRU-01 |
 | `Sync.RwLockRead.Ph.wb_setM` | TRU-01 |
 | `Sync.RwLockRead.Ph.ib_setM` | TRU-01 |

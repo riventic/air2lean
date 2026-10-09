@@ -1815,7 +1815,7 @@ theorem waitInner_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (hL :
   simp only [StateT.run_bind]
   -- `unlock`
   refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl 0
-    (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄ hop₂.current)))
+    (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄)))
   rintro _ G₃ m₅ d₃ ⟨hd₃, hc₅, hi₅⟩
   have hi₅' : proto.inv (upd G₃ 0 (gP { ph := .reg, cw := true })) m₅ := hi₅
   have hfl := hi₅'.2.flags
@@ -2096,7 +2096,7 @@ theorem condWait_spec_v017 (G : ThreadId → Gh) (m : Mem) (d : Nat) (io : Io) (
   simp only [StateT.run_bind]
   -- `unlock`
   refine WP.bind (WP.callC (WP.mono ?_ (MutexOps.unlock_spec fits mptr rfl 0
-    (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄ hop₂.current)))
+    (gH { ph := .reg, cw := true } hL) rfl _ G₂ m₄ k₂ hi₄)))
   rintro _ G₃ m₅ d₃ ⟨hd₃, hc₅, hi₅⟩
   have hi₅' : proto.inv (upd G₃ 0 (gP { ph := .reg, cw := true })) m₅ := hi₅
   have hfl := hi₅'.2.flags

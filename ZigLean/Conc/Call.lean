@@ -165,14 +165,12 @@ def groupAwaitC (g : Ptr) (_ : Io) : CM Tgt σ (Except ErrName Unit) := do
 def groupCancelC (g : Ptr) (io : Io) : CM Tgt σ Unit := do
   let _ ← groupAwaitC g io
 
-/-! ### Mutex unlocks (0.14.1 to 0.17.0) -/
+/-! ### `std.Thread` (0.14.1, 0.15.2; `docs/std-models.md` §Thread model) -/
 
 /-- The owner check (`Thread.mutexOwnerCheck`) that the translator puts at the start of the
-translated `Thread.Mutex.FutexImpl.unlock` and `Io.Mutex.unlock` (`Air2Lean.ownerCheckedUnlocks`):
-the mutex word is at offset 0 of `p`. -/
+translated `Thread.Mutex.FutexImpl.unlock` (`Air2Lean.ownerCheckedUnlocks`): the mutex word is at
+offset 0 of `p`. -/
 def mutexOwnerCheck (p : Ptr) : ConcM Tgt Unit := ConcM.liftMem (Thread.mutexOwnerCheck p)
-
-/-! ### `std.Thread` (0.14.1, 0.15.2; `docs/std-models.md` §Thread model) -/
 
 /-- `Thread.Futex.wait(ptr, expect)`: the futex wait of the model (no `Io`). -/
 def threadFutexWaitC (p : Ptr) (expected : BitVec 32) : CM Tgt σ Unit :=

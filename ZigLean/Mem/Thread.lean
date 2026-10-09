@@ -492,7 +492,7 @@ recent successful acquire of the word (`Mem.mutexHeld`), else `.illegal`: an unl
 thread, a double unlock, an unlock of a lock that was never locked. It changes nothing. It runs
 before `os_unfair_lock_unlock` (macOS terminates the process on a foreign unlock) and before
 the translated `Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2: a foreign unlock is undefined
-behavior) and `Io.Mutex.unlock` (0.16.0, 0.17.0: a model restriction; `docs/std-models.md`).
+behavior). Not before `Io.Mutex.unlock`: it has no owner (`docs/std-models.md`).
 It keys on the acquire, not on the newest write: a waiter's write to the word does not make the
 holder's unlock fail. -/
 def mutexOwnerCheck (p : Ptr) : MemM Unit := do

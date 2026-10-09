@@ -138,18 +138,13 @@ theorem lock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.p
     rw [L.set_set] at hi₂
     exact hloop G₂ m₂ k₂ ⟨by omega, hc₂, hi₂⟩
 
-/-- `unlock` by the holder `t` (`g`), the current thread: the owner check passes
-(`Inv.ownerCheck`), and it goes to `out`. -/
+/-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_specOn (hP : L.FitsOn P U ok) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t := by first | assumption | rfl) :
+    (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   unfold Io_Mutex_unlock
-  have hp' : p = L.ptr := by rw [← hp]; cases p; simp [Ptr.add]
-  have hrun := ((hP.inv _ _).mp hi).1.ownerCheck (by rw [upd_self]; exact hg) hcur
-  rw [← hp'] at hrun
-  refine WP.ownerCheck hrun ?_
   refine WP.bind ?_
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -177,13 +172,13 @@ theorem lock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS
       m'.current = t ∧ ∃ hL, P.inv (upd G' t (L.set g .holds hL)) m') G m d :=
   lock_specOn hP.on hp hS t g hg trivial io G m d hi
 
-/-- `unlock` by the holder `t` (`g`), the current thread: it goes to `out`. -/
+/-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_spec (hP : L.Fits P U) {p : Ptr} (hp : (p.add 0).add 0 = L.ptr) (hS : mutexS.c = L.c)
     (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t := by first | assumption | rfl) :
+    (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_unlock p io) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d :=
-  unlock_specOn hP.on hp hS t g hg trivial io G m d hi hcur
+  unlock_specOn hP.on hp hS t g hg trivial io G m d hi
 
 end MutexOps
 end Sync
