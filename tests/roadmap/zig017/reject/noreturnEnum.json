@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.never",
+ "module": "root",
  "params": [
   0
  ],
@@ -47,6 +48,7 @@
   {
    "k": "enum",
    "name": "zig017.Never",
+   "module": "root",
    "tag": 1,
    "exhaustive": true,
    "fields": [],

@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "variants.codeOf",
+ "module": "root",
  "params": [
   0
  ],
@@ -169,6 +170,7 @@
   {
    "k": "enum",
    "name": "variants.Code",
+   "module": "root",
    "tag": 0,
    "exhaustive": false,
    "fields": [

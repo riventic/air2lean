@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "variants.radius",
+ "module": "root",
  "params": [
   0
  ],
@@ -229,6 +230,7 @@
        "callee": {
         "ty": 8,
         "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__func_0",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -291,6 +293,7 @@
   {
    "k": "union",
    "name": "variants.Shape",
+   "module": "root",
    "layout": "auto",
    "tag": 5,
    "fields": [
@@ -329,6 +332,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -347,6 +351,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -355,6 +360,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
+   "module": "root",
    "tag": 11,
    "exhaustive": true,
    "fields": [
@@ -398,6 +404,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -406,6 +413,7 @@
   {
    "k": "struct",
    "name": "variants.Rect",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {

@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.double__func_812",
+ "module": "root",
  "params": [
   0
  ],

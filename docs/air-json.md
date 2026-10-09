@@ -95,8 +95,8 @@ contract in prose.
 | named global (`nav`) | `name`, `ty`, `const`, `threadlocal`, `extern` | `module`¹, `init` |
 | unnamed global (`uav`) | `ty`, `const`, `init` | — |
 
-¹ The module identity keys of the module-identity change (`Schema.moduleRequired`). They are
-optional until that exporter change is integrated, and then required in schema 12.
+¹ The module identity keys of the module-identity change. `Schema.moduleRequired` is set: every
+schema-12 file carries them, and a file without them is rejected.
 
 Each instruction tag has one payload entry (`instPayload`), following the exporter's
 `writeInst`: for example `args` for every `bin_op`, `un_op` and `ty_op` tag, `callee` and
@@ -165,7 +165,7 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | Field | When |
 |---|---|
 | `id` | always. AIR instruction index, unique in the function. |
-| `tag` | always. AIR tag name, verbatim. |
+| `tag` | always. AIR tag name, verbatim. Zig 0.17.0's renamed and split tags (`int_cast`, `bit_cast`, `ptr_cast`, `error_cast`, `agg_field_val`, …, `Canon.tagAliases017`) and `div_ceil` have the payload of the 0.16.0 tag they replace; the schema table lists them, and `Canon.versionTags` maps them to the 0.16.0 spelling after validation. |
 | `ty` | result type ID. Missing only for `inferred_alloc*`. |
 | `args` | operands, in AIR order |
 | `param` | `arg`: ZIR parameter index |

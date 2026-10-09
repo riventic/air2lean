@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.fromBacking",
+ "module": "root",
  "params": [
   0
  ],
@@ -68,6 +69,7 @@
   {
    "k": "enum",
    "name": "zig017.Color",
+   "module": "root",
    "tag": 0,
    "exhaustive": true,
    "fields": [

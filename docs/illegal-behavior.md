@@ -36,7 +36,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 4 | Slice start greater than end | `startGreaterThanEnd` | `.outOfBounds` | the length `sub` overflows: `.overflow` |
 | 5 | Slice end past the length | `outOfBounds` | `.outOfBounds` | `Zig.checkSliceEnd` on `slice(ptr_add(base, start), len)`, where `base` is a slice's `slice_ptr` or an array pointer: `.illegal` (**fixed**, was a slice past the operand). A many-item pointer has no length, so its slicing has no bound to break |
 | 6 | Cast negative to unsigned / cast truncates data (`@intCast`) | `integerOutOfBounds` | `.overflow` | `intcast`: `Zig.intCast`, `.overflow` |
-| 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor` of `minInt / -1`) | `integerOverflow`, `*_safe` tags | `.overflow` | plain `add`/`sub`/`mul`, `div_trunc`/`div_floor`: `.overflow` |
+| 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor`, 0.17.0 `@divCeil` of `minInt / -1`) | `integerOverflow`, `*_safe` tags | `.overflow` | plain `add`/`sub`/`mul`, `div_trunc`/`div_floor`/`div_ceil`: `.overflow` |
 | 8 | Division by zero (integers) | `divideByZero` | `.divByZero` | `.divByZero` |
 | 9 | Remainder division by zero (integers) | `divideByZero` | `.divByZero` | `.divByZero` |
 | 10 | Exact division remainder (integers) | `exactDivisionRemainder` (Sema emits `div_trunc` and `rem`) | `.panic` | `div_exact`: `Zig.divExact`, `.illegal` for a remainder, a zero divisor and `minInt / -1` (**fixed**, was `.panic`/`.divByZero`/`.overflow`) |

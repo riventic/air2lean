@@ -24,6 +24,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "zig017.both",
+ "module": "root",
  "params": [
   0,
   0

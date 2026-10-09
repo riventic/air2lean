@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "basic.totalWeightedTardiness",
+ "module": "root",
  "params": [
   0
  ],
@@ -468,6 +469,7 @@
                "callee": {
                 "ty": 13,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -534,6 +536,7 @@
            "callee": {
             "ty": 16,
             "func": "basic.weightedTardiness",
+            "module": "root",
             "noreturn": false
            },
            "args": [
@@ -688,6 +691,7 @@
                "callee": {
                 "ty": 13,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -921,6 +925,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -941,6 +946,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -959,6 +965,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -972,6 +979,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -992,6 +1000,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1005,6 +1014,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1028,6 +1038,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1050,6 +1061,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1058,6 +1070,7 @@
   {
    "k": "struct",
    "name": "basic.Job",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -1091,6 +1104,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

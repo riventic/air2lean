@@ -193,7 +193,7 @@ def instPayload (tag : String) : Option (List Key) :=
     some [args, req "success_order" .str, req "failure_order" .str]
   | "reduce" | "reduce_optimized" | "cmp_vector" | "cmp_vector_optimized" =>
     some [args, req "op" .str]
-  | "union_init" | "struct_field_ptr" | "struct_field_val" | "field_parent_ptr" =>
+  | "union_init" | "struct_field_ptr" | "struct_field_val" | "agg_field_val" | "field_parent_ptr" =>
     some [args, req "index" .nat]
   | "arg" => some [req "param" .nat]
   | "block" | "loop" => some [req "body" .arr]
@@ -222,7 +222,9 @@ where
     "array_elem_val", "slice_elem_val", "ptr_elem_val", "shl", "shl_exact", "shl_sat", "shr",
     "shr_exact", "min", "max", "set_union_tag", "memset", "memset_safe", "memcpy", "memmove",
     "atomic_store_unordered", "atomic_store_monotonic", "atomic_store_release",
-    "atomic_store_seq_cst"]
+    "atomic_store_seq_cst",
+    -- Zig 0.17.0 only (`Compat.isNewBinOp`).
+    "div_ceil"]
   unTags : List String := ["is_null", "is_non_null", "is_err", "is_non_err", "ret", "ret_safe",
     "ret_load", "neg", "is_named_enum_value", "is_null_ptr", "is_non_null_ptr", "tag_name",
     "error_name", "is_err_ptr", "is_non_err_ptr", "sqrt", "sin", "cos", "tan", "exp", "exp2",
@@ -235,7 +237,11 @@ where
     "struct_field_ptr_index_3", "ptr_slice_len_ptr", "ptr_slice_ptr_ptr", "fptrunc", "fpext",
     "int_from_float", "int_from_float_safe", "float_from_int", "get_union_tag",
     "optional_payload_ptr", "optional_payload_ptr_set", "splat", "unwrap_errunion_payload_ptr",
-    "unwrap_errunion_err_ptr", "errunion_payload_ptr_set"]
+    "unwrap_errunion_err_ptr", "errunion_payload_ptr_set",
+    -- Zig 0.17.0's renamed and split casts (`Compat.isNewTyOp`; `Canon.tagAliases017`).
+    "bit_cast", "bit_cast_safe", "int_cast", "int_cast_safe", "ptr_cast", "ptr_from_int",
+    "int_from_ptr", "error_cast", "error_from_int", "int_from_error", "union_from_enum",
+    "array_to_vector"]
   extraBinTags : List String := ["add_with_overflow", "sub_with_overflow", "mul_with_overflow",
     "shl_with_overflow", "slice_elem_ptr", "ptr_elem_ptr", "ptr_add", "ptr_sub", "slice"]
 

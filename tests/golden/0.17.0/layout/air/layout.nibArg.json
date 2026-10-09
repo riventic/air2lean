@@ -114,6 +114,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "layout.nibArg",
+ "module": "root",
  "params": [
   0
  ],
@@ -154,6 +155,7 @@
    "callee": {
     "ty": 4,
     "func": "layout.nibSigned",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -202,6 +204,7 @@
   {
    "k": "union",
    "name": "layout.Nib",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
