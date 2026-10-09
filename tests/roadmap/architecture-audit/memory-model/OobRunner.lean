@@ -1,6 +1,7 @@
--- Appended to the fresh `OobPtr` translation of oob_ptr.zig (check.sh).
+-- Appended to the fresh `OobPtr` translation of oob_ptr.zig (check.sh). Runs under the
+-- harness's concrete placement (`Zig.Placement.fresh`).
 private def okBool (x : Zig.MemM Bool) : String :=
-  match (x.run' OobPtr.mem0).run with
+  match (x.run' (OobPtr.mem0 .fresh)).run with
   | some (.ok v) => if v then "1" else "0"
   | some (.error e) => s!"error {reprStr e}"
   | none => "diverges"
