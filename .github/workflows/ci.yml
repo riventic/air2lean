@@ -515,7 +515,7 @@ jobs:
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean
+          lake build ZigLean ZigLean.Sep.AllocSpec
           bash tests/roadmap/alloc-translated/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.

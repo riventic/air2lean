@@ -136,7 +136,9 @@ logics.
   tail beyond `len`).
 * P4 (PageAllocator), FixedBufferAllocator: prove `AllocSpec Logic.total vt ctx I` for the
   translated vtable with an `I` describing the allocator's state; every wrapper contract then
-  follows from this file.
+  follows from this file. For the page allocator this is impossible as stated (atomic locations
+  and dead blocks are outside the heap, and `granted` hides the mapping's size):
+  [alloc-page.md](alloc-page.md).
 
 ## Relation to the legacy models it replaces
 
