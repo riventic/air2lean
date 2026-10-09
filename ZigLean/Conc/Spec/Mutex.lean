@@ -76,19 +76,23 @@ inductive MOp where
   | unlock
   deriving DecidableEq, Repr
 
-/-- A mutex implementation: its shared state for a resource type `X` (atomic words with views,
-a futex, …), the threads' places in its code, and its atomic steps. -/
-structure MutexImpl where
+/-- An implementation of a sync object with the ops `Op`: its shared state for a resource type
+`X` (atomic words with views, a futex, …), the threads' places in its code, and its atomic
+steps. -/
+structure Impl (Op : Type) where
   Sh : Type → Type
   /-- The shared state at the start, when every view is `x₀`. -/
   init : {X : Type} → X → Sh X → Prop
   Loc : Type
   /-- The place where an op starts. -/
-  start : MOp → Loc
+  start : Op → Loc
   /-- An atomic step of thread `t` at `l` with view `v`: the new place, shared state and view. -/
   step : {X : Type} → Tid → Loc → Sh X → X → Loc → Sh X → X → Prop
   /-- The op at `l` has returned `b`. -/
   done : Loc → Option Bool
+
+/-- A mutex implementation. -/
+abbrev MutexImpl := Impl MOp
 
 /-- What a thread of the most general client is. -/
 inductive Ctl (L : Type) where
