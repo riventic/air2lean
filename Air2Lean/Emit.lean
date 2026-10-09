@@ -2279,8 +2279,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .sliceElemVal s i =>
     -- A pure function has the items (`Array`); a function that uses memory reads them, after
     -- its own bounds check (`Zig.checkIndex`: `.illegal` where no Sema check precedes it).
+    let sentinel := ((fc.valTyId? s).bind (fc.layouts[·]?)).any (·.sentinel)
+    let check := if sentinel then "Zig.checkSentinelIndex" else "Zig.checkIndex"
     let expr := if fc.mem then
-        s!"{fc.callMName} (Zig.checkIndex {rv s} {rv i} >>= fun _ => {fc.loadItem s s!"{rv s}.ptr" (rv i)})"
+        s!"{fc.callMName} ({check} {rv s} {rv i} >>= fun _ => {fc.loadItem s s!"{rv s}.ptr" (rv i)})"
       else fc.liftR s!"Zig.index {rv s} {rv i}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .ptrAdd sub p n =>

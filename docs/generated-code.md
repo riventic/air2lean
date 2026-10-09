@@ -158,7 +158,7 @@ Scalar nonoptional C/allowzero pointer values have an explicit [qualified fragme
 | `cmp_lt`, `cmp_lte`, `cmp_gt`, `cmp_gte` on pointers | `Zig.ptrLt`, `Zig.ptrLe`: the order of the addresses (`Zig.ptrAddr`) |
 | `ptr_add`, `ptr_sub` | `p.elem size n`, `p.elemSub size n` (`size`: the item's `abi_size`) |
 | `ptr_elem_ptr`, `slice_elem_ptr` | `p.elem size i`; of a slice `s.ptr.elem size i` |
-| `ptr_elem_val`, `slice_elem_val` | `Zig.load T align (p.elem size i)` (`align`: the pointer's `align(N)`, at most `T`'s alignment). `slice_elem_val` first runs `Zig.checkIndex s i`: an index at or past the length is `.illegal` |
+| `ptr_elem_val`, `slice_elem_val` | `Zig.load T align (p.elem size i)` (`align`: the pointer's `align(N)`, at most `T`'s alignment). `slice_elem_val` first runs `Zig.checkIndex s i`: an index at or past the length is `.illegal` (`Zig.checkSentinelIndex` for `[:s]T`, whose sentinel item at the length is readable) |
 | `slice`, `slice_ptr`, `slice_len`, `array_to_slice` | `⟨p, len⟩`, `s.ptr`, `s.len`, `⟨p, N⟩` |
 | `memset`, `memset_safe` | `Zig.memset (α := T) align p n (some v)`; `none` for `undefined` |
 | `memmove` | `Zig.memmove size dstAlign srcAlign dst src n` (all bytes are read before the first write) |

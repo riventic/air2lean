@@ -503,6 +503,11 @@ Sema's bounds check (`outOfBounds`) catches, so the model checks it itself: `.il
 def checkIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
   if i.toNat < s.len.toNat then pure () else throw .illegal
 
+/-- `checkIndex` for a slice with a sentinel (`[:s]T`): its sentinel item, at the length, is an
+item too (Sema reads it to check sentinel slicing). -/
+def checkSentinelIndex (s : Slice) (i : BitVec 64) : MemM Unit :=
+  if i.toNat ≤ s.len.toNat then pure () else throw .illegal
+
 /-- The items of `s`, for a call to a pure function with a `[]const T` parameter. An undefined
 byte in any item throws `.unspecified`, also in an item that the function does not read.
 Zero-sized items are decoded from empty bytes without accessing the slice pointer. -/

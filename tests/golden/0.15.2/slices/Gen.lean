@@ -646,7 +646,7 @@ def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slic
           throw .outOfBounds)) : Zig.MM subZLocals subZExit) with
       | .br15 => (do
         let i20 ← pure (⟨i4, i11⟩ : Zig.Slice)
-        let i21 ← Zig.callM (Zig.checkIndex i20 i11 >>= fun _ => Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
+        let i21 ← Zig.callM (Zig.checkSentinelIndex i20 i11 >>= fun _ => Zig.load (BitVec 8) 1 (i20.ptr.elem 1 i11))
         let i22 ← pure ((0 : BitVec 8) == i21)
         match ← ((do
           if i22 then (do

@@ -31,7 +31,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | # | Illegal behaviour | ReleaseSafe check (handler) | Model, safe AIR | Model, unsafe AIR |
 | --- | --- | --- | --- | --- |
 | 1 | Reaching `unreachable` | `reachedUnreachable` | `.unreachable` | bare `unreach`: `.illegal` (**fixed**, was `.unreachable`) |
-| 2 | Index out of bounds: array, slice | `outOfBounds` | `.outOfBounds` | pure `Zig.index`/`Zig.vindex`: `.outOfBounds`. Memory `slice_elem_val`: `Zig.checkIndex`, `.illegal` (**fixed**, was a value when the item lay inside the block) |
+| 2 | Index out of bounds: array, slice | `outOfBounds` | `.outOfBounds` | pure `Zig.index`/`Zig.vindex`: `.outOfBounds`. Memory `slice_elem_val`: `Zig.checkIndex` (the sentinel item of `[:s]T` included), `.illegal` (**fixed**, was a value when the item lay inside the block) |
 | 3 | Index out of bounds: many-item pointer | none (no length) | `Mem.access`: `.illegal` outside the allocation | same |
 | 4 | Slice start greater than end | `startGreaterThanEnd` | `.outOfBounds` | the length `sub` overflows: `.overflow` |
 | 5 | Slice end past the length | `outOfBounds` | `.outOfBounds` | **gap**: the `slice` op has no source length. A later access outside the allocation is `.illegal`; inside it is a value |

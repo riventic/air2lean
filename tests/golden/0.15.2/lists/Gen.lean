@@ -545,7 +545,7 @@ def mem_Allocator_dupeZ__anon_1 (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM
                   throw .outOfBounds)) : Zig.MM mem_Allocator_dupeZ__anon_1Locals mem_Allocator_dupeZ__anon_1Exit) with
               | .br59 => (do
                 let i64 ← pure (⟨i54, i55⟩ : Zig.Slice)
-                let i65 ← Zig.callM (Zig.checkIndex i64 i55 >>= fun _ => Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
+                let i65 ← Zig.callM (Zig.checkSentinelIndex i64 i55 >>= fun _ => Zig.load (BitVec 8) 1 (i64.ptr.elem 1 i55))
                 let i66 ← pure ((0 : BitVec 8) == i65)
                 match ← ((do
                   if i66 then (do
@@ -591,7 +591,7 @@ def dupeZLen.loop11 (i3 : Zig.Slice) : Zig.MM dupeZLenLocals dupeZLenExit := do
       else (do
         throw .outOfBounds)) : Zig.MM dupeZLenLocals dupeZLenExit) with
     | .br16 => (do
-      let i21 ← Zig.callM (Zig.checkIndex i3 i13 >>= fun _ => Zig.load (BitVec 8) 1 (i3.ptr.elem 1 i13))
+      let i21 ← Zig.callM (Zig.checkSentinelIndex i3 i13 >>= fun _ => Zig.load (BitVec 8) 1 (i3.ptr.elem 1 i13))
       let i22 ← pure (i21 != (0 : BitVec 8))
       if i22 then (do
         let i24 ← pure ((← get).n)
