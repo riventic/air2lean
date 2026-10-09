@@ -346,7 +346,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn('every selector', full['domain'])
         statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec_full']
         self.assertNotIn('≠', statement['statement'])
-        self.assertIn('opSpec128 op128Profile sel', statement['statement'])
+        self.assertIn('opSpec128 floatopsTarget op128Profile sel', statement['statement'])
 
     def test_f05_profile_follows_the_version(self):
         # `op128Profile` elaborates either profile, so pin which one each version's `op128` selects:
