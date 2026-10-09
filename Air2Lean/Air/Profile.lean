@@ -244,20 +244,20 @@ def checkProgram (profiles : Array BuildProfile) (expected : Option String := no
 
 end BuildProfile
 
-/-- The dialect of a validated profile (`BuildProfile.parse`): the only reader of its Zig
-version, target triple and build mode. Fails closed for a version outside `ZigVersion.all` or a
-schema-12 target outside `Target.qualified`. -/
+/-- The dialect of a profile: the only reader of its Zig version, target triple and build mode.
+Fails closed for a version outside `ZigVersion.all`. The target facts are those that
+`BuildProfile.collect` validated against `Target.qualified`; the diagnostics path also inspects
+a body under the placeholder profile of an invalid one (its violations already reported), whose
+recorded facts are kept as they are. A legacy profile (`unverified` triple) has no target
+architecture: the unverified 64-bit little-endian reference model. -/
 def Dialect.ofProfile (p : BuildProfile) : Except String Dialect := do
   let some version := ZigVersion.ofString? p.zigVersion
     | throw s!"unsupported zig_version '{p.zigVersion}' (supported: \
         {", ".intercalate (ZigVersion.all.map toString)})"
-  let some endian := Endian.ofString? p.endian
-    | throw s!"profile.endian '{p.endian}' is outside the little/big-endian memory model"
-  -- A legacy profile has no target: the unverified 64-bit little-endian reference model.
-  let arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
-  unless arch.isEmpty || (Target.qualified.any (·.arch == arch)) do
-    throw s!"profile.target_triple: outside the {Target.scope} model ABI scope"
-  pure { version, arch, ptrBytes := p.pointerBits / 8, endian, errorSetBits := p.errorSetBits,
-         backend := p.backend, buildMode := p.buildMode }
+  pure { version
+         arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
+         ptrBytes := p.pointerBits / 8
+         endian := (Endian.ofString? p.endian).getD .little
+         errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }
 
 end Air2Lean

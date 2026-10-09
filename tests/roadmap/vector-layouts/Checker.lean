@@ -107,13 +107,9 @@ def main : IO Unit := do
   IO.println "lane pointers: integer and bool lanes are bit-pointers on LLVM x86_64/aarch64"
   for (backend, schema, triple) in [("stage2_x86_64", 12, "x86_64-linux.5.10...6.19-musl"),
       ("stage2_c", 12, "x86_64-linux.5.10...6.19-musl"), ("unverified", 11, "unverified"),
-      ("stage2_llvm", 12, "s390x-linux.5.10...6.19-musl")] do
+      ("stage2_llvm", 12, "riscv64-linux.5.10...6.19-musl"),
+      ("stage2_llvm", 12, "arm-linux.5.10...6.19-musleabihf")] do
     let other ← layoutsOf backend schema triple
     require ([12, 16].all fun i => !tyOk other i && !other[i]!.laneBitPtr)
       s!"{backend} {triple}: a lane pointer is accepted"
-  -- A target outside `Target.qualified` has no dialect: `normalize` rejects it.
-  for triple in ["riscv64-linux.5.10...6.19-musl", "arm-linux.5.10...6.19-musleabihf"] do
-    require (match normalizeCanonical (raw "stage2_llvm" 12 triple) with
-      | .error e => (e.splitOn "model ABI scope").length > 1 | .ok _ => false)
-      s!"{triple}: an unqualified target is normalized"
   IO.println "lane pointers: other backends and targets rejected"

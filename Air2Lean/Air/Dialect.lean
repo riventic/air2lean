@@ -190,8 +190,6 @@ def ofVersion (version : ZigVersion) : Dialect := { version }
 
 def bigEndian (d : Dialect) : Bool := d.endian == .big
 
-def ptrBits (d : Dialect) : Nat := d.ptrBytes * 8
-
 def bitCast (d : Dialect) : ZigVersion.BitCast := d.version.bitCast
 
 /-- Runtime safety checks are on (`Debug`, `ReleaseSafe`); `none` for an unverified build mode. -/
