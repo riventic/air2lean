@@ -22,13 +22,17 @@ returned values. A conjunction is not classified even if its parts would combine
 correctness, since the parts may concern different programs; state `TotalTriple` instead.
 
 `python3 scripts/claims.py report --assurance REPORT` lists `claims`, `claim_class` (the
-strongest claim) and `derived_strength` for every audited theorem.
+strongest claim), `derived_strength` and `premises` for every audited theorem. `premises`
+names what a claim rests on beyond its type: a theorem whose closure contains an inline-asm
+opaque carries [ASM-01](premises.md#asm-01), and a no-panic or guaranteed-return claim over one
+also [ASM-03](premises.md#asm-03), the allowlist fault conditions (S7).
 `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks every project goal
 (`docs/project-workflow.md`). A goal is rejected (exit 1) if its theorem name is not an exact
 audited theorem, the theorem has assurance violations, the declared strength is
 `resource_bound` or `correspondence` (not derivable from these interfaces), or the declared
 strength exceeds the derived one in the order `safety < partial_correctness <
-total_correctness`. Malformed inputs and reports without conclusion shapes exit 2.
+total_correctness`, or the report lacks the theorem's closure (`opaque_dependencies`).
+Malformed inputs and reports without conclusion shapes exit 2.
 
 `check --diff SUMMARY` (repeatable) adds differential outcome evidence for each
 `example.function` root, classified by the shared [outcome taxonomy](outcome-taxonomy.md).

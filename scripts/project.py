@@ -867,7 +867,8 @@ def derived_claim(theorem):
 
     An audit without a conclusion shape (older extractor) derives no strength."""
     found = claims.claims_of(theorem['conclusion']) if 'conclusion' in theorem else frozenset()
-    return {'derived_strength': claims.derived_strength(found), 'claim_class': claims.claim_class(found)}
+    return {'derived_strength': claims.derived_strength(found), 'claim_class': claims.claim_class(found),
+            'premises': claims.premises_of(theorem, found)}
 
 
 def strength_supported(goal):

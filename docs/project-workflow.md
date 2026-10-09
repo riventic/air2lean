@@ -201,8 +201,8 @@ hand-written model, `True`, or with the root only in a hypothesis is `wrapper_or
 even when its proof mentions the generated code. An audit without statement dependencies
 (an older extractor) leaves goals `unbound`. A weak conclusion that mentions the root (for
 example `root x = root x`) still binds, but each direct goal also records the
-`derived_strength` and `claim_class` that `scripts/claims.py` derives from the audited
-conclusion shape, and a declared `safety`/`partial_correctness`/`total_correctness` counts
+`derived_strength`, `claim_class` and `premises` (ASM-01/ASM-03 over an inline-asm opaque) that
+`scripts/claims.py` derives from the audited conclusion shape and closure, and a declared `safety`/`partial_correctness`/`total_correctness` counts
 toward levels and absence claims only up to that derived strength (an unclassified
 conclusion, or an audit without conclusion shapes, derives none). Domains and preconditions
 remain review obligations. `tests/roadmap/assurance/StatementBinding.lean` holds a
