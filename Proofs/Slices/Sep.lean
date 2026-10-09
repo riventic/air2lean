@@ -58,8 +58,8 @@ theorem copyWithin_spec (sl : Slice) (vs : List (BitVec 32)) (d s n : BitVec 64)
     rw [Nat.mod_eq_of_lt (by omega)]; omega
   have hsl : (s.toNat + n.toNat) % 18446744073709551616 ≤ sl.len.toNat := by
     rw [Nat.mod_eq_of_lt (by omega)]; omega
-  have hdc : d.toNat + n.toNat + 0 ≤ sl.len.toNat := by omega
-  have hsc : s.toNat + n.toNat + 0 ≤ sl.len.toNat := by omega
+  have hdc : d.toNat + n.toNat ≤ sl.len.toNat := by omega
+  have hsc : s.toNat + n.toNat ≤ sl.len.toNat := by omega
   have e4 : Enc.size (BitVec 32) = 4 := rfl
   rw [e4] at hr
   simp only [StateT.run, pure, ExceptT.pure, ExceptT.mk] at hr

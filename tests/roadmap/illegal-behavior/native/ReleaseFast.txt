@@ -12,3 +12,10 @@ toIntSafe nan 00000000
 toIntUnsafe nan 00000000
 toIntUnsafe 2^31 00000000
 copyOverlapUnsafe 0101020304060708
+sliceEnd 1..6 len 5
+sliceArray 2..7 len 5
+sentinelBytes 0..2 len 2
+forLen 2/3 6
+forLenMem 2/3 6
+forRange 3/5 9
+parentOf lone true
