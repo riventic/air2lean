@@ -92,6 +92,8 @@ def preflight (funcs : Array Func) (profiles : Array BuildProfile) : Except Stri
     check f
     -- A byte local (`Zig.Bytes T`) is outside the timed subset.
     require (byteLocals f).isEmpty s!"{f.name}: a local with undefined parts"
+    -- The timed body has no `noalias` scope (`Zig.naEnter`/`naMark`, `Air2Lean/Noalias.lean`).
+    require f.noalias.isEmpty s!"{f.name}: noalias parameters are outside the timed subset"
     for i in f.allInsts do
       require (admitted i.op) s!"{f.name}: inst {i.id}: unsupported timed opcode/control flow"
       if let .structFieldVal value field := i.op then

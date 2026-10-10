@@ -49,6 +49,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name as the compiler spells it, e.g. `root` or `std`; not the §Identity key) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `instance_key` | a generic instance only (`name` is `<generic>__anon_<n>`): its content-addressed key, 64 hex digits (§Instances). Additive; older exports omit it, and so does an instance whose comptime arguments have no stable identity. |
 | `params` | type ID of each runtime parameter, in order |
+| `noalias` | the indices into `params` of the `noalias` parameters (Sema's `noalias_bits`: only the first 32 parameters can be `noalias`), in increasing order; `[]` for none. Required in schema 12; legacy schemas have none. The translator checks every call of such a function ([illegal-behavior.md](illegal-behavior.md#noalias-parameters)). `scripts/normalize-air.py` treats `[]` like an absent field, so older goldens compare equal |
 | `ret` | type ID of the return type |
 | `export` | `{name, cc}`: present only for a function declared with the `export` keyword. `name` is the linker symbol it defines, `cc` its calling convention's tag (`std.builtin.CallingConvention`, e.g. `x86_64_sysv`, `aarch64_aapcs_darwin`). `@export` aliases are not reported (§Extern calls). Additive; AIR golden comparison (`scripts/normalize-air.py`) ignores it. |
 | `body` | main body (AIR `getMainBody`) |
@@ -77,7 +78,7 @@ contract in prose.
 
 | Object | Required keys | Optional keys |
 |---|---|---|
-| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key` |
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key` |
 | `profile` | all fields of the example above ([profiles](profiles.md)) | — |
 | every type | `k` | `abi_size`, `abi_align` |
 | `int` / `float` | `signed`, `bits` / `bits` | — |

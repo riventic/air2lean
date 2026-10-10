@@ -37,6 +37,7 @@
  "name": "thread_tuples.zeroWorker",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

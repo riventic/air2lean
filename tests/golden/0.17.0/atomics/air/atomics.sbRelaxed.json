@@ -116,6 +116,7 @@
  "name": "atomics.sbRelaxed",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

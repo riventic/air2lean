@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.Noalias
 import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
@@ -2578,6 +2579,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   for g in f.globals do
     checkGlobal f g
     if let some init := g.init then checkNoThreadlocalConstant f init
+  -- `noalias` parameters: every access has one root, and no tainted value escapes.
+  unless f.noalias.isEmpty do discard <| Noalias.analyze f
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     if let .runtimeNavPtr g := i.op then checkRuntimeNavPtr f i g
@@ -3628,6 +3631,13 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     issues := issues.push { kind := .futureCancel, message }
   if let .error message := checkIoTaskThreadlocals funcs then
     issues := issues.push { kind := .ioTaskThreadlocal, message }
+  -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
+  if funcs.any (!·.noalias.isEmpty) then
+    let conc := concFunctions funcs
+    for f in funcs do
+      if !f.noalias.isEmpty && conc.contains f.name then
+        issues := issues.push { kind := .memory, function := f.name, message :=
+          s!"{f.name}: a concurrent function with noalias parameters is outside the subset" }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -3777,6 +3787,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id })
       (do checkGlobal f g; if let some init := g.init then checkNoThreadlocalConstant f init)
+  unless f.noalias.isEmpty do
+    log := log.record { (checkDiagnostic file f .memoryFailure { idSpace := .canonical }) with
+      category := .unsupportedSemantics } (discard <| Noalias.analyze f)
   for i in insts do
     if let .runtimeNavPtr g := i.op then
       log := log.record (checkDiagnostic file f .globalFailure

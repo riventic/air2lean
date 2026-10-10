@@ -37,6 +37,7 @@
  "name": "thread_locals.twoCounters",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

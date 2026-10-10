@@ -37,6 +37,7 @@
  "name": "tsc.rdtscLow",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

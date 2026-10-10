@@ -41,6 +41,7 @@ for name, callees in program.items():
            'params': [], 'ret': 1, 'body': body, 'types': types}
     if os.environ.get('STUB_PROFILE'):
         air['schema'] = 12
+        air['noalias'] = []
         air['profile'] = json.loads(os.environ['STUB_PROFILE'])
     (out / f'{name}.json').write_text(json.dumps(air))
 if os.environ.get('STUB_WARN'):

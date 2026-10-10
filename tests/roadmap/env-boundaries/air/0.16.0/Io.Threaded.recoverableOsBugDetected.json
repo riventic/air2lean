@@ -37,6 +37,7 @@
  "name": "Io.Threaded.recoverableOsBugDetected",
  "module": "std",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

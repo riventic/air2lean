@@ -96,6 +96,8 @@ FIXTURES = [
      ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/illegal-behavior/Gen.lean", "tests/roadmap/illegal-behavior/air",
      ["--namespace", "IllegalBehavior", "--prefix", "ib."], "exact"),
+    ("tests/roadmap/noalias/Gen.lean", "tests/roadmap/noalias/air",
+     ["--namespace", "Noalias", "--prefix", "na."], "exact"),
     ("tests/roadmap/const-locals/ConstLocals/Gen.lean", "tests/roadmap/const-locals/air/0.16.0",
      ["--namespace", "ConstLocals", "--prefix", "const_locals."], "exact"),
     ("tests/roadmap/const-locals/FuzzS19/Gen.lean", "tests/roadmap/const-locals/air-fuzz_s19/0.16.0",

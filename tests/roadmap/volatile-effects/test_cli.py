@@ -205,7 +205,7 @@ def registry_client(nested=False):
             inst(2, "ret", 1, [ref(1)])]
     del body[0]["args"]  # schema 12: an `arg` has no operands
     return {**{k: base[k] for k in ("schema", "zig_version", "target_endian", "profile")},
-            "name": "client", "module": "root", "params": [param], "ret": 3, "types": types, "body": body,
+            "name": "client", "module": "root", "params": [param], "noalias": [], "ret": 3, "types": types, "body": body,
             "globals": []}
 
 

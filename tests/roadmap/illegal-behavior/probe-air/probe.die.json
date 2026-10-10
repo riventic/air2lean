@@ -42,6 +42,7 @@
   "decl_line": 67
  },
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

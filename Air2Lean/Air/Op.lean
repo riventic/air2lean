@@ -720,5 +720,7 @@ structure Func where
   externs : Array ExternDecl := #[]
   /-- `some`: an `export fn`, the definition of this linker symbol. -/
   exportDecl : Option ExportDecl := none
+  /-- The indices of the `noalias` parameters (`Air2Lean/Noalias.lean`). -/
+  noalias : Array Nat := #[]
 
 end Air2Lean

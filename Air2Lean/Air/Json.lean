@@ -122,6 +122,8 @@ structure RawFunc where
   identities : Array Identity.Record := #[]
   externs : Array ExternDecl := #[]
   exportDecl : Option ExportDecl := none
+  /-- The indices of the `noalias` parameters (`noalias`, schema 12; legacy schemas have none). -/
+  noalias : Array Nat := #[]
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -775,6 +777,12 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
   let layouts ← typesJ.mapM parseLayout
   let paramsJ ← (← j.getObjVal? "params").getArr?
   let params ← paramsJ.mapM Json.getNat?
+  let noalias ← match optField j "noalias" with
+    | some n => (← n.getArr?).mapM Json.getNat?
+    | none => pure #[]
+  for (i, k) in noalias.zipIdx do
+    unless i < params.size && (k == 0 || noalias[k - 1]! < i) do
+      throw s!"{name}: noalias: {i} is not a parameter index in increasing order"
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst name types)
@@ -819,6 +827,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     src := parseSrc? j
     externs
     exportDecl
+    noalias
   }
 
 def parseFunc (j : Json) : Except String RawFunc := do

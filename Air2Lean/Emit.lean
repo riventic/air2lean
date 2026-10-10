@@ -782,6 +782,12 @@ structure FCtx where
   by the call graph, so a function that uses memory charges its frame to the stack budget
   (`Zig.enterFrame`, MM-5). -/
   recursive : Bool := false
+  /-- `some`: the function has `noalias` parameters, or one that has them may call it; the roots
+  of the reads and writes of each instruction that can touch memory (`Air2Lean/Noalias.lean`),
+  or why the function is rejected. Each such instruction is followed by its `Zig.naMark`. -/
+  noalias : Option (Except String Noalias.Marks) := none
+  /-- The function has `noalias` parameters: each call opens a scope (`Zig.naEnter`). -/
+  naScope : Bool := false
 
 /-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
 `r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
@@ -3038,6 +3044,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   (emitLaneWise fc env inst).getD (emitScalarGuarded fc env inst)
 
+/-- The `Zig.naMark` that follows instruction `id` (`FCtx.noalias`), or `""`. -/
+def FCtx.naMarkOf (fc : FCtx) (id : InstId) : String :=
+  match fc.noalias with
+  | none => ""
+  | some (.error e) => placeholder e
+  | some (.ok marks) => match marks[id]? with
+    | none => ""
+    | some (r, w) =>
+      let root (x : Option Nat) := match x with | some p => s!"(some {p})" | none => "none"
+      s!"Zig.naMark {root r} {root w}"
+
 mutual
 
 /-- Translate an instruction sequence into a `Zig.M _ Exit` do-block body (as source text,
@@ -3049,6 +3066,9 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
   match insts with
   | [] => placeholder "a body without a terminator"
   | inst :: rest =>
+    -- With `noalias` parameters (or a caller that has them), each instruction that can touch
+    -- memory is followed by the mark of its roots (`Zig.naMark`), which checks its accesses.
+    let mark := fc.naMarkOf inst.id
     if isTerminating inst.op then
       emitTerminator fc env inst
     else
@@ -3115,12 +3135,15 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         let expr := match fc.pointeeOf p with
           | .errorUnion _ child => fc.storageExpr child expr
           | _ => expr
+        let expr := if mark.isEmpty then expr
+          else s!"(do let r ← {expr}; {mark}; pure r)"
         s!"match ← {expr} with\n\
           | .error _ => {doBlock errStr}\n\
           | .ok {vname} => {doBlock restStr}"
       | _ =>
         let (env', lineOpt) := emitSimple fc env inst
         let restStr := emitStmts fc env' rest
+        let restStr := if mark.isEmpty then restStr else s!"{mark}\n{restStr}"
         match lineOpt with
         | some line => s!"{line}\n{restStr}"
         | none => restStr
@@ -3151,9 +3174,11 @@ partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : 
     | .void => "pure .ret"
     | _ =>
       let v := if fc.isMemPtr ptr then s!"(← {fc.loadMem ptr (rv ptr)})" else fc.loadPlace ptr
+      let mark := fc.naMarkOf inst.id
+      let (pre, v) := if mark.isEmpty then ("", v) else (s!"let r ← pure {v}\n{mark}\n", "r")
       if fc.rawRet then
-        s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
-      else s!"pure (.ret {v})"
+        s!"{pre}pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
+      else s!"{pre}pure (.ret {v})"
   -- A bare `unreach` (no panic call before it, which would end the body first) is
   -- `unreachable` without a safety check: unchecked illegal behaviour.
   | .unreach => "throw .illegal"
@@ -3299,6 +3324,11 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
       let bytes := stack.foldl (fun acc (_, _, size, align) => acc + Zig.alignUp size align) 0
       ([s!"  Zig.enterFrame {bytes}"], [s!"  Zig.leaveFrame {bytes}"])
     else ([], [])
+  -- A function with `noalias` parameters checks the accesses of each call in a scope
+  -- (`ZigLean/Mem/Noalias.lean`).
+  let (enterLines, leaveLines) := if fc.naScope then
+      (enterLines ++ ["  Zig.naEnter"], ["  Zig.naExit"] ++ leaveLines)
+    else (enterLines, leaveLines)
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
     | _ => "| .ret v => pure v"
@@ -3416,10 +3446,21 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) (deviceContract : Bool := false) : FuncParts :=
+    (recursive : Bool := false) (deviceContract : Bool := false) (naCallee : Bool := false) :
+    FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
   let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive, deviceContract }.prepareInstUses
+  -- Only a function that uses memory can access memory during the call: a pure one has none,
+  -- and its slice parameters are read by the caller. A function that one with `noalias`
+  -- parameters may call (`naCallee`) marks its accesses for the caller's scope.
+  let fc := if !fc.mem then fc
+    else if !f.noalias.isEmpty then
+      if fc.conc then { fc with noalias := some (.error
+        s!"{f.name}: a concurrent function with noalias parameters is outside the subset") }
+      else { fc with noalias := some (Noalias.analyze f), naScope := true }
+    else if naCallee && !fc.conc then { fc with noalias := some (.ok (Noalias.calleeMarks f)) }
+    else fc
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))
@@ -4270,12 +4311,16 @@ def emitParts (funcs : Array Func) (prefix_ : String)
         (name, args, kind, complete, classes))
   let allNames := funcs.map (·.name)
   let refs := fnRefs funcs
+  -- Every function that a function with `noalias` parameters may call (`FCtx.noalias`).
+  let naCallees := dedupNames ((funcs.filter (!·.noalias.isEmpty)).flatMap fun f =>
+    reachable funcs allNames refs f.name)
   let groups := (callGroups funcs).map fun (members, recursive) =>
     let names := members.map (·.name)
     let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
     let parts := members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device.isSome
+        (naCallees.contains f.name)
     let text := if recursive then
       -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
       -- call a group member. Types and `again` defs do not recurse, so they come first.

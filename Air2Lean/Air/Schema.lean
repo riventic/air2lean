@@ -168,8 +168,8 @@ def laneForms : List (String × List Key) :=
 def topKeys : List Key :=
   [req "schema" .nat, req "zig_version" .str, req "target_endian" .str, req "profile" .obj,
    req "name" .str, moduleKey, opt "src" .obj, opt "instance_key" .str, opt "export" .obj,
-   opt "externs" .arr, req "params" .arr, req "ret" .nat, req "body" .arr, opt "globals" .arr,
-   req "types" .arr]
+   opt "externs" .arr, req "params" .arr, req "noalias" .arr, req "ret" .nat, req "body" .arr,
+   opt "globals" .arr, req "types" .arr]
 
 /-- An `export fn`'s linker symbol and calling convention (`export`, G1). -/
 def exportKeys : List Key := [req "name" .str, req "cc" .str]
@@ -364,6 +364,8 @@ def validate (j : Json) : Except String Unit := do
   for (t, i) in types.zipIdx do checkType s!"types[{i}]" t
   for p in (← items "AIR file" j "params") do
     unless Shape.nat.accepts p do throw "AIR file: params must be type ids"
+  for p in (← items "AIR file" j "noalias") do
+    unless Shape.nat.accepts p do throw "AIR file: noalias must be parameter indices"
   for i in (← items "AIR file" j "body") do checkInst "body:" i
   for (g, i) in (← items "AIR file" j "globals").zipIdx do
     let path := s!"globals[{i}]"

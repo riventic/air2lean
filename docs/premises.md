@@ -696,9 +696,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: Memory is a CompCert-style list of blocks of bytes with kinds (stack, heap,
   global). Layout comes from `Zig.Enc` instances checked against the profile. Out-of-bounds,
   misaligned or dead accesses are `.illegal`, and so is forming a derived pointer outside
-  `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`). Undefined bytes are
+  `[0, size]` of its block (`ptrProject`, `getelementptr inbounds`), and so are two overlapping
+  accesses of one call, one a write, through pointers with different `noalias` roots
+  (`Zig.naMark`, LLVM's `noalias`). Undefined bytes are
   explicit.
-- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Sep.*`; implied by THR-01.
+- Derived from: `ZigLean.Mem.Basic`, `ZigLean.Env.Host`, `ZigLean.Mem.Enc`, `ZigLean.Mem.Lemmas`, `ZigLean.Mem.Null`, `ZigLean.Mem.NullLemmas`, `ZigLean.Mem.Noalias`, `ZigLean.Sep.*`; implied by THR-01.
 - Sources: [generated-code.md](generated-code.md#memory), [null-pointers.md](null-pointers.md).
 
 <a id="sem-03"></a>

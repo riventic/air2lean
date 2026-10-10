@@ -37,6 +37,7 @@
  "name": "device_asm.elapsed",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

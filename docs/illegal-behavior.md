@@ -77,6 +77,52 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 40 | `@fieldParentPtr` of a pointer that is not to that field (parent without a defined layout) | local places: the checker requires the proven field. Memory: `Zig.checkParent`, the parent must be a live, aligned object of its size in the field pointer's block, `.illegal` (**fixed**, was a value). `extern`/`packed` parents: defined arithmetic, a value |
 | 41 | Inline assembly with undeclared clobbers | premises [ASM-01](premises.md#asm-01), [ASM-02](premises.md#asm-02) |
 | 42 | Branch on, or arithmetic with, `undefined` | `undefined` constant operands are *rejected*. A load of undefined bytes throws `.unspecified`, earlier than the IB |
+| 43 | A `noalias` parameter's memory also accessed through another pointer during the call, one access a write ([below](#noalias-parameters)) | `Zig.naMark`: `.illegal` (**fixed**, was the value of the call). A function whose roots the translator cannot tell: *rejected* |
+
+## noalias parameters
+
+**Rule.** The language reference has no text for `noalias` ("TODO add documentation for
+noalias" in 0.15.2, 0.16.0 and 0.17.0, 0.14.1 likewise). Sema records it as a bit of the
+function type (`noalias_bits`: the first 32 parameters; "non-pointer parameter declared
+noalias" for any other type), and the LLVM backend lowers each set bit to LLVM's `noalias`
+argument attribute: on a pointer parameter, and on the pointer of a slice parameter
+(`src/codegen/llvm.zig` `addByValParamAttrs` and the `.slice` lowering; the call-site attributes
+in `src/codegen/llvm/FuncGen.zig`), in 0.14.1 to 0.17.0 alike. So the rule is LLVM's: during the
+execution of the call, memory accessed through a pointer *based on* the parameter is not also
+accessed through a pointer not based on it, if either access writes. Violating it is undefined
+behaviour; no Zig safety check exists. A parameter of an `inline fn` has no attribute (Sema
+inlines the body), so only a called function's own parameters count. `@memcpy`'s `noalias` is a
+separate rule (row 26).
+
+**Model.** The exporter writes each function's `noalias` parameter indices (`docs/air-json.md`).
+For a function that has some and uses memory, `Air2Lean/Noalias.lean` computes the *root* of
+every access: the parameter the pointer is based on (LLVM's rules: a derived pointer is based
+on its base, `@ptrFromInt` on the pointers of its integer), or none. The generated function
+opens a scope (`Zig.naEnter`) and follows each instruction that can touch memory with the mark
+of its roots (`Zig.naMark`, `ZigLean/Mem/Noalias.lean`). The mark checks that instruction's
+accesses at once against the scope's log and logs them: an access that overlaps a logged one
+with another root, one of the two a write, throws `.illegal`. Every function that such a
+function may call marks its own accesses the same way (root none), so a conflict inside a
+callee is found there too. No later failure (an overflow, a safety panic, a callee's error) can
+take the place of the violation. One instruction is the unit: a load whose read conflicts and
+whose bytes are undefined throws `.unspecified` from its own decode before its mark (the
+conflicting write must then have stored `undefined`), and a model function that records an
+access and then fails in the same call keeps its failure.
+
+**Rejected.** The translator rejects (fail closed) a function with `noalias` parameters in which
+a value based on one reaches memory or another function (a store, an atomic or `memset`
+operand, a call or asm argument, a copy out of a local that holds one): a pointer read back or
+the callee's accesses could then be based on the parameter unseen. It also rejects an access
+whose pointer may be based on more than one of a parameter and another pointer
+(`if (c) p else q`), and a concurrent (`Zig.ConcM`) function with `noalias` parameters. A
+function with `noalias` parameters that uses no memory needs no scope: it writes nothing.
+
+`tests/roadmap/noalias/check.sh`: a `memcpy`-like copy (compiler_rt's `memcpySmall`) within one
+buffer is `.illegal` for overlapping ranges and returns the value for disjoint ones;
+`swap(&x, &x)` is `.illegal`, two `noalias` reads of one pointer are legal, a `noalias` write and
+a read through a plain parameter of the same `u32` are `.illegal`, also when an unchecked
+overflow or a callee's safety panic follows the conflict; a function that passes its `noalias`
+pointer on is rejected.
 
 ## Not illegal behaviour
 
@@ -115,3 +161,4 @@ unequal lengths.
   `.illegal`, so float `@divExact` needs no exception to the
   [build-modes](build-modes.md) transfer premise.
 - `tests/roadmap/architecture-audit/trust-chain/check.py unchecked-memcpy --require-fixed`.
+- `tests/roadmap/noalias/check.sh` (row 43).
