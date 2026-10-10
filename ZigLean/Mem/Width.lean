@@ -152,11 +152,11 @@ The same terms as the 64-bit operations, for an index or count of any width. Eac
 64-bit operation at `BitVec 64` by `rfl`. -/
 
 /-- `Ptr.elem` for a `usize` of `n` bits. -/
-@[inline] def Ptr.elemOf (p : Ptr) (size : Nat) {n : Nat} (i : BitVec n) : Ptr := p.add (size * i.toNat)
+@[inline] def Ptr.elemOf (p : Ptr) (size : Nat) {n : Nat} (i : BitVec n) : Ptr := p.add (size * i.toInt)
 
 /-- `Ptr.elemSub` for a `usize` of `n` bits. -/
 @[inline] def Ptr.elemSubOf (p : Ptr) (size : Nat) {n : Nat} (i : BitVec n) : Ptr :=
-  p.add (-(size * i.toNat))
+  p.add (-(size * i.toInt))
 
 /-- `Zig.index` for a `usize` of `n` bits. -/
 @[inline] def indexOf {α : Type} {n : Nat} (a : Array α) (i : BitVec n) : Result α :=

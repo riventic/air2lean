@@ -35,11 +35,13 @@ structure Ptr where
 /-- The pointer `n` bytes after `p` (`struct_field_ptr`). -/
 @[inline] def Ptr.add (p : Ptr) (n : Int) : Ptr := { p with off := p.off + n }
 
-/-- The pointer to item `i` after `p`, for items of `size` bytes (`ptr_add`, `ptr_elem_ptr`). -/
-@[inline] def Ptr.elem (p : Ptr) (size : Nat) (i : BitVec 64) : Ptr := p.add (size * i.toNat)
+/-- The pointer to item `i` after `p`, for items of `size` bytes (`ptr_add`, `ptr_elem_ptr`).
+The index is signed, as in native code (LLVM's `getelementptr` reads it in two's complement):
+`p[2⁶⁴ - 1]` is the item before `p` (a C `p[-1]` through translate-c). -/
+@[inline] def Ptr.elem (p : Ptr) (size : Nat) (i : BitVec 64) : Ptr := p.add (size * i.toInt)
 
-/-- The pointer to item `i` before `p` (`ptr_sub`). -/
-@[inline] def Ptr.elemSub (p : Ptr) (size : Nat) (i : BitVec 64) : Ptr := p.add (-(size * i.toNat))
+/-- The pointer to item `i` before `p` (`ptr_sub`); signed like `Ptr.elem`. -/
+@[inline] def Ptr.elemSub (p : Ptr) (size : Nat) (i : BitVec 64) : Ptr := p.add (-(size * i.toInt))
 
 /-- A slice `[]T`: the pointer to item 0, and the item count. -/
 structure Slice where
