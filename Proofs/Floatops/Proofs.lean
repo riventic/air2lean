@@ -20,7 +20,7 @@ statement names the translation's profile; where the targets differ (`@mulAdd`, 
 - `f80` differs by target (`docs/floats.md` §Targets): `op80_spec` (premise
   `floatopsTarget = .x86_64`, the x87) is `opSpec`, and excludes a pseudo-denormal numerator
   because f80 floor/ceil changed in 0.16.0 and f80 trunc in 0.17.0 (`docs/floats.md` groups H
-  and I); `op80_spec_aarch64` (premise `.aarch64`, soft float)
+  and I); `op80_spec_aarch64` (premise `floatopsTarget ≠ .x86_64`: both aarch64 targets, soft float)
   is `opSpec80A64`: `.unspecified` on a noncanonical operand, `__divxf3` division, and before
   0.16.0 `@sqrt` through `f64`.
 - `op128_spec_full`: every `sel` of `op128` is `opSpec128 floatopsTarget op128Profile`: the
@@ -159,34 +159,45 @@ theorem op128_other (sel : BitVec 8) (h : 26 ≤ sel.toNat) (a b c : Zig.Float .
 /-! ### Profiles of the translation
 
 CI builds these proofs against the translation of every Zig version on x86_64-linux, and of
-0.16.0 and 0.15.2 on aarch64-macos (`docs/target-matrix.md`). `floatopsTarget` and
+0.16.0 and 0.15.2 on aarch64-macos (`docs/target-matrix.md`); the aarch64-linux translations
+(0.14.1 to 0.16.0) differ from aarch64-macos only in `op16`'s `@mulAdd`. `floatopsTarget` and
 `op128Profile` read the translation's target and version off `Gen.lean`; a statement that holds
 for one target only takes `floatopsTarget = …` as a premise. -/
 
-/-- The float target of a translation (`docs/floats.md` §Targets): the architecture of the
-profile's `target_triple`. A legacy profile is x86_64. -/
+/-- The float rules of a translation's target (`docs/floats.md` §Targets, the translator's
+`Dialect.floatRules`). A legacy profile is x86_64. `aarch64` is aarch64-macos (baseline
+`apple_m1`, with `fullfp16`); `aarch64Generic` is aarch64-linux (baseline `generic`, without). -/
 inductive FloatTarget where
   | x86_64
   | aarch64
+  | aarch64Generic
   deriving DecidableEq, Repr
 
 /-- `@mulAdd` in `compiler-rt` mode on a target: x86_64 calls compiler_rt for every format
 (group B, `Zig.Float.fmaRtChk`); aarch64 has a fused instruction for `f16`/`f32`/`f64` and calls
-compiler_rt for `f80`/`f128` (`Zig.Float.fmaRtFused`). -/
+compiler_rt for `f80`/`f128` (`Zig.Float.fmaRtFused`). Without `fullfp16` an `f16` `@mulAdd` is
+an `f32` `fmadd` rounded back, x86_64's `f16` rule. -/
 def FloatTarget.fmaRt {fmt : Zig.FloatFmt} :
     FloatTarget → Zig.Float fmt → Zig.Float fmt → Zig.Float fmt → Zig.Result (Zig.Float fmt)
   | .x86_64, a, b, c => Zig.Float.fmaRtChk a b c
   | .aarch64, a, b, c => pure (Zig.Float.fmaRtFused a b c)
+  | .aarch64Generic, a, b, c => match fmt with
+    | .f16 => Zig.Float.fmaRtChk a b c
+    | _ => pure (Zig.Float.fmaRtFused a b c)
 
 /-- The target of the translation in `Gen.lean`: an alternative elaborates only when `op80`'s
-addition (x86_64: the x87 `Float.add`) or `op64`'s `@mulAdd` (aarch64: the fused instruction)
-is that target's, checked by `rfl`. -/
+addition (x86_64: the x87 `Float.add`), `op16`'s `@mulAdd` (aarch64: the fused instruction) or
+`op64`'s `@mulAdd` (aarch64 without `fullfp16`: fused from `f32` up) is that target's, checked
+by `rfl`. -/
 def floatopsTarget : FloatTarget := by
   first
   | exact (fun (_ : ∀ a b c, op80 0 a b c = pure (Zig.Float.add a b)) => FloatTarget.x86_64)
       (fun _ _ _ => rfl)
-  | exact (fun (_ : ∀ a b c, op64 4 a b c = pure (Zig.Float.fmaRtFused a b c)) =>
+  | exact (fun (_ : ∀ a b c, op16 4 a b c = pure (Zig.Float.fmaRtFused a b c)) =>
         FloatTarget.aarch64)
+      (fun _ _ _ => rfl)
+  | exact (fun (_ : ∀ a b c, op64 4 a b c = pure (Zig.Float.fmaRtFused a b c)) =>
+        FloatTarget.aarch64Generic)
       (fun _ _ _ => rfl)
 
 /-- `opN`'s branch for one selector binds the result `X`: generalize it and compute. -/
@@ -289,7 +300,8 @@ local macro "fma_case " f:ident : tactic =>
     show _ = floatopsTarget.fmaRt _ _ _
     cases ht : floatopsTarget
     · first | exact absurd ht (by decide) | spec_case $f, Zig.Float.fmaRtChk _ _ _
-    · first | exact absurd ht (by decide) | rfl))
+    · first | exact absurd ht (by decide) | rfl
+    · first | exact absurd ht (by decide) | rfl | spec_case $f, Zig.Float.fmaRtChk _ _ _))
 
 theorem op16_spec (sel : BitVec 8) (a b c : Zig.Float .f16) :
     op16 sel a b c = opSpec floatopsTarget sel a b c := by
@@ -431,8 +443,9 @@ theorem softF80Chk_truncRt017 (a : Zig.F80) :
   · rw [Zig.Float.truncRt017Chk_eq a h]
   · simp [Zig.Float.isNoncanonicalF80, h]
 
-/-- aarch64 `f80`: every selector is `opSpec80A64` of the translation's version profile. -/
-theorem op80_spec_aarch64 (ht : floatopsTarget = .aarch64) (sel : BitVec 8)
+/-- aarch64 `f80` (macOS and Linux: `f80` takes no `fullfp16` instruction): every selector is
+`opSpec80A64` of the translation's version profile. -/
+theorem op80_spec_aarch64 (ht : floatopsTarget ≠ .x86_64) (sel : BitVec 8)
     (a b c : Zig.Float .f80) : op80 sel a b c = opSpec80A64 op128Profile sel a b c := by
   first
   | exact absurd ht (by decide)

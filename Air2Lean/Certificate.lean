@@ -140,7 +140,7 @@ def printGlobal (g : Global) : String :=
 
 /-- Every field of the dialect, its enumerations by their full constructor names. -/
 def printDialect (d : Dialect) : String :=
-  s!"\{ version := {repr d.version}, arch := {str d.arch}, ptrBytes := {d.ptrBytes}, " ++
+  s!"\{ version := {repr d.version}, arch := {str d.arch}, os := {str d.os}, ptrBytes := {d.ptrBytes}, " ++
   s!"endian := {repr d.endian}, errorSetBits := {d.errorSetBits}, backend := {str d.backend}, " ++
   s!"buildMode := {str d.buildMode} }"
 

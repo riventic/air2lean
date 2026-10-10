@@ -671,7 +671,7 @@ routines the reference target (`x86_64-linux -mcpu=baseline`) actually calls, bi
 most examples never reach the divergence and a proof should not have to know it exists. Groups C
 (f80 invalid encodings), D (f32/f64 mixed-sign-zero `@min`/`@max`) and I (a signaling NaN in
 `@min`/`@max`) throw `.unspecified` in both modes, unconditionally: `docs/floats.md` §f80
-invalid encodings, §+0 and −0 in @min/@max. The profile's target (`FCtx.targetArch`) selects
+invalid encodings, §+0 and −0 in @min/@max. The profile's target (`Dialect.floatRules`) selects
 the aarch64 rules (`FCtx.aarch64Floats`, `docs/floats.md` §Targets) in both modes. -/
 inductive FloatSemantics where
   | ieee
@@ -914,11 +914,20 @@ def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.dialect.version.compilerRt == .le
 def FCtx.divRtSuffix (fc : FCtx) : String :=
   if fc.rtSuffix == "" || fc.zigBefore016 then fc.rtSuffix else "Rt016"
 
-/-- The profile targets aarch64 (`docs/floats.md` §Targets): `f80` is soft-float
-(`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on `f16`/`f32`/`f64`
-is the fused instruction. A legacy profile (empty `targetArch`) and x86_64 keep the reference
-x86_64 rules. -/
-def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.targetArch == "aarch64"
+/-- The profile targets aarch64 (`Dialect.floatRules`, `docs/floats.md` §Targets): `f80` is
+soft-float (`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on
+`f32`/`f64` (`f16` with `fullfp16`: `fusedMulAdd`) is the fused instruction. A legacy profile and
+the other targets keep the reference x86_64 rules. -/
+def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.dialect.floatRules matches .aarch64 _
+
+/-- `@mulAdd` on a `fmt`-bit float is the fused instruction: aarch64 `f32`/`f64`, and `f16` when
+the baseline CPU has `fullfp16` (aarch64-macos). aarch64-linux's `generic` CPU promotes an `f16`
+`@mulAdd` to `f32` like x86_64, so the reference rule applies (`Float.fma`'s `f16` case). `f80` and
+`f128` are compiler_rt on every target; `fmaFused` and `fmaRtFused` delegate them. -/
+def FCtx.fusedMulAdd (fc : FCtx) (fmt : Nat) : Bool :=
+  match fc.dialect.floatRules with
+  | .aarch64 fusedF16 => fmt != 16 || fusedF16
+  | .reference => false
 
 /-- Is `v` an `f80` or a vector of `f80`? -/
 def FCtx.isF80Val (fc : FCtx) (v : Val) : Bool :=
@@ -2421,7 +2430,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .mulAdd a b c =>
     -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
     -- aarch64: a fused instruction; its f80 operands are guarded by `softF80Chk` instead.
-    let expr := if fc.aarch64Floats then s!"pure (Zig.Float.fma{fc.rtSuffix}Fused {rv a} {rv b} {rv c})"
+    let fmt := match fc.valTy a with | .float n => n | _ => 0
+    let expr := if fc.fusedMulAdd fmt then s!"pure (Zig.Float.fma{fc.rtSuffix}Fused {rv a} {rv b} {rv c})"
       else s!"Zig.Float.fma{fc.rtSuffix}Chk {rv a} {rv b} {rv c}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatConv a =>

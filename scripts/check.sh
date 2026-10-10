@@ -90,6 +90,8 @@ if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
   python3 scripts/normalize-generated.py proof-status
 fi
 
+host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+host_arch=$(uname -m)
 for ex in $examples; do
   # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
   # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
@@ -100,10 +102,13 @@ for ex in $examples; do
   # only (PLAN.md §Zig version support). A file in tests/golden/<version>/<ex>/air-<os>/ (os:
   # `uname -s` in lower case) replaces it on that host OS only: std code that the compiler picks
   # by OS (`std.Thread`'s implementation) is in the type table. The translation does not change
-  # (the translator emits only the types that the code uses).
+  # (the translator emits only the types that the code uses). A file in
+  # tests/golden/<version>/<ex>/air-<os>-<arch>/ (arch: `uname -m`) replaces it on that host
+  # only (aarch64-linux, whose AIR is the x86_64-linux AIR except where the target shows).
   golden_dir="tests/golden/$ex/air"
   version_dir="tests/golden/$zig_version/$ex/air"
-  os_dir="tests/golden/$zig_version/$ex/air-$(uname -s | tr '[:upper:]' '[:lower:]')"
+  os_dir="tests/golden/$zig_version/$ex/air-$host_os"
+  arch_dir="tests/golden/$zig_version/$ex/air-$host_os-$host_arch"
   air_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
   cmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-check.XXXXXX")
 
@@ -149,7 +154,7 @@ for ex in $examples; do
     workflow_publish --overwrite "$generated" "$AIR2LEAN_OUT_DIR/check-reports/$zig_version/$ex.Gen.lean"
   fi
 
-  echo "== $ex: checking against golden ($golden_dir, then $version_dir, then $os_dir) ==" >&2
+  echo "== $ex: checking against golden ($golden_dir, then $version_dir, $os_dir, $arch_dir) ==" >&2
   # A validated receipt permits the known schema-12 profile/schema-11 transition.
   # Target/profile failures are already fatal; observable AIR data remains compared.
   # The number of a generic std instance (`mem.Allocator.dupeZ__anon_16959`) or of a std type without a name
@@ -179,6 +184,7 @@ for ex in $examples; do
   add_dir "$golden_dir" "$cmp_dir/golden" golden
   add_dir "$version_dir" "$cmp_dir/golden" golden
   add_dir "$os_dir" "$cmp_dir/golden" golden
+  add_dir "$arch_dir" "$cmp_dir/golden" golden
   add_dir "$air_dir" "$cmp_dir/new" actual
   # diff exits 1 on a difference and 2 on an error (e.g. a missing golden dir): both fail.
   if ! diff_output=$(diff -r "$cmp_dir/golden" "$cmp_dir/new" 2>&1); then
@@ -187,14 +193,17 @@ for ex in $examples; do
     echo "hint: if only the golden files are stale (a deliberate exporter change), regenerate: cp $air_dir/* $golden_dir/ (then rename each <name>__anon_<n>.json to <name>__anon_N.json)" >&2
     echo "hint: if only Zig $zig_version differs, copy just the differing files to $version_dir/" >&2
     echo "hint: if only this host OS differs, copy just the differing files to $os_dir/" >&2
+    echo "hint: if only this host OS and architecture differ, copy just the differing files to $arch_dir/" >&2
     exit 1
   fi
 
   # The committed Proofs/<Ex>/Gen.lean is the translation for every Zig version on Linux (the
   # reference host), except a version with its own tests/golden/<version>/<ex>/Gen.lean, and a
   # host OS with its own tests/golden/<version>/<ex>/Gen-<os>.lean (std code that differs per
-  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/).
-  gen_golden="tests/golden/$zig_version/$ex/Gen-$(uname -s | tr '[:upper:]' '[:lower:]').lean"
+  # OS, e.g. 0.15.2's `std.Thread.Mutex`; os: `uname -s` in lower case, as for air-<os>/), and a
+  # host with its own Gen-<os>-<arch>.lean (aarch64-linux's float rules, `docs/floats.md` §Targets).
+  gen_golden="tests/golden/$zig_version/$ex/Gen-$host_os-$host_arch.lean"
+  [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen-$host_os.lean"
   [ -f "$gen_golden" ] || gen_golden="tests/golden/$zig_version/$ex/Gen.lean"
   [ -f "$gen_golden" ] || gen_golden="Proofs/$Ex/Gen.lean"
   # Generated comparisons skip only the first-line profile record (host-specific: the target

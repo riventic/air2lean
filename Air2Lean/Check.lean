@@ -681,8 +681,8 @@ def atomicPtrPointee (types : Array Ty) (layouts : Array Layout) (c : TyId) : Bo
     | _ => false
 
 /-- An atomic op's pointee must be an integer, an enum, a `bool`, a packed struct, or a pointer
-(`atomicPtrPointee`; `docs/std-models.md` §Thread model). An RMW on a pointer must be `.Xchg`.
-A float atomic is rejected with its own reason. -/
+(`atomicPtrPointee`; `docs/std-models.md` §Thread model), at most `Target.atomicBits` wide. An
+RMW on a pointer must be `.Xchg`. A float atomic is rejected with its own reason. -/
 def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option RmwOp := none) :
     Except String Unit := do
   let some pty := cx.valTy? ptr
@@ -697,6 +697,11 @@ def CheckCtx.atomicChild (cx : CheckCtx) (line : Nat) (ptr : Val) (rmw : Option 
         cx.fail line "an atomic RMW on a pointer other than `.Xchg` is outside the subset"
     | none => pure ()
     return
+  -- Wider than the target's `max_atomic_bits` (`Target.atomicBits`): native code has no such op.
+  if let (some t, some bits) := (cx.dialect.bind (·.target?), packedBits cx.types c) then
+    if bits > t.atomicBits then
+      cx.fail line s!"an atomic op on a {bits}-bit integer representation is outside the \
+        {t.arch}-{t.os} model ({t.atomicBits}-bit atomics at the baseline CPU)"
   match cx.types[c]? with
   | some (.int ..) | some (.enum ..) | some .bool | some (.struct _ "packed" _) => pure ()
   | some (.float _) => cx.fail line "a float atomic is outside the subset: the model has no float \

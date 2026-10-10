@@ -139,21 +139,61 @@ def Endian.ofString? : String → Option Endian
   | "big" => some .big
   | _ => none
 
+/-- How a target lowers the float ops whose lowering differs between targets (`docs/floats.md`
+§Targets), at its baseline CPU (`-mcpu=baseline`, the CPU of the native differential test). -/
+inductive FloatRules where
+  /-- The reference (x86_64-linux): `f80` on the x87 and `@mulAdd` through compiler_rt (no FMA
+  instruction). The targets without rules of their own (s390x, wasm32) keep it. -/
+  | reference
+  /-- aarch64 (premise MTH-04): soft-float `f80` (`Zig.Float.softF80Chk`; `__divxf3`; before
+  0.16.0, `@sqrt` through `f64`) and the fused `fmadd` for `@mulAdd` on `f32`/`f64`. With
+  `fusedF16` (`fullfp16` in the baseline CPU: aarch64-macos `apple_m1`) also on `f16`; without
+  it (aarch64-linux `generic`) LLVM promotes an `f16` `@mulAdd` to an `f32` `fmadd` and rounds
+  back, the reference rule. -/
+  | aarch64 (fusedF16 : Bool)
+  deriving DecidableEq, Repr, Inhabited
+
 /-- A target that the memory model admits: the architecture and OS components of the Zig
-triple, with the pointer width and byte order the model takes for it (`docs/profiles.md`). -/
+triple, with the ABI facts that the model takes for it (`docs/profiles.md`). Integer and float
+sizes and alignments are the same on every qualified target (`Zig.intSize`/`Zig.intAlign`;
+`f80` and `f128` are 16/16); the exporter writes `c_longdouble` as the float of
+`longDoubleBits` bits. -/
 structure Target where
   arch : String
   os : String
   pointerBits : Nat
   endian : Endian
+  /-- `c_longdouble` (Zig's `cTypeBitSize(.longdouble)`). -/
+  longDoubleBits : Nat
+  floatRules : FloatRules := .reference
+  /-- The widest atomic integer in bits (Zig's `max_atomic_bits` at the baseline CPU: x86_64
+  has no `cx16`). The checker rejects a wider one. -/
+  atomicBits : Nat
+  /-- The Zig versions whose AIR is accepted for this target. aarch64-linux: those with a native
+  probe record (`tests/roadmap/aarch64-abi/expected/<version>/`, `docs/aarch64-abi.md`). -/
+  versions : List ZigVersion := ZigVersion.all
+  /-- The accepted ABI components of the triple; empty: any. -/
+  abis : List String := []
   deriving Repr, BEq
 
 /-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian
-(`ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). -/
+(`ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). s390x and wasm32
+reject every atomic op (`Check.lean`). The two aarch64 targets are qualified separately
+(`docs/aarch64-abi.md`). -/
 def Target.qualified : List Target := [
-  ⟨"x86_64", "linux", 64, .little⟩, ⟨"aarch64", "macos", 64, .little⟩,
-  ⟨"s390x", "linux", 64, .big⟩,
-  ⟨"wasm32", "freestanding", 32, .little⟩, ⟨"wasm32", "wasi", 32, .little⟩]
+  { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
+    atomicBits := 64 },
+  { arch := "aarch64", os := "macos", pointerBits := 64, endian := .little, longDoubleBits := 64,
+    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128 },
+  { arch := "aarch64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 128,
+    floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
+    versions := [.v0_16_0, .v0_15_2, .v0_14_1], abis := ["gnu"] },
+  { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
+    atomicBits := 64 },
+  { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,
+    longDoubleBits := 128, atomicBits := 32 },
+  { arch := "wasm32", os := "wasi", pointerBits := 32, endian := .little, longDoubleBits := 128,
+    atomicBits := 32 }]
 
 /-- The qualified target of an architecture and OS name, if any. -/
 def Target.find? (arch os : String) : Option Target :=
@@ -175,6 +215,8 @@ structure Dialect where
   /-- The target architecture (`x86_64`, `aarch64`, `s390x`, `wasm32`); empty for a legacy
   profile, whose reference model is x86_64 (`Air2Lean/AsmAllowlist.lean`). -/
   arch : String := ""
+  /-- The target OS (`linux`, `macos`, …); empty for a legacy profile. -/
+  os : String := ""
   /-- The pointer size in bytes (`Zig.PtrWidth.bytes`): 8, or 4 on wasm32. -/
   ptrBytes : Nat := 8
   endian : Endian := .little
@@ -195,6 +237,12 @@ def ofVersion (version : ZigVersion) : Dialect := { version }
 def bigEndian (d : Dialect) : Bool := d.endian == .big
 
 def bitCast (d : Dialect) : ZigVersion.BitCast := d.version.bitCast
+
+/-- The qualified target; `none` for a legacy profile (the x86_64 reference model). -/
+def target? (d : Dialect) : Option Target := Target.find? d.arch d.os
+
+/-- The target's float rules; the reference for a legacy profile. -/
+def floatRules (d : Dialect) : FloatRules := (d.target?.map (·.floatRules)).getD .reference
 
 /-- The backend bit-packs vector lanes in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`,
 `tests/roadmap/vector-layouts`); other backends lay lanes out differently. -/

@@ -4,7 +4,7 @@ import Air2Lean.Air.Dialect
 
 /-! Target/build metadata is an input contract, not a binary correspondence theorem.
 Admitted: the targets of `Target.qualified` (`Air2Lean/Air/Dialect.lean`): the little-endian
-memory model with 64-bit pointers (x86_64-linux, aarch64-macos) or 32-bit pointers
+memory model with 64-bit pointers (x86_64-linux, aarch64-macos, aarch64-linux) or 32-bit pointers
 (wasm32-freestanding, wasm32-wasi; `ZigLean/Mem/Width.lean`), and the 64-bit big-endian model
 (s390x-linux; `ZigLean/Endian.lean`). Schema 12 makes the facts mandatory; schemas 1–11 retain
 the explicitly named, unverified legacy 64-bit little-endian profile. A validated profile
@@ -132,6 +132,15 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       | none => report s!"profile.target_triple: outside the {Target.scope} model ABI scope"
       | some target =>
         targetEndian := some target.endian
+        let name := s!"{arch}-{(os.splitOn ".").head!}"
+        unless target.abis.isEmpty || target.abis.contains (tripleAbi.splitOn ".").head! do
+          report s!"profile.target_triple: the {name} model is qualified for the \
+            {", ".intercalate target.abis} ABI only"
+        if let some version := ZigVersion.ofString? zigVersion then
+          unless target.versions.contains version do
+            report s!"profile.target_triple: the {name} model is qualified for Zig \
+              {", ".intercalate (target.versions.map toString)} only (no native probe record \
+              for {version}; docs/aarch64-abi.md)"
         if let some pointerBits := pointerBits then
           unless pointerBits == target.pointerBits do
             report s!"profile.pointer_bits {pointerBits} differs from the {arch} target's \
@@ -282,8 +291,10 @@ invalid one (its violations already reported), whose recorded facts are kept as 
 profile (`unverified` triple) has no target architecture: the unverified 64-bit little-endian reference
 model. -/
 def Dialect.ofProfile (version : ZigVersion) (p : BuildProfile) : Dialect :=
+  let parts := if p.targetTriple == "unverified" then [] else p.targetTriple.splitOn "-"
   { version
-    arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
+    arch := parts.headD ""
+    os := ((parts.getD 1 "").splitOn ".").headD ""
     ptrBytes := p.pointerBits / 8
     endian := (Endian.ofString? p.endian).getD .little
     errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }
