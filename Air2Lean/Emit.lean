@@ -1424,6 +1424,17 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
 /-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
 def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
+/-- `count` is checked by Sema's shift-amount safety check against the width `w`: the function
+calls the `shiftRhsTooBig` panic handler and compares exactly this count `< w`. -/
+def FCtx.shiftCountGuarded (fc : FCtx) (count : Val) (w : Nat) : Bool :=
+  let insts := fc.allInsts
+  insts.any (fun i => match i.op with
+      | .call callee _ => panicMember? (fc.resolveCallee callee).2 == some "shiftRhsTooBig"
+      | _ => false) &&
+    insts.any fun i => match i.op with
+      | .cmp .lt c (.int _ k) => c == count && k == w
+      | _ => false
+
 /-- `v` is a volatile pointer (L13: a device access with `--device-contract`). -/
 def FCtx.isVolatileVal (fc : FCtx) (v : Val) : Bool :=
   (fc.valTyId? v |>.map (volatilePtrTy fc.types fc.layouts)).getD false
@@ -2218,10 +2229,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     -- The count of a width that is not a power of two can reach the width: illegal behaviour
-    -- that only a safety check (rejected `shiftRhsTooBig`) would catch (`Zig.shiftCountOk`).
+    -- that only a safety check (`shiftRhsTooBig`) catches (`Zig.shiftCountOk`). Under that
+    -- check (`fc.shiftCountGuarded`) Sema may emit the shift before it: the out-of-range result
+    -- is LLVM poison that is never used, and the panic follows, so the shift itself is total.
     let countChecked := match fc.valTy a, b with
       | .int _ w, .int _ k => k < w || k == 0
-      | .int _ w, _ => w &&& (w - 1) == 0  -- a power of two (or `u0`)
+      | .int _ w, _ => w &&& (w - 1) == 0 || fc.shiftCountGuarded b w  -- a power of two (or `u0`)
       | _, _ => true
     let expr := match op with
       | .shl => if countChecked then s!"pure (Zig.shl {rv a} {rv b})" else s!"Zig.shlChk {rv a} {rv b}"
