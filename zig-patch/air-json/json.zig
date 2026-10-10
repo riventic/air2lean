@@ -1501,6 +1501,35 @@ const W = struct {
         return ty.abiSize(zcu) != 0;
     }
 
+    /// The payload offset of field `index` of the `auto` union `agg`, when the compiler's
+    /// (`Type.structFieldOffset`, also `lowerPtr`'s) equals the model's (`unionLayout` in
+    /// `Air2Lean/Check.lean`): the exported tag or safety tag and the natural size and alignment
+    /// of every field that is not `noreturn`, the one with the larger alignment first, the tag if
+    /// equal. Otherwise (explicit field alignment, an untagged `auto` union) `null`.
+    fn unionPayloadOffset(w: *W, agg: Type, index: u32) ?u64 {
+        const zcu = w.pt.zcu;
+        if (agg.containerLayout(zcu) != .auto or !sizedLayout(zcu, agg)) return null;
+        const names_ty = agg.unionTagTypeHypothetical(zcu);
+        if (index >= names_ty.enumFieldCount(zcu)) return null;
+        if (agg.unionFieldTypeByIndex(index, zcu).isNoReturn(zcu)) return null;
+        const tag = agg.unionTagType(zcu) orelse Compat.unionSafetyTag(zcu, agg) orelse return null;
+        var payload_align: u64 = 1;
+        for (0..names_ty.enumFieldCount(zcu)) |i| {
+            const fty = agg.unionFieldTypeByIndex(i, zcu);
+            if (fty.isNoReturn(zcu)) continue;
+            if (!Compat.hasLayout(zcu, fty) or fty.comptimeOnly(zcu)) return null;
+            payload_align = @max(payload_align, fty.abiAlignment(zcu).toByteUnits() orelse return null);
+        }
+        const tag_size = tag.abiSize(zcu);
+        const tag_align = tag.abiAlignment(zcu).toByteUnits() orelse return null;
+        const model: u64 = if (tag_align >= payload_align)
+            std.mem.alignForward(u64, tag_size, payload_align)
+        else
+            0;
+        const compiler = agg.structFieldOffset(index, zcu);
+        return if (compiler == model) compiler else null;
+    }
+
     /// Resolve addresses only; this does not read or initialize an optional/error payload.
     /// Canonical parent pointers are const/volatile/allowzero align(1) in InternPool in
     /// every supported version. Their volatile bit is address metadata, not an access.
@@ -1574,6 +1603,11 @@ const W = struct {
                                 return .{ .unsupported = "field" };
                             break :blk agg.structFieldOffset(@intCast(f.index), zcu);
                         },
+                        // Sema's `ptrField` keeps an `extern`/`packed` union's field pointer as
+                        // its parent pointer, so only an `auto` (tagged or bare) union is a
+                        // `field` base: its payload offset.
+                        .@"union" => w.unionPayloadOffset(agg, f.index) orelse
+                            return .{ .unsupported = "union_field" },
                         else => return .{ .unsupported = "field" },
                     },
                     .opt_payload => blk: {
