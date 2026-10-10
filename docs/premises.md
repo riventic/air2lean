@@ -40,6 +40,10 @@ the tool:
 4. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
    header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
+   Each admission opt-in that the header records maps to its premises (`admissions`:
+   `no-libc` selects MTH-05); an admission without a mapping fails the check. A committed
+   example translation (`Proofs/<Ex>/Gen.lean`, a canonical body without a header) takes the
+   opt-ins of `examples/<ex>/translate.args`, which every translation of the example uses.
    Adds the caller obligations of every generated definition reached: the translator writes
    `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
    parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
@@ -92,7 +96,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Timers and clocks | [TMR-01](#tmr-01) [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
 | Device effects | [DEV-01](#dev-01) |
-| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) |
+| Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
@@ -624,10 +628,23 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   baseline CPU (`Target.floatRules`); they are read from the Zig 0.16.0 LLVM backend and
   compiler_rt sources and checked by each host's differential test. On aarch64-linux the
   `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: the checker rejects the
-  `f128` ops that call them unless `--assume-no-libc` (recorded in the header) states that the
-  program links no libc.
+  `f128` ops that call them unless `--assume-no-libc` (recorded in the header, premise MTH-05)
+  states that the program links no libc.
 - Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
 - Sources: [floats.md](floats.md#targets).
+
+<a id="mth-05"></a>
+### MTH-05 — Program linked without libc
+
+- Kind: environment.
+- Statement: The program is linked without libc, so on a target whose `c_longdouble` is `f128`
+  (aarch64-linux, s390x, wasm32) the `long double` libm routines that `f128` `@sqrt`, `@mulAdd`,
+  `@floor`/`@ceil`/`@trunc`/`@round`, `@min`/`@max` and the division family other than `/` call
+  (`sqrtl`, `fmal`, `floorl`, …) are compiler_rt's, which the model ports. The AIR profile
+  records no `link_libc` fact; the user states this with `--assume-no-libc`.
+- Derived from: a reached generated module whose header records the admission `no-libc`
+  (`assurance/premises.json` `admissions`).
+- Sources: [floats.md](floats.md#targets), [air-json.md](air-json.md).
 
 ## Inline assembly
 

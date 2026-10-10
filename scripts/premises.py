@@ -134,6 +134,7 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
     found += [("generated_markers", p) for p in config["generated_markers"]]
     found += [(f"profiles.{k}", p) for k, p in config["profiles"].items()]
     found += [(f"float_semantics.{k}", p) for k, ps in config["float_semantics"].items() for p in ps]
+    found += [(f"admissions.{k}", p) for k, ps in config.get("admissions", {}).items() for p in ps]
     found += [("source_axiom", p) for p in config["source_axiom"]]
     found += [(f"runtime_modules.{m}", p) for m, ps in config["runtime_modules"].items() for p in ps]
     found += [(f"rules[{i}]", r["premise"]) for i, r in enumerate(config["rules"])]
@@ -552,9 +553,35 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
     return decl.targets
 
 
+# Translator flags that are admission opt-ins, by the name the header records (`admission`).
+ADMISSION_FLAGS = {"--allow-unqualified-build-mode": "unqualified-build-mode", "--assume-no-libc": "no-libc"}
+
+
+def example_admissions(lean: LeanFile) -> list[str]:
+    """A committed example translation (`Proofs/<Ex>/Gen.lean`) is a canonical body without a
+    header; its admission opt-ins are those of `examples/<ex>/translate.args`, which every
+    translation of the example uses (scripts/check.sh)."""
+    parts = lean.rel.split("/")
+    if len(parts) != 3 or parts[0] != "Proofs" or parts[2] != "Gen.lean":
+        return []
+    args = lean.path.parents[2] / "examples" / parts[1].lower() / "translate.args"
+    tokens = args.read_text().split() if args.is_file() else []
+    return [ADMISSION_FLAGS[t] for t in tokens if t in ADMISSION_FLAGS]
+
+
+def admission_premises(config: dict, lean: LeanFile, admissions: list[str]) -> list[str]:
+    mapped = config.get("admissions", {})
+    for admission in admissions:
+        if admission not in mapped:
+            raise ValueError(f"{lean.rel}: admission {admission!r} has no premise mapping")
+    return [p for a in admissions for p in mapped[a]]
+
+
 def profile_premises(config: dict, lean: LeanFile) -> tuple[list[str], str]:
     if not lean.header:
-        return [config["profiles"]["absent"]], "no profile header"
+        admissions = example_admissions(lean)
+        why = "no profile header" + (f", translate.args admission {','.join(admissions)}" if admissions else "")
+        return [config["profiles"]["absent"], *admission_premises(config, lean, admissions)], why
     record = json.loads(lean.header[len(PROFILE_MARKER):])
     name = record.get("profile", {}).get("name")
     if name not in config["profiles"]:
@@ -562,7 +589,13 @@ def profile_premises(config: dict, lean: LeanFile) -> tuple[list[str], str]:
     semantics = record.get("float_semantics", "ieee")
     if semantics not in config["float_semantics"]:
         raise ValueError(f"{lean.rel}: float semantics {semantics!r} has no premise mapping")
-    return [config["profiles"][name], *config["float_semantics"][semantics]], f"profile {name}, float {semantics}"
+    # An admission opt-in (`"admission": "unqualified-build-mode,no-libc"`) widens the claim scope:
+    # each one maps to its premises (`admissions`), and an unmapped one fails closed.
+    admissions = [a for a in record.get("admission", "").split(",") if a]
+    premises = [config["profiles"][name], *config["float_semantics"][semantics],
+                *admission_premises(config, lean, admissions)]
+    why = f"profile {name}, float {semantics}" + (f", admission {','.join(admissions)}" if admissions else "")
+    return premises, why
 
 
 def close(config: dict, via: dict[str, list[str]]) -> dict[str, list[str]]:

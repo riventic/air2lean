@@ -46,6 +46,7 @@ premise was derived. This index covers the committed generated modules.
 | [MTH-02](premises.md#mth-02) | 70 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
+| [MTH-05](premises.md#mth-05) | 16 | Program linked without libc |
 | [ASM-01](premises.md#asm-01) | 17 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
@@ -541,38 +542,38 @@ File premises: PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03
 
 ## `Proofs/Floatops/Proofs.lean`
 
-File premises: PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
+File premises: PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04
 
 | Theorem | Premises |
 |---|---|
-| `cmp64_spec` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `cmp64_spec` | PRF-01, MTH-01, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `classify_of_isNaN` | MTH-01, TRU-01 |
 | `lt_nan` | MTH-01, TRU-01 |
 | `eq_nan` | MTH-01, TRU-01 |
 | `cmpMask_nan` | MTH-01, TRU-01 |
-| `cmp64_nan` | PRF-01, MTH-01, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `cmp64_nan` | PRF-01, MTH-01, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03 |
 | `sel_ne` | TRU-01 |
-| `op16_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op32_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op64_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op80_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_other` | PRF-01, MTH-01, MTH-02, MTH-03, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op16_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op32_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op64_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_other` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `opSpec_other` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |
 | `sel_lt` | TRU-01 |
-| `op16_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op16_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op32_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `softF80Chk_floorRtLegacy` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
 | `softF80Chk_ceilRtLegacy` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
 | `softF80Chk_truncRt017` | MTH-01, MTH-03, MTH-04, SEM-01, TRU-01 |
-| `op80_spec_aarch64` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op80_spec_aarch64` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 | `opSpec128_of_ne` | MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-04 |
 | `sel_cases128` | TRU-01 |
-| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
-| `divExact64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_spec_full` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `op128_eq_opSpec_of_special` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
+| `divExact64_spec` | PRF-01, MTH-01, MTH-02, MTH-03, MTH-04, MTH-05, SEM-01, TRU-01, TRU-02, TRU-03, TRU-04 |
 
 ## `Proofs/Floats/Dot.lean`
 

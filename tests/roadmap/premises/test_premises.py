@@ -46,7 +46,7 @@ ENTRY = """\
 TITLES = {"PRF-01": "Legacy", "PRF-02": "Recorded", "PRF-03": "Gate", "ASM-01": "Opaque asm",
           "ASM-02": "Asm hypothesis", "THR-01": "Scheduler", "SEM-01": "Semantics",
           "EXT-02": "Axiom", "TRU-01": "Kernel", "TRU-02": "Translator",
-          "ALC-09": "Caller allocator", "IOM-01": "Caller Io"}
+          "ALC-09": "Caller allocator", "IOM-01": "Caller Io", "MTH-05": "No libc"}
 
 PROFILE = ('-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee",'
            '"profile":{"name":"abi64-le-v1","schema":12}}\n')
@@ -62,7 +62,8 @@ def fixture_config():
         "generated_markers": {"ALC-09": "allocator parameter", "IOM-01": "Io parameter"},
         "profiles": {"absent": "PRF-01", "legacy-abi64-le": "PRF-01", "abi64-le-v1": "PRF-02",
                      "gate-time": "PRF-03"},
-        "float_semantics": {"ieee": []}, "source_axiom": ["EXT-02"],
+        "float_semantics": {"ieee": []}, "admissions": {"no-libc": ["MTH-05"]},
+        "source_axiom": ["EXT-02"],
         "runtime_modules": {"ZigLean.Basic": ["SEM-01"], "ZigLean.Sched": ["THR-01"]},
         "rules": [{"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
                   {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"}],
@@ -265,6 +266,30 @@ class FixtureTests(unittest.TestCase):
                 self.marked(marker, before)
                 errors, _ = self.fixture.check(write=True)
                 self.assertTrue(any(message in e for e in errors), errors)
+
+    def test_admission_is_a_premise(self):
+        """An `--assume-no-libc` translation: every theorem over it lists MTH-05."""
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"float_semantics":"ieee"', '"admission":"no-libc","float_semantics":"ieee"') + \
+            textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        entries = self.written()
+        self.assertIn("MTH-05", entries["plain_spec"]["premises"])
+        self.assertIn("PRF-02", entries["plain_spec"]["premises"])
+        self.assertNotIn("MTH-05", entries["pure_fact"]["premises"])
+
+    def test_example_translate_args_admission(self):
+        """A committed (headerless) example translation takes the opt-ins of its translate.args."""
+        self.fixture.files["examples/asm/translate.args"] = "--float-semantics compiler-rt --assume-no-libc\n"
+        entries = self.written()
+        self.assertIn("MTH-05", entries["plain_spec"]["premises"])
+        self.assertIn("PRF-01", entries["plain_spec"]["premises"])
+
+    def test_unmapped_admission_fails(self):
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"float_semantics":"ieee"', '"admission":"no-libc,new-opt-in","float_semantics":"ieee"') + \
+            textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        errors, _ = self.fixture.check(write=True)
+        self.assertTrue(any("admission 'new-opt-in' has no premise mapping" in e for e in errors), errors)
 
     def test_unknown_profile_fails(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace("abi64-le-v1", "wasm32") + \
