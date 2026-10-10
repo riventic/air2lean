@@ -28,7 +28,7 @@ namespace Full
 
 open FAssn Conc
 
-/-- The memory invariant of `FTriple`: one thread, blocks below `nextAddr` (`Mem.Seq`), and a
+/-- The memory invariant of `FTriple`: one thread (`Mem.Seq`), and a
 well-formed atomic layout. -/
 def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m)
 
@@ -210,8 +210,7 @@ theorem ptrFromAddr_run (n : Nat) (m : Mem) :
   rcases l with _ | ⟨⟨b, blk⟩, _ | ⟨x, rest⟩⟩ <;> try exact ⟨_, rfl⟩
   cases m.allocPolicy.provenance
   · exact ⟨_, rfl⟩
-  · generalize Array.find? _ _ = r
-    rcases r with _ | ⟨b', blk'⟩ <;> exact ⟨_, rfl⟩
+  · split <;> exact ⟨_, rfl⟩
 
 /-- `@ptrFromInt` frames everything. -/
 theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) :
@@ -255,8 +254,11 @@ theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _⟩
 
+theorem get' : Tame (get : MemM Mem) := of_eq fun _ _ _ h => by
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _⟩
+
 theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Tame (Zig.load T a p) :=
-  bind (loadBytes p _ a .read) fun bs => lift (Enc.decode bs)
+  bind (loadBytes p _ a .read) fun bs => bind get' fun m => lift (decodeLoad m.blocks bs)
 
 theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
     Tame (Zig.storeBytes p a bs k) := of_eq fun _ _ _ h => by
@@ -357,10 +359,9 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
 
 /-! ## Address disjointness of live blocks (input for `@memcpy` overlap checks) -/
 
-/-- Live blocks occupy disjoint address ranges. The placement oracle of
-`codex/fix-address-placement` (`Mem.placeOk`, `addrFree`) maintains it; on `main` it holds of
-reachable memories (`nextAddr` ordering) but is not part of `Mem.Seq`. The migration adds it to the
-memory invariant (`docs/sep-full-state.md`). -/
+/-- Live blocks occupy disjoint address ranges. Every new block's address keeps it (the placement
+oracle's `Mem.placeOk`/`addrFree`, `Mem.newAddr_clear`), so it holds of reachable memories, but
+it is not part of `Mem.Seq`; stage 3 adds it to the memory invariant (`docs/sep-full-state.md`). -/
 def _root_.Zig.Mem.LiveDisjoint (m : Mem) : Prop :=
   ∀ (b b' : BlockId) (blk blk' : Block), b ≠ b' → m.blocks[b]? = some blk →
     m.blocks[b']? = some blk' → blk.live → blk'.live → blk.addr + blk.bytes.size ≤ blk'.addr ∨ blk'.addr + blk'.bytes.size ≤ blk.addr

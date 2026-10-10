@@ -32,11 +32,10 @@ The hardware compares addresses. For the last row the model claims neither the s
 failure, so a proof cannot rely on either; it must exclude the case (strict mode) or accept an
 error result. Two pointers to different blocks therefore never compare equal (`ptrValEq_ne`,
 `ptrValEq_blocks`), and a successful pointer CAS read `expected` itself
-(`Conc.Proto.cmpxchgPtrAt_success`, `cmpxchgWeakPtrAt_success`). Under the default allocation
-policy block addresses are never reused (`Mem.nextAddr` only grows), so the case needs
-out-of-bounds arithmetic or an integer-made pointer; under M05's opt-in reuse policy
-([address-reuse.md](address-reuse.md)) a stale pointer to a freed block can also share a live
-block's address, and its comparison is `.unspecified` as well.
+(`Conc.Proto.cmpxchgPtrAt_success`, `cmpxchgWeakPtrAt_success`). The placement oracle
+([address-placement.md](address-placement.md)) may reuse a freed block's address, so a stale
+pointer to a freed block can share a live block's address, and its comparison is
+`.unspecified` as well ([address-reuse.md](address-reuse.md)).
 
 **Other atomic formats.** Only `.Xchg` is an RMW on a pointer (Zig's rule). A `usize` from
 `@intFromPtr` stays an integer atomic: its compare is the integer compare. The checker rejects,

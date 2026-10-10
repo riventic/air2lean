@@ -130,13 +130,16 @@ unjoined child, whatever the allocator does.
 ### O5: alignments above a page
 
 For `2^k > P`, `map` asks for `2^k - P` extra bytes, and `std.mem.alignPointer` adds
-`2^k - 1` to the mapping's address with an overflow check. The model's addresses are unbounded:
-`Mem.nextAddr` is a `Nat`, and `mmap` places a mapping at the next page address however high.
-From `mem0` with `nextAddr = 2^64 - 4096`, `alloc(1, align 8192)` maps two pages there, the check
-overflows, `alignPointer` returns `null` and `map` panics (`PageAlloc.alloc_high`, kernel-checked).
+`2^k - 1` to the mapping's address with an overflow check. A placement proposal is taken only
+if the mapping's pages end at or below 2^64 (`Mem.placeOk`), and then the check cannot overflow.
+But the fallback address after every block (`Mem.top`, when the proposal is not valid) is a
+`Nat` without a bound. From a memory whose last block ends just below `2^64 - 4096`,
+`alloc(1, align 8192)` maps two pages at `2^64 - 4096`, the check overflows, `alignPointer`
+returns `null` and `map` panics (`PageAlloc.alloc_high`, kernel-checked).
 So no invariant that such a memory satisfies admits `k ≥ 13`, and `ainv.fits` requires
-`k ≤ 12`. Natively the kernel never maps that high. The fix is in the OS model (OSM-01): an
-`mmap` whose mapping would end above the address space fails with `ENOMEM`. Then the larger
+`k ≤ 12`. Natively the kernel never maps that high. The fix is in the memory model: a fallback
+address whose block would end above the address space fails the request (`ENOMEM` for `mmap`);
+it waits on a user decision about that bound. Then the larger
 alignments need the prefix and tail `munmap`s of `map`, which `TotalTriple.munmapPrefix` and
 `munmapTail` already cover.
 

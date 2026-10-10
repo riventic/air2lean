@@ -23,7 +23,7 @@ open Assn
 theorem returnAddress_triple {P : Assn} : TotalTriple P returnAddress (fun _ => P) := by
   intro m hP hF hd hm hp hst
   refine ⟨_, { m with arbitraryNext := m.arbitraryNext + 1 }, hP, rfl, hd, hm, hp, ?_⟩
-  exact ⟨hst.1, hst.2⟩
+  exact ⟨hst.1⟩
 
 /-- `h` owns a cell of block `b` with address `A`. -/
 def OwnsIn (b : BlockId) (A : Nat) (h : Heap) : Prop :=

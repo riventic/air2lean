@@ -31,8 +31,9 @@ decision (`Mem.mapDenied`, the same decision as `rawAlloc`'s: `failAt`, `failure
 the oracle `fails`, `budget`) fails it with `error.OutOfMemory` (`ENOMEM`) and leaves every block
 unchanged. The premise assumes the kernel fails such a mapping with no other `MMapError` (no
 memory locking: no `EAGAIN`). A success is a new block of kind `.mapped 0`: exactly `length` zero
-bytes, at a page-aligned address above every earlier block; the next block starts above the
-mapping's last page (fresh addresses: no address is reused).
+bytes, at the placement's address for its pages (`Mem.newAddr` of `alignUp length page` bytes with
+page alignment, `docs/address-placement.md`): any page-aligned address whose pages stay below 2^64
+and clear of every live block, a freed mapping's included (the kernel reuses addresses).
 
 **munmap.** `memory` must be a page-aligned range `[off, off + alignUp len page)` of one live
 mapping with live offsets `[lo, hi)` (`BlockKind.mapped lo`, `hi` its byte count), and `len > 0`:
@@ -49,10 +50,11 @@ be `0` or `MAYMOVE` and `new_address` must be null (`FIXED`/`DONTUNMAP` are outs
 `.unspecified`). `old_address`/`old_len` must name a whole live mapping (as for `munmap`'s whole
 case), else `.illegal`. `new_len = 0` (`EINVAL`, `error.InvalidSyscallParameters`) is outside the
 model: `.unspecified` (the allocator wrappers never pass it). A shrink stays in place. A growth is
-an allocation attempt: the failure decision fails it with `error.OutOfMemory`; otherwise it grows in place when no other
-block lies above the mapping and the oracle `mremapMoves` does not move it, or moves to a fresh
-mapping under `MAYMOVE`; without `MAYMOVE` and with no room it returns `error.OutOfMemory`. A moved
-mapping copies the live bytes and ends the old block. The grown bytes up to the old page end are
+an allocation attempt: the failure decision fails it with `error.OutOfMemory`; otherwise it grows in
+place when the grown pages are clear of every other live block and below 2^64
+(`Mem.mappingRoom`) and the oracle `mremapMoves` does not move it, or moves to a new mapping at
+the placement's address under `MAYMOVE`; without `MAYMOVE` and with no room it returns
+`error.OutOfMemory`. A moved mapping copies the live bytes and ends the old block. The grown bytes up to the old page end are
 undefined (the kernel keeps the stale tail of the last page), the rest are zero.
 
 **Page size.** Fixed per target (`Os.Target.pageSize`), comptime in Zig 0.16.0's
@@ -104,23 +106,28 @@ def Mem.mapDenied (m : Mem) (n : Nat) : Bool :=
   decide (m.failAt = some m.allocs) || decide (m.allocPolicy.maxBytes < n) ||
     decide (m.allocs ∈ m.allocPolicy.failures) || m.oracleDenies n
 
+/-- The address of a new mapping of `n` bytes with page size `P`: the placement's address for its
+pages (`Mem.newAddr`). -/
+def Mem.mapAddr (m : Mem) (P n : Nat) : Nat := m.newAddr (alignUp n P) P
+
 /-- The memory after a successful `mmap` of `n` bytes with page size `P`: a new `.mapped 0` block
-of `n` zero bytes at the next page-aligned address; the next block starts above its last page. -/
+of `n` zero bytes at `Mem.mapAddr`. -/
 def Mem.afterMmap (m : Mem) (P n : Nat) : Mem :=
   { m with
     blocks := m.blocks.push
       { bytes := Array.replicate n (.int 0), align := P, kind := .mapped 0, live := true,
-        addr := alignUp m.nextAddr P }
-    nextAddr := alignUp m.nextAddr P + alignUp n P + 1 }
+        addr := m.mapAddr P n } }
 
 /-- The bytes that a growth from `cur` to `n` live bytes adds: undefined up to the old page end,
 zero after it. -/
 def mremapFill (P cur n : Nat) : Array Byte :=
   (Array.range (n - cur)).map fun j => if cur + j < alignUp cur P then .undef else .int 0
 
-/-- No block other than `b` reaches up to `blk`'s address: the mapping can grow in place. -/
-def Mem.mappingOnTop (m : Mem) (b : BlockId) (blk : Block) : Bool :=
-  m.blocks.zipIdx.all fun (o, j) => j == b || decide (o.addr + o.bytes.size < blk.addr)
+/-- Mapping `b` (`blk`, live from `lo`) can grow in place to `len` bytes of pages: the range
+`[blk.addr + lo, blk.addr + lo + len)` stays below 2^64 and is clear of every other live block. -/
+def Mem.mappingRoom (m : Mem) (b : BlockId) (blk : Block) (lo len : Nat) : Bool :=
+  decide (blk.addr + lo + len ≤ 2 ^ 64) &&
+    m.blocks.zipIdx.all fun (o, j) => j == b || o.clearOf (blk.addr + lo) len
 
 namespace Os
 
@@ -195,17 +202,15 @@ def _root_.Zig.Mem.mremapShrunk (m : Mem) (b : BlockId) (blk : Block) (lo n : Na
 /-- The memory after an in-place growth of mapping block `b` (live from `lo`) to `n` live bytes. -/
 def _root_.Zig.Mem.mremapGrown (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
   { m with
-    blocks := m.blocks.set! b { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n }
-    nextAddr := Nat.max m.nextAddr (blk.addr + lo + alignUp n P + 1) }
+    blocks := m.blocks.set! b { blk with bytes := blk.bytes ++ mremapFill P (blk.bytes.size - lo) n } }
 
-/-- The memory after moving mapping block `b` (live from `lo`) to a fresh block of `n` live bytes:
-the old block ends, the new one is at the next page-aligned address. -/
+/-- The memory after moving mapping block `b` (live from `lo`) to a new block of `n` live bytes:
+the old block ends, the new one is at `Mem.mapAddr`, chosen while the old one is still mapped. -/
 def _root_.Zig.Mem.mremapMoved (m : Mem) (P : Nat) (b : BlockId) (blk : Block) (lo n : Nat) : Mem :=
   { m with
     blocks := (m.blocks.set! b { blk with live := false }).push
       { bytes := blk.bytes.extract lo blk.bytes.size ++ mremapFill P (blk.bytes.size - lo) n,
-        align := P, kind := .mapped 0, live := true, addr := alignUp m.nextAddr P }
-    nextAddr := alignUp m.nextAddr P + alignUp n P + 1 }
+        align := P, kind := .mapped 0, live := true, addr := m.mapAddr P n } }
 
 /-- `mremap` of the whole live mapping `b` (from `lo`) at `p` to `newLen` bytes, after the
 argument checks (module doc). -/
@@ -224,13 +229,13 @@ def mremapLive (os : Target) (p : Ptr) (b : BlockId) (blk : Block) (lo : Nat) (n
   set { m with allocs := m.allocs + 1 }
   if m.mapDenied n then
     return .error "OutOfMemory"
-  let onTop := m.mappingOnTop b blk
-  if flags = mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n ∨ onTop = false) then
+  let room := m.mappingRoom b blk lo (alignUp n P)
+  if flags = mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n ∨ room = false) then
     recordAccess b lo cur .write
     let m₁ ← get
     set (m₁.mremapMoved P b blk lo n)
     return .ok ⟨⟨some m₁.blocks.size, 0⟩, newLen⟩
-  if onTop = false then return .error "OutOfMemory"
+  if room = false then return .error "OutOfMemory"
   modify fun m => m.mremapGrown P b blk lo n
   return .ok ⟨p, newLen⟩
 

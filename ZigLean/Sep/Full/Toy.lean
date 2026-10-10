@@ -391,7 +391,7 @@ theorem enc1_size : enc1.size = 8 := LawfulEnc.size_encode (α := Ptr) _
 /-- The two globals at program start: the hint (block 0) and `last` (block 1); no atomic
 location. -/
 def start : Mem :=
-  { blocks := #[⟨enc0, 8, .global, true, 4096⟩, ⟨enc1, 8, .global, true, 4112⟩], nextAddr := 4121 }
+  { blocks := #[⟨enc0, 8, .global, true, 4096⟩, ⟨enc1, 8, .global, true, 4112⟩] }
 
 def hintP : Ptr := ⟨some 0, 0⟩
 def lastP : Ptr := ⟨some 1, 0⟩

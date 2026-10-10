@@ -290,20 +290,10 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
       then some ⟨bs'[l.2 - p.off.toNat]!, A, S, K⟩ else m.heap l)
     (htag : ∀ b' x, tagOf (shapes m') b' x = if Covers b' x (b, p.off.toNat, bs.size)
       then some (p.off.toNat, bs.size) else tagOf (shapes m) b' x)
-    (hkn : KMono m m') (hA : m.AddrBelow) (hn : m'.nextAddr = m.nextAddr) :
-    m'.AddrBelow ∧
-      ∃ r', Holds m' r' rF ∧ abytesAt p A S K bs' (some (p.off.toNat, bs.size)) r' := by
+    (hkn : KMono m m') :
+    ∃ r', Holds m' r' rF ∧ abytesAt p A S K bs' (some (p.off.toNat, bs.size)) r' := by
   obtain ⟨-, b0, hb0, h0, hl⟩ := id hab
   rw [hpb] at hb0; cases hb0
-  refine ⟨hA.of_heap hn fun l c hc => ?_, ?_⟩
-  · rw [hheap] at hc
-    split at hc
-    · rename_i hin
-      cases hc
-      have hr := hl l
-      rw [if_pos hin] at hr
-      exact ⟨l, _, (fheap_tag (hh.own hr)).2, rfl, rfl⟩
-    · exact ⟨l, c, hc, rfl, rfl⟩
   let h' : FHeap := fun l =>
     if l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs'.size
     then some ⟨⟨bs'[l.2 - p.off.toNat]!, A, S, K⟩, some (p.off.toNat, bs.size)⟩ else none
@@ -408,10 +398,7 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
       have hshapes : shapes (loadM m₁ li ord
           ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)) = shapes m₁ := by
         unfold loadM acqM observeM; split <;> rfl
-      have hnext : (loadM m₁ li ord
-          ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)).nextAddr = m.nextAddr := by
-        unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]
-      obtain ⟨hAB, r', hh', hab'⟩ := holds_after hh hab (bs' := bs) rfl hpb
+      obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := bs) rfl hpb
         (fun l => by
           rw [heap_of_blocks hblocks]
           split
@@ -422,10 +409,9 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
             rw [if_pos hin] at hr
             exact (fheap_tag (hh.own hr)).2
           · rfl)
-        (fun b' x => by rw [hshapes, htag, hsz]) (kmono_of_blocks hblocks) hs.1.addr hnext
+        (fun b' x => by rw [hshapes, htag, hsz]) (kmono_of_blocks hblocks)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, _, hal, hK, hsz, hv, .inr (by rw [hsz]), hab'⟩,
-        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _,
-          hAB⟩, by rw [hshapes]; exact hwf⟩⟩
+        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _⟩, by rw [hshapes]; exact hwf⟩⟩
 
 theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hli : li < m.atomics.size) :
@@ -506,21 +492,18 @@ theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
       have hshapes : shapes (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w) = shapes m₁ := by
         unfold storeM observeM
         exact shapes_insertM_last hb₁ hli
-      have hnext : (storeM m₁ li (m₁.atomics[li]!).msgs.size ord w).nextAddr = m.nextAddr := by
-        unfold storeM observeM
-        rw [hins, hm₁]; rfl
       have henc : (Enc.encode w).size = 8 := LawfulEnc.size_encode w
       have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive (bs := Enc.encode w)
         (by rw [henc]; omega) hlo
-      obtain ⟨hAB, r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode w) (by rw [henc, hsz]) hpb
+      obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode w) (by rw [henc, hsz]) hpb
         (fun l => by
           rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode w)) hblocks, hwr, henc,
             hsz, hA, hS, hKb])
         (fun b' x => by rw [hshapes, htag, hsz])
         (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode w) })
-          hblk rfl hblocks) hs.1.addr hnext
+          hblk rfl hblocks)
       refine ⟨r', hh', ⟨A, S, K, Enc.encode w, _, hal, hK, henc, LawfulEnc.decode_encode w,
-        .inr (by rw [hsz]), hab'⟩, ⟨⟨?_, hAB⟩, by rw [hshapes]; exact hwf⟩⟩
+        .inr (by rw [hsz]), hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf⟩⟩
       unfold storeM observeM
       exact singleThread_insertM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _
 

@@ -101,3 +101,57 @@ Outside this milestone (the arena milestone), measured on the 0.16.0 `ArenaAlloc
   is not provable (`recovering a symbolic error pointer from an integer or opaque value…`).
 - Lock-free atomics: an `unordered` load of the packed `Node.Size` (`endResize`) and pointer
   atomic stores/RMWs in `pushFreeList`/`stealFreeList` stay rejected.
+
+## Removing the hand-written allocator models (plan)
+
+Allocator milestone 1 proves the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba`,
+`FBA.allocSpec`, `FBA.fallocSpec`) and the translated `PageAllocator`
+(`tests/roadmap/alloc-translated`: `free`/`resize`/`remap` on x86_64-linux and aarch64-macos,
+`alloc` on x86_64-linux for alignments up to a page, partial correctness) against the generic
+specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), from their Zig
+code down to `posix.mmap`/`munmap`/`mremap` (OSM-01). The `std` mode still carries the
+hand-written models below. They are not removed in milestone 1; each step removes one only after
+the translated mode covers every claim that rests on it, so no theorem disappears without a
+translated replacement or a register entry (`ROADMAP.md`, `docs/remaining-acceptance.md`).
+
+| Legacy model | Where | Premise | Users |
+|---|---|---|---|
+| L1 fixed buffer: `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`/`starts` | `ZigLean/Mem/Owned.lean`, `ZigLean/Sep/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `ZigLean/Witnesses/Sep.lean` §Owned |
+| L2 arena and identities: `OwnedPolicy.arena`, `AllocRef.owned`, `BlockKind.owned`, `Mem.allocators` | `ZigLean/Mem/Owned.lean`, `ZigLean/Sep/ArenaClient.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `tests/roadmap/address-reuse/Check.lean` |
+| L3 remap/realloc policy variants: `AllocPolicy.byteRemap` (`ByteRemapMode.fail`/`inPlace`/`move`), sentinel realloc | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/RawAlloc.lean`, `ZigLean/Sep/Remap.lean`, `ZigLean/Sep/SentinelRealloc.lean` | ALC-03, ALC-05 | `tests/roadmap/resize-remap`, `tests/roadmap/sentinel-realloc`, `tests/roadmap/architecture-audit/models` |
+| L4 the std allocator: `Zig.Allocator`, `rawAlloc`/`rawFree`, the `mem.Allocator.*` rows of `Air2Lean/StdModels.lean`, `BlockKind.heap` | `ZigLean/Mem/Alloc.lean`, `ZigLean/Sep/Alloc.lean`, `ZigLean/Sep/Sentinel.lean` | ALC-01, ALC-02, ALC-04, ALC-06, ALC-09 | every std-mode proof that allocates (`Proofs/Lists`, `Proofs/Slices`, …), `tests/roadmap/allocation-policy` |
+
+Steps, one PR each, in this order:
+
+1. **FBA client port** (prerequisite of L1). Lift the client proofs that use the fixed-buffer
+   model onto `FBA.fallocSpec` through the generated wrappers (`ZigLean/Sep/Full/Wrappers.lean`).
+   Blocker: `tame` does not see through the `StateT.run (match …)` that `gen_norm` leaves in the
+   generated wrappers (one matcher per generated `match`); it needs a `StateT`-level `Tame` rule
+   or a split-then-renormalize step. Then delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
+   `OwnedAlloc.starts`, their `Owned.lean`/`Sep/Owned.lean` cases and the fixed-buffer cases of
+   `tests/roadmap/allocator-identity`; narrow ALC-07 to the arena.
+2. **Translated `ArenaAllocator`** (prerequisite of L2), the arena milestone: the three blockers
+   listed under "Regression and scope" (header/bytes punning, the cyclic `Node` type behind
+   `ctx`, the lock-free atomics). Then delete `OwnedPolicy`, `OwnedAlloc`, `AllocRef.owned`,
+   `BlockKind.owned`, `Mem.allocators`, `ZigLean/Sep/ArenaClient.lean` and ALC-07; rewrite the
+   owned-allocator cases of `tests/roadmap/address-reuse/Check.lean` over the translated arena.
+3. **Client contract over `FAllocSpec`** (prerequisite of L3 and L4). A function that takes a
+   `std.mem.Allocator` is proved for every allocator that satisfies `FAllocSpec` (in place of
+   ALC-09, "the caller's allocator behaves as the std model"); `FAllocSpec.toLegacy` already
+   gives the legacy-logic wrappers. Re-prove the std-mode allocation corpora (`Proofs/Lists`,
+   `Proofs/Slices`, sentinel and realloc fixtures) in translated mode against it, and make
+   `--allocator-model translated` the default for every Zig version whose `posix.zig` is
+   reviewed (0.16.0 now; 0.17.0 after its review of the three `posix` rows).
+4. **Remap and realloc behaviour from code** (L3). With step 3, `resize`/`remap`/`realloc`
+   behaviour comes from the translated allocator (`PageAllocator`'s `mremap`, the fixed buffer's
+   last-allocation growth), so delete `AllocPolicy.byteRemap`, `ByteRemapMode`, the byte remap
+   and sentinel realloc models and ALC-03/ALC-05; port `tests/roadmap/resize-remap` and
+   `tests/roadmap/sentinel-realloc` to translated mode.
+5. **The std allocator** (L4). Delete `Zig.Allocator`, `rawAlloc`/`rawFree`, the
+   `mem.Allocator.*` std-model rows, `--allocator-model std` for allocators and ALC-01, ALC-02,
+   ALC-04, ALC-06, ALC-09. The failure decision (`failAt`, `failures`, `maxBytes`, the oracle
+   `fails`, `budget`, `Mem.allocs`) stays only as the OS-level decision of `mmap`/`mremap`
+   (`Mem.mapDenied`, OSM-01); `tests/roadmap/allocation-policy` moves to it.
+
+Each step regenerates the premise index, coverage and the theorem inventory, and records the
+removed CI steps and the translated replacements in the register.

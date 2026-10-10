@@ -44,8 +44,15 @@ Otherwise the call is one allocation attempt, numbered by `Mem.allocs` like ever
 request). A failure returns `error.OutOfMemory` (`ENOMEM`) and changes nothing but the attempt
 count. The premise assumes the kernel fails such a mapping with no other `MMapError` member:
 the process locks no memory (no `EAGAIN`). A success is a new block of kind `.mapped 0` with exactly `length` zero bytes at the
-next page-aligned address; the next block starts above the mapping's last page. Addresses are
-fresh: a later mapping never reuses an unmapped range (address reuse is not on `main` yet).
+placement's address for its pages (`Mem.mapAddr`: `Mem.newAddr` of `alignUp length page` bytes
+with page alignment, [address-placement.md](address-placement.md)). A proposed address is taken
+when it is page-aligned, nonzero, its pages end at or below 2^64 and are clear of every live
+block, so a later mapping may reuse an unmapped range, as the kernel does. Otherwise the mapping
+goes after every block (`Mem.top`, unbounded: see O5 in [alloc-page.md](alloc-page.md)).
+The live range of a block for that check is its whole byte range, also below a mapping's first
+live offset: the model never places a block into the unmapped prefix of a mapping that is still
+partly live, which the kernel may do (open, only the `map` path for alignments above a page
+unmaps a prefix).
 
 ## munmap
 
@@ -76,10 +83,12 @@ are `.unspecified`, as is any call on macOS.
   pass it);
 - a shrink: in place, the bytes end at `lo + new_len`;
 - a growth is an allocation attempt. The failure decision fails it with `error.OutOfMemory`.
-  Under `MAYMOVE` it moves to a fresh page-aligned
-  block when the oracle `AllocPolicy.os.mremapMoves` says so or when another block lies
-  above the mapping; the live bytes are copied and the old block ends. Otherwise it grows in
-  place if no other block lies above the mapping, else returns `error.OutOfMemory` (`ENOMEM`).
+  There is room in place when the grown pages `[A + lo, A + lo + alignUp new_len page)` end
+  at or below 2^64 and are clear of every other live block (`Mem.mappingRoom`). Under
+  `MAYMOVE` it moves to a new mapping at the placement's address (`Mem.mapAddr`, chosen while
+  the old mapping is still mapped) when the oracle `AllocPolicy.os.mremapMoves` says so or
+  when there is no room; the live bytes are copied and the old block ends. Otherwise it grows
+  in place if there is room, else returns `error.OutOfMemory` (`ENOMEM`).
   The grown bytes up to the old length's page end are undefined (the kernel keeps the stale
   tail of the last page), the rest are zero (`mremapFill`).
 

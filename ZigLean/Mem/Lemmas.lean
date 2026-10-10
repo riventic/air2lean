@@ -195,6 +195,13 @@ theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : proj
   simp only [ptrProject, StateT.run]
   rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
 
+/-- A pointer without a block (an `@ptrFromInt` address, the provenance-free result of an
+ambiguous `ptrFromAddr`, `Zig.undefPtr`) has no bounds: any nonzero offset from it is
+`.illegal` (MM-3), only the same pointer is formed. -/
+theorem ptrProject_blockless_add_illegal (m : Mem) (a : Int) {k : Int} (hk : k ≠ 0) :
+    (ptrProject ⟨none, a⟩ (·.add k)).run m = throw .illegal :=
+  ptrProject_illegal _ (by simp [Ptr.add]; omega) (by simp [Mem.inBounds])
+
 /-- Pointer formation never changes memory and keeps the base's block. -/
 theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
     (h : (ptrProject p project).run m = pure (q, m')) : q.block = p.block ∧ m' = m := by

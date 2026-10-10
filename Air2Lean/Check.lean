@@ -1224,15 +1224,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no
       -- typed storage, like an integer: the target must be provably error-free.
       let fromOpaque := cx.allocatorModel == .translated &&
-        ((pointerChild aty).bind (cx.types[·]?)) == some (.other "anyopaque")
+        ((ptrOrOptChild cx.types aty).bind (cx.types[·]?)) == some (.other "anyopaque")
       -- Erasing an error-free pointer to `*anyopaque` (an allocator's `ctx`); every recovery
       -- passes `fromOpaque`.
       let toOpaque := cx.allocatorModel == .translated &&
-        ((pointerChild ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
-        ((pointerChild aty).bind (hasErrorCapability cx.types)) == some false
+        ((ptrOrOptChild cx.types ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
+        ((ptrOrOptChild cx.types aty).bind (hasErrorCapability cx.types)) == some false
       -- A qualifier-only or optional-wrap cast of `*anyopaque` keeps its pointee: no recovery.
       if fromOpaque && !qualifierOnly && !optionalWrapOnly then
-        if let some target := pointerChild ty then
+        if let some target := ptrOrOptChild cx.types ty then
           unless hasErrorCapability cx.types target == some false do
             cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       match ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty with
