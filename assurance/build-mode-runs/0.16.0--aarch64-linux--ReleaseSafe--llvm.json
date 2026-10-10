@@ -1,21 +1,18 @@
 {
   "backend": "llvm",
-  "cases": 86209,
+  "cases": 43584,
   "counts": {
     "error_return_match": 892,
-    "host_difference": 755,
-    "illegal_exclusion": 497,
-    "panic_match": 4975,
-    "unspecified_exclusion": 580,
-    "value_match": 78510
+    "illegal_exclusion": 664,
+    "panic_match": 4591,
+    "unspecified_exclusion": 185,
+    "value_match": 37252
   },
   "emulated": false,
   "examples": {
     "atomics": 100,
     "basic": 2400,
     "errors": 900,
-    "floatconv": 3000,
-    "floatops": 39625,
     "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
@@ -29,74 +26,21 @@
     "variants": 2577,
     "vectors": 9000
   },
-  "excluded_examples": [],
+  "excluded_examples": [
+    {
+      "example": "floatconv",
+      "note": "The committed translation follows the x86_64-linux float rules and the translator has no aarch64-linux profile, so f80 pseudo-denormal and unnormal inputs (63 cases) are typed mismatches against aarch64 results. The aarch64 rules are checked on aarch64-macos.",
+      "reason": "no aarch64-linux float model",
+      "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md"
+    },
+    {
+      "example": "floatops",
+      "note": "Same cause: operations on invalid f80 encodings (500 cases) and fused operations on subnormal operands (23 cases) differ between the x86_64 rules and aarch64 results.",
+      "reason": "no aarch64-linux float model",
+      "reproducer": "tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md"
+    }
+  ],
   "exclusions": [
-    {
-      "cases": 2,
-      "example": "floatconv",
-      "function": "bits32",
-      "status": "unspecified_exclusion"
-    },
-    {
-      "cases": 63,
-      "example": "floatconv",
-      "function": "f80ToF64",
-      "status": "host_difference"
-    },
-    {
-      "cases": 3,
-      "example": "floatconv",
-      "function": "toByte",
-      "status": "unspecified_exclusion"
-    },
-    {
-      "cases": 2,
-      "example": "floatconv",
-      "function": "toI32",
-      "status": "unspecified_exclusion"
-    },
-    {
-      "cases": 2,
-      "example": "floatconv",
-      "function": "toU64",
-      "status": "unspecified_exclusion"
-    },
-    {
-      "cases": 4,
-      "example": "floatops",
-      "function": "op32",
-      "status": "host_difference"
-    },
-    {
-      "cases": 12,
-      "example": "floatops",
-      "function": "op32",
-      "status": "unspecified_exclusion"
-    },
-    {
-      "cases": 27,
-      "example": "floatops",
-      "function": "op64",
-      "status": "host_difference"
-    },
-    {
-      "cases": 12,
-      "example": "floatops",
-      "function": "op64",
-      "status": "unspecified_exclusion"
-    },
-    {
-      "cases": 655,
-      "example": "floatops",
-      "function": "op80",
-      "status": "host_difference"
-    },
-    {
-      "cases": 373,
-      "example": "floatops",
-      "function": "op80",
-      "status": "unspecified_exclusion"
-    },
     {
       "cases": 64,
       "example": "layout",
@@ -128,6 +72,12 @@
       "status": "unspecified_exclusion"
     },
     {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 30,
       "example": "layout",
       "function": "shapeArea",
@@ -140,31 +90,31 @@
       "status": "illegal_exclusion"
     },
     {
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
       "cases": 300,
       "example": "threads",
       "function": "race",
       "status": "illegal_exclusion"
     },
     {
-      "cases": 4,
-      "example": "vectors",
-      "function": "fMax",
-      "status": "host_difference"
-    },
-    {
-      "cases": 5,
+      "cases": 10,
       "example": "vectors",
       "function": "fMax",
       "status": "unspecified_exclusion"
     },
     {
-      "cases": 2,
-      "example": "vectors",
-      "function": "fMin",
-      "status": "host_difference"
-    },
-    {
-      "cases": 4,
+      "cases": 10,
       "example": "vectors",
       "function": "fMin",
       "status": "unspecified_exclusion"
@@ -196,9 +146,11 @@
   "schema": "air2lean-build-mode-run/1",
   "skipped_examples": {
     "asm": "host_excluded",
+    "floatconv": "not_requested",
+    "floatops": "not_requested",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "199632feb8e8cf6a49b4537d7e0c1a2c0dc886a5eb168f193ed63cefb206ba30",
+  "sources_sha256": "5c84bc10681f3548708c3db5bab393d5fd7fdd307aeac95e172d97b94a376ce7",
   "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
   "target": "aarch64-linux",
   "triage": [],

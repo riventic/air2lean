@@ -110,7 +110,7 @@ runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated o
 host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
 segment of release builds).
 
-Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 86209 per aarch64-linux run and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 43584 per aarch64-linux run (floatops and floatconv left out, see below) and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
 run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
 those summaries (`build-mode-summaries-*`) and verifies the records on every run.
@@ -120,7 +120,7 @@ those summaries (`build-mode-summaries-*`) and verifies the records on every run
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4609 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
@@ -137,11 +137,19 @@ container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain fr
 instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
 (`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
 checks the case count, examples, mismatches and exclusions; its counts are the container's
-(86209 cases; 85 triaged float `@divExact` mismatches and 4975 exclusions in ReleaseFast and
-ReleaseSmall, none otherwise).
+(43584 cases; 4609 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
+
+The aarch64-linux runs leave out `floatops` and `floatconv`
+([reproducer](../tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md)): the
+committed translation follows the x86_64-linux float rules, aarch64-macos has its own
+translation and pins, and the translator has no aarch64-linux profile, so 586 f80 and fused-multiply
+cases are typed mismatches there. The float `@divExact` exception is therefore recorded on
+aarch64-macos and x86_64-linux only. In an unchecked mode a call that the model rejects as
+`.illegal` (an out-of-bounds slice pointer, MM-3) may leave a result that the harness cannot
+render; `scripts/diff-report.py` counts it as `ub_excluded`, like a model panic.
 
 **Crashing inputs and the hosted runner.** In ReleaseFast and ReleaseSmall about 700 of the
-4975 excluded inputs crash the tested call with SIGSEGV or SIGBUS (wild pointers in
+excluded inputs crash the tested call with SIGSEGV or SIGBUS (wild pointers in
 `layout` and `slices`: `ptrFromAddr`, `applyOp`, `sumMid`, `sentinelArr`, `subZ`,
 `copyWithin`); ReleaseSafe and Debug trap on them instead. The hosted `ubuntu-24.04-arm`
 image has `kernel.core_pattern = |/usr/lib/systemd/systemd-coredump ...`, and

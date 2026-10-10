@@ -87,7 +87,10 @@ class CommittedRecord(unittest.TestCase):
                              ['aarch64-linux', 'aarch64-macos', 'x86_64-linux'])
             run = json.loads((ROOT / bm.RUN_DIR / f'0.16.0--aarch64-linux--{mode}--llvm.json').read_text())
             self.assertEqual((run['target'], run['emulated'], run['host']), ('aarch64-linux', False, 'Linux-aarch64'))
-            self.assertEqual(run['counts'].get('mismatch', 0), 85 if mode in bm.UNCHECKED else 0)
+            # No aarch64-linux float model: the run leaves floatops and floatconv out, so it
+            # shows none of the float @divExact mismatches the other two targets triage.
+            self.assertEqual(run['counts'].get('mismatch', 0), 0)
+            self.assertEqual(sorted(e['example'] for e in run['excluded_examples']), ['floatconv', 'floatops'])
 
     def test_unqualified_backend_records_state_findings(self):
         for mode in ('Debug', 'ReleaseSafe', 'ReleaseFast'):
