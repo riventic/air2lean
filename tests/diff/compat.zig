@@ -123,6 +123,11 @@ pub fn pollReadable(fd: posix.fd_t, timeout_ms: i32) PollResult {
     }
 }
 
+/// A signal's number: 0.15.2's `SIG` members are plain integers, 0.16.0's are enum values.
+fn sigNumber(sig: anytype) usize {
+    return if (@typeInfo(@TypeOf(sig)) == .@"enum") @intFromEnum(sig) else sig;
+}
+
 /// Containment for a forked tested call, best effort (a failed call leaves the child no worse
 /// off than before): no core file (a crashing child must not feed `core_pattern` helpers such
 /// as apport or systemd-coredump, a storm of thousands of crashes), a cap on the address space
@@ -134,7 +139,7 @@ pub fn containChild(mem_limit: u64) void {
     _ = system.setrlimit(.CORE, &no_core);
     if (is_linux) {
         _ = std.os.linux.prctl(@intFromEnum(std.os.linux.PR.SET_DUMPABLE), 0, 0, 0, 0);
-        _ = std.os.linux.prctl(@intFromEnum(std.os.linux.PR.SET_PDEATHSIG), @intFromEnum(posix.SIG.KILL), 0, 0, 0);
+        _ = std.os.linux.prctl(@intFromEnum(std.os.linux.PR.SET_PDEATHSIG), sigNumber(posix.SIG.KILL), 0, 0, 0);
         if (mem_limit != 0) {
             const cap: posix.rlimit = .{ .cur = mem_limit, .max = mem_limit };
             _ = system.setrlimit(.AS, &cap);

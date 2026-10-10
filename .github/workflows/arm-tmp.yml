@@ -1,5 +1,6 @@
-name: arm-releasefast-tmp
-# TEMPORARY (codex/arm-releasefast-hang): diagnose the ReleaseFast hang on ubuntu-24.04-arm. Deleted before handback.
+name: arm-tmp
+# TEMPORARY (codex/arm-releasefast-hang): runs the build-modes-aarch64-linux job of ci.yml on the hosted
+# arm runner (ci.yml itself only runs for PRs and main). Deleted before handback.
 on:
   push:
     branches: [codex/arm-releasefast-hang]
@@ -8,22 +9,14 @@ permissions:
   contents: read
 
 jobs:
-  harness:
+  build-modes-aarch64-linux:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: orig
-            mode: ReleaseFast
-          - variant: fixed
-            mode: ReleaseFast
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
       - name: Install stock zig 0.16.0 (aarch64-linux)
         run: |
@@ -32,27 +25,8 @@ jobs:
           echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
           tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
+          [ "$("$RUNNER_TEMP/host-zig-0.16.0/zig" version)" = 0.16.0 ]
           echo "$RUNNER_TEMP/host-zig-0.16.0" >> "$GITHUB_PATH"
-
-      - name: System facts
-        run: |
-          set +e
-          uname -a; nproc; free -m
-          echo "core_pattern: $(cat /proc/sys/kernel/core_pattern)"
-          echo "ulimit: $(ulimit -c) core, $(ulimit -u) nproc"
-          cat /proc/sys/vm/overcommit_memory /proc/sys/kernel/pid_max /proc/sys/kernel/threads-max
-          cat /sys/fs/cgroup/pids.max /sys/fs/cgroup/memory.max 2>&1
-          systemctl is-active apport systemd-coredump.socket 2>&1
-          ls -la /var/crash 2>&1 | head -5
-          coredumpctl list 2>&1 | tail -3
-          ls /usr/share/apport 2>&1 | head -3
-          getconf PAGESIZE
-
-      - name: Original harness sources
-        if: matrix.variant == 'orig'
-        run: |
-          git checkout 9cdefbbd -- tests/diff/common.zig tests/diff/compat.zig
-          git status --short
 
       - name: Install elan (aarch64-linux)
         run: |
@@ -84,20 +58,30 @@ jobs:
       - name: Build runtime library + translator
         run: lake build
 
-      - name: diff.sh with watchdog
-        env:
-          MODE: ${{ matrix.mode }}
+      - name: Native build-mode differential runs (aarch64-linux, LLVM)
         run: |
-          set +e
-          (while true; do
-            echo "--- WATCHDOG $(date +%T) $(uptime | sed 's/.*load/load/') $(free -m | awk '/Mem/{print "used="$3" avail="$7}') procs=$(ps -e | wc -l)"
-            ps -eo pid,ppid,stat,etimes,pcpu,rss,wchan:20,args --sort=-etimes | grep -E "air2lean-diff|difftest|zig|scripts/diff" | head -8 | cut -c1-200
-            tail -n 2 "$RUNNER_TEMP/diff.log" | cut -c1-200
-            sleep 30
-          done) &
-          AIR2LEAN_DIFF_OPTIMIZE=$MODE AIR2LEAN_DIFF_BACKEND=llvm \
-            AIR2LEAN_DIFF_REPORT="$RUNNER_TEMP/$MODE.json" timeout -k 10 1200 scripts/diff.sh > "$RUNNER_TEMP/diff.log" 2>&1
-          echo "diff.sh exit $?"
-          tail -c 8000 "$RUNNER_TEMP/diff.log"
-          kill %1
-          tail -c 3000 "$RUNNER_TEMP/$MODE.json" 2>/dev/null | head -c 1500
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build-modes"
+          failed=0
+          for mode in ReleaseSafe Debug ReleaseFast ReleaseSmall; do
+            summary="$RUNNER_TEMP/build-modes/$mode.json"
+            status=0
+            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
+            case "$mode" in ReleaseFast|ReleaseSmall) ;; *) [ "$status" -eq 0 ] || failed=1 ;; esac
+            python3 scripts/build-modes.py record --verify --summary "$summary" \
+              --zig "$(command -v zig)" --zig-version 0.16.0 --target aarch64-linux \
+              --mode "$mode" --backend llvm --explicit-backend \
+              $(case "$mode" in ReleaseFast|ReleaseSmall) echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json ;; esac) \
+              || failed=1
+          done
+          [ "$failed" -eq 0 ]
+
+      - name: Upload the build-mode differential summaries
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/build-modes/
+          if-no-files-found: warn
+          retention-days: 30

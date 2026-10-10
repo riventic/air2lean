@@ -150,16 +150,13 @@ fn writeAll(fd: std.posix.fd_t, bytes: []const u8) void {
 
 /// Per-case limits of the forked child (`forkCall`). Generous: a case takes microseconds, and a
 /// limit only has to turn a runaway input into one reported failure instead of a stalled run.
-const case_timeout_ns: u64 = 20 * std.time.ns_per_s;
-const child_mem_limit: u64 = 4 << 30;
+/// `var` so that a regression fixture can shorten the deadline.
+pub var case_timeout_ns: u64 = 20 * std.time.ns_per_s;
+pub var child_mem_limit: u64 = 4 << 30;
 
 /// The function and input line being run (for the note on a killed case).
-var trace_name: []const u8 = "";
-var trace_line: usize = 0;
-
-fn sigNum(x: anytype) u32 {
-    return if (@typeInfo(@TypeOf(x)) == .@"enum") @intFromEnum(x) else x;
-}
+var case_name: []const u8 = "";
+var case_line: usize = 0;
 
 /// Set to the write end of the result pipe by the child right after `fork()`, so `panic` below
 /// can report which safety check tripped without threading state through `@call`.
@@ -563,14 +560,8 @@ pub fn forkCallBufsWithRenderingAllocator(
     const wr = compat.waitpid(pid, 0);
     child_reaped = true;
     if (read_failed) return harnessFailure();
-    // DIAG-TEMP
-    {
-        const ms = (compat.nowNs() - started) / std.time.ns_per_ms;
-        const sig: u32 = if (std.posix.W.IFSIGNALED(wr.status)) sigNum(std.posix.W.TERMSIG(wr.status)) else 0;
-        if (ms >= 100 or sig != 0) std.debug.print("TRACE {s} #{d} ms={d} sig={d} exit={d} bytes={d}\n", .{ trace_name, trace_line, ms, sig, @as(u32, if (std.posix.W.IFEXITED(wr.status)) std.posix.W.EXITSTATUS(wr.status) else 0xff), text.items.len });
-    }
     if (timed_out) {
-        std.debug.print("harness: {s} input {d} killed after {d} ms\n", .{ trace_name, trace_line, case_timeout_ns / std.time.ns_per_ms });
+        std.debug.print("harness: {s} input {d} killed after {d} ms\n", .{ case_name, case_line, case_timeout_ns / std.time.ns_per_ms });
         return harnessFailure();
     }
     // Only synchronous fault signals during the tested call are semantic observations.
@@ -665,11 +656,11 @@ fn forEachValue(
     defer metadata_writer = null;
 
     var lines = std.mem.splitScalar(u8, content, '\n');
-    trace_name = ex ++ "/" ++ name;
-    trace_line = 0;
+    case_name = ex ++ "/" ++ name;
+    case_line = 0;
     while (lines.next()) |line| {
         if (line.len == 0) continue;
-        trace_line += 1;
+        case_line += 1;
         var parsed = std.json.parseFromSlice(std.json.Value, gpa, line, .{}) catch |err| {
             try metadata.writeAll("{\"schema\":1,\"kind\":\"input_failure\"}\n");
             return err;
