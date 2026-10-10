@@ -69,6 +69,17 @@ theorem mul_unsigned_of_lt {a b : BitVec n} (h : a.toNat * b.toNat < 2 ^ n) :
     mul false a b = pure (a * b) := by
   rw [mul_unsigned]; simp [Nat.not_le.mpr h]
 
+/-- A saturating unsigned subtraction is the truncated one. -/
+theorem subSat_unsigned_toNat (a b : BitVec 64) : (subSat false a b).toNat = a.toNat - b.toNat := by
+  have ha := a.isLt
+  have hb := b.isLt
+  simp only [subSat, clamp, val, Bool.false_eq_true, ↓reduceIte]
+  rw [BitVec.toNat_ofInt]
+  have h64 : ((2 : Int) ^ 64) = 18446744073709551616 := by rfl
+  have h64' : (2 : Nat) ^ 64 = 18446744073709551616 := by rfl
+  simp only [h64, h64'] at *
+  omega
+
 /-- An unsigned narrowing `@intCast` succeeds exactly when the value fits. -/
 theorem intCast_unsigned_of_lt {a : BitVec n} (h : a.toNat < 2 ^ m) :
     intCast false false m a = pure (BitVec.ofNat m a.toNat) := by

@@ -301,6 +301,9 @@ theorem gt_eq (a b : BitVec 64) : Zig.gt false a b = decide (b.toNat < a.toNat) 
 theorem lt_eq (a b : BitVec 64) : Zig.lt false a b = decide (a.toNat < b.toNat) := by
   simp [Zig.lt, BitVec.ult]
 
+theorem le_eq (a b : BitVec 64) : Zig.le false a b = decide (a.toNat ≤ b.toNat) := by
+  simp [Zig.le, BitVec.ule]
+
 end Ops
 
 
