@@ -40,13 +40,18 @@ pub const table: Holder = .{
 };
 
 /// `extern` members: the union's own address, then an `extern` struct field / array element.
+/// An `extern` member pointer needs only `table`'s type; reading `table.head` at comptime
+/// resolves its value first, so the export carries the initializer.
 pub fn extWordPtr() *const u32 {
+    comptime std.debug.assert(table.head == 1);
     return &table.ext.word;
 }
 pub fn extHiPtr() *const u16 {
+    comptime std.debug.assert(table.head == 1);
     return &table.ext.pair.hi;
 }
 pub fn extBytePtr() *const u8 {
+    comptime std.debug.assert(table.head == 1);
     return &table.ext.bytes[2];
 }
 /// Tagged unions: tag first and payload first.
@@ -73,6 +78,17 @@ pub fn maybeCellPtr() *const u16 {
 pub fn resBytePtr() *const u8 {
     return &(table.res catch unreachable).bytes[3];
 }
+/// A union with an alignment-1 error-union payload member (`Failure![2]u8` at 4 + 2): on
+/// `stage2_llvm` the translator rejects a constant at or one past that payload (6..8) through
+/// any member, and accepts the others.
+pub const Mixed = union(enum(u32)) { res: Failure![2]u8, raw: [4]u8 };
+pub const mixed: Mixed = .{ .raw = .{ 60, 61, 62, 63 } };
+pub fn mixedLowPtr() *const u8 {
+    return &mixed.raw[1];
+}
+pub fn mixedHighPtr() *const u8 {
+    return &mixed.raw[3];
+}
 /// Reads through a union-member constant at a run-time index (not folded by Sema).
 pub fn readWideCell(i: usize) u16 {
     const cells = &table.wide.cells;
@@ -95,7 +111,7 @@ noinline fn launder(comptime T: type, p: *const T) *const T {
     return q.*;
 }
 
-test "union-member constant bases retain identity and offsets (stage2_x86_64)" {
+test "union-member constant bases retain identity and offsets" {
     const base = @intFromPtr(&table);
     const ext = base + @offsetOf(Holder, "ext");
     try std.testing.expectEqual(ext, @intFromPtr(launder(u32, extWordPtr())));
@@ -121,6 +137,9 @@ test "union-member constant bases retain identity and offsets (stage2_x86_64)" {
     try std.testing.expectEqual(@as(u8, 52), launder(u8, outerPairPtr()).*);
     try std.testing.expectEqual(@as(u16, 101), readWideCell(1));
     try std.testing.expectEqual(@as(u8, 0x33), readExtByte(2));
+    try std.testing.expectEqual(@intFromPtr(&mixed) + 4 + 1, @intFromPtr(launder(u8, mixedLowPtr())));
+    try std.testing.expectEqual(@intFromPtr(&mixed) + 4 + 3, @intFromPtr(launder(u8, mixedHighPtr())));
+    try std.testing.expectEqual(@as(u8, 63), launder(u8, mixedHighPtr()).*);
 }
 
 // The layout that the exports and proofs record (x86_64).
@@ -129,10 +148,12 @@ comptime {
     std.debug.assert(@sizeOf(Wide) == 12 and @alignOf(Wide) == 4);
     std.debug.assert(@sizeOf(Low) == 16 and @alignOf(Low) == 8);
     std.debug.assert(@sizeOf(Outer) == 16 and @alignOf(Outer) == 8);
+    std.debug.assert(@sizeOf(Mixed) == 8 and @sizeOf(Failure![2]u8) == 4);
 }
 
 comptime {
     _ = &extWordPtr; _ = &extHiPtr; _ = &extBytePtr; _ = &wideCellPtr; _ = &wideSlice;
     _ = &lowPairPtr; _ = &barePairPtr; _ = &outerPairPtr; _ = &maybeCellPtr; _ = &resBytePtr;
-    _ = &readWideCell; _ = &readExtByte; _ = &projectWide; _ = &projectBare;
+    _ = &mixedLowPtr; _ = &mixedHighPtr; _ = &readWideCell; _ = &readExtByte;
+    _ = &projectWide; _ = &projectBare;
 }

@@ -39,7 +39,7 @@
  "src": {
   "file": "union_bases.zig",
   "module": "union_bases",
-  "decl_line": 86
+  "decl_line": 102
  },
  "params": [
   0
@@ -183,7 +183,7 @@
        "ty": 9,
        "callee": {
         "ty": 10,
-        "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__anon_502",
+        "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__anon_531",
         "module": "std",
         "instance_key": "99d9b092af467cacbec61dd9e68eec5a1956a88c98e93c7b40bd7242146f2c9c",
         "noreturn": true

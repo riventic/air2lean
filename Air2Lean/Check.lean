@@ -1737,6 +1737,8 @@ private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Op
     | .errorUnion .. => some 2
     | .struct _ _ fields => some fields.size
     | .tuple children => some children.size
+    -- Every member, active or not, and the tag.
+    | .union .. => some (childTys ty).size
     | _ => none
   let mut remaining := fuel - 1
   if count > remaining then none
@@ -1747,7 +1749,8 @@ private partial def pointerFreeInitializerType (f : Func) (root fuel : Nat) : Op
 
 /-- Complete constructor values whose typed encoding contains no `errFrag`.
 Success error-union tags and null optional-error tags encode literal zero bytes.
-Undefined/unknown values, error names/arms, pointers and opaque unions fail closed. -/
+A union is its active member's value (its tag is an enum integer; the other bytes are
+padding). Undefined/unknown values, error names/arms and pointers fail closed. -/
 private partial def ordinaryInitializer (f : Func) (root : TyId) (v : Val) (fuel : Nat) :
     Option Nat := do
   if fuel == 0 then none
@@ -1784,6 +1787,9 @@ private partial def ordinaryInitializer (f : Func) (root : TyId) (v : Val) (fuel
     if fields.size != values.size || fields.size > remaining then none
     items (fields.map (·.2)) values
   | .tuple children, .agg _ values => items children values
+  | .union _ _ _ fields, .unionVal _ k value =>
+    let (_, child) ← fields[k]?
+    ordinaryInitializer f child value remaining
   | _, _ => none
 
 /-- No mutable or unresolved backing qualifies. Both traversals consume one shared

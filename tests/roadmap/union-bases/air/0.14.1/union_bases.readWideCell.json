@@ -39,7 +39,7 @@
  "src": {
   "file": "union_bases.zig",
   "module": "union_bases",
-  "decl_line": 77
+  "decl_line": 93
  },
  "params": [
   0

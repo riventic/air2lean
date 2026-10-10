@@ -39,7 +39,7 @@
  "src": {
   "file": "union_bases.zig",
   "module": "union_bases",
-  "decl_line": 49
+  "decl_line": 53
  },
  "params": [],
  "ret": 0,
@@ -48,7 +48,7 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2,
+   "line": 3,
    "column": 5
   },
   {
