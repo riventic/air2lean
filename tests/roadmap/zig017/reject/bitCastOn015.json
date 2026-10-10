@@ -28,6 +28,7 @@
  "params": [
   1
  ],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

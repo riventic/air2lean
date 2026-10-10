@@ -44,6 +44,7 @@
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {

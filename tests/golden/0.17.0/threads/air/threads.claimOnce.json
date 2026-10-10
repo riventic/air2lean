@@ -116,6 +116,7 @@
  "name": "threads.claimOnce",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

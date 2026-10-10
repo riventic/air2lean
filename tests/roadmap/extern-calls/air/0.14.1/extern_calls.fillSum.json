@@ -45,6 +45,7 @@
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "export": {
   "name": "fillSum",

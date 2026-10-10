@@ -37,6 +37,7 @@
  "name": "device_asm.fence",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

@@ -37,6 +37,7 @@
   "name": "const_bases.resElemPtr",
   "module": "root",
   "params": [],
+  "noalias": [],
   "ret": 11,
   "body": [
     {

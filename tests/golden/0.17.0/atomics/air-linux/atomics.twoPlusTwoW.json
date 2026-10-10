@@ -37,6 +37,7 @@
  "name": "atomics.twoPlusTwoW",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {

@@ -37,6 +37,7 @@
   "name": "const_bases.maybeBytePtr",
   "module": "root",
   "params": [],
+  "noalias": [],
   "ret": 11,
   "body": [
     {

@@ -46,6 +46,7 @@
   1,
   2
  ],
+ "noalias": [],
  "ret": 0,
  "export": {
   "name": "memset",

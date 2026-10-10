@@ -116,6 +116,7 @@
  "name": "atomics.mpRelaxed",
  "module": "root",
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {
