@@ -88,6 +88,7 @@
     "ZigLean.Mem.Repr": ["SEM-01", "SEM-02"],
     "ZigLean.Mem.NullLemmas": ["SEM-02"],
     "ZigLean.Mem.Parent": ["SEM-02"],
+    "ZigLean.Mem.Noalias": ["SEM-02"],
     "ZigLean.Mem.Device": ["DEV-01"],
     "ZigLean.Mem.Alloc": ["ALC-01", "ALC-02"],
     "ZigLean.Mem.Owned": ["ALC-07"],
