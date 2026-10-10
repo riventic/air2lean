@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "packed_fields.innerCPtr",
+ "module": "root",
  "src": {
   "file": "packed_fields.zig",
   "module": "packed_fields",
@@ -259,6 +260,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -279,6 +281,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -297,6 +300,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -310,6 +314,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
    "bit_offset": 0,
@@ -332,6 +337,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
    "bit_offset": 4,
@@ -347,6 +353,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 3,
    "bit_offset": 8,
@@ -360,6 +367,7 @@
   {
    "k": "struct",
    "name": "packed_fields.Reg",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
@@ -389,6 +397,7 @@
   {
    "k": "struct",
    "name": "packed_fields.Inner",
+   "module": "root",
    "layout": "packed",
    "fields": [
     {
@@ -418,6 +427,7 @@
   {
    "k": "enum",
    "name": "packed_fields.Mode",
+   "module": "root",
    "tag": 15,
    "exhaustive": true,
    "fields": [

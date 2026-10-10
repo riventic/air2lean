@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "runtime_tags.tryPtrCold",
+ "module": "root",
  "src": {
   "file": "runtime_tags.zig",
   "module": "runtime_tags",
@@ -226,6 +227,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -239,6 +241,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -271,6 +274,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

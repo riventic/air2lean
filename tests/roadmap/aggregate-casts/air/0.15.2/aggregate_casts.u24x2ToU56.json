@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "aggregate_casts.u24x2ToU56",
+ "module": "root",
  "src": {
   "file": "aggregate_casts.zig",
   "module": "aggregate_casts",

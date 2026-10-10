@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "try_pointers.payload8",
+ "module": "root",
  "src": {
   "file": "try_pointers.zig",
   "module": "try_pointers",
@@ -154,6 +155,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -186,6 +188,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

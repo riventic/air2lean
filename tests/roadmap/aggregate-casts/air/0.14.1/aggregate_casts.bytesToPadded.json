@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "aggregate_casts.bytesToPadded",
+ "module": "root",
  "src": {
   "file": "aggregate_casts.zig",
   "module": "aggregate_casts",
@@ -98,6 +99,7 @@
   {
    "k": "struct",
    "name": "aggregate_casts.Padded",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

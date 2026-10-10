@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "const_bases.readResElem",
+ "module": "root",
  "src": {
   "file": "const_bases.zig",
   "module": "const_bases",

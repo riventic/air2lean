@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "runtime_tags.shrExact",
+ "module": "root",
  "src": {
   "file": "runtime_tags.zig",
   "module": "runtime_tags",
@@ -168,6 +169,7 @@
        "callee": {
         "ty": 6,
         "func": "debug.FullPanic((function 'defaultPanic')).shrOverflow",
+        "module": "std",
         "noreturn": true
        },
        "args": []

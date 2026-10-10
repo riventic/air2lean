@@ -50,12 +50,12 @@
     }
   },
   "artifacts": {
-    "air-fresh/0.16.0/try_pointers.cleanup.json": "7fd7848a46f85155fdf6cd5e5f3cf3bf2abbd6b2aaefd43e10a270c770bcbd9a",
-    "air-fresh/0.16.0/try_pointers.coldPayload.json": "2a1d0129cf14781cf1a1afde70a21f6a4bb32d0f35b043d7f32290adce036ebd",
-    "air-fresh/0.16.0/try_pointers.payload64.json": "40cb82357ff38cf29f22ceadbd09e71b6b936e2ac2fc31b874e50f52e32cbfc0",
-    "air-fresh/0.16.0/try_pointers.payload8.json": "cd9fb95ab33678122e95d81b962e5af9bb7440369c829e9ee11472f15c88e813",
-    "air-fresh/0.16.0/try_pointers.writeAlias.json": "0eddd926095a706b482600b8492f7e264b31b6b172e98df498d2968b8dcafd1a",
-    "aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "d34b80593663c0b43d6f27ad745fc68f969be5facc014dc7427471f7ffc712d8",
-    "aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "13233108fefb0183195f4835f0c7724075e2025a116b095f681f016fec96f687"
+    "air-fresh/0.16.0/try_pointers.cleanup.json": "ea629f431faba4813d937b624054a326e7b3b698bfff8e93a677f14acdd2a4a4",
+    "air-fresh/0.16.0/try_pointers.coldPayload.json": "db54c1ea3f8f7991ce5f306d3444455fabb7182b7fae416ded6475ec8dd2dcec",
+    "air-fresh/0.16.0/try_pointers.payload64.json": "359ac5b44ad469b2bbb7b770cd2573d2d2e6e5a241e4fe535d2041c8d6ba4741",
+    "air-fresh/0.16.0/try_pointers.payload8.json": "d002ff330957940c165ccef8379735e0dc2a47b77f5a9f47d2fd8cd4d620b6b5",
+    "air-fresh/0.16.0/try_pointers.writeAlias.json": "85e57c3427045e4cc5cdfd192244cbd50968bf828723a7ff1ddf0bbc35fae5c5",
+    "aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "56627940d4f87e0cd1368b940a54ed216f35375e2c6ccee1fd174daaf2a1de2e",
+    "aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "56d85bb84cf44d976c162b2f00772a88c1570f5200b9cadf59a470f62f040411"
   }
 }

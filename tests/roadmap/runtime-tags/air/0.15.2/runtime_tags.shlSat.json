@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "runtime_tags.shlSat",
+ "module": "root",
  "src": {
   "file": "runtime_tags.zig",
   "module": "runtime_tags",

@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "aggregate_casts.u64ToPair",
+ "module": "root",
  "src": {
   "file": "aggregate_casts.zig",
   "module": "aggregate_casts",
@@ -97,6 +98,7 @@
   {
    "k": "struct",
    "name": "aggregate_casts.Pair",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

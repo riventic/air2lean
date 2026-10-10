@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "runtime_tags.fieldPtr",
+ "module": "root",
  "src": {
   "file": "runtime_tags.zig",
   "module": "runtime_tags",
@@ -134,6 +135,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -147,6 +149,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -160,6 +163,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -178,6 +182,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -189,6 +194,7 @@
   {
    "k": "struct",
    "name": "runtime_tags.Wide",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
