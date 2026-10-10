@@ -132,6 +132,66 @@ def divExactUnsafe (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   match e with
   | .ret v => pure v
 
+structure forArrayLocals where
+  sum : BitVec 32
+  local4 : BitVec 64
+  deriving Inhabited
+
+inductive forArrayExit where
+  | ret (v : BitVec 32)
+  | br8
+  | br15
+  | br12
+  | rep13
+
+def forArray.again13 : forArrayExit → Bool
+  | .rep13 => true
+  | _ => false
+
+def forArray.loop13 (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MM forArrayLocals forArrayExit := do
+  let i14 ← pure ((← get).local4)
+  match ← ((do
+    let i16 ← pure (i14)
+    let i17 ← pure (Zig.lt false i16 (3 : BitVec 64))
+    if i17 then (do
+      let i19 ← Zig.callM (Zig.checkIndex p0 i14 >>= fun _ => Zig.load (BitVec 32) 4 (p0.ptr.elem 4 i14))
+      let i20 ← Zig.callM (Zig.load (BitVec 32) 4 (p1.elem 4 i14))
+      let i21 ← pure ((← get).sum)
+      let i22 ← pure (Zig.addWrap i19 i20)
+      let i23 ← pure (Zig.addWrap i21 i22)
+      modify (fun s => { s with sum := i23 })
+      pure .br15)
+    else (do
+      pure .br12)) : Zig.MM forArrayLocals forArrayExit) with
+  | .br15 => (do
+    let i27 ← Zig.add false i14 (1 : BitVec 64)
+    modify (fun s => { s with local4 := i27 })
+    pure .rep13)
+  | e => pure e
+
+def forArray (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
+  let e ← ((do
+    modify (fun s => { s with sum := (0 : BitVec 32) })
+    modify (fun s => { s with local4 := (0 : BitVec 64) })
+    let i6 ← pure p0.len
+    let i7 ← pure ((3 : BitVec 64) == i6)
+    match ← ((do
+      if i7 then (do
+        pure .br8)
+      else (do
+        throw .illegal)) : Zig.MM forArrayLocals forArrayExit) with
+    | .br8 => (do
+      match ← ((do
+        Zig.loop (forArray.loop13 p0 p1) forArray.again13) : Zig.MM forArrayLocals forArrayExit) with
+      | .br12 => (do
+        let i30 ← pure ((← get).sum)
+        pure (.ret i30))
+      | e => pure e)
+    | e => pure e) : Zig.MM forArrayLocals forArrayExit).run' (default : forArrayLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure forLenLocals where
   sum : BitVec 32
   local4 : BitVec 64
@@ -139,34 +199,35 @@ structure forLenLocals where
 
 inductive forLenExit where
   | ret (v : BitVec 32)
-  | br11
-  | br8
-  | rep9
+  | br9
+  | br16
+  | br13
+  | rep14
 
-def forLen.again9 : forLenExit → Bool
-  | .rep9 => true
+def forLen.again14 : forLenExit → Bool
+  | .rep14 => true
   | _ => false
 
-def forLen.loop9 (p0 : Array (BitVec 32)) (p1 : Array (BitVec 32)) (i6 : BitVec 64) : Zig.M forLenLocals forLenExit := do
-  let i10 ← pure ((← get).local4)
+def forLen.loop14 (p0 : Array (BitVec 32)) (p1 : Array (BitVec 32)) (i6 : BitVec 64) : Zig.M forLenLocals forLenExit := do
+  let i15 ← pure ((← get).local4)
   match ← ((do
-    let i12 ← pure (i10)
-    let i13 ← pure (i6)
-    let i14 ← pure (Zig.lt false i12 i13)
-    if i14 then (do
-      let i16 ← Zig.call (Zig.index p0 i10)
-      let i17 ← Zig.call (Zig.index p1 i10)
-      let i18 ← pure ((← get).sum)
-      let i19 ← pure (Zig.addWrap i16 i17)
-      let i20 ← pure (Zig.addWrap i18 i19)
-      modify (fun s => { s with sum := i20 })
-      pure .br11)
+    let i17 ← pure (i15)
+    let i18 ← pure (i6)
+    let i19 ← pure (Zig.lt false i17 i18)
+    if i19 then (do
+      let i21 ← Zig.call (Zig.index p0 i15)
+      let i22 ← Zig.call (Zig.index p1 i15)
+      let i23 ← pure ((← get).sum)
+      let i24 ← pure (Zig.addWrap i21 i22)
+      let i25 ← pure (Zig.addWrap i23 i24)
+      modify (fun s => { s with sum := i25 })
+      pure .br16)
     else (do
-      pure .br8)) : Zig.M forLenLocals forLenExit) with
-  | .br11 => (do
-    let i24 ← Zig.add false i10 (1 : BitVec 64)
-    modify (fun s => { s with local4 := i24 })
-    pure .rep9)
+      pure .br13)) : Zig.M forLenLocals forLenExit) with
+  | .br16 => (do
+    let i29 ← Zig.add false i15 (1 : BitVec 64)
+    modify (fun s => { s with local4 := i29 })
+    pure .rep14)
   | e => pure e
 
 def forLen (p0 : Array (BitVec 32)) (p1 : Array (BitVec 32)) : Zig.Result (BitVec 32) := do
@@ -174,12 +235,20 @@ def forLen (p0 : Array (BitVec 32)) (p1 : Array (BitVec 32)) : Zig.Result (BitVe
     modify (fun s => { s with sum := (0 : BitVec 32) })
     modify (fun s => { s with local4 := (0 : BitVec 64) })
     let i6 ← pure (Zig.len p0)
-    let _i7 ← Zig.call (Zig.forLen (Zig.len p1) i6)
+    let i7 ← pure (Zig.len p1)
+    let i8 ← pure (i6 == i7)
     match ← ((do
-      Zig.loop (forLen.loop9 p0 p1 i6) forLen.again9) : Zig.M forLenLocals forLenExit) with
-    | .br8 => (do
-      let i27 ← pure ((← get).sum)
-      pure (.ret i27))
+      if i8 then (do
+        pure .br9)
+      else (do
+        throw .illegal)) : Zig.M forLenLocals forLenExit) with
+    | .br9 => (do
+      match ← ((do
+        Zig.loop (forLen.loop14 p0 p1 i6) forLen.again14) : Zig.M forLenLocals forLenExit) with
+      | .br13 => (do
+        let i32 ← pure ((← get).sum)
+        pure (.ret i32))
+      | e => pure e)
     | e => pure e) : Zig.M forLenLocals forLenExit).run' (default : forLenLocals)
   match e with
   | .ret v => pure v
@@ -192,34 +261,35 @@ structure forLenMemLocals where
 
 inductive forLenMemExit where
   | ret (v : BitVec 32)
-  | br13
-  | br10
-  | rep11
+  | br11
+  | br18
+  | br15
+  | rep16
 
-def forLenMem.again11 : forLenMemExit → Bool
-  | .rep11 => true
+def forLenMem.again16 : forLenMemExit → Bool
+  | .rep16 => true
   | _ => false
 
-def forLenMem.loop11 (i6 : Zig.Slice) (i7 : Zig.Slice) (i8 : BitVec 64) : Zig.MM forLenMemLocals forLenMemExit := do
-  let i12 ← pure ((← get).local4)
+def forLenMem.loop16 (i6 : Zig.Slice) (i7 : Zig.Slice) (i8 : BitVec 64) : Zig.MM forLenMemLocals forLenMemExit := do
+  let i17 ← pure ((← get).local4)
   match ← ((do
-    let i14 ← pure (i12)
-    let i15 ← pure (i8)
-    let i16 ← pure (Zig.lt false i14 i15)
-    if i16 then (do
-      let i18 ← Zig.callM (Zig.checkIndex i6 i12 >>= fun _ => Zig.load (BitVec 32) 4 (i6.ptr.elem 4 i12))
-      let i19 ← Zig.callM (Zig.checkIndex i7 i12 >>= fun _ => Zig.load (BitVec 32) 4 (i7.ptr.elem 4 i12))
-      let i20 ← pure ((← get).sum)
-      let i21 ← pure (Zig.addWrap i18 i19)
-      let i22 ← pure (Zig.addWrap i20 i21)
-      modify (fun s => { s with sum := i22 })
-      pure .br13)
+    let i19 ← pure (i17)
+    let i20 ← pure (i8)
+    let i21 ← pure (Zig.lt false i19 i20)
+    if i21 then (do
+      let i23 ← Zig.callM (Zig.checkIndex i6 i17 >>= fun _ => Zig.load (BitVec 32) 4 (i6.ptr.elem 4 i17))
+      let i24 ← Zig.callM (Zig.checkIndex i7 i17 >>= fun _ => Zig.load (BitVec 32) 4 (i7.ptr.elem 4 i17))
+      let i25 ← pure ((← get).sum)
+      let i26 ← pure (Zig.addWrap i23 i24)
+      let i27 ← pure (Zig.addWrap i25 i26)
+      modify (fun s => { s with sum := i27 })
+      pure .br18)
     else (do
-      pure .br10)) : Zig.MM forLenMemLocals forLenMemExit) with
-  | .br13 => (do
-    let i26 ← Zig.add false i12 (1 : BitVec 64)
-    modify (fun s => { s with local4 := i26 })
-    pure .rep11)
+      pure .br15)) : Zig.MM forLenMemLocals forLenMemExit) with
+  | .br18 => (do
+    let i31 ← Zig.add false i17 (1 : BitVec 64)
+    modify (fun s => { s with local4 := i31 })
+    pure .rep16)
   | e => pure e
 
 def forLenMem (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
@@ -229,12 +299,20 @@ def forLenMem (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     let i6 ← Zig.load (Zig.Slice) 8 p0
     let i7 ← Zig.load (Zig.Slice) 8 p1
     let i8 ← pure i6.len
-    let _i9 ← Zig.callR (Zig.forLen i7.len i8)
+    let i9 ← pure i7.len
+    let i10 ← pure (i8 == i9)
     match ← ((do
-      Zig.loop (forLenMem.loop11 i6 i7 i8) forLenMem.again11) : Zig.MM forLenMemLocals forLenMemExit) with
-    | .br10 => (do
-      let i29 ← pure ((← get).sum)
-      pure (.ret i29))
+      if i10 then (do
+        pure .br11)
+      else (do
+        throw .illegal)) : Zig.MM forLenMemLocals forLenMemExit) with
+    | .br11 => (do
+      match ← ((do
+        Zig.loop (forLenMem.loop16 i6 i7 i8) forLenMem.again16) : Zig.MM forLenMemLocals forLenMemExit) with
+      | .br15 => (do
+        let i34 ← pure ((← get).sum)
+        pure (.ret i34))
+      | e => pure e)
     | e => pure e) : Zig.MM forLenMemLocals forLenMemExit).run' (default : forLenMemLocals)
   match e with
   | .ret v => pure v
@@ -247,34 +325,35 @@ structure forRangeLocals where
 
 inductive forRangeExit where
   | ret (v : BitVec 32)
-  | br10
-  | br7
-  | rep8
+  | br8
+  | br15
+  | br12
+  | rep13
 
-def forRange.again8 : forRangeExit → Bool
-  | .rep8 => true
+def forRange.again13 : forRangeExit → Bool
+  | .rep13 => true
   | _ => false
 
-def forRange.loop8 (p0 : Array (BitVec 32)) (i6 : BitVec 64) : Zig.M forRangeLocals forRangeExit := do
-  let i9 ← pure ((← get).local4)
+def forRange.loop13 (p0 : Array (BitVec 32)) (i6 : BitVec 64) : Zig.M forRangeLocals forRangeExit := do
+  let i14 ← pure ((← get).local4)
   match ← ((do
-    let i11 ← pure (i9)
-    let i12 ← pure (i6)
-    let i13 ← pure (Zig.lt false i11 i12)
-    if i13 then (do
-      let i15 ← Zig.call (Zig.index p0 i9)
-      let i16 ← pure ((← get).sum)
-      let i17 ← pure (Zig.trunc 32 i9)
-      let i18 ← pure (Zig.addWrap i15 i17)
-      let i19 ← pure (Zig.addWrap i16 i18)
-      modify (fun s => { s with sum := i19 })
-      pure .br10)
+    let i16 ← pure (i14)
+    let i17 ← pure (i6)
+    let i18 ← pure (Zig.lt false i16 i17)
+    if i18 then (do
+      let i20 ← Zig.call (Zig.index p0 i14)
+      let i21 ← pure ((← get).sum)
+      let i22 ← pure (Zig.trunc 32 i14)
+      let i23 ← pure (Zig.addWrap i20 i22)
+      let i24 ← pure (Zig.addWrap i21 i23)
+      modify (fun s => { s with sum := i24 })
+      pure .br15)
     else (do
-      pure .br7)) : Zig.M forRangeLocals forRangeExit) with
-  | .br10 => (do
-    let i23 ← Zig.add false i9 (1 : BitVec 64)
-    modify (fun s => { s with local4 := i23 })
-    pure .rep8)
+      pure .br12)) : Zig.M forRangeLocals forRangeExit) with
+  | .br15 => (do
+    let i28 ← Zig.add false i14 (1 : BitVec 64)
+    modify (fun s => { s with local4 := i28 })
+    pure .rep13)
   | e => pure e
 
 def forRange (p0 : Array (BitVec 32)) (p1 : BitVec 64) : Zig.Result (BitVec 32) := do
@@ -282,12 +361,83 @@ def forRange (p0 : Array (BitVec 32)) (p1 : BitVec 64) : Zig.Result (BitVec 32) 
     modify (fun s => { s with sum := (0 : BitVec 32) })
     modify (fun s => { s with local4 := (0 : BitVec 64) })
     let i6 ← pure (Zig.len p0)
+    let i7 ← pure (i6 == p1)
     match ← ((do
-      Zig.loop (forRange.loop8 p0 i6) forRange.again8) : Zig.M forRangeLocals forRangeExit) with
-    | .br7 => (do
-      let i26 ← pure ((← get).sum)
-      pure (.ret i26))
+      if i7 then (do
+        pure .br8)
+      else (do
+        throw .illegal)) : Zig.M forRangeLocals forRangeExit) with
+    | .br8 => (do
+      match ← ((do
+        Zig.loop (forRange.loop13 p0 i6) forRange.again13) : Zig.M forRangeLocals forRangeExit) with
+      | .br12 => (do
+        let i31 ← pure ((← get).sum)
+        pure (.ret i31))
+      | e => pure e)
     | e => pure e) : Zig.M forRangeLocals forRangeExit).run' (default : forRangeLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure forRangeFromLocals where
+  sum : BitVec 32
+  local5 : BitVec 64
+  deriving Inhabited
+
+inductive forRangeFromExit where
+  | ret (v : BitVec 32)
+  | br10
+  | br17
+  | br14
+  | rep15
+
+def forRangeFrom.again15 : forRangeFromExit → Bool
+  | .rep15 => true
+  | _ => false
+
+def forRangeFrom.loop15 (p0 : Array (BitVec 32)) (p1 : BitVec 64) (i7 : BitVec 64) : Zig.M forRangeFromLocals forRangeFromExit := do
+  let i16 ← pure ((← get).local5)
+  match ← ((do
+    let i18 ← pure (i16)
+    let i19 ← pure (i7)
+    let i20 ← pure (Zig.lt false i18 i19)
+    if i20 then (do
+      let i22 ← Zig.call (Zig.index p0 i16)
+      let i23 ← Zig.add false p1 i16
+      let i24 ← pure ((← get).sum)
+      let i25 ← pure (Zig.trunc 32 i23)
+      let i26 ← pure (Zig.addWrap i22 i25)
+      let i27 ← pure (Zig.addWrap i24 i26)
+      modify (fun s => { s with sum := i27 })
+      pure .br17)
+    else (do
+      pure .br14)) : Zig.M forRangeFromLocals forRangeFromExit) with
+  | .br17 => (do
+    let i31 ← Zig.add false i16 (1 : BitVec 64)
+    modify (fun s => { s with local5 := i31 })
+    pure .rep15)
+  | e => pure e
+
+def forRangeFrom (p0 : Array (BitVec 32)) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.Result (BitVec 32) := do
+  let e ← ((do
+    modify (fun s => { s with sum := (0 : BitVec 32) })
+    modify (fun s => { s with local5 := (0 : BitVec 64) })
+    let i7 ← pure (Zig.len p0)
+    let i8 ← Zig.sub false p2 p1
+    let i9 ← pure (i7 == i8)
+    match ← ((do
+      if i9 then (do
+        pure .br10)
+      else (do
+        throw .illegal)) : Zig.M forRangeFromLocals forRangeFromExit) with
+    | .br10 => (do
+      match ← ((do
+        Zig.loop (forRangeFrom.loop15 p0 p1 i7) forRangeFrom.again15) : Zig.M forRangeFromLocals forRangeFromExit) with
+      | .br14 => (do
+        let i34 ← pure ((← get).sum)
+        pure (.ret i34))
+      | e => pure e)
+    | e => pure e) : Zig.M forRangeFromLocals forRangeFromExit).run' (default : forRangeFromLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic

@@ -11,6 +11,7 @@ safety check before it.
 | `Runtime.lean` | the runtime ops (`Zig.Float.divExactTrunc`, `Zig.memcpy`, `Zig.checkIndex`, `Zig.checkAddr`, …) directly |
 | `mutations.py` | emitter-output mutants that drop one op's check; `Cases.lean` must reject each |
 | `probe.zig`, `probe-air/`, `expected.json`, `probes.py` | IB the translator rejects, and the documented gaps, each translated alone |
+| `forlen.zig`, `for-air/<version>/` | `for` over a slice and a range or an array without safety, exported by every supported version: each translation has the patched Sema's length check (`.illegal`), and an export without `unchecked_ib` is rejected (`expected.json`) |
 | `native.zig`, `native/` | what ReleaseSafe and ReleaseFast builds return for the same input classes |
 
 ```sh

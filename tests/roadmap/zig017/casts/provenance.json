@@ -3,8 +3,8 @@
   "source": {"path": "tests/roadmap/zig017/casts/casts.zig", "sha256": "8b7810da816b326fad915df301d80192dd6d8baa06b8b388d00ede764fc37607"},
   "export": {
     "command": "ZIG_AIR_JSON_DIR=tests/roadmap/zig017/casts/air/0.17.0 ZIG_AIR_JSON_FILTER=casts. zig-air-0.17.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline tests/roadmap/zig017/casts/casts.zig",
-    "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
-    "exporter_json_zig_sha256": "38b83e6a15ac83cb72499107bff5ca8f903e9bc7d41dddf2b8b81083a65f5840",
+    "patched_compiler_sha256": "54f968f791e940d21b0e757a04271a884b82412d88371188ba03c5d3fb91bb55",
+    "exporter_json_zig_sha256": "d8d3f9917c8c808d9f0608d3241bd2859241af0ec4151a48fb445f0fe5e7909c",
     "export_host": "aarch64-macos"
   },
   "translation": "rejected by Check.lean, as for 0.16.0's bitcast of the same casts: raw error representation casts require finalized error ordinals and are outside the finite symbolic error-storage fragment. The fixture shows only that the 0.17.0 exporter writes the tags and that Canon maps them onto the checked 0.16.0 path."

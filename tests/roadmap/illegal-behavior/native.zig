@@ -49,6 +49,8 @@ pub fn main() void {
     std.debug.print("forLen 2/3 {d}\n", .{ib.forLen(twoItems, threeItems)});
     std.debug.print("forLenMem 2/3 {d}\n", .{ib.forLenMem(&twoItems, &threeItems)});
     std.debug.print("forRange 3/5 {d}\n", .{ib.forRange(threeItems, 5)});
+    std.debug.print("forRangeFrom 3/1..6 {d}\n", .{ib.forRangeFrom(threeItems, 1, 6)});
+    std.debug.print("forArray 4/3 {d}\n", .{ib.forArray(items[0..4], items[0..3])});
     var lone: u32 = 7;
     std.debug.print("parentOf lone {}\n", .{@intFromPtr(ib.parentOf(&lone)) + 4 == @intFromPtr(&lone)});
 }

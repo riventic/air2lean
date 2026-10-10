@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,10 +39,16 @@
  },
  "name": "posix.read",
  "module": "std",
+ "src": {
+  "file": "posix.zig",
+  "module": "std",
+  "decl_line": 844
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -58,7 +67,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 3,
@@ -69,7 +79,8 @@
      "id": 4,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 12
     },
     {
      "id": 5,
@@ -119,7 +130,8 @@
        "id": 8,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 2
+       "line": 2,
+       "column": 23
       },
       {
        "id": 9,
@@ -157,7 +169,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 33
+   "line": 33,
+   "column": 31
   },
   {
    "id": 20,
@@ -168,7 +181,8 @@
      "id": 22,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 38
+     "line": 38,
+     "column": 12
     },
     {
      "id": 23,
@@ -179,7 +193,8 @@
        "id": 24,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 39
+       "line": 39,
+       "column": 39
       },
       {
        "id": 25,
@@ -195,7 +210,8 @@
        "id": 26,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 39
+       "line": 39,
+       "column": 53
       },
       {
        "id": 27,
@@ -255,7 +271,8 @@
        "id": 32,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 39
+       "line": 39,
+       "column": 31
       },
       {
        "id": 33,
@@ -294,7 +311,8 @@
        "id": 35,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 40
+       "line": 40,
+       "column": 22
       },
       {
        "id": 37,
@@ -304,6 +322,7 @@
         "ty": 12,
         "func": "posix.errno__anon_1522",
         "module": "std",
+        "instance_key": "c57b4435c781f8ef64888c1ef324e0248ad8ccb2174d47aee499ab856992825e",
         "noreturn": false
        },
        "args": [
@@ -316,7 +335,8 @@
        "id": 38,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 40
+       "line": 40,
+       "column": 17
       },
       {
        "id": 81,
@@ -341,7 +361,8 @@
            "id": 40,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 41
+           "line": 41,
+           "column": 32
           },
           {
            "id": 41,
@@ -357,7 +378,8 @@
            "id": 42,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 41
+           "line": 41,
+           "column": 25
           },
           {
            "id": 43,
@@ -417,7 +439,8 @@
            "id": 46,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 43
+           "line": 43,
+           "column": 23
           },
           {
            "id": 47,
@@ -451,7 +474,8 @@
            "id": 49,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 44
+           "line": 44,
+           "column": 23
           },
           {
            "id": 50,
@@ -485,7 +509,8 @@
            "id": 52,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 45
+           "line": 45,
+           "column": 22
           },
           {
            "id": 53,
@@ -513,7 +538,8 @@
            "id": 54,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 46
+           "line": 46,
+           "column": 23
           },
           {
            "id": 55,
@@ -541,7 +567,8 @@
            "id": 56,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 47
+           "line": 47,
+           "column": 26
           },
           {
            "id": 57,
@@ -569,7 +596,8 @@
            "id": 58,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 48
+           "line": 48,
+           "column": 22
           },
           {
            "id": 59,
@@ -597,7 +625,8 @@
            "id": 60,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 49
+           "line": 49,
+           "column": 20
           },
           {
            "id": 61,
@@ -625,7 +654,8 @@
            "id": 62,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 50
+           "line": 50,
+           "column": 23
           },
           {
            "id": 63,
@@ -653,7 +683,8 @@
            "id": 64,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 51
+           "line": 51,
+           "column": 24
           },
           {
            "id": 65,
@@ -681,7 +712,8 @@
            "id": 66,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 52
+           "line": 52,
+           "column": 23
           },
           {
            "id": 67,
@@ -709,7 +741,8 @@
            "id": 68,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 53
+           "line": 53,
+           "column": 25
           },
           {
            "id": 69,
@@ -737,7 +770,8 @@
            "id": 70,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 54
+           "line": 54,
+           "column": 27
           },
           {
            "id": 71,
@@ -765,7 +799,8 @@
            "id": 72,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 55
+           "line": 55,
+           "column": 26
           },
           {
            "id": 73,
@@ -797,7 +832,8 @@
          "id": 75,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 56
+         "line": 56,
+         "column": 49
         },
         {
          "id": 76,
@@ -819,7 +855,8 @@
          "id": 77,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 56
+         "line": 56,
+         "column": 27
         },
         {
          "id": 78,

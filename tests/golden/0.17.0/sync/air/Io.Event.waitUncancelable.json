@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,10 +118,16 @@
  },
  "name": "Io.Event.waitUncancelable",
  "module": "std",
+ "src": {
+  "file": "Io.zig",
+  "module": "std",
+  "decl_line": 2006
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -165,7 +174,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 6,
@@ -237,7 +247,8 @@
        "id": 11,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 96
       },
       {
        "id": 12,
@@ -267,7 +278,8 @@
              "id": 13,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 3
+             "line": 3,
+             "column": 23
             },
             {
              "id": 14,
@@ -324,7 +336,8 @@
              "id": 17,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 5
+             "line": 5,
+             "column": 24
             },
             {
              "id": 18,
@@ -345,7 +358,8 @@
            "id": 19,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 2
+           "line": 2,
+           "column": 96
           },
           {
            "id": 20,
@@ -407,7 +421,8 @@
      "id": 29,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 7
+     "line": 7,
+     "column": 16
     },
     {
      "id": 30,
@@ -418,7 +433,8 @@
        "id": 31,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 8
+       "line": 8,
+       "column": 37
       },
       {
        "id": 32,
@@ -444,7 +460,8 @@
        "id": 37,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 8
+       "line": 8,
+       "column": 37
       },
       {
        "id": 38,
@@ -454,6 +471,7 @@
         "ty": 11,
         "func": "Io.futexWaitUncancelable__func_745",
         "module": "std",
+        "instance_key": "db8d73c2f746be9b7960618f66cdb98ec19c348b56d5cf441d40720fdf2b7d01",
         "noreturn": false
        },
        "args": [
@@ -473,7 +491,8 @@
        "id": 39,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 9
+       "line": 9,
+       "column": 13
       },
       {
        "id": 40,
@@ -500,7 +519,8 @@
        "id": 42,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 9
+       "line": 9,
+       "column": 21
       },
       {
        "id": 53,
@@ -525,7 +545,8 @@
            "id": 44,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 10
+           "line": 10,
+           "column": 27
           },
           {
            "id": 45,
@@ -582,7 +603,8 @@
            "id": 48,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 12
+           "line": 12,
+           "column": 28
           },
           {
            "id": 49,
@@ -603,7 +625,8 @@
          "id": 50,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 9
+         "line": 9,
+         "column": 21
         },
         {
          "id": 51,

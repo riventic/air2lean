@@ -93,11 +93,11 @@ namespace EnvStd15.Proofs
 open Zig Zig.Env Zig.Env.Linux EnvStdIo
 
 theorem errno_err (e : IoError) :
-    posix_errno__anon_1 (errReturn e) = pure ⟨BitVec.ofNat 16 (errno e)⟩ := by
+    posix_errno__anon_c57b4435c781 (errReturn e) = pure ⟨BitVec.ofNat 16 (errno e)⟩ := by
   cases e <;> rfl
 
 theorem errno_ok (n : Nat) (h1 : n ≤ 2147479552) :
-    posix_errno__anon_1 (BitVec.ofNat 64 n) = pure os_linux_E__enum_1.SUCCESS := by
+    posix_errno__anon_c57b4435c781 (BitVec.ofNat 64 n) = pure os_linux_E__enum_1.SUCCESS := by
   have hti : (BitVec.ofNat 64 n).toInt = n := by
     rw [BitVec.toInt_eq_toNat_of_lt] <;> simp <;> omega
   have hgt : Zig.gt true (BitVec.ofNat 64 n) 18446744073709547520#64 = true := by
@@ -106,7 +106,7 @@ theorem errno_ok (n : Nat) (h1 : n ≤ 2147479552) :
     omega
   have hlt : Zig.lt true (BitVec.ofNat 64 n) 0#64 = false := by
     simp [Zig.lt, BitVec.slt, hti]
-  simp [posix_errno__anon_1, zig_unfold, hgt, hlt, Zig.enumOf, os_linux_E__enum_1.ofInt?, Zig.val]
+  simp [posix_errno__anon_c57b4435c781, zig_unfold, hgt, hlt, Zig.enumOf, os_linux_E__enum_1.ofInt?, Zig.val]
   rfl
 
 /-- The error name of each modelled error in `posix.write`'s switch. -/
@@ -118,7 +118,7 @@ def writeErrName : IoError → ErrName
   | .inputOutput => "InputOutput"
   | .connectionReset => "ConnectionResetByPeer"
 
-theorem closeErrno : posix_errno__anon_1 0#64 = pure os_linux_E__enum_1.SUCCESS := rfl
+theorem closeErrno : posix_errno__anon_c57b4435c781 0#64 = pure os_linux_E__enum_1.SUCCESS := rfl
 
 /-- What `posix.write` returns for an `Ops.write` result. -/
 def writeResult : Except IoError Nat → Except ErrName (BitVec 64)

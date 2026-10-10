@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.14.1",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.4.19...6.13.4-musl",
@@ -36,11 +39,21 @@
  },
  "name": "shift.shl64",
  "module": "root",
+ "src": {
+  "file": "shift.zig",
+  "module": "shift",
+  "decl_line": 14
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "shl64",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -58,7 +71,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 25
   },
   {
    "id": 3,
@@ -74,7 +88,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 14
   },
   {
    "id": 5,
@@ -93,7 +108,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 7,

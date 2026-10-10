@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...7.2-musl",
@@ -36,10 +39,16 @@
  },
  "name": "divceil.divCeilI8",
  "module": "root",
+ "src": {
+  "file": "divceil.zig",
+  "module": "divceil",
+  "decl_line": 5
+ },
  "params": [
   0,
   0
  ],
+ "noalias": [],
  "ret": 0,
  "body": [
   {
@@ -58,7 +67,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 3,
@@ -232,7 +242,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 19,

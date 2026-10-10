@@ -33,6 +33,7 @@ fix lands; the fixture then becomes an agreement test.
 | MM-13 | Value-level tagged-union retagging fills the new payload with `default` | HARDENING | code-read |
 | MM-14 | Race footprint and dead blocks grow without bound in single-threaded runs | HARDENING | measured |
 | MM-15 | Model `@memcpy` copies like `@memmove`; it relies on the ReleaseSafe alias check in AIR | control (agrees) | reproduced (`memcpyOverlap`) |
+| MM-16 | `noalias` parameters are not modelled: an overlapping call gives a value | SOUNDNESS | reproduced (`na.shiftCopy`, `na.swapSelf`); fixed |
 
 Mechanisms checked and found sound: block-id provenance for liveness (use after free, double
 free, foreign free are `.illegal` by block id, not address); one-past-the-end accesses;
@@ -65,6 +66,7 @@ build for each fixed finding below.
 | MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
+| MM-16 | fixed | per-call `noalias` scopes over the footprint (`Zig.naEnter`/`naMark`/`naExit`), roots from `Air2Lean/Noalias.lean`; untrackable functions rejected (`tests/roadmap/noalias/check.sh`) |
 
 ## Measurements
 
@@ -170,8 +172,13 @@ provenance-free address, including address zero, is now `.illegal`. Slicing form
 before Sema's `start <= end` check, so an out-of-allocation start is `.illegal` in the model
 where native ReleaseSafe panics (conservative). The audit fixture is an agreement test:
 `oobCompare(1)` is `1` in both, and `oobCompare(2^63)`, `oobPtrCompare(2^63)` are `.illegal`.
-Residual: `Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer after a checked access
-to the error code, without a bounds check of their own (`docs/build-modes.md`).
+`Zig.tryPayloadPtr` and `Zig.errSetOk` form the payload pointer with `ptrProject` too
+(`codex/fix-try-payload-bounds`). For the compiler's layouts the error code access already
+puts it in bounds: the payload is at offset 0 or right after the 2-byte code at offset 0
+(`errPayloadPtr_formed`, `ZigLean/Mem/Lemmas.lean`), so a truncated object reached through a
+pointer cast fails at the code or payload access. The check matters for any other layout, such as
+`errUnionOffsetsW` with a payload alignment that does not divide the code size
+(`tests/roadmap/try-pointers/TryPointers/Runtime.lean`).
 
 Deliberate over-approximations (each `.illegal` where native Zig may be defined; conservative
 for no-illegal proofs, wrong for outcome reports and native diffs): an out-of-allocation result is
@@ -264,7 +271,7 @@ a model change.
 
 **Status: qualified** (`codex/fix-mm-failclosed`). `docs/build-modes.md` lists the open
 exceptions (MM-1/MM-2, MM-5, float `@divExact`) under the premise, and the README sentence
-names them. MM-3 is fixed on the same branch and listed there as fixed, with its residual.
+names them. MM-3 is fixed on the same branch and listed there as fixed.
 
 ### MM-8. Sep exports allocation-order address facts
 
@@ -363,6 +370,29 @@ concurrency proofs rely. The footprint and dead blocks still grow linearly.
 AIR carries Sema's alias check, and the model panics like native (`memcpyOverlap(1)`). The
 model is right only because export is pinned to ReleaseSafe (`docs/build-modes.md`). If any
 other export mode is ever admitted, `@memcpy` needs its own overlap → `.illegal` rule.
+
+### MM-16. `noalias` parameters
+
+Zig lowers a `noalias` parameter to LLVM's `noalias` argument attribute (the language
+reference documents nothing): during the call, memory accessed through a pointer based on the
+parameter must not be accessed through any other pointer if either access writes. LLVM optimizes
+on it (reordering, forwarding stores), so a violating call has no defined result. The exporter
+did not write the attribute, and the model executed the call as if it were absent: a
+`memcpy`-like `copy(noalias dest, noalias src, n)` with `dest = src + 1` (compiler_rt's
+`memcpySmall`, which the C front end binds for `memcpy`) returned the `@memmove`-like bytes, and
+`swap(&x, &x)` returned a value. A theorem could fix such a value; native code is undefined.
+
+**Fix.** The exporter writes each function's `noalias` parameter indices (`noalias`, required
+in schema 12). For a function with some, `Air2Lean/Noalias.lean` gives every access the
+parameter its pointer is based on (LLVM's "based on": derived pointers, `@ptrFromInt` of a
+derived integer, locals that hold one), and the checker rejects the function when that is
+ambiguous or a based-on value escapes to memory or another function. The generated function
+checks the accesses of each call in a scope (`ZigLean/Mem/Noalias.lean`), right after each
+instruction and in every function it may call; two overlapping accesses with different roots,
+one a write, are `.illegal` before any later failure. Pointer tags in
+`Zig.Ptr` (a precise provenance per pointer) were not chosen: they would change every pointer
+construction, pointer equality and the keys of the futex and group tables. The static roots give
+the same answer for every function the translator accepts, and fail closed on the rest.
 
 ---
 

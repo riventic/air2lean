@@ -3,12 +3,14 @@
 
 Each entry of expected.json names the AIR files of one probe (the function and its callees), the
 expected translator result (`rejected` or `accepted`), and for `rejected` a fragment of the
-diagnostic; for `accepted` the Lean text that must appear in the translation.
+diagnostic; for `accepted` the Lean text that must appear in the translation. `strip` lists
+top-level fields removed from each file first (an export from a compiler without that fact).
+A file name with a `/` is relative to this directory, else to `probe-air/`; `prefix` (default
+`probe.`) selects the translated functions.
 
   python3 tests/roadmap/illegal-behavior/probes.py [path/to/air2lean]
 """
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,9 +25,13 @@ def run(binary, probe):
         air = Path(tmp) / 'air'
         air.mkdir()
         for name in probe['files']:
-            shutil.copy(HERE / 'probe-air' / name, air / name)
+            doc = json.loads((HERE / name if '/' in name else HERE / 'probe-air' / name).read_text())
+            for key in probe.get('strip', []):
+                del doc[key]
+            (air / Path(name).name).write_text(json.dumps(doc))
         out = Path(tmp) / 'Gen.lean'
-        proc = subprocess.run([binary, str(air), '-o', str(out), '--namespace', 'Probe', '--prefix', 'probe.'],
+        prefix = probe.get('prefix', 'probe.')
+        proc = subprocess.run([binary, str(air), '-o', str(out), '--namespace', 'Probe', '--prefix', prefix],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=600)
         return proc.returncode, proc.stdout, out.read_text() if proc.returncode == 0 else ''
 

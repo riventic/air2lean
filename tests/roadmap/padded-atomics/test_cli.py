@@ -84,6 +84,8 @@ def document(name, tag, version, extra):
                 body=body, globals=[])
 
 
+PADDED_WIDTHS = (3, 9, 17, 24, 31, 33, 40, 48, 56, 63, 65, 72)
+
 # (fixture, AIR tag, extra fields, the rejection's `@` builtin or `None` if accepted)
 CASES = [
     ("u24", "cmpxchg_strong", {}, "@cmpxchgStrong"),
@@ -99,8 +101,10 @@ CASES = [
     ("u72", "cmpxchg_strong", {}, "@cmpxchgStrong"),
     ("enum_24", "cmpxchg_strong", {}, "@cmpxchgStrong"),
     ("packed_40", "cmpxchg_weak", {}, "@cmpxchgWeak"),
-    ("u40", "atomic_rmw", {"op": "Max"}, "@atomicRmw .Max"),
-    ("i24", "atomic_rmw", {"op": "Min"}, "@atomicRmw .Min"),
+    # Every padded width, signed and unsigned, native-probed to disagree with the model on
+    # `.Max`/`.Min` (docs/upstream/padded-rmw-minmax.md); the signed ones even with zero padding.
+    *[(f"{t}{w}", "atomic_rmw", {"op": op}, f"@atomicRmw .{op}")
+      for t in "iu" for w in PADDED_WIDTHS for op in ("Max", "Min")],
     ("u8", "cmpxchg_strong", {}, None),
     ("u16", "cmpxchg_weak", {}, None),
     ("u32", "cmpxchg_strong", {}, None),
@@ -111,9 +115,12 @@ CASES = [
     ("bool", "cmpxchg_strong", {}, None),
     ("enum_32", "cmpxchg_strong", {}, None),
     ("packed_32", "cmpxchg_weak", {}, None),
-    ("u32", "atomic_rmw", {"op": "Max"}, None),
-    ("u40", "atomic_rmw", {"op": "Add"}, None),
-    ("u24", "atomic_rmw", {"op": "Xchg"}, None),
+    # Power-of-two widths: `.Max`/`.Min` agree with the model, signed and unsigned.
+    *[(f"{t}{w}", "atomic_rmw", {"op": op}, None)
+      for t in "iu" for w in (8, 16, 32, 64, 128) for op in ("Max", "Min")],
+    # The other RMW ops mask their result, or only write the padding: padded widths stay supported.
+    *[(f"{t}{w}", "atomic_rmw", {"op": op}, None)
+      for t in "iu" for w in (24, 40) for op in ("Xchg", "Add", "Sub", "And", "Nand", "Or", "Xor")],
     ("u40", "atomic_load", {}, None),
     ("u40", "atomic_store_seq_cst", {}, None),
 ]
@@ -152,6 +159,7 @@ def write(air, name, doc):
 
 
 def assert_padded(report, function, builtin):
+    signed_minmax = function[0] == "i" and function.endswith(("_max", "_min"))
     assert report["status"] == "rejected", report
     found = [d for d in report["diagnostics"] if d["code"] == "PADDED_ATOMIC"]
     assert len(found) == 1, (function, report)
@@ -160,6 +168,8 @@ def assert_padded(report, function, builtin):
     assert (d["phase"], d["category"]) == ("check", "unsupported_semantics"), d
     assert d["anchor"]["id_space"] == "canonical" and d["anchor"]["instruction"] == 3, d
     assert builtin in d["message"] and "power-of-two number of bytes" in d["message"], d
+    # A signed `.Max`/`.Min` names its own cause (the native order is wrong even with zero padding).
+    assert ("large unsigned value" in d["message"]) == signed_minmax, d
     # The specific code supersedes the generic instruction check, and it is the only blocker.
     assert all(x["code"] == "PADDED_ATOMIC" for x in report["diagnostics"]), report
 
@@ -224,6 +234,21 @@ class SelfTest(unittest.TestCase):
         self.assertIn("u64_cmpxchg_strong", accepted)
         self.assertIn("u24_cmpxchg_strong", rejected)
         self.assertIn("u40_cmpxchg_strong", rejected)
+
+    def test_minmax_rejected_at_every_padded_width_and_accepted_at_full_width(self):
+        expected = {name: e for name, (_, e) in fixtures().items()}
+        for signedness in "iu":
+            for op in ("max", "min"):
+                for width in PADDED_WIDTHS:
+                    self.assertTrue(expected[f"{signedness}{width}_atomic_rmw_{op}"])
+                for width in (8, 16, 32, 64, 128):
+                    self.assertIsNone(expected[f"{signedness}{width}_atomic_rmw_{op}"])
+        for op in ("xchg", "add", "sub", "and", "nand", "or", "xor"):
+            self.assertIsNone(expected[f"i24_atomic_rmw_{op}"])
+            self.assertIsNone(expected[f"u40_atomic_rmw_{op}"])
+
+    def test_fixture_names_are_unique(self):
+        self.assertEqual(len({f"{t}_{g}_{'_'.join(e.values())}" for t, g, e, _ in CASES}), len(CASES))
 
 
 def main():

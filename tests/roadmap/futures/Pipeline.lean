@@ -1,6 +1,7 @@
 import Air2Lean
 import Air2Lean.Check
 import Air2Lean.Emit
+import Air2Lean.Air.Anon
 
 /-! C08 translator boundary for the committed futures AIR: the qualified future API is accepted
 for Zig 0.16.0 only, a cancelation point other than `Io.checkCancel` reachable from a task is
@@ -31,11 +32,9 @@ private def renameCalls (old new : String) (insts : Array Inst) : Array Inst :=
   mapCalls (fun name => if name == old then new else name) insts
 
 private def loadAir (dir : System.FilePath) : IO (Array Func) := do
-  let mut funcs : Array Func := #[]
-  for entry in (← dir.readDir).qsort (·.fileName < ·.fileName) do
-    let raw ← get <| Raw.parseFile (← IO.FS.readFile entry.path)
-    funcs := funcs.push (← get <| normalize raw)
-  return funcs
+  let entries := (← dir.readDir).qsort (·.fileName < ·.fileName)
+  let raws ← get <| Anon.parseProgram (← entries.mapM fun entry => IO.FS.readFile entry.path)
+  raws.mapM fun raw => get <| normalize raw
 
 def main : IO Unit := do
   let funcs ← loadAir "tests/roadmap/futures/air/0.16.0"

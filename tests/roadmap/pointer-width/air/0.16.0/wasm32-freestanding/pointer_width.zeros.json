@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "wasm32-freestanding-none",
@@ -29,10 +32,16 @@
  },
  "name": "pointer_width.zeros",
  "module": "root",
+ "src": {
+  "file": "pointer_width.zig",
+  "module": "pointer_width",
+  "decl_line": 23
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -79,7 +88,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 26
   },
   {
    "id": 6,
@@ -95,7 +105,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 26
   },
   {
    "id": 10,
@@ -105,6 +116,7 @@
     "ty": 7,
     "func": "mem.Allocator.alloc__anon_1675",
     "module": "std",
+    "instance_key": "9d65d080a5ef59d3c17bc3cc5ce0414cbca26ef13f5a094ea557dfa831a56fb8",
     "noreturn": false
    },
    "args": [
@@ -140,7 +152,8 @@
      "id": 12,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 15
     },
     {
      "id": 13,
@@ -189,7 +202,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 19,
@@ -219,7 +233,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 22,

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,10 +39,16 @@
  },
  "name": "std_io16.readClose",
  "module": "root",
+ "src": {
+  "file": "std_io16.zig",
+  "module": "std_io16",
+  "decl_line": 4
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -58,7 +67,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 22
   },
   {
    "id": 3,
@@ -83,7 +93,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 34
   },
   {
    "id": 5,
@@ -105,7 +116,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 7,

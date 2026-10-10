@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,9 +39,15 @@
  },
  "name": "const_bases.projectRes",
  "module": "root",
+ "src": {
+  "file": "const_bases.zig",
+  "module": "const_bases",
+  "decl_line": 43
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -79,7 +88,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -90,7 +100,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 15
     },
     {
      "id": 7,
@@ -169,7 +180,8 @@
        "id": 13,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 2
+       "line": 2,
+       "column": 26
       },
       {
        "id": 14,
@@ -196,7 +208,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 38
   },
   {
    "id": 18,
@@ -216,7 +229,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 20,

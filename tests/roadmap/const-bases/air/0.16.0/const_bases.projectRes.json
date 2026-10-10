@@ -39,6 +39,7 @@
   "params": [
     15
   ],
+  "noalias": [],
   "ret": 11,
   "body": [
     {

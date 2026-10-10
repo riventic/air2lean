@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "big",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "s390x-linux.5.10...6.19-musl",
@@ -21,12 +24,18 @@
  },
  "name": "big_endian.fieldFromBytes",
  "module": "root",
+ "src": {
+  "file": "big_endian.zig",
+  "module": "big_endian",
+  "decl_line": 60
+ },
  "params": [
   0,
   0,
   0,
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -57,7 +66,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -93,7 +103,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 27
   },
   {
    "id": 9,
@@ -148,7 +159,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 10
   },
   {
    "id": 15,
@@ -191,7 +203,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 10
   },
   {
    "id": 19,
@@ -234,7 +247,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 10
   },
   {
    "id": 23,
@@ -277,7 +291,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 10
   },
   {
    "id": 27,
@@ -320,7 +335,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 42
   },
   {
    "id": 31,
@@ -357,7 +373,8 @@
    "id": 34,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 35,
@@ -373,7 +390,8 @@
    "id": 36,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 37,

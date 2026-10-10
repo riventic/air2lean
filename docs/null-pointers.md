@@ -61,9 +61,8 @@ exception: Zig 0.14.1 and 0.15.2 type an offset-0 field pointer of address zero 
 nonnullable `*F` (`ptrProjectNonnull`), and the model makes it `.illegal` although the native
 code yields address zero; whether later uses of that `*F` are defined is not confirmed natively. An `allowzero` object at
 address zero (freestanding targets) is not modelled: a projection that would need it fails closed.
-The theorems `null_project_zero`, `null_add_zero`, `null_project`, `null_add_ne` and
-`null_project_nonnull` (`Null.lean`) and `ptrProjectNullable_same`, `ptrProjectNullable_ok`,
-`ptrProjectNullable_zero_illegal` and `ptrProjectNonnull_ok` (`NullLemmas.lean`) state the rule.
+The theorems `null_project_zero`, `null_project`, `null_project_nonnull` and
+`null_offset_access` (`Null.lean`) and `ptrProjectNonnull_ok` (`NullLemmas.lean`) state the rule.
 
 Compiler source inspection of 0.16.0 (`Sema.elemPtrOneLayerOnly`, `Type.elemPtrType`,
 `Type.fieldPtrType`, `Sema.analyzePtrArithmetic`, `Sema.coerceExtra`/`coerceCompatiblePtrs`)

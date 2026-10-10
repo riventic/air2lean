@@ -130,10 +130,12 @@ private theorem readableUnion_tag_run {α : Type} [Enc α] {p : Ptr} {n a : Nat}
   have hl := loadBytes_run hacc
     (noRace_of_singleThread hs.single block (p.off.toNat + eo) 2 .read)
   rw [hx] at hl
+  have hpp := errPayloadPtr_formed (α := α) (m := m.recordAt block (p.off.toNat + eo) 2 .read)
+    (access_recordAt.trans hacc)
   refine ⟨m.recordAt block (p.off.toNat + eo) 2 .read, ?_, ?_, ?_, hs.recordAt _ _ _ _⟩
-  · simp only [StateT.run] at hl
+  · simp only [StateT.run] at hl hpp
     cases e with
-    | none => simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, he, eo]
+    | none => simp [finiteTryPayloadPtr, tryPayloadPtr, requireErrorUnion, zig_unfold, hl, hpp, he, eo]
     | some name =>
       have hd := hdom name rfl
       have hdMem : name ∈ domain.names := by simpa using hd

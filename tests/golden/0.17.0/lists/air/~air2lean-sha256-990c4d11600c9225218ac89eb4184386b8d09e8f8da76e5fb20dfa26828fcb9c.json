@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,10 +118,16 @@
  },
  "name": "array_list.Aligned(u32,null).clearAndFree",
  "module": "std",
+ "src": {
+  "file": "array_list.zig",
+  "module": "std",
+  "decl_line": 1337
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -193,7 +202,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 17
   },
   {
    "id": 9,
@@ -219,7 +229,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 50
   },
   {
    "id": 12,
@@ -235,7 +246,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 50
   },
   {
    "id": 14,
@@ -257,7 +269,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 21
   },
   {
    "id": 16,
@@ -273,7 +286,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 41
   },
   {
    "id": 19,
@@ -299,7 +313,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 41
   },
   {
    "id": 22,
@@ -321,7 +336,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 21
   },
   {
    "id": 25,
@@ -347,7 +363,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 17
   },
   {
    "id": 27,
@@ -373,7 +390,8 @@
    "id": 29,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 23
   },
   {
    "id": 30,
@@ -403,7 +421,8 @@
    "id": 32,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 17
   },
   {
    "id": 33,

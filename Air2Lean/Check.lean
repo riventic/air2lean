@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.Noalias
 import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
@@ -725,10 +726,21 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
   if cx.types[c]? == some .bool then return
   let some bits := packedBits cx.types c | return
   if bits != 8 * Zig.intSize bits then
+    -- A signed `.Max`/`.Min` is wrong even with zero padding (natively on 0.14.1-0.17.0,
+    -- x86_64 and aarch64; `docs/upstream/padded-rmw-minmax.md`): LLVM gets the sign-extended
+    -- operand but the cell's raw bytes, so a negative cell orders as a large unsigned value.
+    let signedMinMax := match op, cx.types[c]? with
+      | .atomicRmw .max .., some (.int true _) | .atomicRmw .min .., some (.int true _) => true
+      | _, _ => false
+    let why := if signedMinMax then
+        "the native op orders a negative signed cell as a large unsigned value (its padding is not \
+        sign-extended), where the model compares the signed value bits"
+      else
+        "the native op compares the whole ABI cell, padding included, which the model leaves \
+        undefined"
     cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
-      (ABI size {Zig.intSize bits} bytes), is outside the subset: the native op compares the whole \
-      ABI cell, padding included, which the model leaves undefined; use an integer whose width \
-      is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+      (ABI size {Zig.intSize bits} bytes), is outside the subset: {why}; use an integer whose \
+      width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
@@ -2536,6 +2548,24 @@ def checkBodiesEnd (f : Func) : Except String Unit := do
       throw s!"{f.name}: a body ends without a terminator (`br`, `ret`, `unreach`, a noreturn \
         call, …)"
 
+/-- With runtime safety off, Sema does not check that the operands of a multi-operand `for` have
+equal lengths, and the AIR need not hold any length but the loop's own bound (a range `0..n`
+operand has no instruction): the mismatch is unchecked illegal behaviour. The patched compiler
+lowers it to `if (!ok) unreachable` and lists `for_len` in `unchecked_ib`
+(`docs/illegal-behavior.md` row 27). An export without that fact may hide the mismatch in any
+loop, so a function with a loop is rejected. -/
+def checkForLenFact (f : Func) (insts : Array Inst) : Except String Unit := do
+  unless f.uncheckedIb.contains "for_len" do
+    if let some i := insts.find? (fun i => i.op matches .loop _) then
+      throw s!"{f.name}: inst {i.id}: a loop in an export without the `for` length fact \
+        (`unchecked_ib` lacks \"for_len\"): with runtime safety off it may hide an unequal \
+        `for` operand length; re-export with a compiler built from zig-patch"
+
+/-- `@errorName` (`error_name`). -/
+def Op.isErrorName : Op → Bool
+  | .errorName _ => true
+  | _ => false
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
@@ -2550,6 +2580,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
     if let .union _ _ none _ := t then
       checkMemTy f.name f.types f.layouts 0 id f.errorSetBits
   let insts := f.allInsts
+  checkForLenFact f insts
   -- The 32-bit pointer model (`ZigLean/Mem/Width.lean`) parameterizes pointers, slices,
   -- `usize` and allocation; the ops below remain 64-bit only.
   let ptrBytes := ptrBytesOf f.layouts
@@ -2563,6 +2594,14 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
         | _ => none
       if let some what := what? then
         throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
+  -- Zig 0.14.1's `@errorName` indexes the name table with the sign-extended error code, so a
+  -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
+  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
+  -- does not export the compilation's error count, so no code is known to stay below that bit.
+  if f.zigVersion == "0.14.1" && insts.any (·.op.isErrorName) then
+    throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
+      error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
+      compilation's error codes; use Zig 0.15.2 or later"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -2578,6 +2617,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   for g in f.globals do
     checkGlobal f g
     if let some init := g.init then checkNoThreadlocalConstant f init
+  -- `noalias` parameters: every access has one root, and no tainted value escapes.
+  unless f.noalias.isEmpty do discard <| Noalias.analyze f
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     if let .runtimeNavPtr g := i.op then checkRuntimeNavPtr f i g
@@ -3628,6 +3669,13 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     issues := issues.push { kind := .futureCancel, message }
   if let .error message := checkIoTaskThreadlocals funcs then
     issues := issues.push { kind := .ioTaskThreadlocal, message }
+  -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
+  if funcs.any (!·.noalias.isEmpty) then
+    let conc := concFunctions funcs
+    for f in funcs do
+      if !f.noalias.isEmpty && conc.contains f.name then
+        issues := issues.push { kind := .memory, function := f.name, message :=
+          (Noalias.concurrentMsg f.name) }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
@@ -3762,6 +3810,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
       log := log.record (checkDiagnostic file f .memoryFailure { idSpace := .canonical, typeId := some id })
         (checkMemTy f.name f.types f.layouts 0 id f.errorSetBits)
   let insts := index.insts
+  log := log.record { (checkDiagnostic file f .instructionFailure) with
+    category := .unsupportedSemantics } (checkForLenFact f insts)
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts
@@ -3777,6 +3827,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id })
       (do checkGlobal f g; if let some init := g.init then checkNoThreadlocalConstant f init)
+  unless f.noalias.isEmpty do
+    log := log.record { (checkDiagnostic file f .memoryFailure { idSpace := .canonical }) with
+      category := .unsupportedSemantics } (discard <| Noalias.analyze f)
   for i in insts do
     if let .runtimeNavPtr g := i.op then
       log := log.record (checkDiagnostic file f .globalFailure

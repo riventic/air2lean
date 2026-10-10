@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,14 +39,21 @@
  },
  "name": "Io.Threaded.recoverableOsBugDetected",
  "module": "std",
+ "src": {
+  "file": "Io/Threaded.zig",
+  "module": "std",
+  "decl_line": 14083
+ },
  "params": [],
+ "noalias": [],
  "ret": 0,
  "body": [
   {
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 0,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 3,

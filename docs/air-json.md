@@ -2,6 +2,19 @@
 
 The patched compiler writes one file per function. Safe short names use `$ZIG_AIR_JSON_DIR/<fqn>.json`; long or unsafe names use a reserved SHA-256 basename while JSON retains the complete identity. See [Exported function filenames](export-names.md) for the naming and collision contract. `ZIG_AIR_JSON_FILTER=<prefix>,<prefix>,…` limits output to functions whose fully qualified name starts with one of the prefixes. The format does not depend on the Zig version: AIR tags are written verbatim, and `Air2Lean/Air/Normalize.lean` maps them per version.
 
+The patched compiler is not purely an exporter. It is also a trusted, minimal Sema hook
+(`zig-patch/<version>/hook.patch`): with runtime safety off, `zirForLen` inserts the `for`
+operand length check that Sema otherwise emits only with safety on, as `if (!ok) unreachable`
+(`unchecked_ib`, [illegal-behavior.md](illegal-behavior.md) row 27). Its failure is illegal
+behaviour already, so the hook only refines the stock program, and the AIR is identical to the
+stock compiler's except for that inserted check. Evidence: the committed goldens of all four
+versions compare equal to fresh patched exports (`scripts/check.sh`), and the nine committed loop
+fixtures outside the goldens (`tests/roadmap/env-boundaries/air/0.15.2/{fs.File.readAll,fs.File.writeAll,posix.read,posix.write}`,
+`env-boundaries/air/0.16.0/posix.read`, `idle-loops/air/progress.idle`,
+`loop-tactics/nested/air/nested.pairs`, `volatile-effects/air/0.16.0/device_effects.{putc,writeAll}`),
+all exported before the hook, were re-exported with it and are identical except for the
+additive `unchecked_ib`, `src` and `dbg_stmt` `column` fields.
+
 ## File
 
 ```json
@@ -48,7 +61,9 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `module` | the function's module (§Identity): `root` for the main module, `std` for the standard library, else the module's name. Additive (no schema change); older exports omit it. |
 | `src` | Additive source provenance (no schema change): `file` (the declaring file, relative to its module's root directory), `module` (the module name as the compiler spells it, e.g. `root` or `std`; not the §Identity key) and `decl_line` (1-based line of the function's declaration). Older exports omit it. Read only by check-only diagnostics to locate findings; translation never reads it, and `scripts/normalize-air.py` drops it from golden comparisons. |
 | `instance_key` | a generic instance only (`name` is `<generic>__anon_<n>`): its content-addressed key, 64 hex digits (§Instances). Additive; older exports omit it, and so does an instance whose comptime arguments have no stable identity. |
+| `unchecked_ib` | Additive compiler fact (no schema change): the illegal behaviours that the patched Sema (`zig-patch/<version>/hook.patch`) lowers to `if (!ok) unreachable` where safety is off, so that the AIR carries them. Only `"for_len"`: the operands of a multi-operand `for` must have equal lengths ([illegal-behavior.md](illegal-behavior.md) row 27); the exporter writes it when its Sema declares `air_json_unchecked_ib`. The translator rejects a function with a `loop` in an export without `for_len` (any loop may hide an unchecked length). Golden comparisons keep it: the committed goldens carry it, as the patched compilers export it. |
 | `params` | type ID of each runtime parameter, in order |
+| `noalias` | the indices into `params` of the `noalias` parameters (Sema's `noalias_bits`: only the first 32 parameters can be `noalias`), in increasing order; `[]` for none. Required in schema 12; legacy schemas have none. The translator checks every call of such a function ([illegal-behavior.md](illegal-behavior.md#noalias-parameters)). `scripts/normalize-air.py` treats `[]` like an absent field, so older goldens compare equal |
 | `ret` | type ID of the return type |
 | `export` | `{name, cc}`: present only for a function declared with the `export` keyword. `name` is the linker symbol it defines, `cc` its calling convention's tag (`std.builtin.CallingConvention`, e.g. `x86_64_sysv`, `aarch64_aapcs_darwin`). `@export` aliases are not reported (§Extern calls). Additive; AIR golden comparison (`scripts/normalize-air.py`) ignores it. |
 | `body` | main body (AIR `getMainBody`) |
@@ -77,7 +92,7 @@ contract in prose.
 
 | Object | Required keys | Optional keys |
 |---|---|---|
-| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key` |
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key`, `unchecked_ib` |
 | `profile` | all fields of the example above ([profiles](profiles.md)) | — |
 | every type | `k` | `abi_size`, `abi_align` |
 | `int` / `float` | `signed`, `bits` / `bits` | — |

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.17.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -115,10 +118,16 @@
  },
  "name": "Io.Mutex.unlock",
  "module": "std",
+ "src": {
+  "file": "Io.zig",
+  "module": "std",
+  "decl_line": 1770
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -193,7 +202,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 9,
@@ -219,12 +229,18 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 29
   },
   {
    "id": 12,
    "tag": "dbg_inline_block",
    "ty": 8,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 28
+   },
    "body": [
     {
      "id": 13,
@@ -293,7 +309,8 @@
      "id": 19,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 39
     },
     {
      "id": 20,
@@ -335,7 +352,8 @@
      "id": 23,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 24,
@@ -354,7 +372,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 17
   },
   {
    "id": 26,
@@ -384,7 +403,8 @@
          "id": 27,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 3
+         "line": 3,
+         "column": 26
         },
         {
          "id": 28,
@@ -441,7 +461,8 @@
          "id": 31,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 7
+         "line": 7,
+         "column": 29
         },
         {
          "id": 32,
@@ -457,7 +478,8 @@
          "id": 34,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 7
+         "line": 7,
+         "column": 39
         },
         {
          "id": 35,
@@ -483,7 +505,8 @@
          "id": 37,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 7
+         "line": 7,
+         "column": 45
         },
         {
          "id": 38,
@@ -509,7 +532,8 @@
          "id": 42,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 7
+         "line": 7,
+         "column": 29
         },
         {
          "id": 43,
@@ -519,6 +543,7 @@
           "ty": 16,
           "func": "Io.futexWake__func_349",
           "module": "std",
+          "instance_key": "abb0e28be9a9aa0f039dbe65cae08613dfa3087aa93da98c7aa3cd55cb1e6c74",
           "noreturn": false
          },
          "args": [
@@ -554,7 +579,8 @@
        "id": 45,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 17
       },
       {
        "id": 46,

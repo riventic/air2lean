@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,12 +39,22 @@
  },
  "name": "lanes.u9Lane",
  "module": "root",
+ "src": {
+  "file": "lanes.zig",
+  "module": "lanes",
+  "decl_line": 38
+ },
  "params": [
   0,
   0,
   0
  ],
+ "noalias": [],
  "ret": 1,
+ "export": {
+  "name": "u9Lane",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -65,7 +78,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 4,
@@ -90,7 +104,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 20
   },
   {
    "id": 7,
@@ -133,7 +148,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 34
   },
   {
    "id": 11,
@@ -176,7 +192,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 48
   },
   {
    "id": 15,
@@ -219,7 +236,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 62
   },
   {
    "id": 19,
@@ -259,7 +277,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 17
   },
   {
    "id": 23,
@@ -290,7 +309,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 11
   },
   {
    "id": 26,
@@ -319,7 +339,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 29,
@@ -356,7 +377,8 @@
    "id": 32,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 33,
@@ -458,7 +480,8 @@
    "id": 40,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 22
   },
   {
    "id": 41,
@@ -488,7 +511,8 @@
    "id": 43,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 39
   },
   {
    "id": 44,
@@ -518,7 +542,8 @@
    "id": 46,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 44
   },
   {
    "id": 47,
@@ -551,7 +576,8 @@
    "id": 49,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 61
   },
   {
    "id": 50,
@@ -581,7 +607,8 @@
    "id": 52,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 66
   },
   {
    "id": 53,
@@ -614,7 +641,8 @@
    "id": 55,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 84
   },
   {
    "id": 56,
@@ -644,7 +672,8 @@
    "id": 58,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 89
   },
   {
    "id": 59,
@@ -677,7 +706,8 @@
    "id": 61,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 99
   },
   {
    "id": 62,
@@ -710,7 +740,8 @@
    "id": 64,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 65,

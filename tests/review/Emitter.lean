@@ -33,6 +33,7 @@ private def enumTy (name : String) (tag : Nat) (fields : Array String) : Json :=
 private def file (name : String) (types : Array Json) (params : Array Nat) (ret : Nat)
     (body : Array Json) : Json :=
   obj [("schema", num 11), ("zig_version", .str "0.16.0"), ("target_endian", .str "little"),
+    ("unchecked_ib", .arr #[.str "for_len"]),
     ("name", .str name), ("types", .arr types), ("params", toJson params), ("ret", num ret),
     ("body", .arr body)]
 private def accept (j : Json) : IO Func := do

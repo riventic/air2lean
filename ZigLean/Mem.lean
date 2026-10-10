@@ -10,3 +10,4 @@ import ZigLean.Mem.AtomicPtr
 import ZigLean.Mem.Tls
 import ZigLean.Mem.Width
 import ZigLean.Mem.Device
+import ZigLean.Mem.Noalias

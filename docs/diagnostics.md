@@ -87,7 +87,9 @@ instruction anchor) marks a `@cmpxchgStrong`/`@cmpxchgWeak` or an `@atomicRmw`
 `.Max`/`.Min` on an integer representation with padding bits (`u24`, `u31`, `i40`,
 an `enum(u24)`, a packed struct backed by `u40`): Zig lowers it to an op on the whole
 ABI cell, so the padding bits, which the model leaves undefined, take part in the
-comparison. Use an integer whose width is a power-of-two number of bytes. It replaces
+comparison; a signed `.Max`/`.Min` is also wrong with zero padding (a negative cell orders
+as a large unsigned value; [upstream/padded-rmw-minmax.md](upstream/padded-rmw-minmax.md)). Use an
+integer whose width is a power-of-two number of bytes. It replaces
 the generic `INSTRUCTION_FAILURE` check of that instruction.
 
 `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, canonical instruction

@@ -3,6 +3,7 @@ import Std.Data.HashSet
 import Lean.Data.Json
 import Air2Lean.Air.StrictJson
 import Air2Lean.Air.Identity
+import Air2Lean.Air.Json
 
 /-!
 # Stable names of generic instances
@@ -262,5 +263,10 @@ def renumberAllWithNames (texts : Array String) : Array String × Array String :
 def renumberAll (texts : Array String) : Array String :=
   let (texts, parsed) := parseInstances texts
   renumberAllParsed texts parsed
+
+/-- Parse the AIR files of one program as the CLI does: generic instances numbered first
+(`renumberAll`), so that a reference's `instance_key` names its instance. -/
+def parseProgram (texts : Array String) : Except String (Array Raw.RawFunc) :=
+  (renumberAll texts).mapM Raw.parseFile
 
 end Air2Lean.Anon
