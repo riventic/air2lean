@@ -47,21 +47,32 @@ def errCapacity (bits : Nat) : Nat := 2 ^ bits - 1
 
 /-! ## Code bytes -/
 
-/-- The `errCodeSize bits` bytes of an error code: zeros for no error, else the name's
+/-- Bytes that hold the error integer's bits, `ceil(bits / 8)`: what a store of `u<bits>`
+writes (LLVM's store size of `iN`). Below `errCodeSize bits` only at 17 to 24 bits, where the
+fourth byte of the 4-byte code is padding (native evidence: `tests/roadmap/error-width`). -/
+def errValueSize (bits : Nat) : Nat := (bits + 7) / 8
+
+/-- The `errValueSize bits` value bytes of an error code: zeros for no error, else the name's
 fragments. -/
-def errBytesW (bits : Nat) : Option ErrName → Array Byte
-  | none => Array.replicate (errCodeSize bits) (.int 0)
-  | some e => Array.ofFn (n := errCodeSize bits) fun i =>
+def errValueW (bits : Nat) : Option ErrName → Array Byte
+  | none => Array.replicate (errValueSize bits) (.int 0)
+  | some e => Array.ofFn (n := errValueSize bits) fun i =>
       if h : i.val < 4 then .errFrag e ⟨i.val, h⟩ else .undef
 
-/-- The error of the first `errCodeSize bits` bytes: `none` for the zero code. Any other
-content (mixed, partial, swapped or foreign fragments, integer bytes) throws `.unspecified`. -/
+/-- The `errCodeSize bits` bytes of a stored error code: the value bytes, then padding
+(undefined), as for an integer (`padTo`). -/
+def errBytesW (bits : Nat) (e : Option ErrName) : Array Byte :=
+  padTo (errCodeSize bits) (errValueW bits e)
+
+/-- The error of the first `errValueSize bits` bytes (a padding byte after them is not read):
+`none` for the zero code. Any other content (mixed, partial, swapped or foreign fragments,
+integer bytes) throws `.unspecified`. -/
 def errOfBytesW (bits : Nat) (bs : Array Byte) : Result (Option ErrName) :=
-  let code := bs.extract 0 (errCodeSize bits)
+  let code := bs.extract 0 (errValueSize bits)
   if 4 < errCodeSize bits then throw .unspecified
-  else if code = errBytesW bits none then pure none
+  else if code = errValueW bits none then pure none
   else match (code[0]? : Option Byte) with
-    | some (.errFrag e _) => if code = errBytesW bits (some e) then pure (some e) else throw .unspecified
+    | some (.errFrag e _) => if code = errValueW bits (some e) then pure (some e) else throw .unspecified
     | _ => throw .unspecified
 
 /-! ## Declared finite domains -/
