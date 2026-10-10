@@ -52,28 +52,6 @@ namespace AllocArena.ArenaSpec
 
 open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.ArenaLinux
 
-/-! ## Steps that do not change the memory -/
-
-section Steps
-
-variable {α β : Type} {P : FAssn} {Q : β → FAssn}
-
-/-- A `MemM` step that returns `v` and leaves the memory as it is. -/
-theorem CTriple.pureStep {c : MemM α} {v : α} {f : α → ConcM Tgt β}
-    (hc : ∀ m r rF, Holds m r rF → P r → m.FSeq → c.run m = pure (v, m))
-    (hf : CTriple P (f v) Q) : CTriple P (ConcM.liftMem c >>= f) Q := by
-  refine CTriple.bind (Q := fun w => ⟪w = v⟫ ⋆ P) (CTriple.liftMem (FTriple.of_run
-    fun m r rF hh hp hs => ⟨v, m, r, hc m r rF hh hp hs, hh, sep_lift.mpr ⟨rfl, hp⟩, hs⟩)) ?_
-  intro w
-  exact CTriple.lift fun hw => hw ▸ hf
-
-/-- Facts that hold of every memory holding `P` (and stay true: no memory in them). -/
-theorem CTriple.facts {x : ConcM Tgt β} {φ : Prop}
-    (hφ : ∀ m r rF, Holds m r rF → P r → m.FSeq → φ) (h : φ → CTriple P x Q) : CTriple P x Q :=
-  fun n m r rF hh hp hs => h (hφ m r rF hh hp hs) n m r rF hh hp hs
-
-end Steps
-
 /-! ## Owned cells -/
 
 /-- `P` owns byte `x` of block `b`, whose cell records address `A`, size `S` and kind `K`. -/
@@ -240,17 +218,6 @@ def inv (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) : FAllocInv where
   own := own CI γ e ctx
   tok p n _ _ _ _ := FAssn.ex fun i => gfrag γ e i (p, n)
 
-/-! ## Rules -/
-
-/-- A ghost update of a `CTriple`'s precondition (`FTriple.upd`). -/
-theorem CTriple.upd {β : Type} {P P' : FAssn} {x : ConcM Tgt β} {Q : β → FAssn} (hu : Upd P P')
-    (ht : CTriple P' x Q) : CTriple P x Q := fun n => FTriple.upd hu (ht n)
-
-/-- An entailment that may use the memory (`Holds`, `FSeq`). -/
-theorem CTriple.preM {β : Type} {P P' : FAssn} {x : ConcM Tgt β} {Q : β → FAssn}
-    (hp : ∀ m r rF, Holds m r rF → P r → m.FSeq → P' r) (ht : CTriple P' x Q) : CTriple P x Q :=
-  fun n m r rF hh h hs => ht n m r rF hh (hp m r rF hh h hs) hs
-
 /-! ## `free` -/
 
 /-- The variables of `free`'s precondition on an arena with a first node `N` (block `bN`), a
@@ -393,16 +360,6 @@ theorem ptrProject_elem_run {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} {i :
     funext x; simp [Ptr.elem]
   rw [e]
   exact ptrProject_add_run' hpb hb h0 (by omega) hn
-
-/-! ## Reading a word in the middle of a precondition -/
-
-/-- A step on the part `X` of `P = X ⋆ R` that returns `v` and keeps `X`. -/
-theorem CTriple.readStep {α β : Type} {P X R : FAssn} {c : MemM α} {v : α} {f : α → ConcM Tgt β}
-    {Q : β → FAssn} (ht : FTriple X c (fun w => ⟪w = v⟫ ⋆ X)) (hP : P = (X ⋆ R))
-    (hf : CTriple P (f v) Q) : CTriple P (ConcM.liftMem c >>= f) Q := by
-  subst hP
-  refine CTriple.bind (CTriple.liftMem ht.frame) fun w => ?_
-  refine CTriple.pre (CTriple.lift fun hw => hw ▸ hf) fun _ h => sep_assoc h
 
 section FreeProof
 
