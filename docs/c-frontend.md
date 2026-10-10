@@ -161,9 +161,8 @@ Corpus: 40 files in `tests/roadmap/c-frontend/corpus/`, one construct family eac
 realistic programs (`strings_loops`, `memcpy_loops`, `linked_list`, `ring_buffer`,
 `sort_callback`, `hash_table`, `malloc_vec`, the goto state machine, the bitfield packet
 parser, `varargs_sum`). Recorded in `tests/roadmap/c-frontend/record.json` with stock Zig
-0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 (exporter `zig-patch/air-json/json.zig` sha256 066fab37…, with the G5 fix; the five files with
-libc calls re-recorded with sha256 40fef0e7…, which adds `@export` reporting and link units and
-writes the same AIR for the others apart from the additive `export` fields), on aarch64-macos.
+0.16.0/0.15.2 and the patched AIR-only Zig 0.16.0 built from this branch's `zig-patch`
+(`@export` reporting, link units and module identity), on aarch64-macos.
 
 * **24 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
   program on all four inputs (`#guard`). These cover integer promotions, unsigned
@@ -171,20 +170,21 @@ writes the same AIR for the others apart from the additive `export` fields), on 
   side-effecting expressions, designated initializers and compound literals, `switch` (incl.
   fallthrough by duplication), loops with `break`/`continue`, enums, unions (type punning),
   string literals, static locals, globals, function pointer tables, recursion, macros, a
-  pointer-walking `strlen`/`strcpy`/`strcmp`/`strrev`, `char *` and `void *` views of objects
+  pointer-walking `strlen`/`strcpy`/`strcmp`/`strrev`, negative `[*c]` indices (`ptr_arith`,
+  G4), `char *` and `void *` views of objects
   (`casts`), `void *` byte loops (`memcpy_loops`), a linked list over a static node pool with
-  removal through a pointer to a link (`linked_list`), pointer/integer round trips
-  (`ptr_int_casts`) and libc string calls (`libc_string`: `memset`, `memcpy`, `strlen`,
-  `memcmp` translated from compiler_rt, `strcmp` and `strchr` from lib/c, §libc boundary).
-* Of the 29 files with no libc call and no translate-c demotion, 23 pass, 1 is accepted
-  but evaluates to `.illegal` (G4), 4 hit the Zig 0.16.0 bug (G3) and 1 (`sort_callback`,
-  accepted by air2lean) diverges natively (G8).
-* Of the 4 libc users, `libc_string` passes (it was rejected before Zig's libc was
-  translated). The other 3 are rejected by name (§libc boundary): `libc_stdio` for the
-  variadic `snprintf` (musl C); `malloc_vec` and `libc_stdlib` because lib/c's `free` and
-  `realloc` take `?[*]align(16) u8`, more aligned than the declared `void *` (the C ABI
-  conversion does not check alignment), and below them `std.heap.SmpAllocator` uses
-  `unordered` atomics and musl's `__errno_location`; `libc_stdlib` also panics natively (G8).
+  removal through a pointer to a link (`linked_list`) and pointer/integer round trips
+  (`ptr_int_casts`).
+* Of the 29 files with no libc call and no translate-c demotion, 24 pass, 4 hit the Zig
+  0.16.0 bug (G3) and 1 (`sort_callback`, accepted by air2lean) diverges natively (G8).
+* None of the 4 libc users passes. `libc_string` was `lean_ok` before the soundness batch;
+  now compiler_rt's `memcpyFast` is rejected: it casts byte pointers to vector pointers, which
+  the soundness batch makes illegal behaviour (a vector has no defined byte layout,
+  `Air2Lean/Check.lean`). `libc_stdio` is rejected for the variadic `snprintf` (musl C).
+  `malloc_vec` and `libc_stdlib` now bind lib/c's `free`/`realloc` (`?*align(16)`) through the
+  checked alignment conversion (§Extern calls in `air-json.md`), and stop below at
+  `std.heap.SmpAllocator`'s `unordered` atomics, `posix.mmap`'s integer pointer constants and
+  musl's `__errno_location`; `libc_stdlib` also panics natively (G8).
 * The other 7 are rejected by name: the 6 translate-c demotions (G7) and `setjmp_longjmp`
   (the `noreturn` extern `longjmp`, and `setjmp`, both musl C).
 * Every C program ran cleanly under UBSan; translate-c's Zig agreed with C natively in 27
@@ -205,8 +205,8 @@ generated headline: {"lean_ok": 30}
 | file | C native | translate-c 0.16 | translate-c 0.15.2 | Zig native | AIR export | air2lean | Lean | codes |
 |---|---|---|---|---|---|---|---|---|
 | arrays_2d | ok | ok | ok | compile_error | failed | – | – | – |
-| bitfield_packet | ok | demoted (entry) | demoted | compile_error | failed | – | – | – |
-| bitfields | ok | demoted (entry) | demoted | compile_error | failed | – | – | – |
+| bitfield_packet | ok | demoted (entry) | demoted | compile_error | ok | rejected | – | INPUT_READ×1 |
+| bitfields | ok | demoted (entry) | demoted | compile_error | ok | rejected | – | INPUT_READ×1 |
 | bool_logic | ok | ok | ok | ok | ok | checked | ok | – |
 | casts | ok | ok | ok | ok | ok | checked | ok | – |
 | enums | ok | ok | ok | ok | ok | checked | ok | – |
@@ -221,14 +221,14 @@ generated headline: {"lean_ok": 30}
 | inline_static | ok | ok | ok | ok | ok | checked | ok | – |
 | int_promotion | ok | ok | ok | ok | ok | checked | ok | – |
 | libc_stdio | ok | ok | ok | ok | ok | rejected | – | CALLEE_EXTERN_UNBOUND×1, PROGRAM_FAILURE×1 |
-| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×14, CALLEE_EXTERN_UNBOUND×7, CALLEE_MISSING×54, CONSTANT_FAILURE×3, INSTRUCTION_FAILURE×3, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×8, STRUCTURE_FAILURE×1 |
-| libc_string | ok | ok | ok | ok | ok | checked | ok | – |
+| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×16, CALLEE_EXTERN_UNBOUND×6, CALLEE_MISSING×54, CONSTANT_FAILURE×3, INSTRUCTION_FAILURE×3, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×6, STRUCTURE_FAILURE×1 |
+| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×1, INSTRUCTION_FAILURE×14 |
 | linked_list | ok | ok | ok | ok | ok | checked | ok | – |
 | loops | ok | ok | ok | ok | ok | checked | ok | – |
 | macros | ok | ok | ok | ok | ok | checked | ok | – |
-| malloc_vec | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×15, CALLEE_EXTERN_UNBOUND×9, CALLEE_MISSING×29, CONSTANT_FAILURE×7, INSTRUCTION_FAILURE×3, PROGRAM_FAILURE×9 |
+| malloc_vec | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×21, CALLEE_EXTERN_UNBOUND×7, CALLEE_MISSING×29, CONSTANT_FAILURE×7, INSTRUCTION_FAILURE×3, PROGRAM_FAILURE×7 |
 | memcpy_loops | ok | ok | ok | ok | ok | checked | ok | – |
-| ptr_arith | ok | ok | ok | ok | ok | checked | guard_failed | – |
+| ptr_arith | ok | ok | ok | ok | ok | checked | ok | – |
 | ptr_int_casts | ok | ok | ok | ok | ok | checked | ok | – |
 | recursion | ok | ok | ok | ok | ok | checked | ok | – |
 | ring_buffer | ok | ok | ok | compile_error | failed | – | – | – |
@@ -249,9 +249,8 @@ Headline outcome (first failing stage; `lean_ok` = translated and #guard-checked
 
 | outcome | files |
 |---|---|
-| air2lean | 4 |
+| air2lean | 5 |
 | air_export | 4 |
-| lean | 1 |
 | lean_ok | 24 |
 | translate_c | 6 |
 | zig_native | 1 |
@@ -260,11 +259,12 @@ Rejection histogram (files whose diagnostics contain the code):
 
 | code | files |
 |---|---|
-| CALLEE_BLOCKED | 3 |
+| CALLEE_BLOCKED | 4 |
 | CALLEE_EXTERN_UNBOUND | 8 |
 | CALLEE_MISSING | 2 |
 | CONSTANT_FAILURE | 2 |
-| INSTRUCTION_FAILURE | 3 |
+| INPUT_READ | 2 |
+| INSTRUCTION_FAILURE | 4 |
 | PREREQUISITE_SKIPPED | 1 |
 | PROGRAM_FAILURE | 8 |
 | STRUCTURE_FAILURE | 1 |
@@ -285,12 +285,12 @@ Outcome by C construct family:
 | integer promotions | lean_ok: 1 |
 | libc stdio | air2lean: 1 |
 | libc stdlib | air2lean: 2 |
-| libc string | lean_ok: 1, translate_c: 1 |
+| libc string | air2lean: 1, translate_c: 1 |
 | loops/break/continue | lean_ok: 1 |
 | macros | lean_ok: 1 |
 | multi-dim arrays | air_export: 1 |
 | object-representation casts | lean_ok: 1 |
-| pointer arithmetic | lean: 1, lean_ok: 1 |
+| pointer arithmetic | lean_ok: 2 |
 | pointer<->integer casts | lean_ok: 1 |
 | realistic | air2lean: 1, air_export: 2, lean_ok: 3, zig_native: 1 |
 | recursion | lean_ok: 1 |
@@ -510,4 +510,4 @@ Register row X01 in `ROADMAP.md` and `remaining-acceptance.md` (open):
 
 | ID | Title | Classification | Evidence / acceptance |
 |---|---|---|---|
-| X01 | C programs via translate-c | open | Route: C → stock `zig translate-c` (x86_64-linux-musl) → patched AIR export → air2lean; claims are about translate-c's Zig as compiled by Zig (translate-c and the musl headers join the trusted base), not ISO C semantics (`docs/c-frontend.md`). Baseline: 17/40 corpus files (24/40 with Zig's libc translated) and 30/30 generated programs translate and agree with C under `#guard`. Close when phases 1–3 above are met: every corpus file is `lean_ok` or rejected by a named, documented gate (`setjmp`); every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; the G3 compiler bug is gated or fixed by a qualified Zig version; `check.sh --heavy` is reproducible and CI checks the record. |
+| X01 | C programs via translate-c | open | Route: C → stock `zig translate-c` (x86_64-linux-musl) → patched AIR export → air2lean; claims are about translate-c's Zig as compiled by Zig (translate-c and the musl headers join the trusted base), not ISO C semantics (`docs/c-frontend.md`). Baseline: 24/40 corpus files (G4 signed index; `libc_string` regressed with the soundness batch's vector-cast rule) and 30/30 generated programs translate and agree with C under `#guard`. Close when phases 1–3 above are met: every corpus file is `lean_ok` or rejected by a named, documented gate (`setjmp`); every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; the G3 compiler bug is gated or fixed by a qualified Zig version; `check.sh --heavy` is reproducible and CI checks the record. |
