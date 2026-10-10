@@ -504,11 +504,13 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
   let body ← raw.body.mapM (normalizeInst raw.name)
   -- A lane pointer into a bit-packed vector (`tests/roadmap/vector-layouts/lanes.zig`) becomes
   -- a bit-pointer into the vector's integer, as LLVM lays it out (`Dialect.lanePtrBitPtrs`).
+  let packedLanes := dialect.packedVectorLanes
+  let laneBitPtrs := dialect.lanePtrBitPtrs
   let layouts := raw.layouts.mapIdx fun i l =>
     let l := { l with ptrBytes := dialect.ptrBytes }
     match raw.types[i]? with
-    | some (.vector ..) => { l with packedLanes := dialect.packedVectorLanes }
-    | some (.ptr "one" _ c) => if dialect.lanePtrBitPtrs then lanePtrLayout raw.types c l else l
+    | some (.vector ..) => { l with packedLanes }
+    | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
     | _ => l
   return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts, globals := raw.globals,

@@ -47,7 +47,10 @@ def nameOf : Endian → String
   | .big => bigEndianName
 
 /-- The profile's byte order is big endian (`profile.endian`). -/
-def isBigEndian (p : BuildProfile) : Bool := p.endian == Endian.big.toString
+def isBigEndian (p : BuildProfile) : Bool := Endian.ofString? p.endian == some .big
+
+/-- The profile's Zig version, if supported. -/
+def version? (p : BuildProfile) : Option ZigVersion := ZigVersion.ofString? p.zigVersion
 
 private def strField (j : Json) (k : String) : Except String String := do
   let v ← ((j.getObjVal? k).bind Json.getStr?).mapError fun e => s!"profile.{k}: {e}"
