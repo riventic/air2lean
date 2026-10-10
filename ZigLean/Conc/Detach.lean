@@ -63,7 +63,7 @@ theorem join_run_ok (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
 
 theorem detach_run_ok (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))) :
     ∃ rec, m.threads[tid]? = some rec ∧ rec.spawner = m.current ∧ rec.joined = false ∧
-      m' = { m with threads := m.threads.set! tid { rec with joined := true } } := by
+      m' = { m with threads := m.threads.set! tid { rec with joined := true, released := true } } := by
   unfold Thread.detach at h
   rw [run_get_bind] at h
   cases hr : m.threads[tid]? with
@@ -108,7 +108,7 @@ theorem detach_run {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
     (hs : rec.spawner = m.current) (hj : rec.joined = false)
     (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     ((Thread.detach tid).run m).run =
-      some (.ok ((), { m with threads := m.threads.set! tid { rec with joined := true } })) := by
+      some (.ok ((), { m with threads := m.threads.set! tid { rec with joined := true, released := true } })) := by
   have hng : m.isGated tid = false := by rcases hg with hg | hg <;> simp [Mem.isGated, hr, hg]
   unfold Thread.detach
   simp [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, ExceptT.run,
@@ -416,7 +416,7 @@ theorem WP.callMC_ok {α : Type} {x : MemM α} {v : α} {m' : Mem} {s : σ}
 the record is consumed. -/
 theorem WP.detachC {rec : ThreadRec} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
-    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with joined := true } } n)
+    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with joined := true, released := true } } n)
     (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     P.WP t ((detachC tid : CM Tgt σ Unit).run s) Q G m n :=
   WP.callMC_ok (detach_run hr hs hj hg) (by simp [Array.set!_eq_setIfInBounds]) h

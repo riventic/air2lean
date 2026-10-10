@@ -587,6 +587,13 @@ jobs:
           lake build ZigLean.Conc.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
+      - name: Generic sync specifications (futex, mutex, event, wait group, condition)
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/thread-specs"
+          lake build ZigLean.Conc.Spec.Sys ZigLean.Conc.Spec.Futex ZigLean.Conc.Spec.FutexToy ZigLean.Conc.Spec.Mutex ZigLean.Conc.Spec.MutexToy ZigLean.Conc.Spec.IoMutex ZigLean.Conc.Spec.Event ZigLean.Conc.Spec.Count ZigLean.Conc.Spec.WaitGroup ZigLean.Conc.Spec.Cond 2>&1 | tee "$RUNNER_TEMP/thread-specs/build.log"
+
       - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
         if: ${{ !matrix.mutate }}
         run: |
@@ -1064,6 +1071,16 @@ jobs:
           set -euo pipefail
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
           bash tests/roadmap/error-width/check.sh
+
+      # OSF/OST/OSY/OSK/OSG/OSM-02: the trusted OS thread primitives (futex, clone/pthread,
+      # clocks, interrupts, macOS malloc): proof-only rules with kernel-checked schedules, and
+      # runtime regressions over every schedule.
+      - name: OS thread primitive models, rules and runtime regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.OsMalloc ZigLean.Conc.OsRules
+          lake env lean tests/roadmap/os-threads/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane

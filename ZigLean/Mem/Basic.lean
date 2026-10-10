@@ -165,6 +165,10 @@ structure ThreadRec where
   joined : Bool
   tls : Array (BlockId × BlockId) := #[]
   gated : Bool := false
+  /-- The join obligation ended without a happens-before edge to the owner: `pthread_detach`, or
+  a Linux `clone` thread's exit (`Os.markExited`). `Mem.freeRaces` then does not exempt the
+  thread's accesses. -/
+  released : Bool := false
   deriving Repr, Inhabited
 
 /-- One recorded access, kept so a later overlapping access can check it for a race. -/
@@ -348,6 +352,20 @@ instance : Inhabited Placement := ⟨.fresh⟩
 /-- The oracle is a function, so it is shown opaquely. -/
 instance : Repr Placement := ⟨fun _ _ => "<placement>"⟩
 
+/-- The kernel's and libc's per-process state that the trusted OS thread primitives keep
+(`ZigLean/Os/`, `docs/os-threads.md`). Only those models read or write it. -/
+structure OsState where
+  /-- The threads with a pending interrupt (`tgkill`/`pthread_kill` of `SIG.IO`, premise OSG-01). -/
+  interrupts : Array ThreadId := #[]
+  /-- The number of clock reads so far: the index of the next one into the clock oracle
+  (premise OSK-01). -/
+  clockReads : Nat := 0
+  /-- Each thread's libc `errno` cell (macOS `__error()`), made at its first use. -/
+  errno : Array (ThreadId × BlockId) := #[]
+  /-- The threads that `pthread_detach` released: they stay signalable while they run. -/
+  detached : Array ThreadId := #[]
+  deriving Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The address of every new block (`Mem.newAddr`). -/
@@ -403,6 +421,8 @@ structure Mem where
   stackLimit : Option Nat := none
   /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
   stackUsed : Nat := 0
+  /-- The state of the trusted OS thread primitives (`ZigLean/Os/`). -/
+  os : OsState := {}
   deriving Repr, Inhabited
 
 /-- Thread `t` is a deferred task (`ThreadRec.gated`) that its group still records: no `await` or
@@ -553,13 +573,14 @@ def alloc (kind : BlockKind) (size align : Nat) : MemM Ptr := do
 /-- The end of block `b`'s life (`n` bytes; a frame exit, `rawFree`) races with an earlier access
 `e` to its bytes by another thread unless `e` happened before it: by `e`'s clock, by the clock of
 `e`'s thread now (which is above each access of that thread), or because `e`'s thread is a child
-of the current thread that it joined (the join is after each access of the child). The end of a
+of the current thread that it joined (the join is after each access of the child; a detached or
+exited child, `ThreadRec.released`, gives no such edge). The end of a
 block is a write of all its bytes for the race check (C11: the bytes are reused). -/
 def Mem.freeRaces (m : Mem) (b : BlockId) (n : Nat) : Bool :=
   let c := VClock.bump (m.clocks[m.current]!) m.current
   m.footprint.any fun e => e.block == b && 0 < e.off + e.len && e.off < n && e.tid != m.current &&
     !VClock.le e.clock c && !VClock.le (m.clocks[e.tid]!) c &&
-    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined)
+    !(m.threads[e.tid]?.any fun r => r.spawner == m.current && r.joined && !r.released)
 
 /-- Free the block that `p` points to the start of. A dead block or an inner pointer throws
 `.illegal`; so does an end of the block that races with an access by another thread

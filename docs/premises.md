@@ -96,6 +96,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) |
+| OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) |
 
 ## Target and build profiles
@@ -851,6 +852,165 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: a `--model-registry` entry with an `extern` object; an `externs` entry bound by
   `Air2Lean/Check.lean` `resolveExterns`.
 - Sources: [air-json.md](air-json.md#extern-calls), [external-models.md](external-models.md#extern-functions).
+
+## OS thread primitives
+
+These rows are the trusted base of the translated `std.Thread`/`std.Io` plan
+(`docs/thread-io-translation.md` on `codex/spike-thread-io`): only the named `os.linux.*` wrapper
+or the `extern "c"` symbol is modelled; everything above it is to be translated. Each model is a
+`ZigLean/Os/` definition over the scheduler and memory of THR-01 and ORD-01. It takes the
+explicit environment `Os.Env` (CPU mask, spawn policy, thread and process ids, clock oracle,
+malloc slack), and a theorem states `Env.Valid` and whatever else it assumes of it (user
+decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.md](os-threads.md).
+
+<a id="osf-01"></a>
+### OSF-01 — Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`)
+
+- Kind: trusted.
+- Statement: The kernel compares the `u32` at the address with the expected value as one atomic
+  read of the newest message of that word: an atomic-read footprint and a read-view update. A
+  bad pointer is `.illegal` (stricter than `EFAULT`). A different value returns at once
+  (`EAGAIN`, `0` on macOS). An equal value either returns at once with `EINTR`, or with
+  `ETIMEDOUT` if a timeout was given, or sleeps. An untimed sleeper waits in the queue until a
+  wake or an interrupt; the scheduler reads the word again first and a changed word is a return
+  with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
+  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
+  `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
+  (`.unspecified`); an invalid timeout is `EINVAL`.
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWait`,
+  `Os.Linux.futex_4arg`, `Os.Darwin.__ulock_wait2`, `Os.Darwin.__ulock_wait`; implies THR-01,
+  ORD-01.
+- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
+  `tests/roadmap/os-threads/Check.lean`, Zig 0.16.0 `lib/std/Io/Threaded.zig`
+  (`futexWaitInner`), `lib/std/Thread.zig` (`LinuxThreadImpl.join`).
+
+<a id="osf-02"></a>
+### OSF-02 — Futex wake (`futex_3arg` WAKE, `__ulock_wake`)
+
+- Kind: trusted.
+- Statement: A wake of up to `n` waiters at an address wakes an oracle-chosen subset of
+  `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
+  is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux returns
+  the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
+  `-EINTR` with nobody woken. It gives no happens-before edge.
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWake`,
+  `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
+- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`.
+
+<a id="ost-01"></a>
+### OST-01 — Thread creation (`clone`, `pthread_create`)
+
+- Kind: trusted.
+- Statement: Linux `clone` with exactly std's flag set (`THREAD|DETACHED|VM|FS|FILES|
+  PARENT_SETTID|CHILD_CLEARTID|SIGHAND|SYSVSEM|SETTLS`) and macOS `pthread_create` start a new
+  thread that runs the call site's entry function with its argument (the translator's spawn
+  target), with a happens-before edge from the parent: the scheduler's `spawn`. Under the
+  run's `Zig.Env.spawn = fallible` (and `Mem.spawnLimit`) the scheduler may fail it instead with
+  a declared error, which the row returns as `-ENOMEM` (`OutOfMemory`) or `-EAGAIN` on Linux,
+  `EAGAIN` on macOS. The child gets fresh thread-local instances (batch7 C02); the stack and TLS
+  arguments are not used. Linux writes the child's id (`Env.tid`) to `ptid` after the fork, and
+  `pthread_create` writes the handle. The `pthread_attr_*` calls touch only the attribute bytes,
+  which are undefined to Zig code.
+- Derived from: `ZigLean.Os.Thread`, `ZigLean.Os.Env`; tokens `Os.Linux.clone`,
+  `Os.Darwin.pthread_create`, `Os.Darwin.pthread_attr_*`; implies THR-01, THR-03.
+- Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Zig 0.16.0
+  `lib/std/Thread.zig` (`LinuxThreadImpl.spawn`, `PosixThreadImpl.spawn`).
+
+<a id="ost-02"></a>
+### OST-02 — Thread exit, join and detach
+
+- Kind: trusted.
+- Statement: When a `clone` thread's entry function returns, the kernel's `CHILD_CLEARTID` is
+  one step: a release store of `0` to the `i32` at `ctid`, a wake of every waiter there, and the
+  end of the thread's join obligation. Then the thread ends. Std's translated Linux join gets
+  its edge from that store. macOS `pthread_join(h, null)` waits for the end of `h` and gets the
+  edge from it; `pthread_detach` releases the obligation. A join or detach by a thread that does
+  not own the handle, of a consumed handle, or a second one, is `.illegal`. A detached Linux
+  thread's `freeAndExit` is outside the model.
+- Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
+  `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
+- Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`.
+
+<a id="ost-03"></a>
+### OST-03 — Thread ids, process id and CPU count
+
+- Kind: environment.
+- Statement: `gettid`, `pthread_threadid_np` and `getpid` return `Env.tid t` and `Env.pid`.
+  `Env.Valid` makes thread ids distinct and positive. Ids are never reused within a run, so a
+  program that compares the id of an exited thread with a live one is outside the premise.
+  `sched_getaffinity(0, size ≥ 128, set)` writes `Env.cpuMask`, and
+  `sysctlbyname("hw.logicalcpu")` writes `Env.cpus`, which `Env.Valid` makes at least 1. Other
+  arguments are outside the model.
+- Derived from: `ZigLean.Os.Env`, `ZigLean.Os.Thread`; tokens `Os.Env.cpus`, `Os.Linux.gettid`,
+  `Os.Linux.getpid`, `Os.Linux.sched_getaffinity`, `Os.Darwin.pthread_self`,
+  `Os.Darwin.pthread_threadid_np`, `Os.Darwin.sysctlbyname`.
+- Sources: [os-threads.md](os-threads.md#environment), `ZigLean/Os/Env.lean`.
+
+<a id="osy-01"></a>
+### OSY-01 — Yield
+
+- Kind: trusted.
+- Statement: `sched_yield` is a scheduling point and returns `0`.
+- Derived from: `ZigLean.Os.Thread`; tokens `Os.Linux.sched_yield`, `Os.Darwin.sched_yield`;
+  implies THR-01.
+- Sources: [os-threads.md](os-threads.md#threads).
+
+<a id="osk-01"></a>
+### OSK-01 — Clock reads
+
+- Kind: environment.
+- Statement: `clock_gettime` of `REALTIME`, Linux `MONOTONIC`/`BOOTTIME`, or macOS
+  `UPTIME_RAW`/`MONOTONIC_RAW`/`MONOTONIC` is a scheduling point. The `i`-th clock read of the
+  run returns `Env.clock k i` as a `timespec`. `Env.Valid` makes the `awake` and `boot` clocks
+  monotone along the run and makes every value fit a `timespec`. No relation to the scheduler's
+  turns or to TMR-02's timed scheduler is claimed. Other clocks are outside the model.
+- Derived from: `ZigLean.Os.Clock`, `ZigLean.Os.Env`; tokens `Os.Linux.clock_gettime`,
+  `Os.Darwin.clock_gettime`, `Os.readClock`.
+- Sources: [os-threads.md](os-threads.md#clocks), `ZigLean/Os/Clock.lean`.
+
+<a id="osk-02"></a>
+### OSK-02 — Sleep
+
+- Kind: trusted.
+- Statement: Linux `clock_nanosleep` and macOS `nanosleep` of a valid request are one oracle
+  choice (a scheduling point). They return `0`, or `EINTR` after writing the whole request as
+  the time left to a relative sleep's `remain` (macOS: `-1` with the thread's `errno` cell set).
+  No duration is promised. An invalid request is `EINVAL`. `__error()` returns the calling
+  thread's `errno` cell.
+- Derived from: `ZigLean.Os.Clock`; tokens `Os.Linux.clock_nanosleep`, `Os.Darwin.nanosleep`,
+  `Os.Darwin.__error`; implies THR-01.
+- Sources: [os-threads.md](os-threads.md#clocks), `ZigLean/Os/Clock.lean`.
+
+<a id="osg-01"></a>
+### OSG-01 — Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`)
+
+- Kind: trusted.
+- Statement: A `SIG.IO` to a live thread (std's cancelation of a blocked syscall, with a no-op
+  handler installed) wakes the thread if it sleeps in a futex wait, which then returns `EINTR`.
+  Otherwise it records a pending interrupt. The thread's next futex wait or sleep delivers it at
+  its start without forcing `EINTR`. An unknown, exited (Linux) or joined (macOS) thread gives
+  `ESRCH`; a detached macOS thread stays signalable, also after it ended. Installing the
+  handler has no memory effect. Any other signal is outside the model.
+- Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.interrupt`,
+  `Os.Linux.tgkill`, `Os.Darwin.pthread_kill`; implies THR-01.
+- Sources: [os-threads.md](os-threads.md#interrupts), `ZigLean/Os/Thread.lean`, Zig 0.16.0
+  `lib/std/Io/Threaded.zig` (`signalCanceledSyscall`).
+
+<a id="osm-02"></a>
+### OSM-02 — macOS `malloc`/`free`/`malloc_size`
+
+- Kind: trusted.
+- Statement: Libc's allocator is thread-safe. `malloc(n)` is one allocation attempt of the
+  model heap. `Mem.allocDenied` decides failure (`null`); otherwise the result is a fresh `.heap`
+  block of `n + Env.mallocSlack i n` undefined bytes at a 16-byte-aligned address. `free(null)`
+  does nothing. `free(p)` of offset 0 of a live heap block ends the block and counts as a write
+  of all its bytes. Any other pointer (double free, inner pointer, stack, global, mapping or
+  arena block) is `.illegal`. `malloc_size` returns the block's byte count (`0` for `null`) and
+  is `.illegal` for other pointers, which is stricter than macOS.
+- Derived from: `ZigLean.Os.Malloc`, `ZigLean.Sep.OsMalloc`; tokens `Os.Darwin.malloc`,
+  `Os.Darwin.free`, `Os.Darwin.malloc_size`; implies SEM-02, ALC-02.
+- Sources: [os-threads.md](os-threads.md#malloc), `ZigLean/Os/Malloc.lean`, Zig 0.16.0
+  `lib/std/heap.zig` (`c_allocator`).
 
 ## Compiler and tool trust
 

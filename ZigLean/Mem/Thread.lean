@@ -462,7 +462,8 @@ def join (tid : ThreadId) : MemM Unit := do
 /-- `std.Thread.detach` (C07): the owner of the handle `tid` releases its obligation to join
 it. The thread goes on running independently of its parent; the parent may end, and its stack
 frame die, while the thread runs (`ZigLean/Conc/Detach.lean`). The handle is consumed: the record
-is marked `joined` (so `checkJoinedByChild` no longer asks for a join), and a later `join` or
+is marked `joined` (so `checkJoinedByChild` no longer asks for a join) and `released` (no join
+edge, so `Mem.freeRaces` does not exempt the thread's accesses), and a later `join` or
 `detach` of it throws `.illegal`, as `std` makes it undefined behavior ("Once called, this
 consumes the Thread object"). No happens-before edge: the clocks do not change. A detach by a
 thread that does not own the handle, or of a consumed, unknown or gated (`Mem.isGated`) handle,
@@ -472,7 +473,7 @@ def detach (tid : ThreadId) : MemM Unit := do
   let some rec := m.threads[tid]?
     | throw .illegal
   if rec.spawner != m.current || rec.joined || m.isGated tid then throw .illegal
-  set { m with threads := m.threads.set! tid { rec with joined := true } }
+  set { m with threads := m.threads.set! tid { rec with joined := true, released := true } }
 
 /-- An explicit transfer of the join handle `tid` to the thread `owner` (C07): a model step that
 a proof or a hand-written client inserts where a handle is passed to another thread (a spawn

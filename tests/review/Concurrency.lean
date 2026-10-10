@@ -215,6 +215,18 @@ private def freeTests : IO Unit := do
     ((prog.run {}).run).map fun r => r.map (·.1)
   check "frame end races with an unordered read" (run false) (some (.error .illegal))
   check "frame end after the join" (run true) (some (.ok ()))
+  -- C07 `Thread.detach` consumes the handle without a join edge (`ThreadRec.released`): the
+  -- detached child's write still races with the parent's free.
+  let detached : MemM Unit := do
+    let p ← alloc .heap 4 4
+    let child ← Thread.fork
+    modify fun m => { m with current := child }
+    store 4 p (7#32)
+    modify fun m => { m with current := 0 }
+    Thread.detach child
+    free p
+  check "free after detach races with the detached child's write"
+    (((detached.run {}).run).map fun r => r.map (·.1)) (some (.error .illegal))
 
 /-- Audit #5: `os_unfair_lock_unlock` by a thread that does not hold the lock is `.illegal` (the C
 function terminates the process); a contended lock with a sleeping waiter still unlocks. -/
