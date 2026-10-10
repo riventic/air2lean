@@ -72,21 +72,51 @@ def premise_rules(path: Path = ROOT / 'assurance/premises.json') -> list:
 PREMISE_RULES = premise_rules()
 
 
-def unaccounted(names, nodes, allowed=()) -> list[str]:
-    """F4 (docs/architecture-audit/claims.md), deny by default: hypothesis definitions that no
-    premise accounts for. Standard Lean is trusted and a runtime (ZigLean) definition carries its
-    module's premises; any other definition, such as a hand-written model or oracle in a contract,
-    or one the audit graph does not resolve, must be a declared root assumption or match a
-    premise rule."""
-    out = []
-    for name in sorted(names):
-        module = (nodes.get(name) or {}).get('module')
-        top = module.split('.')[0] if isinstance(module, str) else None
-        if top in ('Lean', 'Init', 'Std', 'Lake', 'ZigLean') or name in allowed:
+STANDARD_MODULES = ('Lean', 'Init', 'Std', 'Lake')
+
+
+def _top(nodes, name):
+    module = (nodes.get(name) or {}).get('module')
+    return module.split('.')[0] if isinstance(module, str) else None
+
+
+def domain_predicate(name, nodes, blocked=()) -> bool:
+    """A contract definition whose body reaches, through contract definitions only, nothing but
+    standard Lean (`BitVec`, `Nat`, ...): no memory, oracle, scheduler, placement, runtime model,
+    generated code or opaque. Applied to the theorem's inputs it restricts the domain; it assumes
+    nothing about the environment. A node without its dependencies is not one (fail closed)."""
+    seen, pending = set(), [name]
+    while pending:
+        current = pending.pop()
+        if current in seen:
             continue
-        if not any(rule.search(name) for rule in PREMISE_RULES):
+        seen.add(current)
+        if _top(nodes, current) in STANDARD_MODULES:
+            continue
+        node = nodes.get(current) or {}
+        if (current in blocked or _top(nodes, current) in (None, 'ZigLean') or node.get('kind') != 'definition'
+                or not isinstance(node.get('dependencies'), list)):
+            return False
+        pending += node['dependencies']
+    return True
+
+
+def unaccounted(names, nodes, allowed=(), blocked=()) -> tuple[list[str], list[str]]:
+    """F4 (docs/architecture-audit/claims.md), deny by default: (hypothesis definitions that no
+    premise accounts for, domain restrictions). Standard Lean is trusted and a runtime (ZigLean)
+    definition carries its module's premises. A contract predicate over the inputs alone
+    (`domain_predicate`) restricts the derived domain, which the non-vacuity witness covers. Any
+    other definition, such as a hand-written model or oracle in a contract, or one the audit graph
+    does not resolve, must be a declared root assumption or match a premise rule."""
+    out, restrictions = [], []
+    for name in sorted(names):
+        if _top(nodes, name) in (*STANDARD_MODULES, 'ZigLean') or name in allowed:
+            continue
+        if domain_predicate(name, nodes, blocked):
+            restrictions.append(name)
+        elif not any(rule.search(name) for rule in PREMISE_RULES):
             out.append(name)
-    return out
+    return out, restrictions
 
 
 def unaccounted_reason(names) -> str:
@@ -298,7 +328,9 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
     if nodes is not None:
-        result['unaccounted'] = unaccounted(hypothesis_defs - blocked, nodes, allowed)
+        result['unaccounted'], restrictions = unaccounted(hypothesis_defs - blocked, nodes, allowed, blocked)
+    else:
+        restrictions = []
     witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
     result['witnesses'] = witnesses
     strength, caps = result['type_strength'], result['caps']
@@ -323,6 +355,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
         domain['nonvacuity'] = witnesses['nonvacuity']
         if not nonvacuous:
             domain['scope'] = 'scoped'
+        domain['restrictions'] = restrictions  # contract predicates over the inputs (F4)
         result['domain'], result['scope'] = domain, domain['scope']
     return result
 

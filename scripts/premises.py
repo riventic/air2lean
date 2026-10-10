@@ -975,6 +975,37 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             "source_gap_count": len(gaps), "errors": errors, "theorems": theorems}
 
 
+def regenerate(root: Path, work: Path, rss_mib: int, timeout: int) -> int:
+    """Run both kernel-graph audits under scripts/build-guard.py (lock: AIR2LEAN_BUILD_LOCK),
+    then write the index from them: the one command after adding or changing a theorem."""
+    import subprocess
+    work.mkdir(parents=True, exist_ok=True)
+    shipped, universe = work / "assumptions.json", work / "universe"
+
+    def guarded(name: str, command: list[str]) -> int:
+        guard = [sys.executable, str(root / "scripts/build-guard.py"), "--cwd", str(root),
+                 "--report", str(work / f"{name}.guard.json"), "--log", str(work / f"{name}.log"),
+                 "--rss-mib", str(rss_mib), "--timeout", str(timeout), "--"]
+        status = subprocess.run(guard + command, env=dict(os.environ, LEAN_NUM_THREADS="1")).returncode
+        if status:
+            print(f"premise error: {name} failed (exit {status}; log {work / (name + '.log')})", file=sys.stderr)
+        return status
+
+    cache = str(work / "replay-cache.json")
+    if guarded("assumptions", [sys.executable, str(root / "scripts/assumptions.py"), "--output", str(shipped),
+                               "--replay-cache", cache]):
+        return 1
+    if guarded("universe", [sys.executable, "-B", str(root / "scripts/theorem_universe.py"), "audit",
+                            "--output-dir", str(universe), "--replay-cache", cache]):
+        return 1
+    config = load_config(root / CONFIG)
+    errors, entries = check(root, write=True, audits=CompiledAudits(root, config, [shipped], universe))
+    for error in errors:
+        print(f"  {error}", file=sys.stderr)
+    print(f"premises {'fail' if errors else 'pass'}: {len(entries)} theorems indexed from {work}", file=sys.stderr)
+    return 1 if errors else 0
+
+
 # ----------------------------------------------------------------------------- CLI
 
 def main(argv: list[str] | None = None) -> int:
@@ -992,6 +1023,11 @@ def main(argv: list[str] | None = None) -> int:
                              help="all-shipped-modules scripts/assumptions.py report (kernel graph)")
         command.add_argument("--universe", type=Path,
                              help="scripts/theorem_universe.py audit output directory (kernel graph)")
+    regen = sub.add_parser("regenerate", help="run both kernel-graph audits (build-guard) and write the index")
+    regen.add_argument("--work", type=Path, default=ROOT / ".lake/assurance/premises",
+                       help="audit outputs and guard logs (default .lake/assurance/premises)")
+    regen.add_argument("--rss-mib", type=int, default=40000)
+    regen.add_argument("--timeout", type=int, default=18000)
     graph = sub.add_parser("compiled", help="derive premises from a scripts/assumptions.py report")
     graph.add_argument("--assurance", type=Path, required=True)
     graph.add_argument("--output", type=Path, required=True)
@@ -1000,6 +1036,8 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
     command = args.command or "check"
     try:
+        if command == "regenerate":
+            return regenerate(root, args.work.resolve(), args.rss_mib, args.timeout)
         if command == "compiled":
             config = load_config(root / CONFIG)
             _, entries = check(root)

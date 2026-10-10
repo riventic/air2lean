@@ -268,10 +268,16 @@ def unaccounted_model_hypothesis():
                                  generated=generated, nodes=NODES)
     silent, declared = check([]), check([model])
     _, row = coverage_level(name, 'AuditClaims.root', 'safety')
+    # The other side: a contract predicate over the input alone is a domain restriction.
+    domain = claims.check_goal({'theorem': 'AuditClaims.domain_hyp', 'strength': 'safety', 'domain': 'scoped: x = 3'},
+                               THEOREMS, definition='AuditClaims.root', heads=HEADS, generated=generated, nodes=NODES)
+    restricted = (domain['status'] == 'accepted'
+                  and (domain['derived_domain'] or {}).get('restrictions') == ['AuditClaims.inRange'])
     exposed = (silent['status'] == 'accepted' or declared['status'] != 'accepted'
-               or row['binding'] != 'unaccounted_premise')
+               or row['binding'] != 'unaccounted_premise' or not restricted)
     return exposed, (f'undeclared: claims={silent["status"]} binding={row["binding"]} ({silent["reason"]}); '
-                     f'declared as a root assumption: claims={declared["status"]}')
+                     f'declared as a root assumption: claims={declared["status"]}; input predicate: '
+                     f'claims={domain["status"]} restrictions={(domain["derived_domain"] or {}).get("restrictions")}')
 
 
 def premises_in_goal_rows():

@@ -43,12 +43,20 @@ satisfiable (witness below), so only the missing liveness witness (S6) caps it. 
 theorem spin_partial : Triple emp spin (fun _ _ => False) := by
   intro m hP hF hd hm hp hs; trivial
 
-/-- F4: a hand-written model in a contract (here a clock oracle). Nothing maps it to a premise. -/
-def clockModel : Nat := 3
+/-- F4: a hand-written model in a contract (here a clock oracle over the memory state). Nothing
+maps it to a premise. -/
+def clockModel (m : Mem) : Nat := m.current
 
 /-- F4: the claim rests on a hypothesis about `clockModel`, which no premise or root assumption
 accounts for. Kernel-checked, `safety` (an exact success over one fixed input). -/
-theorem oracle_hyp (_h : clockModel = 3) : root 3 = pure 4 := rfl
+theorem oracle_hyp (_h : ∀ m : Mem, clockModel m = 0) : root 3 = pure 4 := rfl
+
+/-- F4: a contract predicate over the input alone (standard `BitVec` only): a domain
+restriction, reported in the derived domain, not a premise. -/
+def inRange (x : BitVec 8) : Prop := x.toNat < 255
+
+theorem domain_hyp (x : BitVec 8) (_h : inRange x) (hx : x = 3) : root x = pure 4 := by
+  subst hx; rfl
 
 /-- Equation shapes (`conclusion.lhs`, `conclusion.reflexive`): a reflexive equation states
 nothing about the root; a relational one relates two different applications of it. Neither is

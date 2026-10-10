@@ -12,8 +12,17 @@ stated hypotheses. Nothing else in the runtime is assumed. A premise ID marked
 *trusted* is believed, not proved. A premise marked *meaning* says what kind of statement a
 proof makes (for example partial correctness).
 
+After adding or changing a theorem, one command rebuilds the index. It runs the shipped audit
+and the theorem-universe audit under `scripts/build-guard.py` (lock `AIR2LEAN_BUILD_LOCK`), keeps
+their outputs and logs in `--work` (default `.lake/assurance/premises`), and writes the index:
+
 ```sh
-# The kernel graphs: the shipped audit and the theorem-universe audit (heavy; CI runs both).
+python3 scripts/premises.py regenerate                  # heavy: builds and audits every indexed module
+```
+
+The same steps by hand, and the other commands:
+
+```sh
 scripts/assumptions.sh --output .lake/assurance/assumptions.json
 python3 scripts/theorem_universe.py audit --output-dir .lake/assurance/universe
 python3 scripts/premises.py write --assurance .lake/assurance/assumptions.json --universe .lake/assurance/universe

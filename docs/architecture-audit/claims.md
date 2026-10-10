@@ -58,7 +58,7 @@ gates every finding below in CI.
 | F1 | fixed | coverage accepts exactly the receipt schema proof-receipt seals and verifies (3) |
 | F2 | fixed | one theorem universe: every indexed theorem file is compiled and audited |
 | F3 | fixed | typed host differences; model exclusions pinned per input (SHA-256) |
-| F4 | fixed | deny by default: a hypothesis definition outside standard Lean and the runtime must be a root assumption or match a premise rule, else the goal is `unaccounted_premise` (`unaccounted-model-hypothesis`); each direct goal row lists its premise IDs from the receipt audit's kernel graph (`premises-in-goal-rows`); the premise index is derived from elaborated constants |
+| F4 | fixed | deny by default: a hypothesis definition outside standard Lean and the runtime must be a root assumption or match a premise rule, else the goal is `unaccounted_premise`; a predicate over the inputs alone is a domain restriction (`unaccounted-model-hypothesis`); each direct goal row lists its premise IDs from the receipt audit's kernel graph (`premises-in-goal-rows`); the premise index is derived from elaborated constants |
 | H1 | fixed | reports and diff summaries are bound to the tree (freshness, `--allow-dirty` recorded) |
 | H2 | fixed | batch-8 heads are registered with fingerprints, bounds and the conditional-return claim |
 | H3 | fixed | each recorded kill is bound to the hashes of its regression's committed inputs (`target_sha256`; `mutation-kill-unbound`) |
@@ -254,11 +254,16 @@ binder, which must map to a premise ID or a manifest `assumptions` entry. Otherw
 Fixed (`codex/fix-claims-remaining`). Opaques, axioms and compiler redirections in a closure
 were already refused by the assumption policy, and generated or claim-head definitions in a
 hypothesis by S3; the remaining route was a hypothesis about a contract's own model definition
-(`AuditClaims.oracle_hyp`, a clock oracle `clockModel`), which `claims.py` accepted. Now every
-definition in a hypothesis that is neither standard Lean (`Init`, `Std`, `Lean`, `Lake`) nor
-runtime (`ZigLean`) nor rejected by S3 must be listed in the root's `assumptions` or match a
-premise rule; a definition the audit graph cannot place counts as unaccounted. Otherwise
-`claims.py check` rejects the goal and coverage binds it as `unaccounted_premise`. A conclusion's
+(`AuditClaims.oracle_hyp`, a clock oracle `clockModel` over the memory state), which
+`claims.py` accepted. Now every definition in a hypothesis that is neither standard Lean (`Init`,
+`Std`, `Lean`, `Lake`) nor runtime (`ZigLean`) nor rejected by S3 must be listed in the root's
+`assumptions` or match a premise rule; a definition the audit graph cannot place counts as
+unaccounted. Otherwise `claims.py check` rejects the goal and coverage binds it as
+`unaccounted_premise`. One kind is exempt: a contract definition whose body reaches, through
+contract definitions only, nothing but standard Lean (`BitVec`, `Nat`; no memory, oracle,
+scheduler, placement, runtime model, generated code or opaque), such as `AuditClaims.inRange x`
+in `domain_hyp`. Applied to the inputs, it restricts the domain: the derived domain lists it
+under `restrictions`, and the non-vacuity witness required for functional strength covers it. A conclusion's
 own definitions are its specification, which the derived domain and the goal row already show.
 Each direct coverage goal row carries `premises`: the IDs that the tables of
 `scripts/premises.py` derive from the receipt audit's kernel graph (runtime modules, generated

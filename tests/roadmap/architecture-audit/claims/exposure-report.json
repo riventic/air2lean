@@ -595,6 +595,208 @@
    }
   },
   {
+   "name": "AuditClaims.domain_hyp",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "OfNat.ofNat"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq",
+    "lhs": {
+     "head": "AuditClaims.root"
+    },
+    "reflexive": false
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.inRange",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true,
+   "statement": {
+    "args": [
+     {
+      "args": [
+       {
+        "closed": "BitVec"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Result"
+      },
+      "extra": [],
+      "fn": "Zig.Result",
+      "fn_module": "ZigLean.Basic",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 0
+       }
+      ],
+      "atom": {
+       "bvars": [
+        0
+       ],
+       "open": "AuditClaims.root"
+      },
+      "extra": [],
+      "fn": "AuditClaims.root",
+      "fn_module": "AuditClaims.Gen",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Zig.Result"
+       },
+       {
+        "closed": "Applicative.toPure"
+       },
+       {
+        "closed": "BitVec"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "closed": "Pure.pure"
+      },
+      "extra": [],
+      "fn": "Pure.pure",
+      "fn_module": "Init.Prelude",
+      "params": [
+       "implicit",
+       "inst_implicit",
+       "implicit",
+       "default"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "x",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [
+       "AuditClaims.inRange"
+      ],
+      "name": "_h",
+      "prop": true,
+      "uses": [
+       0
+      ]
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "hx",
+      "prop": true,
+      "uses": [
+       0
+      ]
+     }
+    ],
+    "head": {
+     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "kind": "inductive",
+     "module": "Init.Prelude",
+     "name": "Eq"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "absent",
+      "theorem": null
+     }
+    }
+   }
+  },
+  {
    "name": "AuditClaims.ground_instance",
    "module": "AuditClaims.Vacuous",
    "axioms": [],
@@ -1009,6 +1211,7 @@
     "OfNat.ofNat",
     "Pure.pure",
     "Zig.Error",
+    "Zig.Mem",
     "Zig.Result"
    ],
    "conclusion_dependencies": [
@@ -1030,6 +1233,13 @@
    ],
    "opaque_dependencies": [],
    "extern_dependencies": [
+    "Array.emptyWithCapacity",
+    "Array.mk",
+    "Array.push",
+    "Array.toList",
+    "ByteArray.emptyWithCapacity",
+    "ByteArray.mk",
+    "ByteArray.push",
     "Int.add",
     "Int.decLe",
     "Int.decLt",
@@ -1045,12 +1255,19 @@
     "Nat.decEq",
     "Nat.decLe",
     "Nat.decLt",
+    "Nat.div",
     "Nat.mod",
     "Nat.modCore",
     "Nat.mul",
     "Nat.pow",
     "Nat.pred",
-    "Nat.sub"
+    "Nat.sub",
+    "String.ofByteArray",
+    "UInt32.ofBitVec",
+    "UInt32.toBitVec",
+    "UInt32.toNat",
+    "UInt8.ofBitVec",
+    "UInt8.ofNat"
    ],
    "compiler_redirections": [],
    "violations": [],
@@ -4191,8 +4408,33 @@
    "kind": "definition",
    "dependencies": [
     "Nat",
+    "Zig.Mem",
+    "Zig.Mem.current"
+   ]
+  },
+  "AuditClaims.domain_hyp": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
     "instOfNatNat",
-    "OfNat.ofNat"
+    "Applicative.toPure",
+    "AuditClaims.inRange",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "Eq.ndrec",
+    "Eq.refl",
+    "Eq.symm",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
    ]
   },
   "AuditClaims.ground_instance": {
@@ -4241,6 +4483,19 @@
     "Zig.Result"
    ]
   },
+  "AuditClaims.inRange": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instLTNat",
+    "instOfNatNat",
+    "BitVec.toNat",
+    "LT.lt",
+    "OfNat.ofNat"
+   ]
+  },
   "AuditClaims.modelInc": {
    "module": "AuditClaims.Escapes",
    "kind": "definition",
@@ -4275,6 +4530,7 @@
     "OfNat.ofNat",
     "Pure.pure",
     "Zig.Error",
+    "Zig.Mem",
     "Zig.Result"
    ]
   },
@@ -4820,6 +5076,10 @@
   },
   "Eq.mpr": {
    "module": "Init.Core",
+   "kind": "definition"
+  },
+  "Eq.ndrec": {
+   "module": "Init.Prelude",
    "kind": "definition"
   },
   "Eq.refl": {
@@ -5520,6 +5780,14 @@
     "Array",
     "Zig.Block",
     "Zig.Mem"
+   ]
+  },
+  "Zig.Mem.current": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "Zig.Mem",
+    "Zig.ThreadId"
    ]
   },
   "Zig.Mem.heap": {
