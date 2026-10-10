@@ -234,9 +234,9 @@ def cmd_run(a):
                 leans[target] = lean_stream(airs[target], work, target)
                 lean, lean_panics = leans[target]
             else:
-                # The translator is guarded to the model ABI scope (x86_64-linux, aarch64-macos):
-                # aarch64-linux AIR is accepted only if it equals the x86_64-linux AIR but for
-                # `profile`, and the Lean stream is that of the x86_64-linux translation.
+                # The committed evidence predates aarch64-linux translation (T04): its AIR is
+                # accepted only if it equals the x86_64-linux AIR but for `profile`, and the Lean
+                # stream is that of the x86_64-linux translation.
                 if "x86_64-linux" not in leans:
                     raise SystemExit(f"{target} needs x86_64-linux in --targets as its AIR reference")
                 diff = air_differences(airs["x86_64-linux"], airs[target])

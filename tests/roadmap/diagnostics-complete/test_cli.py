@@ -248,7 +248,7 @@ def exported(binary, air_root):
         for d in located:
             span = d["source_span"]
             if d["phase"] == "profile":
-                # A host outside the model ABI scope (e.g. aarch64-linux) is a profile blocker;
+                # A host outside the model ABI scope (e.g. riscv64-linux) is a profile blocker;
                 # it is located at its function's declaration line.
                 assert d["source_span_status"] == "declaration" and span["column"] is None, d
                 assert source[span["line"] - 1].lstrip().startswith(("export fn", "fn", "inline fn")), d

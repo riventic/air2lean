@@ -45,11 +45,13 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-OSES = ("linux", "darwin")
+# Host keys of the golden overlays (scripts/check.sh): `uname -s` in lower case, then
+# `<os>-<uname -m>` for a host whose AIR or translation differs from its OS's (aarch64-linux).
+OSES = ("linux", "darwin", "linux-aarch64")
 PROFILE_PREFIX = b"-- air2lean-profile: "
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
-GEN_NAME = re.compile(r"Gen(-[a-z]+)?\.lean")
+GEN_NAME = re.compile(r"Gen(-[a-z]+(-[a-z0-9_]+)?)?\.lean")
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
 # the arguments of the fixture's own check script.
@@ -217,9 +219,13 @@ def golden_cases():
                 # Linux is the reference host; another OS has a case when it has its own files.
                 if os_name != "linux" and not os_dir.is_dir() and not os_gen.is_file():
                     continue
-                expected = (os_gen if os_gen.is_file() else golden / "Gen.lean"
-                            if (golden / "Gen.lean").is_file() else ROOT / "Proofs" / Ex / "Gen.lean")
-                dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", os_dir) if d.is_dir()]
+                # An <os>-<arch> host also takes its OS's overlay (check.sh's order).
+                base_os = os_name.split("-")[0]
+                base_dir, base_gen = golden / f"air-{base_os}", golden / f"Gen-{base_os}.lean"
+                expected = next(g for g in (os_gen, base_gen, golden / "Gen.lean", ROOT / "Proofs" / Ex / "Gen.lean")
+                                if g.is_file())
+                overlays = (base_dir, os_dir) if base_os != os_name else (os_dir,)
+                dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", *overlays) if d.is_dir()]
                 yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
                            f"{ex} {version} {os_name}", version)
 

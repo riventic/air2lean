@@ -195,7 +195,7 @@ class SourceTests(unittest.TestCase):
         registry = copy.deepcopy(self.registry)
         registry['theorems']['Proofs.Ex.A64::div_a64'] = dict(IEEE, targets=['x86_64-linux'])
         self.assertEqual(self.problems(registry),
-                         ['Proofs.Ex.A64::div_a64: uses an aarch64-only float rule but its label omits aarch64-macos'])
+                         ['Proofs.Ex.A64::div_a64: uses an aarch64-only float rule but its label lists no aarch64 target'])
         registry['theorems']['Proofs.Ex.A64::div_a64'] = dict(IEEE, targets=['aarch64-macos'])
         self.assertEqual(self.problems(registry), [])
 
