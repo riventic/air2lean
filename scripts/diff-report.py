@@ -386,7 +386,8 @@ def _classify(native, model, nkind, mkind, search, host=False, values_match=None
     if Kind.INPUT_FAILURE in (nkind,mkind): return Status.INPUT_FAILURE
     # Without safety checks the returned value of an illegal call can be garbage that the harness
     # cannot even render (a wild pointer, a missing sentinel): that is the exclusion, not a harness bug.
-    if exclude_ub and mkind == Kind.MODEL_PANIC and nkind == Kind.NATIVE_HARNESS_FAILURE and not same_value(native,model):return Status.UB_EXCLUDED
+    # A model `.illegal` (an out-of-bounds slice pointer, MM-3) is illegal behaviour here as well.
+    if exclude_ub and mkind in (Kind.MODEL_PANIC, Kind.ILLEGAL) and nkind == Kind.NATIVE_HARNESS_FAILURE and not same_value(native,model):return Status.UB_EXCLUDED
     if Kind.NATIVE_HARNESS_FAILURE in (nkind,mkind): return Status.NATIVE_HARNESS_FAILURE
     if values_match is None:values_match=same_value(native,model)
     if values_match:

@@ -262,6 +262,14 @@ class UnsafeModes(unittest.TestCase):
         self.assertEqual(self.classify(*args, True), dr.Status.UB_EXCLUDED)
         self.assertEqual(self.classify(*args, False), dr.Status.NATIVE_HARNESS_FAILURE)
 
+    def test_unrenderable_result_of_a_model_illegal_call(self):
+        # An out-of-bounds slice pointer is `.illegal` in the model (MM-3): without safety checks
+        # the native result can be a wild pointer that the harness cannot render.
+        args = ({'fail': 'unknown'}, {'fail': 'Zig.Error.illegal'},
+                dr.Kind.NATIVE_HARNESS_FAILURE, dr.Kind.ILLEGAL)
+        self.assertEqual(self.classify(*args, True), dr.Status.UB_EXCLUDED)
+        self.assertEqual(self.classify(*args, False), dr.Status.NATIVE_HARNESS_FAILURE)
+
     def test_harness_failure_with_a_value_model_is_never_excluded(self):
         args = ({'fail': 'unknown'}, {'ok': 1}, dr.Kind.NATIVE_HARNESS_FAILURE, dr.Kind.VALUE)
         self.assertEqual(self.classify(*args, True), dr.Status.NATIVE_HARNESS_FAILURE)
