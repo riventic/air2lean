@@ -166,7 +166,12 @@ def main : IO Unit := do
       s!"model '{symbol}' hand-models std code"
   for symbol in #["os.linux.read", "posix.mmap"] do
     require (projectStdBinding? symbol).isNone s!"{symbol}: OS primitive refused"
-    let _ ← get <| ModelRegistry.check #[{ model with symbol }] raw.profile #[caller f "client" symbol]
+  let _ ← get <| ModelRegistry.check #[{ model with symbol := "os.linux.read" }] raw.profile
+    #[caller f "client" "os.linux.read"]
+  -- `posix.mmap` is the built-in OS boundary of `--allocator-model translated` (OSM-01): a
+  -- project binding never shadows it, in either mode.
+  expectError (ModelRegistry.check #[{ model with symbol := "posix.mmap" }] raw.profile
+    #[caller f "client" "posix.mmap"]) "model 'posix.mmap' conflicts with translated AIR or a built-in model"
   -- A user module's names never trigger the std rule (the registry example binds `project.*`).
   for symbol in #["project.identity", "lists.helper", "client.posix.read", "mempool.alloc"] do
     require (projectStdBinding? symbol).isNone s!"{symbol}: user-module name refused as std"

@@ -363,10 +363,7 @@ def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
 
 /-- An op that only a function that uses memory has (`Effects.memoryOnly`). A call's std model
 depends on `--allocator-model` (`modelledStdFn`). -/
-def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool :=
-  match op with
-  | .call (.func name ..) _ => modelledStdFn name mode
-  | _ => op.effects.memoryOnly
+def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool := (op.effectsIn mode).memoryOnly
 
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=

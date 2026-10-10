@@ -2087,6 +2087,9 @@ private def checkGlobalAliasAt (f : Func) (pty g off : Nat) : Except String Unit
         !pointerLayout.sentinel && pointerLayout.sentinelByte.isNone &&
         !pointerLayout.isVolatile && !pointerLayout.allowzero &&
         pointerLayout.hostSize == 0 && pointerLayout.bitOffset == 0 then return
+    -- Any other address in a code block (an offset, another pointee type) has no storage: a
+    -- function type counts as error-free (`castCapability`), so it must not reach the scan.
+    throw s!"{f.name}: global alias has unresolved or cyclic symbolic storage provenance"
   let scanned := hasErrorCapability f.types child
   if scanned.isNone && !hasErrorStorage f.types global.ty &&
       closedErrorFreeAliasGraph f.types global.ty child then return

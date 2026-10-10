@@ -451,7 +451,7 @@ end
 /-- Every tag that `normalizeOp` decodes, in its arm order. `air2lean --print-op-table`
 probes each; `tests/roadmap/op-effects` checks this list against `normalizeOp`'s arms. -/
 def decodedTags : Array String := #[
-  "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
+  "ret_addr", "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
   "mul", "mul_safe", "mul_wrap", "mul_sat", "div_trunc", "div_floor", "div_exact", "div_ceil", "div_float",
   "rem", "mod", "min", "max", "add_with_overflow", "sub_with_overflow", "mul_with_overflow",
   "shl_with_overflow", "clz", "ctz", "popcount", "byte_swap", "bit_reverse", "bit_and", "bit_or",
