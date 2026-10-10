@@ -6,8 +6,9 @@ open Air2Lean
 memory type only for an AIR file whose schema-12 profile names the LLVM backend, with the
 bit-packed size and alignment; byte-strided lanes keep their backend-independent layout. A lane
 pointer (`vector_index`) into an integer or `bool` vector becomes a bit-pointer into the vector's
-integer only for an LLVM profile on x86_64 or aarch64; float lanes, runtime lanes, other
-backends and other targets stay rejected.
+integer only for an LLVM profile on a target with a vector-layouts probe
+(`Target.lanePtrProbe`: x86_64-linux, aarch64-macos, aarch64-linux); float lanes, runtime lanes,
+other backends and other targets stay rejected.
 
     lake env lean --run tests/roadmap/vector-layouts/Checker.lean -/
 
@@ -104,6 +105,10 @@ def main : IO Unit := do
   require (!lane (laneCx llvm 5) 12 2) "a u9 lane pointer into a u32 vector is accepted"
   require ((laneCx llvm 16).atomicChild 0 (.inst 0) |>.toOption.isNone)
     "an atomic op through a bool lane pointer is accepted"
+  -- aarch64-linux has the probe too (`Target.lanePtrProbe`: the T04 files' `load`/`pad` rows).
+  let arm ← layoutsOf "stage2_llvm" 12 "aarch64-linux.6.8...6.8-gnu.2.39"
+  require ([12, 16].all fun i => tyOk arm i && arm[i]!.laneBitPtr)
+    "an aarch64-linux integer or bool lane pointer is rejected"
   IO.println "lane pointers: integer and bool lanes are bit-pointers on LLVM x86_64/aarch64"
   for (backend, schema, triple) in [("stage2_x86_64", 12, "x86_64-linux.5.10...6.19-musl"),
       ("stage2_c", 12, "x86_64-linux.5.10...6.19-musl"), ("unverified", 11, "unverified"),

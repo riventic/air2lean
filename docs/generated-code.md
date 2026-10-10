@@ -127,7 +127,8 @@ A lane pointer (`&v[i]`, `ptr_elem_ptr` through a `*@Vector`) of a byte-strided 
 vector is an item pointer, as for an array. Zig gives `&v[i]` of a `bool` vector or of a vector
 whose lanes are not a power-of-two number of bytes the type `*align(a:0:n:i) T`: the vector's
 address, with the lane in the type (`vector_index`). For integer and `bool` lanes of an AIR file
-whose schema-12 profile names `stage2_llvm` on x86_64 or aarch64, the translator makes it a
+whose schema-12 profile names `stage2_llvm` on a target with a native vector-layouts probe
+(`Target.lanePtrProbe`: x86_64-linux, aarch64-macos, aarch64-linux), the translator makes it a
 bit-pointer into the vector's `n * w`-bit integer, as for a packed field: host `⌈n * w / 8⌉` bytes
 (LLVM's store size of the vector), bit offset `i * w`. The `ptr_elem_ptr` is the vector pointer
 itself, and a load or store through it is `Zig.loadLane`/`Zig.storeLane`, which read or write

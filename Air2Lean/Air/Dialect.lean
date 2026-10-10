@@ -175,6 +175,11 @@ structure Target where
   versions : List ZigVersion := ZigVersion.all
   /-- The accepted ABI components of the triple; empty: any. -/
   abis : List String := []
+  /-- A native run of the vector-layouts probe (`tests/roadmap/vector-layouts/probe.zig`: lane
+  images, and loads/stores through comptime lane pointers) is checked against the model on this
+  target: x86_64-linux in the test job, aarch64-macos (L09's record) and aarch64-linux (the `load`
+  and `pad` rows of the T04 files). `Dialect.lanePtrBitPtrs` needs it. -/
+  lanePtrProbe : Bool := false
   deriving Repr, BEq
 
 /-- The Zig versions with T04 probe records for both aarch64 profiles. -/
@@ -186,12 +191,13 @@ reject every atomic op (`Check.lean`). The two aarch64 targets are qualified sep
 (`docs/aarch64-abi.md`). -/
 def Target.qualified : List Target := [
   { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
-    atomicBits := 64 },
+    atomicBits := 64, lanePtrProbe := true },
   { arch := "aarch64", os := "macos", pointerBits := 64, endian := .little, longDoubleBits := 64,
-    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128, versions := Target.aarch64Probed },
+    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128, versions := Target.aarch64Probed,
+    lanePtrProbe := true },
   { arch := "aarch64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 128,
     floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
-    versions := Target.aarch64Probed, abis := ["gnu"] },
+    versions := Target.aarch64Probed, abis := ["gnu"], lanePtrProbe := true },
   { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
     atomicBits := 64 },
   { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,
@@ -257,14 +263,15 @@ def floatRules (d : Dialect) : FloatRules := (d.target?.map (·.floatRules)).get
 `tests/roadmap/vector-layouts`); other backends lay lanes out differently. -/
 def packedVectorLanes (d : Dialect) : Bool := d.backend == Target.llvmBackend
 
-/-- The architectures with native lane-pointer evidence (`tests/roadmap/vector-layouts`). -/
-def lanePtrArchs : List String := ["x86_64", "aarch64"]
-
 /-- `normalize` makes a comptime lane pointer into a bit-packed vector a bit-pointer into the
-vector's integer (`lanePtrLayout`): LLVM's layout, checked natively only on `lanePtrArchs`
-and only for the versions with `ZigVersion.lanePtrEvidence`. -/
+vector's integer (`lanePtrLayout`): LLVM's layout, checked natively only on the targets with
+`Target.lanePtrProbe` and only for the versions with `ZigVersion.lanePtrEvidence`. -/
 def lanePtrBitPtrs (d : Dialect) : Bool :=
-  d.packedVectorLanes && d.version.lanePtrEvidence && lanePtrArchs.contains d.arch
+  d.packedVectorLanes && d.version.lanePtrEvidence && (d.target?.any (·.lanePtrProbe))
+
+/-- The targets of `Target.lanePtrProbe`, for diagnostics. -/
+def lanePtrTargets : List String :=
+  Target.qualified.filterMap fun t => if t.lanePtrProbe then some s!"{t.arch}-{t.os}" else none
 
 /-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
 instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`

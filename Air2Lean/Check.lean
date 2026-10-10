@@ -186,7 +186,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
         profile of Zig {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
-        ({Target.llvmBackend}) on {" or ".intercalate Dialect.lanePtrArchs}"
+        ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
