@@ -37,7 +37,7 @@ private def crossFree (src dst : Option Nat) : MemM Unit := do
 
 /-- A fixed buffer of 8 bytes: LIFO frees give bytes back, other frees do not. -/
 private def fixedBufferLifo : MemM (List Bool) := do
-  let r := AllocRef.owned (← FixedBuffer.init 4096 8)
+  let r := AllocRef.owned (← FixedBuffer.init (← allocStack 8 1) 8)
   let x ← r.alloc 1 1 (u8 4)
   let y ← r.alloc 1 1 (u8 4)
   let z ← r.alloc 1 1 (u8 1)

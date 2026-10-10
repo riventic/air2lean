@@ -61,7 +61,8 @@ build for each fixed finding below.
 | MM-7 | qualified | `docs/build-modes.md` lists the remaining exceptions of the ReleaseFast premise |
 | MM-8 | fixed | no allocation-order address facts in Sep (every placement) |
 | MM-9 | fixed | address reuse is one case of the placement (ALC-08) |
-| MM-10, MM-12 | open | hardening (fixed-buffer aliasing; zero-length/address-zero projections) |
+| MM-10 | fixed (fail closed) | `FixedBuffer.init` lends the buffer's block to the allocator: a direct access to the buffer is `.illegal`; allocations can be placed at their native addresses inside it |
+| MM-12 | open | hardening (zero-length accesses) |
 | MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
@@ -299,6 +300,21 @@ which is false natively. The translator does not route these allocators yet
 **Fix:** `init` takes ownership of the buffer's block (marks it lent: no direct access until
 `deinit`/`reset`), and allocations are sub-ranges of that block (`Ptr` = buffer block +
 offset).
+
+Reproduced (`var buf: [8]u8`, `p = create(u8)`, `p.* = 7`, `buf[0] = 9`, read `p.*`): the model
+read 7; native ReleaseSafe 0.16.0 reads 9 and has `p == &buf[0]`.
+
+**Status: fixed (fail closed) on `codex/fix-mm-remaining`.** `FixedBuffer.init buf cap` takes the
+buffer pointer instead of an address: the buffer's block must be live and writable for `cap`
+bytes, and it dies, lent to the allocator for good (Zig's allocator has no `deinit`, and `reset`
+does not give the buffer back). A direct access to the buffer, or to the rest of its block, and
+a free of that block are `.illegal`; that is conservative where Zig only aliases. Allocations
+stay blocks of their own: sub-ranges of the buffer's block would lose the per-allocation
+liveness and ownership checks (`AllocRef.free_foreign` and the fixed-buffer run lemma) that the
+legacy M01 model is stated with, and the translated `FixedBufferAllocator` (allocators from OS
+primitives) replaces the model. With the buffer dead, a placement can give each allocation its
+native address inside the buffer, so address observations are covered too. Regression:
+`tests/roadmap/memory-hardening/FixedBuffer.lean`.
 
 ### MM-11. Pointer bytes vs integer bytes
 

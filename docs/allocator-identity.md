@@ -23,7 +23,7 @@ The policies follow the Zig 0.16.0 sources `lib/std/heap/ArenaAllocator.zig` and
 | arena `free` | the block must be a whole live `.owned a` block, else `.illegal`; its lifetime ends. Zig gives the bytes back only for the last allocation; the arena model has no capacity, so nothing else changes. |
 | `arena.reset(mode)` | `Owned.reset`: every `.owned a` block dies, no other block changes. The boolean result (a capacity hint for the retaining modes) is not modelled. |
 | `arena.deinit()` | `Arena.deinit`: reset, then the arena is dead; later use throws `.illegal`. |
-| `FixedBufferAllocator.init(buf)` | `FixedBuffer.init base cap`: `end_index = 0`. |
+| `FixedBufferAllocator.init(buf)` | `FixedBuffer.init buf cap`: `end_index = 0`, `base` = the buffer's address. The buffer's block must be live and writable for `cap` bytes; it dies (lent to the allocator for good, MM-10), so a direct access to it is `.illegal`. |
 | fixed-buffer `alloc` | Zig's `alignPointerOffset` from `base + end_index`; `none` (`OutOfMemory`) if it does not fit, without a policy decision. |
 | fixed-buffer `free` | ownership check as for arenas; `end_index -= len` exactly when the block is the last allocation (`isLastAllocation`), else no bytes come back. |
 | fixed-buffer `reset()` | `Owned.reset`: every block dies, `end_index = 0`. |
@@ -56,8 +56,13 @@ the failing default `Allocator.remap` omits.
   translated programs still use one `std.mem.Allocator` and their `heap.*` calls stay
   rejected. A generated `Allocator` value carries no identity, so this model is for
   hand-written clients and specifications until the vtable is modelled.
-* Owned blocks get fresh model addresses, not addresses inside the fixed buffer or the arena's
-  nodes; address-sensitive programs are M05.
+* A fixed buffer's allocations are blocks of their own, not ranges of the buffer. Natively they
+  alias the buffer, so `FixedBuffer.init` makes the buffer's block dead: a direct access to the
+  buffer or to the rest of its block, and the free of that block (a stack buffer at the end of
+  its frame, a heap buffer through its allocator), throw `.illegal`, also after `reset`
+  (conservative; MM-10 in [the memory-model audit](architecture-audit/memory-model.md)). The
+  allocations get the placement's addresses; with the buffer dead, the placement can give them
+  their native addresses inside it. Arena blocks are not placed inside the arena's nodes.
 * Growing remap of the last allocation fails in the model; Zig grows it in place when it fits
   (M02).
 * `reset`/`deinit` record no race-check access; Zig's are not thread-safe either, and the
