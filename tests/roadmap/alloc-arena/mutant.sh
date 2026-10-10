@@ -2,7 +2,7 @@
 # Negative check: an ArenaAllocator whose `alloc` reserves nothing (the atomic `end_index += n +
 # alignment - 1` of the fast path adds 0, in the translated code) hands out the same bytes twice.
 # Eval.lean, rechecked against the mutated translation, must fail: `arena_two` sees its first
-# allocation overwritten (22, not 21). Needs `lake build ZigLean ZigLean.Sep.Full.Conc`.
+# allocation overwritten (22, not 21). Needs `lake build ZigLean ZigLean.Sep.Full.Conc` (check.sh lists the full set).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"

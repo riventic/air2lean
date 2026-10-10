@@ -5,6 +5,7 @@ import ZigLean.Sep.Full.AllocSpec
 import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.AtomicRules
 import ZigLean.Sep.Full.Ghost
+import ZigLean.Range
 
 /-!
 # The translated `ArenaAllocator`'s `free` against `FAllocSpec` (allocator milestone 2)
@@ -28,7 +29,7 @@ the generated code only. No model of the arena is used.
   leaked back (any bytes; the arena never touches them until `reset`).
 
 With no first node, `n = 0`. A token is `gfrag γ e`, so a token of the current epoch shows `n ≥ 1`
-(`count_of`), hence a first node: **O-A is excluded by ghost state**, not by a premise. A
+(`gfrag_count`), hence a first node: **O-A is excluded by ghost state**, not by a premise. A
 token of an older epoch (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose
 `own` needs the authority of epoch `e'`, which no longer exists.
 
@@ -48,24 +49,6 @@ namespace AllocArena.ArenaSpec
 
 open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.ArenaLinux
 
-/-! ## `⋆` up to associativity and commutativity (`ac_rfl`) -/
-
-theorem sep_comm_eq (P Q : FAssn) : (P ⋆ Q) = (Q ⋆ P) :=
-  funext fun _ => propext ⟨sep_comm, sep_comm⟩
-
-theorem sep_assoc_eq (P Q R : FAssn) : ((P ⋆ Q) ⋆ R) = (P ⋆ (Q ⋆ R)) :=
-  funext fun _ => propext ⟨sep_assoc, sep_assoc'⟩
-
-instance : Std.Associative (α := FAssn) (· ⋆ ·) := ⟨sep_assoc_eq⟩
-instance : Std.Commutative (α := FAssn) (· ⋆ ·) := ⟨sep_comm_eq⟩
-
-theorem sep_ex_eq {γ : Type} (P : γ → FAssn) (Q : FAssn) :
-    (FAssn.ex P ⋆ Q) = FAssn.ex fun x => P x ⋆ Q :=
-  funext fun _ => propext sep_ex
-
-/-- Rewrite a held assertion along an equation. -/
-theorem of_eq {P Q : FAssn} {r : Res} (e : P = Q) (h : P r) : Q r := e ▸ h
-
 /-! ## Steps that do not change the memory -/
 
 section Steps
@@ -80,11 +63,6 @@ theorem CTriple.pureStep {c : MemM α} {v : α} {f : α → ConcM Tgt β}
     fun m r rF hh hp hs => ⟨v, m, r, hc m r rF hh hp hs, hh, sep_lift.mpr ⟨rfl, hp⟩, hs⟩)) ?_
   intro w
   exact CTriple.lift fun hw => hw ▸ hf
-
-/-- A pure `Result` step. -/
-theorem CTriple.resultStep {x : Result α} {v : α} {f : α → ConcM Tgt β} (hx : x = pure v)
-    (hf : CTriple P (f v) Q) : CTriple P (ConcM.liftMem (StateT.lift x) >>= f) Q := by
-  subst hx; exact hf
 
 /-- Facts that hold of every memory holding `P` (and stay true: no memory in them). -/
 theorem CTriple.facts {x : ConcM Tgt β} {φ : Prop}
@@ -255,46 +233,6 @@ def inv (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) : FAllocInv where
   own := own CI γ e ctx
   tok _ _ _ _ _ _ := gfrag γ e
 
-/-! ## Ghost counts in held resources -/
-
-/-- `P`'s ghost state at `γ` contains the cell `c`. -/
-def GHas (γ : Nat) (c : GCell) (P : FAssn) : Prop := ∀ r, P r → ∃ d, r.gh γ = c.add d
-
-theorem GHas.sep {γ c c'} {P Q : FAssn} (h : GHas γ c P) (h' : GHas γ c' Q) :
-    GHas γ (c.add c') (P ⋆ Q) := by
-  rintro _ ⟨r₁, r₂, -, rfl, h1, h2⟩
-  obtain ⟨d, hd⟩ := h r₁ h1
-  obtain ⟨d', hd'⟩ := h' r₂ h2
-  refine ⟨d.add d', ?_⟩
-  show (r₁.gh γ).add (r₂.gh γ) = _
-  rw [hd, hd']
-  ext <;> simp [GCell.add] <;> omega
-
-theorem GHas.sepL {γ c} {P Q : FAssn} (h : GHas γ c P) : GHas γ c (P ⋆ Q) := by
-  rintro _ ⟨r₁, r₂, -, rfl, h1, -⟩
-  obtain ⟨d, hd⟩ := h r₁ h1
-  exact ⟨d.add (r₂.gh γ), by show (r₁.gh γ).add (r₂.gh γ) = _; rw [hd, GCell.add_assoc]⟩
-
-theorem GHas.sepR {γ c} {P Q : FAssn} (h : GHas γ c P) : GHas γ c (Q ⋆ P) :=
-  fun r hr => GHas.sepL h r (sep_comm hr)
-
-theorem gauth_has (γ e n : Nat) : GHas γ (GCell.auth1 e n) (gauth γ e n) := by
-  rintro r ⟨-, -, hg⟩; exact ⟨GCell.unit, by simp [hg, Ghost.at]⟩
-
-theorem gfrag_has (γ e : Nat) : GHas γ (GCell.frag1 e 1) (gfrag γ e) := by
-  rintro r ⟨-, -, hg⟩; exact ⟨GCell.unit, by simp [hg, Ghost.at]⟩
-
-/-- **A token of the current epoch shows that one is outstanding**, wherever the authority and
-the token sit in the held assertion. -/
-theorem count_of {γ e n : Nat} {P : FAssn} (h : GHas γ ((GCell.auth1 e n).add (GCell.frag1 e 1)) P)
-    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) : 1 ≤ n := by
-  obtain ⟨d, hd⟩ := h r hp
-  have := hh.ghost.1 γ
-  simp only [Ghost.add, hd] at this
-  rw [GCell.add_assoc, GCell.add_assoc, GCell.valid_auth1_add, GCell.frag1_add_frag] at this
-  have := this.2.1
-  simp at this; omega
-
 /-! ## Rules -/
 
 /-- A ghost update of a `CTriple`'s precondition (`FTriple.upd`). -/
@@ -352,10 +290,6 @@ def FV.L (v : FV) : FAssn := v.uW ctx ⋆ (v.eW v.w.ei ⋆ v.R0 CI γ e ctx s k 
 
 end Free
 
-/-- A held separating conjunction holds its left part on a sub-resource. -/
-theorem sub_left {X R : FAssn} {r : Res} (h : (X ⋆ R) r) : ∃ r₁, X r₁ := by
-  obtain ⟨r₁, -, -, -, h1, -⟩ := h; exact ⟨r₁, h1⟩
-
 theorem region_facts {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte} {r : Res}
     (h : up (regionIn p A S K a bs) r) : (∃ b, p.block = some b) ∧ (A + p.off.toNat) % a = 0 ∧
       0 ≤ p.off := by
@@ -385,11 +319,8 @@ theorem free_pre {m : Mem} {r rF : Res} (hh : Holds m r rF) (hlen : s.len.toNat 
       up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
       CI.own ⋆ Junk ⋆ FirstPart CI w ⋆ UsedRest CI w.nxt ⋆ FreeList CI w.fl))
       (by simp only [OV.body, inv]; ac_rfl) hp
-    have hg := GHas.sepL (Q := up (regionIn s.ptr A' S' K' (2 ^ k) bs) ⋆
-      up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
-      CI.own ⋆ Junk ⋆ FirstPart CI w ⋆ UsedRest CI w.nxt ⋆ FreeList CI w.fl)
-      (GHas.sep (gauth_has γ e w.n) (gfrag_has γ e))
-    have := count_of hg hh hp'
+    obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hp'
+    have := gfrag_count h1 (Ghost.Ok.assoc.mp hh.ghost)
     omega
   | some N =>
     have hwf' := hwf.2
@@ -499,12 +430,6 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s bs) {m : Mem} {r rF : Res} (hh : H
 
 theorem debug_assert_true : debug_assert true = pure () := rfl
 
-theorem sub_ok {a b : BitVec 64} (h : b.toNat ≤ a.toNat) : Zig.sub false a b = pure (a - b) := by
-  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp; omega)]
-
-theorem sep_left_comm_eq (P Q R : FAssn) : (P ⋆ (Q ⋆ R)) = (Q ⋆ (P ⋆ R)) := by ac_rfl
-
 /-- `free`'s run, case by case (module doc). -/
 theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
@@ -603,7 +528,7 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
     have hle : s.len.toNat ≤ (BitVec.ofNat 64 v.w.ei).toNat := by rw [hei64, hlen]; omega
     have hd : (BitVec.ofNat 64 v.w.ei - s.len).toNat = v.w.ei - bs.size := by
       rw [BitVec.toNat_sub_of_le hle, hei64, hlen]
-    rw [sub_ok hle]
+    rw [Zig.sub_unsigned_of_le hle]
     conc_norm
     -- `buf_ptr + new_end_index == memory.ptr`
     refine CTriple.pureStep (v := (v.N.add 24).add (v.w.ei - bs.size : Nat))
