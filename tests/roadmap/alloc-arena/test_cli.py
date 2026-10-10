@@ -28,14 +28,12 @@ def main(binary):
         assert result.returncode == 1 and report["status"] == "rejected", flags
         assert any(CYCLIC in d["message"] for d in report["diagnostics"]), flags
 
-    # The `Node` graph is cyclic (`next: ?*Node`). With an error union in it, the cast between
+    # The `Node` graph is cyclic (`next: ?*Node`). With an error set in it, the cast between
     # `*Node` and its bytes would expose symbolic error storage: rejected.
     mutated = json.loads(json.dumps(linux))
     doc = base.find(mutated, "heap.ArenaAllocator.Node.allocatedSliceUnsafe.json")
     types = doc["types"]
     types.append({"k": "error_set", "errors": ["Oops"], "abi_size": 2, "abi_align": 2})
-    types.append({"k": "error_union", "error": len(types) - 1, "payload": 10,
-                  "abi_size": 16, "abi_align": 8})
     node = next(t for t in types if t.get("name") == "heap.ArenaAllocator.Node")
     next(f for f in node["fields"] if f["name"] == "end_index")["ty"] = len(types) - 1
     base.reject(binary, mutated, CYCLIC, "arena.")
@@ -46,14 +44,13 @@ def main(binary):
     doc = base.find(mutated, "heap.ArenaAllocator.Node.endResize.json")
     types = doc["types"]
     types.append({"k": "bool", "abi_size": 1, "abi_align": 1})
-    types.append({"k": "ptr", "size": "one", "const": False, "child": len(types) - 1, "ptr_align": 8,
-                  "volatile": False, "allowzero": False, "sentinel": False, "host_size": 0,
-                  "abi_size": 8, "abi_align": 8})
     insts = {i["id"]: i for i in base.walk(doc["body"])}
     hit = False
     for inst in base.walk(doc["body"]):
         if inst.get("tag") == "atomic_load" and inst.get("order") == "unordered":
             operand = insts[inst["args"][0]["inst"]]
+            # The operand's pointer type, retargeted to the `bool`.
+            types.append(dict(types[operand["ty"]], child=len(types) - 1))
             operand["ty"] = len(types) - 1
             inst["ty"] = len(types) - 2
             hit = True

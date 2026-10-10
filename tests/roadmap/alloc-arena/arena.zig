@@ -54,3 +54,19 @@ pub export fn arena_foreign_free() void {
     const foreign: []u8 = buffer[0..8];
     arena.allocator().free(foreign);
 }
+
+var node_buf: [8]u64 = undefined;
+
+/// The state that a failed `alloc` leaves (obstruction O-E): the first node's `end_index` past
+/// its buffer. Built by hand: the translated `alloc` is a `partial_fixpoint` group, which the
+/// kernel does not evaluate. `free` then forms `buf_ptr + end_index` out of bounds
+/// (`ArenaObstruction.lean`; natively undefined behaviour, `docs/upstream/arena-oob-gep.md`).
+pub export fn arena_oob_free() void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const NodePtr = @typeInfo(@TypeOf(arena.state.used_list)).optional.child;
+    const node: NodePtr = @ptrCast(&node_buf);
+    node.* = .{ .size = @bitCast(@as(usize, @sizeOf(@TypeOf(node_buf)))), .end_index = 1000, .next = null };
+    arena.state.used_list = node;
+    const foreign: []u8 = buffer[0..8];
+    arena.allocator().free(foreign);
+}

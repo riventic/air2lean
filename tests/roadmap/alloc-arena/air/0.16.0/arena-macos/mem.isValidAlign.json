@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.isValidAlign",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 4910
+ },
  "params": [
   0
  ],
@@ -101,7 +107,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 31
   },
   {
    "id": 3,
@@ -109,7 +116,9 @@
    "ty": 1,
    "callee": {
     "ty": 3,
-    "func": "mem.isValidAlignGeneric__anon_6879",
+    "func": "mem.isValidAlignGeneric__anon_6415",
+    "module": "std",
+    "instance_key": "32d5b5f10ec2950594e16a9551ab7eb5f61d172473d46f76cac4d5da2302a023",
     "noreturn": false
    },
    "args": [
@@ -122,7 +131,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,

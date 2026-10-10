@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.Node.Size.toInt",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 242
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 2,
@@ -85,7 +92,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 16
   },
   {
    "id": 7,
@@ -115,7 +123,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 13
   },
   {
    "id": 10,
@@ -141,7 +150,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 13
   },
   {
    "id": 13,
@@ -158,6 +168,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node.Size",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -192,6 +203,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -205,6 +217,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 8,
    "bit_offset": 0,

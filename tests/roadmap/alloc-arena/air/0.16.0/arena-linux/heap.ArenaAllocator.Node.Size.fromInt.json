@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.Node.Size.fromInt",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 235
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 19
   },
   {
    "id": 2,
@@ -80,7 +87,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 19
   },
   {
    "id": 5,
@@ -89,6 +97,7 @@
    "callee": {
     "ty": 5,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -101,7 +110,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 13
   },
   {
    "id": 7,
@@ -156,7 +166,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 25
   },
   {
    "id": 13,
@@ -192,7 +203,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 19
   },
   {
    "id": 17,
@@ -201,6 +213,7 @@
    "callee": {
     "ty": 5,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -213,7 +226,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 13
   },
   {
    "id": 19,
@@ -237,6 +251,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node.Size",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -280,6 +295,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -293,6 +309,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -306,6 +323,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 8,
    "bit_offset": 0,

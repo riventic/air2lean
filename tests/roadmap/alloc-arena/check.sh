@@ -2,8 +2,8 @@
 # Allocator milestone 2: std.heap.ArenaAllocator (Zig 0.16.0, lock-free) translated from its AIR with
 # its child allocators (FixedBufferAllocator, page_allocator) down to posix.mmap/munmap/mremap
 # (`--allocator-model translated`, docs/alloc-arena.md). Checks: the retained translations are the
-# fresh ones; they elaborate; the one-thread results equal the native ones (Eval.lean); obstruction
-# O-A is kernel-checked (ArenaObstruction.lean); the admissions fail closed (test_cli.py).
+# fresh ones; they elaborate; the one-thread results equal the native ones (Eval.lean); obstructions
+# O-A and O-E are kernel-checked (ArenaObstruction.lean); the admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt.
 set -euo pipefail
@@ -42,6 +42,7 @@ done
 cat > "$work/Axioms.lean" <<'AX'
 import ArenaObstruction
 #print axioms AllocArena.ArenaObstruction.foreign_free_panics
+#print axioms AllocArena.ArenaObstruction.oob_free_illegal
 AX
 "${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
 # Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).

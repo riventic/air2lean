@@ -25,25 +25,25 @@ instance : ToString Bool := ⟨fun b => if b then "1" else "0"⟩
 
 section Linux
 open AllocArena.ArenaLinux
-#guard [first (arena_sum 1) dispatch mem0, first (arena_sum 10) dispatch mem0,
-  first (arena_sum 3000) dispatch mem0, first (arena_sum 5000) dispatch mem0] =
+#guard [first (arena_sum 1) dispatch (mem0 .fresh), first (arena_sum 10) dispatch (mem0 .fresh),
+  first (arena_sum 3000) dispatch (mem0 .fresh), first (arena_sum 5000) dispatch (mem0 .fresh)] =
   ["ok 1", "ok 10", "ok 0", "ok 0"]
-#guard [first (arena_resize 10 20) dispatch mem0, first (arena_resize 10 5) dispatch mem0,
-  first (arena_resize 10 100) dispatch mem0, first (arena_resize 10 4000) dispatch mem0] =
+#guard [first (arena_resize 10 20) dispatch (mem0 .fresh), first (arena_resize 10 5) dispatch (mem0 .fresh),
+  first (arena_resize 10 100) dispatch (mem0 .fresh), first (arena_resize 10 4000) dispatch (mem0 .fresh)] =
   ["ok 1", "ok 1", "ok 0", "ok 0"]
-#guard [first (arena_reset 10 true) dispatch mem0, first (arena_reset 10 false) dispatch mem0,
-  first (arena_reset 500 true) dispatch mem0, first (arena_reset 1500 true) dispatch mem0] =
+#guard [first (arena_reset 10 true) dispatch (mem0 .fresh), first (arena_reset 10 false) dispatch (mem0 .fresh),
+  first (arena_reset 500 true) dispatch (mem0 .fresh), first (arena_reset 1500 true) dispatch (mem0 .fresh)] =
   ["ok 229", "ok 229", "ok 7001", "ok 1"]
-#guard [first (arena_page 10) dispatch mem0, first (arena_page 20000) dispatch mem0] =
+#guard [first (arena_page 10) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh)] =
   ["ok 12", "ok 20002"]
 -- `@returnAddress` reads the explicit oracle; any values give the same results.
-#guard first (arena_reset 10 true) dispatch { mem0 with arbitrary := #[7, 9, 11] } = "ok 229"
+#guard first (arena_reset 10 true) dispatch { (mem0 .fresh) with arbitrary := #[7, 9, 11] } = "ok 229"
 end Linux
 
 section Macos
 open AllocArena.ArenaMacos
-#guard [first (arena_sum 10) dispatch mem0, first (arena_resize 10 20) dispatch mem0,
-  first (arena_reset 500 true) dispatch mem0, first (arena_page 20000) dispatch mem0] =
+#guard [first (arena_sum 10) dispatch (mem0 .fresh), first (arena_resize 10 20) dispatch (mem0 .fresh),
+  first (arena_reset 500 true) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh)] =
   ["ok 10", "ok 1", "ok 7001", "ok 20002"]
 end Macos
 

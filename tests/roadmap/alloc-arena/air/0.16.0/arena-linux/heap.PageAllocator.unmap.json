@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.PageAllocator.unmap",
+ "module": "std",
+ "src": {
+  "file": "heap/PageAllocator.zig",
+  "module": "std",
+  "decl_line": 187
+ },
  "params": [
   0
  ],
@@ -78,7 +84,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 5,
@@ -89,7 +96,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 7
+     "line": 7,
+     "column": 64
     },
     {
      "id": 7,
@@ -115,24 +123,32 @@
      "id": 10,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 7
+     "line": 7,
+     "column": 87
     },
     {
      "id": 11,
      "tag": "dbg_inline_block",
      "ty": 1,
+     "src": {
+      "file": "heap.zig",
+      "module": "std",
+      "decl_line": 64
+     },
      "body": [
       {
        "id": 12,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 9
       },
       {
        "id": 14,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 41
       },
       {
        "id": 15,
@@ -152,7 +168,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 7
+     "line": 7,
+     "column": 50
     },
     {
      "id": 18,
@@ -160,7 +177,9 @@
      "ty": 5,
      "callee": {
       "ty": 7,
-      "func": "mem.alignForward__anon_1329",
+      "func": "mem.alignForward__anon_1351",
+      "module": "std",
+      "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
       "noreturn": false
      },
      "args": [
@@ -188,7 +207,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 8
+     "line": 8,
+     "column": 28
     },
     {
      "id": 21,
@@ -204,7 +224,8 @@
      "id": 22,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 8
+     "line": 8,
+     "column": 32
     },
     {
      "id": 23,
@@ -271,7 +292,8 @@
      "id": 28,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 8
+     "line": 8,
+     "column": 21
     },
     {
      "id": 29,
@@ -280,6 +302,7 @@
      "callee": {
       "ty": 11,
       "func": "posix.munmap",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -323,6 +346,7 @@
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -341,6 +365,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -354,6 +379,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -367,6 +393,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -394,6 +421,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -407,6 +435,7 @@
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -420,6 +449,7 @@
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,

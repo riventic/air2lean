@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.alignedIndex",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 325
+ },
  "params": [
   0,
   1,
@@ -92,7 +98,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 29
   },
   {
    "id": 7,
@@ -108,7 +115,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 30
   },
   {
    "id": 9,
@@ -137,7 +145,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 29
   },
   {
    "id": 12,
@@ -146,6 +155,7 @@
    "callee": {
     "ty": 6,
     "func": "mem.Alignment.forward",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -161,7 +171,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 68
   },
   {
    "id": 14,
@@ -190,7 +201,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 17,
@@ -212,6 +224,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -227,6 +240,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 9,
    "exhaustive": false,
    "fields": [
@@ -270,6 +284,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -288,6 +303,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

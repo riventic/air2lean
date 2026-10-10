@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.countListCapacity",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 75
+ },
  "params": [
   0
  ],
@@ -101,7 +107,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -137,7 +144,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 6,
@@ -187,7 +195,8 @@
          "id": 13,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 4
+         "line": 4,
+         "column": 12
         },
         {
          "id": 14,
@@ -272,7 +281,8 @@
            "id": 22,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 7
+           "line": 7,
+           "column": 9
           },
           {
            "id": 23,
@@ -288,7 +298,8 @@
            "id": 24,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 7
+           "line": 7,
+           "column": 25
           },
           {
            "id": 25,
@@ -314,7 +325,8 @@
            "id": 27,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 7
+           "line": 7,
+           "column": 36
           },
           {
            "id": 28,
@@ -330,7 +342,8 @@
            "id": 29,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 7
+           "line": 7,
+           "column": 36
           },
           {
            "id": 30,
@@ -339,6 +352,7 @@
            "callee": {
             "ty": 12,
             "func": "heap.ArenaAllocator.Node.Size.toInt",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -351,7 +365,8 @@
            "id": 31,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 7
+           "line": 7,
+           "column": 39
           },
           {
            "id": 32,
@@ -371,7 +386,8 @@
            "id": 33,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 7
+           "line": 7,
+           "column": 18
           },
           {
            "id": 34,
@@ -403,7 +419,8 @@
            "id": 36,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 8
+           "line": 8,
+           "column": 5
           },
           {
            "id": 37,
@@ -414,7 +431,8 @@
            "id": 39,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 35
           },
           {
            "id": 40,
@@ -503,7 +521,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 49,
@@ -519,7 +538,8 @@
    "id": 50,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 51,
@@ -559,6 +579,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -572,6 +593,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -593,6 +615,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -606,6 +629,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -619,6 +643,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -632,6 +657,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -640,6 +666,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node.Size",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -661,6 +688,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {

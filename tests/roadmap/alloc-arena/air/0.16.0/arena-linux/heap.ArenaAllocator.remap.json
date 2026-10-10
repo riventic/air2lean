@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.remap",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 604
+ },
  "params": [
   0,
   1,
@@ -106,7 +112,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 6,
-   "line": 2
+   "line": 2,
+   "column": 16
   },
   {
    "id": 9,
@@ -117,7 +124,8 @@
      "id": 10,
      "tag": "dbg_stmt",
      "ty": 6,
-     "line": 2
+     "line": 2,
+     "column": 22
     },
     {
      "id": 11,
@@ -126,6 +134,7 @@
      "callee": {
       "ty": 9,
       "func": "heap.ArenaAllocator.resize",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -160,7 +169,8 @@
        "id": 12,
        "tag": "dbg_stmt",
        "ty": 6,
-       "line": 2
+       "line": 2,
+       "column": 73
       },
       {
        "id": 13,
@@ -225,7 +235,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 6,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 20,
@@ -247,6 +258,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -260,6 +272,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -268,6 +281,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 15,
    "exhaustive": false,
    "fields": [
@@ -324,6 +338,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -342,6 +357,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -367,6 +383,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -380,6 +397,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

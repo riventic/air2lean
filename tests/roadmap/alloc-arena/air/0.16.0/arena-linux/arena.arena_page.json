@@ -35,10 +35,20 @@
   "export_stage": "analyzed-air"
  },
  "name": "arena.arena_page",
+ "module": "root",
+ "src": {
+  "file": "arena.zig",
+  "module": "arena",
+  "decl_line": 39
+ },
  "params": [
   0
  ],
  "ret": 1,
+ "export": {
+  "name": "arena_page",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -50,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -61,7 +72,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 45
   },
   {
    "id": 4,
@@ -70,6 +82,7 @@
    "callee": {
     "ty": 5,
     "func": "heap.ArenaAllocator.init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -119,7 +132,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 30
   },
   {
    "id": 9,
@@ -128,6 +142,7 @@
    "callee": {
     "ty": 9,
     "func": "heap.ArenaAllocator.allocator",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -179,7 +194,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 15,
@@ -190,7 +206,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 5
+     "line": 5,
+     "column": 23
     },
     {
      "id": 17,
@@ -206,7 +223,8 @@
      "id": 19,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 5
+     "line": 5,
+     "column": 23
     },
     {
      "id": 20,
@@ -214,7 +232,9 @@
      "ty": 13,
      "callee": {
       "ty": 14,
-      "func": "mem.Allocator.create__anon_28186",
+      "func": "mem.Allocator.create__anon_27963",
+      "module": "std",
+      "instance_key": "496c6df2f4ba0de8dc9e37b5092e9a06e025ddd8398cfa519835af7040d35738",
       "noreturn": false
      },
      "args": [
@@ -280,7 +300,8 @@
        "id": 25,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 3
+       "line": 3,
+       "column": 23
       },
       {
        "id": 26,
@@ -296,7 +317,8 @@
        "id": 27,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 3
+       "line": 3,
+       "column": 23
       },
       {
        "id": 28,
@@ -305,6 +327,7 @@
        "callee": {
         "ty": 18,
         "func": "heap.ArenaAllocator.deinit",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -317,7 +340,8 @@
        "id": 29,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 35
       },
       {
        "id": 30,
@@ -349,7 +373,8 @@
    "id": 33,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 34,
@@ -378,7 +403,8 @@
    "id": 36,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 37,
@@ -389,7 +415,8 @@
      "id": 38,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 7
+     "line": 7,
+     "column": 22
     },
     {
      "id": 39,
@@ -405,7 +432,8 @@
      "id": 42,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 7
+     "line": 7,
+     "column": 22
     },
     {
      "id": 43,
@@ -413,7 +441,9 @@
      "ty": 20,
      "callee": {
       "ty": 21,
-      "func": "mem.Allocator.alloc__anon_9732",
+      "func": "mem.Allocator.alloc__anon_8908",
+      "module": "std",
+      "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
      },
      "args": [
@@ -482,7 +512,8 @@
        "id": 48,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 3
+       "line": 3,
+       "column": 23
       },
       {
        "id": 49,
@@ -498,7 +529,8 @@
        "id": 50,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 3
+       "line": 3,
+       "column": 23
       },
       {
        "id": 51,
@@ -507,6 +539,7 @@
        "callee": {
         "ty": 18,
         "func": "heap.ArenaAllocator.deinit",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -519,7 +552,8 @@
        "id": 52,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 7
+       "line": 7,
+       "column": 36
       },
       {
        "id": 53,
@@ -579,7 +613,8 @@
    "id": 59,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 60,
@@ -609,7 +644,8 @@
    "id": 62,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 63,
@@ -625,7 +661,8 @@
    "id": 64,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 19
   },
   {
    "id": 65,
@@ -697,6 +734,7 @@
        "callee": {
         "ty": 25,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -746,7 +784,8 @@
    "id": 75,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 16
   },
   {
    "id": 76,
@@ -775,7 +814,8 @@
    "id": 78,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 23
   },
   {
    "id": 79,
@@ -791,7 +831,8 @@
    "id": 80,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 23
   },
   {
    "id": 81,
@@ -800,6 +841,7 @@
    "callee": {
     "ty": 18,
     "func": "heap.ArenaAllocator.deinit",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -812,7 +854,8 @@
    "id": 82,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 83,
@@ -828,6 +871,7 @@
  "globals": [
   {
    "name": "heap.PageAllocator.vtable",
+   "module": "std",
    "ty": 27,
    "const": true,
    "threadlocal": false,
@@ -868,6 +912,7 @@
   },
   {
    "name": "heap.PageAllocator.alloc",
+   "module": "std",
    "ty": 32,
    "const": true,
    "threadlocal": false,
@@ -875,11 +920,13 @@
    "init": {
     "ty": 32,
     "func": "heap.PageAllocator.alloc",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.PageAllocator.resize",
+   "module": "std",
    "ty": 33,
    "const": true,
    "threadlocal": false,
@@ -887,11 +934,13 @@
    "init": {
     "ty": 33,
     "func": "heap.PageAllocator.resize",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.PageAllocator.remap",
+   "module": "std",
    "ty": 34,
    "const": true,
    "threadlocal": false,
@@ -899,11 +948,13 @@
    "init": {
     "ty": 34,
     "func": "heap.PageAllocator.remap",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.PageAllocator.free",
+   "module": "std",
    "ty": 35,
    "const": true,
    "threadlocal": false,
@@ -911,6 +962,7 @@
    "init": {
     "ty": 35,
     "func": "heap.PageAllocator.free",
+    "module": "std",
     "noreturn": false
    }
   }
@@ -943,6 +995,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -951,6 +1004,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -974,6 +1028,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -998,6 +1053,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1011,6 +1067,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1028,6 +1085,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1041,6 +1099,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1054,6 +1113,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1098,6 +1158,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -1122,6 +1183,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1135,6 +1197,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1159,6 +1222,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1167,6 +1231,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1200,6 +1265,7 @@
    "child": 32,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1212,6 +1278,7 @@
    "child": 33,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1224,6 +1291,7 @@
    "child": 34,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1236,6 +1304,7 @@
    "child": 35,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1260,6 +1329,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.State",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1294,6 +1364,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1302,6 +1373,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1326,6 +1398,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node.Size",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {

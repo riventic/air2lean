@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.reset",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 112
+ },
  "params": [
   0,
   1
@@ -136,7 +142,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 20
+   "line": 20,
+   "column": 35
   },
   {
    "id": 7,
@@ -272,7 +279,8 @@
        "id": 14,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 20
+       "line": 20,
+       "column": 35
       },
       {
        "id": 15,
@@ -281,6 +289,7 @@
        "callee": {
         "ty": 10,
         "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -309,7 +318,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 25
+   "line": 25,
+   "column": 9
   },
   {
    "id": 20,
@@ -347,7 +357,8 @@
        "id": 22,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 27
+       "line": 27,
+       "column": 21
       },
       {
        "id": 23,
@@ -373,7 +384,8 @@
        "id": 25,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 27
+       "line": 27,
+       "column": 21
       },
       {
        "id": 26,
@@ -382,6 +394,7 @@
        "callee": {
         "ty": 12,
         "func": "heap.ArenaAllocator.deinit",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -394,7 +407,8 @@
        "id": 27,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 28
+       "line": 28,
+       "column": 14
       },
       {
        "id": 28,
@@ -443,7 +457,8 @@
        "id": 31,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 29
+       "line": 29,
+       "column": 9
       },
       {
        "id": 32,
@@ -478,7 +493,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 32
+   "line": 32,
+   "column": 50
   },
   {
    "id": 36,
@@ -504,7 +520,8 @@
    "id": 38,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 32
+   "line": 32,
+   "column": 56
   },
   {
    "id": 39,
@@ -530,7 +547,8 @@
    "id": 41,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 32
+   "line": 32,
+   "column": 44
   },
   {
    "id": 42,
@@ -539,6 +557,7 @@
    "callee": {
     "ty": 17,
     "func": "heap.ArenaAllocator.countListCapacity",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -562,7 +581,8 @@
    "id": 44,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 33
+   "line": 33,
+   "column": 50
   },
   {
    "id": 45,
@@ -588,7 +608,8 @@
    "id": 47,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 33
+   "line": 33,
+   "column": 56
   },
   {
    "id": 48,
@@ -614,7 +635,8 @@
    "id": 50,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 33
+   "line": 33,
+   "column": 44
   },
   {
    "id": 51,
@@ -623,6 +645,7 @@
    "callee": {
     "ty": 17,
     "func": "heap.ArenaAllocator.countListCapacity",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -646,7 +669,8 @@
    "id": 53,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 35
+   "line": 35,
+   "column": 35
   },
   {
    "id": 54,
@@ -787,7 +811,8 @@
    "id": 67,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 36
+   "line": 36,
+   "column": 35
   },
   {
    "id": 68,
@@ -839,7 +864,8 @@
        "id": 72,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 36
+       "line": 36,
+       "column": 57
       },
       {
        "id": 73,
@@ -957,7 +983,8 @@
    "id": 84,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 38
+   "line": 38,
+   "column": 5
   },
   {
    "id": 85,
@@ -1012,7 +1039,8 @@
    "id": 91,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 41
+   "line": 41,
+   "column": 27
   },
   {
    "id": 92,
@@ -1038,7 +1066,8 @@
    "id": 94,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 41
+   "line": 41,
+   "column": 33
   },
   {
    "id": 95,
@@ -1054,7 +1083,8 @@
    "id": 96,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 41
+   "line": 41,
+   "column": 51
   },
   {
    "id": 97,
@@ -1080,7 +1110,8 @@
    "id": 99,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 41
+   "line": 41,
+   "column": 57
   },
   {
    "id": 100,
@@ -1109,7 +1140,8 @@
    "id": 102,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 42
+   "line": 42,
+   "column": 9
   },
   {
    "id": 103,
@@ -1255,7 +1287,8 @@
            "id": 116,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 45
+           "line": 45,
+           "column": 9
           },
           {
            "id": 117,
@@ -1300,7 +1333,8 @@
            "id": 122,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 46
+           "line": 46,
+           "column": 9
           },
           {
            "id": 123,
@@ -1321,7 +1355,8 @@
                  "id": 126,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 46
+                 "line": 46,
+                 "column": 36
                 },
                 {
                  "id": 127,
@@ -1406,7 +1441,8 @@
                    "id": 135,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 48
+                   "line": 48,
+                   "column": 22
                   },
                   {
                    "id": 136,
@@ -1455,7 +1491,8 @@
                    "id": 140,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 49
+                   "line": 49,
+                   "column": 17
                   },
                   {
                    "id": 141,
@@ -1525,7 +1562,8 @@
                    "id": 147,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 50
+                   "line": 50,
+                   "column": 18
                   },
                   {
                    "id": 148,
@@ -1551,7 +1589,8 @@
                    "id": 150,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 50
+                   "line": 50,
+                   "column": 42
                   },
                   {
                    "id": 151,
@@ -1567,7 +1606,8 @@
                    "id": 152,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 50
+                   "line": 50,
+                   "column": 68
                   },
                   {
                    "id": 153,
@@ -1583,7 +1623,8 @@
                    "id": 154,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 50
+                   "line": 50,
+                   "column": 68
                   },
                   {
                    "id": 155,
@@ -1592,6 +1633,7 @@
                    "callee": {
                     "ty": 29,
                     "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+                    "module": "std",
                     "noreturn": false
                    },
                    "args": [
@@ -1604,18 +1646,25 @@
                    "id": 156,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 50
+                   "line": 50,
+                   "column": 75
                   },
                   {
                    "id": 157,
                    "tag": "dbg_inline_block",
                    "ty": 4,
+                   "src": {
+                    "file": "mem.zig",
+                    "module": "std",
+                    "decl_line": 45
+                   },
                    "body": [
                     {
                      "id": 158,
                      "tag": "dbg_stmt",
                      "ty": 4,
-                     "line": 2
+                     "line": 2,
+                     "column": 9
                     },
                     {
                      "id": 161,
@@ -1641,12 +1690,18 @@
                    "id": 163,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 50
+                   "line": 50,
+                   "column": 42
                   },
                   {
                    "id": 164,
                    "tag": "dbg_inline_block",
                    "ty": 4,
+                   "src": {
+                    "file": "mem/Allocator.zig",
+                    "module": "std",
+                    "decl_line": 159
+                   },
                    "body": [
                     {
                      "id": 165,
@@ -1725,7 +1780,8 @@
                      "id": 172,
                      "tag": "dbg_stmt",
                      "ty": 4,
-                     "line": 2
+                     "line": 2,
+                     "column": 13
                     },
                     {
                      "id": 173,
@@ -1741,7 +1797,8 @@
                      "id": 174,
                      "tag": "dbg_stmt",
                      "ty": 4,
-                     "line": 2
+                     "line": 2,
+                     "column": 25
                     },
                     {
                      "id": 175,
@@ -1777,7 +1834,8 @@
                      "id": 178,
                      "tag": "dbg_stmt",
                      "ty": 4,
-                     "line": 2
+                     "line": 2,
+                     "column": 27
                     },
                     {
                      "id": 179,
@@ -1803,7 +1861,8 @@
                      "id": 181,
                      "tag": "dbg_stmt",
                      "ty": 4,
-                     "line": 2
+                     "line": 2,
+                     "column": 25
                     },
                     {
                      "id": 182,
@@ -1832,7 +1891,8 @@
                      "id": 183,
                      "tag": "dbg_stmt",
                      "ty": 4,
-                     "line": 2
+                     "line": 2,
+                     "column": 5
                     },
                     {
                      "id": 184,
@@ -1852,7 +1912,8 @@
                    "id": 185,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 51
+                   "line": 51,
+                   "column": 9
                   },
                   {
                    "id": 186,
@@ -1877,7 +1938,8 @@
                    "id": 189,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 52
+                   "line": 52,
+                   "column": 13
                   },
                   {
                    "id": 190,
@@ -1948,7 +2010,8 @@
            "id": 197,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 54
+           "line": 54,
+           "column": 58
           },
           {
            "id": 198,
@@ -1964,7 +2027,8 @@
            "id": 199,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 54
+           "line": 54,
+           "column": 58
           },
           {
            "id": 200,
@@ -1973,6 +2037,7 @@
            "callee": {
             "ty": 29,
             "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -2024,7 +2089,8 @@
            "id": 205,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 57
+           "line": 57,
+           "column": 65
           },
           {
            "id": 206,
@@ -2044,7 +2110,8 @@
            "id": 209,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 57
+           "line": 57,
+           "column": 43
           },
           {
            "id": 210,
@@ -2052,7 +2119,9 @@
            "ty": 9,
            "callee": {
             "ty": 40,
-            "func": "mem.alignBackward__anon_6828",
+            "func": "mem.alignBackward__anon_6364",
+            "module": "std",
+            "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
             "noreturn": false
            },
            "args": [
@@ -2080,7 +2149,8 @@
            "id": 212,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 59
+           "line": 59,
+           "column": 13
           },
           {
            "id": 213,
@@ -2125,7 +2195,8 @@
                "id": 216,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 60
+               "line": 60,
+               "column": 18
               },
               {
                "id": 217,
@@ -2151,7 +2222,8 @@
                "id": 219,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 60
+               "line": 60,
+               "column": 42
               },
               {
                "id": 220,
@@ -2167,18 +2239,25 @@
                "id": 221,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 60
+               "line": 60,
+               "column": 63
               },
               {
                "id": 222,
                "tag": "dbg_inline_block",
                "ty": 4,
+               "src": {
+                "file": "mem.zig",
+                "module": "std",
+                "decl_line": 45
+               },
                "body": [
                 {
                  "id": 223,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 9
                 },
                 {
                  "id": 224,
@@ -2204,12 +2283,18 @@
                "id": 226,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 60
+               "line": 60,
+               "column": 42
               },
               {
                "id": 227,
                "tag": "dbg_inline_block",
                "ty": 4,
+               "src": {
+                "file": "mem/Allocator.zig",
+                "module": "std",
+                "decl_line": 159
+               },
                "body": [
                 {
                  "id": 228,
@@ -2288,7 +2373,8 @@
                  "id": 235,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 13
                 },
                 {
                  "id": 236,
@@ -2304,7 +2390,8 @@
                  "id": 237,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 25
                 },
                 {
                  "id": 238,
@@ -2340,7 +2427,8 @@
                  "id": 241,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 27
                 },
                 {
                  "id": 242,
@@ -2366,7 +2454,8 @@
                  "id": 244,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 25
                 },
                 {
                  "id": 245,
@@ -2395,7 +2484,8 @@
                  "id": 246,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 5
                 },
                 {
                  "id": 247,
@@ -2415,7 +2505,8 @@
                "id": 248,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 61
+               "line": 61,
+               "column": 13
               },
               {
                "id": 249,
@@ -2435,7 +2526,8 @@
                "id": 250,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 62
+               "line": 62,
+               "column": 13
               },
               {
                "id": 251,
@@ -2471,7 +2563,8 @@
            "id": 254,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 65
+           "line": 65,
+           "column": 13
           },
           {
            "id": 255,
@@ -2511,7 +2604,8 @@
            "id": 258,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 66
+           "line": 66,
+           "column": 9
           },
           {
            "id": 259,
@@ -2540,7 +2634,8 @@
            "id": 261,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 68
+           "line": 68,
+           "column": 13
           },
           {
            "id": 262,
@@ -2551,7 +2646,8 @@
              "id": 263,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 68
+             "line": 68,
+             "column": 28
             },
             {
              "id": 264,
@@ -2620,7 +2716,8 @@
                "id": 269,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 70
+               "line": 70,
+               "column": 13
               },
               {
                "id": 270,
@@ -2656,7 +2753,8 @@
            "id": 273,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 73
+           "line": 73,
+           "column": 13
           },
           {
            "id": 274,
@@ -2667,7 +2765,8 @@
              "id": 275,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 73
+             "line": 73,
+             "column": 18
             },
             {
              "id": 276,
@@ -2693,7 +2792,8 @@
              "id": 278,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 73
+             "line": 73,
+             "column": 44
             },
             {
              "id": 279,
@@ -2709,18 +2809,25 @@
              "id": 280,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 73
+             "line": 73,
+             "column": 65
             },
             {
              "id": 281,
              "tag": "dbg_inline_block",
              "ty": 4,
+             "src": {
+              "file": "mem.zig",
+              "module": "std",
+              "decl_line": 45
+             },
              "body": [
               {
                "id": 282,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 9
               },
               {
                "id": 283,
@@ -2746,12 +2853,18 @@
              "id": 285,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 73
+             "line": 73,
+             "column": 44
             },
             {
              "id": 286,
              "tag": "dbg_inline_block",
              "ty": 2,
+             "src": {
+              "file": "mem/Allocator.zig",
+              "module": "std",
+              "decl_line": 147
+             },
              "body": [
               {
                "id": 287,
@@ -2841,7 +2954,8 @@
                "id": 295,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 13
               },
               {
                "id": 296,
@@ -2857,7 +2971,8 @@
                "id": 297,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 27
               },
               {
                "id": 298,
@@ -2893,7 +3008,8 @@
                "id": 301,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 29
               },
               {
                "id": 302,
@@ -2919,7 +3035,8 @@
                "id": 304,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 27
               },
               {
                "id": 305,
@@ -2951,7 +3068,8 @@
                "id": 306,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 2
+               "line": 2,
+               "column": 5
               },
               {
                "id": 307,
@@ -2980,7 +3098,8 @@
                "id": 308,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 75
+               "line": 75,
+               "column": 17
               },
               {
                "id": 309,
@@ -3006,7 +3125,8 @@
                "id": 311,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 75
+               "line": 75,
+               "column": 33
               },
               {
                "id": 312,
@@ -3015,6 +3135,7 @@
                "callee": {
                 "ty": 46,
                 "func": "heap.ArenaAllocator.Node.Size.fromInt",
+                "module": "std",
                 "noreturn": false
                },
                "args": [
@@ -3054,7 +3175,8 @@
                "id": 315,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 78
+               "line": 78,
+               "column": 13
               },
               {
                "id": 316,
@@ -3065,7 +3187,8 @@
                  "id": 317,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 78
+                 "line": 78,
+                 "column": 34
                 },
                 {
                  "id": 318,
@@ -3091,7 +3214,8 @@
                  "id": 320,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 78
+                 "line": 78,
+                 "column": 59
                 },
                 {
                  "id": 321,
@@ -3107,18 +3231,25 @@
                  "id": 322,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 78
+                 "line": 78,
+                 "column": 73
                 },
                 {
                  "id": 323,
                  "tag": "dbg_inline_block",
                  "ty": 4,
+                 "src": {
+                  "file": "mem.zig",
+                  "module": "std",
+                  "decl_line": 45
+                 },
                  "body": [
                   {
                    "id": 324,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 2
+                   "line": 2,
+                   "column": 9
                   },
                   {
                    "id": 325,
@@ -3144,12 +3275,18 @@
                  "id": 327,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 78
+                 "line": 78,
+                 "column": 59
                 },
                 {
                  "id": 328,
                  "tag": "dbg_inline_block",
                  "ty": 48,
+                 "src": {
+                  "file": "mem/Allocator.zig",
+                  "module": "std",
+                  "decl_line": 141
+                 },
                  "body": [
                   {
                    "id": 329,
@@ -3228,7 +3365,8 @@
                    "id": 336,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 2
+                   "line": 2,
+                   "column": 13
                   },
                   {
                    "id": 337,
@@ -3244,7 +3382,8 @@
                    "id": 338,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 2
+                   "line": 2,
+                   "column": 26
                   },
                   {
                    "id": 339,
@@ -3280,7 +3419,8 @@
                    "id": 342,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 2
+                   "line": 2,
+                   "column": 28
                   },
                   {
                    "id": 343,
@@ -3306,7 +3446,8 @@
                    "id": 345,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 2
+                   "line": 2,
+                   "column": 26
                   },
                   {
                    "id": 346,
@@ -3335,7 +3476,8 @@
                    "id": 347,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 2
+                   "line": 2,
+                   "column": 5
                   },
                   {
                    "id": 348,
@@ -3397,7 +3539,8 @@
                    "id": 352,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 80
+                   "line": 80,
+                   "column": 17
                   },
                   {
                    "id": 353,
@@ -3417,7 +3560,8 @@
                    "id": 354,
                    "tag": "dbg_stmt",
                    "ty": 4,
-                   "line": 81
+                   "line": 81,
+                   "column": 17
                   },
                   {
                    "id": 355,
@@ -3450,7 +3594,8 @@
                "id": 358,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 83
+               "line": 83,
+               "column": 18
               },
               {
                "id": 359,
@@ -3476,7 +3621,8 @@
                "id": 361,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 83
+               "line": 83,
+               "column": 42
               },
               {
                "id": 362,
@@ -3492,18 +3638,25 @@
                "id": 363,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 83
+               "line": 83,
+               "column": 63
               },
               {
                "id": 364,
                "tag": "dbg_inline_block",
                "ty": 4,
+               "src": {
+                "file": "mem.zig",
+                "module": "std",
+                "decl_line": 45
+               },
                "body": [
                 {
                  "id": 365,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 9
                 },
                 {
                  "id": 366,
@@ -3529,12 +3682,18 @@
                "id": 368,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 83
+               "line": 83,
+               "column": 42
               },
               {
                "id": 369,
                "tag": "dbg_inline_block",
                "ty": 4,
+               "src": {
+                "file": "mem/Allocator.zig",
+                "module": "std",
+                "decl_line": 159
+               },
                "body": [
                 {
                  "id": 370,
@@ -3613,7 +3772,8 @@
                  "id": 377,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 13
                 },
                 {
                  "id": 378,
@@ -3629,7 +3789,8 @@
                  "id": 379,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 25
                 },
                 {
                  "id": 380,
@@ -3665,7 +3826,8 @@
                  "id": 383,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 27
                 },
                 {
                  "id": 384,
@@ -3691,7 +3853,8 @@
                  "id": 386,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 25
                 },
                 {
                  "id": 387,
@@ -3720,7 +3883,8 @@
                  "id": 388,
                  "tag": "dbg_stmt",
                  "ty": 4,
-                 "line": 2
+                 "line": 2,
+                 "column": 5
                 },
                 {
                  "id": 389,
@@ -3740,7 +3904,8 @@
                "id": 390,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 84
+               "line": 84,
+               "column": 43
               },
               {
                "id": 391,
@@ -3816,6 +3981,7 @@
                    "callee": {
                     "ty": 10,
                     "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+                    "module": "std",
                     "noreturn": true
                    },
                    "args": []
@@ -3854,7 +4020,8 @@
                "id": 401,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 85
+               "line": 85,
+               "column": 13
               },
               {
                "id": 402,
@@ -3870,7 +4037,8 @@
                "id": 403,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 86
+               "line": 86,
+               "column": 33
               },
               {
                "id": 404,
@@ -3879,6 +4047,7 @@
                "callee": {
                 "ty": 46,
                 "func": "heap.ArenaAllocator.Node.Size.fromInt",
+                "module": "std",
                 "noreturn": false
                },
                "args": [
@@ -3952,7 +4121,8 @@
                "id": 410,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 90
+               "line": 90,
+               "column": 13
               },
               {
                "id": 411,
@@ -3997,7 +4167,8 @@
            "id": 415,
            "tag": "dbg_stmt",
            "ty": 4,
-           "line": 92
+           "line": 92,
+           "column": 5
           },
           {
            "id": 416,
@@ -4075,7 +4246,8 @@
    "id": 423,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 94
+   "line": 94,
+   "column": 5
   },
   {
    "id": 424,
@@ -4091,7 +4263,8 @@
    "id": 425,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 94
+   "line": 94,
+   "column": 5
   },
   {
    "id": 426,
@@ -4113,6 +4286,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4121,6 +4295,7 @@
   {
    "k": "union",
    "name": "heap.ArenaAllocator.ResetMode",
+   "module": "std",
    "layout": "auto",
    "tag": 6,
    "fields": [
@@ -4153,6 +4328,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4171,6 +4347,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4179,6 +4356,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(heap.ArenaAllocator.ResetMode).@\"union\".tag_type.?",
+   "module": "std",
    "tag": 51,
    "exhaustive": true,
    "fields": [
@@ -4221,6 +4399,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -4249,6 +4428,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4257,6 +4437,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.State",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -4287,6 +4468,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4311,6 +4493,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4324,6 +4507,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4353,6 +4537,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4366,6 +4551,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4379,6 +4565,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4392,6 +4579,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4400,6 +4588,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -4424,6 +4613,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -4436,6 +4626,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 54,
    "exhaustive": false,
    "fields": [
@@ -4479,6 +4670,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4492,6 +4684,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4505,6 +4698,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4518,6 +4712,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4530,6 +4725,7 @@
    "child": 56,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4543,6 +4739,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4556,6 +4753,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4569,6 +4767,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4582,6 +4781,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4599,6 +4799,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4612,6 +4813,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4624,6 +4826,7 @@
    "child": 58,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4637,6 +4840,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4645,6 +4849,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node.Size",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -4671,6 +4876,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4690,6 +4896,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4702,6 +4909,7 @@
    "child": 60,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -4717,6 +4925,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -4755,6 +4964,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -4811,6 +5021,7 @@
    "child": 62,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

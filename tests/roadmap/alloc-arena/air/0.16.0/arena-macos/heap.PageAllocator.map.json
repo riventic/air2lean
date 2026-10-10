@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.PageAllocator.map",
+ "module": "std",
+ "src": {
+  "file": "heap/PageAllocator.zig",
+  "module": "std",
+  "decl_line": 44
+ },
  "params": [
   0,
   1
@@ -136,24 +142,32 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 40
   },
   {
    "id": 6,
    "tag": "dbg_inline_block",
    "ty": 4,
+   "src": {
+    "file": "heap.zig",
+    "module": "std",
+    "decl_line": 64
+   },
    "body": [
     {
      "id": 7,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 9
     },
     {
      "id": 9,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 41
     },
     {
      "id": 10,
@@ -185,7 +199,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 9
   },
   {
    "id": 13,
@@ -196,7 +211,8 @@
      "id": 14,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 15,
@@ -236,7 +252,8 @@
        "id": 17,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 3
+       "line": 3,
+       "column": 41
       },
       {
        "id": 18,
@@ -271,7 +288,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 4
+   "line": 4,
+   "column": 50
   },
   {
    "id": 22,
@@ -287,7 +305,8 @@
    "id": 23,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 4
+   "line": 4,
+   "column": 50
   },
   {
    "id": 24,
@@ -296,6 +315,7 @@
    "callee": {
     "ty": 9,
     "func": "mem.Alignment.toByteUnits",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -319,7 +339,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 66
+   "line": 66,
+   "column": 46
   },
   {
    "id": 31,
@@ -327,7 +348,9 @@
    "ty": 0,
    "callee": {
     "ty": 10,
-    "func": "mem.alignForward__anon_1605",
+    "func": "mem.alignForward__anon_1626",
+    "module": "std",
+    "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
     "noreturn": false
    },
    "args": [
@@ -355,7 +378,8 @@
    "id": 33,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 67
+   "line": 67,
+   "column": 5
   },
   {
    "id": 34,
@@ -386,7 +410,8 @@
    "id": 36,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 68
+   "line": 68,
+   "column": 44
   },
   {
    "id": 37,
@@ -416,7 +441,8 @@
    "id": 39,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 70
+   "line": 70,
+   "column": 5
   },
   {
    "id": 40,
@@ -437,7 +463,8 @@
      "id": 43,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 73
+     "line": 73,
+     "column": 9
     },
     {
      "id": 47,
@@ -469,7 +496,8 @@
      "id": 49,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 77
+     "line": 77,
+     "column": 13
     },
     {
      "id": 50,
@@ -558,13 +586,15 @@
      "id": 57,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 81
+     "line": 81,
+     "column": 71
     },
     {
      "id": 59,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 82
+     "line": 82,
+     "column": 24
     },
     {
      "id": 60,
@@ -593,7 +623,8 @@
      "id": 62,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 82
+     "line": 82,
+     "column": 99
     },
     {
      "id": 63,
@@ -649,7 +680,8 @@
      "id": 68,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 81
+     "line": 81,
+     "column": 51
     },
     {
      "id": 69,
@@ -715,6 +747,7 @@
          "callee": {
           "ty": 14,
           "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+          "module": "std",
           "noreturn": true
          },
          "args": []
@@ -753,7 +786,8 @@
      "id": 78,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 86
+     "line": 86,
+     "column": 9
     },
     {
      "id": 79,
@@ -841,7 +875,8 @@
    "id": 90,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 89
+   "line": 89,
+   "column": 5
   },
   {
    "id": 91,
@@ -852,7 +887,8 @@
      "id": 92,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 89
+     "line": 89,
+     "column": 29
     },
     {
      "id": 93,
@@ -868,7 +904,8 @@
      "id": 94,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 89
+     "line": 89,
+     "column": 29
     },
     {
      "id": 95,
@@ -877,6 +914,7 @@
      "callee": {
       "ty": 17,
       "func": "posix.mmap",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -961,7 +999,8 @@
        "id": 100,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 96
+       "line": 96,
+       "column": 13
       },
       {
        "id": 101,
@@ -1021,7 +1060,8 @@
    "id": 107,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 97
+   "line": 97,
+   "column": 46
   },
   {
    "id": 108,
@@ -1047,7 +1087,8 @@
    "id": 112,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 97
+   "line": 97,
+   "column": 40
   },
   {
    "id": 113,
@@ -1055,7 +1096,9 @@
    "ty": 12,
    "callee": {
     "ty": 26,
-    "func": "mem.alignPointer__anon_20982",
+    "func": "mem.alignPointer__anon_20540",
+    "module": "std",
+    "instance_key": "787bfe5d1eabc6bba8f8ff369474edbf27e375a9e9c9d76bf2568311dc3f87b3",
     "noreturn": false
    },
    "args": [
@@ -1071,7 +1114,8 @@
    "id": 114,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 97
+   "line": 97,
+   "column": 68
   },
   {
    "id": 115,
@@ -1119,6 +1163,7 @@
        "callee": {
         "ty": 14,
         "func": "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -1185,7 +1230,8 @@
    "id": 126,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 102
+   "line": 102,
+   "column": 40
   },
   {
    "id": 127,
@@ -1211,7 +1257,8 @@
    "id": 129,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 102
+   "line": 102,
+   "column": 33
   },
   {
    "id": 130,
@@ -1275,7 +1322,8 @@
    "id": 135,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 103
+   "line": 103,
+   "column": 9
   },
   {
    "id": 136,
@@ -1320,7 +1368,8 @@
        "id": 139,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 103
+       "line": 103,
+       "column": 42
       },
       {
        "id": 140,
@@ -1429,6 +1478,7 @@
            "callee": {
             "ty": 28,
             "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+            "module": "std",
             "noreturn": true
            },
            "args": [
@@ -1476,7 +1526,8 @@
        "id": 153,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 103
+       "line": 103,
+       "column": 36
       },
       {
        "id": 154,
@@ -1485,6 +1536,7 @@
        "callee": {
         "ty": 30,
         "func": "posix.munmap",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -1527,7 +1579,8 @@
    "id": 158,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 104
+   "line": 104,
+   "column": 41
   },
   {
    "id": 159,
@@ -1557,7 +1610,8 @@
    "id": 161,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 105
+   "line": 105,
+   "column": 9
   },
   {
    "id": 162,
@@ -1611,7 +1665,8 @@
        "id": 166,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 105
+       "line": 105,
+       "column": 77
       },
       {
        "id": 167,
@@ -1685,6 +1740,7 @@
            "callee": {
             "ty": 28,
             "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+            "module": "std",
             "noreturn": true
            },
            "args": [
@@ -1735,7 +1791,8 @@
        "id": 177,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 105
+       "line": 105,
+       "column": 56
       },
       {
        "id": 178,
@@ -1858,6 +1915,7 @@
            "callee": {
             "ty": 14,
             "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -1885,7 +1943,8 @@
        "id": 191,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 105
+       "line": 105,
+       "column": 55
       },
       {
        "id": 192,
@@ -1894,6 +1953,7 @@
        "callee": {
         "ty": 30,
         "func": "posix.munmap",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -1936,7 +1996,8 @@
    "id": 196,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 107
+   "line": 107,
+   "column": 9
   },
   {
    "id": 197,
@@ -1947,7 +2008,8 @@
      "id": 198,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 108
+     "line": 108,
+     "column": 76
     },
     {
      "id": 201,
@@ -1967,7 +2029,8 @@
      "id": 202,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 108
+     "line": 108,
+     "column": 54
     },
     {
      "id": 203,
@@ -1984,7 +2047,8 @@
      "id": 204,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 112
+     "line": 112,
+     "column": 9
     },
     {
      "id": 206,
@@ -2046,7 +2110,8 @@
    "id": 210,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 115
+   "line": 115,
+   "column": 5
   },
   {
    "id": 211,
@@ -2072,6 +2137,7 @@
  "globals": [
   {
    "name": "heap.PageAllocator.addr_hint",
+   "module": "std",
    "ty": 12,
    "const": false,
    "threadlocal": false,
@@ -2093,6 +2159,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 34,
    "exhaustive": false,
    "fields": [
@@ -2142,6 +2209,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2160,6 +2228,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2196,6 +2265,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2215,6 +2285,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2232,6 +2303,7 @@
    "ptr_align": 16384,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -2246,11 +2318,12 @@
   },
   {
    "k": "other",
-   "name": "fn (?[*]align(16384) u8, usize, macho.vm_prot_t, c.MAP__struct_7320, i32, u64) error{AccessDenied,LockedMemoryLimitExceeded,MappingAlreadyExists,MemoryMappingNotSupported,OutOfMemory,PermissionDenied,ProcessFdQuotaExceeded,SystemFdQuotaExceeded,Unexpected}![]align(16384) u8"
+   "name": "fn (?[*]align(16384) u8, usize, macho.vm_prot_t, c.MAP__struct_6856, i32, u64) error{AccessDenied,LockedMemoryLimitExceeded,MappingAlreadyExists,MemoryMappingNotSupported,OutOfMemory,PermissionDenied,ProcessFdQuotaExceeded,SystemFdQuotaExceeded,Unexpected}![]align(16384) u8"
   },
   {
    "k": "struct",
    "name": "macho.vm_prot_t",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -2283,7 +2356,8 @@
   },
   {
    "k": "struct",
-   "name": "c.MAP__struct_7320",
+   "name": "c.MAP__struct_6856",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -2361,6 +2435,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2374,6 +2449,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2387,6 +2463,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2400,6 +2477,7 @@
    "ptr_align": 16384,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2417,6 +2495,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2434,6 +2513,7 @@
    "ptr_align": 16384,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -2451,6 +2531,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2464,6 +2545,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -2490,6 +2572,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -2518,7 +2601,8 @@
   },
   {
    "k": "enum",
-   "name": "c.MAP__struct_7320__enum_7329",
+   "name": "c.MAP__struct_6856__enum_6865",
+   "module": "std",
    "tag": 42,
    "exhaustive": true,
    "fields": [

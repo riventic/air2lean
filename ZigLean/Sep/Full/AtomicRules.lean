@@ -146,10 +146,7 @@ theorem FTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : Ato
       have hshapes : shapes (loadM m₁ li ord
           ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)) = shapes m₁ := by
         unfold loadM acqM observeM; split <;> rfl
-      have hnext : (loadM m₁ li ord
-          ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!)).nextAddr = m.nextAddr := by
-        unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]
-      obtain ⟨hAB, r', hh', hab'⟩ := holds_after hh hab (bs' := bs) rfl hpb
+      obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := bs) rfl hpb
         (fun l => by
           rw [heap_of_blocks hblocks]
           split
@@ -160,10 +157,10 @@ theorem FTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : Ato
             rw [if_pos hin] at hr
             exact (fheap_tag (hh.own hr)).2
           · rfl)
-        (fun b' x => by rw [hshapes, htag, hsz]) (kmono_of_blocks hblocks) hs.1.addr hnext
+        (fun b' x => by rw [hshapes, htag, hsz]) (kmono_of_blocks hblocks)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, _, hal, hK, hsz, hv, .inr (by rw [hsz]), hab'⟩,
-        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _,
-          hAB⟩, by rw [hshapes]; exact hwf⟩⟩
+        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _⟩,
+          by rw [hshapes]; exact hwf⟩⟩
 
 /-- **Strong `cmpxchg`** of an owned 64-bit word that holds the expected value (sequential:
 choice 0): it succeeds, and the word holds the new value. -/
@@ -247,12 +244,12 @@ theorem FTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrde
       subst hm' hres
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       have key : ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks →
-          M₂.nextAddr = m.nextAddr → M₂.SingleThread → ∀ msg : Msg, msg.bytes = Enc.encode new →
+          M₂.SingleThread → ∀ msg : Msg, msg.bytes = Enc.encode new →
           ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
               M₂.nextMsg) r' rF ∧ apts p new r' ∧
             (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
               M₂.nextMsg).FSeq := by
-        intro M₂ hat hbl hna hst msg hmb
+        intro M₂ hat hbl hst msg hmb
         have hn1 : (m₀.atomics[li]!).msgs.size - 1 + 1 = (M₂.atomics[li]!).msgs.size := by
           rw [hat]; omega
         rw [hn1]
@@ -268,22 +265,19 @@ theorem FTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrde
           show shapes (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) = _
           rw [shapes_insertM_last hb₂ (by rw [hat]; exact hli)]
           simp [shapes, hat]
-        have hnext : (observeM (insertM M₂ li (M₂.atomics[li]!).msgs.size msg) li
-            M₂.nextMsg).nextAddr = m.nextAddr := by
-          unfold observeM; rw [hins]; exact hna
         have henc : (Enc.encode new).size = 8 := LawfulEnc.size_encode new
         have hwr := Mem.heap_write (m := m) (o := p.off.toNat) hblk hlive (bs := Enc.encode new)
           (by rw [henc]; omega) hlo
-        obtain ⟨hAB, r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode new) (by rw [henc, hsz])
+        obtain ⟨r', hh', hab'⟩ := holds_after hh hab (bs' := Enc.encode new) (by rw [henc, hsz])
           hpb
           (fun l => by
             rw [heap_of_blocks (m := m.write b blk p.off.toNat (Enc.encode new)) hblocks, hwr, henc,
               hsz, hA, hS, hKb])
           (fun b' x => by rw [hshapes, htag, hsz])
           (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode new) })
-            hblk rfl hblocks) hs.1.addr hnext
+            hblk rfl hblocks)
         refine ⟨r', hh', ⟨A, S, K, Enc.encode new, _, hal, hK, henc, LawfulEnc.decode_encode new,
-          .inr (by rw [hsz]), hab'⟩, ⟨⟨?_, hAB⟩, by rw [hshapes]; exact hwf⟩⟩
+          .inr (by rw [hsz]), hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf⟩⟩
         unfold observeM
         exact singleThread_insertM hst _ _ _
       have hst₀ : m₀.SingleThread := by
@@ -294,13 +288,12 @@ theorem FTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrde
       cases hq : succ.isAcq
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, hfs⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, hfs⟩)
-          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀])
-            (by simp [Mem.recordAt, hm₀]) hst₃ _ ?_)
+          (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀]) hst₃ _ ?_)
         rfl
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, hfs⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, hfs⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
-            (by simp [acqM, Mem.recordAt, hm₀]) (singleThread_acqM hst₃ _) _ ?_)
+            (singleThread_acqM hst₃ _) _ ?_)
         rfl
 
 end Full

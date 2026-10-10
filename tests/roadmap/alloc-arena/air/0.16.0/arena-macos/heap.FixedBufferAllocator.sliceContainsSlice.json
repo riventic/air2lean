@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.FixedBufferAllocator.sliceContainsSlice",
+ "module": "std",
+ "src": {
+  "file": "heap/FixedBufferAllocator.zig",
+  "module": "std",
+  "decl_line": 235
+ },
  "params": [
   0,
   0
@@ -164,7 +170,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 29
   },
   {
    "id": 9,
@@ -190,7 +197,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 12,
@@ -206,7 +214,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 59
   },
   {
    "id": 14,
@@ -232,7 +241,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 38
   },
   {
    "id": 17,
@@ -296,7 +306,8 @@
        "id": 23,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 27
       },
       {
        "id": 24,
@@ -322,7 +333,8 @@
        "id": 26,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 10
       },
       {
        "id": 27,
@@ -338,7 +350,8 @@
        "id": 28,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 40
       },
       {
        "id": 29,
@@ -364,7 +377,8 @@
        "id": 31,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 33
       },
       {
        "id": 32,
@@ -383,7 +397,8 @@
        "id": 33,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 71
       },
       {
        "id": 34,
@@ -409,7 +424,8 @@
        "id": 36,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 50
       },
       {
        "id": 37,
@@ -425,7 +441,8 @@
        "id": 38,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 88
       },
       {
        "id": 39,
@@ -451,7 +468,8 @@
        "id": 41,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 3
+       "line": 3,
+       "column": 77
       },
       {
        "id": 42,
@@ -532,7 +550,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 49,
@@ -554,6 +573,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -572,6 +592,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -590,6 +611,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -603,6 +625,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -616,6 +639,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -646,6 +670,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

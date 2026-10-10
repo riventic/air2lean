@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.ArenaAllocator.alloc",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 332
+ },
  "params": [
   0,
   1,
@@ -99,7 +105,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 2
+   "line": 2,
+   "column": 36
   },
   {
    "id": 8,
@@ -175,6 +182,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -241,7 +249,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 22,
@@ -271,7 +280,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 25,
@@ -280,6 +290,7 @@
    "callee": {
     "ty": 14,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -292,7 +303,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 27,
@@ -303,7 +315,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 7
+   "line": 7,
+   "column": 45
   },
   {
    "id": 29,
@@ -319,7 +332,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 7
+   "line": 7,
+   "column": 45
   },
   {
    "id": 31,
@@ -328,6 +342,7 @@
    "callee": {
     "ty": 17,
     "func": "heap.ArenaAllocator.loadFirstNode",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -364,7 +379,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 36,
@@ -405,7 +421,8 @@
      "id": 42,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 15
+     "line": 15,
+     "column": 19
     },
     {
      "id": 43,
@@ -416,7 +433,8 @@
        "id": 44,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 16
+       "line": 16,
+       "column": 9
       },
       {
        "id": 45,
@@ -437,7 +455,8 @@
          "id": 48,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 17
+         "line": 17,
+         "column": 13
         },
         {
          "id": 49,
@@ -584,7 +603,8 @@
          "id": 62,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 18
+         "line": 18,
+         "column": 37
         },
         {
          "id": 63,
@@ -600,7 +620,8 @@
          "id": 64,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 18
+         "line": 18,
+         "column": 37
         },
         {
          "id": 65,
@@ -609,6 +630,7 @@
          "callee": {
           "ty": 23,
           "func": "heap.ArenaAllocator.Node.loadBuf",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -660,7 +682,8 @@
          "id": 70,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 26
+         "line": 26,
+         "column": 56
         },
         {
          "id": 71,
@@ -676,7 +699,8 @@
          "id": 72,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 26
+         "line": 26,
+         "column": 56
         },
         {
          "id": 73,
@@ -685,6 +709,7 @@
          "callee": {
           "ty": 26,
           "func": "mem.Alignment.toByteUnits",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -697,7 +722,8 @@
          "id": 74,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 26
+         "line": 26,
+         "column": 33
         },
         {
          "id": 75,
@@ -716,7 +742,8 @@
          "id": 76,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 26
+         "line": 26,
+         "column": 59
         },
         {
          "id": 77,
@@ -747,7 +774,8 @@
          "id": 79,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 27
+         "line": 27,
+         "column": 54
         },
         {
          "id": 80,
@@ -799,7 +827,8 @@
          "id": 84,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 28
+         "line": 28,
+         "column": 51
         },
         {
          "id": 85,
@@ -825,7 +854,8 @@
          "id": 87,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 28
+         "line": 28,
+         "column": 47
         },
         {
          "id": 88,
@@ -834,6 +864,7 @@
          "callee": {
           "ty": 29,
           "func": "heap.ArenaAllocator.alignedIndex",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -863,7 +894,8 @@
          "id": 90,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 29
+         "line": 29,
+         "column": 30
         },
         {
          "id": 91,
@@ -882,7 +914,8 @@
          "id": 92,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 29
+         "line": 29,
+         "column": 59
         },
         {
          "id": 93,
@@ -934,7 +967,8 @@
          "id": 97,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 29
+         "line": 29,
+         "column": 19
         },
         {
          "id": 98,
@@ -943,6 +977,7 @@
          "callee": {
           "ty": 14,
           "func": "debug.assert",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -955,7 +990,8 @@
          "id": 99,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 30
+         "line": 30,
+         "column": 17
         },
         {
          "id": 100,
@@ -966,7 +1002,8 @@
            "id": 101,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 30
+           "line": 30,
+           "column": 27
           },
           {
            "id": 102,
@@ -985,7 +1022,8 @@
            "id": 103,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 30
+           "line": 30,
+           "column": 56
           },
           {
            "id": 104,
@@ -1047,7 +1085,8 @@
              "id": 108,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 33
+             "line": 33,
+             "column": 26
             },
             {
              "id": 109,
@@ -1073,7 +1112,8 @@
              "id": 111,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 34
+             "line": 34,
+             "column": 31
             },
             {
              "id": 112,
@@ -1092,7 +1132,8 @@
              "id": 113,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 35
+             "line": 35,
+             "column": 35
             },
             {
              "id": 114,
@@ -1159,7 +1200,8 @@
          "id": 119,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 41
+         "line": 41,
+         "column": 17
         },
         {
          "id": 120,
@@ -1170,7 +1212,8 @@
            "id": 121,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 41
+           "line": 41,
+           "column": 31
           },
           {
            "id": 122,
@@ -1189,7 +1232,8 @@
            "id": 123,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 41
+           "line": 41,
+           "column": 40
           },
           {
            "id": 124,
@@ -1281,7 +1325,8 @@
              "id": 131,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 41
+             "line": 41,
+             "column": 76
             },
             {
              "id": 132,
@@ -1350,7 +1395,8 @@
          "id": 138,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 42
+         "line": 42,
+         "column": 40
         },
         {
          "id": 139,
@@ -1457,6 +1503,7 @@
              "callee": {
               "ty": 32,
               "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+              "module": "std",
               "noreturn": true
              },
              "args": [
@@ -1522,7 +1569,8 @@
          "id": 154,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 42
+         "line": 42,
+         "column": 46
         },
         {
          "id": 155,
@@ -1548,7 +1596,8 @@
          "id": 157,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 10
+         "line": 10,
+         "column": 15
         },
         {
          "id": 158,
@@ -1638,7 +1687,8 @@
              "id": 166,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 11
+             "line": 11,
+             "column": 13
             },
             {
              "id": 167,
@@ -1678,7 +1728,8 @@
              "id": 170,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 12
+             "line": 12,
+             "column": 27
             },
             {
              "id": 171,
@@ -1694,7 +1745,8 @@
              "id": 172,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 12
+             "line": 12,
+             "column": 27
             },
             {
              "id": 173,
@@ -1703,6 +1755,7 @@
              "callee": {
               "ty": 33,
               "func": "heap.ArenaAllocator.pushFreeList",
+              "module": "std",
               "noreturn": false
              },
              "args": [
@@ -1751,7 +1804,8 @@
          "id": 177,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 42
+         "line": 42,
+         "column": 13
         },
         {
          "id": 178,
@@ -1821,7 +1875,8 @@
        "id": 184,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 45
+       "line": 45,
+       "column": 9
       },
       {
        "id": 185,
@@ -1832,7 +1887,8 @@
          "id": 186,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 50
+         "line": 50,
+         "column": 13
         },
         {
          "id": 187,
@@ -1951,7 +2007,8 @@
          "id": 198,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 51
+         "line": 51,
+         "column": 13
         },
         {
          "id": 199,
@@ -1962,7 +2019,8 @@
            "id": 200,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 51
+           "line": 51,
+           "column": 53
           },
           {
            "id": 201,
@@ -1978,7 +2036,8 @@
            "id": 202,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 51
+           "line": 51,
+           "column": 53
           },
           {
            "id": 203,
@@ -1987,6 +2046,7 @@
            "callee": {
             "ty": 36,
             "func": "heap.ArenaAllocator.Node.beginResize",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -2097,7 +2157,8 @@
          "id": 213,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 52
+         "line": 52,
+         "column": 13
         },
         {
          "id": 214,
@@ -2108,7 +2169,8 @@
          "id": 215,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 52
+         "line": 52,
+         "column": 39
         },
         {
          "id": 216,
@@ -2158,7 +2220,8 @@
          "id": 221,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 55
+         "line": 55,
+         "column": 40
         },
         {
          "id": 222,
@@ -2254,6 +2317,7 @@
              "callee": {
               "ty": 32,
               "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+              "module": "std",
               "noreturn": true
              },
              "args": [
@@ -2348,6 +2412,7 @@
              "callee": {
               "ty": 32,
               "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+              "module": "std",
               "noreturn": true
              },
              "args": [
@@ -2424,7 +2489,8 @@
          "id": 245,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 56
+         "line": 56,
+         "column": 55
         },
         {
          "id": 246,
@@ -2482,7 +2548,8 @@
          "id": 251,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 57
+         "line": 57,
+         "column": 51
         },
         {
          "id": 252,
@@ -2508,7 +2575,8 @@
          "id": 254,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 57
+         "line": 57,
+         "column": 47
         },
         {
          "id": 255,
@@ -2517,6 +2585,7 @@
          "callee": {
           "ty": 29,
           "func": "heap.ArenaAllocator.alignedIndex",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -2546,7 +2615,8 @@
          "id": 257,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 58
+         "line": 58,
+         "column": 68
         },
         {
          "id": 258,
@@ -2566,7 +2636,8 @@
          "id": 259,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 58
+         "line": 58,
+         "column": 84
         },
         {
          "id": 260,
@@ -2585,7 +2656,8 @@
          "id": 263,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 58
+         "line": 58,
+         "column": 46
         },
         {
          "id": 264,
@@ -2593,7 +2665,9 @@
          "ty": 1,
          "callee": {
           "ty": 37,
-          "func": "mem.alignForward__anon_1329",
+          "func": "mem.alignForward__anon_1351",
+          "module": "std",
+          "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
           "noreturn": false
          },
          "args": [
@@ -2621,7 +2695,8 @@
          "id": 266,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 60
+         "line": 60,
+         "column": 17
         },
         {
          "id": 267,
@@ -2632,7 +2707,8 @@
            "id": 268,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 60
+           "line": 60,
+           "column": 44
           },
           {
            "id": 269,
@@ -2701,7 +2777,8 @@
              "id": 274,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 53
+             "line": 53,
+             "column": 33
             },
             {
              "id": 275,
@@ -2727,7 +2804,8 @@
              "id": 277,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 53
+             "line": 53,
+             "column": 55
             },
             {
              "id": 278,
@@ -2753,7 +2831,8 @@
              "id": 280,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 53
+             "line": 53,
+             "column": 33
             },
             {
              "id": 281,
@@ -2762,6 +2841,7 @@
              "callee": {
               "ty": 38,
               "func": "heap.ArenaAllocator.Node.endResize",
+              "module": "std",
               "noreturn": false
              },
              "args": [
@@ -2810,7 +2890,8 @@
          "id": 285,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 66
+         "line": 66,
+         "column": 17
         },
         {
          "id": 286,
@@ -2821,7 +2902,8 @@
            "id": 287,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 66
+           "line": 66,
+           "column": 22
           },
           {
            "id": 288,
@@ -2847,7 +2929,8 @@
            "id": 290,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 66
+           "line": 66,
+           "column": 48
           },
           {
            "id": 291,
@@ -2863,18 +2946,25 @@
            "id": 292,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 66
+           "line": 66,
+           "column": 69
           },
           {
            "id": 293,
            "tag": "dbg_inline_block",
            "ty": 5,
+           "src": {
+            "file": "mem.zig",
+            "module": "std",
+            "decl_line": 45
+           },
            "body": [
             {
              "id": 294,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 9
             },
             {
              "id": 295,
@@ -2900,12 +2990,18 @@
            "id": 297,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 66
+           "line": 66,
+           "column": 48
           },
           {
            "id": 298,
            "tag": "dbg_inline_block",
            "ty": 7,
+           "src": {
+            "file": "mem/Allocator.zig",
+            "module": "std",
+            "decl_line": 147
+           },
            "body": [
             {
              "id": 299,
@@ -2995,7 +3091,8 @@
              "id": 307,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 13
             },
             {
              "id": 308,
@@ -3011,7 +3108,8 @@
              "id": 309,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 27
             },
             {
              "id": 310,
@@ -3047,7 +3145,8 @@
              "id": 313,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 29
             },
             {
              "id": 314,
@@ -3073,7 +3172,8 @@
              "id": 316,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 27
             },
             {
              "id": 317,
@@ -3105,7 +3205,8 @@
              "id": 318,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 5
             },
             {
              "id": 319,
@@ -3134,7 +3235,8 @@
              "id": 320,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 67
+             "line": 67,
+             "column": 17
             },
             {
              "id": 321,
@@ -3153,7 +3255,8 @@
              "id": 322,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 71
+             "line": 71,
+             "column": 21
             },
             {
              "id": 323,
@@ -3164,7 +3267,8 @@
                "id": 324,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 73
+               "line": 73,
+               "column": 26
               },
               {
                "id": 325,
@@ -3190,7 +3294,8 @@
                "id": 327,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 75
+               "line": 75,
+               "column": 35
               },
               {
                "id": 328,
@@ -3247,7 +3352,8 @@
                  "id": 331,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 79
+                 "line": 79,
+                 "column": 52
                 },
                 {
                  "id": 332,
@@ -3263,7 +3369,8 @@
                  "id": 333,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 79
+                 "line": 79,
+                 "column": 56
                 },
                 {
                  "id": 334,
@@ -3348,7 +3455,8 @@
                  "id": 341,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 79
+                 "line": 79,
+                 "column": 69
                 },
                 {
                  "id": 342,
@@ -3444,6 +3552,7 @@
                      "callee": {
                       "ty": 32,
                       "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+                      "module": "std",
                       "noreturn": true
                      },
                      "args": [
@@ -3538,6 +3647,7 @@
                      "callee": {
                       "ty": 32,
                       "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                      "module": "std",
                       "noreturn": true
                      },
                      "args": [
@@ -3614,7 +3724,8 @@
                  "id": 365,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 80
+                 "line": 80,
+                 "column": 52
                 },
                 {
                  "id": 366,
@@ -3721,6 +3832,7 @@
                      "callee": {
                       "ty": 32,
                       "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                      "module": "std",
                       "noreturn": true
                      },
                      "args": [
@@ -3786,7 +3898,8 @@
                  "id": 381,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 80
+                 "line": 80,
+                 "column": 58
                 },
                 {
                  "id": 382,
@@ -3812,7 +3925,8 @@
                  "id": 384,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 53
+                 "line": 53,
+                 "column": 33
                 },
                 {
                  "id": 385,
@@ -3838,7 +3952,8 @@
                  "id": 387,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 53
+                 "line": 53,
+                 "column": 55
                 },
                 {
                  "id": 388,
@@ -3864,7 +3979,8 @@
                  "id": 390,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 53
+                 "line": 53,
+                 "column": 33
                 },
                 {
                  "id": 391,
@@ -3873,6 +3989,7 @@
                  "callee": {
                   "ty": 38,
                   "func": "heap.ArenaAllocator.Node.endResize",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -3891,7 +4008,8 @@
                  "id": 392,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 10
+                 "line": 10,
+                 "column": 15
                 },
                 {
                  "id": 393,
@@ -3981,7 +4099,8 @@
                      "id": 401,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 11
+                     "line": 11,
+                     "column": 13
                     },
                     {
                      "id": 402,
@@ -4021,7 +4140,8 @@
                      "id": 405,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 12
+                     "line": 12,
+                     "column": 27
                     },
                     {
                      "id": 406,
@@ -4037,7 +4157,8 @@
                      "id": 407,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 12
+                     "line": 12,
+                     "column": 27
                     },
                     {
                      "id": 408,
@@ -4046,6 +4167,7 @@
                      "callee": {
                       "ty": 33,
                       "func": "heap.ArenaAllocator.pushFreeList",
+                      "module": "std",
                       "noreturn": false
                      },
                      "args": [
@@ -4094,7 +4216,8 @@
                  "id": 412,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 80
+                 "line": 80,
+                 "column": 21
                 },
                 {
                  "id": 413,
@@ -4168,7 +4291,8 @@
          "id": 420,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 53
+         "line": 53,
+         "column": 33
         },
         {
          "id": 421,
@@ -4194,7 +4318,8 @@
          "id": 423,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 53
+         "line": 53,
+         "column": 55
         },
         {
          "id": 424,
@@ -4220,7 +4345,8 @@
          "id": 426,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 53
+         "line": 53,
+         "column": 33
         },
         {
          "id": 427,
@@ -4229,6 +4355,7 @@
          "callee": {
           "ty": 38,
           "func": "heap.ArenaAllocator.Node.endResize",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -4261,7 +4388,8 @@
        "id": 429,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 89
+       "line": 89,
+       "column": 9
       },
       {
        "id": 430,
@@ -4272,7 +4400,8 @@
          "id": 431,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 97
+         "line": 97,
+         "column": 13
         },
         {
          "id": 432,
@@ -4283,7 +4412,8 @@
            "id": 433,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 97
+           "line": 97,
+           "column": 50
           },
           {
            "id": 434,
@@ -4299,7 +4429,8 @@
            "id": 435,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 97
+           "line": 97,
+           "column": 50
           },
           {
            "id": 436,
@@ -4308,6 +4439,7 @@
            "callee": {
             "ty": 17,
             "func": "heap.ArenaAllocator.stealFreeList",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -4390,7 +4522,8 @@
          "id": 443,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 99
+         "line": 99,
+         "column": 13
         },
         {
          "id": 444,
@@ -4421,7 +4554,8 @@
            "id": 449,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 100
+           "line": 100,
+           "column": 17
           },
           {
            "id": 450,
@@ -4457,7 +4591,8 @@
            "id": 453,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 101
+           "line": 101,
+           "column": 17
           },
           {
            "id": 454,
@@ -4493,7 +4628,8 @@
            "id": 457,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 102
+           "line": 102,
+           "column": 17
           },
           {
            "id": 458,
@@ -4504,7 +4640,8 @@
            "id": 459,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 102
+           "line": 102,
+           "column": 59
           },
           {
            "id": 460,
@@ -4535,7 +4672,8 @@
            "id": 462,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 104
+           "line": 104,
+           "column": 17
           },
           {
            "id": 463,
@@ -4571,7 +4709,8 @@
            "id": 466,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 105
+           "line": 105,
+           "column": 17
           },
           {
            "id": 467,
@@ -4631,7 +4770,8 @@
                  "id": 474,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 106
+                 "line": 106,
+                 "column": 24
                 },
                 {
                  "id": 475,
@@ -4721,7 +4861,8 @@
                      "id": 483,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 110
+                     "line": 110,
+                     "column": 33
                     },
                     {
                      "id": 484,
@@ -4747,7 +4888,8 @@
                      "id": 486,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 110
+                     "line": 110,
+                     "column": 38
                     },
                     {
                      "id": 487,
@@ -4783,7 +4925,8 @@
                      "id": 490,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 110
+                     "line": 110,
+                     "column": 27
                     },
                     {
                      "id": 491,
@@ -4792,6 +4935,7 @@
                      "callee": {
                       "ty": 14,
                       "func": "debug.assert",
+                      "module": "std",
                       "noreturn": false
                      },
                      "args": [
@@ -4804,7 +4948,8 @@
                      "id": 492,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 111
+                     "line": 111,
+                     "column": 58
                     },
                     {
                      "id": 493,
@@ -4820,7 +4965,8 @@
                      "id": 494,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 111
+                     "line": 111,
+                     "column": 58
                     },
                     {
                      "id": 495,
@@ -4829,6 +4975,7 @@
                      "callee": {
                       "ty": 23,
                       "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+                      "module": "std",
                       "noreturn": false
                      },
                      "args": [
@@ -4869,7 +5016,8 @@
                      "id": 499,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 111
+                     "line": 111,
+                     "column": 60
                     },
                     {
                      "id": 500,
@@ -4965,6 +5113,7 @@
                          "callee": {
                           "ty": 32,
                           "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+                          "module": "std",
                           "noreturn": true
                          },
                          "args": [
@@ -5059,6 +5208,7 @@
                          "callee": {
                           "ty": 32,
                           "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                          "module": "std",
                           "noreturn": true
                          },
                          "args": [
@@ -5135,7 +5285,8 @@
                      "id": 523,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 112
+                     "line": 112,
+                     "column": 59
                     },
                     {
                      "id": 524,
@@ -5161,7 +5312,8 @@
                      "id": 526,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 112
+                     "line": 112,
+                     "column": 55
                     },
                     {
                      "id": 527,
@@ -5170,6 +5322,7 @@
                      "callee": {
                       "ty": 29,
                       "func": "heap.ArenaAllocator.alignedIndex",
+                      "module": "std",
                       "noreturn": false
                      },
                      "args": [
@@ -5200,7 +5353,8 @@
                      "id": 529,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 114
+                     "line": 114,
+                     "column": 48
                     },
                     {
                      "id": 530,
@@ -5219,7 +5373,8 @@
                      "id": 531,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 114
+                     "line": 114,
+                     "column": 58
                     },
                     {
                      "id": 532,
@@ -5269,7 +5424,8 @@
                      "id": 536,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 115
+                     "line": 115,
+                     "column": 25
                     },
                     {
                      "id": 537,
@@ -5333,7 +5489,8 @@
                          "id": 542,
                          "tag": "dbg_stmt",
                          "ty": 5,
-                         "line": 116
+                         "line": 116,
+                         "column": 25
                         },
                         {
                          "id": 543,
@@ -5362,7 +5519,8 @@
                          "id": 545,
                          "tag": "dbg_stmt",
                          "ty": 5,
-                         "line": 117
+                         "line": 117,
+                         "column": 25
                         },
                         {
                          "id": 546,
@@ -5391,7 +5549,8 @@
                          "id": 548,
                          "tag": "dbg_stmt",
                          "ty": 5,
-                         "line": 118
+                         "line": 118,
+                         "column": 25
                         },
                         {
                          "id": 549,
@@ -5440,7 +5599,8 @@
                      "id": 553,
                      "tag": "dbg_stmt",
                      "ty": 5,
-                     "line": 120
+                     "line": 120,
+                     "column": 17
                     },
                     {
                      "id": 554,
@@ -5465,13 +5625,15 @@
                    "id": 556,
                    "tag": "dbg_stmt",
                    "ty": 5,
-                   "line": 106
+                   "line": 106,
+                   "column": 38
                   },
                   {
                    "id": 558,
                    "tag": "dbg_stmt",
                    "ty": 5,
-                   "line": 107
+                   "line": 107,
+                   "column": 21
                   },
                   {
                    "id": 559,
@@ -5500,7 +5662,8 @@
                    "id": 561,
                    "tag": "dbg_stmt",
                    "ty": 5,
-                   "line": 108
+                   "line": 108,
+                   "column": 30
                   },
                   {
                    "id": 562,
@@ -5589,7 +5752,8 @@
            "id": 571,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 122
+           "line": 122,
+           "column": 17
           },
           {
            "id": 572,
@@ -5618,7 +5782,8 @@
            "id": 574,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 122
+           "line": 122,
+           "column": 50
           },
           {
            "id": 575,
@@ -5666,6 +5831,7 @@
                "callee": {
                 "ty": 9,
                 "func": "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+                "module": "std",
                 "noreturn": true
                },
                "args": []
@@ -5716,7 +5882,8 @@
            "id": 584,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 122
+           "line": 122,
+           "column": 62
           },
           {
            "id": 585,
@@ -5764,6 +5931,7 @@
                "callee": {
                 "ty": 9,
                 "func": "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+                "module": "std",
                 "noreturn": true
                },
                "args": []
@@ -5925,7 +6093,8 @@
          "id": 604,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 125
+         "line": 125,
+         "column": 13
         },
         {
          "id": 605,
@@ -5946,7 +6115,8 @@
            "id": 608,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 126
+           "line": 126,
+           "column": 54
           },
           {
            "id": 609,
@@ -5962,7 +6132,8 @@
            "id": 610,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 126
+           "line": 126,
+           "column": 54
           },
           {
            "id": 611,
@@ -5971,6 +6142,7 @@
            "callee": {
             "ty": 23,
             "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -6011,7 +6183,8 @@
            "id": 615,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 126
+           "line": 126,
+           "column": 56
           },
           {
            "id": 616,
@@ -6107,6 +6280,7 @@
                "callee": {
                 "ty": 32,
                 "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -6201,6 +6375,7 @@
                "callee": {
                 "ty": 32,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -6277,7 +6452,8 @@
            "id": 639,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 127
+           "line": 127,
+           "column": 55
           },
           {
            "id": 640,
@@ -6303,7 +6479,8 @@
            "id": 642,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 127
+           "line": 127,
+           "column": 51
           },
           {
            "id": 643,
@@ -6312,6 +6489,7 @@
            "callee": {
             "ty": 29,
             "func": "heap.ArenaAllocator.alignedIndex",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -6342,7 +6520,8 @@
            "id": 645,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 128
+           "line": 128,
+           "column": 17
           },
           {
            "id": 646,
@@ -6361,7 +6540,8 @@
            "id": 647,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 128
+           "line": 128,
+           "column": 70
           },
           {
            "id": 648,
@@ -6380,7 +6560,8 @@
            "id": 649,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 128
+           "line": 128,
+           "column": 79
           },
           {
            "id": 650,
@@ -6508,7 +6689,8 @@
          "id": 663,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 131
+         "line": 131,
+         "column": 17
         },
         {
          "id": 664,
@@ -6539,7 +6721,8 @@
              "id": 666,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 135
+             "line": 135,
+             "column": 50
             },
             {
              "id": 667,
@@ -6555,7 +6738,8 @@
              "id": 668,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 135
+             "line": 135,
+             "column": 72
             },
             {
              "id": 669,
@@ -6575,7 +6759,8 @@
              "id": 670,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 135
+             "line": 135,
+             "column": 88
             },
             {
              "id": 671,
@@ -6594,7 +6779,8 @@
              "id": 674,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 135
+             "line": 135,
+             "column": 50
             },
             {
              "id": 675,
@@ -6602,7 +6788,9 @@
              "ty": 1,
              "callee": {
               "ty": 37,
-              "func": "mem.alignForward__anon_1329",
+              "func": "mem.alignForward__anon_1351",
+              "module": "std",
+              "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
               "noreturn": false
              },
              "args": [
@@ -6630,7 +6818,8 @@
              "id": 677,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 136
+             "line": 136,
+             "column": 21
             },
             {
              "id": 678,
@@ -6641,7 +6830,8 @@
                "id": 679,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 136
+               "line": 136,
+               "column": 26
               },
               {
                "id": 680,
@@ -6667,7 +6857,8 @@
                "id": 682,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 136
+               "line": 136,
+               "column": 52
               },
               {
                "id": 683,
@@ -6683,7 +6874,8 @@
                "id": 684,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 136
+               "line": 136,
+               "column": 78
               },
               {
                "id": 685,
@@ -6699,7 +6891,8 @@
                "id": 686,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 136
+               "line": 136,
+               "column": 78
               },
               {
                "id": 687,
@@ -6708,6 +6901,7 @@
                "callee": {
                 "ty": 23,
                 "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+                "module": "std",
                 "noreturn": false
                },
                "args": [
@@ -6720,18 +6914,25 @@
                "id": 688,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 136
+               "line": 136,
+               "column": 85
               },
               {
                "id": 689,
                "tag": "dbg_inline_block",
                "ty": 5,
+               "src": {
+                "file": "mem.zig",
+                "module": "std",
+                "decl_line": 45
+               },
                "body": [
                 {
                  "id": 690,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 2
+                 "line": 2,
+                 "column": 9
                 },
                 {
                  "id": 691,
@@ -6757,12 +6958,18 @@
                "id": 693,
                "tag": "dbg_stmt",
                "ty": 5,
-               "line": 136
+               "line": 136,
+               "column": 52
               },
               {
                "id": 694,
                "tag": "dbg_inline_block",
                "ty": 7,
+               "src": {
+                "file": "mem/Allocator.zig",
+                "module": "std",
+                "decl_line": 147
+               },
                "body": [
                 {
                  "id": 695,
@@ -6852,7 +7059,8 @@
                  "id": 703,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 2
+                 "line": 2,
+                 "column": 13
                 },
                 {
                  "id": 704,
@@ -6868,7 +7076,8 @@
                  "id": 705,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 2
+                 "line": 2,
+                 "column": 27
                 },
                 {
                  "id": 706,
@@ -6904,7 +7113,8 @@
                  "id": 709,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 2
+                 "line": 2,
+                 "column": 29
                 },
                 {
                  "id": 710,
@@ -6930,7 +7140,8 @@
                  "id": 712,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 2
+                 "line": 2,
+                 "column": 27
                 },
                 {
                  "id": 713,
@@ -6962,7 +7173,8 @@
                  "id": 714,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 2
+                 "line": 2,
+                 "column": 5
                 },
                 {
                  "id": 715,
@@ -6991,7 +7203,8 @@
                  "id": 716,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 137
+                 "line": 137,
+                 "column": 25
                 },
                 {
                  "id": 717,
@@ -7017,7 +7230,8 @@
                  "id": 719,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 137
+                 "line": 137,
+                 "column": 41
                 },
                 {
                  "id": 720,
@@ -7026,6 +7240,7 @@
                  "callee": {
                   "ty": 52,
                   "func": "heap.ArenaAllocator.Node.Size.fromInt",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -7065,7 +7280,8 @@
                  "id": 723,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 139
+                 "line": 139,
+                 "column": 39
                 },
                 {
                  "id": 724,
@@ -7101,7 +7317,8 @@
                  "id": 727,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 139
+                 "line": 139,
+                 "column": 39
                 },
                 {
                  "id": 728,
@@ -7110,6 +7327,7 @@
                  "callee": {
                   "ty": 33,
                   "func": "heap.ArenaAllocator.pushFreeList",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -7128,7 +7346,8 @@
                  "id": 729,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 140
+                 "line": 140,
+                 "column": 21
                 },
                 {
                  "id": 730,
@@ -7180,7 +7399,8 @@
          "id": 735,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 144
+         "line": 144,
+         "column": 50
         },
         {
          "id": 736,
@@ -7196,7 +7416,8 @@
          "id": 737,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 144
+         "line": 144,
+         "column": 50
         },
         {
          "id": 738,
@@ -7205,6 +7426,7 @@
          "callee": {
           "ty": 23,
           "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -7245,7 +7467,8 @@
          "id": 742,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 144
+         "line": 144,
+         "column": 52
         },
         {
          "id": 743,
@@ -7341,6 +7564,7 @@
              "callee": {
               "ty": 32,
               "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+              "module": "std",
               "noreturn": true
              },
              "args": [
@@ -7435,6 +7659,7 @@
              "callee": {
               "ty": 32,
               "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+              "module": "std",
               "noreturn": true
              },
              "args": [
@@ -7511,7 +7736,8 @@
          "id": 766,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 145
+         "line": 145,
+         "column": 34
         },
         {
          "id": 767,
@@ -7558,7 +7784,8 @@
          "id": 771,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 147
+         "line": 147,
+         "column": 17
         },
         {
          "id": 772,
@@ -7594,7 +7821,8 @@
          "id": 775,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 147
+         "line": 147,
+         "column": 44
         },
         {
          "id": 776,
@@ -7626,7 +7854,8 @@
          "id": 778,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 148
+         "line": 148,
+         "column": 17
         },
         {
          "id": 779,
@@ -7675,7 +7904,8 @@
          "id": 783,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 150
+         "line": 150,
+         "column": 38
         },
         {
          "id": 784,
@@ -7701,7 +7931,8 @@
          "id": 786,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 150
+         "line": 150,
+         "column": 38
         },
         {
          "id": 787,
@@ -7710,6 +7941,7 @@
          "callee": {
           "ty": 54,
           "func": "heap.ArenaAllocator.tryPushNode",
+          "module": "std",
           "noreturn": false
          },
          "args": [
@@ -7725,7 +7957,8 @@
          "id": 788,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 150
+         "line": 150,
+         "column": 21
         },
         {
          "id": 790,
@@ -7760,7 +7993,8 @@
              "id": 791,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 153
+             "line": 153,
+             "column": 25
             },
             {
              "id": 792,
@@ -7850,7 +8084,8 @@
                  "id": 800,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 153
+                 "line": 153,
+                 "column": 36
                 },
                 {
                  "id": 801,
@@ -7919,7 +8154,8 @@
              "id": 807,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 156
+             "line": 156,
+             "column": 48
             },
             {
              "id": 808,
@@ -8039,7 +8275,8 @@
              "id": 819,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 157
+             "line": 157,
+             "column": 47
             },
             {
              "id": 820,
@@ -8169,7 +8406,8 @@
              "id": 832,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 158
+             "line": 158,
+             "column": 25
             },
             {
              "id": 833,
@@ -8221,7 +8459,8 @@
                  "id": 837,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 159
+                 "line": 159,
+                 "column": 51
                 },
                 {
                  "id": 838,
@@ -8269,6 +8508,7 @@
                      "callee": {
                       "ty": 9,
                       "func": "debug.FullPanic((function 'defaultPanic')).unwrapNull",
+                      "module": "std",
                       "noreturn": true
                      },
                      "args": []
@@ -8307,7 +8547,8 @@
                  "id": 846,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 160
+                 "line": 160,
+                 "column": 43
                 },
                 {
                  "id": 847,
@@ -8323,7 +8564,8 @@
                  "id": 848,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 160
+                 "line": 160,
+                 "column": 43
                 },
                 {
                  "id": 849,
@@ -8332,6 +8574,7 @@
                  "callee": {
                   "ty": 33,
                   "func": "heap.ArenaAllocator.pushFreeList",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -8380,7 +8623,8 @@
              "id": 853,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 163
+             "line": 163,
+             "column": 21
             },
             {
              "id": 854,
@@ -8396,7 +8640,8 @@
              "id": 855,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 163
+             "line": 163,
+             "column": 48
             },
             {
              "id": 856,
@@ -8503,6 +8748,7 @@
                  "callee": {
                   "ty": 32,
                   "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                  "module": "std",
                   "noreturn": true
                  },
                  "args": [
@@ -8568,7 +8814,8 @@
              "id": 871,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 163
+             "line": 163,
+             "column": 54
             },
             {
              "id": 872,
@@ -8594,7 +8841,8 @@
              "id": 874,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 10
+             "line": 10,
+             "column": 15
             },
             {
              "id": 875,
@@ -8684,7 +8932,8 @@
                  "id": 883,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 11
+                 "line": 11,
+                 "column": 13
                 },
                 {
                  "id": 884,
@@ -8724,7 +8973,8 @@
                  "id": 887,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 12
+                 "line": 12,
+                 "column": 27
                 },
                 {
                  "id": 888,
@@ -8740,7 +8990,8 @@
                  "id": 889,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 12
+                 "line": 12,
+                 "column": 27
                 },
                 {
                  "id": 890,
@@ -8749,6 +9000,7 @@
                  "callee": {
                   "ty": 33,
                   "func": "heap.ArenaAllocator.pushFreeList",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -8797,7 +9049,8 @@
              "id": 894,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 163
+             "line": 163,
+             "column": 21
             },
             {
              "id": 895,
@@ -8856,7 +9109,8 @@
              "id": 899,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 167
+             "line": 167,
+             "column": 25
             },
             {
              "id": 900,
@@ -8895,7 +9149,8 @@
              "id": 903,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 168
+             "line": 168,
+             "column": 39
             },
             {
              "id": 904,
@@ -8931,7 +9186,8 @@
              "id": 907,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 168
+             "line": 168,
+             "column": 39
             },
             {
              "id": 908,
@@ -8940,6 +9196,7 @@
              "callee": {
               "ty": 33,
               "func": "heap.ArenaAllocator.pushFreeList",
+              "module": "std",
               "noreturn": false
              },
              "args": [
@@ -8958,7 +9215,8 @@
              "id": 909,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 170
+             "line": 170,
+             "column": 21
             },
             {
              "id": 910,
@@ -8977,7 +9235,8 @@
              "id": 911,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 171
+             "line": 171,
+             "column": 21
             },
             {
              "id": 912,
@@ -8999,7 +9258,8 @@
            "id": 913,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 150
+           "line": 150,
+           "column": 21
           },
           {
            "id": 914,
@@ -9008,6 +9268,7 @@
            "callee": {
             "ty": 9,
             "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -9025,7 +9286,8 @@
        "id": 917,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 176
+       "line": 176,
+       "column": 9
       },
       {
        "id": 918,
@@ -9036,7 +9298,8 @@
          "id": 919,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 177
+         "line": 177,
+         "column": 17
         },
         {
          "id": 920,
@@ -9098,7 +9361,8 @@
              "id": 925,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 178
+             "line": 178,
+             "column": 17
             },
             {
              "id": 926,
@@ -9117,7 +9381,8 @@
              "id": 927,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 180
+             "line": 180,
+             "column": 17
             },
             {
              "id": 928,
@@ -9139,7 +9404,8 @@
          "id": 930,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 183
+         "line": 183,
+         "column": 13
         },
         {
          "id": 931,
@@ -9150,7 +9416,8 @@
            "id": 932,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 184
+           "line": 184,
+           "column": 71
           },
           {
            "id": 933,
@@ -9166,7 +9433,8 @@
            "id": 934,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 184
+           "line": 184,
+           "column": 71
           },
           {
            "id": 935,
@@ -9175,6 +9443,7 @@
            "callee": {
             "ty": 26,
             "func": "mem.Alignment.toByteUnits",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -9187,7 +9456,8 @@
            "id": 936,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 184
+           "line": 184,
+           "column": 48
           },
           {
            "id": 937,
@@ -9207,7 +9477,8 @@
            "id": 938,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 184
+           "line": 184,
+           "column": 74
           },
           {
            "id": 939,
@@ -9237,7 +9508,8 @@
            "id": 941,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 185
+           "line": 185,
+           "column": 17
           },
           {
            "id": 942,
@@ -9253,7 +9525,8 @@
            "id": 943,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 185
+           "line": 185,
+           "column": 51
           },
           {
            "id": 944,
@@ -9272,7 +9545,8 @@
            "id": 945,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 185
+           "line": 185,
+           "column": 62
           },
           {
            "id": 946,
@@ -9303,7 +9577,8 @@
            "id": 948,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 186
+           "line": 186,
+           "column": 88
           },
           {
            "id": 949,
@@ -9323,7 +9598,8 @@
            "id": 950,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 186
+           "line": 186,
+           "column": 70
           },
           {
            "id": 951,
@@ -9342,7 +9618,8 @@
            "id": 954,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 186
+           "line": 186,
+           "column": 46
           },
           {
            "id": 955,
@@ -9350,7 +9627,9 @@
            "ty": 1,
            "callee": {
             "ty": 37,
-            "func": "mem.alignForward__anon_1329",
+            "func": "mem.alignForward__anon_1351",
+            "module": "std",
+            "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
             "noreturn": false
            },
            "args": [
@@ -9378,7 +9657,8 @@
            "id": 957,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 187
+           "line": 187,
+           "column": 37
           },
           {
            "id": 958,
@@ -9387,6 +9667,7 @@
            "callee": {
             "ty": 52,
             "func": "heap.ArenaAllocator.Node.Size.fromInt",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -9451,7 +9732,8 @@
          "id": 964,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 189
+         "line": 189,
+         "column": 13
         },
         {
          "id": 965,
@@ -9462,7 +9744,8 @@
            "id": 966,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 189
+           "line": 189,
+           "column": 30
           },
           {
            "id": 967,
@@ -9488,7 +9771,8 @@
            "id": 969,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 189
+           "line": 189,
+           "column": 55
           },
           {
            "id": 970,
@@ -9504,7 +9788,8 @@
            "id": 971,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 189
+           "line": 189,
+           "column": 66
           },
           {
            "id": 972,
@@ -9520,7 +9805,8 @@
            "id": 973,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 189
+           "line": 189,
+           "column": 66
           },
           {
            "id": 974,
@@ -9529,6 +9815,7 @@
            "callee": {
             "ty": 57,
             "func": "heap.ArenaAllocator.Node.Size.toInt",
+            "module": "std",
             "noreturn": false
            },
            "args": [
@@ -9541,18 +9828,25 @@
            "id": 975,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 189
+           "line": 189,
+           "column": 73
           },
           {
            "id": 976,
            "tag": "dbg_inline_block",
            "ty": 5,
+           "src": {
+            "file": "mem.zig",
+            "module": "std",
+            "decl_line": 45
+           },
            "body": [
             {
              "id": 977,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 9
             },
             {
              "id": 978,
@@ -9578,12 +9872,18 @@
            "id": 980,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 189
+           "line": 189,
+           "column": 55
           },
           {
            "id": 981,
            "tag": "dbg_inline_block",
            "ty": 3,
+           "src": {
+            "file": "mem/Allocator.zig",
+            "module": "std",
+            "decl_line": 141
+           },
            "body": [
             {
              "id": 982,
@@ -9662,7 +9962,8 @@
              "id": 989,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 13
             },
             {
              "id": 990,
@@ -9678,7 +9979,8 @@
              "id": 991,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 26
             },
             {
              "id": 992,
@@ -9714,7 +10016,8 @@
              "id": 995,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 28
             },
             {
              "id": 996,
@@ -9740,7 +10043,8 @@
              "id": 998,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 26
             },
             {
              "id": 999,
@@ -9769,7 +10073,8 @@
              "id": 1000,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 2
+             "line": 2,
+             "column": 5
             },
             {
              "id": 1001,
@@ -9831,7 +10136,8 @@
              "id": 1005,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 10
+             "line": 10,
+             "column": 15
             },
             {
              "id": 1006,
@@ -9921,7 +10227,8 @@
                  "id": 1014,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 11
+                 "line": 11,
+                 "column": 13
                 },
                 {
                  "id": 1015,
@@ -9961,7 +10268,8 @@
                  "id": 1018,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 12
+                 "line": 12,
+                 "column": 27
                 },
                 {
                  "id": 1019,
@@ -9977,7 +10285,8 @@
                  "id": 1020,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 12
+                 "line": 12,
+                 "column": 27
                 },
                 {
                  "id": 1021,
@@ -9986,6 +10295,7 @@
                  "callee": {
                   "ty": 33,
                   "func": "heap.ArenaAllocator.pushFreeList",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -10034,7 +10344,8 @@
              "id": 1025,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 190
+             "line": 190,
+             "column": 17
             },
             {
              "id": 1026,
@@ -10066,7 +10377,8 @@
          "id": 1029,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 191
+         "line": 191,
+         "column": 37
         },
         {
          "id": 1030,
@@ -10142,6 +10454,7 @@
              "callee": {
               "ty": 9,
               "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+              "module": "std",
               "noreturn": true
              },
              "args": []
@@ -10180,7 +10493,8 @@
          "id": 1040,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 192
+         "line": 192,
+         "column": 13
         },
         {
          "id": 1041,
@@ -10257,7 +10571,8 @@
          "id": 1047,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 197
+         "line": 197,
+         "column": 13
         },
         {
          "id": 1048,
@@ -10286,7 +10601,8 @@
          "id": 1050,
          "tag": "dbg_stmt",
          "ty": 5,
-         "line": 198
+         "line": 198,
+         "column": 13
         },
         {
          "id": 1051,
@@ -10344,7 +10660,8 @@
        "id": 1056,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 201
+       "line": 201,
+       "column": 50
       },
       {
        "id": 1057,
@@ -10360,7 +10677,8 @@
        "id": 1058,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 201
+       "line": 201,
+       "column": 50
       },
       {
        "id": 1059,
@@ -10369,6 +10687,7 @@
        "callee": {
         "ty": 23,
         "func": "heap.ArenaAllocator.Node.allocatedSliceUnsafe",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -10409,7 +10728,8 @@
        "id": 1063,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 201
+       "line": 201,
+       "column": 52
       },
       {
        "id": 1064,
@@ -10505,6 +10825,7 @@
            "callee": {
             "ty": 32,
             "func": "debug.FullPanic((function 'defaultPanic')).startGreaterThanEnd",
+            "module": "std",
             "noreturn": true
            },
            "args": [
@@ -10599,6 +10920,7 @@
            "callee": {
             "ty": 32,
             "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+            "module": "std",
             "noreturn": true
            },
            "args": [
@@ -10675,7 +10997,8 @@
        "id": 1087,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 202
+       "line": 202,
+       "column": 47
       },
       {
        "id": 1088,
@@ -10701,7 +11024,8 @@
        "id": 1090,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 202
+       "line": 202,
+       "column": 43
       },
       {
        "id": 1091,
@@ -10710,6 +11034,7 @@
        "callee": {
         "ty": 29,
         "func": "heap.ArenaAllocator.alignedIndex",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -10740,7 +11065,8 @@
        "id": 1093,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 203
+       "line": 203,
+       "column": 24
       },
       {
        "id": 1094,
@@ -10766,7 +11092,8 @@
        "id": 1096,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 203
+       "line": 203,
+       "column": 35
       },
       {
        "id": 1097,
@@ -10782,7 +11109,8 @@
        "id": 1098,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 203
+       "line": 203,
+       "column": 35
       },
       {
        "id": 1099,
@@ -10791,6 +11119,7 @@
        "callee": {
         "ty": 57,
         "func": "heap.ArenaAllocator.Node.Size.toInt",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -10803,7 +11132,8 @@
        "id": 1100,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 203
+       "line": 203,
+       "column": 55
       },
       {
        "id": 1101,
@@ -10823,7 +11153,8 @@
        "id": 1102,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 203
+       "line": 203,
+       "column": 71
       },
       {
        "id": 1103,
@@ -10875,7 +11206,8 @@
        "id": 1107,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 203
+       "line": 203,
+       "column": 15
       },
       {
        "id": 1108,
@@ -10884,6 +11216,7 @@
        "callee": {
         "ty": 14,
         "func": "debug.assert",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -10896,7 +11229,8 @@
        "id": 1109,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 205
+       "line": 205,
+       "column": 17
       },
       {
        "id": 1110,
@@ -10922,7 +11256,8 @@
        "id": 1112,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 205
+       "line": 205,
+       "column": 44
       },
       {
        "id": 1113,
@@ -10954,7 +11289,8 @@
        "id": 1115,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 206
+       "line": 206,
+       "column": 17
       },
       {
        "id": 1116,
@@ -11003,7 +11339,8 @@
        "id": 1120,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 208
+       "line": 208,
+       "column": 34
       },
       {
        "id": 1121,
@@ -11019,7 +11356,8 @@
        "id": 1122,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 208
+       "line": 208,
+       "column": 34
       },
       {
        "id": 1123,
@@ -11028,6 +11366,7 @@
        "callee": {
         "ty": 54,
         "func": "heap.ArenaAllocator.tryPushNode",
+        "module": "std",
         "noreturn": false
        },
        "args": [
@@ -11043,7 +11382,8 @@
        "id": 1124,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 208
+       "line": 208,
+       "column": 17
       },
       {
        "id": 1126,
@@ -11083,7 +11423,8 @@
              "id": 1127,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 210
+             "line": 210,
+             "column": 17
             },
             {
              "id": 1128,
@@ -11103,7 +11444,8 @@
              "id": 1129,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 211
+             "line": 211,
+             "column": 44
             },
             {
              "id": 1130,
@@ -11210,6 +11552,7 @@
                  "callee": {
                   "ty": 32,
                   "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                  "module": "std",
                   "noreturn": true
                  },
                  "args": [
@@ -11275,7 +11618,8 @@
              "id": 1145,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 211
+             "line": 211,
+             "column": 50
             },
             {
              "id": 1146,
@@ -11301,7 +11645,8 @@
              "id": 1148,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 10
+             "line": 10,
+             "column": 15
             },
             {
              "id": 1149,
@@ -11391,7 +11736,8 @@
                  "id": 1157,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 11
+                 "line": 11,
+                 "column": 13
                 },
                 {
                  "id": 1158,
@@ -11431,7 +11777,8 @@
                  "id": 1161,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 12
+                 "line": 12,
+                 "column": 27
                 },
                 {
                  "id": 1162,
@@ -11447,7 +11794,8 @@
                  "id": 1163,
                  "tag": "dbg_stmt",
                  "ty": 5,
-                 "line": 12
+                 "line": 12,
+                 "column": 27
                 },
                 {
                  "id": 1164,
@@ -11456,6 +11804,7 @@
                  "callee": {
                   "ty": 33,
                   "func": "heap.ArenaAllocator.pushFreeList",
+                  "module": "std",
                   "noreturn": false
                  },
                  "args": [
@@ -11504,7 +11853,8 @@
              "id": 1168,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 211
+             "line": 211,
+             "column": 17
             },
             {
              "id": 1169,
@@ -11563,7 +11913,8 @@
              "id": 1173,
              "tag": "dbg_stmt",
              "ty": 5,
-             "line": 214
+             "line": 214,
+             "column": 17
             },
             {
              "id": 1174,
@@ -11598,7 +11949,8 @@
            "id": 1176,
            "tag": "dbg_stmt",
            "ty": 5,
-           "line": 208
+           "line": 208,
+           "column": 17
           },
           {
            "id": 1177,
@@ -11607,6 +11959,7 @@
            "callee": {
             "ty": 9,
             "func": "debug.FullPanic((function 'defaultPanic')).corruptSwitch",
+            "module": "std",
             "noreturn": true
            },
            "args": []
@@ -11624,7 +11977,8 @@
        "id": 1180,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 217
+       "line": 217,
+       "column": 5
       },
       {
        "id": 1181,
@@ -11663,6 +12017,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11678,6 +12033,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 61,
    "exhaustive": false,
    "fields": [
@@ -11727,6 +12083,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11745,6 +12102,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11770,6 +12128,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11783,6 +12142,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11796,6 +12156,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11820,6 +12181,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11843,6 +12205,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11856,6 +12219,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11869,6 +12233,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11882,6 +12247,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11895,6 +12261,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -11912,6 +12279,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11925,6 +12293,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11942,6 +12311,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11955,6 +12325,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11978,6 +12349,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -11999,6 +12371,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12030,6 +12403,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12038,6 +12412,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -12062,6 +12437,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12075,6 +12451,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12088,6 +12465,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12101,6 +12479,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12113,6 +12492,7 @@
    "child": 66,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12126,6 +12506,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12139,6 +12520,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12152,6 +12534,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 8,
    "bit_offset": 0,
@@ -12167,6 +12550,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12180,6 +12564,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12188,6 +12573,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node.Size",
+   "module": "std",
    "layout": "packed",
    "fields": [
     {
@@ -12209,6 +12595,7 @@
   {
    "k": "union",
    "name": "heap.ArenaAllocator.PushResult",
+   "module": "std",
    "layout": "auto",
    "tag": 55,
    "fields": [
@@ -12231,6 +12618,7 @@
   {
    "k": "enum",
    "name": "@typeInfo(heap.ArenaAllocator.PushResult).@\"union\".tag_type.?",
+   "module": "std",
    "tag": 68,
    "exhaustive": true,
    "fields": [
@@ -12254,6 +12642,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12271,6 +12660,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12283,6 +12673,7 @@
    "child": 69,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12302,6 +12693,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -12321,6 +12713,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -12352,6 +12745,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -12403,6 +12797,7 @@
   {
    "k": "struct",
    "name": "heap.ArenaAllocator.State",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -12426,6 +12821,7 @@
    "child": 73,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -12438,6 +12834,7 @@
    "child": 74,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
