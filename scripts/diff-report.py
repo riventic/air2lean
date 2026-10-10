@@ -264,12 +264,14 @@ MATCHES = (Status.VALUE_MATCH, Status.ERROR_RETURN_MATCH, Status.PANIC_MATCH, St
 # only if every differing float leaf satisfies one of the kinds listed for the function:
 #   nan_payload    both NaN of one format (sign and payload bits differ)
 #   zero_sign      both zero of one format, opposite signs
-#   libm_ulp       both finite of one format, at most LIBM_ULPS ulps apart
+#   libm_ulp       both finite of one format, at most LIBM_ULPS ulps apart; an f80/f128 pair whose
+#                  values are both f64 values (the transcendental routines compute in f64) is
+#                  measured in f64 ulps
 # Anything else, including a model panic, error or exclusion against a native value, is a mismatch.
 # An f80 rounding difference is no host kind: an aarch64-macos translation models the soft-float
 # routines bit for bit (docs/floats.md §Targets).
 HOST_KINDS = ('nan_payload', 'zero_sign', 'libm_ulp')
-LIBM_ULPS = 1
+LIBM_ULPS = 2
 # Hex digits of a "0x<bits>" float leaf -> (exponent bits, mantissa bits, explicit integer bit).
 FLOAT_FORMATS = {4: (5, 10, False), 8: (8, 23, False), 16: (11, 52, False), 20: (15, 64, True), 32: (15, 112, False)}
 HEX_FLOAT = re.compile(r'0x[0-9a-f]+\Z')
@@ -313,6 +315,11 @@ def leaf_host_kinds(native, model):
         return frozenset({'zero_sign'})
     if {n[1], m[1]} <= {'finite', 'zero'}:
         ulps = abs(n[2] - m[2])
+        wide = {20: 63, 32: 112}.get(n[0])  # mantissa bits of f80 (integer bit dropped), f128
+        if wide is not None:
+            shift = wide - 52
+            if n[2] % (1 << shift) == 0 and m[2] % (1 << shift) == 0:
+                ulps >>= shift
         return frozenset({'libm_ulp'} if ulps <= LIBM_ULPS else set())
     return frozenset()
 

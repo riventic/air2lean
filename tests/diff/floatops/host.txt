@@ -2,8 +2,9 @@
 # Off x86_64-linux a disagreement of two returned values is a host difference only if every
 # differing float has a listed kind; anything else is a mismatch.
 op16 nan_payload,zero_sign
-# libm_ulp: with Zig 0.15.2 on arm64 macOS the transcendental routines differ by one ulp.
+# libm_ulp: with Zig 0.15.2 on arm64 macOS the transcendental routines differ by up to two ulps
+# (f80/f128 ones in f64 ulps: both sides compute them in f64).
 op32 nan_payload,zero_sign,libm_ulp
 op64 nan_payload,zero_sign,libm_ulp
-op80 nan_payload,zero_sign
+op80 nan_payload,zero_sign,libm_ulp
 op128 nan_payload,zero_sign,libm_ulp
