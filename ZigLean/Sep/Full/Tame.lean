@@ -41,9 +41,6 @@ theorem elim {o : Option β} {x : MemM α} {f : β → MemM α} (hx : Tame x) (h
 theorem map {f : α → β} {x : MemM α} (hx : Tame x) : Tame (f <$> x) := by
   rw [map_eq_pure_bind]; exact bind hx fun _ => pure' _
 
-theorem get : Tame (get : MemM Mem) := fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _⟩
-
 theorem ptrFromAddr (n : Nat) : Tame (Zig.ptrFromAddr n) := fun m v m' h => by
   obtain ⟨w, hw⟩ := ptrFromAddr_run n m
   rw [hw] at h

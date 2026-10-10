@@ -134,10 +134,6 @@ effect. -/
 theorem checkAddr_ok {align n : Nat} (h : n % align = 0) : checkAddr align false n = pure () := by
   simp [checkAddr, h]
 
-theorem checkIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat < s.len.toNat) :
-    checkIndex s i = pure () := by
-  simp [checkIndex, h]
-
 theorem checkSentinelIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat ≤ s.len.toNat) :
     checkSentinelIndex s i = pure () := by
   simp [checkSentinelIndex, h]
@@ -362,12 +358,10 @@ theorem ptrProject_elem_region {p : Ptr} {A S : Nat} {K : BlockKind} {a size : N
     {bs : Array Byte} {i : BitVec 64} (hpos : 0 < bs.size) (hi : size * i.toNat ≤ bs.size) :
     TotalTriple (regionIn p A S K a bs) (ptrProject p (·.elem size i))
       (fun r => ⌜r = p.elem size i⌝ ∗ regionIn p A S K a bs) := by
-  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b ∧ 0 ≤ p.off)
-    (fun h hr => let ⟨b, hb, h0, _⟩ := bytesAt_ownsAt hr.2.2 hpos; ⟨b, hb, h0⟩)
-    fun ⟨b, hb, h0⟩ => ptrProject_elem_ownsAt (j := p.off.toNat + (bs.size - 1)) hb h0
-      (by push_cast; omega) fun h hr => ?_
-  obtain ⟨b', hb', -, ho⟩ := bytesAt_ownsAt hr.2.2 hpos
-  rw [hb] at hb'; cases hb'; exact ho
+  rw [show (fun x : Ptr => x.elem size i) = (·.add ((size * i.toNat : Nat) : Int)) from
+    funext fun x => Ptr.elem_eq x size i, Ptr.elem_eq]
+  intro m h hF hd hm hp hst
+  exact ⟨_, m, h, bytesAt_ptrProject_run hp.2.2 hm hi hpos, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
 
 /-- `h` owns a cell of block `b`; cells record their block's byte count `S`. -/
 def OwnsSz (b : BlockId) (S : Nat) (h : Heap) : Prop :=

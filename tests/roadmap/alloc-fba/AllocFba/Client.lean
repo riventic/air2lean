@@ -574,15 +574,14 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
     simp only [Wrap.sliceResult] at hp
     obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
     exact hp) ?_
-  rw [if_pos (by decide), checkIndex_ok (by rw [ht8]; decide), pure_bind]
+  rw [if_pos (by decide), checkIndex_bind_of_lt (by rw [ht8]; decide)]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load0 (w := v) (al := 1) (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
       (by rw [show Enc.size (BitVec 8) = 1 from rfl, hv0]; exact decode_byte v))
     (fun h hp => sep_comm hp) fun x₀ => tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1)
       fun hx₀ => ?_
   subst x₀
-  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_ok (by rw [ht8]; decide),
-    pure_bind]
+  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_bind_of_lt (by rw [ht8]; decide)]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load (w := v) (al := 1) 3 (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
       (Nat.one_dvd _) (by rw [show Enc.size (BitVec 8) = 1 from rfl]; exact hv3 ▸ decode_byte v))
@@ -590,7 +589,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
       tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hx₃ => ?_
   subst x₃
   rw [intCast_byte, Norm.lift_pure, pure_bind, add32 (by have := v.isLt; omega) v.isLt,
-    Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_ok (by rw [ht8]; decide), pure_bind]
+    Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_bind_of_lt (by rw [ht8]; decide)]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load (w := Zig.addWrap v 1) (al := 1) 7 (by decide) (by rw [hb2]; decide)
       (Nat.one_dvd _) (Nat.one_dvd _)
@@ -648,8 +647,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
   subst hq
   refine TotalTriple.bind (TotalTriple.frame (granted_store (J := J) v 11 (by decide)
     (by rw [Array.size_replicate]; decide) (Nat.one_dvd _) (Nat.one_dvd _))) fun _ => ?_
-  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl, checkIndex_ok (by rw [hu]; decide),
-    pure_bind]
+  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl, checkIndex_bind_of_lt (by rw [hu]; decide)]
   have hw : (Enc.encode v).size = 1 := LawfulEnc.size_encode v
   have hv11 : (writeBytes (Array.replicate 12 .undef) 11 (Enc.encode v)).extract 11 12 =
       Enc.encode v := by

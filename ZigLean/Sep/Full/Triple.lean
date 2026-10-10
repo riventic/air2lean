@@ -255,11 +255,11 @@ theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _⟩
 
-theorem get' : Tame (get : MemM Mem) := of_eq fun _ _ _ h => by
+theorem get : Tame (get : MemM Mem) := of_eq fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _⟩
 
 theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Tame (Zig.load T a p) :=
-  bind (loadBytes p _ a .read) fun bs => bind get' fun m => lift (decodeLoad m.blocks bs)
+  bind (loadBytes p _ a .read) fun bs => bind Tame.get fun m => lift (decodeLoad m.blocks bs)
 
 theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
     Tame (Zig.storeBytes p a bs k) := of_eq fun _ _ _ h => by
