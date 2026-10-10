@@ -62,6 +62,38 @@ pub fn bumpOther(same: bool) u32 {
     return bumpThenRead(&x, if (same) &x else &y);
 }
 
+/// A conflicting read, then an unchecked overflow: the violation comes first, `.illegal`.
+fn readThenOverflow(noalias p: *u8, q: *const u8) u8 {
+    @setRuntimeSafety(false);
+    p.* = 200;
+    return q.* + 100;
+}
+
+pub fn overflowAfterOverlap(same: bool) u8 {
+    var x: u8 = 0;
+    var y: u8 = 200;
+    return readThenOverflow(&x, if (same) &x else &y);
+}
+
+/// A callee that reads through its pointer, then reaches a safety check.
+fn readChecked(q: *const u8) u8 {
+    const v = q.*;
+    if (v == 200) unreachable;
+    return v;
+}
+
+/// The conflicting read is in the callee, which then panics: still `.illegal`.
+fn writeThenCall(noalias p: *u8, q: *const u8) u8 {
+    p.* = 200;
+    return readChecked(q);
+}
+
+pub fn panicAfterOverlap(same: bool) u8 {
+    var x: u8 = 0;
+    var y: u8 = 200;
+    return writeThenCall(&x, if (same) &x else &y);
+}
+
 fn sink(p: *u32) void {
     p.* = 0;
 }
@@ -78,5 +110,7 @@ comptime {
     _ = &swapSelf;
     _ = &sumSelf;
     _ = &bumpOther;
+    _ = &overflowAfterOverlap;
+    _ = &panicAfterOverlap;
     _ = &escape;
 }

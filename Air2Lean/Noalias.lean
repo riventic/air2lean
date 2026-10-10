@@ -26,8 +26,10 @@ An access through a pointer tainted by exactly one parameter has that root; one 
 parameter has `none`; anything else (two parameters, a parameter and another pointer, as in
 `if (c) p else q`) is rejected: its root depends on the run. A call has the roots
 `(none, none)`: no argument is tainted, so the callee's accesses are based on none of the
-parameters. A function with `noalias` parameters that runs concurrently (`Zig.ConcM`) is
-rejected by the emitter.
+parameters. Every function that such a function may call (directly or not) marks its own
+accesses with `none` (`calleeMarks`), so a conflict in a callee is found before the callee can
+fail in another way. A function with `noalias` parameters that runs concurrently (`Zig.ConcM`)
+is rejected by the checker.
 -/
 
 namespace Air2Lean.Noalias
@@ -84,14 +86,32 @@ private def State.same (a b : State) : Bool :=
     a.vals.fold (fun ok k v => ok && b.vals[k]? == some v) true &&
     a.slots.fold (fun ok k v => ok && b.slots[k]? == some v) true
 
+/-- The local (`alloc`) of each place of `f` that the translation keeps as a value. -/
+private def locals (f : Func) (insts : Array Inst) : Std.HashMap InstId InstId :=
+  let escaping := escapingAllocs f
+  (placeRoots insts).foldl (init := {}) fun m (p, r) => if escaping.contains r then m else m.insert p r
+
+/-- `i` can touch memory: a call, an op that only a function using memory has, or an access
+outside the locals kept as values. -/
+private def touchesMemory (locals : Std.HashMap InstId InstId) (i : Inst) : Bool :=
+  i.op.effects.cls == .call || i.op.effects.memoryOnly ||
+    i.op.effects.access.any fun (p, _) => match p with
+      | .inst id => !locals.contains id
+      | _ => true
+
+/-- The marks of a function that a function with `noalias` parameters may call: each
+instruction that can touch memory, with the roots `none` (no argument is based on a `noalias`
+parameter). Its marks check its accesses against the caller's scope at once. -/
+def calleeMarks (f : Func) : Marks :=
+  let insts := f.allInsts
+  let locals := locals f insts
+  insts.foldl (init := {}) fun m i => if touchesMemory locals i then m.insert i.id (none, none) else m
+
 /-- The roots and rejections of `f`, a function with `noalias` parameters. -/
 def analyze (f : Func) : Except String Marks := do
   let insts := f.allInsts
   let byId : Std.HashMap InstId Inst := insts.foldl (fun m i => m.insert i.id i) {}
-  let escaping := escapingAllocs f
-  -- The local (`alloc`) of each place that the translation keeps as a value.
-  let locals : Std.HashMap InstId InstId := (placeRoots insts).foldl (init := {}) fun m (p, r) =>
-    if escaping.contains r then m else m.insert p r
+  let locals := locals f insts
   let localOf (v : Val) : Option InstId := match v with
     | .inst id => locals[id]?
     | _ => none
@@ -170,12 +190,8 @@ def analyze (f : Func) : Except String Marks := do
     -- `some r`: the root of the instruction's reads (writes); every one must have the same.
     let mut read : Option (Option Nat) := none
     let mut write : Option (Option Nat) := none
-    -- Only an instruction that can touch memory needs a mark: an access outside the locals kept
-    -- as values, a call, or an op that only a function using memory has.
-    let mut memory := i.op.effects.cls == .call || i.op.effects.memoryOnly
     for (p, kind) in i.op.effects.access do
       if (localOf p).isSome then continue
-      memory := true
       let r ← match (t p).root with
         | .ok r => pure r
         | .error what => fail i what
@@ -185,7 +201,8 @@ def analyze (f : Func) : Except String Marks := do
       unless kind matches .load do
         if write.any (· != r) then fail i "accesses with two different noalias roots"
         write := some r
-    if memory then marks := marks.insert i.id (read.getD none, write.getD none)
+    -- Only an instruction that can touch memory needs a mark.
+    if touchesMemory locals i then marks := marks.insert i.id (read.getD none, write.getD none)
   return marks
 
 end Air2Lean.Noalias

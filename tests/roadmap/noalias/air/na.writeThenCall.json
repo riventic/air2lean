@@ -34,18 +34,21 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "na.sink",
+ "name": "na.writeThenCall",
  "module": "root",
  "src": {
   "file": "na.zig",
   "module": "na",
-  "decl_line": 97
+  "decl_line": 86
  },
  "params": [
+  0,
+  1
+ ],
+ "noalias": [
   0
  ],
- "noalias": [],
- "ret": 1,
+ "ret": 2,
  "body": [
   {
    "id": 0,
@@ -55,33 +58,68 @@
   },
   {
    "id": 1,
-   "tag": "dbg_stmt",
+   "tag": "arg",
    "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
    "line": 2,
    "column": 5
   },
   {
-   "id": 2,
+   "id": 3,
    "tag": "store_safe",
-   "ty": 1,
+   "ty": 3,
    "args": [
     {
      "inst": 0
     },
     {
      "ty": 2,
-     "val": "0"
+     "val": "200"
     }
    ]
   },
   {
-   "id": 3,
-   "tag": "ret_safe",
+   "id": 4,
+   "tag": "dbg_stmt",
    "ty": 3,
+   "line": 3,
+   "column": 23
+  },
+  {
+   "id": 5,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 4,
+    "func": "na.readChecked",
+    "module": "root",
+    "noreturn": false
+   },
    "args": [
     {
-     "ty": 1,
-     "val": "{}"
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 7,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 5
     }
    ]
   }
@@ -92,7 +130,7 @@
    "size": "one",
    "const": false,
    "child": 2,
-   "ptr_align": 4,
+   "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -102,16 +140,34 @@
    "abi_align": 8
   },
   {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 2,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
    "k": "void",
    "abi_size": 0,
    "abi_align": 1
   },
   {
-   "k": "int",
-   "signed": false,
-   "bits": 32,
-   "abi_size": 4,
-   "abi_align": 4
+   "k": "other",
+   "name": "fn (*const u8) u8"
   },
   {
    "k": "noreturn"

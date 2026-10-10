@@ -98,14 +98,16 @@ separate rule (row 26).
 For a function that has some and uses memory, `Air2Lean/Noalias.lean` computes the *root* of
 every access: the parameter the pointer is based on (LLVM's rules: a derived pointer is based
 on its base, `@ptrFromInt` on the pointers of its integer), or none. The generated function
-opens a scope (`Zig.naEnter`), marks each access and call with its roots (`Zig.naMark`) and
-closes the scope before it returns (`Zig.naExit`, `ZigLean/Mem/Noalias.lean`). The scope logs
-every access of the call from the footprint, the callees' accesses included (root none), and
-an access that overlaps a logged one with another root, one of the two a write, throws
-`.illegal`. A conflict is reported at the next mark of the function (its next access or call), or
-at its return. Any failure in between (a callee's, a safety panic, another op's `.illegal` or
-`.overflow`) stays the outcome instead: the result is a failure either way, never a value, but a
-theorem that such a call fails in a particular way does not exclude this undefined behaviour.
+opens a scope (`Zig.naEnter`) and follows each instruction that can touch memory with the mark
+of its roots (`Zig.naMark`, `ZigLean/Mem/Noalias.lean`). The mark checks that instruction's
+accesses at once against the scope's log and logs them: an access that overlaps a logged one
+with another root, one of the two a write, throws `.illegal`. Every function that such a
+function may call marks its own accesses the same way (root none), so a conflict inside a
+callee is found there too. No later failure (an overflow, a safety panic, a callee's error) can
+take the place of the violation. One instruction is the unit: a load whose read conflicts and
+whose bytes are undefined throws `.unspecified` from its own decode before its mark (the
+conflicting write must then have stored `undefined`), and a model function that records an
+access and then fails in the same call keeps its failure.
 
 **Rejected.** The translator rejects (fail closed) a function with `noalias` parameters in which
 a value based on one reaches memory or another function (a store, an atomic or `memset`
@@ -118,8 +120,9 @@ function with `noalias` parameters that uses no memory needs no scope: it writes
 `tests/roadmap/noalias/check.sh`: a `memcpy`-like copy (compiler_rt's `memcpySmall`) within one
 buffer is `.illegal` for overlapping ranges and returns the value for disjoint ones;
 `swap(&x, &x)` is `.illegal`, two `noalias` reads of one pointer are legal, a `noalias` write and
-a read through a plain parameter of the same `u32` are `.illegal`; a function that passes its
-`noalias` pointer on is rejected.
+a read through a plain parameter of the same `u32` are `.illegal`, also when an unchecked
+overflow or a callee's safety panic follows the conflict; a function that passes its `noalias`
+pointer on is rejected.
 
 ## Not illegal behaviour
 

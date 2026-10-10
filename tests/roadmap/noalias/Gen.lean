@@ -16,13 +16,13 @@ inductive bumpThenReadExit where
 def bumpThenRead (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   Zig.naEnter
   let e ← ((do
-    Zig.naMark (some 0) none
     let i2 ← Zig.load (BitVec 32) 4 p0
+    Zig.naMark (some 0) none
     let i3 ← Zig.add false i2 (1 : BitVec 32)
-    Zig.naMark none (some 0)
     Zig.store (α := BitVec 32) 4 p0 i3
-    Zig.naMark none none
+    Zig.naMark none (some 0)
     let i5 ← Zig.load (BitVec 32) 4 p1
+    Zig.naMark none none
     pure (.ret i5)) : Zig.MM bumpThenReadLocals bumpThenReadExit).run' (default : bumpThenReadLocals)
   Zig.naExit
   match e with
@@ -83,12 +83,12 @@ def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocal
     let i10 ← pure (p2)
     let i11 ← pure (Zig.lt false i9 i10)
     if i11 then (do
-      Zig.naMark none none
       let i13 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 i7))
-      Zig.naMark (some 1) none
+      Zig.naMark none none
       let i14 ← Zig.callM (Zig.load (BitVec 8) 1 (p1.elem 1 i7))
-      Zig.naMark none (some 0)
+      Zig.naMark (some 1) none
       Zig.store (α := BitVec 8) 1 i13 i14
+      Zig.naMark none (some 0)
       pure .br8)
     else (do
       pure .br5)) : Zig.MM copyLocals copyExit) with
@@ -110,6 +110,135 @@ def copy (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (Unit) := do
   Zig.naExit
   match e with
   | .ret => pure ()
+  | _ => throw .panic
+
+structure readThenOverflowLocals where
+  deriving Inhabited
+
+inductive readThenOverflowExit where
+  | ret (v : BitVec 8)
+
+def readThenOverflow (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
+  Zig.naEnter
+  let e ← ((do
+    Zig.store (α := BitVec 8) 1 p0 (200 : BitVec 8)
+    Zig.naMark none (some 0)
+    let i3 ← Zig.load (BitVec 8) 1 p1
+    Zig.naMark none none
+    let i4 ← Zig.add false i3 (100 : BitVec 8)
+    pure (.ret i4)) : Zig.MM readThenOverflowLocals readThenOverflowExit).run' (default : readThenOverflowLocals)
+  Zig.naExit
+  match e with
+  | .ret v => pure v
+
+structure overflowAfterOverlapLocals where
+  x : Zig.Ptr
+  y : Zig.Ptr
+  deriving Inhabited
+
+inductive overflowAfterOverlapExit where
+  | ret (v : BitVec 8)
+  | br5 (v : Zig.Ptr)
+
+def overflowAfterOverlap (p0 : Bool) : Zig.MemM (BitVec 8) := do
+  let s1 ← Zig.allocStack 1 1
+  let s3 ← Zig.allocStack 1 1
+  let e ← ((do
+    let i1 ← pure (← get).x
+    Zig.store (α := BitVec 8) 1 i1 (0 : BitVec 8)
+    let i3 ← pure (← get).y
+    Zig.store (α := BitVec 8) 1 i3 (200 : BitVec 8)
+    match ← ((do
+      if p0 then (do
+        let i7 ← pure (i1)
+        pure (.br5 i7))
+      else (do
+        let i9 ← pure (i3)
+        pure (.br5 i9))) : Zig.MM overflowAfterOverlapLocals overflowAfterOverlapExit) with
+    | .br5 v5 => (do
+      let i11 ← Zig.callM (readThenOverflow i1 v5)
+      pure (.ret i11))
+    | e => pure e) : Zig.MM overflowAfterOverlapLocals overflowAfterOverlapExit).run' { (default : overflowAfterOverlapLocals) with x := s1, y := s3 }
+  Zig.free s1
+  Zig.free s3
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure readCheckedLocals where
+  deriving Inhabited
+
+inductive readCheckedExit where
+  | ret (v : BitVec 8)
+  | br2
+
+def readChecked (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
+  let e ← ((do
+    let i1 ← Zig.load (BitVec 8) 1 p0
+    Zig.naMark none none
+    match ← ((do
+      let i3 ← pure (i1 == (200 : BitVec 8))
+      if i3 then (do
+        throw .unreachable)
+      else (do
+        pure .br2)) : Zig.MM readCheckedLocals readCheckedExit) with
+    | .br2 => (do
+      pure (.ret i1))
+    | e => pure e) : Zig.MM readCheckedLocals readCheckedExit).run' (default : readCheckedLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure writeThenCallLocals where
+  deriving Inhabited
+
+inductive writeThenCallExit where
+  | ret (v : BitVec 8)
+
+def writeThenCall (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
+  Zig.naEnter
+  let e ← ((do
+    Zig.store (α := BitVec 8) 1 p0 (200 : BitVec 8)
+    Zig.naMark none (some 0)
+    let i3 ← Zig.callM (readChecked p1)
+    Zig.naMark none none
+    pure (.ret i3)) : Zig.MM writeThenCallLocals writeThenCallExit).run' (default : writeThenCallLocals)
+  Zig.naExit
+  match e with
+  | .ret v => pure v
+
+structure panicAfterOverlapLocals where
+  x : Zig.Ptr
+  y : Zig.Ptr
+  deriving Inhabited
+
+inductive panicAfterOverlapExit where
+  | ret (v : BitVec 8)
+  | br5 (v : Zig.Ptr)
+
+def panicAfterOverlap (p0 : Bool) : Zig.MemM (BitVec 8) := do
+  let s1 ← Zig.allocStack 1 1
+  let s3 ← Zig.allocStack 1 1
+  let e ← ((do
+    let i1 ← pure (← get).x
+    Zig.store (α := BitVec 8) 1 i1 (0 : BitVec 8)
+    let i3 ← pure (← get).y
+    Zig.store (α := BitVec 8) 1 i3 (200 : BitVec 8)
+    match ← ((do
+      if p0 then (do
+        let i7 ← pure (i1)
+        pure (.br5 i7))
+      else (do
+        let i9 ← pure (i3)
+        pure (.br5 i9))) : Zig.MM panicAfterOverlapLocals panicAfterOverlapExit) with
+    | .br5 v5 => (do
+      let i11 ← Zig.callM (writeThenCall i1 v5)
+      pure (.ret i11))
+    | e => pure e) : Zig.MM panicAfterOverlapLocals panicAfterOverlapExit).run' { (default : panicAfterOverlapLocals) with x := s1, y := s3 }
+  Zig.free s1
+  Zig.free s3
+  match e with
+  | .ret v => pure v
   | _ => throw .panic
 
 structure shiftCopyLocals where
@@ -180,10 +309,10 @@ inductive sumExit where
 def sum (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   Zig.naEnter
   let e ← ((do
-    Zig.naMark (some 0) none
     let i2 ← Zig.load (BitVec 32) 4 p0
-    Zig.naMark (some 1) none
+    Zig.naMark (some 0) none
     let i3 ← Zig.load (BitVec 32) 4 p1
+    Zig.naMark (some 1) none
     let i4 ← Zig.add false i2 i3
     pure (.ret i4)) : Zig.MM sumLocals sumExit).run' (default : sumLocals)
   Zig.naExit
@@ -219,14 +348,14 @@ inductive swapExit where
 def swap (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
   Zig.naEnter
   let e ← ((do
-    Zig.naMark (some 0) none
     let i2 ← Zig.load (BitVec 32) 4 p0
-    Zig.naMark (some 1) none
+    Zig.naMark (some 0) none
     let i3 ← Zig.load (BitVec 32) 4 p1
-    Zig.naMark none (some 0)
+    Zig.naMark (some 1) none
     Zig.store (α := BitVec 32) 4 p0 i3
-    Zig.naMark none (some 1)
+    Zig.naMark none (some 0)
     Zig.store (α := BitVec 32) 4 p1 i2
+    Zig.naMark none (some 1)
     pure .ret) : Zig.MM swapLocals swapExit).run' (default : swapLocals)
   Zig.naExit
   match e with

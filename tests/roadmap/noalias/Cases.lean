@@ -36,6 +36,12 @@ def main : IO Unit := do
   -- A `noalias` write and a read through another parameter.
   check "bumpOther same" (run (bumpOther true)) (.error .illegal)
   check "bumpOther distinct" (run (bumpOther false)) (.ok 7)
+  -- The violation is found at once: a later overflow or a callee's safety panic does not
+  -- take its place.
+  check "overflowAfterOverlap same" (run (overflowAfterOverlap true)) (.error .illegal)
+  check "overflowAfterOverlap distinct" (run (overflowAfterOverlap false)) (.error .overflow)
+  check "panicAfterOverlap same" (run (panicAfterOverlap true)) (.error .illegal)
+  check "panicAfterOverlap distinct" (run (panicAfterOverlap false)) (.error .unreachable)
   IO.println "noalias cases passed"
 
 end NoaliasCases

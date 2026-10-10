@@ -382,8 +382,9 @@ in schema 12). For a function with some, `Air2Lean/Noalias.lean` gives every acc
 parameter its pointer is based on (LLVM's "based on": derived pointers, `@ptrFromInt` of a
 derived integer, locals that hold one), and the checker rejects the function when that is
 ambiguous or a based-on value escapes to memory or another function. The generated function
-logs the accesses of each call from the footprint in a scope (`ZigLean/Mem/Noalias.lean`); two
-overlapping accesses with different roots, one a write, are `.illegal`. Pointer tags in
+checks the accesses of each call in a scope (`ZigLean/Mem/Noalias.lean`), right after each
+instruction and in every function it may call; two overlapping accesses with different roots,
+one a write, are `.illegal` before any later failure. Pointer tags in
 `Zig.Ptr` (a precise provenance per pointer) were not chosen: they would change every pointer
 construction, pointer equality and the keys of the futex and group tables. The static roots give
 the same answer for every function the translator accepts, and fail closed on the rest.
