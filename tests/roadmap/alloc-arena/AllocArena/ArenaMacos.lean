@@ -4053,19 +4053,21 @@ def arena_sum (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
-structure arena_twoLocals where
+structure arena_threeLocals where
   fba : Zig.Ptr
   arena : Zig.Ptr
   deriving Inhabited
 
-inductive arena_twoExit where
+inductive arena_threeExit where
   | ret (v : BitVec 64)
   | br9 (v : Zig.Slice)
   | br19 (v : Zig.Slice)
-  | br35
-  | br44
+  | br29 (v : Zig.Slice)
+  | br47
+  | br56
+  | br67
 
-def arena_two (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
+def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   let s1 ← Zig.allocStack 24 8
   let s4 ← Zig.allocStack 32 8
   let e ← ((do
@@ -4087,7 +4089,7 @@ def arena_two (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
         let _i15 ← Zig.callRC (Zig.unwrapErr i10)
         let i16 ← Zig.load (heap_ArenaAllocator) 8 i4
         let _i17 ← Zig.callC (heap_ArenaAllocator_deinit i16)
-        pure (.ret (0 : BitVec 64)))) : Zig.CM Tgt arena_twoLocals arena_twoExit) with
+        pure (.ret (0 : BitVec 64)))) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
     | .br9 v9 => (do
       match ← ((do
         let i20 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 i8 p0)
@@ -4099,41 +4101,69 @@ def arena_two (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
           let _i25 ← Zig.callRC (Zig.unwrapErr i20)
           let i26 ← Zig.load (heap_ArenaAllocator) 8 i4
           let _i27 ← Zig.callC (heap_ArenaAllocator_deinit i26)
-          pure (.ret (1 : BitVec 64)))) : Zig.CM Tgt arena_twoLocals arena_twoExit) with
+          pure (.ret (1 : BitVec 64)))) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
       | .br19 v19 => (do
-        let _i29 ← pure v9.len
-        Zig.callMC (Zig.memset (α := BitVec 8) 1 v9.ptr v9.len (some (1 : BitVec 8)))
-        let _i31 ← pure v19.len
-        Zig.callMC (Zig.memset (α := BitVec 8) 1 v19.ptr v19.len (some (2 : BitVec 8)))
-        let i33 ← pure v9.len
-        let i34 ← pure (Zig.lt false (0 : BitVec 64) i33)
         match ← ((do
-          if i34 then (do
-            pure .br35)
+          let i30 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 i8 p0)
+          let i31 ← pure (Zig.isNonErr i30)
+          if i31 then (do
+            let i33 ← Zig.callRC (Zig.unwrapPayload i30)
+            pure (.br29 i33))
           else (do
-            throw .outOfBounds)) : Zig.CM Tgt arena_twoLocals arena_twoExit) with
-        | .br35 => (do
-          let i40 ← Zig.callMC (Zig.checkIndex v9 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v9.ptr.elem 1 (0 : BitVec 64)))
-          let i41 ← Zig.intCast false false 64 i40
-          let i42 ← pure v19.len
-          let i43 ← pure (Zig.lt false (0 : BitVec 64) i42)
+            let _i35 ← Zig.callRC (Zig.unwrapErr i30)
+            let i36 ← Zig.load (heap_ArenaAllocator) 8 i4
+            let _i37 ← Zig.callC (heap_ArenaAllocator_deinit i36)
+            pure (.ret (2 : BitVec 64)))) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
+        | .br29 v29 => (do
+          let _i39 ← pure v9.len
+          Zig.callMC (Zig.memset (α := BitVec 8) 1 v9.ptr v9.len (some (1 : BitVec 8)))
+          let _i41 ← pure v19.len
+          Zig.callMC (Zig.memset (α := BitVec 8) 1 v19.ptr v19.len (some (2 : BitVec 8)))
+          let _i43 ← pure v29.len
+          Zig.callMC (Zig.memset (α := BitVec 8) 1 v29.ptr v29.len (some (3 : BitVec 8)))
+          let i45 ← pure v9.len
+          let i46 ← pure (Zig.lt false (0 : BitVec 64) i45)
           match ← ((do
-            if i43 then (do
-              pure .br44)
+            if i46 then (do
+              pure .br47)
             else (do
-              throw .outOfBounds)) : Zig.CM Tgt arena_twoLocals arena_twoExit) with
-          | .br44 => (do
-            let i49 ← Zig.callMC (Zig.checkIndex v19 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v19.ptr.elem 1 (0 : BitVec 64)))
-            let i50 ← Zig.intCast false false 64 i49
-            let i51 ← Zig.mul false (10 : BitVec 64) i50
-            let i52 ← Zig.add false i41 i51
-            let i53 ← Zig.load (heap_ArenaAllocator) 8 i4
-            let _i54 ← Zig.callC (heap_ArenaAllocator_deinit i53)
-            pure (.ret i52))
+              throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
+          | .br47 => (do
+            let i52 ← Zig.callMC (Zig.checkIndex v9 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v9.ptr.elem 1 (0 : BitVec 64)))
+            let i53 ← Zig.intCast false false 64 i52
+            let i54 ← pure v19.len
+            let i55 ← pure (Zig.lt false (0 : BitVec 64) i54)
+            match ← ((do
+              if i55 then (do
+                pure .br56)
+              else (do
+                throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
+            | .br56 => (do
+              let i61 ← Zig.callMC (Zig.checkIndex v19 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v19.ptr.elem 1 (0 : BitVec 64)))
+              let i62 ← Zig.intCast false false 64 i61
+              let i63 ← Zig.mul false (10 : BitVec 64) i62
+              let i64 ← Zig.add false i53 i63
+              let i65 ← pure v29.len
+              let i66 ← pure (Zig.lt false (0 : BitVec 64) i65)
+              match ← ((do
+                if i66 then (do
+                  pure .br67)
+                else (do
+                  throw .outOfBounds)) : Zig.CM Tgt arena_threeLocals arena_threeExit) with
+              | .br67 => (do
+                let i72 ← Zig.callMC (Zig.checkIndex v29 (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (v29.ptr.elem 1 (0 : BitVec 64)))
+                let i73 ← Zig.intCast false false 64 i72
+                let i74 ← Zig.mul false (100 : BitVec 64) i73
+                let i75 ← Zig.add false i64 i74
+                let i76 ← Zig.load (heap_ArenaAllocator) 8 i4
+                let _i77 ← Zig.callC (heap_ArenaAllocator_deinit i76)
+                pure (.ret i75))
+              | e => pure e)
+            | e => pure e)
           | e => pure e)
         | e => pure e)
       | e => pure e)
-    | e => pure e) : Zig.CM Tgt arena_twoLocals arena_twoExit).run' { (default : arena_twoLocals) with fba := s1, arena := s4 }
+    | e => pure e) : Zig.CM Tgt arena_threeLocals arena_threeExit).run' { (default : arena_threeLocals) with fba := s1, arena := s4 }
   Zig.free s1
   Zig.free s4
   match e with

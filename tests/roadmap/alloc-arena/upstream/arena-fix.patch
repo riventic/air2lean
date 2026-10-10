@@ -23,7 +23,17 @@
  
      var cur_first_node = arena.loadFirstNode();
  
-@@ -357,6 +366,13 @@
+@@ -347,6 +356,9 @@
+         const first_node: ?*Node, const prev_size: usize = first_node: {
+             const node = cur_first_node orelse break :first_node .{ null, 0 };
+             const buf = node.loadBuf();
++            // A reservation larger than the buffer never fits; do not bump `end_index` by it (it
++            // could wrap around).
++            if (n + alignment.toByteUnits() - 1 > buf.len) break :first_node .{ node, buf.len };
+ 
+             // To avoid using a CAS loop in the hot path we atomically increase
+             // `end_index` by a large enough amount to be able to always provide
+@@ -357,6 +369,13 @@
              const alignable = n + alignment.toByteUnits() - 1;
              const end_index = @atomicRmw(usize, &node.end_index, .Add, alignable, .acquire); // acquire any memory that may have been freed
              const aligned_index = alignedIndex(buf.ptr, end_index, alignment);
@@ -37,7 +47,7 @@
              assert(end_index + alignable >= aligned_index + n);
              if (end_index + alignable != aligned_index + n) {
                  _ = @cmpxchgStrong(
-@@ -369,7 +385,6 @@
+@@ -369,7 +388,6 @@
                  );
              }
  
@@ -45,7 +55,7 @@
              return buf[aligned_index..][0..n].ptr;
          };
  
-@@ -386,7 +401,7 @@
+@@ -386,7 +404,7 @@
              const buf = allocated_slice[@sizeOf(Node)..];
              const end_index = @atomicLoad(usize, &node.end_index, .monotonic);
              const aligned_index = alignedIndex(buf.ptr, end_index, alignment);
@@ -54,7 +64,7 @@
  
              if (new_size <= allocated_slice.len) {
                  // A `resize` or `free` call managed to sneak in and we need to
-@@ -442,7 +457,7 @@
+@@ -442,7 +460,7 @@
                      const buf = node.allocatedSliceUnsafe()[@sizeOf(Node)..];
                      const aligned_index = alignedIndex(buf.ptr, 0, alignment);
  
@@ -63,7 +73,7 @@
                      if (diff < best_fit_diff) {
                          best_fit_prev = it_prev;
                          best_fit = node;
-@@ -456,16 +471,16 @@
+@@ -456,16 +474,16 @@
              const aligned_index, const need_resize = aligned_index: {
                  const buf = node.allocatedSliceUnsafe()[@sizeOf(Node)..];
                  const aligned_index = alignedIndex(buf.ptr, 0, alignment);
@@ -84,7 +94,7 @@
                  } else {
                      arena.pushFreeList(first_free, last_free);
                      break :from_free_list; // we couldn't find a fitting free node
-@@ -512,9 +527,9 @@
+@@ -512,9 +530,9 @@
              }
  
              const size: Node.Size = size: {

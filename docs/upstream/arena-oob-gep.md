@@ -66,6 +66,8 @@ zig build-exe -OReleaseSafe -femit-llvm-ir=oob_gep.ll oob_gep.zig && ./oob_gep
 fix and, since the same proof obligation needs it, makes `alloc` return `null` where a size
 overflows `usize` instead of panicking (O-B in [alloc-arena.md](../alloc-arena.md)):
 
+* the fast path does not reserve at all when `n + alignment - 1` exceeds the buffer (such a
+  reservation never fits, and adding it to `end_index` could wrap around);
 * the fast path checks the fit *before* the overshoot `cmpxchg`; when the request does not fit
   it gives the reservation back (`@cmpxchgStrong(&node.end_index, end_index +% alignable,
   end_index, …)`) and goes on to the resize, free-list and new-node paths, so a failure of the
@@ -88,9 +90,9 @@ cover racing `alloc`s.
 `AllocArena/ArenaFixedLinux.lean`) and equals its native run on every fixture client
 (`Eval.lean`). Its proof against `FAllocSpec` is in progress ([alloc-arena.md](../alloc-arena.md)
 §What is proved): `free`, `resize` and `remap`, which the patch does not change, are proved for
-the stock arena over an invariant with `end_index <= buf.len`. That the patched `alloc` keeps this
-invariant (with the child's `FAllocSpec`), the patched module's own entry proofs, and `reset` are
-not proved yet, so the patch is not yet proved correct.
+the stock and for the patched module over an invariant with `end_index <= buf.len`. That the
+patched `alloc` keeps this invariant (with the child's `FAllocSpec`), and `reset`, are not proved
+yet, so the patch is not yet proved correct.
 
 ## In the model
 

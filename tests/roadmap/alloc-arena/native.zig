@@ -11,6 +11,6 @@ pub fn main() void {
     std.debug.print("resize ok {d} ok {d} ok {d} ok {d}\n", .{ b(arena.arena_resize(10, 20)), b(arena.arena_resize(10, 5)), b(arena.arena_resize(10, 100)), b(arena.arena_resize(10, 4000)) });
     std.debug.print("reset ok {d} ok {d} ok {d} ok {d}\n", .{ arena.arena_reset(10, true), arena.arena_reset(10, false), arena.arena_reset(500, true), arena.arena_reset(1500, true) });
     std.debug.print("page ok {d} ok {d}\n", .{ arena.arena_page(10), arena.arena_page(20000) });
-    std.debug.print("two ok {d} ok {d}\n", .{ arena.arena_two(1), arena.arena_two(100) });
+    std.debug.print("three ok {d} ok {d}\n", .{ arena.arena_three(1), arena.arena_three(100) });
     std.debug.print("oom ok {d}\n", .{b(arena.arena_oom_free(8))});
 }

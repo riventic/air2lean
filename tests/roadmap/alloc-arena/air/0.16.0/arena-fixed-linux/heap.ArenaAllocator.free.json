@@ -39,7 +39,7 @@
  "src": {
   "file": "heap/ArenaAllocator.zig",
   "module": "std",
-  "decl_line": 623
+  "decl_line": 626
  },
  "params": [
   0,

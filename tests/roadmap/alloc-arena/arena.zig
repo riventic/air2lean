@@ -36,17 +36,21 @@ pub export fn arena_reset(n: usize, retain: bool) usize {
     return @intFromBool(ok) + 2 * t.len + 4 * arena.queryCapacity();
 }
 
-/// Two live allocations must not overlap: 1 + 10 * 2 = 21 (`mutant.sh` breaks this).
-pub export fn arena_two(n: usize) u64 {
+/// Three live allocations must not overlap: 1 + 10 * 2 + 100 * 3 = 321. The first comes from a
+/// new node, the others from its fast path, which reserves by bumping `end_index` (`mutant.sh`
+/// removes the bump: the third allocation gets the second's bytes, 331).
+pub export fn arena_three(n: usize) u64 {
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     var arena = std.heap.ArenaAllocator.init(fba.allocator());
     defer arena.deinit();
     const a = arena.allocator();
     const s = a.alloc(u8, n) catch return 0;
     const t = a.alloc(u8, n) catch return 1;
+    const u = a.alloc(u8, n) catch return 2;
     @memset(s, 1);
     @memset(t, 2);
-    return @as(u64, s[0]) + 10 * @as(u64, t[0]);
+    @memset(u, 3);
+    return @as(u64, s[0]) + 10 * @as(u64, t[0]) + 100 * @as(u64, u[0]);
 }
 
 pub export fn arena_page(n: usize) u64 {

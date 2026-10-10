@@ -169,9 +169,13 @@ free list) is not attempted.
   shows O-E from real runs.
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
-  (`expected-fixed.txt`), `check.sh` builds that native run.
+  (`expected-fixed.txt`), `check.sh` builds that native run. The patch does not change `free`,
+  `resize` and `remap` (the generated code is the same), and `check.sh` checks `ArenaSpec.lean`
+  instantiated for the patched module too (`AllocArena.ArenaSpecFixed`, by renaming the module).
 * `mutant.sh`: an `alloc` whose fast path reserves nothing (the `end_index` bump adds `0`) hands
-  out the same bytes twice; `Eval.lean` rejects it (`arena_two`: 22 instead of 21).
+  out the same bytes twice; `Eval.lean` rejects it at `arena_three` (331 instead of 321: the third
+  allocation gets the second one's bytes; two allocations do not show it, the first comes from a
+  new node).
 * Library rules the entries need (each its own commit): the named-grant ledger
   (`ZigLean/Sep/Full/Ghost.lean`: `Upd.issue`/`retire`/`reassign`/`bump`, `gfrag_mem`);
   `FTriple.atomicLoadPtr`, `FTriple.cmpxchgHit`, `FTriple.atomicLoadAs`
@@ -184,11 +188,11 @@ free list) is not attempted.
 
 Not proved yet, in order:
 
-* The patched arena's entries: `alloc` (fixpoint induction over the `alloc` group with the
-  library rules above, the child's `FAllocSpec` through the closed vtable dispatch of the
-  generated code, `Upd.issue` under a fresh id for each grant, `defer pushFreeList`), and `free`,
-  `resize`, `remap` on the patched module (the same code as the stock arena's; the proofs are
-  stated over the stock module's constants, so they have to be instantiated for the patched one).
+* The patched arena's `alloc`: fixpoint induction over the `alloc` group with the library rules
+  above, the child's `FAllocSpec` through the closed vtable dispatch of the generated code (the
+  call site tests the loaded function pointer against every allocator function of the program;
+  with the child's vtable read-only, as `Dispatch.vtR`, it selects the child's entry),
+  `Upd.issue` under a fresh id for each grant, `defer pushFreeList`.
 * `reset` (stock and patched): the precondition gives back every byte of every node (`Covers`);
   `Upd.bump` revokes the outstanding tokens. It walks both lists (`Zig.loop`, `CTriple.loop`) and
   calls the child's `free`/`resize`/`alloc`.

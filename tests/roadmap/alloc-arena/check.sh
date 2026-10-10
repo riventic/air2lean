@@ -6,7 +6,7 @@
 # x86_64-linux); they elaborate; the one-thread results equal the native ones (Eval.lean; the stock
 # arena's O-E run is illegal where native code has undefined behaviour); obstructions
 # O-A and O-E are kernel-checked (ArenaObstruction.lean); `free`, `resize` and `remap` are proved
-# against FAllocSpec (ArenaSpec.lean); an alloc that reserves nothing is rejected (mutant.sh); the
+# against FAllocSpec (ArenaSpec.lean, also instantiated for the patched module); an alloc that reserves nothing is rejected (mutant.sh); the
 # admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
 # ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.AllocSpec.Ops`; runs no compiler. With
@@ -55,15 +55,21 @@ used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a i
 assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 # ArenaSpec.lean: `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant; it
-# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`.
-"${lean_cmd[@]}" "$here/ArenaSpec.lean" > "$work/spec.txt"
-python3 - "$work/spec.txt" <<'EOF'
+# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`. The patch does not change these
+# entries (the generated code is the same), so the same proofs, instantiated for the patched
+# module, must check too.
+sed -e 's/AllocArena\.ArenaLinux/AllocArena.ArenaFixedLinux/g' \
+  -e 's/AllocArena\.ArenaSpec/AllocArena.ArenaSpecFixed/g' "$here/ArenaSpec.lean" > "$work/ArenaSpecFixed.lean"
+for spec in "$here/ArenaSpec.lean" "$work/ArenaSpecFixed.lean"; do
+  "${lean_cmd[@]}" "$spec" > "$work/spec.txt"
+  python3 - "$work/spec.txt" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert 'sorryAx' not in text and text.count('depends on axioms') == 3, text
 assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
+done
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
