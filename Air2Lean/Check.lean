@@ -3631,6 +3631,13 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     issues := issues.push { kind := .futureCancel, message }
   if let .error message := checkIoTaskThreadlocals funcs then
     issues := issues.push { kind := .ioTaskThreadlocal, message }
+  -- A concurrent function gets no `noalias` scope (the emitter's `Noalias.analyze` arm).
+  if funcs.any (!·.noalias.isEmpty) then
+    let conc := concFunctions funcs
+    for f in funcs do
+      if !f.noalias.isEmpty && conc.contains f.name then
+        issues := issues.push { kind := .memory, function := f.name, message :=
+          s!"{f.name}: a concurrent function with noalias parameters is outside the subset" }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts

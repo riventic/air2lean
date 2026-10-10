@@ -56,7 +56,7 @@ def Taint.root (t : Taint) : Except String (Option Nat) :=
   | _, _ => throw "the pointer of an access may be based on more than one of a noalias \
       parameter and another pointer"
 
-/-- The roots of each instruction: of its reads and of its writes. -/
+/-- The roots of the reads and of the writes of each instruction that can touch memory. -/
 abbrev Marks := Std.HashMap InstId (Option Nat × Option Nat)
 
 /-- The analysis state: the taint of each instruction's value, and of each local (by `alloc`). -/
@@ -70,22 +70,30 @@ private def tyOfVal (insts : Std.HashMap InstId Inst) (v : Val) : Option TyId :=
   | v => v.constTy?
 
 /-- A value of type `ty` keeps the `other` flag only if it can hold a pointer, and its
-parameters only if it can hold a pointer or an address. -/
+parameters unless it cannot hold an address at all (`bool`, `void`, `noreturn`): an address
+can also travel in an optional, error union, aggregate, vector or float (`@bitCast`). -/
 private def normalize (types : Array Ty) (ty : TyId) (t : Taint) : Taint :=
   if hasPtr types ty then t
   else match types[ty]? with
-    | some (.int ..) => { t with other := false }
-    | _ => {}
+    | some .bool | some .void | some .noreturn => {}
+    | _ => { t with other := false }
+
+/-- The two states have the same taints. -/
+private def State.same (a b : State) : Bool :=
+  a.vals.size == b.vals.size && a.slots.size == b.slots.size &&
+    a.vals.fold (fun ok k v => ok && b.vals[k]? == some v) true &&
+    a.slots.fold (fun ok k v => ok && b.slots[k]? == some v) true
 
 /-- The roots and rejections of `f`, a function with `noalias` parameters. -/
 def analyze (f : Func) : Except String Marks := do
   let insts := f.allInsts
   let byId : Std.HashMap InstId Inst := insts.foldl (fun m i => m.insert i.id i) {}
   let escaping := escapingAllocs f
-  let roots := placeRoots insts
-  -- The local (`alloc`) that the place `v` is in, if the translation keeps it as a value.
+  -- The local (`alloc`) of each place that the translation keeps as a value.
+  let locals : Std.HashMap InstId InstId := (placeRoots insts).foldl (init := {}) fun m (p, r) =>
+    if escaping.contains r then m else m.insert p r
   let localOf (v : Val) : Option InstId := match v with
-    | .inst id => (roots.find? (·.1 == id)).bind fun (_, r) => if escaping.contains r then none else some r
+    | .inst id => locals[id]?
     | _ => none
   let isInt (v : Val) : Bool := match (tyOfVal byId v).bind (f.types[·]?) with
     | some (.int ..) => true
@@ -135,10 +143,7 @@ def analyze (f : Func) : Except String Marks := do
   let mut stable := false
   for _ in [0:2 * (insts.size + 1) * (f.noalias.size + 1) + 1] do
     let s' := insts.foldl step s
-    if s'.vals.toList.length == s.vals.toList.length &&
-        s'.vals.toList.all (fun (k, v) => s.vals[k]? == some v) &&
-        s'.slots.toList.length == s.slots.toList.length &&
-        s'.slots.toList.all (fun (k, v) => s.slots[k]? == some v) then
+    if s'.same s then
       stable := true
       break
     s := s'
@@ -162,22 +167,25 @@ def analyze (f : Func) : Except String Marks := do
     if let .memcpy _ dst src := i.op then
       if (localOf dst).isNone && ((localOf src).map (s.slots.getD · {}) |>.getD {}).tainted then
         fail i "a copy of a local that holds a pointer based on a noalias parameter"
-    let mut read : Option Nat := none
-    let mut write : Option Nat := none
-    let mut seenRead := false
-    let mut seenWrite := false
+    -- `some r`: the root of the instruction's reads (writes); every one must have the same.
+    let mut read : Option (Option Nat) := none
+    let mut write : Option (Option Nat) := none
+    -- Only an instruction that can touch memory needs a mark: an access outside the locals kept
+    -- as values, a call, or an op that only a function using memory has.
+    let mut memory := i.op.effects.cls == .call || i.op.effects.memoryOnly
     for (p, kind) in i.op.effects.access do
       if (localOf p).isSome then continue
+      memory := true
       let r ← match (t p).root with
         | .ok r => pure r
         | .error what => fail i what
-      let isRead := kind matches .load | .atomic
-      let isWrite := !(kind matches .load)
-      if (isRead && seenRead && read != r) || (isWrite && seenWrite && write != r) then
-        fail i "accesses with two different noalias roots"
-      if isRead then read := r; seenRead := true
-      if isWrite then write := r; seenWrite := true
-    marks := marks.insert i.id (read, write)
+      if kind matches .load | .atomic then
+        if read.any (· != r) then fail i "accesses with two different noalias roots"
+        read := some r
+      unless kind matches .load do
+        if write.any (· != r) then fail i "accesses with two different noalias roots"
+        write := some r
+    if memory then marks := marks.insert i.id (read.getD none, write.getD none)
   return marks
 
 end Air2Lean.Noalias

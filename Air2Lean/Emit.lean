@@ -3052,16 +3052,16 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
   match insts with
   | [] => placeholder "a body without a terminator"
   | inst :: rest =>
-    -- With `noalias` parameters, each access and each call first marks the roots of its
-    -- accesses (`Zig.naMark`), which also logs the accesses since the last mark.
-    let accesses := !inst.op.effects.access.isEmpty || inst.op.effects.cls == .call
+    -- With `noalias` parameters, each instruction that can touch memory first marks the roots
+    -- of its accesses (`Zig.naMark`), which also logs the accesses since the last mark.
     let mark := match fc.noalias with
       | none => ""
       | some (.error e) => placeholder e ++ "\n"
-      | some (.ok marks) => if !accesses then "" else
-        let (r, w) := marks.getD inst.id (none, none)
-        let root (x : Option Nat) := match x with | some p => s!"(some {p})" | none => "none"
-        s!"Zig.naMark {root r} {root w}\n"
+      | some (.ok marks) => match marks[inst.id]? with
+        | none => ""
+        | some (r, w) =>
+          let root (x : Option Nat) := match x with | some p => s!"(some {p})" | none => "none"
+          s!"Zig.naMark {root r} {root w}\n"
     mark ++
     if isTerminating inst.op then
       emitTerminator fc env inst

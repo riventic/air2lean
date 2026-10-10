@@ -67,7 +67,7 @@ fn sink(p: *u32) void {
 }
 
 /// A `noalias` pointer passed on: the callee's accesses would not be checked against it, so
-/// the translator rejects the function (`probe-air`, `expected.json`).
+/// the translator rejects the function (`probe-air`, `check.sh`).
 pub fn escape(noalias p: *u32) void {
     sink(p);
 }

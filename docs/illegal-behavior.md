@@ -102,8 +102,10 @@ opens a scope (`Zig.naEnter`), marks each access and call with its roots (`Zig.n
 closes the scope before it returns (`Zig.naExit`, `ZigLean/Mem/Noalias.lean`). The scope logs
 every access of the call from the footprint, the callees' accesses included (root none), and
 an access that overlaps a logged one with another root, one of the two a write, throws
-`.illegal`. A conflict is reported at the next mark of the function, or at its return: a failure
-of a callee before that stays the outcome, never a value.
+`.illegal`. A conflict is reported at the next mark of the function (its next access or call), or
+at its return. Any failure in between (a callee's, a safety panic, another op's `.illegal` or
+`.overflow`) stays the outcome instead: the result is a failure either way, never a value, but a
+theorem that such a call fails in a particular way does not exclude this undefined behaviour.
 
 **Rejected.** The translator rejects (fail closed) a function with `noalias` parameters in which
 a value based on one reaches memory or another function (a store, an atomic or `memset`

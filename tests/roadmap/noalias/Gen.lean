@@ -77,13 +77,13 @@ def copy.again6 : copyExit → Bool
   | _ => false
 
 def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocals copyExit := do
-  Zig.naMark none none
   let i7 ← pure ((← get).local3)
   match ← ((do
     let i9 ← pure (i7)
     let i10 ← pure (p2)
     let i11 ← pure (Zig.lt false i9 i10)
     if i11 then (do
+      Zig.naMark none none
       let i13 ← Zig.callM (Zig.ptrProject p0 (·.elem 1 i7))
       Zig.naMark (some 1) none
       let i14 ← Zig.callM (Zig.load (BitVec 8) 1 (p1.elem 1 i7))
@@ -94,7 +94,6 @@ def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocal
       pure .br5)) : Zig.MM copyLocals copyExit) with
   | .br8 => (do
     let i18 ← Zig.add false i7 (1 : BitVec 64)
-    Zig.naMark none none
     modify (fun s => { s with local3 := i18 })
     pure .rep6)
   | e => pure e
@@ -102,7 +101,6 @@ def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocal
 def copy (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (Unit) := do
   Zig.naEnter
   let e ← ((do
-    Zig.naMark none none
     modify (fun s => { s with local3 := (0 : BitVec 64) })
     match ← ((do
       Zig.loop (copy.loop6 p0 p1 p2) copy.again6) : Zig.MM copyLocals copyExit) with

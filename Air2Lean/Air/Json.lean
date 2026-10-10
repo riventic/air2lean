@@ -781,7 +781,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     | some n => (← n.getArr?).mapM Json.getNat?
     | none => pure #[]
   for (i, k) in noalias.zipIdx do
-    unless i < params.size && (noalias.extract 0 k).all (· < i) do
+    unless i < params.size && (k == 0 || noalias[k - 1]! < i) do
       throw s!"{name}: noalias: {i} is not a parameter index in increasing order"
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
