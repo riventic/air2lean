@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 import Air2Lean.Memory
+import Air2Lean.Noalias
 import Air2Lean.BitCast
 import Air2Lean.Diagnostic
 import Air2Lean.Air.Compat
@@ -2578,6 +2579,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   for g in f.globals do
     checkGlobal f g
     if let some init := g.init then checkNoThreadlocalConstant f init
+  -- `noalias` parameters: every access has one root, and no tainted value escapes.
+  unless f.noalias.isEmpty do discard <| Noalias.analyze f
   let mut checkedConstTypes : Std.HashSet TyId := {}
   for i in insts do
     if let .runtimeNavPtr g := i.op then checkRuntimeNavPtr f i g
@@ -3777,6 +3780,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
   for (g, id) in f.globals.zipIdx do
     log := log.record (checkDiagnostic file f .globalFailure { idSpace := .canonical, globalId := some id })
       (do checkGlobal f g; if let some init := g.init then checkNoThreadlocalConstant f init)
+  unless f.noalias.isEmpty do
+    log := log.record { (checkDiagnostic file f .memoryFailure { idSpace := .canonical }) with
+      category := .unsupportedSemantics } (discard <| Noalias.analyze f)
   for i in insts do
     if let .runtimeNavPtr g := i.op then
       log := log.record (checkDiagnostic file f .globalFailure

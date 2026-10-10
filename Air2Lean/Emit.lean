@@ -782,6 +782,9 @@ structure FCtx where
   by the call graph, so a function that uses memory charges its frame to the stack budget
   (`Zig.enterFrame`, MM-5). -/
   recursive : Bool := false
+  /-- `some`: the function has `noalias` parameters; the roots of each instruction's reads and
+  writes (`Air2Lean/Noalias.lean`), or why the function is rejected. -/
+  noalias : Option (Except String Noalias.Marks) := none
 
 /-- The `div_trunc`s that lower a float `@divExact` with safety on (`Sema.zirDivExact`):
 `r = div_trunc(a, b)`, `f = floor(r)`, `ok = cmp_eq(r, f)` (for a vector, `reduce(And)` of a
@@ -3049,6 +3052,17 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
   match insts with
   | [] => placeholder "a body without a terminator"
   | inst :: rest =>
+    -- With `noalias` parameters, each access and each call first marks the roots of its
+    -- accesses (`Zig.naMark`), which also logs the accesses since the last mark.
+    let accesses := !inst.op.effects.access.isEmpty || inst.op.effects.cls == .call
+    let mark := match fc.noalias with
+      | none => ""
+      | some (.error e) => placeholder e ++ "\n"
+      | some (.ok marks) => if !accesses then "" else
+        let (r, w) := marks.getD inst.id (none, none)
+        let root (x : Option Nat) := match x with | some p => s!"(some {p})" | none => "none"
+        s!"Zig.naMark {root r} {root w}\n"
+    mark ++
     if isTerminating inst.op then
       emitTerminator fc env inst
     else
@@ -3299,6 +3313,11 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
       let bytes := stack.foldl (fun acc (_, _, size, align) => acc + Zig.alignUp size align) 0
       ([s!"  Zig.enterFrame {bytes}"], [s!"  Zig.leaveFrame {bytes}"])
     else ([], [])
+  -- A function with `noalias` parameters checks the accesses of each call in a scope
+  -- (`ZigLean/Mem/Noalias.lean`).
+  let (enterLines, leaveLines) := if fc.noalias.isSome then
+      (enterLines ++ ["  Zig.naEnter"], ["  Zig.naExit"] ++ leaveLines)
+    else (enterLines, leaveLines)
   let retArm := match fc.tyOfId retTy with
     | .void => "| .ret => pure ()"
     | _ => "| .ret v => pure v"
@@ -3420,6 +3439,12 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
   let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive, deviceContract }.prepareInstUses
+  -- Only a function that uses memory can access memory during the call: a pure one has none,
+  -- and its slice parameters are read by the caller.
+  let fc := if f.noalias.isEmpty || !fc.mem then fc
+    else if fc.conc then { fc with noalias := some (.error
+      s!"{f.name}: a concurrent function with noalias parameters is outside the subset") }
+    else { fc with noalias := some (Noalias.analyze f) }
   let allInsts := fc.allInsts
   let leanName := fc.fnName
   let allocs := collectAllocs f.types allInsts (structNames.map (·.2))

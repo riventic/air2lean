@@ -701,9 +701,18 @@ const W = struct {
         try w.writeInstanceKey("instance_key", func);
         try w.field("params");
         try w.j.beginArray();
-        const param_types = ip.indexToKey(fn_ty.toIntern()).func_type.param_types.get(ip);
+        const fn_info = ip.indexToKey(fn_ty.toIntern()).func_type;
+        const param_types = fn_info.param_types.get(ip);
         w.param_types = param_types;
         for (param_types) |param_ty| try w.writeTypeRef(Type.fromInterned(param_ty));
+        try w.j.endArray();
+        // The `noalias` parameters, as indices into `params` (the LLVM backend's `noalias`
+        // argument attribute). Only the first 32 parameters can be `noalias`.
+        try w.field("noalias");
+        try w.j.beginArray();
+        for (0..@min(param_types.len, 32)) |i| {
+            if (@as(u1, @truncate(fn_info.noalias_bits >> @as(u5, @intCast(i)))) != 0) try w.j.write(i);
+        }
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
