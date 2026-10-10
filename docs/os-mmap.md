@@ -22,10 +22,19 @@ returns is `error.OutOfMemory`; the translator checks that each call site's erro
 `Os.Target` fixes the page size (`std.heap.pageSize()`, comptime in Zig 0.16.0 for both
 modelled targets) and the flag encodings:
 
-| Target | Page size | `PROT.READ\|WRITE` | `MAP.PRIVATE\|ANONYMOUS` | `mremap` |
-|---|---|---|---|---|
-| `Os.Target.linux` (x86_64-linux) | 4096 | `3` | `0x22` | yes |
-| `Os.Target.macos` (aarch64-macos) | 16384 | `3` | `0x1002` | no (`posix.MREMAP == void`) |
+| Target | Page size | `addrLimit` | `PROT.READ\|WRITE` | `MAP.PRIVATE\|ANONYMOUS` | `mremap` |
+|---|---|---|---|---|---|
+| `Os.Target.linux` (x86_64-linux) | 4096 | `2^47` | `3` | `0x22` | yes |
+| `Os.Target.macos` (aarch64-macos) | 16384 | `0x7FFFFE000000` | `3` | `0x1002` | no (`posix.MREMAP == void`) |
+
+`addrLimit` is the end of the user address space: no mapping ends above it (`Os.Target.fits`).
+On x86_64-linux user space ends at `TASK_SIZE_MAX`, a page below `2^47` (4-level paging; with
+5-level paging the kernel maps above 47 bits only for a hint above it, which the premise assumes
+no call passes). On aarch64-macos it ends at `MACH_VM_MAX_ADDRESS` (`0x00007FFFFE000000`,
+128 TiB - 32 MiB, `mach/arm/vm_param.h` of the macOS SDK). Each is at least the kernel's bound, so
+every mapping the kernel makes is one the model can make (the placement oracle can propose the
+kernel's address). Both are far below `2^64 - 2^63`, so adding an alignment `2^k - 1` (`k < 64`)
+to an address inside a mapping does not overflow.
 
 `Os.noFd` is `-1`, `Os.mremapMayMove` is `MREMAP{ .MAYMOVE = true }` (`1`).
 
@@ -48,7 +57,8 @@ placement's address for its pages (`Mem.mapAddr`: `Mem.newAddr` of `alignUp leng
 with page alignment, [address-placement.md](address-placement.md)). A proposed address is taken
 when it is page-aligned, nonzero, its pages end at or below 2^64 and are clear of every live
 block, so a later mapping may reuse an unmapped range, as the kernel does. Otherwise the mapping
-goes after every block (`Mem.top`, unbounded: see O5 in [alloc-page.md](alloc-page.md)).
+goes after every block (`Mem.top`). Either way, a mapping whose pages would end above
+`addrLimit` fails with `error.OutOfMemory` (one attempt, no block): the kernel never maps there.
 The live range of a block for that check is its whole byte range, also below a mapping's first
 live offset: the model never places a block into the unmapped prefix of a mapping that is still
 partly live, which the kernel may do (open, only the `map` path for alignments above a page
@@ -84,11 +94,12 @@ are `.unspecified`, as is any call on macOS.
 - a shrink: in place, the bytes end at `lo + new_len`;
 - a growth is an allocation attempt. The failure decision fails it with `error.OutOfMemory`.
   There is room in place when the grown pages `[A + lo, A + lo + alignUp new_len page)` end
-  at or below 2^64 and are clear of every other live block (`Mem.mappingRoom`). Under
+  at or below `addrLimit` and are clear of every other live block (`Mem.mappingRoom`). Under
   `MAYMOVE` it moves to a new mapping at the placement's address (`Mem.mapAddr`, chosen while
   the old mapping is still mapped) when the oracle `AllocPolicy.os.mremapMoves` says so or
   when there is no room; the live bytes are copied and the old block ends. Otherwise it grows
-  in place if there is room, else returns `error.OutOfMemory` (`ENOMEM`).
+  in place if there is room, else returns `error.OutOfMemory` (`ENOMEM`). A move whose pages
+  would end above `addrLimit` returns `error.OutOfMemory` too.
   The grown bytes up to the old length's page end are undefined (the kernel keeps the stale
   tail of the last page), the rest are zero (`mremapFill`).
 
@@ -100,7 +111,7 @@ address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not
 
 | Theorem | Statement |
 |---|---|
-| `TotalTriple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, or `error.OutOfMemory` and no bytes. For every failure policy. |
+| `TotalTriple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, whose block address `A` has `A + alignUp length page ≤ addrLimit`, or `error.OutOfMemory` and no bytes. For every failure policy. |
 | `TotalTriple.munmapWhole` | `mapping p A lo bs` before, `emp` after. |
 | `TotalTriple.munmapPrefix` | `mapping p A lo bs` before; after, `mapping (p.add k) A (lo + k) (bs.extract k)` with `k = alignUp len page`. |
 | `TotalTriple.munmapTail` | `munmap ⟨p.add k, len⟩` of a page tail: `mapping p A lo (bs.extract 0 k)` after. |
