@@ -1,5 +1,6 @@
 import ZigLean.Sep.AllocSpec.Region
 import ZigLean.Sep.Block
+import ZigLean.Mem.Null
 
 /-!
 # Triples for the other operations of translated allocators and wrappers
@@ -67,6 +68,41 @@ theorem ptrAddr_owned {P : Assn} {q : Ptr} {b : BlockId} {A : Nat} (hqb : q.bloc
   obtain ⟨blk, hblk, hA⟩ := (hown hP hp).block hm
   refine ⟨_, m, hP, ?_, hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
   simp [ptrAddr, hqb, hblk, hA, zig_unfold, get, getThe, MonadStateOf.get, StateT.get]
+
+/-- The model's `@alignCast` check (`Zig.checkAlign`, MM) of a pointer into a block of which the
+precondition owns a cell, at an address that `al` divides: no effect. -/
+theorem checkAlign_owned {P : Assn} {q : Ptr} {b : BlockId} {A al : Nat} (hqb : q.block = some b)
+    (hown : ∀ h, P h → OwnsIn b A h) (hal : ((A : Int) + q.off) % al = 0) :
+    TotalTriple P (checkAlign al q) (fun _ => P) := by
+  unfold checkAlign
+  refine TotalTriple.bind (ptrAddr_owned hqb hown) fun r => TotalTriple.lift fun hr => ?_
+  subst hr
+  rw [if_neg (by simp [hal])]
+  exact TotalTriple.ret (Q := fun _ => P) ()
+
+/-- `h` owns a cell of block `b`, whose bytes number `S`. -/
+def OwnsSz (b : BlockId) (S : Nat) (h : Heap) : Prop :=
+  ∃ o c, h (b, o) = some c ∧ c.size = S
+
+theorem OwnsSz.block {m : Mem} {b : BlockId} {S : Nat} {h hF : Heap} (ho : OwnsSz b S h)
+    (hm : m.heap = h ∪ hF) : ∃ blk, m.blocks[b]? = some blk ∧ blk.bytes.size = S := by
+  obtain ⟨o, c, hc, hS⟩ := ho
+  have : m.heap (b, o) = some c := by rw [hm]; simp [hc]
+  obtain ⟨blk, hblk, -, ho, hcb⟩ := Mem.heap_some this
+  subst hcb
+  exact ⟨blk, hblk, hS⟩
+
+/-- Pointer formation (`ptrProject`, MM-3) of a byte offset that stays in `[0, S]` of a block of
+which the precondition owns a cell: the offset pointer, no effect. -/
+theorem ptrProject_owned {P : Assn} {q : Ptr} {b : BlockId} {S : Nat} {k : Int}
+    (hqb : q.block = some b) (hown : ∀ h, P h → OwnsSz b S h) (h0 : 0 ≤ q.off) (h1 : q.off ≤ S)
+    (h2 : 0 ≤ q.off + k) (h3 : q.off + k ≤ S) :
+    TotalTriple P (ptrProject q (·.add k)) (fun r => ⌜r = q.add k⌝ ∗ P) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨blk, hblk, hS⟩ := (hown hP hp).block hm
+  refine ⟨_, m, hP, ptrProject_add_run (inBounds_of hqb hblk h0 (by omega))
+    (inBounds_of (p := q.add k) hqb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega)),
+    hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
 
 /-- `ptrLe x y` for `x`, `y` in blocks of which the precondition owns cells. -/
 theorem ptrLe_owned {P : Assn} {x y : Ptr} {b₁ b₂ : BlockId} {A₁ A₂ : Nat}

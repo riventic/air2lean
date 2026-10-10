@@ -122,6 +122,14 @@ FIXTURES = [
      "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json",
      ["--namespace", "DeviceAsm", "--prefix", "device_asm.",
       "--device-contract", str(ROOT / "tests/roadmap/volatile-effects/tsc.json")], "exact"),
+    ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
+     ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
+] + [
+    (f"tests/roadmap/alloc-translated/AllocTranslated/{prog.title()}{target.title()}.lean",
+     f"tests/roadmap/alloc-translated/air/0.16.0/{prog}-{target}",
+     ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
+      "--allocator-model", "translated"], "exact")
+    for prog in ("page", "fba") for target in ("linux", "macos")
 ] + [
     (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
      ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")

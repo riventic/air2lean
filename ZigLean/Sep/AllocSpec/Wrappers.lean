@@ -74,7 +74,10 @@ def SrcSep (I : AllocInv) (k : Nat) (src : Ptr) (A' S' : Nat) (K' : BlockKind) (
 namespace Wrap
 
 theorem tame_alignCast (k : Nat) (p : Ptr) : Full.Tame (alignCast k p) := by
-  unfold alignCast; tame
+  unfold alignCast
+  exact Full.Tame.ite (Full.Tame.pure' _) (Full.Tame.bind (Full.Tame.ptrAddr _) fun _ =>
+    Full.Tame.ite (Full.Tame.bind (Full.Tame.checkAlign _ _) fun _ => Full.Tame.pure' _)
+      (Full.Tame.throw _))
 
 theorem tame_copyChecked (size da sa : Nat) (d s : Ptr) (n : BitVec 64) :
     Full.Tame (copyChecked size da sa d s n) := by
@@ -188,7 +191,10 @@ theorem alignCast_spec {p : Ptr} {A S : Nat} {K : BlockKind} {k : Nat} {bs : Arr
     have : ((A + p.off.toNat : Nat) : Int) % ((2 ^ k : Nat) : Int) = 0 := by exact_mod_cast ha
     rw [Int.natCast_add, Int.toNat_of_nonneg h0] at this; exact_mod_cast this
   rw [if_pos (Ops.and_mask_eq_zero hk (by omega) hx)]
-  exact ret_eq
+  refine TotalTriple.bind (checkAlign_owned (A := A) hpb (fun h hr => ?_) (by exact_mod_cast hx))
+    fun _ => ret_eq
+  obtain ⟨b', hpb', ho⟩ := regionIn_ownsIn hr hpos
+  rw [hpb] at hpb'; cases hpb'; exact ho
 
 /-! ## Allocation -/
 

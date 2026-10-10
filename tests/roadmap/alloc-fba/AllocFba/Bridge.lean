@@ -67,7 +67,7 @@ macro "bridge_norm" : tactic => `(tactic| (
     bind_assoc, pure_bind, map_pure, bind_map_left, map_bind, Norm.beq_true_iff,
     fromByteUnits_one, fromByteUnits_four, mul_one, bind_pure_unit, mask_three, two_ne_zero, enc_size_u8, enc_align_u8, eq_self_iff_true,
     Norm.elim_bind, Wrap.umulOverflow_one, Wrap.ofNat_one_mul, mem_Alignment.«1»,
-    mem_Alignment.«4»]
+    mem_Alignment.«4», Nat.reducePow]
   try simp only [Norm.isSome_ite, Norm.elim_bind, bind_assoc, pure_bind, Norm.ite_bind,
     bind_pure_unit]))
 

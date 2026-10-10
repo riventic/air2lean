@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Triple
 import ZigLean.Os.Mmap
+import ZigLean.Mem.Null
 
 /-!
 # More `Tame` programs, and the `tame` tactic
@@ -69,6 +70,19 @@ theorem arbitraryWord : Tame Zig.arbitraryWord := of_eq fun m v m' h => by
   exact ⟨rfl, KMono.of_blocks rfl⟩
 
 theorem returnAddress : Tame Zig.returnAddress := arbitraryWord
+
+theorem checkAlign (al : Nat) (p : Ptr) : Tame (Zig.checkAlign al p) := by
+  unfold Zig.checkAlign
+  exact bind (ptrAddr p) fun _ => ite (throw _) (pure' _)
+
+theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : Tame (Zig.ptrProject p f) := of_eq fun m v m' h => by
+  unfold Zig.ptrProject at h
+  simp only [StateT.run] at h
+  split at h
+  · simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
+      Prod.mk.injEq] at h
+    obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _⟩
+  · simp [MonadExcept.throw, throwThe, MonadExceptOf.throw, ExceptT.run, ExceptT.mk] at h
 
 theorem ptrLe (a b : Ptr) : Tame (Zig.ptrLe a b) := by
   unfold Zig.ptrLe
@@ -248,6 +262,8 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.recordAccess _ _ _ _
   | with_reducible exact Tame.returnAddress
   | with_reducible exact Tame.ptrLe _ _
+  | with_reducible exact Tame.checkAlign _ _
+  | with_reducible exact Tame.ptrProject _ _
   | with_reducible exact Tame.memset _ _ _ _
   | with_reducible exact Tame.memmove _ _ _ _ _ _
   | with_reducible exact Tame.arbitraryWord

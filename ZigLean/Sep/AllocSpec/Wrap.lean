@@ -1,4 +1,5 @@
 import ZigLean.Sep.AllocSpec
+import ZigLean.Mem.Null
 
 /-!
 # The step semantics of the `std.mem.Allocator` wrappers (Zig 0.16.0)
@@ -42,11 +43,14 @@ abbrev liftR {α : Type} (r : Result α) : MemM α := StateT.lift r
 
 variable (vt : RawVTable) (ctx : Ptr)
 
-/-- `@alignCast` of a fresh pointer to alignment `2 ^ k`: no check for `k = 0`. -/
+/-- `@alignCast` of a fresh pointer to alignment `2 ^ k`: no check for `k = 0`. Sema's safety
+check (`.panic`), then the model's own check of the cast (`Zig.checkAlign`, `.illegal`). -/
 def alignCast (k : Nat) (p : Ptr) : MemM (Except ErrName Ptr) :=
   if k = 0 then pure (.ok p) else
   ptrAddr p >>= fun a =>
-    if (BitVec.ofInt 64 a &&& BitVec.ofNat 64 (2 ^ k - 1)) = 0 then pure (.ok p) else throw .panic
+    if (BitVec.ofInt 64 a &&& BitVec.ofNat 64 (2 ^ k - 1)) = 0 then
+      checkAlign (2 ^ k) p >>= fun _ => pure (.ok p)
+    else throw .panic
 
 /-- `allocBytesWithAlignment`. -/
 def allocBytes (k : Nat) (n ra : BitVec 64) : MemM (Except ErrName Ptr) :=
