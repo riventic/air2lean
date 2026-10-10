@@ -630,20 +630,6 @@ theorem toInt_ofBits (w : BitVec 64) (h : w.toNat % 2 = 0) :
     heap_ArenaAllocator_Node_Size)) : Result _) = pure w
   exact congrArg pure (bits_even w h)
 
-theorem le_eq (a b : BitVec 64) : Zig.le false a b = decide (a.toNat ≤ b.toNat) := by
-  simp [Zig.le, BitVec.ule]
-
-/-- A saturating unsigned subtraction is the truncated one. -/
-theorem subSat_toNat (a b : BitVec 64) : (Zig.subSat false a b).toNat = a.toNat - b.toNat := by
-  have ha := a.isLt
-  have hb := b.isLt
-  simp only [Zig.subSat, Zig.clamp, Zig.val, Bool.false_eq_true, ↓reduceIte]
-  rw [BitVec.toNat_ofInt]
-  have h64 : ((2 : Int) ^ 64) = 18446744073709551616 := by rfl
-  have h64' : (2 : Nat) ^ 64 = 18446744073709551616 := by rfl
-  simp only [h64, h64'] at *
-  omega
-
 /-- `Node.loadBuf` of a node whose `size` word holds the even size `sz`: the buffer after the
 header, `sz - 24` bytes. -/
 theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block = some b)
@@ -666,7 +652,7 @@ theorem loadBuf_ct {N : Ptr} {b : BlockId} {sz : Nat} {R : FAssn} (hb : N.block 
   · obtain ⟨blk, hblk, hle⟩ := hmem m r rF hh hp hs
     rw [ptrProject_elem_run hb hblk h0 (by simp; omega)]; rfl
   have h24 : (24 : BitVec 64).toNat ≤ (BitVec.ofNat 64 sz).toNat := by rw [hsz64]; simp; omega
-  simp only [le_eq, h24, decide_true, ↓reduceIte, Zig.sub_unsigned_of_le h24, Nat.le_refl]
+  simp only [Ops.le_eq, h24, decide_true, ↓reduceIte, Zig.sub_unsigned_of_le h24, Nat.le_refl]
   conc_norm
   have hce : checkSliceEnd (BitVec.ofNat 64 sz) 24 (BitVec.ofNat 64 sz - 24) 0 = pure () := by
     unfold checkSliceEnd; rw [if_pos (by rw [BitVec.toNat_sub_of_le h24]; simp; omega)]
@@ -808,7 +794,7 @@ theorem resize_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : Bi
     have h0 := hnf.off0
     have hsm := hnf.small
     have hlenei : bs.size ≤ v.w.ei := by omega
-    simp only [le_eq, hlen]
+    simp only [Ops.le_eq, hlen]
     by_cases hle : n.toNat ≤ bs.size
     · -- shrink: `end_index` moves back by `len - n`; the cut bytes rejoin the tail
       simp only [hle, decide_true, ↓reduceIte]
@@ -921,8 +907,8 @@ theorem resize_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : Bi
       conc_norm
       have hroom : (Zig.subSat false (BitVec.ofNat 64 (v.w.sz - 24)) (BitVec.ofNat 64 v.w.ei)).toNat =
           v.w.sz - 24 - v.w.ei := by
-        rw [subSat_toNat, hei64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-      simp only [Zig.ge, le_eq, hroom, hd]
+        rw [Zig.subSat_unsigned_toNat, hei64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+      simp only [Zig.ge, Ops.le_eq, hroom, hd]
       by_cases hfit : n.toNat - bs.size ≤ v.w.sz - 24 - v.w.ei
       · simp only [hfit, decide_true, ↓reduceIte]
         have hadd : (BitVec.ofNat 64 v.w.ei).toNat + (n - s.len).toNat < 2 ^ 64 := by
@@ -1014,7 +1000,7 @@ theorem resize_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : Bi
           FV.tR, FV.rg, FV.F]
         ac_rfl
   · -- not the first node's last allocation: only a shrink succeeds; the cut bytes become junk
-    simp only [heq, decide_false, Bool.not_false, ↓reduceIte, le_eq, hlen]
+    simp only [heq, decide_false, Bool.not_false, ↓reduceIte, Ops.le_eq, hlen]
     by_cases hle : n.toNat ≤ bs.size
     · simp only [hle, decide_true]
       refine CTriple.upd (Upd.trans (Upd.of_imp fun r h => of_eq (by
