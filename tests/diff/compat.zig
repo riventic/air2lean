@@ -101,6 +101,47 @@ pub fn waitpid(pid: posix.pid_t, flags: u32) WaitPidResult {
     }
 }
 
+/// Monotonic clock in nanoseconds (the per-case deadline of common.zig's forkCall).
+pub fn nowNs() u64 {
+    var ts: posix.timespec = undefined;
+    _ = system.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
+}
+
+pub const PollResult = enum { readable, timeout, failed };
+
+/// Waits up to `timeout_ms` for `fd` to be readable (data, EOF or hang-up).
+pub fn pollReadable(fd: posix.fd_t, timeout_ms: i32) PollResult {
+    var fds = [1]posix.pollfd{.{ .fd = fd, .events = posix.POLL.IN, .revents = 0 }};
+    while (true) {
+        const rc = system.poll(&fds, 1, timeout_ms);
+        switch (posix.errno(rc)) {
+            .SUCCESS => return if (rc == 0) .timeout else .readable,
+            .INTR => continue,
+            else => return .failed,
+        }
+    }
+}
+
+/// Containment for a forked tested call, best effort (a failed call leaves the child no worse
+/// off than before): no core file (a crashing child must not feed `core_pattern` helpers such
+/// as apport or systemd-coredump, a storm of thousands of crashes), a cap on the address space
+/// (an undefined-behavior input must not take the host's memory; `mem_limit` bytes, 0 = none;
+/// Linux only, macOS does not enforce RLIMIT_AS), and death with the parent (no orphan keeps
+/// running, or holds the CI step's output pipe open, after the harness is killed).
+pub fn containChild(mem_limit: u64) void {
+    const no_core: posix.rlimit = .{ .cur = 0, .max = 0 };
+    _ = system.setrlimit(.CORE, &no_core);
+    if (is_linux) {
+        _ = std.os.linux.prctl(@intFromEnum(std.os.linux.PR.SET_DUMPABLE), 0, 0, 0, 0);
+        _ = std.os.linux.prctl(@intFromEnum(std.os.linux.PR.SET_PDEATHSIG), @intFromEnum(posix.SIG.KILL), 0, 0, 0);
+        if (mem_limit != 0) {
+            const cap: posix.rlimit = .{ .cur = mem_limit, .max = mem_limit };
+            _ = system.setrlimit(.AS, &cap);
+        }
+    }
+}
+
 pub fn exit(status: u8) noreturn {
     if (!v16) posix.exit(status);
     if (is_linux) std.os.linux.exit_group(status);

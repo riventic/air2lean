@@ -1,0 +1,86 @@
+name: arm-releasefast-tmp
+# TEMPORARY (codex/arm-releasefast-hang): diagnose the ReleaseFast hang on ubuntu-24.04-arm. Deleted before handback.
+on:
+  push:
+    branches: [codex/arm-releasefast-hang]
+
+permissions:
+  contents: read
+
+jobs:
+  harness:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: orig
+            mode: ReleaseFast
+          - variant: fixed
+            mode: ReleaseFast
+          - variant: fixed
+            mode: ReleaseSmall
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install stock zig 0.16.0 (aarch64-linux)
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz
+          echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
+          echo "$RUNNER_TEMP/host-zig-0.16.0" >> "$GITHUB_PATH"
+
+      - name: System facts
+        run: |
+          set +e
+          uname -a; nproc; free -m
+          echo "core_pattern: $(cat /proc/sys/kernel/core_pattern)"
+          echo "ulimit: $(ulimit -c) core, $(ulimit -u) nproc"
+          cat /proc/sys/vm/overcommit_memory /proc/sys/kernel/pid_max /proc/sys/kernel/threads-max
+          cat /sys/fs/cgroup/pids.max /sys/fs/cgroup/memory.max 2>&1
+          systemctl is-active apport systemd-coredump.socket 2>&1
+          ls -la /var/crash 2>&1 | head -5
+          coredumpctl list 2>&1 | tail -3
+          ls /usr/share/apport 2>&1 | head -3
+          getconf PAGESIZE
+
+      - name: Original harness sources
+        if: matrix.variant == 'orig'
+        run: |
+          git checkout 9cdefbbd -- tests/diff/common.zig tests/diff/compat.zig
+          git status --short
+
+      - name: Harness runs
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          set +e
+          (while true; do
+            echo "--- WATCHDOG $(date +%T) $(uptime | sed 's/.*load/load/') $(free -m | awk '/Mem/{print "used="$3" avail="$7}') procs=$(ps -e | wc -l)"
+            ps -eo pid,ppid,stat,etimes,pcpu,rss,args --sort=-pcpu | head -6 | cut -c1-160
+            sleep 20
+          done) &
+          mkdir -p "$RUNNER_TEMP/b"
+          for ex in $(ls examples); do
+            [ -d "examples/$ex" ] || continue
+            [ "$ex" = asm ] && continue
+            if [ -f "examples/$ex/zig-versions" ] && ! grep -qx 0.16.0 "examples/$ex/zig-versions"; then continue; fi
+            zig build-exe -O"$MODE" -mcpu=baseline -fllvm -femit-bin="$RUNNER_TEMP/b/$ex" \
+              --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig || exit 1
+            echo "=== RUN $ex $(date +%T)"
+            start=$(date +%s)
+            timeout -k 5 420 "$RUNNER_TEMP/b/$ex" > "$RUNNER_TEMP/out.$ex.log" 2>&1
+            st=$?
+            echo "=== DONE $ex status=$st secs=$(( $(date +%s) - start ))"
+            grep -c TRACE "$RUNNER_TEMP/out.$ex.log"; grep -v '^TRACE' "$RUNNER_TEMP/out.$ex.log" | head -c 2000
+            grep TRACE "$RUNNER_TEMP/out.$ex.log" | awk '{print $2, $5}' | sed 's/#[0-9]*//' | sort | uniq -c | sort -rn | head -8
+            grep 'killed after' "$RUNNER_TEMP/out.$ex.log" | head -5
+            pgrep -c -f "$RUNNER_TEMP/b/" || true
+          done
+          kill %1
