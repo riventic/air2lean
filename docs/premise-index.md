@@ -997,7 +997,7 @@ File premises: PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03
 | `subZ_oob` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `copy_len` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `tag_bytes` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `example@L108` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `example@L111` | PRF-01, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `Proofs/Slices/Sep.lean`
 
