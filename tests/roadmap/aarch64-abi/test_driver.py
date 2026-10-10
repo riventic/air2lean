@@ -89,7 +89,7 @@ class Driver(unittest.TestCase):
     def test_unrecorded_version_is_an_exclusion_not_a_match(self):
         text = (EXPECTED / 'aarch64-linux-gnu-ReleaseSafe.txt').read_text()
         code, output = main('compare', '--target', 'aarch64-linux-gnu',
-                            self.observed(text.replace('meta zig 0.16.0', 'meta zig 0.17.0')))
+                            self.observed(text.replace('meta zig 0.16.0', 'meta zig 0.18.0')))
         self.assertEqual((code, json.loads(output)['status']), (abi.EXCLUDED, 'excluded'))
 
     def test_foreign_host_is_an_exclusion_and_runs_no_compiler(self):

@@ -59,7 +59,7 @@ fn isLanePointer(comptime T: type) bool {
 }
 
 fn laneBits(comptime T: type, x: T) u64 {
-    return if (T == bool) @intFromBool(x) else @as(std.meta.Int(.unsigned, @bitSizeOf(T)), @bitCast(x));
+    return if (T == bool) @intFromBool(x) else @as(std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1), @bitCast(x));
 }
 
 /// A load through `&v[j]`, `j` the lane after `lane`; then the bytes after the vector's integer

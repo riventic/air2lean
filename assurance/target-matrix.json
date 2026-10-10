@@ -102,6 +102,18 @@
   ],
   "abi_profiles": [
     {
+      "requirement": "T04", "zig": "0.17.0", "host": "aarch64-linux", "target_triple": "aarch64-linux-gnu",
+      "mode": "ReleaseSafe", "expected": "tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-linux-gnu-ReleaseSafe.txt",
+      "probe": {"job": "aarch64-linux", "step": "aarch64-linux ABI qualification (T04, 0.17.0)"},
+      "proof": {"job": "test", "matrix": {"zig": "0.16.0", "full": true, "mutate": false}, "step": "aarch64 ABI profile proofs (T04, 0.17.0)"}
+    },
+    {
+      "requirement": "T04", "zig": "0.17.0", "host": "aarch64-macos", "target_triple": "aarch64-macos-none",
+      "mode": "ReleaseSafe", "expected": "tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-macos-none-ReleaseSafe.txt",
+      "probe": {"job": "macos", "step": "aarch64-macos ABI qualification (T04, 0.17.0)"},
+      "proof": {"job": "test", "matrix": {"zig": "0.16.0", "full": true, "mutate": false}, "step": "aarch64 ABI profile proofs (T04, 0.17.0)"}
+    },
+    {
       "requirement": "T04", "zig": "0.16.0", "host": "aarch64-linux", "target_triple": "aarch64-linux-gnu",
       "mode": "ReleaseSafe", "expected": "tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt",
       "probe": {"job": "aarch64-linux", "step": "aarch64-linux ABI qualification (T04, 0.16.0)"},

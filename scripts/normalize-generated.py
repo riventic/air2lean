@@ -81,7 +81,7 @@ def profile_for_air(doc):
                            ("s390x", "linux"), ("wasm32", "freestanding"), ("wasm32", "wasi")}):
         raise ValueError("target triple is outside the supported model ABI scope")
     if target == ("aarch64", "linux") and (p["abi"] != "gnu" or
-                                           version not in ("0.14.1", "0.15.2", "0.16.0")):
+                                           version not in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")):
         raise ValueError("target triple is outside the supported model ABI scope")
     if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
         raise ValueError("incompatible target profile")

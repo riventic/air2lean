@@ -277,10 +277,10 @@ records a bounded candidate for T04/T05/T06.
   operation, the accepted orderings, `bool`/enum/pointer/float cells, and threaded litmus tests.
 
 The output must equal that profile's versioned expected file
-(`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
+(`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
 is `excluded`, which exits non-zero and never counts as a match. `tests/roadmap/aarch64-abi/Model.lean`
 kernel-checks each profile's layout table against the model and compares the file's float
-and atomic results with it. Six declared divergences (eight before Zig 0.16.0) are reported and
+and atomic results with it. Six declared divergences (eight before Zig 0.16.0, two result and two or three layout rows in 0.17.0: [aarch64-abi.md](aarch64-abi.md#zig-0170)) are reported and
 not counted as matches: soft-float f80 unnormal and pseudo-denormal handling, padding-sensitive
 `u24`/`u40` cmpxchg, signed `Max` of a negative `i24`/`i40` cell, and (before 0.16.0)
 f64-precision `@sqrt` of f80 and f128.
@@ -288,8 +288,9 @@ f64-precision `@sqrt` of f80 and f128.
 The translator accepts both profiles (`Target.qualified`, `Air2Lean/Air/Dialect.lean`), each with
 its own row: pointer width, byte order, `c_longdouble` (aarch64-linux `f128`, aarch64-macos
 `f64`), float rules (premise MTH-04, [floats.md](floats.md#targets)) and the widest atomic (128
-bits). aarch64-linux fails closed outside the probes: a Zig version without an expected file
-(0.17.0), an ABI other than `gnu` and a CPU with `fullfp16` (whose `f16` `@mulAdd` is fused,
+bits). Both fail closed outside the probes: a Zig version without an expected file is a profile
+error (`Target.aarch64Probed`), and so are, on aarch64-linux, an ABI other than `gnu` and a CPU
+with `fullfp16` (whose `f16` `@mulAdd` is fused,
 unlike `generic`'s) are profile errors. The declared divergences are outside the
 translation: a noncanonical `f80` operand is `.unspecified` (`softF80Chk`), the pre-0.16.0 `@sqrt`
 is the `f64`-precision helper, and `cmpxchg` and `.Max`/`.Min` on a padded width are rejected

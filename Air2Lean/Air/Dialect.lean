@@ -169,12 +169,16 @@ structure Target where
   /-- The widest atomic integer in bits (Zig's `max_atomic_bits` at the baseline CPU: x86_64
   has no `cx16`). The checker rejects a wider one. -/
   atomicBits : Nat
-  /-- The Zig versions whose AIR is accepted for this target. aarch64-linux: those with a native
-  probe record (`tests/roadmap/aarch64-abi/expected/<version>/`, `docs/aarch64-abi.md`). -/
+  /-- The Zig versions whose AIR is accepted for this target. aarch64: those with a native probe
+  record (`tests/roadmap/aarch64-abi/expected/<version>/`, `docs/aarch64-abi.md`), listed so that
+  a new version needs its own record. -/
   versions : List ZigVersion := ZigVersion.all
   /-- The accepted ABI components of the triple; empty: any. -/
   abis : List String := []
   deriving Repr, BEq
+
+/-- The Zig versions with T04 probe records for both aarch64 profiles. -/
+def Target.aarch64Probed : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
 
 /-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian
 (`ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). s390x and wasm32
@@ -184,10 +188,10 @@ def Target.qualified : List Target := [
   { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
     atomicBits := 64 },
   { arch := "aarch64", os := "macos", pointerBits := 64, endian := .little, longDoubleBits := 64,
-    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128 },
+    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128, versions := Target.aarch64Probed },
   { arch := "aarch64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 128,
     floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
-    versions := [.v0_16_0, .v0_15_2, .v0_14_1], abis := ["gnu"] },
+    versions := Target.aarch64Probed, abis := ["gnu"] },
   { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
     atomicBits := 64 },
   { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,

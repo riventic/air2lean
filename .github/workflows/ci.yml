@@ -1167,6 +1167,23 @@ jobs:
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
           done
 
+      # Zig 0.17.0 aligns f80 (and f128 on macOS) and the f80x2 vector to 8: declared layout
+      # divergences (Model.lean); the f80x2 image is not compared.
+      - name: aarch64 ABI profile proofs (T04, 0.17.0)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.17.0/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.17.0/*.txt; do
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt" --skip f80x2
+          done
+
       # Source/native correspondence is bounded to explicit stage2_x86_64 Linux16.
       - name: Global payload source, generated clients and semantic mutations
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
@@ -1909,6 +1926,14 @@ jobs:
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
             --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.14.1-ReleaseSafe.txt"
 
+      - name: aarch64-macos ABI qualification (T04, 0.17.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.17.0/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.17.0-ReleaseSafe.txt"
+
       # Zig 0.17.0 (in qualification) contract: tests/roadmap/abi-probes/0.17.0/ (LLVM 22 features).
       - name: macOS ABI target probe (0.17.0)
         env:
@@ -2118,7 +2143,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
-      - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
+      - name: Install stock zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
         run: |
           set -euo pipefail
           while read -r version sha256; do
@@ -2132,6 +2157,7 @@ jobs:
           0.16.0 ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
           0.15.2 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
           0.14.1 f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+          0.17.0 9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8
           EOF
 
       - name: aarch64-linux ABI qualification (T04, 0.16.0)
@@ -2157,6 +2183,14 @@ jobs:
           set -euo pipefail
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
             --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.14.1-ReleaseSafe.txt"
+
+      - name: aarch64-linux ABI qualification (T04, 0.17.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.17.0/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.17.0-ReleaseSafe.txt"
 
       - name: Upload aarch64-linux observation
         if: failure()

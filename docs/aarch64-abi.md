@@ -2,7 +2,7 @@
 
 Two aarch64 profiles are qualified separately: **aarch64-linux-gnu** (`-mcpu=baseline` =
 `generic`) and **aarch64-macos-none** (`-mcpu=baseline` = `apple_m1`). Both use stock Zig
-(0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
+(0.17.0, 0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
 ReleaseSafe. Each profile has three pieces of evidence:
 
 1. A native probe run. `scripts/aarch64-abi.py` runs only on the profile's own host. It does
@@ -13,12 +13,13 @@ ReleaseSafe. Each profile has three pieces of evidence:
 
 The translator accepts both profiles (`Target.qualified` in `Air2Lean/Air/Dialect.lean`;
 [profiles.md](profiles.md#aarch64-abi-profiles-t04)). aarch64-linux only for the Zig versions
-with an expected file (0.16.0, 0.15.2 and 0.14.1) and the `gnu` ABI: any other is a profile error.
+with an expected file (`Target.aarch64Probed`: 0.17.0, 0.16.0, 0.15.2 and 0.14.1, on both
+profiles) and, on aarch64-linux, the `gnu` ABI: any other is a profile error.
 See [target-matrix.md](target-matrix.md) and §Translation below.
 
 ```sh
 # On the profile's host (aarch64 Linux or Apple silicon macOS), with a stock Zig whose version
-# has an expected file (0.16.0, 0.15.2, 0.14.1):
+# has an expected file (0.17.0, 0.16.0, 0.15.2, 0.14.1):
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-linux-gnu
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-macos-none
 # Any host:
@@ -138,6 +139,25 @@ the atomic. The widening comes from Zig's frontend lowering, so other targets pr
 the same way. This has been observed only on aarch64. Widths without padding (`u8`,
 `u16`, `u32`, `u64`, `u128`) match on both profiles, with either padding.
 
+### Zig 0.17.0
+
+The 0.17.0 files (recorded with the stock 0.17.0: natively on Apple silicon, and in a
+`linux/arm64` container) differ from 0.16.0's in four ways, on both profiles unless noted:
+
+| Row | 0.17.0 | Model |
+| --- | --- | --- |
+| `float f80` (and `float f128` on aarch64-macos-none, where it is not `c_longdouble`) | alignment 8 | 16 |
+| `vector f80x2` | alignment 8; the second lane's image is not `Vec.packedEnc`'s | 32, bit-packed |
+| `atomic u24`/`u40` `padff` | cmpxchg succeeds | succeeds (no longer a divergence) |
+| `rmw i24`/`i40` `Max` | the signed maximum | the signed maximum (no longer a divergence) |
+
+`Model.lean` declares the layout rows as 0.17.0 divergences (`layoutDivergences017`): the file
+must record alignment 8 there and the model's table elsewhere, and the CI step compares the
+vector images without `f80x2` (`vector-layouts/Model.lean --skip f80x2`). The translator rejects
+these types in memory on 0.17.0: `checkMemTy` compares the exporter's alignment with the model's.
+The padded `cmpxchg` and `.Max`/`.Min` stay rejected on every version. Only the two soft-float
+`f80` rows remain result divergences in 0.17.0.
+
 ## Per-profile observations (every recorded Zig version, ReleaseSafe)
 
 The two expected files differ only in these lines:
@@ -187,9 +207,8 @@ Not covered:
   semantics is in `ZigLean/Conc/WeakCas.lean` (`docs/weak-cas.md`);
 - instruction-level ordering strength (LDAR/STLR vs LL/SC) and futex/mutex behaviour;
 - atomics on `f80`, and the `-mcpu` features other than `baseline`;
-- other Zig versions (0.17.0 included). A new version needs its own `expected/<version>/`
-  files; without them `compare` reports `excluded`, and the translator rejects its
-  aarch64-linux AIR;
+- other Zig versions. A new version needs its own `expected/<version>/` files; without them
+  `compare` reports `excluded`, and the translator rejects its aarch64 AIR;
 - programs linked with libc on aarch64-linux: `f128` `long double` libcalls then resolve to
   glibc, not compiler_rt. The translator rejects those `f128` ops unless `--assume-no-libc`
   ([floats.md](floats.md#targets)); a `link_libc` profile fact is a follow-up.

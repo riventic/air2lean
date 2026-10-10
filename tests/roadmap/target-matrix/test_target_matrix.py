@@ -298,7 +298,7 @@ class AbiProfiles(Scratch):
         self.assertEqual(code, 0, output)
         rows = {row['profile']: row for row in json.loads(output)['abi_profiles']}
         self.assertEqual(set(rows), {f'{version}/{triple}/ReleaseSafe'
-                                     for version in ('0.16.0', '0.15.2', '0.14.1')
+                                     for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1')
                                      for triple in ('aarch64-linux-gnu', 'aarch64-macos-none')})
         self.assertEqual(rows['0.16.0/aarch64-linux-gnu/ReleaseSafe']['probe_job'], 'aarch64-linux')
 

@@ -36,9 +36,8 @@ fn rt(comptime T: type, x: T) T {
     return p.*;
 }
 
-fn Bits(comptime T: type) type {
-    return std.meta.Int(.unsigned, @bitSizeOf(T));
-}
+/// `std.meta.Int` is gone from 0.17.0 (`compat.Bits`).
+const Bits = compat.Bits;
 
 fn hex(out: *Out, comptime T: type, x: T) !void {
     const digits = comptime (@bitSizeOf(T) + 3) / 4;
@@ -275,13 +274,13 @@ fn atomicExt(out: *Out) !void {
 
 const litmus_rounds = 100_000;
 const Litmus = struct {
-    var data: [litmus_rounds]u32 = [_]u32{0} ** litmus_rounds;
-    var flag: [litmus_rounds]u32 = [_]u32{0} ** litmus_rounds;
-    var barrier: [litmus_rounds]u32 = [_]u32{0} ** litmus_rounds;
-    var x: [litmus_rounds]u32 = [_]u32{0} ** litmus_rounds;
-    var y: [litmus_rounds]u32 = [_]u32{0} ** litmus_rounds;
-    var r1: [litmus_rounds]u32 = [_]u32{7} ** litmus_rounds;
-    var r2: [litmus_rounds]u32 = [_]u32{7} ** litmus_rounds;
+    var data: [litmus_rounds]u32 = @splat(0);
+    var flag: [litmus_rounds]u32 = @splat(0);
+    var barrier: [litmus_rounds]u32 = @splat(0);
+    var x: [litmus_rounds]u32 = @splat(0);
+    var y: [litmus_rounds]u32 = @splat(0);
+    var r1: [litmus_rounds]u32 = @splat(7);
+    var r2: [litmus_rounds]u32 = @splat(7);
     var violations: u32 = 0;
     var counter8: u8 = 0;
     var counter24: u24 = 0;

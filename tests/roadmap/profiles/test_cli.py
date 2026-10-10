@@ -52,16 +52,17 @@ def main():
     mac["profile"]["cpu"] = "apple_m1"
     mac["profile"]["features"] = ["neon"]
     run(binary, [mac])
-    # aarch64-linux (T04): gnu only, and only the Zig versions with a native probe record.
+    # aarch64-linux (T04): gnu only (every supported Zig version has a native probe record).
     arm = copy.deepcopy(CURRENT)
     arm["profile"].update(target_triple="aarch64-linux.6.8...6.8-gnu.2.39", cpu="generic", features=["neon"])
     run(binary, [arm])
+    arm17 = copy.deepcopy(arm)
+    arm17["zig_version"] = arm17["profile"]["zig_version"] = "0.17.0"
+    arm17["profile"]["build_mode"] = "safe"
+    run(binary, [arm17])
     musl = copy.deepcopy(arm)
     musl["profile"].update(target_triple="aarch64-linux-musl", abi="musl")
     run(binary, [musl], error="qualified for the gnu ABI only")
-    unprobed = copy.deepcopy(arm)
-    unprobed["zig_version"] = unprobed["profile"]["zig_version"] = "0.17.0"
-    run(binary, [unprobed], error="no native probe record for 0.17.0")
     # The float rules are generic's: a CPU with fullfp16 fuses an f16 @mulAdd.
     fp16 = copy.deepcopy(arm)
     fp16["profile"]["features"] = ["fullfp16", "neon"]
