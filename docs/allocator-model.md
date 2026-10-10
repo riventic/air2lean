@@ -48,7 +48,10 @@ original rejection.
   `Zig.returnAddress`: the next value of the explicit oracle `Mem.arbitrary` (query `k` gives
   `arbitrary[k]`, `0` past the end). A theorem over every initial memory therefore covers every
   sequence of return addresses. Allocators only pass the value along. The result must be a
-  `usize`.
+  `usize`. The generated program-start memory takes the oracle as a parameter
+  (`mem0 σ (arbitrary := #[])`), so a statement about `mem0` quantifies over it too, and the
+  `-- air2lean-profile:` header of a translated module records `"allocator_model":"translated"`
+  (its trust base is OSM-01, not the allocator model).
 - **Integer pointer constants** (`@ptrFromInt(c)` at comptime, the exporter's
   `{"unsupported": "int", "off": c}`): a pointer without a block, `⟨none, c⟩`, so every access
   through it is `.illegal`. This is the zero-length allocation sentinel of

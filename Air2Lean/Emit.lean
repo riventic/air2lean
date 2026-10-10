@@ -1539,7 +1539,10 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
   let rv := fc.resolveVal env
   let arg (i : Nat) : String := rv (args[i]?.getD .void)
   let bits (i : Nat) : String := s!"(Zig.Packed.toBits {arg i})"
-  let target := if fc.targetOs == "macos" then "Zig.Os.Target.macos" else "Zig.Os.Target.linux"
+  let target := match fc.targetOs with
+    | "macos" => "Zig.Os.Target.macos"
+    | "linux" => "Zig.Os.Target.linux"
+    | os => placeholder s!"an OS model for target OS '{os}'"
   match fn with
   | .mmap => s!"Zig.Os.mmap {target} {arg 0} {arg 1} {bits 2} {bits 3} {arg 4} {arg 5}"
   | .munmap => s!"Zig.Os.munmap {target} {arg 0}"
@@ -3745,7 +3748,7 @@ placement `σ` gives them (`Zig.Placement`, MM-1). A theorem from `mem0 σ` hold
 so it cannot depend on where a block is. With an `extern` global, `mem0` also takes the explicit
 external initial state `ext : ExternInit`, one field per `extern` global in block order: a proof
 from `mem0 σ ext` states its assumptions about external storage on `ext`. -/
-def emitMem0 (gs : Array ProgGlobal) : String :=
+def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
   let kind (g : ProgGlobal) := if g.isVar then ".global" else ".constGlobal"
   let lines := gs.toList.zipIdx.map fun (g, k) =>
     let source := match g.externField with
@@ -3756,6 +3759,12 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
   let keys := gs.toList.zipIdx.filterMap fun (g, k) => if g.tls then some s!"{k}" else none
   let body := if keys.isEmpty then s!"Zig.Mem.ofGlobals σ {body}" else
     s!"(Zig.Mem.ofGlobals σ {body}).mainTls #[{", ".intercalate keys}]"
+  -- `--allocator-model translated`: `@returnAddress()` and `undefined` pointers read the oracle
+  -- `Mem.arbitrary`; a statement about `mem0` covers every sequence of its words.
+  let (oracleParam, body, oracleDoc) := if translated then
+      (" (arbitrary : Array (BitVec 64) := #[])", s!"\{ {body} with arbitrary }",
+        " The words of `@returnAddress()` and of `undefined` pointers are `arbitrary` (`Mem.arbitrary`).")
+    else ("", body, "")
   let tlsDoc := if keys.isEmpty then "" else
     " The main thread's instance of a `threadlocal` global is its block (its TLS key)."
   let tlsInit := if keys.isEmpty then "" else
@@ -3768,8 +3777,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
     let access := if g.isVar then "`var`, writable" else "`const`, read-only"
     s!"  /-- Block {k}: `{g.label}` ({access}). -/\n  {field} : {ty}"
   if externs.isEmpty then
-    s!"/-- The memory at program start under the placement `σ`: block `k` is global `k`.{tlsDoc} -/\n\
-      def mem0 (σ : Zig.Placement) : Zig.Mem := {body}{tlsInit}"
+    s!"/-- The memory at program start under the placement `σ`: block `k` is global `k`.{tlsDoc}{oracleDoc} -/\n\
+      def mem0 (σ : Zig.Placement){oracleParam} : Zig.Mem := {body}{tlsInit}"
   else
     s!"/-- External initial state: the initial value of each `extern` global, which this program \
       does not define. Fields follow block (initialization) order. Contract: the external \
@@ -3777,8 +3786,8 @@ def emitMem0 (gs : Array ProgGlobal) : String :=
       other assumption about external storage is a hypothesis on this value. -/\n\
       structure {externInitName} where\n{"\n".intercalate externs}\n\n\
       /-- The memory at program start under the placement `σ`: block `k` is global `k`. Blocks \
-      are added in order; an `extern` block holds its `ext` field, never a default.{tlsDoc} -/\n\
-      def mem0 (σ : Zig.Placement) (ext : {externInitName}) : Zig.Mem := {body}{tlsInit}"
+      are added in order; an `extern` block holds its `ext` field, never a default.{tlsDoc}{oracleDoc} -/\n\
+      def mem0 (σ : Zig.Placement) (ext : {externInitName}){oracleParam} : Zig.Mem := {body}{tlsInit}"
 
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
@@ -4287,7 +4296,9 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let errDefs := if hasErrorName then [emitErrorNameOf errNames globals.size] else []
   let globals := errNames.foldl (fun gs n =>
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
-  let globalsStr := if memFuncs.isEmpty then [] else [emitMem0 globals] ++ tagDefs.toList ++ errDefs
+  let translated := funcs.any (·.allocatorModel == .translated)
+  let globalsStr := if memFuncs.isEmpty then [] else
+    [emitMem0 globals translated] ++ tagDefs.toList ++ errDefs
   let idsOf (f : Func) := ((ids.find? (·.1 == f.name)).map (·.2)).getD #[]
   let fnBlocks := (fnRefs funcs).filterMap fun (tn, nm) =>
     (globals.findIdx? (·.label == nm)).map (tn, nm, ·)

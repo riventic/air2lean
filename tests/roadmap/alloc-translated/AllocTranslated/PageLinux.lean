@@ -1,4 +1,4 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
+-- air2lean-profile: {"allocator_model":"translated","correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -136,8 +136,8 @@ instance : Zig.Enc mem_Alignment where
     let b : BitVec 6 ← Zig.Enc.decode bs
     pure ⟨b⟩
 
-/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
-def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. The words of `@returnAddress()` and of `undefined` pointers are `arbitrary` (`Mem.arbitrary`). -/
+def mem0 (σ : Zig.Placement) (arbitrary : Array (BitVec 64) := #[]) : Zig.Mem := { Zig.Mem.ofGlobals σ [
   -- 0: heap.PageAllocator.addr_hint
   (Zig.Enc.encode (none : Option (Zig.Ptr)), 8, .global),
   -- 1: heap.PageAllocator.vtable
@@ -149,7 +149,7 @@ def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 4: heap.PageAllocator.remap
   (#[.undef], 1, .constGlobal),
   -- 5: heap.PageAllocator.free
-  (#[.undef], 1, .constGlobal)]
+  (#[.undef], 1, .constGlobal)] with arbitrary }
 
 /-- The spawn targets of the program. -/
 inductive Tgt where

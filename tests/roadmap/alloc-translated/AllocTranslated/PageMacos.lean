@@ -1,4 +1,4 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"none","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"apple_m1","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["aes","aggressive_fma","alternate_sextload_cvt_f32_pattern","altnzcv","am","arith_bcc_fusion","arith_cbz_fusion","ccdp","ccidx","ccpp","complxnum","contextidr_el2","crc","disable_latency_sched_heuristic","dit","dotprod","el2vmsa","el3","flagm","fp16fml","fp_armv8","fptoint","fullfp16","fuse_address","fuse_aes","fuse_arith_logic","fuse_crypto_eor","fuse_csel","fuse_literals","jsconv","lor","lse","lse2","mpam","neon","nv","pan","pan_rwv","pauth","perfmon","predres","ras","rcpc","rcpc_immo","rdm","sb","sel2","sha2","sha3","specrestrict","ssbs","store_pair_suppress","tlb_rmi","tracev8_4","uaops","v8_1a","v8_2a","v8_3a","v8_4a","v8a","vh","zcm_fpr64","zcm_gpr64","zcz","zcz_gp"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"aarch64-macos.13.0...15.6-none","zig_version":"0.16.0"}}
+-- air2lean-profile: {"allocator_model":"translated","correspondence":"model","float_semantics":"ieee","profile":{"abi":"none","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"apple_m1","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["aes","aggressive_fma","alternate_sextload_cvt_f32_pattern","altnzcv","am","arith_bcc_fusion","arith_cbz_fusion","ccdp","ccidx","ccpp","complxnum","contextidr_el2","crc","disable_latency_sched_heuristic","dit","dotprod","el2vmsa","el3","flagm","fp16fml","fp_armv8","fptoint","fullfp16","fuse_address","fuse_aes","fuse_arith_logic","fuse_crypto_eor","fuse_csel","fuse_literals","jsconv","lor","lse","lse2","mpam","neon","nv","pan","pan_rwv","pauth","perfmon","predres","ras","rcpc","rcpc_immo","rdm","sb","sel2","sha2","sha3","specrestrict","ssbs","store_pair_suppress","tlb_rmi","tracev8_4","uaops","v8_1a","v8_2a","v8_3a","v8_4a","v8a","vh","zcm_fpr64","zcm_gpr64","zcz","zcz_gp"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"aarch64-macos.13.0...15.6-none","zig_version":"0.16.0"}}
 import ZigLean
 
 
@@ -109,8 +109,8 @@ instance : Zig.Packed c_MAP__struct_1 32 where
   ofBits b := { TYPE := Zig.Packed.get b 0, FIXED := Zig.Packed.get b 4, _5 := Zig.Packed.get b 5, NORESERVE := Zig.Packed.get b 6, _7 := Zig.Packed.get b 7, HASSEMAPHORE := Zig.Packed.get b 9, NOCACHE := Zig.Packed.get b 10, JIT := Zig.Packed.get b 11, ANONYMOUS := Zig.Packed.get b 12, «_» := Zig.Packed.get b 13 }
   valid b := Zig.Packed.validAt (c_MAP__struct_1__enum_1) b 0
 
-/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
-def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. The words of `@returnAddress()` and of `undefined` pointers are `arbitrary` (`Mem.arbitrary`). -/
+def mem0 (σ : Zig.Placement) (arbitrary : Array (BitVec 64) := #[]) : Zig.Mem := { Zig.Mem.ofGlobals σ [
   -- 0: heap.PageAllocator.addr_hint
   (Zig.Enc.encode (none : Option (Zig.Ptr)), 8, .global),
   -- 1: heap.PageAllocator.vtable
@@ -122,7 +122,7 @@ def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 4: heap.PageAllocator.remap
   (#[.undef], 1, .constGlobal),
   -- 5: heap.PageAllocator.free
-  (#[.undef], 1, .constGlobal)]
+  (#[.undef], 1, .constGlobal)] with arbitrary }
 
 /-- The spawn targets of the program. -/
 inductive Tgt where

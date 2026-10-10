@@ -383,6 +383,8 @@ private def run (args : List String) : IO UInt32 := do
             -- An admission opt-in is part of the claim scope: the header records it.
             let admission := if a.allowUnqualified then
               [("admission", Lean.Json.str "unqualified-build-mode")] else []
+            let admission := admission ++ if a.allocatorModel == .translated then
+              [("allocator_model", Lean.Json.str "translated")] else []
             let metadata := Lean.Json.mkObj ([("profile", profile.toJson),
               ("float_semantics", .str semantics), ("correspondence", .str "model")] ++ admission)
             let header := "-- air2lean-profile: " ++ metadata.compress ++ "\n" ++

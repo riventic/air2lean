@@ -118,7 +118,7 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : B
       if visited.contains id then continue
       let some ty := types[id]? | return false
       match ty with
-      | .other n => unless n.startsWith "fn (" do return false
+      | .other _ => unless isFnTy ty do return false
       | .errorSet _ | .errorUnion .. => return false
       | _ => pure ()
       let count := match ty with
