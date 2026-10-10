@@ -65,8 +65,8 @@ One translation must use identical profiles, including schema, Zig version,
 CPU/features (including their array order), build mode and error tracing. The one
 exception is a link unit: its files agree exactly among themselves, and with the
 program in everything but `build_mode` (compiler_rt is built `ReleaseFast` under a
-`ReleaseSafe` program). The program profile reported in the generated header is the
-program's own. Legacy
+`ReleaseSafe` program), and each of its build modes is admitted like the program's. The
+program profile reported in the generated header is the program's own. Legacy
 and schema-12 files cannot be mixed. A mismatch or any checked-program failure
 leaves an existing output file untouched. This policy complements structural,
 reference, layout, global and call checks; profile agreement alone establishes

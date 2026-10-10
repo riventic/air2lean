@@ -8,6 +8,7 @@ comptime {
 
 extern fn abi_fill(dest: ?*anyopaque, c: c_int, n: usize) ?*anyopaque;
 extern fn abi_len(s: [*c]const u8) usize;
+extern fn abi_first(p: ?*const anyopaque) u8;
 
 /// Fill the first `n` (at most 16) of 16 ones with the byte `c` through `abi_fill(u8)`; the sum
 /// of all 16 bytes. A `c` outside `u8` has no defined behaviour.
@@ -30,4 +31,12 @@ pub export fn lenOf(which: u32) usize {
         1 => b,
         else => null,
     });
+}
+
+/// Byte `off` of a 16-aligned buffer of 1, 2, ..., 32 through `abi_first(?*align(16))`; `null`
+/// for an `off` past the buffer. An `off` that is not a multiple of 16 has no defined behaviour.
+pub export fn firstAt(off: usize) u8 {
+    var buf: [32]u8 align(16) = undefined;
+    for (&buf, 0..) |*b, i| b.* = @intCast(i + 1);
+    return abi_first(if (off < buf.len) &buf[off] else null);
 }

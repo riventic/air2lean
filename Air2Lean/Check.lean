@@ -3514,9 +3514,13 @@ and converts the result. Only conversions that keep the value are admitted:
 
 * a pointer (`*T`, `[*]T`, `[*c]T`) or optional pointer (`?*T`, `?[*]T`) to another such type:
   the same address; `null` reaching a pointer that cannot be `null` is `unreachable` (the
-  definition may assume it is not null, so the call has no defined behaviour). A pointer whose
-  defined alignment exceeds the declared one, a slice, a volatile or bit-pointer, and a
-  function pointer are rejected;
+  definition may assume it is not null, so the call has no defined behaviour). Where the
+  receiving type has more alignment than the sending one (Zig's libc defines
+  `free(?*align(16) anyopaque)`, the musl header declares `free(?*anyopaque)`), the address is
+  checked: a pointer that is not a multiple of the receiving alignment is `unreachable` (the
+  receiving side may assume the alignment, so the call has no defined behaviour), `null` passes.
+  A proof that the pointer is aligned discharges the check. A pointer type without a known
+  alignment, a slice, a volatile or bit-pointer, and a function pointer are rejected;
 * an integer to an integer: the same value; a value outside the receiving type's range is
   `unreachable` (the C calling convention extends a narrow argument by its declared
   signedness, which the definition may rely on);
@@ -3539,13 +3543,14 @@ private def abiPtrChildOk (types : Array Ty) (c : TyId) : Bool :=
   | some _ => true
   | none => false
 
-/-- A pointer type's size and alignment, if the ABI conversion admits it. -/
+/-- A pointer type's size and alignment, if the ABI conversion admits it (its alignment must
+be known: the exporter omits `ptr_align` for a child without a layout). -/
 private def abiPlainPtr (types : Array Ty) (layouts : Array Layout) (id : TyId) :
     Option (String × Nat) := do
   let .ptr size _ c := (← types[id]?) | none
   let l ← layouts[id]?
   unless size != "slice" && !l.isVolatile && l.hostSize == 0 && abiPtrChildOk types c do none
-  pure (size, l.ptrAlign.getD 1)
+  pure (size, ← l.ptrAlign)
 
 private def abiClass (types : Array Ty) (layouts : Array Layout) (t : TyId) : Option AbiClass :=
   match types[t]? with
@@ -3609,9 +3614,16 @@ private def freshInst (ty : TyId) (op : Op) : ThunkM Inst := do
   modify fun s => { s with next := s.next + 1 }
   return { id, ty, op }
 
+/-- The alignment of a pointer class (`none` for an integer). -/
+private def AbiClass.align? : AbiClass → Option Nat
+  | .ptr _ a | .optPtr a => some a
+  | .int .. => none
+
 /-- Convert `v` from the type `src` (class `a`) to `dst` (class `b`, both thunk-table IDs),
 then continue with `k`. A check wraps the continuation in a `cond_br` whose other branch is
-`unreach`. -/
+`unreach`. A pointer reaching more alignment than it has is checked (`aligned`); for an
+optional source the check is on the payload, and `null` takes the other branch of a `cond_br`,
+which continues with its own copy of `k`. -/
 private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiClass)
     (k : Val → ThunkM (Array Inst)) : ThunkM (Array Inst) := do
   let noret ← thunkTy .noreturn {}
@@ -3623,6 +3635,22 @@ private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiC
       ThunkM (Array Inst) := do
     let i ← freshInst ty (op x)
     return #[i] ++ (← more (.inst i.id))
+  let usize : ThunkM TyId := thunkTy (.int false 64) { size := some 8, align := some 8 }
+  -- `rest` if the address of the (non-optional) pointer `p` is a multiple of the receiving
+  -- alignment; `null` (address 0) is.
+  let need := match a.align?, b.align? with
+    | some x, some y => if y > x then some y else none
+    | _, _ => none
+  let aligned (p : Val) (rest : Array Inst) : ThunkM (Array Inst) := do
+    let some n := need | return rest
+    let u ← usize
+    let addr ← freshInst u (.bitcast p)
+    let low ← freshInst u (.bit .and (.inst addr.id) (.int u (n - 1)))
+    let c ← freshInst boolTy (.cmp .eq (.inst low.id) (.int u 0))
+    guarded #[addr, low, c] (.inst c.id) rest
+  let payloadOf (t : TyId) : ThunkM TyId := do
+    let some (.optional child) := types[t]? | throw "optional pointer without a payload type"
+    return child
   match a, b with
   | .int sa wa, .int sb wb =>
     let (lo, hi) := abiIntRange sb wb
@@ -3634,20 +3662,26 @@ private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiC
       let le ← freshInst boolTy (.cmp .le v (.int src (min hi shi)))
       let both ← freshInst boolTy (.boolAnd (.inst ge.id) (.inst le.id))
       guarded #[ge, le, both] (.inst both.id) (← cast v dst op k)
-  | .optPtr _, .optPtr _ | .optPtr _, .ptr true _ | .ptr true _, .ptr true _
-  | .ptr true _, .optPtr _ | .ptr false _, .ptr _ _ => cast v dst .bitcast k
-  | .ptr false _, .optPtr _ =>
-    let some (.optional child) := types[dst]? | throw "optional pointer without a payload type"
-    cast v child .bitcast fun p => cast p dst .wrapOptional k
-  | .optPtr _, .ptr false _ =>
-    let some (.optional child) := types[src]? | throw "optional pointer without a payload type"
+  | .optPtr _, .optPtr _ | .optPtr _, .ptr true _ =>
+    if need.isNone then cast v dst .bitcast k else
     let c ← freshInst boolTy (.isNonNull v)
-    guarded #[c] (.inst c.id) (← cast v child .optPayload fun p => cast p dst .bitcast k)
+    let p ← freshInst (← payloadOf src) (.optPayload v)
+    let some_ := #[p] ++ (← aligned (.inst p.id) (← cast v dst .bitcast k))
+    let br ← freshInst noret (.condBr (.inst c.id) some_ (← cast v dst .bitcast k))
+    return #[c, br]
+  | .ptr true _, .ptr true _ | .ptr true _, .optPtr _ | .ptr false _, .ptr _ _ =>
+    aligned v (← cast v dst .bitcast k)
+  | .ptr false _, .optPtr _ =>
+    aligned v (← cast v (← payloadOf dst) .bitcast fun p => cast p dst .wrapOptional k)
+  | .optPtr _, .ptr false _ =>
+    let c ← freshInst boolTy (.isNonNull v)
+    guarded #[c] (.inst c.id) (← cast v (← payloadOf src) .optPayload fun p =>
+      do aligned p (← cast p dst .bitcast k))
   | .ptr true _, .ptr false _ =>
-    let usize ← thunkTy (.int false 64) { size := some 8, align := some 8 }
-    let addr ← freshInst usize (.bitcast v)
-    let c ← freshInst boolTy (.cmp .ne (.inst addr.id) (.int usize 0))
-    guarded #[addr, c] (.inst c.id) (← cast v dst .bitcast k)
+    let u ← usize
+    let addr ← freshInst u (.bitcast v)
+    let c ← freshInst boolTy (.cmp .ne (.inst addr.id) (.int u 0))
+    guarded #[addr, c] (.inst c.id) (← aligned v (← cast v dst .bitcast k))
   | _, _ => throw "no C ABI conversion"
 
 /-- Why the type `d` of `f` cannot be converted to the type `u` of `target` (`toDef`: from the
@@ -3658,12 +3692,9 @@ private def abiMismatch (f target : Func) (d u : TyId) (what : String) (toDef : 
   let (srcF, srcT, dstF, dstT) := if toDef then (f, d, target, u) else (target, u, f, d)
   match abiClass srcF.types srcF.layouts srcT, abiClass dstF.types dstF.layouts dstT with
   | some (.int ..), some (.int ..) => return none
-  | some (.ptr _ a), some (.ptr _ b) | some (.ptr _ a), some (.optPtr b)
-  | some (.optPtr a), some (.ptr _ b) | some (.optPtr a), some (.optPtr b) =>
-    if b > a then
-      return some (if toDef then s!"{what} needs alignment {b}, more than the declared {a}"
-        else s!"{what} is declared with alignment {b}, more than the defined {a}")
-    return none
+  -- More alignment on the receiving side is checked at run time (`abiConvert`).
+  | some (.ptr ..), some (.ptr ..) | some (.ptr ..), some (.optPtr _)
+  | some (.optPtr _), some (.ptr ..) | some (.optPtr _), some (.optPtr _) => return none
   | _, _ => return some s!"{what} has another type, with no value-preserving C ABI conversion"
 
 /-- The function that binds `f`'s extern declaration `e` to `target`: `none` if every type

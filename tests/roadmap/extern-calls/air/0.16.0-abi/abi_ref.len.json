@@ -35,10 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "abi_ref.len",
+ "module": "root",
  "src": {
   "file": "abi_ref.zig",
   "module": "abi_calls",
-  "decl_line": 15
+  "decl_line": 16
  },
  "params": [
   0
@@ -375,6 +376,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": true,
    "host_size": 0,
    "abi_size": 8,
@@ -395,6 +397,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -413,6 +416,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -426,6 +430,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -442,6 +447,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

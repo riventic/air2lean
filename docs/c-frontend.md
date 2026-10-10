@@ -448,9 +448,11 @@ How Zig links it decides how it is exported (`src/Compilation.zig` of 0.16.0):
   `ReleaseFast`, `buildOutputFromZig`: `-fno-builtin`, no stack check, no error tracing). The
   harness exports it with those flags (`build-lib -OReleaseFast -fno-builtin -fno-stack-check
   -fno-error-tracing -lc`) as the link unit `compiler_rt` (`ZIG_AIR_JSON_UNIT`): the translator
-  qualifies its identities (`compiler_rt#mem.len__anon_1` is compiler_rt's `ReleaseFast`
-  instance, not the program's) and accepts its build mode ([air-json.md §Link
-  units](air-json.md#link-units)). The program reaches it only by linker symbol.
+  qualifies its modules (`mem.len__anon_1` of module `compiler_rt#std` is compiler_rt's
+  `ReleaseFast` instance, not the program's) and admits its build mode only with
+  `--allow-unqualified-build-mode`, which the harness passes and the header records
+  ([air-json.md §Link units](air-json.md#link-units)). The program reaches it only by linker
+  symbol.
 * **Exports.** lib/c and compiler_rt export with `@export` (weak, hidden). The exporter now
   reports every export of a function, with linkage, visibility and aliases, and rewrites a
   file whose function gained an export after it was dumped (compiler_rt's `clear_cache` does).
@@ -459,8 +461,10 @@ How Zig links it decides how it is exported (`src/Compilation.zig` of 0.16.0):
   come from the musl headers and name other Zig types than the definitions
   (`strcmp([*c]const u8, …)` against `strcmp([*:0]const c_char, …)`, `memset(…, c_int, …)`
   against `memset(…, u8, …)`), so the call goes through a generated C ABI conversion that
-  keeps every value and makes `null` for a non-null parameter, or an integer outside the
-  parameter's type, `unreachable` ([air-json.md §Extern calls](air-json.md#extern-calls)).
+  keeps every value and makes `null` for a non-null parameter, an integer outside the
+  parameter's type, or an address without the receiving side's alignment (`free(?*anyopaque)`
+  against `free(?*align(16) anyopaque)`) `unreachable` ([air-json.md §Extern
+  calls](air-json.md#extern-calls)).
 * **Link census (no silent shadowing).** The AIR set is not the whole link. The harness also
   links the executable with stock Zig and LLD (`-flld --verbose-link`) and lists, with `nm`,
   which other input of the real link (crt1.o, musl's `libc.a`, `libcompiler_rt.a`) defines

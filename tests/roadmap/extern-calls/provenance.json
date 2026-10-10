@@ -1,7 +1,7 @@
 {
   "source_sha256": {
-    "abi_calls.zig": "8a36e38a71799d55ccbfcb00ea2caaa565d11f6a1f03c189095faa4616b10752",
-    "abi_ref.zig": "4e90b052a87bd0c7b9e5b21760a9cb66cfcb603c7efa4ed8afddcaeb243190e7",
+    "abi_calls.zig": "533f3542bfbedafddd526e8c0cd60c155eb5ce00a66dd121e5bcb4fd08cce04e",
+    "abi_ref.zig": "81a8b7bf8aa1896f637ed66c9b4d281d475c56d5416dbfcbf4d4ee8e6c174b5d",
     "extern_calls.zig": "a3b2623b6ec44732a94c42bd9adeec4b5b1c8710d5283232901318620342c5c0",
     "libc_ref.zig": "fab8a2a56bb80a188a19429ae2eb15db8de252e1bc89c7daede0c66a96aef19f",
     "trusted.zig": "80df9e4b16f1729a84b614975125437ee7ac4420f322cced37922b3bc1594c48"
@@ -18,22 +18,24 @@
     }
   },
   "air_sha256": {
-    "0.14.1/extern_calls.fillSum.json": "5a8c1c0941c845277a18cc00defdc4f0929af9cad501629d05b7d537e0e01a75",
-    "0.14.1/extern_calls.greetLen.json": "2986ee061e0208293c82ce52367fad6517bbc01e80f7431a4691f9c075f075c8",
-    "0.14.1/libc_ref.memset.json": "98135b157e28c92b2dad8d84a6b42713ce04e634230511a01cd0c2285f92873a",
-    "0.14.1/libc_ref.strlen.json": "98278c64a73618f0966886c1df923dcc16cf22ebe0f649734c5dcd17c465d89c",
-    "0.15.2/extern_calls.fillSum.json": "8c61d9d05e1338c89fc5c4a87ef42f54aef3254fd65f212aa64b19c01bd1b712",
-    "0.15.2/extern_calls.greetLen.json": "a9bb41e1c5af427204348a00f7db39eb3e03537790af28f9c52fc078e751ef3e",
-    "0.15.2/libc_ref.memset.json": "df39f37c940c39f7b088179d5e7a4362641a16432d0ca45e5a8292203c76575d",
-    "0.15.2/libc_ref.strlen.json": "4d7e40f91ede4fe9a63b81bf9e80ba5d39a4b2f1202ff400e921b5cc6d8fc22a",
-    "0.16.0/extern_calls.fillSum.json": "1059c3742b3c538bb3212bf0a4ade515d41bb0775c24b25f53fbbc067ab08c33",
-    "0.16.0/extern_calls.greetLen.json": "18e01729215e34a529d40b769bf20e25e1fadfd25b367675592c5710538f484f",
-    "0.16.0/libc_ref.memset.json": "a45d3e570c6dd2f340d74e627648267d6a37bd7cce0da13c4c8951dbd8a36b83",
-    "0.16.0/libc_ref.strlen.json": "92b73c800089ea8128142f7555b9846387ba9ebd46ab790214613878cefb2596",
-    "0.16.0-abi/abi_calls.fillSum.json": "fb8eeb90c951875c343d2388108d204352e3d8adc4df908e4b4ca7cb3acdc6f6",
-    "0.16.0-abi/abi_calls.lenOf.json": "9facd2c3e36c8ef634caed0dec60a6853ad50445aabbef59fa17b454d92445a8",
-    "0.16.0-abi/abi_ref.fill.json": "f8a6c886a134ead9690b58c1179feedfa7dcd63aff6763eed72e94437c8dba7a",
-    "0.16.0-abi/abi_ref.len.json": "b64f556b8f0bde24ca1a9256c6efaba51303f6c81f8e8023879fe3e2c244c46f",
-    "0.16.0-trusted/trusted.absSum.json": "21bb16edd2e45317e5c357e765567d6728a111ca0ef6ae1a9084d0c0060db388"
+    "0.14.1/extern_calls.fillSum.json": "bf8c97466015b9ea09de5f1e03c0ecabb26de538ad3239a697f42079b040c7f5",
+    "0.14.1/extern_calls.greetLen.json": "c97334b2bd9a8162f565b07636f52d27fce2746345f8b3072b598e0b519ade70",
+    "0.14.1/libc_ref.memset.json": "8b5f12a7b7f5ef07c64676f49d8be9cc252302511fc03f17faddeeb909ec0b47",
+    "0.14.1/libc_ref.strlen.json": "68fa9e6879e2f36eda059e6048f058aec76f2063894cbef3056ce2753819ccda",
+    "0.15.2/extern_calls.fillSum.json": "5a3f27cddd3a4357ea13c96d2dc7a4c85c62ca0114e38e4a234fd61966c0fea4",
+    "0.15.2/extern_calls.greetLen.json": "935e79a90b4f5cec9c2818515c5275a09d28beac17dbccbf4e25ffabc605e61d",
+    "0.15.2/libc_ref.memset.json": "0dccef427374c98548d1b163884e4521c64e9f46c9d982f315e4289d68b99e28",
+    "0.15.2/libc_ref.strlen.json": "2571dd64d53db8368700cc64891926c614e6e8429f811cddd901cbc5e7f7dcfd",
+    "0.16.0/extern_calls.fillSum.json": "84f84be427b8deb790be116099095537a1e46a95f46f3d63f931604660ba2d35",
+    "0.16.0/extern_calls.greetLen.json": "49545a6763e9f881d503b65a37bb27dcb25d2c85ee8d21702320cc7f3e051718",
+    "0.16.0/libc_ref.memset.json": "f71c112df5c74e63eaa385400c0547b6003d3579fab22a4eea5c149a1e505da2",
+    "0.16.0/libc_ref.strlen.json": "4308dc1fb4ab6ac8d44353e45c0526c95468e43dd9bca85fac9b1e854402c035",
+    "0.16.0-abi/abi_calls.fillSum.json": "448cbfafac9a26759a8d4e9e380163b3651a0bdb2c0164aaa10f82e0fde3fa1f",
+    "0.16.0-abi/abi_calls.firstAt.json": "bc34215fa37ed6f94b4891c3f1e3e7185b89da2233c8704baa35da66dff6c496",
+    "0.16.0-abi/abi_calls.lenOf.json": "98ad291946b6e6c4a16cf7ee0bdbca6f08436d44022a4f27431c6b9b5b671300",
+    "0.16.0-abi/abi_ref.fill.json": "ea0df819bde7cfb6e1be108e3a5024480e967e4c08c8c16fd832dfb00155110f",
+    "0.16.0-abi/abi_ref.first.json": "f9ca76db7f1d83fa7cdfc911c811134d9cd7167856ba42b205f1a32787c4cf00",
+    "0.16.0-abi/abi_ref.len.json": "e0fe5afee9891502e3eddbbd0ea3ca05323972d62a37519b6eef76dc02efa196",
+    "0.16.0-trusted/trusted.absSum.json": "f056f2f1d8cb65695a2eb5ad5a723a7526555b1e4ab69fa8f8af687b4cd7cfd7"
   }
 }

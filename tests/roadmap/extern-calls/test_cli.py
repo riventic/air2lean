@@ -166,11 +166,16 @@ def main(exe):
             name="memset", linkage="weak")}), "is defined by several functions", tmp=tmp)
 
         # C ABI conversions (air/0.16.0-abi, AbiEval.lean). An alignment the declaration does not
-        # give does not bind (a type with no conversion: above).
+        # give binds through a run-time check (AbiEval `firstAt`); an unknown one does not.
         def more_aligned(d):  # `?[*]align(16) u8`: the optional's payload pointer
             d["types"][d["types"][d["params"][0]]["child"]]["ptr_align"] = 16
-        rejects(exe, stage(tmp, ABI, {"abi_ref.fill": more_aligned}),
-                "parameter 0 needs alignment 16, more than the declared 1", tmp=tmp)
+        assert translate(exe, stage(tmp, ABI, {"abi_ref.fill": more_aligned}), tmp=tmp).returncode == 0
+        assert "&&& (15 : BitVec 64)" in (Path(tmp) / "Out.lean").read_text(), "no alignment check"
+
+        def unknown_align(d):
+            d["types"][d["types"][d["params"][0]]["child"]].pop("ptr_align")
+        rejects(exe, stage(tmp, ABI, {"abi_ref.fill": unknown_align}),
+                "parameter 0 has another type, with no value-preserving C ABI conversion", tmp=tmp)
         rejects(exe, stage(tmp, ABI, {"abi_calls.fillSum": lambda d: d.update(name="abi:x")}),
                 "cannot start with 'abi:'", tmp=tmp)
 

@@ -301,9 +301,12 @@ a pointer or optional pointer to another (the same address; `null` reaching a po
 cannot be `null` is `unreachable`, since the definition may assume it is not), and an integer
 to an integer (the same value; a value outside the receiving type is `unreachable`, since the
 C calling convention extends a narrow argument by its declared signedness, which the
-definition may rely on). A pointer that the definition declares more aligned than the
-declaration, a slice, a volatile, bit- or function pointer, and every other type difference
-are rejected (`CALLEE_EXTERN_UNBOUND`, "is declared with another signature"). No input
+definition may rely on). A pointer that reaches a type with more alignment than its own (Zig's
+libc defines `free(?*align(16) anyopaque)`, the musl header declares `free(?*anyopaque)`) is
+checked: an address that is not a multiple of the receiving alignment is `unreachable`, since
+the receiving side may assume it (`null` passes); a proof that the pointer is aligned
+discharges the check. A pointer type without `ptr_align`, a slice, a volatile, bit- or function
+pointer, and every other type difference are rejected (`CALLEE_EXTERN_UNBOUND`, "is declared with another signature"). No input
 function may be named with the `abi:` prefix. `noalias` parameters are not modelled (neither
 for a direct call): a call that passes overlapping regions to `memcpy` gets a definite result
 in the model where the compiled program has undefined behaviour.
@@ -316,12 +319,16 @@ build mode (`ReleaseFast` under a `ReleaseSafe` program). Its AIR is exported by
 compiler run with `ZIG_AIR_JSON_UNIT=<label>` (`[A-Za-z0-9_]+`), which writes
 `profile.link_unit`, and translated together with the program's AIR. Such a library has its
 own instances of everything, std included (its `mem.len` is compiled `ReleaseFast`), so the
-translator first qualifies every identity of a link unit's file, its name, the functions it
-names, its types and its globals, as `<label>#<name>` (`Air2Lean/Air/Anon.lean`
-`qualifyLinkUnits`), and rejects a program identity that starts with `<label>#`. Calls cross
-from the program into a link unit only by linker symbol (§Extern calls). A link unit's
-profiles agree exactly among themselves and with the program's in everything but
-`build_mode` ([profiles.md](profiles.md)).
+translator first qualifies every module of a link unit's file (the function's, those of the
+functions it names, of its types and of its globals) as `<label>#<module>`
+(`Air2Lean/Air/Anon.lean` `qualifyLinkUnits`): the unit's identities get their own keys
+(§Identity, `<label>#std:mem.len`), and no std model or special std type matches them. A link
+unit needs module identity, and a program module that starts with `<label>#` is rejected. Each
+compilation's `__anon_<n>` numbers are renumbered on their own (§Instances). Calls cross from
+the program into a link unit only by linker symbol (§Extern calls). A link unit's profiles
+agree exactly among themselves and with the program's in everything but `build_mode`
+([profiles.md](profiles.md)); each build mode must be admitted like the program's
+(`--allow-unqualified-build-mode` for compiler_rt's `ReleaseFast`).
 
 ## Global
 
