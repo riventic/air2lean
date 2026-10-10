@@ -2173,14 +2173,17 @@ jobs:
           path: ${{ runner.temp }}/aarch64-linux-gnu-*-ReleaseSafe.txt
           if-no-files-found: ignore
 
-  # T06: ReleaseSafe and Debug on LLVM, natively on aarch64-linux hardware, verified against the
+  # T06: the four optimize modes on LLVM, natively on aarch64-linux hardware, verified against the
   # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).
-  # ReleaseFast and ReleaseSmall are not run here: on this hosted runner their harness run (the
-  # 4975 inputs that are illegal behaviour without safety checks) killed the runner twice, so
-  # those two records come from a native linux/arm64 container run only.
+  # ReleaseFast and ReleaseSmall have the triaged float @divExact mismatches, so diff.sh exits 1
+  # there; `record --verify` then requires exactly the committed counts and triage. In those two
+  # modes the ~700 inputs that are illegal behaviour crash the tested call (SIGSEGV/SIGBUS): the
+  # hosted image routes core dumps to systemd-coredump and apport, which run for every crash even
+  # with RLIMIT_CORE 0 and stall the runner. The harness therefore makes its children
+  # undumpable and kills a case after a deadline (tests/diff/common.zig, docs/build-modes.md).
   build-modes-aarch64-linux:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -2232,13 +2235,17 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build-modes"
           failed=0
-          for mode in ReleaseSafe Debug; do
+          for mode in ReleaseSafe Debug ReleaseFast ReleaseSmall; do
             summary="$RUNNER_TEMP/build-modes/$mode.json"
+            status=0
             AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
-              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
+            case "$mode" in ReleaseFast|ReleaseSmall) ;; *) [ "$status" -eq 0 ] || failed=1 ;; esac
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version 0.16.0 --target aarch64-linux \
-              --mode "$mode" --backend llvm --explicit-backend || failed=1
+              --mode "$mode" --backend llvm --explicit-backend \
+              $(case "$mode" in ReleaseFast|ReleaseSmall) echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json ;; esac) \
+              || failed=1
           done
           [ "$failed" -eq 0 ]
 
