@@ -43,7 +43,7 @@ flips its row. `test_exposure.py --require-fixed` is the gate for a hardening br
 
 ## Fix status (soundness batch)
 
-`tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1`
+`tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,F4,H1,H3,H4`
 gates every finding below in CI.
 
 | Finding | Status | Fix |
@@ -58,10 +58,11 @@ gates every finding below in CI.
 | F1 | fixed | coverage accepts exactly the receipt schema proof-receipt seals and verifies (3) |
 | F2 | fixed | one theorem universe: every indexed theorem file is compiled and audited |
 | F3 | fixed | typed host differences; model exclusions pinned per input (SHA-256) |
-| F4 | partly | caller obligations (ALC-09, IOM-01) and asm premises are surfaced per goal |
+| F4 | fixed | deny by default: a hypothesis definition outside standard Lean and the runtime must be a root assumption or match a premise rule, else the goal is `unaccounted_premise` (`unaccounted-model-hypothesis`); each direct goal row lists its premise IDs from the receipt audit's kernel graph (`premises-in-goal-rows`); the premise index is derived from elaborated constants |
 | H1 | fixed | reports and diff summaries are bound to the tree (freshness, `--allow-dirty` recorded) |
 | H2 | fixed | batch-8 heads are registered with fingerprints, bounds and the conditional-return claim |
-| H3, H4 | open | hardening |
+| H3 | fixed | each recorded kill is bound to the hashes of its regression's committed inputs (`target_sha256`; `mutation-kill-unbound`) |
+| H4 | fixed | a contract `partial def` or `implemented_by` constant is a policy violation on a kernel-replayed module (`escape-hatches-allowed`, `AuditClaims/Escapes.lean`) |
 
 ## Ranked findings
 
@@ -250,6 +251,22 @@ closure is one of three things. It is a standard Lean node. It is a runtime node
 binder, which must map to a premise ID or a manifest `assumptions` entry. Otherwise the goal is
 `unaccounted`. Emit `premises` in each coverage goal row and in the receipt.
 
+Fixed (`codex/fix-claims-remaining`). Opaques, axioms and compiler redirections in a closure
+were already refused by the assumption policy, and generated or claim-head definitions in a
+hypothesis by S3; the remaining route was a hypothesis about a contract's own model definition
+(`AuditClaims.oracle_hyp`, a clock oracle `clockModel`), which `claims.py` accepted. Now every
+definition in a hypothesis that is neither standard Lean (`Init`, `Std`, `Lean`, `Lake`) nor
+runtime (`ZigLean`) nor rejected by S3 must be listed in the root's `assumptions` or match a
+premise rule; a definition the audit graph cannot place counts as unaccounted. Otherwise
+`claims.py check` rejects the goal and coverage binds it as `unaccounted_premise`. A conclusion's
+own definitions are its specification, which the derived domain and the goal row already show.
+Each direct coverage goal row carries `premises`: the IDs that the tables of
+`scripts/premises.py` derive from the receipt audit's kernel graph (runtime modules, generated
+modules and their profiles, caller markers, name rules), together with the asm premises. The
+receipt is unchanged: its sealed audit is that graph, so the IDs are recomputed from evidence
+the receipt binds. The premise index itself now comes from elaborated constants
+(`docs/premises.md`). `DEV-01` is in the catalogue.
+
 ### H1 — HARDENING, medium: `claims.py check` and `--no-build` audits trust their inputs' freshness
 
 `claims.py check --assurance REPORT` classifies any JSON with `status` `pass`. Nothing binds the
@@ -280,6 +297,15 @@ x86_64 (F3).
 Fix: merge the ledger. Bind each kill to the hashes of the killed target (module olean or diff
 summary `runner_runtime_sources`), not only to the mutation text.
 
+Fixed. The ledger (`assurance/mutation-kills.json`) is on the base, and each kill now records
+`target_sha256` over the killing regression's committed inputs: a proof module and the
+hand-written `Proofs` modules it imports, or `examples/<ex>/` and `tests/diff/<ex>/`.
+`mutation-map.py check` fails when they changed after the kill was recorded, and `kills verify`
+in the CI mutation shards requires the ledger to match the tree it runs on. Source hashes are
+used instead of olean or runtime hashes: they are committed, host-independent and change
+whenever the regression could. The existing kills were bound to the current tree; the next CI
+mutation run attests them.
+
 ### H4 — HARDENING, low: hypothesis-level opaques and `partial def`
 
 None are exploitable today. `partial def` occurs only in meta code (`Sep/Automation.lean`
@@ -287,6 +313,12 @@ None are exploitable today. `partial def` occurs only in meta code (`Sep/Automat
 `implemented_by` (`Float.libm`) is policy-listed and not kernel-visible. `native_decide` and
 `ofReduceBool` are rejected by policy. Keep the policy, and add the S1 replay so that these
 checks rest on the kernel rather than on the elaborator.
+
+Fixed. The S1 replay is in place, and `AuditClaims/Escapes.lean` pins the policy on a contract:
+a hypothesis about a `partial def` (an opaque constant without equations) and a conclusion over
+an `implemented_by` constant are both kernel-checked and pass `leanchecker`, and the audit
+refuses both (`unexpected-opaque`, `unexpected-compiler-redirection`), so neither theorem can
+back a goal.
 
 ## Related unmerged work
 

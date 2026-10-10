@@ -21,8 +21,8 @@ was deleted when the translator started rejecting comptime fields:
   lake env lean tests/roadmap/architecture-audit/trust-chain/volatile-asm/SameTick.lean
   lake env lean tests/roadmap/architecture-audit/trust-chain/reduce-bool-handedit/PanicDefault.lean
 
-Fixed cases (CI runs them with --require-fixed): addrspace, comptime-field, build-mode,
-legacy-default, unknown-key, missing-flag.
+Every case is fixed; CI runs all of them with --require-fixed (merged-tags: finding 12,
+generated-binding: finding 13).
 """
 import argparse
 import dataclasses

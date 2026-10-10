@@ -83,10 +83,16 @@ map names (`tests/roadmap/*/check.sh`, `mutations.py`) stay in their own gates.
 that killed it: `{"kind": "diff", "target": "<example>"}` (the differential test of that example
 reported a mismatch or an eligible count change) or `{"kind": "proof", "target": "<module>"}`
 (`lake build <module>` failed with a Lean error, possibly in a dependency such as
-`ZigLean.Conc.Lemmas`), plus `block_sha256`, the hash of the mutation's text in `mutate.sh`.
+`ZigLean.Conc.Lemmas`), plus `block_sha256`, the hash of the mutation's text in `mutate.sh`,
+and `target_sha256`, the hash of the killing regression's committed inputs: for a proof, the
+module and the hand-written `Proofs` modules it imports (`mutate.sh` regenerates the `Gen`
+modules with the mutated translator); for a differential test, `examples/<ex>/` and
+`tests/diff/<ex>/` (program, harness, inputs, allow-lists).
 `check` fails when a designated `mutate.sh` mutant has no recorded kill, the killing example or
-module does not exist, the hash differs (the mutation was edited after its kill was recorded),
-or the ledger names a mutation that is gone. A survivor can never be recorded.
+module does not exist, either hash differs (the mutation or its regression changed after the
+kill was recorded: rerun it and `kills record`), or the ledger names a mutation that is gone.
+`kills verify` also requires the ledger's `target_sha256` to match the tree it runs on. A
+survivor can never be recorded.
 
 ```sh
 AIR2LEAN_MUTATION_KILL_LOG=kills.log scripts/mutate.sh        # also per shard (heavy)

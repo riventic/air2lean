@@ -39,8 +39,8 @@ comments. All seven cases were `vulnerable` with the translator built from `af9d
 | 7 | fixed | claim goals bind to the root's generated definition (`claims-unbound`) |
 | 8, 10 | fixed | admission: only ReleaseSafe/stage2_llvm by default, legacy schemas only with `--profile legacy-abi64-le` (`build-mode`, `legacy-default`) |
 | 11 | fixed | schema-12 deny-by-default schema table (`unknown-key`, `missing-flag`) |
-| 12 | partly | the `call*` prefix rule is gone and `memcpy`/`memmove` are distinct ops; safe/unsafe arithmetic tags still share a model (each throws) |
-| 13 | open | Gen.lean header revision/digest binding |
+| 12 | fixed | the `call*` prefix rule is gone, `memcpy`/`memmove` are distinct ops, `add`/`sub`/`mul` and `intcast` keep their safety in the op (`Mode.unchecked`, `Op.intCast checked`), and every remaining merge is a reviewed group checked at build time (`merged-tags`) |
+| 13 | fixed | generated modules are bound by retranslation of their committed AIR with their check's arguments, which receipts and inventory records require (`generated-binding`) |
 | 14 | fixed | panic handlers resolve only in the `std` module (B1) |
 | 15 | fixed | integer, enum and packed constants are range-checked at decode |
 
@@ -336,6 +336,20 @@ different semantics would be accepted silently.
 **Fix.** List the four call tags explicitly. Keep the safe/unsafe distinction in `Op`, for
 example as a `Safety` field, so that a model change cannot silently weaken an unchecked op.
 
+**Fixed.** The four call tags are listed. `add`, `sub` and `mul` decode to `Mode.unchecked`
+(overflow is illegal behaviour) and their `_safe` tags to `Mode.checked` (a safety panic);
+`intcast` and `intcast_safe` to `Op.intCast false`/`true`. Every consumer (emitter, checker,
+AIR semantics, certificates, proof API) matches each mode, so a model change for one tag is
+not inherited by the other. The unchecked tags still lower to the checked primitive, and
+`Air2Lean/Sem.lean` proves why that is sound: `arithFn_unchecked_fails` and
+`intCast_unchecked_fails` state that the shared model throws on every input where the
+unchecked op is illegal behaviour. The tags that still decode to one op are listed with a
+reason in `Normalize.sharedOpTags` (for example `store`/`store_safe`, which differ only for an
+undefined operand, whose bytes the model leaves undefined). `Air2Lean/OpTable.lean` checks at
+build time (`#guard`) that the tags decoding to identical ops are exactly these groups, so a new
+merge fails the build until it is reviewed; `--print-op-table` reports each tag's group
+(`shared_op`).
+
 ## 13. Binding of the generated file (HARDENING)
 
 `Main.lean` writes `-- air2lean-profile: {profile, float_semantics, correspondence}`, plus the
@@ -347,6 +361,20 @@ only record identities, as documented.
 **Fix.** The header records `{translator_revision, air_sha256 per file, flags}`.
 `normalize-generated.py compare`, the manifest and the claims check then refuse a `Gen.lean`
 whose header does not match a fresh translation of the recorded AIR by the recorded translator.
+
+**Fixed, by retranslation instead of a header record.** A header naming AIR bytes or the
+translator revision would make generated Lean depend on storage file names and on AIR edits
+that change no semantics, which the stable-generation guarantees forbid
+(`docs/stable-generation.md`, `tests/roadmap/export-names`), and would change every committed
+translation and the evidence pinned to it on each translator commit. A header claim would
+also be checked only against itself. The binding is instead a fresh translation:
+`scripts/gen-integrity.py attest` requires each tracked generated module to equal the output
+of the current translator on its committed AIR with its own check's arguments (namespace,
+prefix, `--spawn-policy`, `--proof-api`, profile). Proof receipts (`proof-receipts/check.sh`)
+and theorem-inventory records refuse to run unless it passes, `gen-integrity.py check` gates
+CI, and `project.py check` retranslates a project's roots. The case `generated-binding` shows
+that the committed module attests while a translation of the same AIR with another option
+(`--proof-api`) does not, and that both consumers attest.
 
 ## 14–15. Panic-handler names; constant shapes (HARDENING)
 

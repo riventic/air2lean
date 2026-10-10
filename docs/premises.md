@@ -13,71 +13,85 @@ stated hypotheses. Nothing else in the runtime is assumed. A premise ID marked
 proof makes (for example partial correctness).
 
 ```sh
-python3 scripts/premises.py check            # fails on a stale index, undefined/orphan ID or unmapped module
-python3 scripts/premises.py write            # regenerate docs/premise-index.md
-python3 scripts/premises.py explain parallelCounter_spec   # which tokens/modules caused each premise
+# The kernel graphs: the shipped audit and the theorem-universe audit (heavy; CI runs both).
+scripts/assumptions.sh --output .lake/assurance/assumptions.json
+python3 scripts/theorem_universe.py audit --output-dir .lake/assurance/universe
+python3 scripts/premises.py write --assurance .lake/assurance/assumptions.json --universe .lake/assurance/universe
+python3 scripts/premises.py check --assurance .lake/assurance/assumptions.json --universe .lake/assurance/universe
+python3 scripts/premises.py check            # without the audits: catalogue, mappings, theorem set, source rows
+python3 scripts/premises.py explain parallelCounter_spec --assurance ... --universe ...   # why each premise
 python3 scripts/premises.py compiled --assurance .lake/assurance/assumptions.json --output premises.json --strict
 ```
 
 ## How premises are derived
 
-The rules are in [assurance/premises.json](../assurance/premises.json). For each theorem,
-the tool:
+The rules are in [assurance/premises.json](../assurance/premises.json). A theorem's
+dependencies are those of its elaborated constant: the kernel dependency graph that
+`scripts/assumptions.py` extracts for the shipped modules and `scripts/theorem_universe.py
+audit` for every other indexed file. For each theorem, the tool:
 
-1. Strips comments and tokenizes the theorem's statement and proof. It resolves each
-   identifier through the file's namespaces and `open` declarations, against declarations
-   visible through its transitive imports. Three implicit forms are approximated:
-   `x.f` on a binder or `variable` `x : T ...` resolves to `T.f` (generalized field
-   notation); `.c` resolves to the inductive that declares constructor `c` when exactly one
-   visible inductive does; and a visible instance is assumed used when every name in its
-   instance type (for example `Enc ThreadId`) occurs in the closure.
-2. Follows resolved project declarations (proof helpers, other theorems, generated `Gen.lean`
-   functions and their callees) transitively. It stops at runtime (`ZigLean.*`) declarations
-   and records their modules.
-3. Maps every recorded runtime module through the reviewed `runtime_modules` table. It
-   applies the token rules to every identifier and resolved name in the closure. `statement`
-   rules see only the theorem's own hypotheses and conclusion.
-4. Adds the profile of every generated module reached. Its first-line
+1. Follows the constant's kernel dependencies (statement and proof) through project
+   declarations: proof helpers, other theorems, generated `Gen.lean` functions and their
+   callees. At a runtime (`ZigLean.*`) declaration it records the module. It unfolds a runtime
+   definition to the runtime definitions it is built from (a store's race check), but not a
+   runtime lemma's proof or a runtime type's fields.
+2. Maps every recorded runtime module through the reviewed `runtime_modules` table. It
+   applies the name rules to every declaration in that closure. `statement` rules see only
+   the constants of the theorem's kernel type.
+3. Adds the profile of every generated module reached. Its first-line
    `-- air2lean-profile:` header selects PRF-02 (`abi64-le-v1`) or PRF-05 (`abi64-be-v1`); no
-   header or `legacy-abi64-le` selects PRF-01. A generated import absent from the repository uses PRF-03.
+   header or `legacy-abi64-le` selects PRF-01. A generated module absent from the repository uses PRF-03.
    Adds the caller obligations of every generated definition reached: the translator writes
    `-- air2lean-premises: {"ALC-09":[0]}` on the line before a `def` whose parameter (here
    parameter 0) contains a `std.mem.Allocator` (ALC-09) or a `std.Io` (IOM-01). Only the IDs
    in `generated_markers` are accepted (`scripts/premise_markers.py` reads them), and a malformed marker or one that is not directly
    above a `def` fails the check.
-5. Closes the set under the `implies` table and adds TRU-01 to every theorem.
+4. Closes the set under the `implies` table and adds TRU-01 to every theorem.
+
+A theorem with no constant in those audits is an `example` (Lean keeps no constant for it) or
+lies in a file that only its gate audits against a module generated at gate time
+(`theorem_universe.py` `GATES`). Its row is marked † and comes from the **source resolver**:
+it strips comments, tokenizes the statement and proof, and resolves each identifier through
+the file's namespaces, `open` declarations and transitive imports, approximating `x.f` field
+notation on typed binders, unique `.ctor` names and instances whose type names only names in
+the closure. Any other indexed theorem without a constant fails the check. A `when_defined X
+... end_when` (or `if_decl`) block elaborates only when the translation declares `X`, so its
+theorems are indexed only then.
 
 The check fails if a runtime module with declarations has no mapping, if any ID is not
 defined here, if a defined premise is referenced by no rule/module/report, if an import is
 neither resolvable nor an allowed generated import, or if the committed index is stale.
-Every theorem therefore has a derived premise set. TRU-01 alone means that the theorem
-uses no runtime model.
+Without the audits, `check` keeps the committed premises of the kernel rows, rederives the †
+rows from source, and fails on a theorem the index does not list. With them (CI, after the
+two audits) it rederives every row. TRU-01 alone means that the theorem uses no runtime model.
 
-**Limits of the source derivation.** Some implicit dependencies are still not visible in
-source: simp sets such as `zig_unfold`, unification and tactic-generated terms, and field
-notation on a value whose type is not written in a binder. The `compiled` mode applies the
-same tables to the kernel dependency graph of `scripts/assumptions.sh`. That is the
-authoritative closure for `Proofs/` and `ZigLean/`. It lists each theorem's `source_gaps`
-(compiled premises absent from the source index) with the reason for each (`gap_via`).
-`--strict` fails on any gap, and CI runs it after the audit, so the committed index is a
-superset of the kernel-derived premises for every audited theorem.
+**Kernel against source derivation.** Before the index moved to the kernel graph (audit
+finding F4 and its follow-up), it came from the source resolver alone. On the 0.16.0 tree,
+of 3048 indexed theorems, 1597 have the same premises both ways; 675 have fewer from the
+kernel graph, 331 more, and 514 rows are † (443 examples, 71 gate-audited theorems). Every
+premise that only the source derived (1929 premise attributions in the 675 theorems) traces
+to a declaration, runtime module, generated file or caller marker that the source resolver
+matched by name but that the elaborated theorem does not use: most often a short name
+(`push`, `fits`) resolved to a generated function of the same namespace, an instance assumed
+used, or a rule token in a proof script. Conversely the kernel graph finds what source
+cannot see: simp sets, unification and runtime definitions unfolded to another module.
+`scripts/premises.py compiled --strict` still checks that the index covers every
+kernel-derived premise of the shipped audit.
 
-**Reviewed compiled-mode gaps.** The first strict review of the 0.16.0 audit found 441
-theorems with gaps. They were closed by general rules, not per-theorem entries:
+**Reviewed table rules.** The first strict review of the 0.16.0 audit (when the source index
+was checked against the kernel graph) fixed these general rules:
 
 - Struct updates such as `{ m with current := c }` mention every `Mem` field, including
   `allocPolicy` and `failAt`, in the kernel term. These fields are inert data; the policy acts
   only through the allocator modules. ALC-02 and ALC-03 therefore come from those modules and
-  from policy-content tokens, not from the `Mem` fields or the `ByteRemapMode` type.
+  from policy-content names, not from the `Mem` fields or the `ByteRemapMode` type.
 - The runtime model is layered, and `implies` records the layers: THR-01 implies SEM-02 (the
   scheduler runs over the block memory), and SEM-02 and SEM-03 imply SEM-01 (memory ops and
   loops return `Zig.Result`).
 - `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: their ops and frame
   structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
-- Field notation on typed binders, unique `.ctor` names and instances are resolved as in
-  step 1.
 
-Roadmap clients outside `Proofs/` have only the source derivation. Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
+Committed `Proofs/*/Gen.lean` files are the 0.16.0 translations;
 `scripts/check.sh` replaces them per Zig version. The index describes the committed files.
 
 ## Index
