@@ -1582,7 +1582,7 @@ jobs:
           diff -u tests/roadmap/vcs/report.json "$RUNNER_TEMP/vcs/report.json"
 
       # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
-      # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
+      # a dispatch profile (tests/roadmap/dispatch/check.sh rejects it; no 0.17.0 evidence yet).
       - name: Loop-switch dispatch regressions
         if: ${{ !matrix.mutate && matrix.zig == '0.14.1' || !matrix.mutate && matrix.zig == '0.15.2' || !matrix.mutate && matrix.zig == '0.16.0' }}
         env:

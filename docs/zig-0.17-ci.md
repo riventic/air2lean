@@ -18,10 +18,9 @@ by the other 0.17.0 tracks.
 | Mutation shards | Stay on 0.16.0, the default; moving them to 0.17.0 is a separate decision. |
 | 0.16.0 / 0.15.2 / 0.14.1 rows | Unchanged. |
 
-The 0.17.0 job is a blocking job, not `continue-on-error`. Its gates fail until the
-other tracks have merged: the exporter pin and hook, `coverage/0.17.0.json`, golden
-overrides under `tests/golden/0.17.0/` where AIR or translations differ, and a
-`tests/floatprobe/expected.0.17.0.txt` if the reference target changes a probed case.
+The 0.17.0 job is a blocking job, not `continue-on-error`. Its inputs are the exporter pin
+and hook, `coverage/0.17.0.json`, golden overrides under `tests/golden/0.17.0/` where AIR or
+translations differ, and `tests/floatprobe/expected.0.17.0.txt`.
 
 Steps gated to one version (mostly `matrix.zig == '0.16.0'`, plus `0.15.2 || 0.16.0` for
 the proof API and typed outcomes) stay as they are. Their source/native qualification
@@ -95,19 +94,11 @@ qualification work. It needs fresh evidence on 0.17.0, not a list edit.
 
 ## Integration
 
-At integration, before CI can pass:
-
-1. Merge the exporter pin (`["0.17.0"]` first, `[ci.host-zig."0.17.0"]`, `zig-patch/0.17.0/hook.patch`),
-   `coverage/0.17.0.json`, `supportedVersions` with 0.17.0 first, and CLI help that names 0.17.0.
-2. Run `python3 scripts/support-matrix.py generate`. The committed regions here are generated
-   from the pre-integration tree.
-3. Run `python3 scripts/compat.py check`, `python3 scripts/support-matrix.py check`, and the
-   `distribution` and `support-matrix` unittest suites.
-
-The tests find versions by name, derive the hook list from `compatibility.json`, and
-read example cells by version column. They pass once those inputs are merged. A
-simulation of the merged inputs on this tree passed `compat.py check`, `support-matrix.py generate`,
-and both suites.
+The 0.17.0 inputs (exporter pin, `coverage/0.17.0.json`, `supportedVersions`, CLI help) are
+merged. `python3 scripts/compat.py check`, `python3 scripts/support-matrix.py check` and the
+`distribution` and `support-matrix` unittest suites pass on the committed tree. After a change to
+the version metadata, run `python3 scripts/support-matrix.py generate` to refresh the committed
+README/PLAN/support-matrix regions.
 
 0.17.0 is qualified (`status: qualified`, `qualification/0.17.0.json`). Still open: extending each
 class (b) gate after running it on 0.17.0, and the decision whether to move the default and the
