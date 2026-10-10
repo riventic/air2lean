@@ -2175,9 +2175,9 @@ jobs:
 
   # T06: the four optimize modes on LLVM, natively on aarch64-linux hardware, verified against the
   # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).
-  # ReleaseFast and ReleaseSmall have the triaged float @divExact mismatches, so diff.sh exits 1
-  # there; `record --verify` then requires exactly the committed counts and triage. In those two
-  # modes the ~700 inputs that are illegal behaviour crash the tested call (SIGSEGV/SIGBUS): the
+  # floatops and floatconv are left out (excluded_examples in the records): the translation has no
+  # aarch64-linux float model (tests/roadmap/build-modes/reproducers/aarch64-linux-float-targets.md).
+  # `record --verify` requires exactly the committed counts. In ReleaseFast and ReleaseSmall the ~700 inputs that are illegal behaviour crash the tested call (SIGSEGV/SIGBUS): the
   # hosted image routes core dumps to systemd-coredump and apport, which run for every crash even
   # with RLIMIT_CORE 0 and stall the runner. The harness therefore makes its children
   # undumpable and kills a case after a deadline (tests/diff/common.zig, docs/build-modes.md).
@@ -2235,16 +2235,18 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build-modes"
           failed=0
+          source scripts/example-selection.sh
+          examples=$(for e in $(air2lean_default_examples . 0.16.0 aarch64); do
+            case "$e" in floatops|floatconv) ;; *) printf '%s ' "$e" ;; esac
+          done)
           for mode in ReleaseSafe Debug ReleaseFast ReleaseSmall; do
             summary="$RUNNER_TEMP/build-modes/$mode.json"
-            status=0
-            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
-              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
-            case "$mode" in ReleaseFast|ReleaseSmall) ;; *) [ "$status" -eq 0 ] || failed=1 ;; esac
+            AIR2LEAN_EXAMPLES="$examples" AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version 0.16.0 --target aarch64-linux \
               --mode "$mode" --backend llvm --explicit-backend \
-              $(case "$mode" in ReleaseFast|ReleaseSmall) echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json ;; esac) \
+              --excluded-examples tests/roadmap/build-modes/reproducers/excluded-float-aarch64-linux.json \
               || failed=1
           done
           [ "$failed" -eq 0 ]

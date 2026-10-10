@@ -78,8 +78,8 @@
   },
   {
     "function": "Pointers.dueOf",
-    "program": "Pointers.vc_dueOf",
-    "status": "extracted"
+    "reason": "no VC rule or `@[vc_contract]` theorem for `Zig.ptrProject`:\n  Zig.ptrProject p0 fun x => x.add 4",
+    "status": "refused"
   },
   {
     "function": "Pointers.maxPtr",

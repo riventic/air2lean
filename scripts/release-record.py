@@ -10,7 +10,7 @@
 The profile is the CI matrix of .github/workflows/ci.yml at the recorded revision; every matrix
 row is one job and every `run:` step whose condition holds for that row is a gate (actions and the
 tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`,
-`aarch64-linux` and `bitops-native-arm` jobs are native-runner jobs that only GitHub evidence covers. A workflow whose gate lets a proof
+`aarch64-linux`, `bitops-native-arm` and `build-modes-aarch64-linux` jobs are native-runner jobs that only GitHub evidence covers. A workflow whose gate lets a proof
 receipt bind a dirty tree (`AIR2LEAN_RECEIPT_ALLOW_DIRTY`, `proof-receipt.py ... --allow-dirty`)
 is refused. `record` requires a clean
 checkout and binds to HEAD. A gate is passed only with evidence for that exact commit: GitHub
@@ -210,12 +210,13 @@ def reproduce(row):
 
 MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs the Linux test job'
 # Matrix-free jobs on native runners that scripts/local-ci.sh cannot reproduce: Q05 `macos` and
-# T04 `aarch64-linux` and L02 `bitops-native-arm` (ubuntu-24.04-arm).
+# T04 `aarch64-linux`, L02 `bitops-native-arm` and T06 `build-modes-aarch64-linux` (ubuntu-24.04-arm).
 ARM_REPRODUCE = 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job'
 NATIVE_JOBS = {
     'macos': MACOS_REPRODUCE,
     'aarch64-linux': ARM_REPRODUCE,
     'bitops-native-arm': ARM_REPRODUCE,
+    'build-modes-aarch64-linux': ARM_REPRODUCE,
 }
 
 
@@ -255,7 +256,7 @@ def build_plan(root, revision):
     expression, setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
     jobs = workflow.get('jobs') or {}
     if set(jobs) - set(NATIVE_JOBS) != {'test'}:
-        raise ReleaseError('%s: only the test, macos, aarch64-linux and bitops-native-arm jobs are qualified for release records'
+        raise ReleaseError('%s: only the test, macos, aarch64-linux, bitops-native-arm and build-modes-aarch64-linux jobs are qualified for release records'
                            % WORKFLOW)
     job = jobs['test']
     rows = (((job.get('strategy') or {}).get('matrix') or {}).get('include')) or []
