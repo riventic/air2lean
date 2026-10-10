@@ -62,6 +62,10 @@ def main():
     unprobed = copy.deepcopy(arm)
     unprobed["zig_version"] = unprobed["profile"]["zig_version"] = "0.17.0"
     run(binary, [unprobed], error="no native probe record for 0.17.0")
+    # The float rules are generic's: a CPU with fullfp16 fuses an f16 @mulAdd.
+    fp16 = copy.deepcopy(arm)
+    fp16["profile"]["features"] = ["fullfp16", "neon"]
+    run(binary, [fp16], error="fullfp16 is outside the aarch64-linux float rules")
     run(binary, [CURRENT], ["--profile", "abi64-le-v1", "--float-semantics", "compiler-rt"], mode="compiler-rt")
     for field in CURRENT["profile"]:
         malformed = copy.deepcopy(CURRENT)

@@ -121,19 +121,24 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   let abi ← take? (strField p "abi")
   -- The qualified target's byte order, which names the profile (`nameOf`).
   let mut targetEndian : Option Endian := none
+  -- The qualified target, for the checks of fields parsed below (`features`).
+  let mut qualifiedTarget : Option Target := none
   if let some triple := targetTriple then
     -- Zig triples have arch-os-abi components (version suffixes are permitted).
     match triple.splitOn "-" with
     | [arch, os, tripleAbi] =>
+      let osName := (os.splitOn ".").head!
+      let abiName := (tripleAbi.splitOn ".").head!
       if let some abi := abi then
-        unless !arch.isEmpty && !os.isEmpty && (tripleAbi.splitOn ".").head! == abi do
+        unless !arch.isEmpty && !os.isEmpty && abiName == abi do
           report "profile.target_triple: empty component or ABI differs from profile.abi"
-      match Target.find? arch (os.splitOn ".").head! with
+      match Target.find? arch osName with
       | none => report s!"profile.target_triple: outside the {Target.scope} model ABI scope"
       | some target =>
         targetEndian := some target.endian
-        let name := s!"{arch}-{(os.splitOn ".").head!}"
-        unless target.abis.isEmpty || target.abis.contains (tripleAbi.splitOn ".").head! do
+        qualifiedTarget := some target
+        let name := s!"{arch}-{osName}"
+        unless target.abis.isEmpty || target.abis.contains abiName do
           report s!"profile.target_triple: the {name} model is qualified for the \
             {", ".intercalate target.abis} ABI only"
         if let some version := ZigVersion.ofString? zigVersion then
@@ -174,6 +179,13 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   for f in features.getD #[] do
     unless !f.isEmpty && !seen.contains f do report "profile.features: empty or duplicate feature"
     seen := seen.insert f
+  -- The float rules are those of the target's baseline CPU (`FloatRules`): without `fullfp16`
+  -- (aarch64-linux `generic`) an `f16` `@mulAdd` rounds through `f32`. A CPU with `fullfp16`
+  -- fuses it, which those rules do not state (fail closed).
+  if let (some t, some fs) := (qualifiedTarget, features) then
+    if t.floatRules == .aarch64 (fusedF16 := false) && fs.contains "fullfp16" then
+      report s!"profile.features: fullfp16 is outside the {t.arch}-{t.os} float rules (baseline \
+        CPU without fullfp16: an f16 @mulAdd rounds through f32; docs/floats.md §Targets)"
   let buildMode ← take? (do canonicalBuildMode zigVersion (← strField p "build_mode"))
   let floatMode ← take? (strField p "float_mode")
   if let some floatMode := floatMode then

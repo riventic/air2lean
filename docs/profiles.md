@@ -289,7 +289,8 @@ The translator accepts both profiles (`Target.qualified`, `Air2Lean/Air/Dialect.
 its own row: pointer width, byte order, `c_longdouble` (aarch64-linux `f128`, aarch64-macos
 `f64`), float rules (premise MTH-04, [floats.md](floats.md#targets)) and the widest atomic (128
 bits). aarch64-linux fails closed outside the probes: a Zig version without an expected file
-(0.17.0) and an ABI other than `gnu` are profile errors. The declared divergences are outside the
+(0.17.0), an ABI other than `gnu` and a CPU with `fullfp16` (whose `f16` `@mulAdd` is fused,
+unlike `generic`'s) are profile errors. The declared divergences are outside the
 translation: a noncanonical `f80` operand is `.unspecified` (`softF80Chk`), the pre-0.16.0 `@sqrt`
 is the `f64`-precision helper, and `cmpxchg` and `.Max`/`.Min` on a padded width are rejected
 (`PADDED_ATOMIC`).

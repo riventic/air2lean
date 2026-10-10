@@ -92,6 +92,11 @@ fi
 
 host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
 host_arch=$(uname -m)
+# aarch64-linux AIR is exported for the baseline CPU (`generic`): the translator rejects a profile
+# with `fullfp16`, whose `f16` `@mulAdd` is fused (docs/floats.md §Targets), and the native
+# harness is built for the baseline CPU too. The other hosts keep the native CPU of their goldens.
+mcpu=''
+if [ "$host_os-$host_arch" = linux-aarch64 ]; then mcpu=-mcpu=baseline; fi
 for ex in $examples; do
   # <Ex>: the namespace/dir form of <ex> (layout convention) — first letter uppercased. No
   # `${ex^}`: that's a bash-4 operator, and macOS ships bash 3.2.
@@ -123,7 +128,7 @@ for ex in $examples; do
   done
   echo "== $ex: dumping AIR ==" >&2
   workflow_run_stage env ZIG_AIR_JSON_DIR="$air_dir" ZIG_AIR_JSON_FILTER="$filter" "$zig_air" \
-    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing "examples/$ex/$ex.zig"
+    build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing $mcpu "examples/$ex/$ex.zig"
 
   if ! ls "$air_dir"/*.json >/dev/null 2>&1; then
     echo "error: the AIR dump of $ex wrote no files (ZIG_AIR_JSON_FILTER=$filter)" >&2

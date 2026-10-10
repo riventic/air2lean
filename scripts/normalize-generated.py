@@ -91,6 +91,9 @@ def profile_for_air(doc):
     if (not isinstance(fs, list) or any(not isinstance(f, str) or not f for f in fs) or
             len(fs) != len(set(fs)) or type(p["error_tracing"]) is not bool):
         raise ValueError("invalid profile features or error_tracing")
+    # aarch64-linux's float rules are the `generic` CPU's: `fullfp16` would fuse an f16 @mulAdd.
+    if target == ("aarch64", "linux") and "fullfp16" in fs:
+        raise ValueError("incompatible target profile: fullfp16 is outside the aarch64-linux float rules")
     if (p["build_mode"] not in {"Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"} or
             p["float_mode"] != "per-instruction" or p["error_layout"] != "type-table" or
             p["export_stage"] != "analyzed-air"):
