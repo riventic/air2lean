@@ -27,6 +27,17 @@ python3 scripts/counterexample.py replay --bundle cx.json --interpret
 
 `goal-search` appends a driver to a copy of `Gen.lean` and runs `lake env lean --run`: no native toolchain, no libm archive. `--spec` is a decidable Lean proposition over the parameter names (`p0`, `p1`, ...) and `r : Except Zig.Error T`; `--pre` filters inputs. Supported shape: plain `Zig.Result` functions with `BitVec n`/`Bool` parameters and result (anything else is `unsolved: unsupported`). Candidates are boundary values, a seeded cross product and a seeded sample (`--max-inputs`, `--seed`), smallest first. The first violation is replayed in a fresh Lean process; only then is it a `counterexample` (contract `postcondition`). A domain fully enumerated without a violation is `no_failure`; a bounded search without one is `unsolved: search_exhausted`, as are a timeout (`timeout`), a no-result (fuel) input (`bounded_no_result`) and a precondition no input satisfies. An elaboration error of the driver or spec is `setup_failure: lean_error`. Sequential `from-case` bundles of supported functions replay the same way (`replay.kind = lean_sequential`); that confirms the model side only, and the native line stays recorded evidence. `replay --interpret` runs `tests/diff/Schedules.lean` through the interpreter with the recorded schedule prefix as the oracle.
 
+### With the Zig side
+
+```sh
+# Also run the native program on the violating input and compare (stock zig; $AIR2LEAN_ZIG or zig by default).
+python3 scripts/counterexample.py goal-search --example loops --function scale --spec 'r.toBool = true' \
+  --gen Gen.lean --zig-source loops.zig --native-zig /path/to/stock/zig --output goal.json
+python3 scripts/counterexample.py replay --bundle goal.json --native-zig /path/to/stock/zig
+```
+
+`--zig-source` (on `goal-search` and `from-case`) adds `replay.zig_native` to a sequential bundle: the Zig file, its SHA-256, the raw input and the parameter and result types. The Zig file must define `--function` as exactly one `export fn` or `pub fn` whose parameters and result are the integers/`bool` of the generated signature. The replay builds `tests/diff/common.zig` plus a generated harness with `zig build-exe -OReleaseSafe -mcpu=baseline`, runs `forkCall` on the input in a child process (as `scripts/diff.sh` does) and compares the outcome line with the Lean one by the differential rules: equal values, or a native panic kind and its `Zig.Error` constructor from `scripts/panic-policy.tsv` (`integerOverflow` and `overflow`). Both sides must reproduce for `replay.status = verified`. A native outcome that disagrees is `not_reproduced` (`unsolved: replay_not_reproduced`: a model, translation or host difference, never program-bug evidence); a failed native build or missing `zig` is `setup_failure: replay_error`; a changed Zig file is stale (`error`). `replay` exits 0/1/2/3 by the combined status.
+
 All builder commands exit 0 once a bundle is written, whatever its classification, and 3 on invalid or stale evidence. Read `classification` from the bundle or the `COUNTEREXAMPLE:` line.
 
 ## Bundle contents
@@ -49,7 +60,7 @@ The model reports only the `Zig.Error` constructor, not the faulting instruction
 - `deadlock`: calls to `join`/`wait`/`timedWait`/`lock`/`lockShared`.
 - `model_panic`: noreturn panic-handler calls whose `scripts/panic-policy.tsv` constructor matches, plus the matching checked arithmetic.
 
-A differential value mismatch is `function_only`. A goal-search violation is `function_only`. `zig_line` is the span line for an uninlined `statement` site; otherwise it is `fn` declaration line + `dbg_stmt` line − 1 (nearest preceding statement), so it is approximate. Inside a `dbg_inline_block` the call-site line is kept and the site is marked `inlined`. Std functions have no Zig line.
+A differential value mismatch is `function_only`. A goal-search violation is `function_only`, unless the violating run is itself an `illegal` or `model_panic` outcome: then the sites of that failure are listed (a postcondition that fails because `a * b` overflows names the `mul_safe` statement). `zig_line` is the span line for an uninlined `statement` site; otherwise it is `fn` declaration line + `dbg_stmt` line − 1 (nearest preceding statement), so it is approximate. Inside a `dbg_inline_block` the call-site line is kept and the site is marked `inlined`. Std functions have no Zig line.
 
 ## Classification
 
@@ -71,6 +82,10 @@ A timeout or cap is never a program bug, even when the receipt recorded a failur
 python3 -I -B tests/roadmap/counterexamples/test_counterexample.py
 # Goal search and Zig-free replay (the seeded-loop class needs `lake build ZigLean air2lean`; no Zig):
 python3 -I -B tests/roadmap/counterexamples/test_goal.py
+# Real export (I05 spans) and the native Zig replay. Needs a patched zig that carries the I05 exporter,
+# a stock zig, and `lake build ZigLean air2lean`; skipped otherwise:
+AIR2LEAN_ZIG_AIR=/path/to/zig-air/bin/zig AIR2LEAN_ZIG_NATIVE=/path/to/stock/zig \
+  python3 -I -B tests/roadmap/counterexamples/test_real_export.py
 # After `(cd tests/diff && lake build schedules)`:
 python3 -I -B tests/roadmap/counterexamples/test_e2e.py [path/to/schedules]
 ```
@@ -78,3 +93,5 @@ python3 -I -B tests/roadmap/counterexamples/test_e2e.py [path/to/schedules]
 The unit suite mocks the model process. Positive controls cover a replayed race with prefix, contract and Zig-line sites, panic and deadlock site selection, and replay exit statuses. Negative controls cover a search timeout, a replay timeout, an unreproduced replay, truncated and no-result trees, prefix-capped failures, a replay error, the verdict table, capped and stale differential cases, and an unreplayed sequential mismatch.
 
 The end-to-end test runs the real atomics model. `mpRelaxed`'s relaxed message-passing data race replays as an `illegal` counterexample, with candidate sites at `atomics.zig:43` (reader) and `:20` (writer). `mpRelAcq` is `no_failure`; `--fuel 2`, `--node-cap 1` and a 1 s timeout on `stackPush` (which takes more than 2 minutes at node cap 2000) are `unsolved`, and their bundles do not replay successfully.
+
+`test_real_export.py` exports `tests/roadmap/counterexamples/native/loops.zig` with the patched compiler (`native/export.sh`, a compiler without the I05 change fails it on purpose), translates it, and checks the reports against the real file: the off-by-one `sumUpTo` counterexample (`input = [1]`) carries the declaration span of `export fn sumUpTo`, and the overflowing `scale` counterexample carries the `mul_safe` statement span at the line and column of `*` in `return a * b;`, with the headline naming `loops.zig:<line>`. In both, the native program built from the same file gives the same outcome (`{"ok":1}`; `integerOverflow` against `Zig.Error.overflow`). A native source that disagrees leaves the violation unsolved. The unit class `NativeReplay` in `test_goal.py` covers the comparison and failure mapping with a fake `zig`. Sequential only: schedule bundles keep the `schedules` binary replay.

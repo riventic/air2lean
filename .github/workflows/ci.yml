@@ -695,6 +695,18 @@ jobs:
           bash tests/roadmap/diagnostics-complete/export.sh "$PWD/zig-air-${{ matrix.zig }}/bin/zig" "$diagnostics_evidence_dir/air"
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/diagnostics-complete/test_cli.py "$PWD/.lake/build/bin/air2lean" \
             --export-air "$diagnostics_evidence_dir/air" 2>&1 | tee "$diagnostics_evidence_dir/complete.log"
+
+      # P08: counterexample reports on a real patched export carry I05 source spans, and the
+      # replay also runs the native Zig program (stock zig) on the counterexample input.
+      - name: Counterexample spans and Zig-side replay
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
+        run: |
+          python3 -I -B tests/roadmap/counterexamples/test_goal.py
+          python3 -I -B tests/roadmap/counterexamples/test_real_export.py
+
       # L13: exporter-schema fixtures, the default rejection, the reviewed asm allowlist
       # (ASM_VOLATILE_EFFECT) and the opt-in device contract; fresh real exports of the fixtures
       # with the patched compiler; device-trace proofs on the generated UART driver and rdtsc

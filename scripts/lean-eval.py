@@ -13,9 +13,11 @@ postcondition violation, `N idx` no result within fuel, `S checked skipped none 
 import hashlib
 import itertools
 import json
+import os
 from pathlib import Path
 import random
 import re
+import signal
 import subprocess
 import tempfile
 
@@ -148,15 +150,22 @@ def run(root, gen_path, text, *, timeout, runner=('lake', 'env', 'lean', '--run'
     with tempfile.TemporaryDirectory(prefix='air2lean-eval-') as temp:
         path = Path(temp)/'Eval.lean'
         path.write_text(Path(gen_path).read_text() + text)
+        # Own session: `lake` forks `lean`, and a timeout must end the whole group, not orphan the evaluator.
         try:
-            done = subprocess.run([*runner, str(path)], cwd=root, capture_output=True, text=True, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            return dict(status='timeout', lines=[], detail='lean evaluation timed out')
+            proc = subprocess.Popen([*runner, str(path)], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    start_new_session=True)
         except OSError as error:
             return dict(status='error', lines=[], detail=str(error))
-    if done.returncode != 0:
-        return dict(status='error', lines=[], detail=(done.stdout + done.stderr)[-2000:])
-    return dict(status='ok', lines=[l.split('\t') for l in done.stdout.splitlines() if l[:2] in ('O\t', 'V\t', 'N\t', 'S\t')], detail='')
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try: os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+            proc.communicate()
+            return dict(status='timeout', lines=[], detail='lean evaluation timed out')
+    if proc.returncode != 0:
+        return dict(status='error', lines=[], detail=(stdout + stderr)[-2000:])
+    return dict(status='ok', lines=[l.split('\t') for l in stdout.splitlines() if l[:2] in ('O\t', 'V\t', 'N\t', 'S\t')], detail='')
 
 
 def sha256(path):

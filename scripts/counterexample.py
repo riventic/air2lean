@@ -10,9 +10,12 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = 1
@@ -351,8 +354,126 @@ def lean_confirm(root, request, timeout, runner=None):
     return dict(status='verified' if same else 'not_reproduced', observed=observed, violated=violated)
 
 
+# --- Zig-side replay ----------------------------------------------------------------------
+# The Lean replay re-evaluates the model only. This one also runs the native Zig program on the
+# same input through the production differential harness (tests/diff/common.zig: fork per call,
+# panic kinds, JSON rendering) and compares the two outcome lines the way diff-report does.
+
+HARNESS = '''const std = @import("std");
+const common = @import("common");
+const target = @import("target");
+comptime {{ _ = target; }} // analyze the target's `export fn`s
+pub const panic = common.panic;
+{decl}
+pub fn main() !void {{
+    var gpa_state = std.heap.DebugAllocator(.{{}}){{}};
+    defer _ = gpa_state.deinit();
+    const gpa = gpa_state.allocator();
+    try common.makePath("tests/diff/out/zig/target");
+    try common.forEachLine(gpa, "target", "{function}", struct {{
+        fn call(_: std.mem.Allocator, items: []std.json.Value, writer: anytype) !void {{
+{lets}            const outcome = try common.forkCall(std.meta.ArgsTuple(@TypeOf({ref})), .{{ {args} }}, {ref}, {quote});
+            try common.writeResult(writer, outcome);
+        }}
+    }}.call);
+}}
+'''
+ZIG_IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*\Z')
+
+
+def zig_type(t, signed):
+    return 'bool' if t[0] == 'bool' else f"{'i' if signed else 'u'}{t[1]}"
+
+
+def native_request(root, source, function, raw_input, params, ret, sign):
+    """A Zig-side replay request for a plain `export fn`/`pub fn` of `source`, or None when unsupported."""
+    source = Path(source)
+    source = source if source.is_absolute() else root/source
+    if not source.is_file() or not ZIG_IDENT.fullmatch(function) or len(params) != len(raw_input): return None
+    text = source.read_text()
+    exported = re.search(r'^\s*export\s+fn\s+' + re.escape(function) + r'\s*\(', text, re.M)
+    public = re.search(r'^\s*pub\s+fn\s+' + re.escape(function) + r'\s*\(', text, re.M)
+    if bool(exported) == bool(public): return None
+    for (_, t), value in zip(params, raw_input):
+        if type(value) is not (bool if t[0] == 'bool' else int) or not -2**63 <= value < 2**63: return None   # std.json reads i64
+    signs = sign[0] if sign else [False] * len(params)
+    return dict(source=str(source.relative_to(root)) if source.is_relative_to(root) else str(source), source_sha256=EVAL.sha256(source),
+                function=function, args=list(raw_input), decl='export' if exported else 'pub',
+                params=[zig_type(t, sg) for (_, t), sg in zip(params, signs)], ret=zig_type(ret, bool(sign and sign[1])),
+                quote_wide=ret[0] == 'bv' and ret[1] >= 64)
+
+
+def harness_text(request):
+    ref = request['function'] if request['decl'] == 'export' else 'target.' + request['function']
+    decl = (f"extern fn {ref}({', '.join(f'p{k}: {t}' for k, t in enumerate(request['params']))}) {request['ret']};"
+            if request['decl'] == 'export' else '')
+    lets = ''.join(f"            const a{k}: {t} = " + (f'items[{k}].bool' if t == 'bool' else f'@intCast(items[{k}].integer)') + ';\n'
+                   for k, t in enumerate(request['params']))
+    return HARNESS.format(decl=decl, function=request['function'], lets=lets, ref=ref,
+                          args=', '.join(f'a{k}' for k in range(len(request['params']))), quote=str(request['quote_wide']).lower())
+
+
+def native_matches(native_line, model_line):
+    """The differential comparison: equal values, or a native panic kind and its model constructor."""
+    try: native, model = REPORT.decode(native_line), REPORT.decode(model_line)
+    except Invalid: return False
+    return isinstance(native, dict) and isinstance(model, dict) and REPORT.legacy_bucket(native, model, False) in ('ok', 'fail_match')
+
+
+def native_confirm(root, request, zig, model_line, timeout):
+    """Build and run the harness with a stock `zig`; compare its outcome line with the model's."""
+    source = Path(request['source'])
+    source = source if source.is_absolute() else root/source
+    if not source.is_file() or EVAL.sha256(source) != request['source_sha256']: return dict(status='error', detail='Zig source changed or is missing')
+    try: version = subprocess.run([zig, 'version'], capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except subprocess.TimeoutExpired: return dict(status='timeout', detail='zig version timed out')
+    except OSError as error: return dict(status='unavailable', detail=str(error))
+    with tempfile.TemporaryDirectory(prefix='air2lean-native-') as temp:
+        temp = Path(temp)
+        (temp/'harness.zig').write_text(harness_text(request))
+        inputs = temp/'tests/diff/target/inputs'; inputs.mkdir(parents=True)
+        (inputs/f"{request['function']}.jsonl").write_text(json.dumps(request['args']) + '\n')
+        cmd = [zig, 'build-exe', '-OReleaseSafe', '-mcpu=baseline', f'-femit-bin={temp/"harness"}', '--cache-dir', str(temp/'cache'),
+               '--dep', 'target', '--dep', 'common', '-Mroot=harness.zig', f'-Mtarget={source}', f'-Mcommon={root/"tests/diff/common.zig"}']
+        try:
+            built = subprocess.run(cmd, cwd=temp, capture_output=True, text=True, timeout=timeout)
+            if built.returncode != 0: return dict(status='error', zig_version=version, detail='native build failed: ' + built.stderr.strip()[-400:])
+            ran = subprocess.run([str(temp/'harness')], cwd=temp, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired: return dict(status='timeout', zig_version=version, detail='native build or run timed out')
+        except OSError as error: return dict(status='error', zig_version=version, detail=str(error))
+        out = temp/'tests/diff/out/zig/target'/f"{request['function']}.jsonl"
+        lines = out.read_text().splitlines() if ran.returncode == 0 and out.is_file() else []
+    if len(lines) != 1: return dict(status='error', zig_version=version, detail=f'native harness exit {ran.returncode}: {len(lines)} output lines')
+    same = native_matches(lines[0], model_line)
+    return dict(status='verified' if same else 'not_reproduced', zig_version=version, observed=dict(line=lines[0]), model_line=model_line)
+
+
+def confirm(root, replay, timeout, zig=None, runner=None):
+    """Lean replay of `replay['request']`, then the native Zig run when the block carries one. Both must reproduce.
+
+    A native outcome that differs from the Lean model line is not a program bug but a model or host
+    disagreement: the replay is `not_reproduced`, so the case stays unsolved."""
+    outcome = lean_confirm(root, replay['request'], timeout, runner)
+    native = replay.get('zig_native')
+    if native is None: return outcome
+    if outcome['status'] != 'verified': return dict(outcome, zig_native=dict(native, status='not_run'))
+    result = native_confirm(root, native['request'], zig, outcome['observed']['line'], timeout)
+    status = {'verified': 'verified', 'not_reproduced': 'not_reproduced', 'timeout': 'timeout'}.get(result['status'], 'error')
+    return dict(outcome, status=status, zig_native=dict(native, **result))
+
+
+def with_native(root, info, zig_source, example, function, raw_input, *, gen=None, air_dir=None):
+    """Attach the Zig-side replay request of `zig_source` to a lean_sequential block."""
+    if zig_source is None: return info
+    params, ret = EVAL.signature(gen_path(root, example, gen).read_text(), function)
+    request = native_request(root, zig_source, function, raw_input, params, ret, air_signedness(root, example, function, air_dir))
+    if request is None: raise Invalid(f'{zig_source}: {function} is not an export/pub fn matching the generated signature')
+    info['zig_native'] = dict(request=request, status='not_run')
+    return info
+
+
 def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs=4096, seed=0, timeout=300,
-                replay=True, air_dir=None, runner=None):
+                replay=True, air_dir=None, runner=None, zig_source=None, zig=None):
     """Search small inputs for a violation of `spec`; the violation is replayed in a fresh Lean process."""
     path = gen_path(root, example, gen)
     source = dict(kind='lean_goal_search', gen=str(path), spec=spec, pre=pre, max_inputs=max_inputs, seed=seed, timeout=timeout)
@@ -396,8 +517,8 @@ def goal_bundle(root, example, function, spec, pre=None, *, gen=None, max_inputs
                    example=example, function=function, args=list(row), spec=spec, pre=pre,
                    signed_result=bool(sign and sign[1]), signedness=source['signedness'],
                    expected=dict(line=hit[2], violation=True))
-    info = lean_block(request)
-    if replay: info.update(lean_confirm(root, request, timeout, runner))
+    info = with_native(root, lean_block(request), zig_source, example, function, raw, gen=gen, air_dir=air_dir)
+    if replay: info.update(confirm(root, info, timeout, zig, runner))
     common.update(input_value=raw, input_sha256=hashlib.sha256(json.dumps(raw, separators=(',', ':')).encode()).hexdigest(),
                   input_index=int(hit[1]), observed=dict(kind=EVAL.obs_kind(hit[2]), line=hit[2]))
     return bundle(replay=info, judgement=verdict(goal='violated', replay=info['status']), **common)
@@ -410,6 +531,8 @@ def bundle(root, *, source, example, function, input_index, input_value, input_s
            schedule=None, native=None, replay=None, air_dir=None, sources=None, statement=None):
     classification, reason, contract = judgement
     failure_kind = contract or (observed or {}).get('kind')
+    # A postcondition violated by a safety panic or illegal behaviour is localized like that failure.
+    if failure_kind == 'postcondition' and (observed or {}).get('kind') in SITE_FAILURES: failure_kind = observed['kind']
     ctor = (observed or {}).get('line', '')
     ctor = REPORT.decode(ctor).get('fail', '').removeprefix('Zig.Error.') if ctor.startswith('{') else None
     return dict(schema=SCHEMA, qualified=False, classification=classification, reason=reason,
@@ -453,6 +576,10 @@ def schedule_bundle(root, receipt_path, index=None, *, replay=False, binary=None
     return bundle(root, observed=observed, schedule=schedule, replay=replay_info, judgement=judgement, **common)
 
 
+def default_zig():
+    return os.environ.get('AIR2LEAN_ZIG', 'zig')
+
+
 def replay_block(request, expected, binary):
     binary = Path(binary or ROOT/'tests/diff/.lake/build/bin/schedules')
     shown = binary.relative_to(ROOT) if binary.is_absolute() and binary.is_relative_to(ROOT) else binary
@@ -460,7 +587,8 @@ def replay_block(request, expected, binary):
                 command=['python3', 'scripts/counterexample.py', 'replay', '--bundle', '<this bundle>', '--binary', str(shown)])
 
 
-def case_bundle(root, summary, example, function, index, *, replay=False, binary=None, timeout=60, air_dir=None):
+def case_bundle(root, summary, example, function, index, *, replay=False, binary=None, timeout=60, air_dir=None,
+                zig_source=None, zig=None):
     data = REPORT.read_summary(summary)
     if data.get('complete') is not True: raise Invalid('incomplete differential summary')
     # A replay must run the code that produced the summary, as `schedules.py replay --summary` requires.
@@ -497,8 +625,10 @@ def case_bundle(root, summary, example, function, index, *, replay=False, binary
     if replay_info is None:
         request = lean_request(root, example, function, raw_input, model_line)
         if request is not None:
-            replay_info = lean_block(request)
-            if replay: replay_info.update(lean_confirm(root, request, timeout))
+            replay_info = with_native(root, lean_block(request), zig_source, example, function, raw_input, air_dir=air_dir)
+            if replay: replay_info.update(confirm(root, replay_info, timeout, zig))
+    if zig_source is not None and 'zig_native' not in (replay_info or {}):
+        raise Invalid('--zig-source needs a sequential case whose function the Lean replay supports')
     if replay_info is None:
         # Unsupported shape or unmatched concurrent case: rerun the differential runner for this example.
         replay_info = dict(status='unavailable', command=['env', f'AIR2LEAN_EXAMPLES={example}', 'scripts/diff.sh'],
@@ -531,7 +661,7 @@ def search_bundle(root, args):
 REPLAY_EXIT = {'verified': 0, 'not_reproduced': 1, 'timeout': 2, 'error': 3, 'unavailable': 3}
 
 
-def replay_bundle(root, path, binary, timeout):
+def replay_bundle(root, path, binary, timeout, zig=None):
     """Re-run a bundle's embedded request. Exit: 0 reproduced, 1 not reproduced, 2 unsolved, 3 setup."""
     data = CLI.read_json(path)
     if type(data) is not dict or data.get('schema') != SCHEMA or data.get('qualified') is not False: raise Invalid('unsupported bundle')
@@ -542,9 +672,12 @@ def replay_bundle(root, path, binary, timeout):
     if data.get('sources_sha256') != sources_digest(REPORT.source_hashes(root)):
         print('counterexample: stale runner/runtime source fingerprints', file=sys.stderr); return 3
     if replay.get('kind') == 'lean_sequential':
-        outcome = lean_confirm(root, replay['request'], timeout)
+        outcome = confirm(root, replay, timeout, zig or default_zig())
+        native = outcome.get('zig_native')
         print(f"REPLAY: status={outcome['status']} {data.get('example')}.{data.get('function')}#{data.get('input_index')} lean_sequential"
-              f" observed={outcome.get('observed', {}).get('kind', '-')}")
+              f" observed={outcome.get('observed', {}).get('kind', '-')}"
+              + (f" zig_native={native['status']} native_observed={native.get('observed', {}).get('line', '-')}" if native else ''))
+        if native and native.get('detail'): print(f"counterexample: {native['detail']}", file=sys.stderr)
         if outcome.get('detail'): print(f"counterexample: {outcome['detail']}", file=sys.stderr)
         return REPLAY_EXIT[outcome['status']]
     request, expected = replay['request'], replay['expected']
@@ -589,8 +722,12 @@ def parser():
     goal.add_argument('--gen', type=Path); goal.add_argument('--air-dir', type=Path); goal.add_argument('--output', type=Path, required=True)
     goal.add_argument('--max-inputs', type=int, default=4096); goal.add_argument('--seed', type=int, default=0)
     goal.add_argument('--no-replay', action='store_true'); goal.add_argument('--timeout', type=int, default=300)
+    for sub in (case, goal):
+        sub.add_argument('--zig-source', type=Path, help='Zig file defining --function: also replay the native program on the input')
     rep = subs.add_parser('replay', help='re-run a bundle; exit 0 reproduced, 1 not reproduced, 2 unsolved, 3 setup')
     rep.add_argument('--bundle', type=Path, required=True)
+    for sub in (case, goal, rep):
+        sub.add_argument('--native-zig', default=default_zig(), help='stock zig for the native replay (default $AIR2LEAN_ZIG or zig)')
     for sub in (search, receipt, case, rep):
         sub.add_argument('--interpret', action='store_true', help='run schedules through the Lean interpreter (no native build)')
         sub.add_argument('--binary', type=Path, default=ROOT/'tests/diff/.lake/build/bin/schedules')
@@ -602,11 +739,12 @@ def execute(args, root=ROOT):
     CLI.nat(args.timeout, 900, 'timeout')
     if args.timeout == 0: raise Invalid('timeout must be positive')
     if getattr(args, 'interpret', False): args.binary = root/'scripts/schedules-interpreted.sh'
-    if args.command == 'replay': return replay_bundle(root, args.bundle, args.binary, args.timeout)
+    if args.command == 'replay': return replay_bundle(root, args.bundle, args.binary, args.timeout, args.native_zig)
     if args.command == 'goal-search':
         if not 0 < args.max_inputs <= EVAL.MAX_CASES: raise Invalid(f'max-inputs must be in 1..{EVAL.MAX_CASES}')
         data = goal_bundle(root, args.example, args.function, args.spec, args.pre, gen=args.gen, max_inputs=args.max_inputs,
-                           seed=args.seed, timeout=args.timeout, replay=not args.no_replay, air_dir=args.air_dir)
+                           seed=args.seed, timeout=args.timeout, replay=not args.no_replay, air_dir=args.air_dir,
+                           zig_source=args.zig_source, zig=args.native_zig)
         if 'command' in data['replay']:
             data['replay']['command'] = [str(args.output) if c == '<this bundle>' else c for c in data['replay']['command']]
         REPORT.atomic_json(args.output, data)
@@ -618,7 +756,8 @@ def execute(args, root=ROOT):
                                timeout=args.timeout, air_dir=args.air_dir)
     else:
         data = case_bundle(root, args.summary, args.example, args.function, args.input_index, replay=args.replay,
-                           binary=args.binary, timeout=args.timeout, air_dir=args.air_dir)
+                           binary=args.binary, timeout=args.timeout, air_dir=args.air_dir,
+                           zig_source=args.zig_source, zig=args.native_zig)
     if 'command' in data['replay']:
         data['replay']['command'] = [str(args.output) if c == '<this bundle>' else c for c in data['replay']['command']]
     REPORT.atomic_json(args.output, data)
