@@ -285,8 +285,9 @@ class AbiProfiles(Scratch):
         code, output = run('check', '--root', self.root, '--json')
         self.assertEqual(code, 0, output)
         rows = {row['profile']: row for row in json.loads(output)['abi_profiles']}
-        self.assertEqual(set(rows), {'0.16.0/aarch64-linux-gnu/ReleaseSafe',
-                                     '0.16.0/aarch64-macos-none/ReleaseSafe'})
+        self.assertEqual(set(rows), {f'{version}/{triple}/ReleaseSafe'
+                                     for version in ('0.16.0', '0.15.2', '0.14.1')
+                                     for triple in ('aarch64-linux-gnu', 'aarch64-macos-none')})
         self.assertEqual(rows['0.16.0/aarch64-linux-gnu/ReleaseSafe']['probe_job'], 'aarch64-linux')
 
     def test_probe_on_another_host_does_not_count(self):
@@ -299,8 +300,8 @@ class AbiProfiles(Scratch):
         self.check_fails(f'{self.LINUX}: probe step', 'do not run the native probe and compare')
 
     def test_ignored_failure_does_not_count(self):
-        self.edit_text(TM['WORKFLOW'], '"$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt"',
-                       '"$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt" || true')
+        self.edit_text(TM['WORKFLOW'], '"$RUNNER_TEMP/aarch64-linux-gnu-0.16.0-ReleaseSafe.txt"',
+                       '"$RUNNER_TEMP/aarch64-linux-gnu-0.16.0-ReleaseSafe.txt" || true')
         self.check_fails(f'{self.LINUX}: probe step', 'ignores a failure')
 
     def test_proof_must_check_the_profile_file(self):

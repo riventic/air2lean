@@ -46,6 +46,29 @@ class Driver(unittest.TestCase):
             self.assertIn('meta zig 0.16.0\n', text)
             self.assertIn('limit atomic_u256 expected_128-bit_integer_type_or_smaller', text)
 
+    def test_every_version_records_every_profile_and_synchronization_row(self):
+        limits = {p.stem for p in (ROOT / 'tests/roadmap/aarch64-abi/limits').glob('*.zig')}
+        for version in ('0.16.0', '0.15.2', '0.14.1'):
+            for triple in ('aarch64-linux-gnu', 'aarch64-macos-none'):
+                text = (ROOT / f'tests/roadmap/aarch64-abi/expected/{version}/{triple}-ReleaseSafe.txt').read_text()
+                self.assertIn(f'meta zig {version}\n', text)
+                kinds = [line.split()[0] for line in text.splitlines()]
+                for kind, count in (('rmw', 110), ('order', 4), ('atomic_ext', 5), ('litmus', 3)):
+                    self.assertEqual(kinds.count(kind), count, (version, triple, kind))
+                self.assertEqual({l.split()[1] for l in text.splitlines() if l.startswith('limit ')}, limits)
+                # Forbidden outcomes never occur on a conforming target (nothing to normalize).
+                self.assertIn('litmus mp_release_acquire violations 0 ', text)
+                self.assertIn('litmus sb_seq_cst both_zero 0 unset 0 ', text)
+
+    def test_older_versions_differ_from_0_16_0_only_in_soft_float_sqrt(self):
+        for triple in ('aarch64-linux-gnu', 'aarch64-macos-none'):
+            new = (EXPECTED / f'{triple}-ReleaseSafe.txt').read_text().splitlines()
+            for version in ('0.15.2', '0.14.1'):
+                old = (EXPECTED.parent / version / f'{triple}-ReleaseSafe.txt').read_text().splitlines()
+                self.assertEqual(len(old), len(new))
+                changed = [a.split(' sqrt(2)')[0] for a, b in zip(old, new) if a != b]
+                self.assertEqual(changed, ['meta zig ' + version, 'fop f80', 'fop f128'], (version, triple))
+
     def test_exact_file_matches(self):
         code, output = main('compare', '--target', 'aarch64-linux-gnu',
                             EXPECTED / 'aarch64-linux-gnu-ReleaseSafe.txt')

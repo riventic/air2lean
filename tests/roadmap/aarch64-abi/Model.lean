@@ -1,5 +1,6 @@
 import ZigLean.VecMem
 import ZigLean.Float.Allowed
+import ZigLean.Mem.Thread
 
 /-! T04: the model's side of the two aarch64 profiles' recorded probe results
 (`tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt`, `docs/aarch64-abi.md`).
@@ -13,7 +14,12 @@ import ZigLean.Float.Allowed
   and each float/atomic result line must be allowed by the model (`Zig.Float.Allowed`: bit for
   bit, or any NaN for a NaN), except the declared divergences of that profile, which must
   diverge. A divergence is printed and never counted as a match. The vector byte images are
-  L09's (`tests/roadmap/vector-layouts/Model.lean`). -/
+  L09's (`tests/roadmap/vector-layouts/Model.lean`).
+* Synchronization rows: each `rmw` row is the model's `RmwOp.apply`; the `order` rows are the
+  same for every ordering the compiler accepts; the `litmus` rows are the sequentially forced
+  counts and zero forbidden outcomes; the `limit` rows are the rejected-program messages. The
+  `atomic_ext` rows (bool, enum, pointer and float cells) are native observations only: the
+  model has no such atomics. -/
 
 open Zig
 
@@ -174,7 +180,90 @@ def divergences : List (String × String) := [
   ("fop f80 isnan(unnormal(e=1,i=0))", "soft-float f80 (compiler_rt) treats an unnormal as a number, not NaN (the model and x87: NaN)"),
   ("fop f80 pseudo-denormal+0", "soft-float f80 keeps the pseudo-denormal encoding; the model (x87) normalizes it"),
   ("atomic u24 padff", "cmpxchg compares the 4-byte cell, padding byte included: it fails although the u24 values are equal"),
-  ("atomic u40 padff", "cmpxchg compares the 8-byte cell, padding bytes included: it fails although the u40 values are equal")]
+  ("atomic u40 padff", "cmpxchg compares the 8-byte cell, padding bytes included: it fails although the u40 values are equal"),
+  ("rmw i24 Max e54321 2bcdef", "signed Max of a negative i24 cell and a positive operand keeps the negative cell: the native i24 Max is not the signed maximum (padded width)"),
+  ("rmw i40 Max 8987654321 7890abcdef", "signed Max of a negative i40 cell and a positive operand keeps the negative cell: the native i40 Max is not the signed maximum (padded width)")]
+
+/-- Zig before 0.16.0: the soft-float `@sqrt` of f80 and f128 on aarch64 is computed at f64
+precision (`sqrt(2)` has 53 correct bits, the rest zero). 0.16.0 rounds correctly. -/
+def divergencesIn (version : String) : List (String × String) :=
+  if version == "0.14.1" || version == "0.15.2" then divergences ++ [
+    ("fop f80 sqrt(2)", "@sqrt of f80 is correct to f64 precision only (compiler_rt before 0.16.0)"),
+    ("fop f128 sqrt(2)", "@sqrt of f128 is correct to f64 precision only (compiler_rt before 0.16.0)")]
+  else divergences
+
+/-! ## Synchronization rows (run time) -/
+
+def rmwOp? : String → Option RmwOp
+  | "Xchg" => some .xchg | "Add" => some .add | "Sub" => some .sub | "And" => some .and
+  | "Nand" => some .nand | "Or" => some .or | "Xor" => some .xor | "Max" => some .max
+  | "Min" => some .min | _ => none
+
+/-- `rmw <type> <op> <cell> <operand> <returned> <final>`: the call returns the old cell and
+leaves the model's `RmwOp.apply` of it (signed `Max`/`Min` for `iN`). -/
+def rmwCase (bits : Nat) (signed : Bool) (op : RmwOp) (cell operand returned final : String) : Bool :=
+  match hexNat? cell, hexNat? operand, hexNat? returned, hexNat? final with
+  | some c, some v, some r, some f =>
+    c < 2 ^ bits && v < 2 ^ bits && r == c &&
+      f == (op.apply signed (BitVec.ofNat bits c) (BitVec.ofNat bits v)).toNat
+  | _, _, _, _ => false
+
+def splitOnce (c : Char) (s : String) : Option (String × String) :=
+  match s.splitOn c.toString with
+  | [a, b] => some (a, b)
+  | _ => none
+
+/-- `order <op> <ordering>:<result> ...`: the orderings that the compiler accepts, in order, and
+a result independent of them (a store or load of 9, 7; adds from 9; cmpxchg from 14, each
+consecutive and successful). -/
+def orderCase (kind : String) (cells : List String) : Bool :=
+  let pairs := cells.filterMap (splitOnce ':')
+  pairs.length == cells.length &&
+  match kind with
+  | "load" => pairs == [("monotonic", "7"), ("acquire", "7"), ("seq_cst", "7")]
+  | "store" => pairs == [("monotonic", "9"), ("release", "9"), ("seq_cst", "9")]
+  | "rmw" => pairs == [("monotonic", "9"), ("acquire", "a"), ("release", "b"), ("acq_rel", "c"),
+      ("seq_cst", "d")]
+  | "cmpxchg" =>
+    let names := ["monotonic/monotonic", "acquire/monotonic", "acquire/acquire",
+      "release/monotonic", "release/acquire", "acq_rel/monotonic", "acq_rel/acquire",
+      "seq_cst/monotonic", "seq_cst/acquire", "seq_cst/seq_cst"]
+    pairs.map (·.1) == names &&
+      (pairs.zipIdx.all fun ((_, v), i) => v == s!"{String.ofList (Nat.toDigits 16 (14 + i))},true")
+  | _ => false
+
+/-- Native observations of cell types the model's integer atomics do not cover. -/
+def atomicExtRows : List (List String) := [
+  ["bool", "1", "1", "false", "true", "true"], ["enum_u8", "1", "1", "red", "true", "green"],
+  ["pointer", "8", "8", "true", "true", "5"],
+  ["f32", "4", "4", "3fc00000", "40700000", "bf800000", "bfc00000"],
+  ["f64", "8", "8", "3ff8000000000000", "400e000000000000", "bff0000000000000", "bff8000000000000"]]
+
+/-- `litmus`: no forbidden outcome, and the counters the sequential model forces (four threads
+adding `per_thread` each, wrapping at the cell width). -/
+def litmusCase : List String → Bool
+  | ["mp_release_acquire", "violations", "0", "rounds", _] => true
+  | ["sb_seq_cst", "both_zero", "0", "unset", "0", "rounds", _] => true
+  | ["counters", "u8", a, "u24", b, "u128", c, "cas_u64", d, "per_thread", n] =>
+    match n.toNat? with
+    | some n => a.toNat? == some (4 * n % 2 ^ 8) && b.toNat? == some (4 * n % 2 ^ 24) &&
+        c.toNat? == some (4 * n) && d.toNat? == some (4 * n)
+    | none => false
+  | _ => false
+
+/-- The program that the compiler must reject, and its first error (spaces as `_`). -/
+def limitMessages : List (String × String) := [
+  ("atomic_array", "expected_bool,_integer,_float,_enum,_packed_struct,_or_pointer_type;_found_'[2]u8'"),
+  ("atomic_vector", "expected_bool,_integer,_float,_enum,_packed_struct,_or_pointer_type;_found_'@Vector(2,_u32)'"),
+  ("bool_add", "@atomicRmw_with_bool_only_allowed_with_.Xchg"),
+  ("cmpxchg_failure_release", "failure_atomic_ordering_must_not_be_release_or_acq_rel"),
+  ("cmpxchg_failure_stronger", "failure_atomic_ordering_must_be_no_stricter_than_success"),
+  ("float_and", "@atomicRmw_with_float_only_allowed_with_.Xchg,_.Add,_.Sub,_.Max,_and_.Min"),
+  ("load_acq_rel", "@atomicLoad_atomic_ordering_must_not_be_release_or_acq_rel"),
+  ("load_release", "@atomicLoad_atomic_ordering_must_not_be_release_or_acq_rel"),
+  ("rmw_unordered", "@atomicRmw_atomic_ordering_must_not_be_unordered"),
+  ("store_acq_rel", "@atomicStore_atomic_ordering_must_not_be_acquire_or_acq_rel"),
+  ("store_acquire", "@atomicStore_atomic_ordering_must_not_be_acquire_or_acq_rel")]
 
 def intBits? (name : String) : Option Nat :=
   if name.startsWith "u" || name.startsWith "i" then (name.drop 1).toString.toNat? else none
@@ -221,6 +310,16 @@ def main (args : List String) : IO UInt32 := do
     | IO.eprintln s!"aarch64-abi: no kernel-checked table for {triple}"; return 2
   let lines := ((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty) |>.map
     (·.splitOn " " |>.filter (!·.isEmpty))
+  let version := lines.findSome? fun l => match l with | ["meta", "zig", v] => some v | _ => none
+  let some version := version | IO.eprintln s!"aarch64-abi: {path}: no `meta zig` line"; return 1
+  -- Every synchronization row the probe prints must be present (a missing row is not a pass).
+  let required : List (String × Nat) := [("rmw", 110), ("order", 4), ("atomic_ext", 5),
+    ("litmus", 3), ("limit", 1 + limitMessages.length)]
+  for (kind, n) in required do
+    let count := (lines.filter (·.headD "" == kind)).length
+    unless count == n do
+      IO.eprintln s!"aarch64-abi: {path}: {count} `{kind}` rows, expected {n}"
+      return 1
   let r ← match parseLayouts ref lines with
     | .ok r => pure r
     | .error e => throw (IO.userError s!"aarch64-abi: {path}: {e}")
@@ -240,25 +339,36 @@ def main (args : List String) : IO UInt32 := do
         let some bits := intBits? name | pure (s!"atomic {name} {pad}", false)
         pure (s!"atomic {name} {pad}", atomicCase bits won lost added swapped loaded)
       -- A malformed result line is a failure, not a skipped case.
-      | "fop" :: rest | "atomic" :: rest => pure (s!"malformed {" ".intercalate rest}", false)
+      | ["rmw", ty, opName, cell, operand, returned, final] =>
+        let key := s!"rmw {ty} {opName} {cell} {operand}"
+        match intBits? ty, rmwOp? opName with
+        | some bits, some op => pure (key, rmwCase bits (ty.startsWith "i") op cell operand returned final)
+        | _, _ => pure (key, false)
+      | "order" :: kind :: cells => pure (s!"order {kind}", orderCase kind cells)
+      | "atomic_ext" :: rest => pure (s!"atomic_ext {rest.headD ""}", atomicExtRows.contains rest)
+      | "litmus" :: rest => pure (s!"litmus {rest.headD ""}", litmusCase rest)
+      | ["limit", "atomic_u256", _] => pure ("", true)
+      | ["limit", name, msg] => pure (s!"limit {name}", limitMessages.lookup name == some msg)
+      | "fop" :: rest | "atomic" :: rest | "rmw" :: rest | "limit" :: rest => pure (s!"malformed {" ".intercalate rest}", false)
       | _ => pure ("", true)
     if key.isEmpty then continue
-    match divergences.lookup key, ok with
+    match (divergencesIn version).lookup key, ok with
     | none, true => matched := matched + 1
     | some why, false => diverged := diverged ++ [s!"{key}: {why}"]
     | none, false => bad := bad ++ [s!"{key}: the recorded result is not allowed by the model"]
     | some _, true => bad := bad ++ [s!"{key}: declared divergence now matches (stale)"]
   let keys := lines.filterMap fun l => match l with
     | ["fop", ty, name, _] => some s!"fop {ty} {name}"
+    | ["rmw", ty, op, cell, operand, _, _] => some s!"rmw {ty} {op} {cell} {operand}"
     | "atomic" :: name :: _ :: _ :: pad :: _ => some s!"atomic {name} {pad}"
     | _ => none
-  for (key, _) in divergences do
+  for (key, _) in divergencesIn version do
     unless keys.contains key do bad := bad ++ [s!"{key}: declared divergence is not in the file"]
   for d in diverged do IO.println s!"divergence (not a match) {d}"
   for b in bad do IO.eprintln s!"aarch64-abi: {b}"
   unless bad.isEmpty do return 1
-  IO.println s!"aarch64-abi: {triple}: {r.ints.length + r.floats.length + r.vectors.length + r.atomics.length} \
-    layout rows equal the kernel-checked table; {matched} float/atomic results allowed by the model; \
+  IO.println s!"aarch64-abi: {triple} (Zig {version}): {r.ints.length + r.floats.length + r.vectors.length + r.atomics.length} \
+    layout rows equal the kernel-checked table; {matched} float, atomic and synchronization results allowed by the model; \
     {diverged.length} declared divergences (not counted as matches)"
   return 0
 

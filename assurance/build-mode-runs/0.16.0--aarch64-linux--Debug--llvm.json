@@ -1,0 +1,206 @@
+{
+  "backend": "llvm",
+  "cases": 86209,
+  "counts": {
+    "error_return_match": 892,
+    "host_difference": 755,
+    "illegal_exclusion": 497,
+    "panic_match": 4975,
+    "unspecified_exclusion": 580,
+    "value_match": 78510
+  },
+  "emulated": false,
+  "examples": {
+    "atomics": 100,
+    "basic": 2400,
+    "errors": 900,
+    "floatconv": 3000,
+    "floatops": 39625,
+    "floats": 2100,
+    "iogroup": 40,
+    "layout": 12241,
+    "lists": 1503,
+    "options": 900,
+    "pointers": 3300,
+    "recursion": 1200,
+    "slices": 6003,
+    "sync": 100,
+    "threads": 1220,
+    "variants": 2577,
+    "vectors": 9000
+  },
+  "excluded_examples": [],
+  "exclusions": [
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "bits32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 63,
+      "example": "floatconv",
+      "function": "f80ToF64",
+      "status": "host_difference"
+    },
+    {
+      "cases": 3,
+      "example": "floatconv",
+      "function": "toByte",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "toI32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "toU64",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 4,
+      "example": "floatops",
+      "function": "op32",
+      "status": "host_difference"
+    },
+    {
+      "cases": 12,
+      "example": "floatops",
+      "function": "op32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "floatops",
+      "function": "op64",
+      "status": "host_difference"
+    },
+    {
+      "cases": 12,
+      "example": "floatops",
+      "function": "op64",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 655,
+      "example": "floatops",
+      "function": "op80",
+      "status": "host_difference"
+    },
+    {
+      "cases": 373,
+      "example": "floatops",
+      "function": "op80",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlMode",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlSum",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "growCircle",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 135,
+      "example": "layout",
+      "function": "maskCount",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "numInt",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "shapeArea",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 3,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 300,
+      "example": "threads",
+      "function": "race",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "host_difference"
+    },
+    {
+      "cases": 5,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "host_difference"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "illegal_exclusion"
+    }
+  ],
+  "flags": "-ODebug -mcpu=baseline -fllvm",
+  "float_mode_optimized_sources": [],
+  "host": "Linux-aarch64",
+  "mode": "Debug",
+  "pin_violations": 0,
+  "schema": "air2lean-build-mode-run/1",
+  "skipped_examples": {
+    "asm": "host_excluded",
+    "threadsync": "version_excluded"
+  },
+  "sources_sha256": "199632feb8e8cf6a49b4537d7e0c1a2c0dc886a5eb168f193ed63cefb206ba30",
+  "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
+  "target": "aarch64-linux",
+  "triage": [],
+  "zig_version": "0.16.0"
+}

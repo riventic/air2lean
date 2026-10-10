@@ -1120,17 +1120,54 @@ jobs:
       # T04: the recorded aarch64-linux-gnu and aarch64-macos-none results (observed natively
       # by the aarch64-linux and macos jobs) against the model, with kernel-checked layout
       # tables per profile; their vector images against L09's encoding (docs/aarch64-abi.md).
-      - name: aarch64 ABI profile proofs (T04)
+      - name: aarch64 ABI profile driver tests (T04)
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.VecMem ZigLean.Float.Allowed
+          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
           python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
+
+      - name: aarch64 ABI profile proofs (T04, 0.16.0)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
             tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
           lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
             tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-macos-none-ReleaseSafe.txt
           for expected in tests/roadmap/aarch64-abi/expected/0.16.0/*.txt; do
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
+          done
+
+      - name: aarch64 ABI profile proofs (T04, 0.15.2)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.15.2/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.15.2/*.txt; do
+            grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
+            lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
+          done
+
+      - name: aarch64 ABI profile proofs (T04, 0.14.1)
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+            tests/roadmap/aarch64-abi/expected/0.14.1/aarch64-linux-gnu-ReleaseSafe.txt
+          lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-macos-none \
+            tests/roadmap/aarch64-abi/expected/0.14.1/aarch64-macos-none-ReleaseSafe.txt
+          for expected in tests/roadmap/aarch64-abi/expected/0.14.1/*.txt; do
             grep -E '^(vector|lane|load|pad) ' "$expected" > "$RUNNER_TEMP/vectors.txt"
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
           done
@@ -1824,6 +1861,7 @@ jobs:
           install_zig 0.17.0 b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a
           install_zig 0.16.0 b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
           install_zig 0.15.2 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
+          install_zig 0.14.1 39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa
 
       # Builds and executes probe.zig for aarch64-macos-none (docs/profiles.md).
       - name: macOS ABI target probe (0.16.0)
@@ -1851,14 +1889,31 @@ jobs:
               --output "$RUNNER_TEMP/abi-0.15.2-aarch64-macos-none-$mode.json"
           done
 
-      # T04: the native aarch64-macos-none probe against its versioned expected results.
+      # T04: the native aarch64-macos-none probe against its versioned expected results, for each
+      # Zig version with recorded results.
       - name: aarch64-macos ABI qualification (T04, 0.16.0)
         env:
           AIR2LEAN_ZIG_VERSION: "0.16.0"
         run: |
           set -euo pipefail
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
-            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-ReleaseSafe.txt"
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.16.0-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.15.2-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.14.1)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.14.1-ReleaseSafe.txt"
 
       # Zig 0.17.0 (in qualification) contract: tests/roadmap/abi-probes/0.17.0/ (LLVM 22 features).
       - name: macOS ABI target probe (0.17.0)
@@ -2067,16 +2122,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # sha256 from https://ziglang.org/download/index.json ("0.16.0" -> "aarch64-linux".shasum).
-      - name: Install stock zig (aarch64-linux)
+      # sha256 from https://ziglang.org/download/index.json ("<version>" -> "aarch64-linux".shasum).
+      - name: Install stock zig 0.16.0, 0.15.2 and 0.14.1 (aarch64-linux)
         run: |
           set -euo pipefail
-          curl -fL --output "$RUNNER_TEMP/zig.tar.xz" \
-            https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz
-          echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
-          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
-          [ "$("$RUNNER_TEMP/host-zig-0.16.0/zig" version)" = 0.16.0 ]
+          while read -r version sha256; do
+            curl -fL --output "$RUNNER_TEMP/zig-$version.tar.xz" \
+              "https://ziglang.org/download/$version/zig-aarch64-linux-$version.tar.xz"
+            echo "$sha256  $RUNNER_TEMP/zig-$version.tar.xz" | sha256sum -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$version"
+            tar -xJf "$RUNNER_TEMP/zig-$version.tar.xz" -C "$RUNNER_TEMP/host-zig-$version" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$version/zig" version)" = "$version" ]
+          done <<'EOF'
+          0.16.0 ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
+          0.15.2 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
+          0.14.1 f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
+          EOF
 
       - name: aarch64-linux ABI qualification (T04, 0.16.0)
         env:
@@ -2084,15 +2145,109 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
-            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-ReleaseSafe.txt"
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.16.0-ReleaseSafe.txt"
+
+      - name: aarch64-linux ABI qualification (T04, 0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.15.2-ReleaseSafe.txt"
+
+      - name: aarch64-linux ABI qualification (T04, 0.14.1)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
+            --target aarch64-linux-gnu --output "$RUNNER_TEMP/aarch64-linux-gnu-0.14.1-ReleaseSafe.txt"
 
       - name: Upload aarch64-linux observation
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: abi-aarch64-linux
-          path: ${{ runner.temp }}/aarch64-linux-gnu-ReleaseSafe.txt
+          path: ${{ runner.temp }}/aarch64-linux-gnu-*-ReleaseSafe.txt
           if-no-files-found: ignore
+
+  # T06: ReleaseSafe and Debug on LLVM, natively on aarch64-linux hardware, verified against the
+  # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).
+  # ReleaseFast and ReleaseSmall are not run here: on this hosted runner their harness run (the
+  # 4975 inputs that are illegal behaviour without safety checks) killed the runner twice, so
+  # those two records come from a native linux/arm64 container run only.
+  build-modes-aarch64-linux:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install stock zig 0.16.0 (aarch64-linux)
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/zig.tar.xz" https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz
+          echo "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/host-zig-0.16.0"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/host-zig-0.16.0" --strip-components=1
+          [ "$("$RUNNER_TEMP/host-zig-0.16.0/zig" version)" = 0.16.0 ]
+          echo "$RUNNER_TEMP/host-zig-0.16.0" >> "$GITHUB_PATH"
+
+      - name: Install elan (aarch64-linux)
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-linux-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator
+        run: lake build
+
+      - name: Native build-mode differential runs (aarch64-linux, LLVM)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build-modes"
+          failed=0
+          for mode in ReleaseSafe Debug; do
+            summary="$RUNNER_TEMP/build-modes/$mode.json"
+            AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
+            python3 scripts/build-modes.py record --verify --summary "$summary" \
+              --zig "$(command -v zig)" --zig-version 0.16.0 --target aarch64-linux \
+              --mode "$mode" --backend llvm --explicit-backend || failed=1
+          done
+          [ "$failed" -eq 0 ]
+
+      - name: Upload the build-mode differential summaries
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-mode-summaries-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/build-modes/
+          if-no-files-found: warn
+          retention-days: 30
 
   # L02: the wide bit-operation corpus on native aarch64-linux hardware. No Lean here: the
   # native stream must equal the Lean stream recorded in the committed evidence, which the
