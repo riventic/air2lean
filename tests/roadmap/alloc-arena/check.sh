@@ -53,14 +53,14 @@ text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
-# ArenaSpec.lean: `free` against FAllocSpec over the ghost-epoch invariant; it prints the axioms of
-# `free_spec`.
+# ArenaSpec.lean: `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant; it
+# prints the axioms of `free_spec`, `resize_spec` and `remap_spec`.
 "${lean_cmd[@]}" "$here/ArenaSpec.lean" > "$work/spec.txt"
 python3 - "$work/spec.txt" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert 'sorryAx' not in text and text.count('depends on axioms') == 1, text
+assert 'sorryAx' not in text and text.count('depends on axioms') == 3, text
 assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 bash "$here/mutant.sh"
