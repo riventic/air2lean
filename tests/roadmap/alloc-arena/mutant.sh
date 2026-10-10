@@ -13,8 +13,7 @@ mkdir -p "$work/AllocArena"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
-for module in ArenaLinux ArenaMacos; do
-  python3 - "$here/AllocArena/$module.lean" "$work/AllocArena/$module.lean" <<'EOF'
+python3 - "$here/AllocArena/ArenaLinux.lean" "$work/AllocArena/ArenaLinux.lean" <<'EOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
 text = open(src).read()
@@ -25,6 +24,9 @@ assert len(hits) == 1, "expected exactly one end_index bump in alloc"
 m = hits[0]
 open(dst, "w").write(text[:m.start()] + m.group(1) + " 0\n" + text[m.end():])
 EOF
+# Only the Linux module is mutated: the guard that sees the overlap is a Linux one.
+cp "$here/AllocArena/ArenaMacos.lean" "$work/AllocArena/ArenaMacos.lean"
+for module in ArenaLinux ArenaMacos; do
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/$module.olean" "$work/AllocArena/$module.lean" > /dev/null
 done
 if "${lean_cmd[@]}" "$here/Eval.lean" > "$work/eval.log" 2>&1; then
@@ -32,7 +34,8 @@ if "${lean_cmd[@]}" "$here/Eval.lean" > "$work/eval.log" 2>&1; then
   exit 1
 fi
 # A #guard fails; a missing import (an unbuilt prerequisite) is not a rejection of the mutant.
-grep -q "#guard\|did not evaluate to" "$work/eval.log" &&
-  ! grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/eval.log" ||
-  { cat "$work/eval.log" >&2; echo "alloc-arena mutant: Eval.lean failed for another reason" >&2; exit 1; }
+if grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/eval.log" ||
+    ! grep -q "#guard\|did not evaluate to" "$work/eval.log"; then
+  cat "$work/eval.log" >&2; echo "alloc-arena mutant: Eval.lean failed for another reason" >&2; exit 1
+fi
 echo "alloc-arena mutant: rejected (two allocations overlap)"

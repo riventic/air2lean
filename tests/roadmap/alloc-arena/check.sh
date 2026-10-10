@@ -39,19 +39,14 @@ for os in linux macos; do
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/$module.olean" "$work/AllocArena/$module.lean"
 done
 "${lean_cmd[@]}" "$here/Eval.lean"
-"${lean_cmd[@]}" -R "$here" -o "$work/ArenaObstruction.olean" "$here/ArenaObstruction.lean"
-cat > "$work/Axioms.lean" <<'AX'
-import ArenaObstruction
-#print axioms AllocArena.ArenaObstruction.foreign_free_panics
-#print axioms AllocArena.ArenaObstruction.oob_free_illegal
-AX
-"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt"
+# ArenaObstruction.lean prints the axioms of its two theorems.
+"${lean_cmd[@]}" "$here/ArenaObstruction.lean" > "$work/axioms.txt"
 # Only the standard axioms (any subset of propext, Classical.choice, Quot.sound).
 python3 - "$work/axioms.txt" <<'EOF'
 import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-assert text.strip() and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"

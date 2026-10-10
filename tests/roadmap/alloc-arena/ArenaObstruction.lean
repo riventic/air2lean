@@ -48,4 +48,8 @@ theorem foreign_free_panics : solo arena_foreign_free = some (.error .panic) := 
 theorem oob_free_illegal : solo arena_oob_free = some (.error .illegal) := by
   decide +kernel
 
+-- `check.sh` requires only the standard axioms.
+#print axioms foreign_free_panics
+#print axioms oob_free_illegal
+
 end AllocArena.ArenaObstruction
