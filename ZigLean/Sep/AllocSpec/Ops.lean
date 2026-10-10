@@ -129,6 +129,11 @@ theorem checkSliceEnd_ok {srcLen start len : BitVec 64} {extra : Nat}
     (h : start.toNat + len.toNat + extra ≤ srcLen.toNat) : checkSliceEnd srcLen start len extra = pure () := by
   simp [checkSliceEnd, h]
 
+/-- The model's address check of `@ptrFromInt` (`Zig.checkAddr`) of an aligned address: no
+effect. -/
+theorem checkAddr_ok {align n : Nat} (h : n % align = 0) : checkAddr align false n = pure () := by
+  simp [checkAddr, h]
+
 theorem checkIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat < s.len.toNat) :
     checkIndex s i = pure () := by
   simp [checkIndex, h]

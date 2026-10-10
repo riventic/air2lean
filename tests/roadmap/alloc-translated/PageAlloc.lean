@@ -79,6 +79,10 @@ theorem alignPointer_total {p : Ptr} {A : Nat} {bs : Array Byte} {k : Nat} (hk :
   simp only [pure_bind, Option.elim_some, e0]
   refine TotalTriple.of_pure (φ := (∃ b, p.block = some b) ∧ A % P = 0)
     (fun h hp => ⟨(PageSpec.mapping_block hp).imp fun _ x => x.1, hp.2.2.1⟩) fun ⟨⟨b, hb⟩, hA⟩ => ?_
+  refine TotalTriple.bind (TotalTriple.project_mapping (k := 0) (Nat.zero_le _))
+    fun q => TotalTriple.lift fun hq => ?_
+  subst hq
+  rw [e0]
   refine TotalTriple.bind (ptrAddr_owned (A := A) hb fun h hp => by
     obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hp
     rw [hb] at hb'; cases hb'; exact ho) fun x => TotalTriple.lift fun hx => ?_
@@ -313,7 +317,7 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
       Ops.and_mask_eq_zero (k := 12) (by decide) (by omega) hal
     have hL4 : BitVec.ofNat 64 (alignUp len.toNat P) &&& 4095 = 0 := by
       rw [and4095, hL]; exact alignUp_mod_self (by decide)
-    rw [if_pos (hint_check hv hL4)]
+    rw [if_pos (hint_check hv hL4), checkAddr_ok ((and4095 _).mp (hint_check hv hL4)), pure_bind]
     refine CTriple.bind (CTriple.liftMem (optPtrFromAddr_frame _)) fun x => ?_
     refine CTriple.pre (P := aptsE hint (some (⟨some b, off⟩ : Ptr)) ⋆ HintKn (some (⟨some b, off⟩ : Ptr))) ?_
       fun r hr => Full.sep_mono_right (fun _ hk => hintKn_some (Full.sep_lift.mpr ⟨⟨rfl, ho, hal⟩, hk⟩)) hr
