@@ -1277,7 +1277,7 @@ def lean_checks(gen_text, namespace, expected):
              "private def successful {α : Type} (r : Zig.Result α) : Option α := Option.bind r Except.toOption"]
     for (a, b), value in zip(INPUTS, expected):
         call = f"({namespace}.entry {a}#32 {b}#32)"
-        run = f"({call}.run' {namespace}.mem0 .fresh)" if memory else call
+        run = f"({call}.run' ({namespace}.mem0 .fresh))" if memory else call
         lines.append(f"#guard successful {run} == some {value}#32")
     lines.append(f"end {namespace}.FuzzCheck")
     return "\n".join(lines) + "\n"
