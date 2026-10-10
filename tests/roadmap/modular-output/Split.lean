@@ -26,10 +26,9 @@ private def require (ok : Bool) (message : String) : IO Unit :=
 private def load (dir : System.FilePath) : IO (Array Func) := do
   let paths := ((← dir.readDir).filter (·.fileName.endsWith ".json")).qsort
     (fun a b => decide (a.fileName < b.fileName))
-  -- As the CLI does: number the generic instances first, so a keyed reference names its instance.
-  let texts := Anon.renumberAll (← paths.mapM fun entry => IO.FS.readFile entry.path)
-  (paths.zip texts).mapM fun (entry, text) => do
-    match (do let f ← normalize (← Raw.parseFile text); check f; pure f : Except String Func) with
+  let raws ← IO.ofExcept (Anon.parseProgram (← paths.mapM fun entry => IO.FS.readFile entry.path))
+  (paths.zip raws).mapM fun (entry, raw) => do
+    match (do let f ← normalize raw; check f; pure f : Except String Func) with
     | .ok f => pure f
     | .error e => throw (IO.userError s!"{entry.path}: {e}")
 

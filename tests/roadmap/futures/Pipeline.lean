@@ -33,13 +33,8 @@ private def renameCalls (old new : String) (insts : Array Inst) : Array Inst :=
 
 private def loadAir (dir : System.FilePath) : IO (Array Func) := do
   let entries := (← dir.readDir).qsort (·.fileName < ·.fileName)
-  -- As the CLI does: number the generic instances first, so a keyed reference names its instance.
-  let texts := Anon.renumberAll (← entries.mapM fun entry => IO.FS.readFile entry.path)
-  let mut funcs : Array Func := #[]
-  for text in texts do
-    let raw ← get <| Raw.parseFile text
-    funcs := funcs.push (← get <| normalize raw)
-  return funcs
+  let raws ← get <| Anon.parseProgram (← entries.mapM fun entry => IO.FS.readFile entry.path)
+  raws.mapM fun raw => get <| normalize raw
 
 def main : IO Unit := do
   let funcs ← loadAir "tests/roadmap/futures/air/0.16.0"

@@ -783,9 +783,9 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
   let noalias ← match optField j "noalias" with
     | some n => (← n.getArr?).mapM Json.getNat?
     | none => pure #[]
-  for (i, k) in noalias.zipIdx do
-    unless i < params.size && (k == 0 || noalias[k - 1]! < i) do
-      throw s!"{name}: noalias: {i} is not a parameter index in increasing order"
+  for (p, k) in noalias.zipIdx do
+    unless p < params.size && (k == 0 || noalias[k - 1]! < p) do
+      throw s!"{name}: noalias: {p} is not a parameter index in increasing order"
   let ret ← (← j.getObjVal? "ret").getNat?
   let bodyJ ← (← j.getObjVal? "body").getArr?
   let body ← bodyJ.mapM (parseInst name types)
@@ -817,7 +817,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
                               cc := ← (← ej.getObjVal? "cc").getStr? : ExportDecl })
     | none => pure none
   let uncheckedIb ← match optField j "unchecked_ib" with
-    | some u => do (← u.getArr?).mapM Json.getStr?
+    | some u => (← u.getArr?).mapM Json.getStr?
     | none => pure #[]
   return {
     schema

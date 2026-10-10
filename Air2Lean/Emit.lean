@@ -3432,8 +3432,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   -- parameters may call (`naCallee`) marks its accesses for the caller's scope.
   let fc := if !fc.mem then fc
     else if !f.noalias.isEmpty then
-      if fc.conc then { fc with noalias := some (.error
-        s!"{f.name}: a concurrent function with noalias parameters is outside the subset") }
+      if fc.conc then { fc with noalias := some (.error (Noalias.concurrentMsg f.name)) }
       else { fc with noalias := some (Noalias.analyze f), naScope := true }
     else if naCallee && !fc.conc then { fc with noalias := some (.ok (Noalias.calleeMarks f)) }
     else fc

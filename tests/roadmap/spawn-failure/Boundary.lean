@@ -28,11 +28,10 @@ private def configVariant (f : Func) (value : Int) (allocator : Bool := false)
     | _ => i }
 
 def main : IO Unit := do
-  -- Numbered as the CLI numbers it, so a keyed reference names its instance.
-  let some text := (Anon.renumberAll
-      #[← IO.FS.readFile "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.empty.json"])[0]?
-    | throw (IO.userError "no fixture text")
-  let f ← match (do let f ← normalize (← Raw.parseFile text); check f; pure f : Except String Func) with
+  let text ← IO.FS.readFile "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.empty.json"
+  let f ← match (do
+      let some raw := (← Anon.parseProgram #[text])[0]? | throw "no fixture"
+      let f ← normalize raw; check f; pure f : Except String Func) with
     | .ok f => pure f
     | .error e => throw (IO.userError e)
   require (f.allInsts.any fun i => match i.op with

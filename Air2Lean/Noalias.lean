@@ -152,8 +152,7 @@ def analyze (f : Func) : Except String Marks := do
       | some a => { s with slots := s.slots.insert a ((s.slots.getD a {}).union v) }
       | none => s
     match i.op with
-    | .store p v => s := addSlot s p (t v)
-    | .memset p v => s := addSlot s p (t v)
+    | .store p v | .memset p v => s := addSlot s p (t v)
     | .memcpy _ dst src =>
       s := addSlot s dst (match localOf src with | some a => s.slots.getD a {} | none => .otherPtr)
     | _ => pure ()
@@ -200,16 +199,19 @@ def analyze (f : Func) : Except String Marks := do
       let r ← match (t p).root with
         | .ok r => pure r
         | .error what => fail i what
-      if kind matches .load | .atomic then
-        if read.any (· != r) then fail i "accesses with two different noalias roots"
-        read := some r
-      unless kind matches .load do
-        if write.any (· != r) then fail i "accesses with two different noalias roots"
-        write := some r
+      let join (cur : Option (Option Nat)) : Except String (Option (Option Nat)) :=
+        if cur.any (· != r) then fail i "accesses with two different noalias roots" else pure (some r)
+      if kind matches .load | .atomic then read ← join read
+      unless kind matches .load do write ← join write
     -- A store may first read the bytes it writes through the same pointer (a bit-pointer or
     -- vector-lane store reads its host, `Zig.storeBits`): those reads have the write's root. Only
     -- an instruction that can touch memory needs a mark.
     if touchesMemory locals i then marks := marks.insert i.id ((read <|> write).getD none, write.getD none)
   return marks
+
+/-- The rejection of a concurrent function with noalias parameters (`Check.programIssues`; the
+emitter fails closed with the same message). -/
+def concurrentMsg (name : String) : String :=
+  s!"{name}: a concurrent function with noalias parameters is outside the subset"
 
 end Air2Lean.Noalias

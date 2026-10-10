@@ -3675,7 +3675,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
     for f in funcs do
       if !f.noalias.isEmpty && conc.contains f.name then
         issues := issues.push { kind := .memory, function := f.name, message :=
-          s!"{f.name}: a concurrent function with noalias parameters is outside the subset" }
+          (Noalias.concurrentMsg f.name) }
   for (f, index) in funcs.zip indexes do
     if mem.contains f.name then
       let insts := index.insts
