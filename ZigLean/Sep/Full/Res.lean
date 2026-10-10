@@ -13,7 +13,7 @@ frame keeps them (`docs/alloc-page.md`, obstructions O1 and O3):
 * **the metadata of dead blocks**: `ptrAddr` (`@intFromPtr`) of a pointer into a freed block reads
   the block's address, and throws `.illegal` only if the block does not exist at all.
 
-A full-state resource `Res` has two parts:
+A full-state resource `Res` has three parts:
 
 * `heap : FHeap`: owned live bytes, each with its legacy `Cell` **and its atomic tag**
   (`FCell.atom`: the start and length of the atomic location over the byte, or `none`). Owning a
@@ -22,6 +22,8 @@ A full-state resource `Res` has two parts:
 * `know : Know`: **persistent knowledge** of block addresses, `known b A`: block `b` exists and
   has address `A`. Block ids are never reused and a block's address never changes, so this
   knowledge stays true after `free` (it is not ownership: it is duplicable, `known_dup`).
+* `gh : Ghost`: ghost epoch ledgers (§Ghost state below, rules in `Ghost.lean`); no primitive
+  reads or changes them.
 
 `Mem.fheap m` is the full heap of a memory (live bytes with their tags); `Mem.kn m` its
 knowledge (every block, live or dead, with its address).

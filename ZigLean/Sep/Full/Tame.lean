@@ -6,7 +6,7 @@ import ZigLean.Mem.Null
 # More `Tame` programs, and the `tame` tactic
 
 `Tame c` (`ZigLean/Sep/Full/Triple.lean`): `c` keeps the atomic layout and every block's address,
-so a legacy triple of `c` lifts to a full-state one (`FTriple.ofTriple`, `FTotalTriple.ofTotal`).
+and keeps live blocks apart (`LDMono`), so a legacy triple of `c` lifts to a full-state one (`FTriple.ofTriple`, `FTotalTriple.ofTotal`).
 This file adds the control flow of normalized generated code (`throw`, `if`, `match`,
 `Option.elim`, `<$>`), `@ptrFromInt`, and the OS page mappings of premise OSM-01 (`Os.mmap`,
 `Os.munmap`, `Os.mremap`: they push blocks, or replace a block by one at the same address).
@@ -134,8 +134,9 @@ theorem mappingAt_ok {p : Ptr} {m m' : Mem} {r : BlockId × Block × Nat}
       split at h₁
       · rename_i lo hk
         split at h₁
-        · obtain ⟨rfl, rfl⟩ := Proto.MemM.pure_ok h₁
-          exact ⟨rfl, hb, by simpa using (by assumption : _ ∧ _).1, hk⟩
+        · rename_i hlive
+          obtain ⟨rfl, rfl⟩ := Proto.MemM.pure_ok h₁
+          exact ⟨rfl, hb, by simpa using hlive.1, hk⟩
         · exact (Proto.MemM.throw_ok h₁).elim
       · exact (Proto.MemM.throw_ok h₁).elim
 
@@ -178,7 +179,7 @@ theorem _root_.Zig.Full.KMono.set_push {m m' : Mem} {b : BlockId} {blk nb x : Bl
 
 /-- `addrFree` survives a block's death. -/
 theorem _root_.Zig.Mem.addrFree_set_dead {m : Mem} {b : BlockId} {blk : Block} {A n : Nat}
-    (hb : m.blocks[b]? = some blk) (h : m.addrFree A n = true) :
+    (h : m.addrFree A n = true) :
     ({ m with blocks := m.blocks.set! b { blk with live := false } } : Mem).addrFree A n = true := by
   unfold Mem.addrFree at h ⊢
   rw [Array.all_eq_true] at h ⊢
@@ -208,7 +209,7 @@ theorem _root_.Zig.Full.LDMono.set_dead_push {m m' : Mem} {b : BlockId} {blk x :
   have hf' : m.addrFree x.addr x.bytes.size = true := by unfold Mem.addrFree at hf ⊢; rwa [← hM]
   exact LDMono.trans (m₂ := { m with blocks := m.blocks.set! b { blk with live := false } })
     (LDMono.set (nb := { blk with live := false }) hb (by simp) rfl (Nat.le_refl _) rfl)
-    (LDMono.push (fun _ => Mem.addrFree_set_dead hb hf') h)
+    (LDMono.push (fun _ => Mem.addrFree_set_dead hf') h)
 
 theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo : Nat}
     {newLen : BitVec 64} {flags : BitVec 32} {m m' : Mem} {v : Except ErrName Slice}

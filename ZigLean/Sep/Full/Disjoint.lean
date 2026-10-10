@@ -185,6 +185,26 @@ theorem _root_.Zig.Mem.newAddr_addrFree (m : Mem) (size align : Nat) :
     have := le_alignUp m.top align
     rw [clearOf_iff]; right; right; right; right; omega
 
+/-- A global's block is placed like any new block. -/
+theorem LDMono.addGlobal (m : Mem) (bs : Array Byte) (a : Nat) (k : BlockKind) :
+    LDMono m (m.addGlobal bs a k) :=
+  LDMono.push (fun _ => m.newAddr_addrFree _ _) rfl
+
+/-- The memory at program start keeps live blocks apart, so `Mem.FSeq`'s `LiveDisjoint` holds of
+every memory reachable from it. -/
+theorem _root_.Zig.Mem.ofGlobals_liveDisjoint (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) : (Mem.ofGlobals σ gs).LiveDisjoint := by
+  unfold Mem.ofGlobals
+  suffices h : ∀ (gs : List (Array Byte × Nat × BlockKind)) (m : Mem), m.LiveDisjoint →
+      (gs.foldl (fun m (bs, a, k) => m.addGlobal bs a k) m).LiveDisjoint from
+    h gs _ fun _ _ _ _ _ h => by simp at h
+  intro gs
+  induction gs with
+  | nil => exact fun _ h => h
+  | cons g gs ih =>
+    obtain ⟨bs, a, k⟩ := g
+    exact fun m h => ih _ (LDMono.addGlobal m bs a k h)
+
 /-- A range inside a clear one is clear. -/
 theorem _root_.Zig.Mem.addrFree_mono {m : Mem} {A n A' n' : Nat} (h : m.addrFree A n = true)
     (hA : A ≤ A') (hn : A' + n' ≤ A + n) : m.addrFree A' n' = true := by

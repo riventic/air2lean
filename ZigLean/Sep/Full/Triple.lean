@@ -10,14 +10,16 @@ import ZigLean.Sep.Full.Disjoint
 (`ZigLean/Sep/Full/Res.lean`): a memory holds a resource `r` with the frame `rF` (`Holds`) if its
 full heap (live bytes **with their atomic tags**) is exactly the disjoint union of the two, and
 **the knowledge of both is true in it** (every `known b A` names an existing block at its address).
-The memory invariant is `Mem.FSeq`: `Mem.Seq` and a well-formed atomic layout.
+The memory invariant is `Mem.FSeq`: `Mem.Seq`, a well-formed atomic layout, and live blocks at
+disjoint addresses (`Mem.LiveDisjoint`). The ghost states of a resource and its frame compose
+(`Ghost.Ok`).
 
-* **Structural rules**: `conseq`, `frame`, `ret`, `bind`, `ex`, `lift`; `drop` forgets knowledge.
-  The frame is in the definition, so the frame rule holds for every program; the frame now
-  includes the tags of its bytes and its knowledge.
+* **Structural rules**: `conseq`, `frame`, `ret`, `bind`, `ex`, `lift`; `drop` forgets knowledge
+  and ghost state. The frame is in the definition, so the frame rule holds for every program; the
+  frame now includes the tags of its bytes and its knowledge.
 * **Lifting** (`ofTriple`): a legacy `Triple P c Q` of a program that keeps the atomic layout and
-  every block's address (`Tame`) is a full triple of `up P` and `up Q`. Every primitive of plain
-  generated code is `Tame` (`Tame.load`, `.store`, `.alloc`, `.free`, `.ptrAddr`, closed
+  every block's address and keeps live blocks apart (`Tame`) is a full triple of `up P` and
+  `up Q`. Every primitive of plain generated code is `Tame` (`Tame.load`, `.store`, `.alloc`, `.free`, `.ptrAddr`, closed
   under `pure` and `bind`), so the legacy rules carry over unchanged.
 * **Knowledge** (`know_intro`): owning a byte of block `b` gives `known b A` for its address `A`;
   `ptrAddr` (`@intFromPtr`) of a pointer into `b` needs only `known b A`, so it works after `free`

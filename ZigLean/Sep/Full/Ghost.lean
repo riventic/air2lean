@@ -12,8 +12,9 @@ triple's pre- or postcondition (`FTriple.upd`, `FTriple.upd_post`):
 * `Upd.alloc`: a new ledger `gauth γ 0 0` at a name no frame uses;
 * `Upd.issue`: a new token of the current epoch;
 * `Upd.retire`: a token of the current epoch given back;
-* `Upd.bump`: the next epoch, every outstanding token stale (revocation without collection);
-* `Upd.count`: a token of the current epoch shows that `n ≥ 1`.
+* `Upd.bump`: the next epoch, every outstanding token stale (revocation without collection).
+
+A token of the current epoch shows that `n ≥ 1` (`gfrag_count`, `FTriple.count`).
 
 A stale token stays valid but is useless: an invariant indexed by the epoch (`own e`) needs the
 authority of its epoch, which is exclusive.
