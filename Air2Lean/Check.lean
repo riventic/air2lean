@@ -618,10 +618,10 @@ def CheckCtx.memPtrTy (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String T
 but `Zig.Mem.access` of zero bytes still needs a live block, in bounds and aligned, so the model
 would report `.illegal` where Zig is defined. Sema emits no load or store of a zero-bit value (it
 is comptime-known) and the exporter gives a zero-size struct no type (`.other`), so this keeps a
-hand-written or future export from reaching that rule. -/
-def zeroSizeAccess? (types : Array Ty) (layouts : Array Layout) (ty : TyId) (errBits : Nat)
-    (what : String) : Option String :=
-  if let .ok (0, _) := modelLayout types layouts ty errBits then
+hand-written or future export from reaching that rule. Called after `checkMemTy` succeeded,
+so the exported size is the model's. -/
+def zeroSizeAccess? (layouts : Array Layout) (ty : TyId) (what : String) : Option String :=
+  if (layouts[ty]?.bind (·.size)) == some 0 then
     some s!"{what} of a zero-size type is outside the subset (the model's access of zero \
       bytes needs a live block)"
   else none
@@ -629,7 +629,7 @@ def zeroSizeAccess? (types : Array Ty) (layouts : Array Layout) (ty : TyId) (err
 /-- `zeroSizeAccess?` as a check failure at `line`. -/
 def CheckCtx.rejectZeroSize (cx : CheckCtx) (line : Nat) (ty : TyId) (what : String) :
     Except String Unit := do
-  if let some msg := zeroSizeAccess? cx.types cx.layouts ty cx.errBits what then
+  if let some msg := zeroSizeAccess? cx.layouts ty what then
     cx.fail line msg
 
 /-- A memory access through `ptr` (not a place): the pointee must be a type the model encodes,
@@ -3680,7 +3680,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
             issues := issues.push { kind := .memory, function := f.name, instruction := i.id, message }
           -- A slice read is a `loadItem`: no access of zero bytes (MM-12, `rejectZeroSize`).
           else if i.op matches .sliceElemVal .. then
-            if let some msg := zeroSizeAccess? f.types f.layouts c f.errorSetBits "an item access" then
+            if let some msg := zeroSizeAccess? f.layouts c "an item access" then
               issues := issues.push { kind := .memory, function := f.name, instruction := i.id,
                                       message := s!"{f.name}: near line 0: {msg}" }
   return issues
