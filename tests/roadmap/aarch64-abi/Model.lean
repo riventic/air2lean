@@ -33,7 +33,7 @@ structure Recorded where
   floats : List (String × FloatFmt × Nat × Nat)
   vectors : List (String × Nat × Nat × Bool × Nat × Nat)
   atomics : List (String × Nat × Nat × Nat)
-  /-- The widest integer `@atomicRmw` accepts (`atomic-limit.zig` must be rejected). -/
+  /-- The widest integer `@atomicRmw` accepts (`limits/atomic_u256.zig` must be rejected). -/
   atomicMaxBits : Nat
   cacheLine : Nat
   deriving BEq, Repr

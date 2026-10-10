@@ -165,7 +165,7 @@ jobs:
       - name: Artifact manifest provenance regressions
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/artifact-manifest/test_manifest.py
 
-      # Two committed receipt-chained fixtures (fresh schema-12 exports, schema-2 receipts, native identity):
+      # Two committed receipt-chained fixtures (fresh schema-12 exports, schema-3 receipts, native identity):
       # edit-one-link and receipt-replay tests on copies, the offline recheck and the offline replay of
       # each committed receipt against the tree (no revision needed). No Zig, Lake or Lean.
       # Heavy counterpart (local, guarded): scripts/provenance-evidence.py --fixture NAME regenerate WORKDIR.
@@ -775,6 +775,7 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/packed-fields/check.sh
+          bash tests/roadmap/packed-fields/compiler.sh --check
       # B1: tagged unions with a `noreturn` variant; committed 0.16.0/0.15.2 exports, kernel
       # proofs of the native values and fail-closed rejections. Runs no compiler.
       - name: Noreturn union variants
@@ -1213,6 +1214,7 @@ jobs:
           lake build ZigLean.Sep.Try ZigLean.Sep.Discard
           python3 -m unittest discover -s tests/roadmap/try-pointers -v
           bash tests/roadmap/try-pointers/check.sh --check-artifacts
+          bash tests/roadmap/try-pointers/check.sh --check-qualification
           bash tests/roadmap/try-pointers/check.sh --native
           fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-source.XXXXXX")
           trap 'rm -rf "$fresh"' EXIT

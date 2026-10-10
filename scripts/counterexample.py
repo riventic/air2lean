@@ -457,7 +457,7 @@ def confirm(root, replay, timeout, zig=None, runner=None):
     native = replay.get('zig_native')
     if native is None: return outcome
     if outcome['status'] != 'verified': return dict(outcome, zig_native=dict(native, status='not_run'))
-    result = native_confirm(root, native['request'], zig, outcome['observed']['line'], timeout)
+    result = native_confirm(root, native['request'], zig or default_zig(), outcome['observed']['line'], timeout)
     status = {'verified': 'verified', 'not_reproduced': 'not_reproduced', 'timeout': 'timeout'}.get(result['status'], 'error')
     return dict(outcome, status=status, zig_native=dict(native, **result))
 

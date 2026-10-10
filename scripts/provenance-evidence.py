@@ -3,7 +3,7 @@
 
 Two fixtures are committed (`--fixture`): `provenance` (assurance/provenance, x86_64-linux) and
 `gap` (assurance/provenance-gap, aarch64-macos), each a manifest chaining source, AIR, profile,
-Gen.lean, proofs, a schema-2 proof receipt and a native-build identity.
+Gen.lean, proofs, a schema-3 proof receipt and a native-build identity.
 
 `check` is offline (no Zig, Lake or Lean): it rechecks a fixture's manifest.json against the tree
 with the reviewer pins in its pins.json. Drift in the repository-wide links (compiler patch,
@@ -151,9 +151,9 @@ def replay(fx, strict, root=ROOT):
     manifest = json.loads((root / fx['dir'] / 'manifest.json').read_text())
     module = fx['proof_module']
     problems = []
-    if not (receipt.get('schema') == 2 and receipt.get('status') == 'audited' and plan.get('schema') == 1
+    if not (receipt.get('schema') == 3 and receipt.get('status') == 'audited' and plan.get('schema') == 1
             and plan.get('scope') == 'explicit-modules' and plan.get('modules') == [module]):
-        problems.append('receipt copy is not a schema-2 audited explicit-module receipt for ' + module)
+        problems.append('receipt copy is not a schema-3 audited explicit-module receipt for ' + module)
     if audit.get('status') != 'pass' or audit.get('violations') or audit.get('build_checked') is not True:
         problems.append('audit did not pass the dependency policy with a checked build')
     toolchain_file = (root / 'lean-toolchain').read_text().strip()

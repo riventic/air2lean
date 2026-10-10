@@ -126,7 +126,7 @@ Two fixtures are committed, each a genuine fresh run chaining every link includi
 
 Each holds schema-12 AIR from the patched 0.16.0 AIR-only compiler (`air/`), the generated
 `Gen.lean` (with profile header, byte-identical to translator output: `scripts/gen-integrity.py`),
-proofs, a schema-2 proof receipt (`receipt/`, without `after.json`), `manifest.json` and
+proofs, a schema-3 proof receipt (`receipt/`, without `after.json`), `manifest.json` and
 `pins.json` (reviewer pins). The two differ in target, ABI, CPU features and theorem shapes, so
 neither a profile nor a theorem set is special-cased.
 
