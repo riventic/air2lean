@@ -30,9 +30,12 @@ region can be any byte range of a block: a fixed buffer hands out sub-ranges of 
 a page allocator a prefix of a mapping.
 
 **Logics.** `Logic` packages a Hoare logic over `MemM` with its structural rules
-(`ofTotal`, `toPartial`, `conseq`, `frame`, `bind`, `ex`, `lift`, `congr`).
-`Logic.partial` is `Triple` (a diverging call satisfies every triple), `Logic.total` is
-`TotalTriple`. Every result below is stated for an arbitrary `L`.
+(`ofTotal`, `conseq`, `frame`, `bind`, `ex`, `lift`, `congr`). `ofTotal` lifts a total triple
+of a program that keeps the atomic layout and every block's address (`Full.Tame`; every
+primitive of generated plain-memory code is). `Logic.partial` is `Triple` (a diverging call
+satisfies every triple), `Logic.total` is `TotalTriple`; both are `Logic.Sound` (their triples
+are partial triples). `FLogic.legacy FL O` is the full-state logic `FL` with the allocator state
+`O` framed around every assertion. Every result below is stated for an arbitrary `L`.
 
 **The vtable.** `RawVTable` is the semantics of the four `std.mem.Allocator.VTable` entries
 (Zig 0.16.0), each taking the context pointer `ctx` (`Allocator.ptr`), the alignment as the
@@ -72,7 +75,7 @@ wrappers make them undefined). `ret_addr` is unconstrained. A free consumes exac
 and its token; the allocator may keep the bytes (an arena), reuse them, or give them back to
 the OS, which `I.own` hides.
 
-Closure properties: `AllocSpec.toPartial` (a total allocator is a partial one) and
+Closure properties: `AllocSpec.toPartial` (an allocator in a sound logic is a partial one) and
 `AllocSpec.congr` (an allocator whose entries have the same runs from every sequential memory
 satisfies the same spec; this is how a translated allocator inherits a proof about its
 unfolded step semantics).
@@ -199,8 +202,10 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   [sep-full-state.md](sep-full-state.md)) has the same entries and conditions over full-state
   assertions. `FAllocSpec.ofTotal` lifts a total `AllocSpec` of a vtable whose entries are `Tame`
   (the FixedBufferAllocator: `FBA.fallocSpec`). The page allocator's `free`, `resize` and `remap`
-  are proved against it; its `alloc` is blocked by O4 ([alloc-page.md](alloc-page.md)). The
-  wrapper contracts are still stated over `AllocSpec`.
+  are proved against it; its `alloc` is blocked by O4 ([alloc-page.md](alloc-page.md)).
+  `FAllocSpec.toLegacy` turns an `FAllocSpec` whose tokens are legacy assertions into an
+  `AllocSpec` in `FLogic.legacy FL O`, so every wrapper contract below holds in the full-state
+  logic, with the allocator state `O` framed (`ZigLean/Sep/Full/Wrappers.lean`).
 
 ## Relation to the legacy models it replaces
 

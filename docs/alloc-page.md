@@ -2,7 +2,7 @@
 
 Status: the translated `PageAllocator` (Zig 0.16.0, x86_64-linux and aarch64-macos, from
 `posix.mmap`/`munmap`/`mremap` only, premise [OSM-01](premises.md#osm-01)) does **not** satisfy
-`AllocSpec` ([alloc-spec.md](alloc-spec.md)) as it is stated, in any logic and for any invariant
+`AllocSpec` ([alloc-spec.md](alloc-spec.md)) as it is stated, in any sound logic and for any invariant
 that holds at program start. This is a limit of the specification's logic, not a bug of the
 allocator or of the OS model: the native program is fine. This page records the obstructions,
 their kernel-checked evidence, two upstream Zig bugs, the native comparison, and the status with

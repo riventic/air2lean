@@ -1,4 +1,5 @@
 import ZigLean.Sep.AllocSpec.Region
+import ZigLean.Sep.Full.Triple
 
 /-!
 # A generic allocator specification
@@ -41,12 +42,15 @@ open Assn
 /-! ## Logics -/
 
 /-- A Hoare logic over `MemM` with the structural rules of `Triple` and `TotalTriple`. A total
-triple is a triple of every such logic (`ofTotal`), and a triple of any of them is a partial
-triple (`toPartial`). -/
+triple of a program that keeps the atomic layout and every block's address
+(`Full.Tame`, `ZigLean/Sep/Full/Triple.lean`) is a triple of every such logic (`ofTotal`). Every
+primitive of generated plain-memory code is `Tame`. `Triple` and `TotalTriple` are logics whose
+triples are partial triples (`Logic.Sound`); so is the full-state logic seen through a fixed
+allocator state (`FLogic.legacy`, `ZigLean/Sep/Full/AllocSpec.lean`), in its own sense. -/
 structure Logic where
   T : {α : Type} → Assn → MemM α → (α → Assn) → Prop
-  ofTotal : ∀ {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}, TotalTriple P c Q → T P c Q
-  toPartial : ∀ {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}, T P c Q → Triple P c Q
+  ofTotal : ∀ {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}, TotalTriple P c Q →
+    Full.Tame c → T P c Q
   conseq : ∀ {α : Type} {P P' : Assn} {c : MemM α} {Q Q' : α → Assn}, T P c Q →
     (∀ h, P' h → P h) → (∀ v h, Q v h → Q' v h) → T P' c Q'
   frame : ∀ {α : Type} {P R : Assn} {c : MemM α} {Q : α → Assn}, T P c Q →
@@ -74,8 +78,7 @@ theorem TotalTriple.congr {α : Type} {P : Assn} {c c' : MemM α} {Q : α → As
 /-- Partial correctness: `Triple`. A diverging allocator satisfies it. -/
 def Logic.partial : Logic where
   T := Triple
-  ofTotal := TotalTriple.toPartial
-  toPartial := id
+  ofTotal h _ := h.toPartial
   conseq := Triple.conseq
   frame := Triple.frame
   bind := Triple.bind
@@ -86,8 +89,7 @@ def Logic.partial : Logic where
 /-- Total correctness: `TotalTriple`. Every call returns. -/
 def Logic.total : Logic where
   T := TotalTriple
-  ofTotal := id
-  toPartial := TotalTriple.toPartial
+  ofTotal h _ := h
   conseq := TotalTriple.conseq
   frame := TotalTriple.frame
   bind := TotalTriple.bind
@@ -95,11 +97,20 @@ def Logic.total : Logic where
   lift := TotalTriple.lift
   congr := TotalTriple.congr
 
+/-- Every triple of `L` is a partial triple. -/
+def Logic.Sound (L : Logic) : Prop :=
+  ∀ {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn}, L.T P c Q → Triple P c Q
+
+theorem Logic.partial_sound : Logic.partial.Sound := id
+
+theorem Logic.total_sound : Logic.total.Sound := TotalTriple.toPartial
+
 namespace Logic
 
 variable (L : Logic) {α β : Type} {P R : Assn} {c : MemM α} {Q : α → Assn}
 
-theorem ret (v : α) : L.T (Q v) (pure v : MemM α) Q := L.ofTotal (TotalTriple.ret v)
+theorem ret (v : α) : L.T (Q v) (pure v : MemM α) Q :=
+  L.ofTotal (TotalTriple.ret v) (Full.Tame.pure' v)
 
 /-- `ret` with an entailment. -/
 theorem ret' (v : α) (hq : ∀ h, P h → Q v h) : L.T P (pure v : MemM α) Q :=
@@ -182,13 +193,13 @@ structure AllocSpec (L : Logic) (vt : RawVTable) (ctx : Ptr) (I : AllocInv) : Pr
     s.len.toNat = bs.size → 0 < bs.size →
     L.T (I.own ∗ granted I s.ptr k bs) (vt.free ctx s k ra) (fun _ => I.own)
 
-/-- A total allocator is a partial one. -/
+/-- An allocator in a sound logic (`Logic.total`, for instance) is a partial one. -/
 theorem AllocSpec.toPartial {L : Logic} {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
-    (h : AllocSpec L vt ctx I) : AllocSpec Logic.partial vt ctx I where
-  alloc len k ra h1 h2 h3 := L.toPartial (h.alloc len k ra h1 h2 h3)
-  resize s k n ra bs h1 h2 h3 h4 h5 := L.toPartial (h.resize s k n ra bs h1 h2 h3 h4 h5)
-  remap s k n ra bs h1 h2 h3 h4 h5 := L.toPartial (h.remap s k n ra bs h1 h2 h3 h4 h5)
-  free s k ra bs h1 h2 h3 := L.toPartial (h.free s k ra bs h1 h2 h3)
+    (hL : L.Sound) (h : AllocSpec L vt ctx I) : AllocSpec Logic.partial vt ctx I where
+  alloc len k ra h1 h2 h3 := hL (h.alloc len k ra h1 h2 h3)
+  resize s k n ra bs h1 h2 h3 h4 h5 := hL (h.resize s k n ra bs h1 h2 h3 h4 h5)
+  remap s k n ra bs h1 h2 h3 h4 h5 := hL (h.remap s k n ra bs h1 h2 h3 h4 h5)
+  free s k ra bs h1 h2 h3 := hL (h.free s k ra bs h1 h2 h3)
 
 /-- The spec only depends on the runs of the entries: an allocator with the same runs from
 every sequential memory (the translated one, after unfolding) satisfies it too. -/

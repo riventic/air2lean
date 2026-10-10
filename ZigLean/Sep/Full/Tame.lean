@@ -54,6 +54,37 @@ theorem recordAccess (b o n : Nat) (k : AccessKind) : Tame (Zig.recordAccess b o
     obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h
     exact ⟨rfl, KMono.of_blocks rfl⟩
 
+/-- A pure `Result` step lifted into `MemM`. -/
+theorem liftM (r : Result α) : Tame (_root_.liftM r : MemM α) := lift r
+
+/-- `@returnAddress` / an arbitrary word: only the oracle position moves. -/
+theorem arbitraryWord : Tame Zig.arbitraryWord := of_eq fun m v m' h => by
+  unfold Zig.arbitraryWord at h
+  obtain ⟨_, m₁, h1, h2⟩ := Proto.MemM.bind_ok h
+  obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h1
+  obtain ⟨_, m₂, h3, h4⟩ := Proto.MemM.bind_ok h2
+  have := Proto.MemM.set_ok h3
+  subst this
+  obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h4
+  exact ⟨rfl, KMono.of_blocks rfl⟩
+
+theorem returnAddress : Tame Zig.returnAddress := arbitraryWord
+
+theorem ptrLe (a b : Ptr) : Tame (Zig.ptrLe a b) := by
+  unfold Zig.ptrLe
+  exact bind (ptrAddr a) fun _ => bind (ptrAddr b) fun _ => pure' _
+
+theorem memset {β : Type} [Enc β] (a : Nat) (p : Ptr) (n : BitVec 64) (v : Option β) :
+    Tame (Zig.memset a p n v) := by
+  unfold Zig.memset
+  exact ite (pure' _) (bind get fun m => bind (liftM _) fun _ => storeBytes _ _ _ _)
+
+theorem memmove (size da sa : Nat) (d s : Ptr) (n : BitVec 64) :
+    Tame (Zig.memmove size da sa d s n) := by
+  unfold Zig.memmove
+  exact ite (pure' _) (bind get fun m => bind (liftM _) fun _ =>
+    bind (loadBytes _ _ _ _) fun _ => storeBytes _ _ _ _)
+
 /-! ## OS page mappings (premise OSM-01) -/
 
 theorem throw_bind_ok {β γ : Type} {e : Error} {f : β → MemM γ} {m₀ m₁ : Mem} {x : γ}
@@ -199,11 +230,12 @@ end Tame
 
 /-- `Tame` goals of normalized generated code. Callees are taken from the hypotheses
 (`have := …` the callee's `Tame` lemma first). -/
-macro "tame" : tactic => `(tactic| repeat' (first
+macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | (guard_target = ∀ _, _; intro)
   | with_reducible exact Tame.pure' _
   | with_reducible exact Tame.throw _
   | with_reducible exact Tame.lift _
+  | with_reducible exact Tame.liftM _
   | with_reducible exact Tame.get
   | with_reducible exact Tame.load _ _ _
   | with_reducible exact Tame.store _ _ _
@@ -214,6 +246,11 @@ macro "tame" : tactic => `(tactic| repeat' (first
   | with_reducible exact Tame.ptrAddr _
   | with_reducible exact Tame.ptrFromAddr _
   | with_reducible exact Tame.recordAccess _ _ _ _
+  | with_reducible exact Tame.returnAddress
+  | with_reducible exact Tame.ptrLe _ _
+  | with_reducible exact Tame.memset _ _ _ _
+  | with_reducible exact Tame.memmove _ _ _ _ _ _
+  | with_reducible exact Tame.arbitraryWord
   | with_reducible exact Tame.munmap _ _
   | with_reducible exact Tame.mremap _ _ _ _ _ _
   | with_reducible exact Tame.mmap _ _ _ _ _ _ _
@@ -222,7 +259,10 @@ macro "tame" : tactic => `(tactic| repeat' (first
   | with_reducible apply Tame.ite
   | with_reducible apply Tame.elim
   | with_reducible apply Tame.bind
-  | split))
+  | split
+  | exact Tame.memset _ _ _ _
+  | exact Tame.memmove _ _ _ _ _ _))
+
 
 end Full
 end Zig

@@ -15,7 +15,7 @@ bytes) splits into the precondition's part and a frame. Two parts of `Mem` that 
   at the same bytes makes `locIdx` throw `.unspecified`. `odd` has the heap of `mem0` (the program
   start) and such a location, so no precondition that holds at program start gives a triple for
   `alloc` (`alloc_no_triple_at_start`), and no allocator invariant that holds at program start
-  satisfies `AllocSpec` (`not_allocSpec_at_start`), in any logic.
+  satisfies `AllocSpec` (`not_allocSpec_at_start`), in any sound logic.
 * **O1, dead blocks.** After `free` of the last allocation, `addr_hint` points into an unmapped
   (dead) block; the next `alloc` reads its address (`@intFromPtr`) and checks the alignment of the
   derived hint (`@ptrFromInt` to `[*]align(page_size_min) u8`). Dead blocks are not in the heap.
@@ -116,22 +116,22 @@ theorem alloc_args (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) :
 
 set_option maxHeartbeats 0 in
 /-- **O3.** No precondition that holds in (a part of) the heap at program start makes
-`alloc(1 byte, alignment 1)` a triple of any logic. -/
-theorem alloc_no_triple_at_start (L : Logic) (c : Ptr) (ra : BitVec 64) (P : Assn)
+`alloc(1 byte, alignment 1)` a triple of any sound logic. -/
+theorem alloc_no_triple_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitVec 64) (P : Assn)
     (Q : Option Ptr → Assn) {hP hF : Heap} (hd : Heap.Disjoint hP hF)
     (hm : mem0.heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
   intro ht
   rw [alloc_args] at ht
-  exact no_error_of_triple (L.toPartial ht) hd (by rw [odd_heap]; exact hm) hp odd_seq alloc_odd
+  exact no_error_of_triple (hL ht) hd (by rw [odd_heap]; exact hm) hp odd_seq alloc_odd
 
 /-- So no allocator invariant that holds at program start and admits a 1-byte request satisfies
-`AllocSpec`, in any logic. -/
-theorem not_allocSpec_at_start (L : Logic) (c : Ptr) (I : AllocInv)
+`AllocSpec`, in any sound logic. -/
+theorem not_allocSpec_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (I : AllocInv)
     (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ mem0.heap = hP ∪ hF ∧ I.own hP) (hfit : I.fits 1 0) :
     ¬ AllocSpec L vt c I := by
   intro hs
   obtain ⟨hP, hF, hd, hm, hp⟩ := hI
-  exact alloc_no_triple_at_start L c 0 I.own _ hd hm hp
+  exact alloc_no_triple_at_start L hL c 0 I.own _ hd hm hp
     (hs.alloc 1 0 0 (by decide) (by decide) hfit)
 
 /-! ## O1: the hint points into a dead block -/
@@ -183,13 +183,13 @@ def cycle : Option Mem :=
 
 set_option maxHeartbeats 0 in
 /-- **O1.** No precondition that holds after the hinted block was unmapped makes `alloc` a
-triple of any logic. -/
-theorem alloc_no_triple_after_free (L : Logic) (c : Ptr) (ra : BitVec 64) (P : Assn)
+triple of any sound logic. -/
+theorem alloc_no_triple_after_free (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitVec 64) (P : Assn)
     (Q : Option Ptr → Assn) {hP hF : Heap} (hd : Heap.Disjoint hP hF)
     (hm : hinted.heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
   intro ht
   rw [alloc_args] at ht
-  exact no_error_of_triple (L.toPartial ht) hd (by rw [hinted_heap]; exact hm) hp hintedLost_seq
+  exact no_error_of_triple (hL ht) hd (by rw [hinted_heap]; exact hm) hp hintedLost_seq
     alloc_hintedLost
 
 /-! ## O4: the derived hint address is ambiguous -/

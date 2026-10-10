@@ -35,31 +35,34 @@ theorem tame_isLastAllocation (c : Ptr) (s : Slice) :
   unfold heap_FixedBufferAllocator_isLastAllocation; gen_norm; tame
 
 set_option maxHeartbeats 2000000 in
-theorem tame_alloc (c : Ptr) (n : BitVec 64) (k : Nat) (ra : BitVec 64) :
-    Tame (impl.alloc c n k ra) := by
+theorem tame_alloc (c : Ptr) (n : BitVec 64) (a : mem_Alignment) (ra : BitVec 64) :
+    Tame (heap_FixedBufferAllocator_alloc c n a ra) := by
   have := tame_alignPointerOffset
-  unfold impl; simp only [heap_FixedBufferAllocator_alloc]; gen_norm; tame
+  simp only [heap_FixedBufferAllocator_alloc]; gen_norm; tame
 
 set_option maxHeartbeats 2000000 in
-theorem tame_resize (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) :
-    Tame (impl.resize c s k n ra) := by
+theorem tame_resize (c : Ptr) (s : Slice) (a : mem_Alignment) (n ra : BitVec 64) :
+    Tame (heap_FixedBufferAllocator_resize c s a n ra) := by
   have := tame_ownsSlice; have := tame_isLastAllocation
-  unfold impl; simp only [heap_FixedBufferAllocator_resize]; gen_norm; tame
+  simp only [heap_FixedBufferAllocator_resize]; gen_norm; tame
 
 set_option maxHeartbeats 2000000 in
-theorem tame_remap (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) :
-    Tame (impl.remap c s k n ra) := by
-  have := fun c s k n ra => tame_resize c s k n ra
-  unfold impl at this ⊢; simp only [heap_FixedBufferAllocator_remap]; gen_norm; tame
+theorem tame_remap (c : Ptr) (s : Slice) (a : mem_Alignment) (n ra : BitVec 64) :
+    Tame (heap_FixedBufferAllocator_remap c s a n ra) := by
+  have := tame_resize
+  simp only [heap_FixedBufferAllocator_remap]; gen_norm; tame
 
 set_option maxHeartbeats 2000000 in
-theorem tame_free (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) :
-    Tame (impl.free c s k ra) := by
+theorem tame_free (c : Ptr) (s : Slice) (a : mem_Alignment) (ra : BitVec 64) :
+    Tame (heap_FixedBufferAllocator_free c s a ra) := by
   have := tame_ownsSlice; have := tame_isLastAllocation
-  unfold impl; simp only [heap_FixedBufferAllocator_free]; gen_norm; tame
+  simp only [heap_FixedBufferAllocator_free]; gen_norm; tame
 
 theorem vtame (ctx : Ptr) : VTame impl ctx :=
-  ⟨tame_alloc ctx, tame_resize ctx, tame_remap ctx, tame_free ctx⟩
+  ⟨fun n k ra => tame_alloc ctx n ⟨BitVec.ofNat 6 k⟩ ra,
+    fun s k n ra => tame_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra,
+    fun s k n ra => tame_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra,
+    fun s k ra => tame_free ctx s ⟨BitVec.ofNat 6 k⟩ ra⟩
 
 /-- **The translated `FixedBufferAllocator` satisfies the full-state allocator specification.** -/
 theorem fallocSpec (ctx : Ptr) (B : Buf) : FAllocSpec FLogic.total impl ctx (inv ctx B).toFull :=

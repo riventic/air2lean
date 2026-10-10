@@ -182,5 +182,121 @@ theorem FAllocSpec.ofTotal {vt : RawVTable} {ctx : Ptr} {I : AllocInv}
     (FTotalTriple.ofTotal (h.free s k ra bs h1 h2 h3) (ht.free s k ra)).pre
       fun _ h => up_own_granted h
 
+/-! ## The legacy contracts in the full-state logic
+
+`FLogic.legacy FL O` reads a legacy assertion `P` as `O ⋆ up P` in the full-state logic `FL`, for
+a fixed full-state frame `O` (the allocator state an `FAllocInv` owns beyond its legacy part). It
+is a `Logic`: legacy total triples of `Tame` programs lift (`FTotalTriple.ofTotal`), and the
+structural rules carry over. `FAllocSpec.toLegacy` turns a full-state allocator specification
+whose tokens are legacy (`up`) into a legacy `AllocSpec` in that logic. So every contract proved
+for an arbitrary `Logic` (`Wrap.*_spec`, `ZigLean/Sep/AllocSpec/Wrappers.lean`) holds in the
+full-state logic, with the allocator state framed: for the FixedBufferAllocator
+(`FBA.fallocSpec`) and the page allocator (`PageSpec.inv`).
+-/
+
+theorem up_mono {P P' : Assn} {r : Res} (h : ∀ x, P x → P' x) (hp : up P r) : up P' r :=
+  ⟨h _ hp.1, hp.2⟩
+
+/-- The full-state logic `FL` with the frame `O` around every legacy assertion. -/
+def FLogic.legacy (FL : FLogic) (O : FAssn) : Logic where
+  T P c Q := FL.T (O ⋆ up P) c (fun v => O ⋆ up (Q v))
+  ofTotal ht hc := FL.ofTotal (FLogic.total.frameL (FTotalTriple.ofTotal ht hc))
+  conseq ht hp hq := FL.conseq ht (fun _ h => sep_mono_right (fun _ x => up_mono hp x) h)
+    (fun v _ h => sep_mono_right (fun _ x => up_mono (hq v) x) h)
+  frame ht := FL.conseq (FL.frame (R := up _) ht)
+    (fun _ h => sep_assoc' (sep_mono_right (fun _ x => up_sep x) h))
+    (fun _ _ h => sep_mono_right (fun _ x => sep_up x) (sep_assoc h))
+  bind hc hf := FL.bind hc hf
+  ex h := FL.pre (FL.ex h) fun _ hp => by
+    obtain ⟨x, hx⟩ := sep_ex.mp (sep_comm (sep_mono_right (fun _ y => up_ex.mp y) hp))
+    exact ⟨x, sep_comm hx⟩
+  lift h := FL.pre (FL.lift h) fun _ hp => by
+    obtain ⟨r₁, r₂, hd, rfl, ho, hq⟩ := hp
+    obtain ⟨hφ, hq⟩ := up_lift.mp hq
+    exact sep_lift.mpr ⟨hφ, ⟨r₁, r₂, hd, rfl, ho, hq⟩⟩
+  congr he ht := FL.congr (fun m hm => he m hm.1) ht
+
+/-- `J` is the legacy invariant `I` with the full-state allocator state `O` added: its tokens are
+`I`'s under `up`, it owns `O ⋆ up I.own`, and it accepts the same requests. -/
+structure LegacyTokens (J : FAllocInv) (I : AllocInv) (O : FAssn) : Prop where
+  tok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K)
+  own : ∀ r, J.own r ↔ (O ⋆ up I.own) r
+  fits : ∀ n k, J.fits n k ↔ I.fits n k
+
+/-- A lifted legacy invariant (`FBA.fallocSpec`) has no full-state allocator state. -/
+theorem AllocInv.toFull_legacy (I : AllocInv) : LegacyTokens I.toFull I emp :=
+  ⟨fun _ _ _ _ _ _ => rfl, fun _ => ⟨fun h => sep_comm (sep_emp.mpr h),
+    fun h => sep_emp.mp (sep_comm h)⟩, fun _ _ => Iff.rfl⟩
+
+section ToLegacy
+
+variable {J : FAllocInv} {I : AllocInv} {O : FAssn} {r : Res}
+
+theorem granted_up (htok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K))
+    {p : Ptr} {k : Nat} {bs : Array Byte} : J.granted p k bs r ↔ up (granted I p k bs) r := by
+  have e : J.granted p k bs = I.toFull.granted p k bs := by
+    unfold FAllocInv.granted; simp only [htok]; rfl
+  rw [e]; exact up_granted
+
+theorem lift_granted_up (htok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K))
+    {φ : Array Byte → Prop} {p : Ptr} {k : Nat} :
+    (FAssn.ex fun bs => ⟪φ bs⟫ ⋆ J.granted p k bs) r ↔
+      up (Assn.ex fun bs => ⌜φ bs⌝ ∗ granted I p k bs) r := by
+  constructor
+  · rintro ⟨bs, h⟩
+    obtain ⟨hφ, hg⟩ := sep_lift.mp h
+    exact up_ex.mpr ⟨bs, up_lift.mpr ⟨hφ, (granted_up htok).mp hg⟩⟩
+  · intro h
+    obtain ⟨bs, h⟩ := up_ex.mp h
+    obtain ⟨hφ, hg⟩ := up_lift.mp h
+    exact ⟨bs, sep_lift.mpr ⟨hφ, (granted_up htok).mpr hg⟩⟩
+
+/-- `J.own ⋆ X'` as `O ⋆ up (I.own ∗ X)`, for parts `X'` and `X` that agree. -/
+theorem own_to {X' : FAssn} {X : Assn} (hown : ∀ r, J.own r ↔ (O ⋆ up I.own) r)
+    (hx : ∀ r, X' r → up X r) (h : (J.own ⋆ X') r) : (O ⋆ up (I.own ∗ X)) r :=
+  sep_mono_right (fun _ y => sep_up y)
+    (sep_assoc (sep_mono (fun _ y => (hown _).mp y) hx h))
+
+theorem own_from {X' : FAssn} {X : Assn} (hown : ∀ r, J.own r ↔ (O ⋆ up I.own) r)
+    (hx : ∀ r, up X r → X' r) (h : (O ⋆ up (I.own ∗ X)) r) : (J.own ⋆ X') r :=
+  sep_mono (fun _ y => (hown _).mpr y) hx (sep_assoc' (sep_mono_right (fun _ y => up_sep y) h))
+
+theorem FAllocSpec.toLegacy' {FL : FLogic} {vt : RawVTable} {ctx : Ptr}
+    (h : FAllocSpec FL vt ctx J)
+    (htok : ∀ p n k A S K, J.tok p n k A S K = up (I.tok p n k A S K))
+    (hown : ∀ r, J.own r ↔ (O ⋆ up I.own) r) (hfits : ∀ n k, J.fits n k ↔ I.fits n k) :
+    AllocSpec (FL.legacy O) vt ctx I where
+  alloc len k ra h1 h2 h3 := FL.conseq (h.alloc len k ra h1 h2 ((hfits _ _).mpr h3))
+    (fun _ hp => (hown _).mpr hp)
+    (fun v _ hq => by
+      cases v with
+      | none => exact (hown _).mp hq
+      | some p => exact own_to hown (fun _ y => (lift_granted_up htok).mp y) hq)
+  resize s k n ra bs h1 h2 h3 h4 h5 :=
+    FL.conseq (h.resize s k n ra bs h1 h2 ((hfits _ _).mpr h3) h4 h5)
+      (fun _ hp => own_from hown (fun _ y => (granted_up htok).mpr y) hp)
+      (fun v _ hq => by
+        cases v with
+        | false => exact own_to hown (fun _ y => (granted_up htok).mp y) hq
+        | true => exact own_to hown (fun _ y => (lift_granted_up htok).mp y) hq)
+  remap s k n ra bs h1 h2 h3 h4 h5 :=
+    FL.conseq (h.remap s k n ra bs h1 h2 ((hfits _ _).mpr h3) h4 h5)
+      (fun _ hp => own_from hown (fun _ y => (granted_up htok).mpr y) hp)
+      (fun v _ hq => by
+        cases v with
+        | none => exact own_to hown (fun _ y => (granted_up htok).mp y) hq
+        | some q => exact own_to hown (fun _ y => (lift_granted_up htok).mp y) hq)
+  free s k ra bs h1 h2 h3 := FL.conseq (h.free s k ra bs h1 h2 h3)
+    (fun _ hp => own_from hown (fun _ y => (granted_up htok).mpr y) hp)
+    (fun _ _ hq => (hown _).mp hq)
+
+/-- **A full-state allocator specification with legacy tokens is a legacy one** in the
+full-state logic seen through the allocator state `O`. -/
+theorem FAllocSpec.toLegacy {FL : FLogic} {vt : RawVTable} {ctx : Ptr}
+    (h : FAllocSpec FL vt ctx J) (hJ : LegacyTokens J I O) : AllocSpec (FL.legacy O) vt ctx I :=
+  h.toLegacy' hJ.tok hJ.own hJ.fits
+
+end ToLegacy
+
 end Full
 end Zig

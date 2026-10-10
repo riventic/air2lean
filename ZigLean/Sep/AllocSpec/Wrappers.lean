@@ -2,6 +2,7 @@ import ZigLean.Sep.AllocSpec.Wrap
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
 import ZigLean.Sep.Automation
+import ZigLean.Sep.Full.Tame
 
 /-!
 # Contracts of the `std.mem.Allocator` wrappers over any allocator that satisfies `AllocSpec`
@@ -71,6 +72,24 @@ def SrcSep (I : AllocInv) (k : Nat) (src : Ptr) (A' S' : Nat) (K' : BlockKind) (
     RangeSep ((A : Int) + d.off) bs.size ((A' : Int) + src.off) bsrc.size
 
 namespace Wrap
+
+theorem tame_alignCast (k : Nat) (p : Ptr) : Full.Tame (alignCast k p) := by
+  unfold alignCast; tame
+
+theorem tame_copyChecked (size da sa : Nat) (d s : Ptr) (n : BitVec 64) :
+    Full.Tame (copyChecked size da sa d s n) := by
+  unfold copyChecked
+  exact Full.Tame.bind (Full.Tame.ptrLe _ _) fun _ => Full.Tame.bind (Full.Tame.ptrLe _ _) fun _ =>
+    Full.Tame.ite (Full.Tame.memmove _ _ _ _ _ _) (Full.Tame.throw _)
+
+/-- The `Tame` side condition of `Logic.ofTotal` for the primitives the wrappers run. -/
+macro "tame_prim" : tactic => `(tactic| first
+  | exact Full.Tame.returnAddress
+  | exact Full.Tame.memset _ _ _ _
+  | exact Full.Tame.store _ _ _
+  | exact Full.Tame.load _ _ _
+  | exact Wrap.tame_alignCast _ _
+  | exact Wrap.tame_copyChecked _ _ _ _ _ _)
 
 /-- The owned bytes of an allocated slice (module doc). -/
 def owned (I : AllocInv) (k : Nat) (p : Ptr) (bs : Array Byte) : Assn :=
@@ -193,11 +212,11 @@ theorem allocBytes_spec (h : AllocSpec L vt ctx I) (k : Nat) (n ra : BitVec 64) 
       refine granted_ex' fun bs hs => granted_open fun A S K => ?_
       refine L.bind (L.pre (L.frame (R := I.own ∗ I.tok p bs.size k A S K)
         (L.ofTotal (Region.memsetUndefIn (p := p) (A := A) (S := S) (K := K) (a := 2 ^ k)
-          (n := n) hs.symm)))
+          (n := n) hs.symm) (by tame_prim)))
         fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
       refine L.conseq (L.frame (R := I.own ∗ I.tok p bs.size k A S K)
         (L.ofTotal (alignCast_spec (p := p) (A := A) (S := S) (K := K)
-          (bs := Array.replicate n.toNat Byte.undef) hk (by simpa using hn))))
+          (bs := Array.replicate n.toNat Byte.undef) hk (by simpa using hn)) (by tame_prim)))
         (fun hh hp => hp) fun r hh hp => ?_
       obtain ⟨hr, hp'⟩ := sep_lift.mp (sep_assoc hp)
       subst hr
@@ -234,7 +253,7 @@ theorem allocAdvanced_spec (h : AllocSpec L vt ctx I) (size k : Nat) (n ra : Bit
 theorem allocSlice_spec (h : AllocSpec L vt ctx I) (size k : Nat) (n : BitVec 64)
     (hk : k < 64) (hs : size < 2 ^ 64) (hfit : Fits I (size * n.toNat) k) :
     L.T I.own (allocSlice vt ctx size k n) (sliceResult I k n (size * n.toNat)) :=
-  L.bind (L.ofTotal returnAddress_triple) fun ra => allocAdvanced_spec h size k n ra hk hs hfit
+  L.bind (L.ofTotal returnAddress_triple Full.Tame.returnAddress) fun ra => allocAdvanced_spec h size k n ra hk hs hfit
 
 /-- `create(T)`: one item of `size` bytes, undefined. -/
 theorem create_spec (h : AllocSpec L vt ctx I) (size k : Nat) (hk : k < 64)
@@ -248,7 +267,7 @@ theorem create_spec (h : AllocSpec L vt ctx I) (size k : Nat) (hk : k < 64)
     simp only [allocResult]
     rw [owned_zero (by simp)]
     exact sep_emp.mpr hp
-  · refine L.bind (L.ofTotal returnAddress_triple) fun ra => ?_
+  · refine L.bind (L.ofTotal returnAddress_triple Full.Tame.returnAddress) fun ra => ?_
     have := allocBytes_spec h k (BitVec.ofNat 64 size) ra hk (by rw [toNat_ofNat_lt hs]; exact hfit)
     rwa [toNat_ofNat_lt hs] at this
 
@@ -264,7 +283,7 @@ theorem destroy_spec (h : AllocSpec L vt ctx I) (size k : Nat) (p : Ptr) (bs : A
     exact sep_emp.mp hp
   · rename_i h0
     rw [owned_pos (by omega)]
-    refine L.bind (L.ofTotal returnAddress_triple) fun ra => ?_
+    refine L.bind (L.ofTotal returnAddress_triple Full.Tame.returnAddress) fun ra => ?_
     exact h.free ⟨p, BitVec.ofNat 64 size⟩ k ra bs hk
       (by show (BitVec.ofNat 64 size).toNat = bs.size; rw [toNat_ofNat_lt hs, hsz]) (by omega)
 
@@ -286,9 +305,9 @@ theorem freeBytes_spec (h : AllocSpec L vt ctx I) (k : Nat) (s : Slice) (bs : Ar
     refine granted_open fun A S K => ?_
     refine L.bind (L.pre (L.frame (R := I.own ∗ I.tok s.ptr bs.size k A S K)
       (L.ofTotal (Region.memsetUndefIn (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k)
-        (n := s.len) hsz.symm)))
+        (n := s.len) hsz.symm) (by tame_prim)))
       fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
-    refine L.bind (L.ofTotal returnAddress_triple) fun ra => ?_
+    refine L.bind (L.ofTotal returnAddress_triple Full.Tame.returnAddress) fun ra => ?_
     refine L.pre (h.free s k ra (Array.replicate s.len.toNat .undef) hk (by simp) (by simp; omega)) ?_
     intro hh hp
     have e : (Array.replicate s.len.toNat Byte.undef).size = bs.size := by simp [hsz]
@@ -394,7 +413,7 @@ theorem dupe_spec (h : AllocSpec L vt ctx I) (size k sa a' : Nat) (src : Slice) 
         (A' := A') (S' := S') (K' := K') (a := 2 ^ k) (a' := a') (da := 2 ^ k) (sa := sa)
         (size := size) (bd := Array.replicate (size * src.len.toNat) Byte.undef) (bsrc := bsrc)
         (n := d.len) (by rw [hlen]; omega) (by rw [hlen, hr, hsz]; omega) (by rw [hlen, hsz]; omega)
-        (Nat.dvd_refl _) hsa (by rw [hlen, ← hsz]; simpa [hr] using hsp))))
+        (Nat.dvd_refl _) hsa (by rw [hlen, ← hsz]; simpa [hr] using hsp)) (by tame_prim)))
       fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => L.ret' _ fun hh hp => ?_
     have ew : writeBytes (Array.replicate (size * src.len.toNat) Byte.undef) 0
         (bsrc.extract 0 (d.len.toNat * size)) = bsrc := by
@@ -530,7 +549,7 @@ theorem reallocAdvanced_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Sl
                 (size := 1) (bd := bn) (bsrc := bs)
                 (n := Zig.min false (BitVec.ofNat 64 size * newN) (byteLen size old))
                 (by rw [em]; omega) (by rw [em]; omega) (by rw [em]; omega) (Nat.one_dvd _)
-                (Nat.one_dvd _) (by rw [em]; exact hsp.mono (by omega) (by omega)))))
+                (Nat.one_dvd _) (by rw [em]; exact hsp.mono (by omega) (by omega))) (by tame_prim)))
               fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
             rw [em]
             -- poison the old region
@@ -538,7 +557,7 @@ theorem reallocAdvanced_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Sl
               (R := regionIn p A₂ S₂ K₂ (2 ^ k) (writeBytes bn 0 (bs.extract 0 (Min.min bn.size bs.size))) ∗
                 (I.own ∗ (I.tok p bn.size k A₂ S₂ K₂ ∗ I.tok old.ptr bs.size k A S K)))
               (L.ofTotal (Region.memsetUndefIn (p := old.ptr) (A := A) (S := S) (K := K)
-                (a := 2 ^ k) (bs := bs) (n := byteLen size old) eo)))
+                (a := 2 ^ k) (bs := bs) (n := byteLen size old) eo) (by tame_prim)))
               fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
             -- free it
             refine L.bind (L.pre (L.frame
@@ -576,7 +595,7 @@ theorem realloc_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Slice) (ne
     (hfit : Fits I (size * newN.toNat) k) (hsep : GrantSep I k) :
     L.T (I.own ∗ owned I k old.ptr bs) (realloc vt ctx size k old newN)
       (reallocResult I k size old newN bs) :=
-  L.bind (L.ofTotal returnAddress_triple) fun ra =>
+  L.bind (L.ofTotal returnAddress_triple Full.Tame.returnAddress) fun ra =>
     reallocAdvanced_spec h size k old newN ra bs hk hsize hs hsz hbs hfit hsep
 
 /-! ## Sentinel -/
@@ -606,7 +625,7 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
   have e1 := toNat_add_one hn
   unfold allocSentinel
   simp only [liftR, add_one_ok hn, Norm.lift_pure, pure_bind]
-  refine L.bind (L.ofTotal returnAddress_triple) fun ra => ?_
+  refine L.bind (L.ofTotal returnAddress_triple Full.Tame.returnAddress) fun ra => ?_
   refine L.bind (allocAdvanced_spec h (Enc.size T) k (n + 1) ra hk hTs (by rw [e1]; exact hfit)) fun r => ?_
   cases r with
   | error e => exact L.ret' _ fun hh hp => hp
@@ -630,7 +649,7 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
           (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size k A S K)
         (L.ofTotal (Region.storeItemIn (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k)
           (bs := Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef)
-          (o := Enc.size T * n.toNat) (al := Enc.align T) sentinel hT ho hal halo)))
+          (o := Enc.size T * n.toNat) (al := Enc.align T) sentinel hT ho hal halo) (by tame_prim)))
         fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
     rw [if_pos hle]
     have hw : (Enc.encode sentinel).size = Enc.size T := LawfulEnc.size_encode sentinel
@@ -647,7 +666,7 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
     refine L.bind (L.pre (L.frame (R := I.own ∗ I.tok s.ptr
           (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size k A S K)
         (L.ofTotal (loadItemIn (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k)
-          (al := Enc.align T) hT ho' hal halo hv)))
+          (al := Enc.align T) hT ho' hal halo hv) (by tame_prim)))
         fun hh hp => hp) fun x => ?_
     refine L.pre (L.lift fun hx => ?_) fun hh hp => sep_assoc hp
     subst x

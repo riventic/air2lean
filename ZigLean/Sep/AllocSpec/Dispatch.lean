@@ -49,7 +49,7 @@ variable {L : Logic}
 theorem load_dispatch {α : Type} {R : Assn} {p v : Ptr} {c : MemM α} {Q : α → Assn}
     (hc : L.T (ptsR p 8 v ∗ R) c Q) :
     L.T (ptsR p 8 v ∗ R) (load Ptr 8 p >>= fun f => if f = v then c else throw .illegal) Q := by
-  refine L.bind (L.frame (L.ofTotal (ptsR_load (p := p) (a := 8) (v := v) (by decide)))) fun f => ?_
+  refine L.bind (L.frame (L.ofTotal (ptsR_load (p := p) (a := 8) (v := v) (by decide)) (by tame_prim))) fun f => ?_
   refine L.pre (L.lift fun hf => ?_) fun h hp => sep_assoc hp
   subst hf
   rw [if_pos rfl]

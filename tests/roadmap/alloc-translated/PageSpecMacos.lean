@@ -449,6 +449,14 @@ theorem tame_remap (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) :
 
 variable {own : FAssn} {r : Res}
 
+/-- The page allocator's invariant is the legacy one with the allocator state `own` added, so
+every `std.mem.Allocator` wrapper contract holds for it (`ZigLean/Sep/Full/Wrappers.lean`). -/
+theorem inv_legacy (own : FAssn) : LegacyTokens (inv own) legacy own :=
+  ⟨fun _ _ _ _ _ _ => rfl,
+    fun _ => ⟨fun h => sep_mono_right (fun _ y => up_emp.mpr y) (sep_emp.mpr h),
+      fun h => sep_emp.mp (sep_mono_right (fun _ y => up_emp.mp y) h)⟩,
+    fun _ _ => Iff.rfl⟩
+
 theorem pre_up {p : Ptr} {k : Nat} {bs : Array Byte}
     (h : (own ⋆ (inv own).granted p k bs) r) : (own ⋆ up (granted legacy p k bs)) r :=
   sep_mono_right (fun _ x => up_granted (I := legacy).mp x) h
