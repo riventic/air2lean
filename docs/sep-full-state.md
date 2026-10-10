@@ -120,7 +120,7 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run`, `FTriple.ptrFromAddr` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing and never fails (an ambiguous address gives a pointer without provenance: O4 fix, `docs/address-reuse.md`) |
 | `Disjoint` | `Mem.LiveDisjoint`, `LDMono.set`/`push`/`grow`, `Mem.newAddr_addrFree` | live blocks have disjoint address ranges (`Block.clearOf`); every block update of the memory model keeps it |
 | `Triple` | `Holds.apart`, `FTriple.apart` | owned bytes of two different blocks lie in disjoint address ranges (`LiveDisjoint` is part of `FSeq`) |
-| `Ghost` | `Upd.alloc`/`issue`/`retire`/`bump`, `gfrag_count`, `FTriple.upd`/`upd_post`/`count`, `Upd.frame` | epoch ledgers (§Ghost state): frame-preserving updates; a token of the current epoch shows one is outstanding |
+| `Ghost` | `Upd.alloc`/`issue`/`retire`/`reassign`/`bump`, `gfrag_mem`, `FTriple.upd`/`upd_post`/`mem`, `Upd.frame` | epoch ledgers of named grants (§Ghost state): frame-preserving updates; a token of the current epoch names a grant the authority records |
 | `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
@@ -219,10 +219,11 @@ sequential run that compares the value it just read needs no address.
 behaviours need the token to say something about the allocator's *current* state, which `own`
 holds and the token does not see:
 
-* **A token must imply that the allocator has issued something.** The arena's `free` and
-  `resize` start with `loadFirstNode().?`, which panics on an arena without a node: a fresh one,
-  or one after `reset(.free_all)` (`docs/alloc-arena.md`, O-A). So `own ⋆ granted p k bs` must be
-  unsatisfiable when the arena has no node.
+* **A token must name a region that the allocator granted.** The arena's `free` and `resize`
+  start with `loadFirstNode().?`, which panics on an arena without a node: a fresh one, or one
+  after `reset(.free_all)` (`docs/alloc-arena.md`, O-A). So `own ⋆ granted p k bs` must be
+  unsatisfiable when the arena has no node, and more generally when this allocator did not grant
+  the region at `p` in its current state: a `free` of a foreign slice is a permission violation.
 * **A reset revokes every outstanding token.** After `reset`, the bytes of every grant are the
   allocator's again. A client that kept a token must not be able to use it with the new state.
 
@@ -233,24 +234,27 @@ revoked. This is what ghost state is for: logical resources that live only in th
 ### The design
 
 `Res` gets a third component, `gh : Ghost`, with `Ghost := Nat → GCell` (names to cells). A cell
-is an **epoch ledger** (`ZigLean/Sep/Full/Res.lean`, rules in `Ghost.lean`):
+is an **epoch ledger of named grants** (`ZigLean/Sep/Full/Res.lean`, rules in `Ghost.lean`):
 
 ```
+abbrev GRegion := Ptr × Nat              -- a region: start pointer, length in bytes
+abbrev GMap := Nat → Option GRegion      -- grant id ↦ the region granted under it
 structure GCell where
-  auth : Nat × Nat → Nat   -- how many authorities ●(e, n): current epoch e, n tokens outstanding
-  frag : Nat → Nat         -- ◯e, counted: how many tokens of epoch e this resource holds
+  auth : Nat × GMap → Nat          -- how many authorities ●(e, M): current epoch e, grant map M
+  frag : Nat × Nat × GRegion → Nat -- how many tokens ◯(e, i ↦ g): grant i of epoch e names g
 ```
 
 * **Composition** is pointwise addition of both counts, so it is total, associative and
   commutative, with the empty ledger as unit. Two authorities for one name are ruled out by
   validity, not by composition.
-* **Validity** (`GCell.Valid`): at most one authority; where an authority `●(e, n)` exists, at
-  most `n` tokens of epoch `e` exist, and none of a later epoch. Tokens of an earlier epoch are
-  valid: they are *stale*.
+* **Validity** (`GCell.Valid`): at most one authority; where an authority `●(e, M)` exists, every
+  token `◯(e, i ↦ g)` of epoch `e` is recorded, `M i = some g`, and there is at most one per id;
+  there is none of a later epoch. Tokens of an earlier epoch are valid: they are *stale*.
 * **Finiteness** (`Ghost.Fin`): only finitely many names are in use. This gives a fresh name for
   a new ledger.
-* **Assertions.** `gauth γ e n` owns `●(e, n)` at `γ`; `gfrag γ e` owns one `◯e` at `γ`. Neither
-  owns bytes or knowledge. `up`, `emp`, `known` and the byte assertions own no ghost state.
+* **Assertions.** `gauth γ e M` owns `●(e, M)` at `γ`; `gfrag γ e i g` owns `◯(e, i ↦ g)` at `γ`.
+  Neither owns bytes or knowledge. `up`, `emp`, `known` and the byte assertions own no ghost
+  state.
 
 `Holds m r rF` additionally requires `Ghost.Ok r.gh rF.gh`: the sum of the two ghost states is
 valid and finite. No primitive changes the ghost state: every primitive rule keeps
@@ -264,46 +268,56 @@ ledger's updates:
 
 | update | from | to | why it is frame-preserving |
 |---|---|---|---|
-| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 0` | `Ghost.Fin` gives a name no frame uses |
-| `Upd.issue` | `gauth γ e n` | `gauth γ e (n+1) ⋆ gfrag γ e` | the frame holds at most `n` tokens of epoch `e` |
-| `Upd.retire` | `gauth γ e n ⋆ gfrag γ e` | `gauth γ e (n-1)` | the frame holds at most `n - 1` |
-| `Upd.bump` | `gauth γ e n` | `gauth γ (e+1) 0` | the frame holds no token of a later epoch; its tokens of epoch `e` become stale |
+| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 GMap.empty` | `Ghost.Fin` gives a name no frame uses |
+| `Upd.issue g` | `gauth γ e M` with `M i = none` | `gauth γ e (M.set i g) ⋆ gfrag γ e i g` | the frame holds no token for `i`: `M` does not record it |
+| `Upd.retire` | `gauth γ e M ⋆ gfrag γ e i g` | `gauth γ e (M.set i none)` | the frame holds no other token for `i` |
+| `Upd.reassign g'` | `gauth γ e M ⋆ gfrag γ e i g` | `gauth γ e (M.set i g') ⋆ gfrag γ e i g'` | `retire`, then `issue` |
+| `Upd.bump` | `gauth γ e M` | `gauth γ (e+1) GMap.empty` | the frame holds no token of a later epoch; its tokens of epoch `e` become stale |
 
-A token of the current epoch also shows that one is outstanding (`gfrag_count`, as a triple rule
-`FTriple.count`: `gauth γ e n ⋆ gfrag γ e` gives `1 ≤ n`, by validity).
+A token of the current epoch names a recorded grant (`gfrag_mem`, as a triple rule `FTriple.mem`:
+`gauth γ e M ⋆ gfrag γ e i g` gives `M i = some g`, by validity). Fresh ids: an invariant keeps
+`M` finite (`GMap.Fin`, kept by `set`), and `GMap.Fin.fresh` gives an unused id.
 
 ### Use by an allocator with reset
 
 An allocator whose `own` holds a ledger `γ` uses the invariant family
-`I e := { own := own' e, tok := … ⋆ gfrag γ e }` indexed by the epoch:
+`I e := { own := own' e, tok p n … := ∃ i, gfrag γ e i (p, n) ⋆ … }` indexed by the epoch:
 
-* `own' e` holds `gauth γ e n` and relates `n` to its state, e.g. "no node ⇒ `n = 0`". A fresh
-  allocator starts at `gauth γ 0 0` (`Upd.alloc`). With `gfrag_count`, a token of epoch `e` gives
-  `n ≥ 1`, so the allocator has a node: O-A is no longer a premise.
-* `alloc` issues (`Upd.issue`), and `free` or a shrink to nothing retires (`Upd.retire`).
+* `own' e` holds `gauth γ e M` and relates `M` to its state, e.g. "no node ⇒ no grant". A fresh
+  allocator starts at `gauth γ 0 GMap.empty` (`Upd.alloc`). With `gfrag_mem`, a token of epoch
+  `e` names a grant of `M`, so the allocator has a node: O-A is no longer a premise.
+* The token names the region: `granted p k bs` holds a token for `(p, bs.size)`. A client can only
+  have one for a region that this allocator granted in this epoch, so a `free`, `resize` or
+  `remap` of a foreign slice (or of a slice of another length) has no precondition to stand on: it
+  is a permission violation, not a case the allocator's code has to survive.
+* `alloc` issues (`Upd.issue` under a fresh id), `free` retires (`Upd.retire`), and a successful
+  `resize` re-points the grant at the new length (`Upd.reassign`).
 * `reset` is specified as `{own' e ⋆ (the bytes of every grant)} reset {own' (e+1)}`, by
   `Upd.bump`. Every token of epoch `e` that the client still holds is stale afterwards. A stale
   token is useless: `FAllocSpec … (I e)` needs `own' e`, which no longer exists (the authority is
   exclusive and now at epoch `e + 1`), and `FAllocSpec … (I (e+1))` needs a token of epoch `e+1`.
   A use after a retaining reset is therefore a permission violation twice over: the client no
   longer owns the bytes, and its token belongs to a dead epoch.
-* A `free` without a token of the current epoch is a permission violation. The token counts
-  grants; it does not name a region unless `tok` says so (the arena's does not, and its `free`
-  turns a foreign slice into junk).
 
 Nothing in the ledger is specific to arenas: any allocator with a reset (a `FixedBufferAllocator`
-`reset`, a pool, a stack allocator's `freeAll`) can take the same family, and a counted token is
+`reset`, a pool, a stack allocator's `freeAll`) can take the same family, and a named token is
 also what a `deinit` that requires every grant back needs.
 
-### Why counted tokens with epochs
+### Why named grants with epochs
 
 * **Revocation needs epochs.** In a frame-preserving logic, an update cannot invalidate a
-  resource held by the frame. With a plain authoritative count (`●n`, tokens `◯1`) a reset must
-  collect every token. With epochs, the bump leaves the frame's tokens valid but stale, so a reset
-  needs only the bytes back (which it needs anyway), not the tokens.
-* **Counts, not sets.** The specification's `free` only needs "some token of this epoch exists",
-  and `reset` needs no list of grants. A set of regions (`●S`, `◯{x}`) would also work but makes
-  the client track which grants are outstanding.
+  resource held by the frame. With a plain authoritative map (`●M`, tokens `◯(i ↦ g)`) a reset
+  must collect every token. With epochs, the bump leaves the frame's tokens valid but stale, so a
+  reset needs only the bytes back (which it needs anyway), not the tokens.
+* **Named, not counted.** A counted token (`●(e, n)`, `◯e`) says only that some grant of the
+  epoch is outstanding. It can then come with any slice the client owns, so a `free` of a foreign
+  slice would have a precondition, and the allocator's code would have to handle it (the arena
+  turned such a slice into junk). Naming the region makes the token the proof that this exact
+  region was granted, as `std.mem.Allocator`'s contract requires.
+* **Ids, not a set of regions.** The map is keyed by a grant id rather than being a set of
+  regions, so issuing needs only an unused id (`GMap.Fin.fresh`), not a proof that the new region
+  differs from every outstanding one, which would need disjointness facts about memory that
+  clients hold.
 * **Alternatives.** A per-allocator `Prop`-valued "issued" knowledge is monotone and cannot be
   revoked. Putting the ledger into `Mem` (a model of the allocator) is ruled out by the
   principle that only the OS primitives are trusted. Iris's general cameras would subsume the

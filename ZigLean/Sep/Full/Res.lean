@@ -22,7 +22,7 @@ A full-state resource `Res` has three parts:
 * `know : Know`: **persistent knowledge** of block addresses, `known b A`: block `b` exists and
   has address `A`. Block ids are never reused and a block's address never changes, so this
   knowledge stays true after `free` (it is not ownership: it is duplicable, `known_dup`).
-* `gh : Ghost`: ghost epoch ledgers (§Ghost state below, rules in `Ghost.lean`); no primitive
+* `gh : Ghost`: ghost epoch ledgers of named grants (§Ghost state below, rules in `Ghost.lean`); no primitive
   reads or changes them.
 
 `Mem.fheap m` is the full heap of a memory (live bytes with their tags); `Mem.kn m` its
@@ -261,26 +261,39 @@ theorem KMono.push {m m' : Mem} {nb : Block} (h : m'.blocks = m.blocks.push nb) 
 
 /-! ## Ghost state: epoch ledgers (`docs/sep-full-state.md` §Ghost state)
 
-A ghost cell is an epoch ledger. `auth` counts authorities `●(e, n)` (epoch `e`, `n` tokens
-outstanding); a valid state has at most one per name. `frag e` counts tokens `◯e`. Composition
-adds both counts, so it is total; `Ghost.Valid` (part of `Holds`) rules out two authorities, more
-tokens of the current epoch than the authority admits, and tokens of a later epoch. -/
+A ghost cell is an epoch ledger of named grants. `auth` counts authorities `●(e, M)`: the current
+epoch `e` and the grant map `M` (grant id ↦ the region it names, a start pointer and a length);
+a valid state has at most one per name. `frag (e, i, g)` counts tokens `◯(e, i ↦ g)`. Composition
+adds both counts, so it is total; `Ghost.Valid` (part of `Holds`) rules out two authorities, a
+token of the current epoch that the map does not record (or two for one id), and tokens of a
+later epoch. -/
+
+/-- A region named by a ledger token: its start pointer and its length in bytes. -/
+abbrev GRegion := Ptr × Nat
+
+/-- A ledger's grant map: grant id ↦ the region granted under it. -/
+abbrev GMap := Nat → Option GRegion
 
 @[ext] structure GCell where
-  auth : Nat × Nat → Nat
-  frag : Nat → Nat
+  auth : Nat × GMap → Nat
+  frag : Nat × Nat × GRegion → Nat
 
 namespace GCell
 
 def unit : GCell := ⟨fun _ => 0, fun _ => 0⟩
 
-def add (a b : GCell) : GCell := ⟨fun x => a.auth x + b.auth x, fun e => a.frag e + b.frag e⟩
+def add (a b : GCell) : GCell := ⟨fun x => a.auth x + b.auth x, fun t => a.frag t + b.frag t⟩
 
-/-- At most one authority, and if there is one, `●(e, n)`, at most `n` tokens of epoch `e` and
-none of a later one. -/
+/-- The tokens of epoch `e` agree with the grant map `M`: at most one per id, and only for ids
+that `M` maps to that region. -/
+def TokOk (c : GCell) (e : Nat) (M : GMap) : Prop :=
+  ∀ i g, c.frag (e, i, g) ≤ 1 ∧ (0 < c.frag (e, i, g) → M i = some g)
+
+/-- At most one authority, and if there is one, `●(e, M)`, the tokens of epoch `e` agree with
+`M` and there are none of a later epoch. -/
 def Valid (c : GCell) : Prop :=
-  (∀ x, c.auth x = 0) ∨ ∃ e n, c.auth (e, n) = 1 ∧ (∀ x, x ≠ (e, n) → c.auth x = 0) ∧
-    c.frag e ≤ n ∧ ∀ e', e < e' → c.frag e' = 0
+  (∀ x, c.auth x = 0) ∨ ∃ e M, c.auth (e, M) = 1 ∧ (∀ x, x ≠ (e, M) → c.auth x = 0) ∧
+    c.TokOk e M ∧ ∀ e' i g, e < e' → c.frag (e', i, g) = 0
 
 theorem add_comm (a b : GCell) : a.add b = b.add a := by
   ext <;> simp [add, Nat.add_comm]
@@ -293,16 +306,16 @@ theorem add_assoc (a b c : GCell) : (a.add b).add c = a.add (b.add c) := by
 @[simp] theorem unit_add (a : GCell) : unit.add a = a := by ext <;> simp [add, unit]
 
 theorem Valid.of_add {a b : GCell} (h : (a.add b).Valid) : a.Valid := by
-  rcases h with h | ⟨e, n, h1, h2, h3, h4⟩
+  rcases h with h | ⟨e, M, h1, h2, h3, h4⟩
   · left; intro x; have := h x; simp only [add] at this; omega
-  · by_cases ha : a.auth (e, n) = 1
+  · by_cases ha : a.auth (e, M) = 1
     · right
-      refine ⟨e, n, ha, fun x hx => ?_, ?_, fun e' he => ?_⟩
+      refine ⟨e, M, ha, fun x hx => ?_, fun i g => ?_, fun e' i g he => ?_⟩
       · have := h2 x hx; simp only [add] at this; omega
-      · simp only [add] at h3; omega
-      · have := h4 e' he; simp only [add] at this; omega
+      · have := h3 i g; simp only [add] at this; exact ⟨by omega, fun hp => this.2 (by omega)⟩
+      · have := h4 e' i g he; simp only [add] at this; omega
     · left; intro x
-      by_cases hx : x = (e, n)
+      by_cases hx : x = (e, M)
       · subst hx; simp only [add] at h1; omega
       · have := h2 x hx; simp only [add] at this; omega
 
