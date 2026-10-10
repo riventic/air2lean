@@ -30,13 +30,13 @@ def air_absDiff : Func :=
     ⟨4, 4, (.condBr (.inst 3) #[⟨13, 2, (.line 2)⟩,
     ⟨5, 0, (.arith .sub .checked (.inst 0) (.inst 1))⟩,
     ⟨14, 2, (.line 2)⟩,
-    ⟨6, 1, (.intCast (.inst 5))⟩,
+    ⟨6, 1, (.intCast true (.inst 5))⟩,
     ⟨15, 2, (.line 2)⟩,
     ⟨7, 4, (.ret (.inst 6))⟩] #[⟨8, 4, (.br 2 .void)⟩])⟩])⟩,
     ⟨16, 2, (.line 3)⟩,
     ⟨9, 0, (.arith .sub .checked (.inst 1) (.inst 0))⟩,
     ⟨17, 2, (.line 3)⟩,
-    ⟨10, 1, (.intCast (.inst 9))⟩,
+    ⟨10, 1, (.intCast true (.inst 9))⟩,
     ⟨18, 2, (.line 3)⟩,
     ⟨11, 4, (.ret (.inst 10))⟩] }
 
@@ -80,7 +80,7 @@ def air_scale : Func :=
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 1, (.arg 1)⟩,
     ⟨5, 2, (.line 2)⟩,
-    ⟨2, 0, (.intCast (.inst 1))⟩,
+    ⟨2, 0, (.intCast false (.inst 1))⟩,
     ⟨3, 0, (.arith .mul .checked (.inst 0) (.inst 2))⟩,
     ⟨6, 2, (.line 2)⟩,
     ⟨4, 3, (.ret (.inst 3))⟩] }

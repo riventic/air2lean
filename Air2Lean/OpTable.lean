@@ -33,6 +33,24 @@ def probeTag (tag : String) : Option Op :=
   [0, 1, 2, 3].findSome? fun n => ["eq", "Add"].findSome? fun op =>
     (normalizeOp "probe" (probeInst tag n op)).toOption
 
+deriving instance BEq for Op, Inst, SwitchCase
+
+/-- The tags of `decodedTags` that decode to the same op as `tag`, `tag` included. -/
+def sharedOp (tag : String) : Array String :=
+  match probeTag tag with
+  | none => #[]
+  | some op => decodedTags.filter fun t => (probeTag t).any (· == op)
+
+/-- The groups of two or more `decodedTags` that decode to one op, in `decodedTags` order. -/
+def sharedOpGroups : Array (Array String) :=
+  decodedTags.foldl (fun groups tag =>
+    let group := sharedOp tag
+    if group.size < 2 || groups.contains group then groups else groups.push group) #[]
+
+-- Fail closed (trust-chain audit finding 12): every merge of tags into one op is reviewed in
+-- `sharedOpTags`, and every reviewed group still decodes to one op.
+#guard sharedOpGroups == sharedOpTags.map (·.1)
+
 /-- The reasons table's tags, in table order. -/
 private def reasonTags (table : Array (Array String × String)) : Array String :=
   table.flatMap (·.1)
@@ -48,6 +66,8 @@ def opTableJson : Json :=
       ("constructor", toJson (op.map (·.ctorName))),
       ("effect", toJson (op.map (·.effects.cls.name))),
       ("emit", toJson (op.map (·.emitRoute.name))),
+      ("shared_op", toJson ((sharedOpTags.find? (·.1.contains tag)).map fun (group, reason) =>
+        Json.mkObj [("tags", toJson group), ("reason", toJson reason)])),
       ("runtime_reason", toJson (runtimeTagReason? tag)),
       ("exporter_reason", toJson (exporterTagReason? tag))]
   Json.mkObj [

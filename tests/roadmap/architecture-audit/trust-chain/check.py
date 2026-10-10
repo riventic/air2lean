@@ -184,6 +184,23 @@ def case_claims_unbound(binary, tmp):
     return result['status'] == 'accepted', f'goal for root basic.tardiness backed by `pure v` theorem: {result["status"]}'
 
 
+def case_merged_tags(binary, tmp):
+    # Finding 12: Normalize merged tags whose illegal input differs (`add` is illegal behaviour on
+    # overflow, `add_safe` a panic; likewise `intcast`), so a model change for one silently applied
+    # to the other. Fixed: those keep their safety in the op, and every remaining merge is a
+    # reviewed group with a reason (`sharedOpTags`, checked at build time by OpTable.lean).
+    proc = subprocess.run([str(binary), '--print-op-table'], capture_output=True, text=True, timeout=600)
+    if proc.returncode:
+        return True, f'--print-op-table exited {proc.returncode}'
+    rows = {row['tag']: row for row in json.loads(proc.stdout)['tags']}
+    merged = [t for t in ('add', 'sub', 'mul', 'intcast')
+              if t + '_safe' in ((rows[t].get('shared_op') or {}).get('tags') or ())]
+    unreviewed = sorted(t for t, row in rows.items() if 'shared_op' not in row)
+    groups = sorted({tuple(row['shared_op']['tags']) for row in rows.values() if row.get('shared_op')})
+    return bool(merged or unreviewed), (f'safety merged: {merged}; rows without a reviewed sharing record: '
+                                        f'{len(unreviewed)}; reviewed groups: {len(groups)}')
+
+
 CASES = {
     'std-name-spoof': case_std_name_spoof,
     'std-type-spoof': case_std_type_spoof,
@@ -197,6 +214,7 @@ CASES = {
     'unknown-key': case_unknown_key,
     'missing-flag': case_missing_flag,
     'claims-unbound': case_claims_unbound,
+    'merged-tags': case_merged_tags,
 }
 
 

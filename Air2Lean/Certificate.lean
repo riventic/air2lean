@@ -75,7 +75,8 @@ partial def printVal : Val → String
   | .sliceConst t p l => s!"(.sliceConst {t} {printVal p} {printVal l})"
 
 def arithOp : ArithOp → String | .add => ".add" | .sub => ".sub" | .mul => ".mul"
-def mode : Mode → String | .checked => ".checked" | .wrap => ".wrap" | .sat => ".sat"
+def mode : Mode → String
+  | .checked => ".checked" | .unchecked => ".unchecked" | .wrap => ".wrap" | .sat => ".sat"
 def divOp : DivOp → String
   | .divTrunc => ".divTrunc" | .divFloor => ".divFloor" | .divExact => ".divExact"
   | .rem => ".rem" | .mod => ".mod" | .divCeil => ".divCeil"
@@ -96,7 +97,7 @@ partial def printOp : Op → Option String
   | .cmp o a b => some s!"(.cmp {cmpOp o} {printVal a} {printVal b})"
   | .boolAnd a b => some s!"(.boolAnd {printVal a} {printVal b})"
   | .boolOr a b => some s!"(.boolOr {printVal a} {printVal b})"
-  | .intCast a => some s!"(.intCast {printVal a})"
+  | .intCast c a => some s!"(.intCast {c} {printVal a})"
   | .trunc a => some s!"(.trunc {printVal a})"
   | .alloc => some ".alloc"
   | .load p => some s!"(.load {printVal p})"
@@ -224,7 +225,7 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
     vals [a, b]
   | .boolAnd a b | .boolOr a b => vals [a, b]
   | .not a => vals [a]
-  | .intCast a | .trunc a => do intRes; vals [a]
+  | .intCast _ a | .trunc a => do intRes; vals [a]
   | .br _ v | .ret v => vals [v]
   | .call (.func _ _ none) args => vals args.toList
   | .call .. => throw s!"inst {i.id}: an indirect or spawn call"

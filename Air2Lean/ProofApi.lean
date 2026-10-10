@@ -71,7 +71,7 @@ private def proofVal (f : Func) : Val → Option Json
 private def proofArith : ArithOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul"
 private def proofMode : Mode → String
-  | .checked => "checked" | .wrap => "wrapping" | .sat => "saturating"
+  | .checked => "checked" | .unchecked => "unchecked" | .wrap => "wrapping" | .sat => "saturating"
 
 private def proofOp (f : Func) (op : Op) : Option Json := do
   let unary (name : String) (a : Val) : Option Json := do
@@ -86,7 +86,7 @@ private def proofOp (f : Func) (op : Op) : Option Json := do
   | .bit bit a b => binary (match bit with | .and => "bit-and" | .or => "bit-or" | .xor => "bit-xor") a b
   | .not a => unary "not" a
   | .neg a => unary "neg" a
-  | .intCast a => unary "int-cast" a
+  | .intCast _ a => unary "int-cast" a
   | .trunc a => unary "truncate" a
   | .bitcast a => unary "bitcast" a
   | .ret a => unary "return" a

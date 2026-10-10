@@ -1101,7 +1101,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- Emit maps a float `add`/`sub`/`mul` to the IEEE op and ignores `mode`: reject a float
     -- operand (scalar or a vector of floats) with a wrapping or saturating mode (Zig has none
     -- today) instead of guessing.
-    if mode != .checked then
+    if mode == .wrap || mode == .sat then
       let elemTy := match cx.types[ty]? with
         | some (.vector _ c) => cx.types[c]?
         | t => t
@@ -1148,7 +1148,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     unless cx.intShape? flagTy == some (alen, false, 1) do
       cx.fail line "shift-overflow flag must be u1 with the operand vector length"
     pure line
-  | .intCast a =>
+  | .intCast _ a =>
     if ((cx.valTy? a).map (fun id => hasErrorStorage cx.types id)).getD false || hasErrorStorage cx.types ty then
       cx.fail line "integer/error casts require compiler-wide finalized error ordinals and are outside the finite symbolic error-storage fragment"
     pure line

@@ -1744,7 +1744,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .cmp _ a b => #[a, b]
   | .boolAnd a b => #[a, b]
   | .boolOr a b => #[a, b]
-  | .intCast a => #[a]
+  | .intCast _ a => #[a]
   | .trunc a => #[a]
   | .bitcast a => if fc.isPlace a then #[] else #[a]
   | .floatRound _ a => #[a]
@@ -2053,13 +2053,13 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else
           let sgn := if fc.tySigned child then "true" else "false"
           match op, mode with
-          | .add, .checked => s!"Zig.Vec.map2M (Zig.add {sgn}) {rv a} {rv b}"
+          | .add, .checked | .add, .unchecked => s!"Zig.Vec.map2M (Zig.add {sgn}) {rv a} {rv b}"
           | .add, .wrap => s!"pure (Zig.Vec.map2 Zig.addWrap {rv a} {rv b})"
           | .add, .sat => s!"pure (Zig.Vec.map2 (Zig.addSat {sgn}) {rv a} {rv b})"
-          | .sub, .checked => s!"Zig.Vec.map2M (Zig.sub {sgn}) {rv a} {rv b}"
+          | .sub, .checked | .sub, .unchecked => s!"Zig.Vec.map2M (Zig.sub {sgn}) {rv a} {rv b}"
           | .sub, .wrap => s!"pure (Zig.Vec.map2 Zig.subWrap {rv a} {rv b})"
           | .sub, .sat => s!"pure (Zig.Vec.map2 (Zig.subSat {sgn}) {rv a} {rv b})"
-          | .mul, .checked => s!"Zig.Vec.map2M (Zig.mul {sgn}) {rv a} {rv b}"
+          | .mul, .checked | .mul, .unchecked => s!"Zig.Vec.map2M (Zig.mul {sgn}) {rv a} {rv b}"
           | .mul, .wrap => s!"pure (Zig.Vec.map2 Zig.mulWrap {rv a} {rv b})"
           | .mul, .sat => s!"pure (Zig.Vec.map2 (Zig.mulSat {sgn}) {rv a} {rv b})"
       | _ =>
@@ -2068,14 +2068,16 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
           s!"pure ({f} {rv a} {rv b})"
         else
           let sgn := if fc.valSigned a then "true" else "false"
+          -- An unchecked op's overflow is illegal behaviour: it shares the safety-checked
+          -- primitive, which throws on every overflowing input (`Sem.arithFn_unchecked_fails`).
           match op, mode with
-          | .add, .checked => s!"Zig.add {sgn} {rv a} {rv b}"
+          | .add, .checked | .add, .unchecked => s!"Zig.add {sgn} {rv a} {rv b}"
           | .add, .wrap => s!"pure (Zig.addWrap {rv a} {rv b})"
           | .add, .sat => s!"pure (Zig.addSat {sgn} {rv a} {rv b})"
-          | .sub, .checked => s!"Zig.sub {sgn} {rv a} {rv b}"
+          | .sub, .checked | .sub, .unchecked => s!"Zig.sub {sgn} {rv a} {rv b}"
           | .sub, .wrap => s!"pure (Zig.subWrap {rv a} {rv b})"
           | .sub, .sat => s!"pure (Zig.subSat {sgn} {rv a} {rv b})"
-          | .mul, .checked => s!"Zig.mul {sgn} {rv a} {rv b}"
+          | .mul, .checked | .mul, .unchecked => s!"Zig.mul {sgn} {rv a} {rv b}"
           | .mul, .wrap => s!"pure (Zig.mulWrap {rv a} {rv b})"
           | .mul, .sat => s!"pure (Zig.mulSat {sgn} {rv a} {rv b})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
@@ -2268,7 +2270,9 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .boolAnd a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} && {rv b})"; (env, some l)
   | .boolOr a b => let (env, l) := bindLet fc env inst.id s!"pure ({rv a} || {rv b})"; (env, some l)
-  | .intCast a =>
+  -- `intcast` (out of range: illegal behaviour) shares `intcast_safe`'s primitive, which throws
+  -- on every out-of-range value (`Sem.intCast_unchecked_fails`).
+  | .intCast _ a =>
     let (env, l) := bindLet fc env inst.id (fc.enumIntCast a inst.ty (rv a)); (env, some l)
   | .trunc a =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.trunc {fc.tyBits inst.ty} {rv a})"
@@ -2985,7 +2989,7 @@ def laneOp? : Op → Option (Array Val × (Array Val → Op))
   | .cmp o a b => some (#[a, b], fun v => .cmp o v[0]! v[1]!)
   | .boolAnd a b => some (#[a, b], fun v => .boolAnd v[0]! v[1]!)
   | .boolOr a b => some (#[a, b], fun v => .boolOr v[0]! v[1]!)
-  | .intCast a => some (#[a], fun v => .intCast v[0]!)
+  | .intCast c a => some (#[a], fun v => .intCast c v[0]!)
   | .trunc a => some (#[a], fun v => .trunc v[0]!)
   | .floatRound o a => some (#[a], fun v => .floatRound o v[0]!)
   | .sqrt a => some (#[a], fun v => .sqrt v[0]!)

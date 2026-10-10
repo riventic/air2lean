@@ -197,7 +197,7 @@ def Op.effects (op : Op) : Effects :=
   | .arith _ _ a b | .div _ a b | .divFloat a b | .minMax _ a b | .withOverflow _ a b
   | .shlWithOverflow a b | .bit _ a b | .shift _ a b | .cmp _ a b | .boolAnd a b | .boolOr a b
   | .arrayElemVal a b => .pure #[a, b]
-  | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast a | .trunc a
+  | .countBits _ a | .permuteBits _ a | .not a | .neg a | .abs a | .intCast _ a | .trunc a
   | .floatRound _ a | .sqrt a | .libm _ a | .floatConv a | .floatFromInt a | .intFromFloat _ a
   | .isNull a | .isNonNull a | .optPayload a | .isErr a | .isNonErr a | .errPayload a
   | .errCode a | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a

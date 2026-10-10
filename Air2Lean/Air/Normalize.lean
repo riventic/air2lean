@@ -163,13 +163,16 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let some p := raw.param
       | throw s!"{fnName}: inst {raw.id}: 'arg' needs 'param'"
     return .arg p
-  | "add" | "add_safe" => let (a, b) ← arg2 fnName raw; return .arith .add .checked a b
+  | "add" => let (a, b) ← arg2 fnName raw; return .arith .add .unchecked a b
+  | "add_safe" => let (a, b) ← arg2 fnName raw; return .arith .add .checked a b
   | "add_wrap" => let (a, b) ← arg2 fnName raw; return .arith .add .wrap a b
   | "add_sat" => let (a, b) ← arg2 fnName raw; return .arith .add .sat a b
-  | "sub" | "sub_safe" => let (a, b) ← arg2 fnName raw; return .arith .sub .checked a b
+  | "sub" => let (a, b) ← arg2 fnName raw; return .arith .sub .unchecked a b
+  | "sub_safe" => let (a, b) ← arg2 fnName raw; return .arith .sub .checked a b
   | "sub_wrap" => let (a, b) ← arg2 fnName raw; return .arith .sub .wrap a b
   | "sub_sat" => let (a, b) ← arg2 fnName raw; return .arith .sub .sat a b
-  | "mul" | "mul_safe" => let (a, b) ← arg2 fnName raw; return .arith .mul .checked a b
+  | "mul" => let (a, b) ← arg2 fnName raw; return .arith .mul .unchecked a b
+  | "mul_safe" => let (a, b) ← arg2 fnName raw; return .arith .mul .checked a b
   | "mul_wrap" => let (a, b) ← arg2 fnName raw; return .arith .mul .wrap a b
   | "mul_sat" => let (a, b) ← arg2 fnName raw; return .arith .mul .sat a b
   | "div_trunc" => let (a, b) ← arg2 fnName raw; return .div .divTrunc a b
@@ -253,7 +256,8 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     return .shuffle a raw.args[1]? raw.mask
   | "bool_and" => let (a, b) ← arg2 fnName raw; return .boolAnd a b
   | "bool_or" => let (a, b) ← arg2 fnName raw; return .boolOr a b
-  | "intcast" | "intcast_safe" => let a ← arg1 fnName raw; return .intCast a
+  | "intcast" => let a ← arg1 fnName raw; return .intCast false a
+  | "intcast_safe" => let a ← arg1 fnName raw; return .intCast true a
   | "trunc" => let a ← arg1 fnName raw; return .trunc a
   | "bitcast" => let a ← arg1 fnName raw; return .bitcast a
   | "is_null" => let a ← arg1 fnName raw; return .isNull a
@@ -444,6 +448,33 @@ partial def normalizeCase (fnName : String) (raw : Raw.RawCase) :
   return { items := raw.items, ranges := raw.ranges, body }
 
 end
+
+/-- The reviewed tags that decode to one op, each group with the reason that one model is exact
+for every tag in it (trust-chain audit finding 12). `Air2Lean/OpTable.lean` checks at build
+time that these are exactly the tags of `decodedTags` whose decoded ops coincide, so a new
+merge, or a tag that silently joins one, fails the build until it is reviewed here. A tag whose
+illegal input differs from its `_safe` tag's (`add`/`add_safe`, `intcast`/`intcast_safe`) keeps
+its safety in the op instead (`Mode.unchecked`, `Op.intCast checked`). -/
+def sharedOpTags : Array (Array String × String) := #[
+  (#["fptrunc", "fpext"], "the conversion's direction follows from the operand and result float types"),
+  (#["cmp_eq", "cmp_vector"], "cmp_vector carries its operator (the probe's `eq`) and decodes to that \
+    scalar comparison; the lane count follows from the operand types"),
+  (#["shuffle_one", "shuffle_two", "shuffle"], "the operand count and the mask carry the difference"),
+  (#["alloc", "ret_ptr"], "the return slot is a stack allocation of the result type"),
+  (#["struct_field_ptr", "struct_field_ptr_index_0"], "the field index is the instruction's index; \
+    the second fixes it to 0"),
+  (#["store", "store_safe"], "they differ only for an undefined operand (the safe tag writes 0xaa); \
+    the model writes undefined bytes (`Zig.storeUndef`), which no read relies on, or rejects the store"),
+  (#["ptr_elem_ptr", "slice_elem_ptr"], "the element address of a many-pointer or of a slice; the \
+    operand type selects"),
+  (#["memset", "memset_safe"], "as `store`/`store_safe`; a partly undefined item is rejected"),
+  (#["block", "dbg_inline_block"], "an inlined call's block carries only debug information"),
+  (#["try", "try_cold"], "a branch-weight hint only"),
+  (#["try_ptr", "try_ptr_cold"], "a branch-weight hint only"),
+  (#["ret", "ret_safe"], "they differ only for an undefined operand, which is outside the subset"),
+  (#["dbg_var_ptr", "dbg_var_val", "dbg_arg_inline", "dbg_empty_stmt"], "debug information, no effect"),
+  (#["call", "call_always_tail", "call_never_tail", "call_never_inline"],
+    "tail-call and inlining hints only")]
 
 /-- Every tag that `normalizeOp` decodes, in its arm order. `air2lean --print-op-table`
 probes each; `tests/roadmap/op-effects` checks this list against `normalizeOp`'s arms. -/

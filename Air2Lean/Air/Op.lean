@@ -391,11 +391,14 @@ structure AsmOperand where
   ref : Option Val
   deriving Repr, Inhabited, BEq
 
-/-- Integer overflow behaviour of `+`, `-`, `*`. -/
+/-- Integer overflow behaviour of `+`, `-`, `*`. The AIR tag's safety is kept (trust-chain audit
+finding 12): every consumer decides each mode explicitly, so a model change for the safety-checked
+tag cannot silently apply to the unchecked one. -/
 inductive Mode where
-  | checked  -- overflow ⇒ `throw .overflow` (`add`, `add_safe`)
-  | wrap     -- `+%`
-  | sat      -- `+|`
+  | checked    -- `add_safe`: overflow is a safety panic, `throw .overflow`
+  | unchecked  -- `add`: overflow is illegal behaviour (runtime safety off, or Sema checked it before)
+  | wrap       -- `+%`
+  | sat        -- `+|`
   deriving Repr, Inhabited, BEq
 
 inductive ArithOp where
@@ -486,8 +489,9 @@ inductive Op where
   | cmp (op : CmpOp) (a b : Val)
   | boolAnd (a b : Val)
   | boolOr (a b : Val)
-  /-- `@intCast`. The target type is the instruction's result type. -/
-  | intCast (a : Val)
+  /-- `@intCast`. The target type is the instruction's result type. `checked`: `intcast_safe`
+  (an out-of-range value is a safety panic); otherwise `intcast`, where it is illegal behaviour. -/
+  | intCast (checked : Bool) (a : Val)
   /-- `@truncate`. -/
   | trunc (a : Val)
   /-- Same bits, other type with the same representation (for example `usize` → `u64`); also

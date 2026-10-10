@@ -126,15 +126,39 @@ def intTy? (f : Func) (t : TyId) : Option (Bool × Nat) :=
 
 def arithFn (op : ArithOp) (mode : Mode) (s : Bool) {w : Nat} (a b : BitVec w) : Result (BitVec w) :=
   match op, mode with
-  | .add, .checked => Zig.add s a b
+  | .add, .checked | .add, .unchecked => Zig.add s a b
   | .add, .wrap => pure (Zig.addWrap a b)
   | .add, .sat => pure (Zig.addSat s a b)
-  | .sub, .checked => Zig.sub s a b
+  | .sub, .checked | .sub, .unchecked => Zig.sub s a b
   | .sub, .wrap => pure (Zig.subWrap a b)
   | .sub, .sat => pure (Zig.subSat s a b)
-  | .mul, .checked => Zig.mul s a b
+  | .mul, .checked | .mul, .unchecked => Zig.mul s a b
   | .mul, .wrap => pure (Zig.mulWrap a b)
   | .mul, .sat => pure (Zig.mulSat s a b)
+
+/-- Whether `op` overflows `w` bits: the input on which `add_safe` panics and `add` is illegal
+behaviour. -/
+def arithOverflows (op : ArithOp) (s : Bool) {w : Nat} (a b : BitVec w) : Bool :=
+  match op with
+  | .add => if s then a.saddOverflow b else a.uaddOverflow b
+  | .sub => if s then a.ssubOverflow b else a.usubOverflow b
+  | .mul => if s then a.smulOverflow b else a.umulOverflow b
+
+/-- Trust-chain audit finding 12: the unchecked tags (`add`, `sub`, `mul`) share the checked
+primitive, which fails on every overflowing input, where the unchecked op is illegal behaviour.
+A model change that returned a value there breaks this theorem. -/
+theorem arithFn_unchecked_fails (op : ArithOp) (s : Bool) {w : Nat} (a b : BitVec w)
+    (h : arithOverflows op s a b) : arithFn op .unchecked s a b = throw .overflow := by
+  cases op <;> simp_all [arithFn, arithOverflows, Zig.add, Zig.sub, Zig.mul]
+
+/-- The same for `intcast` (illegal behaviour out of range) and `intcast_safe` (a panic): the
+shared primitive fails on every value outside the target range. -/
+theorem intCast_unchecked_fails (s₁ s₂ : Bool) (m : Nat) {n : Nat} (a : BitVec n)
+    (h : ¬((if s₂ then -(2 ^ (m - 1)) else 0 : Int) ≤ Zig.val s₁ a ∧
+      Zig.val s₁ a ≤ (if s₂ then 2 ^ (m - 1) - 1 else 2 ^ m - 1 : Int))) :
+    Zig.intCast s₁ s₂ m a = throw .overflow := by
+  simp only [Zig.intCast]
+  exact if_neg h
 
 def divFn (op : DivOp) (s : Bool) {w : Nat} (a b : BitVec w) : Result (BitVec w) :=
   match op with
@@ -236,7 +260,7 @@ def evalPure (f : Func) (env : Env) (i : Inst) : Result Value :=
     let x ← (← operand f env a).asBool
     let y ← (← operand f env b).asBool
     pure (.bool (x || y))
-  | .intCast a => match intTy? f i.ty with
+  | .intCast _ a => match intTy? f i.ty with
     | some (s₂, m) => do
       match ← operand f env a with
       | .int s₁ _ x => pure (.int s₂ m (← Zig.intCast s₁ s₂ m x))
