@@ -33,6 +33,16 @@ def with_code_layout(doc, size, align):
     return doc
 
 
+def with_version(doc, version):
+    doc = copy.deepcopy(doc)
+    doc["zig_version"] = doc["profile"]["zig_version"] = version
+    return doc
+
+
+# `@errorName` (Zig 0.16.0 export of `tests/golden/slices`), relabelled as other versions.
+ERROR_NAME = json.loads((HERE.parents[1] / "golden" / "0.16.0" / "slices" / "air" /
+                         "slices.failName.json").read_text())
+
 CASES = {
     # `--error-limit 0`: no error integer and no storage.
     "zero width": ([with_bits(load("bits16"), 0)], "profile.error_set_bits 0 is outside"),
@@ -50,29 +60,46 @@ CASES = {
     # One program, two widths: profiles must agree exactly.
     "mixed widths": ([load("bits16"), load("bits8", "loadOptional")],
                      "mixed AIR profiles: field 'error_set_bits' differs"),
+    # Zig 0.14.1 names no error whose code has the top bit set; the error count is not exported.
+    "@errorName on 0.14.1": ([with_version(ERROR_NAME, "0.14.1")],
+                             "`@errorName` is rejected for Zig 0.14.1"),
 }
+
+# The same `@errorName` function is accepted by the other versions: the rejection is the
+# 0.14.1 dialect, not the operation.
+ACCEPTED = {f"@errorName on {v}": [with_version(ERROR_NAME, v)] for v in ("0.15.2", "0.16.0")}
+
+
+def translate(docs):
+    with tempfile.TemporaryDirectory(prefix="air2lean-error-width-") as temp:
+        air = Path(temp) / "air"
+        air.mkdir()
+        for doc in docs:
+            (air / f"{doc['name']}.json").write_text(json.dumps(doc))
+        result = subprocess.run([sys.argv[1], str(air), "-o", str(Path(temp) / "Gen.lean"),
+                                 "--namespace", "ErrorWidthNegative",
+                                 "--prefix", docs[0]["name"].split(".")[0] + "."],
+                                capture_output=True, text=True, timeout=300)
+        return result, (Path(temp) / "Gen.lean").exists()
 
 
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
-    translator = sys.argv[1]
     for name, (docs, expected) in CASES.items():
-        with tempfile.TemporaryDirectory(prefix="air2lean-error-width-") as temp:
-            air = Path(temp) / "air"
-            air.mkdir()
-            for doc in docs:
-                (air / f"{doc['name']}.json").write_text(json.dumps(doc))
-            result = subprocess.run([translator, str(air), "-o", str(Path(temp) / "Gen.lean"),
-                                     "--namespace", "ErrorWidthNegative", "--prefix", "error_width."],
-                                    capture_output=True, text=True, timeout=300)
-            output = result.stdout + result.stderr
-            if result.returncode == 0 or expected not in output:
-                raise SystemExit(f"{name}: expected rejection containing {expected!r}, "
-                                 f"got exit {result.returncode}: {output[-2000:]}")
-            if (Path(temp) / "Gen.lean").exists():
-                raise SystemExit(f"{name}: a rejected configuration wrote Gen.lean")
-    print(f"error-width negatives rejected: {len(CASES)}")
+        result, wrote = translate(docs)
+        output = result.stdout + result.stderr
+        if result.returncode == 0 or expected not in output:
+            raise SystemExit(f"{name}: expected rejection containing {expected!r}, "
+                             f"got exit {result.returncode}: {output[-2000:]}")
+        if wrote:
+            raise SystemExit(f"{name}: a rejected configuration wrote Gen.lean")
+    for name, docs in ACCEPTED.items():
+        result, wrote = translate(docs)
+        if result.returncode != 0 or not wrote:
+            raise SystemExit(f"{name}: expected translation, got exit {result.returncode}: "
+                             f"{(result.stdout + result.stderr)[-2000:]}")
+    print(f"error-width negatives rejected: {len(CASES)}; controls accepted: {len(ACCEPTED)}")
 
 
 if __name__ == "__main__":

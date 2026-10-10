@@ -147,16 +147,13 @@
   "exporter_sha256": "c470a8c9041176fd3fde7b74fb4edcbe32e0459ca37191dbae83fde68521aa03",
   "native": {
     "command": "<stock zig> build-exe -lc -OReleaseSafe -fno-error-tracing [--error-limit <limit>] probe.zig, one build per configuration (native.py)",
-    "driver_sha256": "6833b4d3f64756148818439312b09d5a452cae7736a2f26b4b05bc80cf80f9c0",
+    "driver_sha256": "4fa27981b9e409ce451785ae0d97cf8e2dd820100d5e3f1d5e0ce1a7bba79bf4",
     "observations_sha256": {
-      "aarch64-macos-0.14.1.txt": "029f3d2f233f9691236c104fd24e19b08bc3cbd2876f3c9841598ec8d4a0e08c",
+      "aarch64-macos-0.14.1.txt": "ee4a56c1d804e00152c5d292c928c72f1be95fb96b538e47a68356fc3dd81f55",
       "aarch64-macos-0.15.2.txt": "db3f08676848fe4fab854b0c349a835145df60bbd98d0fe5390a6380a211c527",
-      "aarch64-macos-0.16.0.txt": "7525d3fac68b5af87baac5630c522a93a9d832728a41525ecbe163f85103c4e1",
-      "expected-mismatches-0.14.1.txt": "c03c55d3c69ef76c211fc8255e4c1fea949666ac1438309b00fb5716b9e8825c",
-      "expected-mismatches-0.15.2.txt": "e703cfd7cd615af95ba5d3b897a8720cffbd9b718f91d940cf73b7035ed62962",
-      "expected-mismatches-0.16.0.txt": "e703cfd7cd615af95ba5d3b897a8720cffbd9b718f91d940cf73b7035ed62962"
+      "aarch64-macos-0.16.0.txt": "7525d3fac68b5af87baac5630c522a93a9d832728a41525ecbe163f85103c4e1"
     },
-    "probe_sha256": "8eab7d65124a9d015c5ff76f67fea8c5e6f288776a4f63249e025d33a989d476",
+    "probe_sha256": "3f8b56e0d89232c4e289095633b4dbb13092aa074ee8b2b8f7162d1b5b62a2d4",
     "stock_compiler_sha256": {
       "0.14.1": "b3de43be2f2a65738c11d6bba5520e3e2f75a3aadbedd4ac3640a6a107fcd593",
       "0.15.2": "c65cd34917923f575448cc0603dd7c2326da0af0e5c323043d090662dcdf351c",

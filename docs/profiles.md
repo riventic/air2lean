@@ -34,7 +34,7 @@ Every schema-12 function has a mandatory `profile` object:
 | `features` | Enabled CPU feature names, emitted in sorted order; empty/duplicate names are rejected |
 | `build_mode` | `Debug`, `ReleaseSafe`, `ReleaseFast`, or `ReleaseSmall`; recording a mode does not qualify it ([build-modes.md](build-modes.md)) |
 | `float_mode` | `"per-instruction"` |
-| `error_set_bits` | `1`–`32` (the error integer that `--error-limit` selects); `0` and wider values are rejected. Every error-set layout must match it. Only `16` (the default limit) has native evidence: [§Error-code width](#error-code-width---error-limit) |
+| `error_set_bits` | `1`–`32` (the error integer that `--error-limit` selects); `0` and wider values are rejected. Every error-set layout must match it. Widths 1–32 are compared with native observations: [§Error-code width](#error-code-width---error-limit) |
 | `error_layout` | `"type-table"`; each exported type's ABI size/alignment remains checked against the model |
 | `error_tracing` | Boolean from the owning module |
 | `export_stage` | `"analyzed-air"`; a shipping-binary correspondence claim is rejected |
@@ -115,6 +115,9 @@ For every width from 1 to 32 bits it proves the following:
 * `E`, `?E`, `FiniteErrorW` and finite `E!T` values read back after a store
   (`errorEncW_store_load`, `optionalErrorEncW_store_load`, `errorUnionEncW_store_load`).
   Foreign names and the zero code never reload as a member.
+* A stored code defines its `ceil(bits / 8)` value bytes (`errValueSize`). The fourth byte of a
+  4-byte code of 17–24 bits is padding: it is undefined, as natively, and a load does not read it
+  (`errBytesW_padding`, `errOfBytesW_extract_value`).
 * Error-union wrap/unwrap is lawful (`errorUnionWithW_lawful`). The code slice read by
   pointer-form `try`/`is_err_ptr` is the code of the stored value (`errorUnionWithW_code`).
 * `@errorFromInt (@intFromError e) = e` and its converse hold for any compilation numbering
@@ -127,12 +130,14 @@ For every width from 1 to 32 bits it proves the following:
 
 The translator still rejects integer/error casts (`@intFromError`, `@errorFromInt`). AIR
 does not export the compilation's numbering, so the model states these casts over an explicit
-`ErrorTable` and does not translate them.
+`ErrorTable` and does not translate them. `@errorName` is rejected for Zig 0.14.1, whose
+name-table lookup reads out of bounds for a code of at least `2^(bits-1)`
+([upstream note](upstream/zig-0.14.1-error-name-sign-extension.md)).
 
 | Configuration | `error_set_bits` | Status |
 | --- | --- | --- |
 | Default `--error-limit` (65534) | 16 | Qualified. Native/model observations come from the finite error-storage gate ([error-storage](../tests/roadmap/error-storage/README.md)), plus the width proofs and the hand-written fixtures |
-| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Model-qualified only. The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed ([error-width](../tests/roadmap/error-width/README.md)). There is no compiler export or native observation |
+| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Model-qualified only. The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1, 0.15.2 and 0.16.0 are executed, and stock-compiler observations at 1–32 bits match the model ([error-width](../tests/roadmap/error-width/README.md)) |
 | `--error-limit 0` | 0 | Rejected (no error storage) |
 
 The project workflow (`scripts/project.py`), golden receipts (`scripts/normalize-generated.py`)

@@ -59,26 +59,27 @@ and where they panic, not which number an error gets.
 Results, with 0.15.2 and 0.16.0 identical:
 
 * Width = `bit_length(limit)`; size and alignment are 1, 2 or 4 bytes; `E!T` layout, `?E` and
-  `null`, the casts and their bounds all match the model, from 1 bit (limit 1) to 32.
-* The model differs on the number of defined code bytes at 17 to 24 bits (limits 65536, 100000,
-  2^23): a store of the error integer writes `ceil(bits / 8)` bytes, so the fourth byte of a 4-byte
-  code is padding; the model fills all `errCodeSize` bytes (`enc defined 4` against `3`). The
-  model writes a fragment into that byte and its decoder requires it, so it is stricter than the
-  native layout when reading (it rejects a code natively written without the padding byte) and
-  more defined when writing; translated programs only read what they wrote, so no program is
-  mis-modelled, but the correspondence of the fourth byte is not established. Listed in
-  `native/expected-mismatches-<version>.txt`.
+  `null`, the casts and their bounds all match the model, from 1 bit (limit 1) to 32, on all
+  three versions.
+* A store of the error integer writes `ceil(bits / 8)` bytes (`errValueSize`). At 17 to 24 bits
+  (limits 65536, 100000, 2^23) the fourth byte of the 4-byte code is padding: the model leaves it
+  undefined and its decoder does not read it (`enc defined 3`; `errBytesW_padding`,
+  `errOfBytesW_extract_value` in `ZigLean/Mem/ErrWidthLemmas.lean`).
 * 0.14.1 names 12 errors in its start code, so no compilation has fewer than 13, and widths below
-  4 bits are not observable (`skipped`). It also mishandles codes of width `bits` with the top bit
-  set: `@errorName` of such a code is empty, and `@errorFromInt` rejects codes above 253 (limit
-  255), 32767 (limits 65534 and 65535) or 65535 (limits 65536 and 100000) although the errors
-  exist. The model has no such rule (`bound count N`). Listed in
-  `native/expected-mismatches-0.14.1.txt`; these are the failing expectations for 0.14.1, not a
-  model change.
+  4 bits are not observable (`skipped`). Its `@errorName` indexes the name table with the
+  sign-extended code, so a code with the top bit set (at least `2^(bits-1)`) reads out of bounds:
+  an empty or garbage name, or a crash
+  ([upstream note](../../../docs/upstream/zig-0.14.1-error-name-sign-extension.md); fixed in
+  0.15.2). The translator rejects `@errorName` on 0.14.1 (`negatives.py`), and `native.py` does
+  not read those names there (`names from 2^(bits-1) unread`, which `Model.lean` requires).
+  `@errorFromInt` is correct on 0.14.1.
 
-A recorded mismatch must not change silently: `Model.lean` fails on a mismatch that is not listed
-and on a listed one that no longer occurs. `check.sh` also runs five mutated observations (payload
-offset, code size, `@errorFromInt` bound, zero code, compile verdict), which it must reject.
+`Model.lean` fails on any mismatch, unless it is listed in
+`native/expected-mismatches-<version>.txt` (none at present); a listed mismatch that no longer
+occurs also fails. `check.sh` also runs ten mutated observations, which it must reject: payload
+offset, code size, `@errorFromInt` bound, zero code, compile verdict, defined code bytes, an
+empty name, and on 0.14.1 an empty name below the top bit, a top-bit `@errorFromInt` rejection
+and a top-bit name read.
 
 `check.sh` runs these steps:
 
@@ -90,13 +91,15 @@ offset, code size, `@errorFromInt` bound, zero code, compile verdict), which it 
 4. Runs `Runtime.lean`, which executes every generated function with each width's own
    dictionaries. Errors, `null`, success payloads and the zero code written by
    `errunion_payload_ptr_set` all survive. A foreign name and a narrower code do not reload
-   as members.
+   as members. A stored code defines `errValueSize` bytes, and any byte in its padding is
+   ignored on load.
 5. Runs `negatives.py`, which requires rejection of width 0, width 33, a profile/layout
-   disagreement in either direction, a domain wider than the width (`--error-limit 1`) and a
-   program that mixes widths.
+   disagreement in either direction, a domain wider than the width (`--error-limit 1`), a
+   program that mixes widths and `@errorName` on Zig 0.14.1. The same `@errorName` function is
+   accepted for 0.15.2 and 0.16.0.
 6. Checks `provenance.json` (`test_provenance.py`), then translates, elaborates and executes the
    18 compiler exports of `air-fresh/` with the same checks as step 4.
-7. Compares the three recorded native observations with the model (`Model.lean`), and five mutated
+7. Compares the three recorded native observations with the model (`Model.lean`), and ten mutated
    observations that must be rejected. With `AIR2LEAN_ZIG_NATIVE=<stock zig>` it also records this
    host's observation (`native.py`) and compares that.
 

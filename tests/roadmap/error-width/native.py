@@ -14,7 +14,7 @@ and 0.16.0, 12 in 0.14.1, measured first); a configuration smaller than that is 
 Observed per configuration: whether it compiles, the probe's report
 (encoding, error-union layout), the `@errorFromInt` boundary (a panic is a signal exit of a
 `probe from C` subprocess) and the names of codes 1..N (all of them up to 1000 errors, else the
-first and last three).
+first and last three; on 0.14.1 only codes below `2^(bits-1)`, see `observe`).
 """
 import subprocess
 import sys
@@ -103,7 +103,7 @@ def hidden_errors(zig, work):
     return lo - 2
 
 
-def observe(zig, name, limit, total, hidden, work):
+def observe(zig, version, name, limit, total, hidden, work):
     shown = "default" if limit is None else limit
     head = f"config {name} limit {shown} total {total}"
     if total - hidden < 1:
@@ -142,11 +142,19 @@ def observe(zig, name, limit, total, hidden, work):
     out.append(f"bound max {top} {'panic' if panics(exe, top) else 'ok'}")
     out.append(f"bound over {top + 1} {'panic' if panics(exe, top + 1) else 'ok'}")
     ranges = [(1, count)] if count <= 1000 else [(1, 4), (count - 2, count)]
+    # Zig 0.14.1's `@errorName` indexes its name table with the sign-extended code: a code with
+    # the top bit set reads out of bounds (docs/upstream/zig-0.14.1-error-name-sign-extension.md).
+    # Those names are not read; the translator rejects `@errorName` on 0.14.1.
+    unread = 2 ** (bits - 1) if version == "0.14.1" and count >= 2 ** (bits - 1) else None
+    if unread is not None:
+        ranges = [(lo_, min(hi_, unread - 1)) for lo_, hi_ in ranges if lo_ < unread]
     for lo_, hi_ in ranges:
         t = run([str(exe), "table", str(lo_), str(hi_)])
         if t.returncode != 0:
             raise SystemExit(f"{name}: table {lo_} {hi_} failed")
         out += t.stdout.splitlines()
+    if unread is not None:
+        out.append(f"names from {unread} unread")
     return out
 
 
@@ -163,7 +171,7 @@ def main():
         for name, limit, total in CONFIGS:
             if quick and name in BIG:
                 continue
-            lines += observe(zig, name, limit, total, hidden, work)
+            lines += observe(zig, version, name, limit, total, hidden, work)
     text = "\n".join(lines) + "\n"
     if len(args) == 2:
         Path(args[1]).write_text(text)

@@ -2368,6 +2368,14 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
         | _ => none
       if let some what := what? then
         throw s!"{f.name}: {what} is outside the {8 * ptrBytes}-bit pointer model"
+  -- Zig 0.14.1's `@errorName` indexes the name table with the sign-extended error code, so a
+  -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
+  -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
+  -- does not export the compilation's error count, so no code is known to stay below that bit.
+  if f.zigVersion == "0.14.1" && insts.any (fun i => match i.op with | .errorName _ => true | _ => false) then
+    throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
+      error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
+      compilation's error codes; use Zig 0.15.2 or later"
   let errorGlobals := f.globals.any (fun g => hasErrorStorage f.types g.ty)
   let escaping := escapingAllocs f
   let localRoots := placeRoots insts

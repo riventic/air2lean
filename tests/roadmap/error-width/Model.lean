@@ -8,7 +8,8 @@ native observation (`native/<arch>-<os>-<version>.txt`), it recomputes from
   error count is at most the limit; width 0 has no error value);
 * the error integer's width (`errorLimitBits`), size and alignment (`errCodeSize`,
   `errCodeAlign`), also of `?E`;
-* the byte images: a stored error is a nonzero code of `errCodeSize` bytes, distinct errors have
+* the byte images: a stored error is a nonzero code of `errCodeSize` bytes whose first
+  `errValueSize` bytes are defined and the rest padding (undefined), distinct errors have
   distinct images, `null` is the zero code, `?E` shares the image of `E`;
 * where `E!T` keeps its code and payload and its size and alignment (`errUnionOffsetsW`,
   `errUnionSizeW`) for seven payloads;
@@ -64,31 +65,41 @@ private def parseHead (l : String) : Option Cfg :=
     some ⟨n, lim.toNat?, t.toNat!, "skipped", []⟩
   | _ => none
 
-private def parseFile (text : String) : Nat × List Cfg := Id.run do
+/-- The `meta zig` version, the `meta hidden` error count and the configurations. -/
+private def parseFile (text : String) : String × Nat × List Cfg := Id.run do
+  let mut version := ""
   let mut hidden := 0
   let mut cfgs : Array Cfg := #[]
   for l in (text.splitOn "\n").filter (· ≠ "") do
-    if l.startsWith "meta hidden " then hidden := (l.drop 12).toNat!
+    if l.startsWith "meta zig " then version := (l.drop 9).toString
+    else if l.startsWith "meta hidden " then hidden := (l.drop 12).toNat!
     else if let some c := parseHead l then cfgs := cfgs.push c
     else if 0 < cfgs.size then
       cfgs := cfgs.modify (cfgs.size - 1) fun c => { c with body := c.body ++ [l] }
-  return (hidden, cfgs.toList)
+  return (version, hidden, cfgs.toList)
 
 private def head (c : Cfg) (status : String) : String :=
   let lim := match c.limit with | none => "default" | some n => toString n
   if status == "skipped" then s!"config {c.name} limit {lim} total {c.total} skipped"
   else s!"config {c.name} limit {lim} total {c.total} compile {status}"
 
-private def names (c : Cfg) : Array ErrName := Id.run do
+/-- The printed numbering: (code, name), by code. -/
+private def names (c : Cfg) : Array (Nat × ErrName) := Id.run do
   let mut out : Array (Nat × String) := #[]
   for l in c.body do
     match l.splitOn " " with
     | ["name", n, s] => out := out.push (n.toNat!, s)
     | _ => pure ()
-  return (out.qsort (·.1 < ·.1)).map (·.2)
+  return out.qsort (·.1 < ·.1)
+
+/-- Zig 0.14.1's `@errorName` reads out of bounds for a code with the error integer's top bit
+set (it sign-extends the table index; docs/upstream/zig-0.14.1-error-name-sign-extension.md).
+The translator rejects `@errorName` on 0.14.1, so those names are a documented rejection:
+`native.py` does not read them and prints `names from 2^(bits-1) unread`. -/
+private def topBitUnread (version : String) : Bool := version == "0.14.1"
 
 /-- The model's lines of one configuration. `observed` supplies the compiler's numbering. -/
-private def expected (hidden : Nat) (c : Cfg) : List String :=
+private def expected (version : String) (hidden : Nat) (c : Cfg) : List String :=
   let limit := c.limit.getD defaultErrorLimit
   let fits := 0 < limit && c.total ≤ limit
   if c.total < hidden + 1 then [head c "skipped"]
@@ -100,23 +111,30 @@ private def expected (hidden : Nat) (c : Cfg) : List String :=
     let isSingle := c.total == hidden + 1
     let d := if isSingle then single else domain
     let bytesOf (e : ErrName) := errBytesW bits (some e)
-    let top := if isSingle then "Bad" else if c.total == hidden + 2 then "Other" else "Top"
-    let es := (if isSingle then ["Bad"] else ["Bad", "Other"]) ++ (if top == "Top" then ["Top"] else [])
+    let last := if isSingle then "Bad" else if c.total == hidden + 2 then "Other" else "Top"
+    let es := (if isSingle then ["Bad"] else ["Bad", "Other"]) ++ (if last == "Top" then ["Top"] else [])
     let nonzero := es.all fun e => bytesOf e != errBytesW bits none
     let distinct := isSingle || bytesOf "Bad" != bytesOf "Other"
     let ownBytes := es.all fun e => (bytesOf e).size == n
+    -- The bytes a store defines (`probe.zig` compares only these); the rest is padding.
+    let defined := ((bytesOf "Bad").toList.takeWhile (· != .undef)).length
+    let padded := es.all fun e => (bytesOf e).toList.drop defined |>.all (· == .undef)
     let optNull := (optionalErrorEncW bits d).encode none == errBytesW bits none &&
-      (errBytesW bits none).all (fun b => b == .int 0)
+      ((errBytesW bits none).extract 0 defined).all (fun b => b == .int 0)
     let optSome := es.all fun e => (optionalErrorEncW bits d).encode (some e) == bytesOf e &&
       (errorEncW bits d).encode e == bytesOf e
-    let tbl := names c
+    -- 0.14.1: no name is read from code `unread` up (`topBitUnread`).
+    let unread := if topBitUnread version ∧ 2 ^ (bits - 1) ≤ c.total then some (2 ^ (bits - 1)) else none
+    let printed := names c
+    let tbl := printed.map (·.2)
     -- The printed codes of `Bad`, `Other` and the last error lie in 1..N, `Bad` and `Other` apart.
     let codesOk := match (c.body.find? (·.startsWith "code ")).map (·.splitOn " ") with
       | some ["code", "Bad", x, "Other", y, "top", z] =>
         [x, y, z].all (fun s => 1 ≤ s.toNat! && s.toNat! ≤ c.total) && (isSingle || x != y)
       | _ => false
     -- With a printed numbering (at most 1000 errors): unique, fits the width, inverse casts.
-    let tableOk : Bool := match ErrorTable.check tbl bits with
+    let tableOk : Bool := printed.all (fun (k, _) => unread.all (k < ·)) && tbl.all (· != "") &&
+      match ErrorTable.check tbl bits with
       | .error _ => false
       | .ok t => (List.range tbl.size).all fun i =>
           verdict (intFromErrorW bits t tbl[i]!) (fun v => toString v.toNat) == toString (i + 1) &&
@@ -133,7 +151,7 @@ private def expected (hidden : Nat) (c : Cfg) : List String :=
     let maxCode := 2 ^ bits - 1
     let tableLines := c.body.filter (·.startsWith "name ")
     [head c "ok",
-     s!"enc size {n} {a}", s!"enc defined {n}", s!"enc anyerror {n} {a} {bits}",
+     s!"enc size {n} {a}", s!"enc defined {if padded then defined else n}", s!"enc anyerror {n} {a} {bits}",
      s!"enc optional {(optionalErrorEncW bits d).size} {(optionalErrorEncW bits d).align}",
      flag "nonzero" (nonzero && ownBytes), flag "distinct" distinct,
      flag "le_code" (ownBytes && codesOk && nerr ≤ errCapacity bits && (tbl.size ≤ 1000 → tableOk)),
@@ -146,10 +164,10 @@ private def expected (hidden : Nat) (c : Cfg) : List String :=
     [s!"bound zero {castAt 0}", s!"bound count {nerr}",
      s!"bound above {nerr + 1} {castAt (nerr + 1)}",
      s!"bound max {maxCode} {castAt maxCode}", s!"bound over {maxCode + 1} {castAt (maxCode + 1)}"] ++
-    tableLines
+    tableLines ++ (unread.map fun u => [s!"names from {u} unread"]).getD []
 
-private def mismatches (hidden : Nat) (c : Cfg) : List String :=
-  let model := expected hidden c
+private def mismatches (version : String) (hidden : Nat) (c : Cfg) : List String :=
+  let model := expected version hidden c
   let seen := head c c.status :: c.body
   -- The `code` line is the compiler's numbering: copied, then bounds-checked below.
   let modelOnly := model.filter (!seen.contains ·)
@@ -166,8 +184,8 @@ def main (args : List String) : IO UInt32 := do
     | [p] => pure (p, none)
     | [p, e] => pure (p, some e)
     | _ => throw (IO.userError "usage: Model.lean [--print-mismatches] OBSERVED [EXPECTED_MISMATCHES]")
-  let (hidden, cfgs) := parseFile (← IO.FS.readFile path)
-  let got := cfgs.flatMap (mismatches hidden)
+  let (version, hidden, cfgs) := parseFile (← IO.FS.readFile path)
+  let got := cfgs.flatMap (mismatches version hidden)
   if printOnly then
     got.forM IO.println
     return 0

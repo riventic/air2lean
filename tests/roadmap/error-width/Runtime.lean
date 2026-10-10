@@ -22,6 +22,8 @@ def main : IO Unit := do
     ErrorWidth17.unionTry8, ErrorWidth17.unionTry64, ErrorWidth17.setPayload, ErrorWidth17.loadUnion⟩
   -- The widths really differ: 2, 1, 2 and 4 code bytes; E!u8 is 4, 2, 4 and 8 bytes.
   check "code sizes" ([16, 8, 10, 17].map errCodeSize) [2, 1, 2, 4]
+  -- A store writes `ceil(bits / 8)` bytes: the 4-byte code of 17 to 24 bits has one padding byte.
+  check "code value bytes" ([16, 8, 10, 17, 24, 25].map errValueSize) [2, 1, 2, 3, 3, 4]
   check "E!u8 sizes" ([16, 8, 10, 17].map fun b => (union8 b).size) [4, 2, 4, 8]
   -- A narrower code is not a complete wider code. (Every function of one program has the
   -- same profile, so mixed-width storage does not arise from translated code.)

@@ -242,15 +242,17 @@ fn is(arg: [*:0]const u8, comptime word: []const u8) bool {
     return arg[word.len] == 0;
 }
 
-/// `from C`: `@errorFromInt(@intCast(C))`. A panic (SIGILL/SIGTRAP) for an integer that does
-/// not fit `Code`, is 0, or names no error.
+/// `from C`: `@errorFromInt(@intCast(C))`, printed back with `@intFromError`. A panic
+/// (SIGILL/SIGTRAP) for an integer that does not fit `Code`, is 0, or names no error. No
+/// `@errorName` here: Zig 0.14.1 reads its name table out of bounds for a code with the top bit
+/// set, which would be mistaken for a rejected code.
 fn from(c: u64) void {
     const code: Code = @intCast(c);
     const e = @errorFromInt(code);
     str("from ");
     num(c);
     ch(' ');
-    str(@errorName(e));
+    num(@intFromError(e));
     eol();
 }
 
