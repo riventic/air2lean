@@ -190,7 +190,7 @@ MUTANTS = {
         '            pass\n', PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # D03 (W1): the kernel-graph derivation applies the same markers.
     'premises-compiled-interface-marker-dropped': (
-        'scripts/premises.py', '                apply_markers(via, user(name), markers.of(module, user(name)))\n', '',
+        'scripts/premises.py', '                apply_markers(via, self.user(name), self.markers.of(module, self.user(name)))\n', '',
         PREMISES, 'premises', ('CompiledTests.test_compiled_interface_marker',)),
     # E04 (W3): a native result outside the model that is not a known divergence must fail.
     'inclusion-new-divergence-ignored': (

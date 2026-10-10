@@ -33,6 +33,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,8 +89,14 @@ def target_files(root, kind, target):
     each `Gen` module with the mutated translator, so the committed one is not an input), or an
     example's program and its tests/diff/<ex>/ harness, inputs and allow-lists."""
     if kind == 'diff':
-        files = {p for d in (root / 'examples' / target, root / 'tests/diff' / target) if d.is_dir()
-                 for p in d.rglob('*') if p.is_file()}
+        dirs = [d for d in (root / 'examples' / target, root / 'tests/diff' / target) if d.is_dir()]
+        # Only tracked files: build outputs and caches of a local run must not change the digest.
+        listed = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--', *map(str, dirs)],
+                                capture_output=True) if dirs else None
+        if listed is not None and listed.returncode == 0 and (root / '.git').exists():
+            files = {root / rel for rel in listed.stdout.decode().split('\0') if rel}
+        else:
+            files = {p for d in dirs for p in d.rglob('*') if p.is_file()}
     else:
         files, pending = set(), [target]
         while pending:
