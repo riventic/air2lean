@@ -619,11 +619,18 @@ but `Zig.Mem.access` of zero bytes still needs a live block, in bounds and align
 would report `.illegal` where Zig is defined. Sema emits no load or store of a zero-bit value (it
 is comptime-known) and the exporter gives a zero-size struct no type (`.other`), so this keeps a
 hand-written or future export from reaching that rule. -/
+def zeroSizeAccess? (types : Array Ty) (layouts : Array Layout) (ty : TyId) (errBits : Nat)
+    (what : String) : Option String :=
+  if let .ok (0, _) := modelLayout types layouts ty errBits then
+    some s!"{what} of a zero-size type is outside the subset (the model's access of zero \
+      bytes needs a live block)"
+  else none
+
+/-- `zeroSizeAccess?` as a check failure at `line`. -/
 def CheckCtx.rejectZeroSize (cx : CheckCtx) (line : Nat) (ty : TyId) (what : String) :
     Except String Unit := do
-  if let .ok (0, _) := modelLayout cx.types cx.layouts ty cx.errBits then
-    cx.fail line s!"{what} of a zero-size type is outside the subset (the model's access of zero \
-      bytes needs a live block)"
+  if let some msg := zeroSizeAccess? cx.types cx.layouts ty cx.errBits what then
+    cx.fail line msg
 
 /-- A memory access through `ptr` (not a place): the pointee must be a type the model encodes,
 of nonzero size. -/
@@ -1418,7 +1425,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     cx.rejectZeroSize line ty "an item access"
     pure line
   -- A pure function indexes the items (`Array`); `checkProgram` checks the item type of a
-  -- slice read in a function that uses memory.
+  -- slice read in a function that uses memory (encoded, of nonzero size: MM-12).
   | .sliceElemVal .. => pure line
   -- An address only: the access through the field pointer is checked at its `load`/`store`.
   | .sliceFieldPtr .. => pure line
@@ -3671,6 +3678,11 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         for c in items do
           if let .error message := checkMemTy f.name f.types f.layouts 0 c f.errorSetBits then
             issues := issues.push { kind := .memory, function := f.name, instruction := i.id, message }
+          -- A slice read is a `loadItem`: no access of zero bytes (MM-12, `rejectZeroSize`).
+          else if i.op matches .sliceElemVal .. then
+            if let some msg := zeroSizeAccess? f.types f.layouts c f.errorSetBits "an item access" then
+              issues := issues.push { kind := .memory, function := f.name, instruction := i.id,
+                                      message := s!"{f.name}: near line 0: {msg}" }
   return issues
 
 def checkProgram (funcs : Array Func) (models : Array ModelBinding := #[])

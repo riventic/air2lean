@@ -308,7 +308,10 @@ read 7; native ReleaseSafe 0.16.0 reads 9 and has `p == &buf[0]`.
 buffer pointer instead of an address: the buffer's block must be live and writable for `cap`
 bytes, and it dies, lent to the allocator for good (Zig's allocator has no `deinit`, and `reset`
 does not give the buffer back). A direct access to the buffer, or to the rest of its block, and
-a free of that block are `.illegal`; that is conservative where Zig only aliases. Allocations
+a free of that block are `.illegal`; that is conservative where Zig only aliases. Ending the
+block records a write of it for the race check, as a free does. A buffer inside an arena or
+fixed-buffer block is `.illegal` (conservative), since that allocator's `reset` would not reach
+the allocations made from it. Allocations
 stay blocks of their own: sub-ranges of the buffer's block would lose the per-allocation
 liveness and ownership checks (`AllocRef.free_foreign` and the fixed-buffer run lemma) that the
 legacy M01 model is stated with, and the translated `FixedBufferAllocator` (allocators from OS
@@ -351,9 +354,9 @@ struct no type, so no exported fixture reached it (`*void`, `*u0`, `*[0]u8` load
 `@fieldParentPtr` into `struct { a: u0, b: [0]u8 }`, all checked against 0.16.0).
 
 **Status: fixed (fail closed) on `codex/fix-mm-remaining`.** The checker rejects a memory
-access, an item access (`ptr_elem_val`) and a `@fieldParentPtr` of a zero-size type
-(`CheckCtx.rejectZeroSize`), so no translated program reaches the zero-length rule. The runtime
-rule stays as it is: making an access of zero bytes succeed without a block would change the
+access, an item access (`ptr_elem_val`, and `slice_elem_val` in a function that uses memory)
+and a `@fieldParentPtr` of a zero-size type (`CheckCtx.rejectZeroSize`, `zeroSizeAccess?`), so
+no translated program reaches the zero-length rule. The runtime rule stays as it is: making an access of zero bytes succeed without a block would change the
 run lemmas of `loadBytes`/`storeBytes`/`load`/`store` (they record an access of `n` bytes for
 every `n`), and it is conservative (`.illegal` where Zig is defined, never the reverse). The
 projection half is closed by MM-3: an offset-0 projection from address zero is the base itself;

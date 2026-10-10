@@ -56,6 +56,13 @@ def native : Placement := ⟨fun b => if b = 1 then some 4096 else none⟩
   Owned.reset a
   load (BitVec 8) 1 buf) = some (.error .illegal)
 
+-- A buffer in an arena's block is rejected: the arena's reset would not end its allocations.
+#guard outcome .fresh (do
+  let a ← Arena.init
+  match ← AllocRef.alloc (.owned a) 1 1 8 with
+  | .error _ => throw .panic
+  | .ok s => discard <| FixedBuffer.init s.ptr 8) = some (.error .illegal)
+
 -- A buffer must be live and writable; an empty one lends nothing and has no room.
 #guard outcome .fresh (do let buf ← allocStack 4 1; FixedBuffer.init buf 8) =
   some (.error .illegal)
