@@ -12,16 +12,20 @@ about the translation (`docs/air-semantics.md`).
 
 The fragment:
 
-* values: integers of any width with their signedness, `bool`, `void`, and a pointer
-  (`Zig.Ptr`) to a stack local;
+* values: integers of any width with their signedness, `bool`, `void`, and a single or many
+  pointer (`Zig.Ptr`); the SSA environment records each value's AIR type, so an access takes
+  its alignment and pointee from the pointer's type;
 * integer arithmetic (`add`/`sub`/`mul` checked, wrapping and saturating; division and
   remainder; `min`/`max`; bitwise `and`/`or`/`xor`/`not`), comparisons, `bool_and`/`bool_or`,
   `intcast` and `trunc`;
 * control flow: `block`/`br`, `cond_br`, `switch_br` on an integer, `loop`/`repeat`, `ret`,
   `unreach`, `trap`, and a call to a safety-panic handler;
-* locals over ZigLean's byte-level memory (`Zig.Mem`, `Zig.MemM`): `alloc` makes a stack block
-  (`Zig.allocStack`) freed when the function returns, `load`/`store` of an integer or `bool`
-  go through `Zig.load`/`Zig.store` (`store` of `undefined`: `Zig.storeUndef`);
+* memory, ZigLean's byte-level `Zig.Mem` (`Zig.MemM`): `alloc` makes a stack block
+  (`Zig.allocStack`) freed when the function returns; `load`/`store` of an integer, `bool` or
+  pointer go through `Zig.load`/`Zig.store` at the pointer type's alignment (`store` of
+  `undefined`: `Zig.storeUndef`); `struct_field_ptr` of a non-`packed` struct is
+  `Zig.ptrProject` by the field's offset; a pointer `bitcast` keeps the pointer; `==`/`!=` and
+  the order of two pointers compare their addresses (`Zig.ptrEqAddr`, `Zig.ptrLt`, `Zig.ptrLe`);
 * direct calls through an oracle (`Ctx.call`); `run` ties the oracle to the program;
 * debug instructions have no effect.
 
@@ -43,22 +47,22 @@ inductive Value where
   | int (signed : Bool) (w : Nat) (v : BitVec w)
   | bool (b : Bool)
   | void
-  /-- A pointer, with the alignment its AIR pointer type guarantees (`align(N)`). -/
-  | ptr (p : Zig.Ptr) (align : Nat)
+  /-- A single or many pointer. Its alignment and pointee come from its AIR type (`Env`). -/
+  | ptr (p : Zig.Ptr)
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
 (`Zig.Error`): it is `Option`'s `none`, the bottom of `Zig.Result`'s order. -/
 def stuck {α : Type} : Result α := ExceptT.mk none
 
-/-- SSA environment: the value of each instruction that has run. -/
-abbrev Env := InstId → Option Value
+/-- SSA environment: the AIR type and the value of each instruction that has run. -/
+abbrev Env := InstId → Option (TyId × Value)
 
 /-- The stack blocks the running function has allocated, in allocation order. -/
 abbrev Frame := List Zig.Ptr
 
-def Env.set (env : Env) (id : InstId) (v : Value) : Env :=
-  fun j => if j = id then some v else env j
+def Env.set (env : Env) (id : InstId) (t : TyId) (v : Value) : Env :=
+  fun j => if j = id then some (t, v) else env j
 
 /-- How a body ends: `br` to a block (with its value), `repeat` of a loop, or `ret`. -/
 inductive Exit where
@@ -100,7 +104,7 @@ theorem litBV_eq_ofInt (w : Nat) (n : Int) : litBV w n = BitVec.ofInt w n := by
 /-- An operand's value. -/
 def operand (f : Func) (env : Env) : Val → Result Value
   | .inst id => match env id with
-    | some v => pure v
+    | some (_, v) => pure v
     | none => stuck
   | .int t n => match tyOf f t with
     | .int s w => pure (.int s w (litBV w n))
@@ -108,6 +112,11 @@ def operand (f : Func) (env : Env) : Val → Result Value
   | .bool b => pure (.bool b)
   | .void => pure .void
   | _ => stuck
+
+/-- An operand's AIR type: an instruction's from the environment, a constant's own. -/
+def operandTy (env : Env) : Val → Option TyId
+  | .inst id => (env id).map (·.1)
+  | v => v.constTy?
 
 /-- An integer operand of width `w`. -/
 def Value.asInt (w : Nat) : Value → Result (BitVec w)
@@ -286,32 +295,96 @@ def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
 /-- The `align(N)` of a pointer type. -/
 def ptrAlignOf (f : Func) (t : TyId) : Option Nat := (f.layouts[t]?).bind (·.ptrAlign)
 
-/-- Load a value of the AIR type `t`. -/
-def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
-  match tyOf f t with
-  | .int s w => do pure (.int s w (← Zig.load (BitVec w) align p))
-  | .bool => do pure (.bool (← Zig.load Bool align p))
-  | _ => StateT.lift stuck
-
-/-- Store the operand `v` (an integer or `bool`); `undefined` makes the bytes of its type
-undefined. -/
-def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM Unit :=
-  match v with
-  | .undef t => match tyOf f t with
-    | .int _ w => Zig.storeUndef (BitVec w) align p
-    | .bool => Zig.storeUndef Bool align p
-    | _ => StateT.lift stuck
-  | v => do
-    match ← StateT.lift (operand f env v) with
-    | .int _ _ x => Zig.store align p x
-    | .bool b => Zig.store align p b
-    | _ => StateT.lift stuck
+/-- A single or many pointer type through which an access is an ordinary memory access: not a
+slice, not `volatile` (a device access, L13) and not a bit-pointer into a packed field. -/
+def plainPtr (f : Func) (t : TyId) : Bool :=
+  match tyOf f t, f.layouts[t]? with
+  | .ptr size _ _, some l => (size == "one" || size == "many") && !l.isVolatile && l.hostSize == 0
+  | _, _ => false
 
 /-- The pointee type of a pointer type. -/
 def pointee? (f : Func) (t : TyId) : Option TyId :=
   match tyOf f t with
   | .ptr _ _ c => some c
   | _ => none
+
+/-- The pointer operand `v`, with the alignment of its (plain) pointer type. -/
+def ptrOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Ptr × Nat) := do
+  match operandTy env v with
+  | some t =>
+    match plainPtr f t, ptrAlignOf f t, ← operand f env v with
+    | true, some a, .ptr p => pure (p, a)
+    | _, _, _ => stuck
+  | none => stuck
+
+/-- Load a value of the AIR type `t`. -/
+def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
+  match tyOf f t with
+  | .int s w => do pure (.int s w (← Zig.load (BitVec w) align p))
+  | .bool => do pure (.bool (← Zig.load Bool align p))
+  | .ptr .. => if plainPtr f t then do pure (.ptr (← Zig.load Zig.Ptr align p)) else StateT.lift stuck
+  | _ => StateT.lift stuck
+
+/-- Store the operand `v` (an integer, `bool` or pointer); `undefined` makes the bytes of its
+type undefined. -/
+def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM Unit :=
+  match v with
+  | .undef t => match tyOf f t with
+    | .int _ w => Zig.storeUndef (BitVec w) align p
+    | .bool => Zig.storeUndef Bool align p
+    | .ptr .. => if plainPtr f t then Zig.storeUndef Zig.Ptr align p else StateT.lift stuck
+    | _ => StateT.lift stuck
+  | v => do
+    match ← StateT.lift (operand f env v) with
+    | .int _ _ x => Zig.store align p x
+    | .bool b => Zig.store align p b
+    | .ptr q => Zig.store align p q
+    | _ => StateT.lift stuck
+
+/-- The byte offset of field `idx` of the non-`packed` struct that a pointer of type `t` points
+to. -/
+def fieldOffset? (f : Func) (t : TyId) (idx : Nat) : Option Nat := do
+  let s ← pointee? f t
+  match tyOf f s with
+  | .struct _ layout _ => if layout == "packed" then none else (← f.layouts[s]?).offsets[idx]?
+  | _ => none
+
+/-- The value of an instruction that may access memory but has no control flow and makes no
+call: the straight-line operations (`evalPure`), `load`, `store`, `struct_field_ptr`, a pointer
+`bitcast` and pointer comparisons. -/
+def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
+  match i.op with
+  | .load p => do
+    let (q, a) ← StateT.lift (ptrOperand f env p)
+    loadAs f i.ty q a
+  | .store p v => do
+    let (q, a) ← StateT.lift (ptrOperand f env p)
+    storeAs f env q a v
+    pure .void
+  | .fieldPtr base idx => do
+    let (q, _) ← StateT.lift (ptrOperand f env base)
+    match (operandTy env base).bind (fieldOffset? f · idx), plainPtr f i.ty with
+    | some off, true => do pure (.ptr (← Zig.ptrProject q (·.add off)))
+    | _, _ => StateT.lift stuck
+  | .bitcast a =>
+    if plainPtr f i.ty then do
+      let (q, _) ← StateT.lift (ptrOperand f env a)
+      pure (.ptr q)
+    else StateT.lift stuck
+  | .cmp op a b => do
+    match ← StateT.lift (operand f env a) with
+    | .ptr _ => do
+      let (p, _) ← StateT.lift (ptrOperand f env a)
+      let (q, _) ← StateT.lift (ptrOperand f env b)
+      match op with
+      | .eq => do pure (.bool (← Zig.ptrEqAddr p q))
+      | .ne => do pure (.bool (!(← Zig.ptrEqAddr p q)))
+      | .lt => do pure (.bool (← Zig.ptrLt p q))
+      | .le => do pure (.bool (← Zig.ptrLe p q))
+      | .gt => do pure (.bool (← Zig.ptrLt q p))
+      | .ge => do pure (.bool (← Zig.ptrLe q p))
+    | _ => StateT.lift (evalPure f env i)
+  | _ => StateT.lift (evalPure f env i)
 
 mutual
 
@@ -327,12 +400,12 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
   match _h : i.op with
   | .arg index =>
     match c.args[index]? with
-    | some v => execBody c rest (env.set i.id v)
+    | some v => execBody c rest (env.set i.id i.ty v)
     | none => liftR stuck
   | .block body => do
     let e ← execBody c body.toList env
     match e with
-    | .br t v => if t = i.id then execBody c rest (env.set i.id v) else pure e
+    | .br t v => if t = i.id then execBody c rest (env.set i.id i.ty v) else pure e
     | _ => pure e
   | .loop body =>
     -- A loop never falls through: it repeats on its own `repeat` and otherwise propagates.
@@ -350,36 +423,25 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
     | .int s _ x => execSwitch c s x cases.toList el env
     | _ => liftR stuck
   | .alloc => do
+    -- The block's alignment is the pointer type's `align(N)` (MM-1).
     match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
-    | some (size, align), some palign => do
+    | some (size, _), some align => do
       let p ← liftMem (Zig.allocStack size align)
       modify (· ++ [p])
-      execBody c rest (env.set i.id (.ptr p palign))
+      execBody c rest (env.set i.id i.ty (.ptr p))
     | _, _ => liftR stuck
-  | .load p => do
-    match ← liftR (operand c.func env p) with
-    | .ptr q align => do
-      let v ← liftMem (loadAs c.func i.ty q align)
-      execBody c rest (env.set i.id v)
-    | _ => liftR stuck
-  | .store p v => do
-    match ← liftR (operand c.func env p) with
-    | .ptr q align => do
-      liftMem (storeAs c.func env q align v)
-      execBody c rest env
-    | _ => liftR stuck
   | .call (.func name _ _) args => do
     match panicOf? name with
     | some e => liftR (throw e)
     | none => do
       let vs ← liftR (args.toList.mapM (operand c.func env))
       let v ← liftMem (c.call name vs)
-      execBody c rest (env.set i.id v)
+      execBody c rest (env.set i.id i.ty v)
   | .line _ => execBody c rest env
   | .dbg _ _ => execBody c rest env
   | _ => do
-    let v ← liftR (evalPure c.func env i)
-    execBody c rest (env.set i.id v)
+    let v ← liftMem (evalMem c.func env i)
+    execBody c rest (env.set i.id i.ty v)
 termination_by (sizeOf i + sizeOf rest, 1)
 decreasing_by
   all_goals
@@ -406,12 +468,13 @@ decreasing_by
 end
 
 /-- Does `v` have the AIR type `t`? Only the fragment's parameter types (integers, `bool`,
-`void`) have values here. -/
+`void`, single and many pointers) have values here. -/
 def valOk (t : Ty) (v : Value) : Bool :=
   match t, v with
   | .int s w, .int s' w' _ => s == s' && w == w'
   | .bool, .bool _ => true
   | .void, .void => true
+  | .ptr size _ _, .ptr _ => size == "one" || size == "many"
   | _, _ => false
 
 /-- Do the arguments match the parameter types, one for one? -/
@@ -442,6 +505,11 @@ def Value.toBool : Value → Bool
   | .bool b => b
   | _ => false
 
+/-- The pointer a `ptr` value holds (`Zig.Ptr.null` for any other value). -/
+def Value.toPtr : Value → Zig.Ptr
+  | .ptr p => p
+  | _ => Zig.Ptr.null
+
 theorem argsOk_nil {f : Func} {args : List Value} (h : argsOk f [] args = true) : args = [] := by
   cases args <;> simp_all [argsOk]
 
@@ -462,6 +530,10 @@ theorem valOk_bool {v : Value} (h : valOk .bool v = true) : v = .bool v.toBool :
 
 theorem valOk_void {v : Value} (h : valOk .void v = true) : v = .void := by
   cases v <;> simp_all [valOk]
+
+theorem valOk_ptr {size : String} {c : Bool} {t : TyId} {v : Value}
+    (h : valOk (.ptr size c t) v = true) : v = .ptr v.toPtr := by
+  cases v <;> simp_all [valOk, Value.toPtr]
 
 /-! ## Programs -/
 
@@ -511,20 +583,19 @@ theorem execBody_mono (f : Func) (args : List Value) :
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o⟩ s x cs el env))
   case case1 => intros; simp only [execBody]; exact monotone_const _
   case case2 => intros; simp only [execBody]; assumption
-  case case23 => intros; simp only [execSwitch]; assumption
-  case case24 => intros; unfold execSwitch; repeat' mono_step
-  case case22 =>
-    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 n15 n16 ih
+  case case21 => intros; simp only [execSwitch]; assumption
+  case case22 => intros; unfold execSwitch; repeat' mono_step
+  case case20 =>
+    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 ih
     unfold execInst
     split <;> (try (exfalso; first
       | exact n1 _ ‹_› | exact n2 _ ‹_› | exact n3 _ ‹_› | exact n4 _ _ ‹_› | exact n5 _ ‹_›
       | exact n6 _ ‹_› | exact n7 ‹_› | exact n8 ‹_› | exact n9 _ _ _ ‹_› | exact n10 _ _ _ ‹_›
-      | exact n11 ‹_› | exact n12 _ ‹_› | exact n13 _ _ ‹_› | exact n14 _ _ _ _ ‹_›
-      | exact n15 _ ‹_› | exact n16 _ _ ‹_›))
+      | exact n11 ‹_› | exact n12 _ _ _ _ ‹_› | exact n13 _ ‹_› | exact n14 _ _ ‹_›))
     apply monotone_bind
     · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
     · apply monotone_of_monotone_apply; intro v; exact ih v
-  case case19 =>
+  case case17 =>
     intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
     simp only at *
     subst_vars
@@ -704,7 +775,23 @@ theorem run_ite' {m : Type → Type} {σ α : Type} (c : Prop) [Decidable c] (a 
     (if c then a else b).run s = if c then a.run s else b.run s := by
   split <;> rfl
 
+/-- A zero-offset projection is the pointer itself (no instruction natively). -/
+theorem ptrProject_add_zero (p : Zig.Ptr) : Zig.ptrProject p (·.add 0) = pure p := by
+  have h : p.add 0 = p := by cases p; simp [Zig.Ptr.add]
+  funext m
+  simp only [Zig.ptrProject, h, true_or, ite_true]
+  rfl
+
+/-- A field offset, a natural-number literal, as the integer literal the generated code writes. -/
+theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
+
 attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+  evalMem ptrOperand operandTy plainPtr loadAs storeAs fieldOffset? pointee? ptrAlignOf layoutOf
+  Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR
+  Bool.true_or Bool.or_true Bool.not_false Bool.not_true Bool.false_and Bool.and_false
+  Option.map_some Option.map_none Option.bind_some Option.bind_none Option.pure_def
+  Option.bind_eq_bind String.reduceBEq String.reduceBNe Nat.reduceBEq Nat.reduceBNe Option.getD_none
+  Bool.false_eq_true Bool.true_eq_false natCast_ofNat Int.natCast_zero
   operand Env.set Value.asInt Value.asBool arithFn divFn cmpFn bitFn liftR litBV Exit.again
   bind_ite map_ite run_ite' throw_bind map_throw run_throw run_throwMM run_throwMem Zig.call liftMem free_nil
   Array.toList List.mapM_cons List.mapM_nil List.getElem?_toArray Option.getD_some

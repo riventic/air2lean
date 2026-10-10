@@ -409,6 +409,7 @@ private def run (args : List String) : IO UInt32 := do
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
             if let (some path, some genModule) := (a.airCertificate, a.airCertificateImport) then
               let cert := Certificate.emit emissionFuncs a.ns declNames genModule
+                (memoryFunctions emissionFuncs (models.map (·.symbol))) (concFunctions emissionFuncs)
               try IO.FS.writeFile path cert catch e =>
                 throw (IO.userError s!"writing AIR certificate {path}: {e}")
             if let some path := a.sourceMapJson then

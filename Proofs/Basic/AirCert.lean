@@ -10,9 +10,9 @@ open Air2Lean Air2Lean.Sem
 
 Outside the certificate fragment:
 
-* `basic.sum`: a parameter that is not an integer or bool
-* `basic.totalWeightedTardiness`: a parameter that is not an integer or bool
-* `basic.weightedTardiness`: a parameter that is not an integer or bool
+* `basic.sum`: a parameter that is not an integer, bool or plain pointer
+* `basic.totalWeightedTardiness`: a parameter that is not an integer, bool or plain pointer
+* `basic.weightedTardiness`: a parameter that is not an integer, bool or plain pointer
 -/
 
 /-- The decoded canonical AIR of `basic.absDiff`. -/
