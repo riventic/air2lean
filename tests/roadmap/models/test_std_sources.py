@@ -17,7 +17,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 TABLE = ROOT / 'Air2Lean/StdModels.lean'
 REVIEW = re.compile(r'review "([^"]+)"\s*(?:<\|\s*)?\[(.*?)\]', re.S)
-ENTRY = re.compile(r'\("(\d+\.\d+\.\d+)",\s*"([^"]*)"\)')
+# `(.v0_16_0, "<sha256>")`: a `ZigVersion` constructor (`Air2Lean/Air/Dialect.lean`) and the hash.
+ENTRY = re.compile(r'\(\.v(\d+)_(\d+)_(\d+),\s*"([^"]*)"\)')
 BUILD = Path('/opt/dev/air2lean-build')
 LOCAL = {'0.14.1': BUILD / '0.14.1/zig-0.14.1-pristine/lib/std',
          '0.15.2': BUILD / 'zig-0.15.2-pristine/lib/std',
@@ -27,7 +28,7 @@ LOCAL = {'0.14.1': BUILD / '0.14.1/zig-0.14.1-pristine/lib/std',
 def reviews(text):
     """(file, version, sha256) of every `review "<file>" [...]` table in the std model table."""
     found = [(file, version, digest) for file, body in REVIEW.findall(text)
-             for version, digest in ENTRY.findall(body)]
+             for *parts, digest in ENTRY.findall(body) for version in ['.'.join(parts)]]
     if not found:
         raise ValueError('no std reviews found in Air2Lean/StdModels.lean')
     return found
