@@ -1,6 +1,9 @@
 {
  "schema": 11,
  "zig_version": "0.15.2",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "name": "math.sub__anon_7217",
  "instance_key": "0f2c83b513d8300017be2fba9707e1f0ba89702e45d09ea4a91556eaee5e7240",
  "params": [

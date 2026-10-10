@@ -124,6 +124,9 @@ structure RawFunc where
   exportDecl : Option ExportDecl := none
   /-- The indices of the `noalias` parameters (`noalias`, schema 12; legacy schemas have none). -/
   noalias : Array Nat := #[]
+  /-- `unchecked_ib`: the illegal behaviours that the patched compiler's Sema lowers to `unreach`
+  where it has no safety check (`zig-patch/<version>/hook.patch`); empty in older exports. -/
+  uncheckedIb : Array String := #[]
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
@@ -813,6 +816,9 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     | some ej => pure (some { name := ← (← ej.getObjVal? "name").getStr?,
                               cc := ← (← ej.getObjVal? "cc").getStr? : ExportDecl })
     | none => pure none
+  let uncheckedIb ← match optField j "unchecked_ib" with
+    | some u => do (← u.getArr?).mapM Json.getStr?
+    | none => pure #[]
   return {
     schema
     zigVersion
@@ -828,6 +834,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
     externs
     exportDecl
     noalias
+    uncheckedIb
   }
 
 def parseFunc (j : Json) : Except String RawFunc := do

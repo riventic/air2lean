@@ -633,7 +633,7 @@
         },
         "floatops": {
           "path": "tests/golden/0.15.2/floatops/Gen.lean",
-          "sha256": "3ecabef85897c64c684ca4599e178a8af18e57ba1b1eff3f71afa588793de571"
+          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
         },
         "lists": {
           "path": "tests/golden/0.15.2/lists/Gen.lean",
@@ -745,7 +745,7 @@
       "gens": {
         "floatops": {
           "path": "tests/golden/0.14.1/floatops/Gen.lean",
-          "sha256": "3ecabef85897c64c684ca4599e178a8af18e57ba1b1eff3f71afa588793de571"
+          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
         }
       },
       "sources": {
@@ -862,7 +862,7 @@
         },
         "floatops": {
           "path": "Proofs/Floatops/Gen.lean",
-          "sha256": "e62bd7cf8e64da6d32df75cb4da87f6464eff6b5e47e00668d2860741c9b7f7a"
+          "sha256": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b"
         },
         "floats": {
           "path": "Proofs/Floats/Gen.lean",
@@ -1015,7 +1015,7 @@
       "gens": {
         "floatops": {
           "path": "Proofs/Floatops/Gen.lean",
-          "sha256": "e62bd7cf8e64da6d32df75cb4da87f6464eff6b5e47e00668d2860741c9b7f7a"
+          "sha256": "ad6eb615edf7992cf2d01cfb1631f7a3323836ffcaf4160088dfa0d6f0e2f60b"
         }
       },
       "sources": {
@@ -1054,7 +1054,7 @@
       "gens": {
         "floatops": {
           "path": "tests/golden/0.15.2/floatops/Gen.lean",
-          "sha256": "3ecabef85897c64c684ca4599e178a8af18e57ba1b1eff3f71afa588793de571"
+          "sha256": "44c85ad4b4fb685ad8303e149c8dbac16ab908d0b9f18bcbdeed130bc941a03a"
         }
       },
       "sources": {

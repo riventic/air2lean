@@ -18,4 +18,6 @@ sentinelBytes 0..2 len 2
 forLen 2/3 6
 forLenMem 2/3 6
 forRange 3/5 9
+forRangeFrom 3/1..6 12
+forArray 4/3 12
 parentOf lone true

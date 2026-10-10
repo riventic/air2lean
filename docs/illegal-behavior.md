@@ -56,7 +56,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 24 | Sentinel mismatch (sentinel slicing) | `sentinelMismatch` | `.panic` | `u8` sentinel on 0.16.0 (the export records its value): `Zig.checkSentinelByte`, and the sentinel item must lie in the operand, `.illegal` (**fixed**, was a value). Any other sentinel without Sema's check: *rejected* (**fixed**) |
 | 25 | `@memcpy` arguments of unequal length | `copyLenMismatch` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove` with the destination's count) |
 | 26 | `@memcpy` arguments alias | `memcpyAlias` | `.panic` | `Zig.memcpy`: `.illegal` (**fixed**, was `Zig.memmove`) |
-| 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | slice operands: Sema still emits each slice operand's `slice_len`; one that nothing reads, before a loop bounded by `cmp_lt(bitcast(i), bound)`, becomes `Zig.forLen len bound`, `.illegal` when unequal (**fixed**, was a value). The match is by shape, so it errs toward `.illegal`: an unread `slice_len` before an unrelated loop is checked too. A later range or array operand: **gap**, see below |
+| 27 | `for` over operands of unequal length | `forLenMismatch` | `.panic` | Sema compares the lengths only with safety on; without it the AIR need not hold any operand length but the loop's own (a range `0..n` has no instruction). The patched Sema (`zig-patch/<version>/hook.patch`, every supported version) emits the same comparison as `if (!ok) unreachable`, and the export lists `for_len` in `unchecked_ib`; the bare `unreach` is `.illegal` (**fixed**, slices, ranges and arrays). A function with a loop in an export without that fact is rejected (`Check.checkForLenFact`) |
 | 28 | `@tagName` of an unnamed non-exhaustive enum value | `invalidEnumValue` (via `is_named_enum_value`) | `.panic` | `E.tagName`: `.illegal` (**fixed**, was `.panic`) |
 | 29 | Switch on a corrupt value | `corruptSwitch` | `.panic` | every model enum value is named; no corrupt value exists |
 | 30 | A `noreturn` function returns | `noreturnReturned` | *rejected* (handler outside the table) | — |
@@ -137,21 +137,19 @@ pointer on is rejected.
 ## Gaps
 
 `@setRuntimeSafety(false)` blocks inside a ReleaseSafe build produce the unchecked shapes,
-so the rows above model each op's own check instead of relying on a Sema check. One case stays
-open: a `for` loop with runtime safety off whose second or later operand is a range
-(`for (a, 0..n)`) or an array. Sema emits no instruction for that operand's length, so the
-analyzed AIR does not contain it (`ib.forRange`). The loop runs over the first operand, and the
-model returns that result for any other length. Neither the model nor the checker can see the
-mismatch. Closing it needs an exporter change that keeps the operand lengths. Until then, a
-claim about a function with such a loop under `@setRuntimeSafety(false)` does not cover
-unequal lengths.
+so the rows above model each op's own check instead of relying on a Sema check. No case is open.
+The last one, a `for` loop with runtime safety off whose later operand is a range or an array,
+needs a fact the AIR did not carry; the patched Sema now exports it (row 27). AIR from a
+compiler without that patch (no `unchecked_ib`) is accepted only for functions without loops.
 
 ## Evidence
 
 - `tests/roadmap/illegal-behavior/check.sh`: the fixture sources `ib.zig` and `probe.zig`
   (each former gap as a `@setRuntimeSafety(false)` function),
   their retained 0.16.0 AIR (`air/`, `probe-air/`), the translation, `Cases.lean` on the
-  generated functions, and `Runtime.lean` on the runtime ops.
+  generated functions, and `Runtime.lean` on the runtime ops. `forlen.zig` and its AIR from every
+  supported version (`for-air/<version>/`) show the `for` length check (row 27) in each, and a
+  copy without `unchecked_ib` is rejected.
 - Native: `native.zig` prints what a ReleaseSafe and a ReleaseFast build return for each input
   class (`native/*.txt`; [build-modes.md](build-modes.md)). The differential harness (`scripts/diff.sh`) counts every
   `.illegal` row as an `illegal` exclusion in every mode, so it compares none of them:

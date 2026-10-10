@@ -24,7 +24,9 @@ MUTANTS = {
     'shift-count-unchecked': (r'Zig\.shlChk (\w+) (\w+)', r'pure (Zig.shl \1 \2)'),
     'slice-end-unchecked': (r'Zig\.checkSliceEnd \S+ \S+ \S+ \d+ >>= fun _ => ', ''),
     'sentinel-unchecked': (r'Zig\.checkSentinelByte \S+ \S+ \(\d+ : BitVec 8\) >>= fun _ => ', ''),
-    'for-length-unchecked': (r'Zig\.call[RM]? \(Zig\.forLen (\(Zig\.len \S+\)|\S+) \S+\)', r'pure \1'),
+    # The patched Sema's `for` length check (`if (!ok) unreachable`) branches to its block exit.
+    'for-length-unchecked': (r'(if i\d+ then \(do\n\s+pure (\.br\d+)\)\n\s+else \(do\n\s+)throw \.illegal\)',
+                             r'\1pure \2)'),
     'parent-unchecked': (r'Zig\.checkParent \d+ \d+ q >>= fun _ => ', ''),
 }
 

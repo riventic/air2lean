@@ -722,5 +722,8 @@ structure Func where
   exportDecl : Option ExportDecl := none
   /-- The indices of the `noalias` parameters (`Air2Lean/Noalias.lean`). -/
   noalias : Array Nat := #[]
+  /-- The export's `unchecked_ib` (`docs/air-json.md`): `"for_len"` when the compiler lowers an
+  unchecked `for` length mismatch to `unreach`. Hand-built functions have none. -/
+  uncheckedIb : Array String := #[]
 
 end Air2Lean
