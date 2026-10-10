@@ -203,9 +203,10 @@ Compiler-generated fixtures are the selected goldens (exported by `check.sh`'s
 patched-compiler dump and compared on each run) plus the exports with
 recorded provenance in `tests/roadmap/thread-tuples/air`, `tests/roadmap/try-pointers/air`,
 `tests/roadmap/bitops/qualified/0.16.0/air`, `tests/roadmap/spawn-failure/air`,
-`tests/roadmap/idle-loops/air`, `tests/roadmap/runtime-tags/air` (all three versions), and the 0.16.0 and 0.15.2 exports in
+`tests/roadmap/idle-loops/air`, `tests/roadmap/runtime-tags/air` (all three versions), the 0.14.1, 0.15.2 and 0.16.0 exports in
+`tests/roadmap/aggregate-casts/air`, and the 0.16.0 and 0.15.2 exports in
 `tests/roadmap/env-boundaries/air` and `tests/roadmap/noreturn-variants/air`. Hand-written AIR (`undef-operands`, `undef-locals`,
-`global-init`, `aggregate-casts`, `packed-fields`, `error-width`, `try-pointers/aliases`),
+`global-init`, `aggregate-casts/air-handwritten`, `packed-fields`, `error-width`, `try-pointers/aliases`),
 compiler AIR for layout rejections (`noreturn-variants/air-reject`), fuzzer mutants and synthetic model/profile inputs are explicitly excluded. Shared golden files are a single export reused across
 versions; they count for a version only through `check.sh`'s per-version
 re-export comparison.

@@ -4,8 +4,9 @@ import ZigLean.ReprCast
 /-!
 # Zig ≤0.16 representation casts and optional pointers, on the retained translation
 
-`AggregateCasts.Gen` is the translation of `air/0.16.0` (hand-written AIR in the exporter's
-schema for `probe.zig`'s casts). Each `@bitCast` of an array, `extern` struct or `extern` union
+`AggregateCasts.Gen` is the translation of `air/0.16.0`, the patched 0.16.0 compiler's export
+of `aggregate_casts.zig` (the casts of `probe.zig`); the 0.15.2 and 0.14.1 exports translate to
+the same text apart from the profile header (`check.sh`). Each `@bitCast` of an array, `extern` struct or `extern` union
 is `Zig.reprCast`: the source's memory bytes, padding bytes undefined, decoded as the
 destination. A round trip holds when neither side has padding; a destination part that needs a
 padding byte throws `.unspecified`. The optional-pointer casts use null = address 0 and
@@ -87,13 +88,28 @@ theorem optAddr_null (m : Mem) : (optAddr none).run m = pure (0, m) := rfl
 
 theorem optFromAddr_zero (m : Mem) : (optFromAddr 0).run m = pure (none, m) := rfl
 
+/-- The compiler's `@ptrFromInt` to `?*u32` checks alignment first (`bit_and 3`, then the
+`incorrectAlignment` panic), which the earlier hand-written AIR lacked: a misaligned address
+panics, a multiple of 4 does not. -/
+theorem optFromAddr_misaligned (m : Mem) : (optFromAddr 1).run m = throw .panic := rfl
+
 theorem optUnwrap_null (m : Mem) : (optUnwrap none).run m = throw .panic := rfl
 
-theorem optUnwrap_some (p : Ptr) (m : Mem) : (optUnwrap (some p)).run m = pure (p, m) := rfl
+/-- The compiler's unwrap (`@ptrCast` of `?*u32` to `*u32`) tests the address first
+(`cmp_neq addr 0`, then the `castToNull` panic). A pointer whose address is not 0 mod 2^64
+passes the test and is returned unchanged. -/
+theorem optUnwrap_some (p : Ptr) (m : Mem) (a : Int)
+    (hp : (ptrAddr p).run m = pure (a, m)) (ha : BitVec.ofInt 64 a ≠ 0#64) :
+    (optUnwrap (some p)).run m = pure (p, m) := by
+  have ha' : (BitVec.ofInt 64 a = 0#64) = False := eq_false ha
+  simp [optUnwrap, Zig.callM, Zig.optPtrAddr, hp, Zig.optPtrUnwrap, ha']
 
 theorem ptrWrap_some (p : Ptr) (m : Mem) : (ptrWrap p).run m = pure (some p, m) := rfl
 
-/-- Wrap then unwrap is the pointer; the unwrap of null is never a pointer. -/
-theorem wrap_unwrap (p : Ptr) (m : Mem) : (ptrWrap p >>= optUnwrap).run m = pure (p, m) := rfl
+/-- Wrap then unwrap is the pointer, for a pointer with a nonzero address. -/
+theorem wrap_unwrap (p : Ptr) (m : Mem) (a : Int)
+    (hp : (ptrAddr p).run m = pure (a, m)) (ha : BitVec.ofInt 64 a ≠ 0#64) :
+    (ptrWrap p >>= optUnwrap).run m = pure (p, m) := by
+  simp [StateT.run_bind, ptrWrap_some, optUnwrap_some p m a hp ha]
 
 end AggregateCastsClients

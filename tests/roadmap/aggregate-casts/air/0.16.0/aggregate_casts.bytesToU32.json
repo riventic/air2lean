@@ -1,23 +1,67 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "aggregate_casts.bytesToU32",
+ "src": {
+  "file": "aggregate_casts.zig",
+  "module": "aggregate_casts",
+  "decl_line": 12
+ },
  "params": [
-  2
+  0
  ],
- "ret": 0,
+ "ret": 1,
  "body": [
   {
    "id": 0,
    "tag": "arg",
-   "ty": 2,
+   "ty": 0,
    "param": 0
   },
   {
    "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 2,
    "tag": "bitcast",
-   "ty": 0,
+   "ty": 1,
    "args": [
     {
      "inst": 0
@@ -25,17 +69,32 @@
    ]
   },
   {
-   "id": 2,
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 4,
    "tag": "ret_safe",
    "ty": 3,
    "args": [
     {
-     "inst": 1
+     "inst": 2
     }
    ]
   }
  ],
  "types": [
+  {
+   "k": "array",
+   "len": 4,
+   "child": 4,
+   "sentinel": false,
+   "abi_size": 4,
+   "abi_align": 1
+  },
   {
    "k": "int",
    "signed": false,
@@ -44,22 +103,19 @@
    "abi_align": 4
   },
   {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
    "k": "int",
    "signed": false,
    "bits": 8,
    "abi_size": 1,
    "abi_align": 1
-  },
-  {
-   "k": "array",
-   "len": 4,
-   "child": 1,
-   "sentinel": false,
-   "abi_size": 4,
-   "abi_align": 1
-  },
-  {
-   "k": "noreturn"
   }
  ]
 }
