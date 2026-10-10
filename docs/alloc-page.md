@@ -137,9 +137,8 @@ But the fallback address after every block (`Mem.top`, when the proposal is not 
 `alloc(1, align 8192)` maps two pages at `2^64 - 4096`, the check overflows, `alignPointer`
 returns `null` and `map` panics (`PageAlloc.alloc_high`, kernel-checked).
 So no invariant that such a memory satisfies admits `k ≥ 13`, and `ainv.fits` requires
-`k ≤ 12`. Natively the kernel never maps that high. The fix is in the memory model: a fallback
-address whose block would end above the address space fails the request (`ENOMEM` for `mmap`);
-it waits on a user decision about that bound. Then the larger
+`k ≤ 12`. Natively the kernel never maps that high. The approved fix (`mmap`/`mremap` fail with
+`ENOMEM` above the target's user address space) follows on `codex/alloc-o5`. Then the larger
 alignments need the prefix and tail `munmap`s of `map`, which `TotalTriple.munmapPrefix` and
 `munmapTail` already cover.
 

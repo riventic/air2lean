@@ -94,13 +94,17 @@ the code that the compiler emits for `lib/std/mem/Allocator.zig`, which is the g
   `create`, `allocSentinel` and `realloc`, after the `@memset` in `free`, not at all for a
   zero-sized `create`/`destroy` or an empty `free`.
 * `allocBytesWithAlignment` poisons fresh memory with `@memset(_, undefined)` and then checks
-  the `@alignCast` of the result (`alignCast`) when the alignment is above 1.
+  the `@alignCast` of the result (`alignCast`) when the alignment is above 1: Sema's mask check
+  (`.panic`), then the model's own `Zig.checkAlign` (`.illegal`).
 * `free` poisons before `rawFree`, `destroy` does not; `free` of a sentinel-terminated slice
   absorbs the sentinel with an overflow-checked `len + 1` (`freeSentinel`).
-* `dupe` and the copying path of `realloc` check the `@memcpy`: the lengths agree and the two
-  address ranges do not overlap (two `ptrLe`, `copyChecked`).
-* `allocSentinel` computes `n + 1` with an overflow check, stores the sentinel and reads it back
-  when it slices `ptr[0..n :sentinel]`.
+* `dupe` and the copying path of `realloc` check the `@memcpy`: the end pointers are formed
+  (`ptrProject`, MM-3), the two address ranges do not overlap (two `ptrLe`), and the model's
+  `memcpy` checks the counts and the overlap again (`copyChecked`); `realloc` first checks the
+  slicing `old[0..min]` (`checkSliceEnd`).
+* `allocSentinel` computes `n + 1` with an overflow check, forms the sentinel's pointer
+  (`ptrProject`), stores the sentinel and reads it back when it slices `ptr[0..n :sentinel]`
+  (`checkSliceEnd`, `checkSentinelIndex`).
 
 | theorem | contract |
 |---|---|
@@ -125,9 +129,10 @@ says nothing about addresses), so across blocks it is a placement fact that the 
 
 ## Translated allocators: dispatch and the FixedBufferAllocator
 
-A translated wrapper loads the function pointer from the `VTable` constant and calls it if it is
-one of the program's allocator functions (`.illegal` otherwise). `dispatch impl fns vtp` is that
-`RawVTable`; `dispatch_allocSpec : AllocSpec L impl ctx I → AllocSpec L (dispatch impl fns vtp)
+A translated wrapper loads the function pointer from the `VTable` constant (the field pointer of
+entry `i > 0` formed with `ptrProject`, MM-3) and calls it if it is one of the program's allocator
+functions (`.illegal` otherwise). `dispatch impl fns vtp` is that `RawVTable`;
+`dispatch_allocSpec : AllocSpec L impl ctx I → 0 ≤ vtp.off → AllocSpec L (dispatch impl fns vtp)
 ctx (I.withVTable vtp fns)` adds the read-only vtable (`vtR`) to the invariant.
 
 `tests/roadmap/alloc-fba` proves `FBA.allocSpec : AllocSpec Logic.total impl ctx (FBA.inv ctx B)`
