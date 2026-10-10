@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Seq
 import ZigLean.Sep.Full.Logic
+import ZigLean.Sep.Full.Ghost
 import ZigLean.Conc.Call
 import ZigLean.Conc.AtomicWord
 import ZigLean.Conc.PtrAtomic
@@ -146,6 +147,36 @@ theorem step {H : FAssn} {X : Assn} {c : MemM α} {Y : α → Assn} {f : α → 
     (hf : ∀ v, CTriple (H ⋆ up (Y v)) (f v) S) :
     CTriple (H ⋆ up X) (ConcM.liftMem c >>= f) S :=
   bind (liftMem (FTotalTriple.ofTotal ht hc).toPartial.frameL) hf
+
+/-- A `MemM` step that returns `v` and leaves the memory as it is. -/
+theorem pureStep {c : MemM α} {v : α} {f : α → ConcM Tgt β} {S : β → FAssn}
+    (hc : ∀ m r rF, Holds m r rF → P r → m.FSeq → c.run m = pure (v, m))
+    (hf : CTriple P (f v) S) : CTriple P (ConcM.liftMem c >>= f) S := by
+  refine bind (Q := fun w => ⟪w = v⟫ ⋆ P) (liftMem (FTriple.of_run
+    fun m r rF hh hp hs => ⟨v, m, r, hc m r rF hh hp hs, hh, sep_lift.mpr ⟨rfl, hp⟩, hs⟩)) ?_
+  intro w
+  exact lift fun hw => hw ▸ hf
+
+/-- Facts that hold of every memory that holds `P` (they mention no memory, so they stay true). -/
+theorem facts {φ : Prop} (hφ : ∀ m r rF, Holds m r rF → P r → m.FSeq → φ) (h : φ → CTriple P x Q) :
+    CTriple P x Q :=
+  fun n m r rF hh hp hs => h (hφ m r rF hh hp hs) n m r rF hh hp hs
+
+/-- An entailment that may use the memory (`Holds`, `FSeq`). -/
+theorem preM (hp : ∀ m r rF, Holds m r rF → P' r → m.FSeq → P r) (ht : CTriple P x Q) :
+    CTriple P' x Q :=
+  fun n m r rF hh h hs => ht n m r rF hh (hp m r rF hh h hs) hs
+
+/-- A step on the part `X` of `P = X ⋆ R` that returns `v` and keeps `X`. -/
+theorem readStep {X R : FAssn} {c : MemM α} {v : α} {f : α → ConcM Tgt β} {S : β → FAssn}
+    (ht : FTriple X c (fun w => ⟪w = v⟫ ⋆ X)) (hP : P = (X ⋆ R)) (hf : CTriple P (f v) S) :
+    CTriple P (ConcM.liftMem c >>= f) S := by
+  subst hP
+  refine bind (liftMem ht.frame) fun w => ?_
+  exact pre (lift fun hw => hw ▸ hf) fun _ h => sep_assoc h
+
+/-- A ghost update of the precondition (`FTriple.upd`). -/
+theorem upd (hu : Upd P' P) (ht : CTriple P x Q) : CTriple P' x Q := fun n => FTriple.upd hu (ht n)
 
 end CTriple
 
