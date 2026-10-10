@@ -92,7 +92,7 @@ contract in prose.
 
 | Object | Required keys | Optional keys |
 |---|---|---|
-| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key` |
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `noalias`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key`, `unchecked_ib` |
 | `profile` | all fields of the example above ([profiles](profiles.md)) | — |
 | every type | `k` | `abi_size`, `abi_align` |
 | `int` / `float` | `signed`, `bits` / `bits` | — |
