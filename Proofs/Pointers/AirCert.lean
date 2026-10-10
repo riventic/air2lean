@@ -115,15 +115,15 @@ def table : Table := [
 /-- The generated definitions as a call oracle (arguments decoded by type). -/
 def gen : Oracle
   | "pointers.addTo", args =>
-    (fun v => Value.void) <$> Pointers.addTo ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toBV 32)
+    (fun _ => Value.void) <$> Pointers.addTo ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toBV 32)
   | "pointers.delay", args =>
-    (fun v => Value.void) <$> Pointers.delay ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toBV 32)
+    (fun _ => Value.void) <$> Pointers.delay ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toBV 32)
   | "pointers.dueOf", args =>
     (fun v => (Value.ptr v)) <$> Pointers.dueOf ((args.getD 0 .void).toPtr)
   | "pointers.same", args =>
     (fun v => (Value.bool v)) <$> Pointers.same ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toPtr)
   | "pointers.swap", args =>
-    (fun v => Value.void) <$> Pointers.swap ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toPtr)
+    (fun _ => Value.void) <$> Pointers.swap ((args.getD 0 .void).toPtr) ((args.getD 1 .void).toPtr)
   | _, _ => StateT.lift stuck
 
 

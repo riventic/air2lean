@@ -42,7 +42,7 @@ def table : Table := [
 /-- The generated definitions as a call oracle (arguments decoded by type). -/
 def gen : Oracle
   | "debug.assert", args =>
-    StateT.lift ((fun v => Value.void) <$> Iogroup.debug_assert ((args.getD 0 .void).toBool))
+    StateT.lift ((fun _ => Value.void) <$> Iogroup.debug_assert ((args.getD 0 .void).toBool))
   | _, _ => StateT.lift stuck
 
 theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).reachedUnreachable" = some .unreachable := rfl
@@ -50,7 +50,7 @@ theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).reachedU
 /-- `debug.assert`: the AIR semantics of the decoded function (under any call oracle) equals the generated definition. -/
 theorem debug_assert_step (call : Oracle) (p0 : Bool) (m : Zig.Mem) :
     (execFunc call air_debug_assert [(Value.bool p0)]).run m =
-      (fun v => (Value.void, m)) <$> Iogroup.debug_assert p0 := by
+      (fun _ => (Value.void, m)) <$> Iogroup.debug_assert p0 := by
   conv => rhs; rw [Iogroup.debug_assert]
   simp only [air_debug_assert, air_sem, callee_0]
 
@@ -79,12 +79,12 @@ theorem run_le_gen : Lean.Order.PartialOrder.rel (run (progOf table)) gen :=
 /-- `debug.assert` makes no certified call: its AIR semantics equals the generated definition. -/
 theorem debug_assert_run (p0 : Bool) (m : Zig.Mem) :
     (run (progOf table) "debug.assert" [(Value.bool p0)]).run m =
-      (fun v => (Value.void, m)) <$> Iogroup.debug_assert p0 := by
+      (fun _ => (Value.void, m)) <$> Iogroup.debug_assert p0 := by
   rw [run_of_lookup (by rfl)]
   exact debug_assert_step _ p0 m
 
 theorem debug_assert_complete (p0 : Bool) (m : Zig.Mem) :
-    Lean.Order.PartialOrder.rel ((fun v => (Value.void, m)) <$> Iogroup.debug_assert p0)
+    Lean.Order.PartialOrder.rel ((fun _ => (Value.void, m)) <$> Iogroup.debug_assert p0)
       ((run (progOf table) "debug.assert" [(Value.bool p0)]).run m) :=
   rel_of_eq (debug_assert_run p0 m).symm
 

@@ -47,7 +47,7 @@ def table : Table := [
 /-- The generated definitions as a call oracle (arguments decoded by type). -/
 def gen : Oracle
   | "threads.writeFlag", args =>
-    (fun v => Value.void) <$> Threads.writeFlag ((args.getD 0 .void).toPtr)
+    (fun _ => Value.void) <$> Threads.writeFlag ((args.getD 0 .void).toPtr)
   | _, _ => StateT.lift stuck
 
 

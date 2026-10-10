@@ -191,6 +191,9 @@ def scalar? (f : Func) (t : TyId) : Option Scalar :=
     else none
   | _ => none
 
+/-- The binder of a lambda over a value of this type: `_` if its encoding ignores the value. -/
+def Scalar.binder (sc : Scalar) : String := if sc.enc "v" == sc.enc "w" then "_" else "v"
+
 def retScalar? (f : Func) (t : TyId) : Option Scalar :=
   match f.types[t]? with
   | some .void => some {
@@ -397,7 +400,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   let genRes (f : Func) (args : String) : String :=
     let s := sig f
     if isMem f then s!"(fun r => ({s.ret.enc "r.1"}, r.2)) <$> ({genName f} {args}).run m"
-    else s!"(fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {args}"
+    else s!"(fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {genName f} {args}"
   let mut lines : Array String := #[
     "-- air2lean AIR semantics certificate (docs/air-semantics.md). Generated; do not edit.",
     "import Air2Lean.Sem", s!"import {genModule}", "",
@@ -421,7 +424,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   for f in frag do
     let s := sig f
     let args := s.ps.map fun (i, sc) => sc.dec i
-    let app := s!"(fun v => {s.ret.enc "v"}) <$> {genName f} {" ".intercalate args.toList}"
+    let app := s!"(fun {s.ret.binder} => {s.ret.enc "v"}) <$> {genName f} {" ".intercalate args.toList}"
     lines := lines.push s!"  | {str f.name}, args =>\n    {if isMem f then app else s!"StateT.lift ({app})"}"
   lines := lines.push "  | _, _ => StateT.lift stuck\n"
   let callees := (frag.flatMap callsIn).toList.eraseDups
@@ -490,7 +493,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   -- the generated clique (or one unfolding, outside a clique), then equality.
   let motive (f : Func) : String :=
     let s := sig f
-    s!"fun g => ∀ {s.argNames} m, Lean.Order.PartialOrder.rel ((fun v => ({s.ret.enc "v"}, m)) <$> g {s.argNames}) " ++
+    s!"fun g => ∀ {s.argNames} m, Lean.Order.PartialOrder.rel ((fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> g {s.argNames}) " ++
       s!"((run (progOf table) {str f.name} [{s.encArgs}]).run m)"
   let mut complete : Array String := frag.filterMap fun f => if calling f then none else some f.name
   for (members, recursive) in callGroups frag do
@@ -529,7 +532,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
         let args := cs.ps.map fun (i, sc) => sc.dec i
         lines := lines ++ #[s!"  | {str c.name}, args =>",
           s!"    if argsOk {airName c} {airName c}.params.toList args then",
-          s!"      StateT.lift ((fun v => {cs.ret.enc "v"}) <$> g_{declOf c.name} {" ".intercalate args.toList})",
+          s!"      StateT.lift ((fun {cs.ret.binder} => {cs.ret.enc "v"}) <$> g_{declOf c.name} {" ".intercalate args.toList})",
           "    else StateT.lift stuck"]
       lines := lines.push "  | _, _ => StateT.lift stuck\n"
     -- One completeness theorem per member.
@@ -540,7 +543,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
       let pre := #[
         s!"/-- `{f.name}`: the generated definition terminates only as the AIR does: it is below `run`. -/",
         s!"theorem {d}_complete {s.binders} (m : Zig.Mem) :",
-        s!"    Lean.Order.PartialOrder.rel ((fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames})",
+        s!"    Lean.Order.PartialOrder.rel ((fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames})",
         s!"      ((run (progOf table) {str f.name} [{s.encArgs}]).run m) := by"]
       -- The step for member `g`, given the bound clique functions and hypotheses.
       let step (g : Func) (bound : Bool) (indent : String) : Array String := Id.run do
@@ -605,7 +608,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
         s!"/-- `{f.name}`: its AIR semantics equals the generated definition. -/",
         s!"theorem {d}_eq {s.binders} (m : Zig.Mem) :",
         s!"    (run (progOf table) {str f.name} [{s.encArgs}]).run m =",
-        s!"      (fun v => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} :=",
+        s!"      (fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} :=",
         s!"  Lean.Order.PartialOrder.rel_antisymm ({d}_sound {s.argNames} m) ({d}_complete {s.argNames} m)", ""]
   lines := lines.push s!"end {ns}.AirCert"
   pure ("\n".intercalate lines.toList ++ "\n")
