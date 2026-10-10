@@ -19422,7 +19422,7 @@
       "ZigLean/Conc/Lemmas.lean": "5f2ae7223081a27a75b4afc97d7afe6ba1b601d1282647894a208dd053910060",
       "ZigLean/Conc/Lock.lean": "2c36837305166b351bdef0b37854ae1c8948ca68d8eb2e1f4fbcc380fb1e3589",
       "ZigLean/Conc/LockRules.lean": "aba264fbed3a149fe2481af45b56402fae027bf9952c05890aaccb61ac0cd953",
-      "ZigLean/Conc/Logic.lean": "86145aba11dae06ebbf79bb804eef477d18f93ae95e4a4bc7b4b57e7e5ca3af3",
+      "ZigLean/Conc/Logic.lean": "857fc16253fb87c6b7f960c5406bd66cf0f396a5a5d207980976515e428505e7",
       "ZigLean/Conc/OsRules.lean": "896c875ed8948eacdb780e9573274d8c523d294098af9e3a865b39652bcebdfb",
       "ZigLean/Conc/Own.lean": "c6f3327a4408e39e880a80c1a43fc35aa85f66e043841c2e4b2948e4fbf6cd73",
       "ZigLean/Conc/Progress.lean": "bc62e7491f3b93772841ec6cf0ea90afb6527ee4d3f2198c0a16d07472481f35",
