@@ -28,11 +28,11 @@
     "export_stage": "analyzed-air"
   },
   "source_sha256": {
-    "tests/roadmap/abi-probes/probe.zig": "ec2ac95862006bb99860d05e5d7f64b510ea2b1e5a149ba5fa399bce374caf65",
+    "tests/roadmap/abi-probes/probe.zig": "8aa8332923acdf4e50cf421e269f4f7345080c8b997f1ec2e73445419a4dbf5e",
     "tests/diff/compat.zig": "e08b36666946ddd8dcf95d65b2fd64d00eb2a3bee698e286472d93f667ff14bc"
   },
   "compiler_sha256": "5165c9a2d17938a8173839b3adf81d025b558d38d9e9711237a6fa5b8d8bb3f7",
-  "binary_sha256": "99596c8921a4c51250c4e587b89b8b2b6cbb8db777e38eae4e7b2b99d1998d9d",
+  "binary_sha256": "8a9aedd09a0c47b6f28ce608cafca80eb4166c26bf9a0e6659d239ba2ca73c5f",
   "command": [
     "/zig/zig",
     "build-exe",
@@ -42,7 +42,7 @@
     "-target",
     "aarch64-linux-gnu",
     "-mcpu=baseline",
-    "-femit-bin=/tmp/air2lean-abi-ao6q_jiq/probe",
+    "-femit-bin=/tmp/air2lean-abi-xn3w1fo8/probe",
     "--dep",
     "compat",
     "-Mroot=/w/tests/roadmap/abi-probes/probe.zig",
