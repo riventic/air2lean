@@ -25,6 +25,7 @@ Fixed cases (CI runs them with --require-fixed): addrspace, comptime-field, buil
 legacy-default, unknown-key, missing-flag.
 """
 import argparse
+import dataclasses
 import importlib.util
 import json
 import re
@@ -201,6 +202,35 @@ def case_merged_tags(binary, tmp):
                                         f'{len(unreviewed)}; reviewed groups: {len(groups)}')
 
 
+def case_generated_binding(binary, tmp):
+    # Finding 13: the Gen.lean header records only the profile and float semantics, and receipts
+    # and manifests recorded only the module's identity. Fixed by retranslation rather than by a
+    # header claim (AIR digests or a translator revision in the header would make the output
+    # depend on storage names and on AIR edits that change no semantics, docs/stable-generation.md):
+    # every evidence consumer requires the module to equal a fresh translation of its committed
+    # AIR with its own check's arguments (gen-integrity.py attest), as proof receipts
+    # (proof-receipts/check.sh) and theorem inventory records do and `project.py check` does by
+    # retranslating. A translation with another semantic option must not attest.
+    spec = importlib.util.spec_from_file_location('gen_integrity', ROOT / 'scripts/gen-integrity.py')
+    gi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gi)
+    target = 'tests/roadmap/global-init/GlobalInit/Gen.lean'
+    index, case = next((i, c) for i, c in enumerate(gi.all_cases()) if c.path == target)
+    (tmp / 'gi').mkdir()
+    (tmp / 'gi-other').mkdir()
+    translator = gi.Translator(str(binary), tmp / 'gi')
+    attested = translator.matches(index, case, target) is None
+    other = dataclasses.replace(case, args=[*case.args, '--proof-api'])
+    altered = tmp / 'Altered.lean'
+    altered.write_bytes(gi.Translator(str(binary), tmp / 'gi-other').output(index, other))
+    refused = translator.matches(index, case, str(altered)) is not None
+    consumers = {'proof receipts': 'gen-integrity.py" attest' in (ROOT / 'tests/roadmap/proof-receipts/check.sh').read_text(),
+                 'theorem inventory': 'attest_generated(' in (ROOT / 'scripts/theorem-inventory.py').read_text()}
+    fixed = attested and refused and all(consumers.values())
+    return not fixed, (f'committed module attests: {attested}; --proof-api translation refused: {refused}; '
+                       f'consumers attesting: {consumers}')
+
+
 CASES = {
     'std-name-spoof': case_std_name_spoof,
     'std-type-spoof': case_std_type_spoof,
@@ -215,6 +245,7 @@ CASES = {
     'missing-flag': case_missing_flag,
     'claims-unbound': case_claims_unbound,
     'merged-tags': case_merged_tags,
+    'generated-binding': case_generated_binding,
 }
 
 
