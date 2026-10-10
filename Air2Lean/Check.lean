@@ -171,9 +171,8 @@ as `ArenaAllocator.Node`, or a `*anyopaque` field such as `Allocator.ptr`), `som
 error-free type graph whose `*anyopaque` edges are not followed: an opaque pointee is no typed
 storage, and every recovery of a typed pointer from it is itself a checked cast (`fromOpaque`). -/
 private def translatedErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
-  match hasErrorCapability types id with
-  | some c => some c
-  | none => if closedErrorFreeAliasGraph types id id (opaquePtrs := true) then some false else none
+  hasErrorCapability types id <|>
+    if closedErrorFreeAliasGraph types id id (opaquePtrs := true) then some false else none
 
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
@@ -1232,12 +1231,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         return pid == aty && a.size.isSome && a.align.isSome &&
           a.ptrAlign.isSome && b.ptrAlign.isNone &&
           a == { b with ptrAlign := a.ptrAlign } : Option Bool)).getD false
-      -- A code address carries no data storage: a function pointer may be reinterpreted,
-      -- and a call through it dispatches over the table of its type (`.illegal` for any
-      -- other block, L11).
       let capability (t : TyId) : Option Bool :=
         if cx.allocatorModel == .translated then translatedErrorCapability cx.types t
         else hasErrorCapability cx.types t
+      -- A code address carries no data storage: a function pointer may be reinterpreted,
+      -- and a call through it dispatches over the table of its type (`.illegal` for any
+      -- other block, L11).
       let castCapability (t : TyId) : Option Bool :=
         if (cx.types[t]?.map isFnTy).getD false then some false else capability t
       -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no

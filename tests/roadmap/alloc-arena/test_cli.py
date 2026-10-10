@@ -44,15 +44,16 @@ def main(binary):
     doc = base.find(mutated, "heap.ArenaAllocator.Node.endResize.json")
     types = doc["types"]
     types.append({"k": "bool", "abi_size": 1, "abi_align": 1})
+    bool_ty = len(types) - 1
     insts = {i["id"]: i for i in base.walk(doc["body"])}
     hit = False
     for inst in base.walk(doc["body"]):
         if inst.get("tag") == "atomic_load" and inst.get("order") == "unordered":
             operand = insts[inst["args"][0]["inst"]]
             # The operand's pointer type, retargeted to the `bool`.
-            types.append(dict(types[operand["ty"]], child=len(types) - 1))
+            types.append(dict(types[operand["ty"]], child=bool_ty))
             operand["ty"] = len(types) - 1
-            inst["ty"] = len(types) - 2
+            inst["ty"] = bool_ty
             hit = True
     assert hit
     base.reject(binary, mutated, "an `unordered` load of a type other than an integer, a packed "
