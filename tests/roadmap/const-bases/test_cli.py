@@ -59,7 +59,9 @@ def translate(binary, documents, directory):
         (air / name).write_text(json.dumps(document))
     out = directory / "Gen.lean"
     out.write_text("sentinel\n")
-    result = subprocess.run([str(binary), str(air), "-o", str(out), *ARGS], text=True,
+    # A legacy schema 1-11 file needs the explicit opt-in to its assumed profile.
+    profile = ["--profile", "legacy-abi64-le"] if any(d.get("schema", 12) < 12 for d in documents.values()) else []
+    result = subprocess.run([str(binary), str(air), "-o", str(out), *profile, *ARGS], text=True,
                             capture_output=True, check=False, timeout=60)
     return result, out
 
