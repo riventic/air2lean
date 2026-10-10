@@ -47,12 +47,50 @@ zig build-exe -OReleaseSafe -femit-llvm-ir=oob_gep.ll oob_gep.zig && ./oob_gep
 ## Possible fixes
 
 * Compare integers, not pointers: `@intFromPtr(buf_ptr) + cur_end_index` (wrapping) against
-  `@intFromPtr(memory.ptr) + memory.len`.
+  `@intFromPtr(memory.ptr) + memory.len`. **Not enough on its own**: with `end_index` past the
+  buffer, a slice of another allocation whose end address happens to equal `buf_ptr +
+  end_index` (for example the start of the next block) passes the test, `free` moves
+  `end_index` back by its length, and a later `alloc` hands out bytes of the node that are
+  still granted.
 * Or, before forming the pointer, check that `cur_end_index <= buf.len`. The size is already
   loaded in `resize` (`loadBuf`); `free` would need the same load.
-* Or have the failing `alloc` restore `end_index` (a `cmpxchg` back to the old value), so that
-  `end_index <= buf.len` is an invariant of the first node. Concurrent `alloc`s that bump past
-  the end make that harder.
+* Or have `alloc` give the reservation back when the request does not fit (a `cmpxchg` back to
+  the old value), so that `end_index <= buf.len` stays an invariant of the first node. Concurrent
+  `alloc`s that bump past the end make that harder: a rollback that loses its `cmpxchg` leaves
+  the other thread's value.
+
+## Proposed patch
+
+[`tests/roadmap/alloc-arena/upstream/arena-fix.patch`](../../tests/roadmap/alloc-arena/upstream/arena-fix.patch)
+(against Zig 0.16.0 `lib/std/heap/ArenaAllocator.zig`; 0.17.0 has the same code) takes the third
+fix and, since the same proof obligation needs it, makes `alloc` return `null` where a size
+overflows `usize` instead of panicking (O-B in [alloc-arena.md](../alloc-arena.md)):
+
+* the fast path checks the fit *before* the overshoot `cmpxchg`; when the request does not fit
+  it gives the reservation back (`@cmpxchgStrong(&node.end_index, end_index +% alignable,
+  end_index, …)`) and goes on to the resize, free-list and new-node paths, so a failure of the
+  child leaves `end_index` within the buffer;
+* `n + alignment - 1`, the sizes of the in-place growth and of a free-list node
+  (`nodeSizeFor`), and the size of a new node are computed with overflow checks that fail the
+  request (or skip that path) instead of panicking.
+
+Consequences visible in the fixture: `arena_oom_free` (an allocation the child cannot serve
+after one it could, then the `free` of the first) frees the first slice; the in-place growth of
+the first node no longer includes the failed reservation, so it asks the child for less
+(`arena_reset 500 true` gives 5001 instead of 7001, `arena_reset 1500 true` succeeds where the
+stock arena's second allocation fails: `expected-fixed.txt`). The stock standard library's
+`ArenaAllocator` tests pass with the patch (`zig test --zig-lib-dir <patched lib> lib/std/std.zig
+--test-filter ArenaAllocator`). The concurrent caveat above remains: the patch makes the
+single-threaded arena keep `end_index <= buf.len`; a `free`/`resize` bounds check would also
+cover racing `alloc`s.
+
+**Evidence.** The patched arena is translated from its real AIR (`arena-fixed-linux`,
+`AllocArena/ArenaFixedLinux.lean`) and equals its native run on every fixture client
+(`Eval.lean`). Its proof against `FAllocSpec` is in progress ([alloc-arena.md](../alloc-arena.md)
+§What is proved): `free`, `resize` and `remap`, which the patch does not change, are proved for
+the stock arena over an invariant with `end_index <= buf.len`. That the patched `alloc` keeps this
+invariant (with the child's `FAllocSpec`), the patched module's own entry proofs, and `reset` are
+not proved yet, so the patch is not yet proved correct.
 
 ## In the model
 
