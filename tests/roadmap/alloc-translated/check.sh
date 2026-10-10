@@ -2,8 +2,9 @@
 # `--allocator-model translated` (P1): std.heap.page_allocator and FixedBufferAllocator clients
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
 # P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean,
-# PageSpecMacos.lean), the whole vtable with alloc for alignments up to a page (PageAlloc.lean),
-# the obstructions (PageObstruction.lean, PageAlloc.alloc_high), a mutant (mutant.sh). Needs a built translator and
+# PageSpecMacos.lean), the whole vtable with alloc for every alignment (PageAlloc.lean), the
+# obstructions (PageObstruction.lean), the O5 regressions (PageAlloc.alloc_high, alloc_top, alloc_edge), a
+# mutant (mutant.sh). Needs a built translator and
 # `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops
 # ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc
 # ZigLean.Sep.Full.AtomicPtr`; runs no compiler. With

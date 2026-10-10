@@ -66,9 +66,10 @@ undefined (the kernel keeps the stale tail of the last page), the rest are zero.
 **Address space.** No mapping ends above `Os.Target.addrLimit`: `2 ^ 47` on `x86_64-linux`
 (`TASK_SIZE_MAX` is a page below it with 4-level paging), and `MACH_VM_MAX_ADDRESS` on
 `aarch64-macos` (`0x7FFFFE000000`, `mach/arm/vm_param.h`). Each is at least the kernel's own bound
-for a call without a hint above it (5-level-paging Linux maps above 47 bits only for such a
-hint); the premise assumes no such hint. Both are far below `2 ^ 64 - 2 ^ 63`, so adding an
-alignment `2 ^ k - 1` (`k < 64`) to an address inside a mapping does not overflow.
+for a call without a hint above `TASK_SIZE_MAX` (`DEFAULT_MAP_WINDOW`, `2 ^ 47 - 4096`):
+5-level-paging Linux maps above 47 bits for such a hint, `2 ^ 47` itself included; the premise
+assumes no such hint. Both are far below `2 ^ 64 - 2 ^ 63`, so adding an alignment `2 ^ k - 1`
+(`k < 64`) to an address inside a mapping does not overflow.
 -/
 
 namespace Zig

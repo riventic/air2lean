@@ -29,12 +29,13 @@ modelled targets) and the flag encodings:
 
 `addrLimit` is the end of the user address space: no mapping ends above it (`Os.Target.fits`).
 On x86_64-linux user space ends at `TASK_SIZE_MAX`, a page below `2^47` (4-level paging; with
-5-level paging the kernel maps above 47 bits only for a hint above it, which the premise assumes
-no call passes). On aarch64-macos it ends at `MACH_VM_MAX_ADDRESS` (`0x00007FFFFE000000`,
-128 TiB - 32 MiB, `mach/arm/vm_param.h` of the macOS SDK). Each is at least the kernel's bound, so
-every mapping the kernel makes is one the model can make (the placement oracle can propose the
-kernel's address). Both are far below `2^64 - 2^63`, so adding an alignment `2^k - 1` (`k < 64`)
-to an address inside a mapping does not overflow.
+5-level paging the kernel maps above 47 bits for a hint above `TASK_SIZE_MAX`
+(`DEFAULT_MAP_WINDOW`), `2^47` itself included, which the premise assumes no call passes). On
+aarch64-macos it ends at `MACH_VM_MAX_ADDRESS` (`0x00007FFFFE000000`, 128 TiB - 32 MiB,
+`mach/arm/vm_param.h` of the macOS SDK). Each is at least the kernel's bound, so the bound
+excludes no kernel address (the placement's other limits still do: the model never reuses the
+unmapped prefix of a partly live mapping, below). Both are far below `2^64 - 2^63`, so adding
+an alignment `2^k - 1` (`k < 64`) to an address inside a mapping does not overflow.
 
 `Os.noFd` is `-1`, `Os.mremapMayMove` is `MREMAP{ .MAYMOVE = true }` (`1`).
 
@@ -61,8 +62,9 @@ goes after every block (`Mem.top`). Either way, a mapping whose pages would end 
 `addrLimit` fails with `error.OutOfMemory` (one attempt, no block): the kernel never maps there.
 The live range of a block for that check is its whole byte range, also below a mapping's first
 live offset: the model never places a block into the unmapped prefix of a mapping that is still
-partly live, which the kernel may do (open, only the `map` path for alignments above a page
-unmaps a prefix).
+partly live, which the kernel may do (open: the `map` path for alignments above a page, proved
+in `PageAlloc.lean`, unmaps such a prefix, and a later mapping the kernel puts there is outside
+the model).
 
 ## munmap
 

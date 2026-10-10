@@ -24,15 +24,16 @@ and the OS mapping model only (premise OSM-01). No model of the allocator is use
   itself (`PageObstruction.vt`) is not a `FAllocSpec` entry: it starts thread `0` from any
   memory and ends it (`checkJoinedByChild`), which an `FSeq` memory with another current thread
   or an unjoined child fails, whatever the allocator does.
-* **Alignments up to a page** (`ainv.fits`: `k ≤ 12`, obstruction O5). For a larger alignment,
-  `map` asks for extra pages and `std.mem.alignPointer` adds `alignment - 1` to the mapping's
-  address with an overflow check. A placement proposal keeps the mapping below `2 ^ 64`
-  (`Mem.placeOk`), but the fallback address after every block (`Mem.top`) is unbounded, so the
-  check can fail and `map` panics: `alloc_high` (kernel-checked) is such a run from a memory
-  whose last block ends high. Natively the kernel never maps that high. The fix is a bound on
-  the fallback (a request whose block would end above the address space fails); with it, larger
-  alignments need the prefix and tail `munmap`s, which `TotalTriple.munmapPrefix`/`munmapTail`
-  already cover.
+* **Every alignment** (`ainv.fits` is `legacy.fits`, O5 fixed). For an alignment `2 ^ k` above
+  a page, `map` maps `2 ^ k - 4096` extra bytes, `std.mem.alignPointer` moves `drop A (2 ^ k)`
+  bytes up from the mapping's address `A` (`alignPointer_gen`; its overflow check passes because
+  `mmap` never maps above `Os.Target.addrLimit = 2 ^ 47`, OSM-01), and `map` unmaps the pages
+  below (`TotalTriple.munmapPrefix`, `munmap_drop`) and above (`TotalTriple.munmapTail`,
+  `munmap_rest`) the granted ones. `alloc_high` (kernel-checked) is the regression of the old
+  counterexample: from a memory whose last block ends near `2 ^ 64` (the fallback address
+  `Mem.top`) the mapping now fails and `alloc` returns `null` instead of panicking; `alloc_top`
+  runs the prefix `munmap` on a mapping that a placement proposal puts three pages below the end
+  of the address space, `alloc_edge` the tail `munmap` on one that ends exactly at it.
 * **Partial correctness.** The atomic rules are partial (`FTriple`); `free`, `resize` and
   `remap` are total (`PageSpec.lean`).
 -/
@@ -41,21 +42,10 @@ namespace AllocTranslated.PageAlloc
 
 open Zig Zig.Region AllocTranslated.PageLinux AllocTranslated.PageSpec Zig.Full Zig.Full.FAssn
 
-/-! ## Page arithmetic for alignments up to a page -/
+/-! ## `std.mem.alignPointer` up to a page: the pointer itself -/
 
 theorem two_pow_le {k : Nat} (hk : k ≤ 12) : 2 ^ k ≤ 4096 :=
   Nat.le_trans (Nat.pow_le_pow_right (n := 2) (by decide) hk) (by decide)
-
-theorem subSat_small {k : Nat} (hk : k ≤ 12) :
-    Zig.subSat false (BitVec.ofNat 64 (2 ^ k)) 4096 = 0 := by
-  have := two_pow_le hk
-  simp only [Zig.subSat, Zig.clamp, Zig.val, Bool.false_eq_true, ↓reduceIte]
-  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-  apply BitVec.eq_of_toNat_eq
-  simp only [BitVec.toNat_ofInt]
-  have e : max (0 : Int) (min (2 ^ 64 - 1) ((2 ^ k : Nat) - (4096 : BitVec 64).toNat)) = 0 := by
-    simp only [show (4096 : BitVec 64).toNat = 4096 from rfl]; omega
-  rw [e]; rfl
 
 theorem alignPointerOffset_small {k : Nat} (hk : k ≤ 12) (p : Ptr) :
     mem_alignPointerOffset__anon_7004c05f4892 p (BitVec.ofNat 64 (2 ^ k)) = pure (some 0) := by
@@ -66,6 +56,10 @@ theorem alignPointerOffset_small {k : Nat} (hk : k ≤ 12) (p : Ptr) :
     gen_norm
     rfl
 
+theorem mapping_owns {p : Ptr} {b : BlockId} {A lo : Nat} {bs : Array Byte} (hb : p.block = some b) :
+    ∀ h, mapping P p A lo bs h → OwnsIn b A h := fun h hm => by
+  obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hm
+  rw [hb] at hb'; cases hb'; exact ho
 
 /-- `std.mem.alignPointer` of a page-aligned owned pointer, to at most a page: the pointer. -/
 theorem alignPointer_total {p : Ptr} {A : Nat} {bs : Array Byte} {k : Nat} (hk : k ≤ 12)
@@ -83,15 +77,216 @@ theorem alignPointer_total {p : Ptr} {A : Nat} {bs : Array Byte} {k : Nat} (hk :
     fun q => TotalTriple.lift fun hq => ?_
   subst hq
   rw [e0]
-  refine TotalTriple.bind (ptrAddr_owned (A := A) hb fun h hp => by
-    obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hp
-    rw [hb] at hb'; cases hb'; exact ho) fun x => TotalTriple.lift fun hx => ?_
+  refine TotalTriple.bind (ptrAddr_owned (A := A) hb (mapping_owns hb)) fun x =>
+    TotalTriple.lift fun hx => ?_
   subst hx
   rw [addr_mask (by omega) hA (by rw [h0]; rfl)]
   simp only [↓reduceIte]
   exact TotalTriple.conseq (TotalTriple.ret (Q := fun r => ⌜r = some p⌝ ∗ mapping P p A 0 bs) _)
     (fun h hm => sep_lift.mpr ⟨rfl, hm⟩) (fun _ _ x => x)
 
+/-! ## `std.mem.alignPointer` above a page -/
+
+/-- The bytes that `std.mem.alignPointer` skips from the address `A` to alignment `K`. -/
+def drop (A K : Nat) : Nat := alignUp A K - A
+
+theorem sub_pow_one {k : Nat} (hk : k < 64) :
+    Zig.sub false (BitVec.ofNat 64 (2 ^ k)) 1 = pure (BitVec.ofNat 64 (2 ^ k) - 1) := by
+  have := Nat.two_pow_pos k
+  have := Ops.toNat_two_pow hk
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
+theorem toNat_pow_sub_one {k : Nat} (hk : k < 64) :
+    (BitVec.ofNat 64 (2 ^ k) - 1).toNat = 2 ^ k - 1 := by
+  have := Nat.two_pow_pos k
+  have := Ops.toNat_two_pow hk
+  rw [BitVec.toNat_sub_of_le (by simp; omega)]; simp; omega
+
+theorem toNat_and_mask {k : Nat} (hk : k < 64) (z : BitVec 64) :
+    (z &&& (BitVec.ofNat 64 (2 ^ k) - 1)).toNat = z.toNat % 2 ^ k := by
+  rw [BitVec.toNat_and, toNat_pow_sub_one hk, Nat.and_two_pow_sub_one_eq_mod]
+
+theorem toNat_and_not_mask {k : Nat} (hk : k < 64) (z : BitVec 64) :
+    (z &&& ~~~(BitVec.ofNat 64 (2 ^ k) - 1)).toNat = z.toNat - z.toNat % 2 ^ k := by
+  have h0 : (z &&& ~~~(BitVec.ofNat 64 (2 ^ k) - 1)) &&& (z &&& (BitVec.ofNat 64 (2 ^ k) - 1)) =
+      0#64 := by
+    ext i; simp only [BitVec.getElem_and, BitVec.getElem_not, BitVec.getElem_zero]
+    cases z[i] <;> cases (BitVec.ofNat 64 (2 ^ k) - 1)[i] <;> rfl
+  have h1 := BitVec.toNat_add_of_and_eq_zero h0
+  rw [BitVec.add_eq_or_of_and_eq_zero _ _ h0] at h1
+  have h2 : ((z &&& ~~~(BitVec.ofNat 64 (2 ^ k) - 1)) ||| (z &&& (BitVec.ofNat 64 (2 ^ k) - 1))) =
+      z := by
+    ext i; simp only [BitVec.getElem_and, BitVec.getElem_not, BitVec.getElem_or]
+    cases z[i] <;> cases (BitVec.ofNat 64 (2 ^ k) - 1)[i] <;> rfl
+  rw [h2, toNat_and_mask hk] at h1
+  omega
+
+theorem isValidAlign_pow {k : Nat} (hk : k < 64) :
+    mem_isValidAlign (BitVec.ofNat 64 (2 ^ k)) = pure true := by
+  have h2 := Ops.toNat_two_pow hk
+  have hpos := Nat.two_pow_pos k
+  have hand : BitVec.ofNat 64 (2 ^ k) &&& (BitVec.ofNat 64 (2 ^ k) - 1) = 0 := by
+    apply BitVec.eq_of_toNat_eq; rw [toNat_and_mask hk, h2, Nat.mod_self]; rfl
+  have hgt : Zig.gt false (BitVec.ofNat 64 (2 ^ k)) 0 = true := by
+    rw [Ops.gt_eq, h2]; simpa using hpos
+  unfold mem_isValidAlign mem_isValidAlignGeneric__anon_32d5b5f10ec2 math_isPowerOfTwo__anon_38853e1fe316
+  have hm : 2 ^ k % 18446744073709551616 = 2 ^ k := Nat.mod_eq_of_lt (Ops.two_pow_lt hk)
+  have hne : 2 ^ k ≠ 0 := Nat.pos_iff_ne_zero.mp hpos
+  simp [hm, hpos, debug_assert_true, Zig.call]
+  rw [show BitVec.ofNat 64 (2 ^ k) &&& BitVec.ofNat 64 (2 ^ k) - 1#64 = 0#64 from hand]; rfl
+
+theorem le_big {k : Nat} (hk : k < 64) (hk12 : 12 < k) :
+    Zig.le false (BitVec.ofNat 64 (2 ^ k)) 4096 = false := by
+  have h2 := Ops.toNat_two_pow hk
+  have : 2 ^ 13 ≤ 2 ^ k := Nat.pow_le_pow_right (by decide) hk12
+  simp [Zig.le, BitVec.ule, h2]; omega
+
+theorem alignUp_eq_sub {A K : Nat} (hK : 0 < K) : alignUp A K = (A + K - 1) - (A + K - 1) % K := by
+  unfold alignUp; rw [if_neg (by omega)]
+  have := Nat.mod_add_div (A + K - 1) K
+  rw [Nat.mul_comm] at this; omega
+
+theorem alignUp_bounds {A K : Nat} (hK : 0 < K) : A ≤ alignUp A K ∧ alignUp A K < A + K := by
+  have := alignUp_eq_sub (A := A) hK
+  exact ⟨le_alignUp A K, by omega⟩
+
+theorem rem_one (x : BitVec 64) : Zig.rem false x 1 = pure 0 := by
+  simp [Zig.rem]
+
+theorem divTrunc_one (x : BitVec 64) : Zig.divTrunc false x 1 = pure x := by
+  simp [Zig.divTrunc]
+
+/-- The overflow check of `alignPointerOffset` passes, and the aligned address is `alignUp`. -/
+theorem align_add {k A : Nat} (hk : k < 64) (hfit : A + 2 ^ k ≤ 2 ^ 64) :
+    Zig.addWithOverflow false (BitVec.ofInt 64 ((A : Int) + 0)) (BitVec.ofNat 64 (2 ^ k) - 1) =
+      (BitVec.ofNat 64 (A + 2 ^ k - 1), 0) := by
+  have hpos := Nat.two_pow_pos k
+  have h1 := toNat_pow_sub_one hk
+  have hA : (BitVec.ofInt 64 ((A : Int) + 0)).toNat = A := by
+    rw [Int.add_zero, BitVec.ofInt_natCast, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  simp only [Zig.addWithOverflow, Bool.false_eq_true, ↓reduceIte, BitVec.uaddOverflow, hA, h1]
+  rw [if_neg (by simp; omega)]
+  congr 1
+  apply BitVec.eq_of_toNat_eq
+  rw [BitVec.toNat_add, hA, h1, BitVec.toNat_ofNat]
+  congr 1; omega
+
+theorem align_sub {k A : Nat} (hk : k < 64) (hfit : A + 2 ^ k ≤ 2 ^ 64) :
+    Zig.sub false (BitVec.ofNat 64 (A + 2 ^ k - 1) &&& ~~~(BitVec.ofNat 64 (2 ^ k) - 1))
+      (BitVec.ofInt 64 ((A : Int) + 0)) = pure (BitVec.ofNat 64 (drop A (2 ^ k))) := by
+  have hpos := Nat.two_pow_pos k
+  have hA : (BitVec.ofInt 64 ((A : Int) + 0)).toNat = A := by
+    rw [Int.add_zero, BitVec.ofInt_natCast, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hx : (BitVec.ofNat 64 (A + 2 ^ k - 1) &&& ~~~(BitVec.ofNat 64 (2 ^ k) - 1)).toNat =
+      alignUp A (2 ^ k) := by
+    rw [toNat_and_not_mask hk, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega),
+      alignUp_eq_sub hpos]
+  have hle := le_alignUp A (2 ^ k)
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte, hx, hA]
+  rw [if_neg (by simp only [decide_eq_true_eq]; omega)]
+  congr 1
+  apply BitVec.eq_of_toNat_eq
+  rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def, hx, hA]; exact hle), hx, hA, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt (by have := (alignUp_bounds (A := A) hpos).2; unfold drop; omega)]
+  rfl
+
+/-- `std.mem.alignPointerOffset` of a page-aligned mapping start to `2 ^ k > 4096`: no overflow
+(the mapping ends in the address space), the offset `drop A (2 ^ k)`. -/
+theorem alignPointerOffset_big {k : Nat} (hk : k < 64) (hk12 : 12 < k) {p : Ptr} {A : Nat}
+    {bs : Array Byte} (h0 : p.off = 0) (hfit : A + 2 ^ k ≤ 2 ^ 64) :
+    TotalTriple (mapping P p A 0 bs) (mem_alignPointerOffset__anon_7004c05f4892 p (BitVec.ofNat 64 (2 ^ k)))
+      (fun r => ⌜r = some (BitVec.ofNat 64 (drop A (2 ^ k)))⌝ ∗ mapping P p A 0 bs) := by
+  have hpos := Nat.two_pow_pos k
+  have h2 := Ops.toNat_two_pow hk
+  unfold mem_alignPointerOffset__anon_7004c05f4892
+  gen_norm
+  rw [isValidAlign_pow hk]
+  gen_norm
+  rw [debug_assert_true, le_big hk hk12]
+  gen_norm
+  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b)
+    (fun h hp => let ⟨b, hb, _⟩ := PageSpec.mapping_block hp; ⟨b, hb⟩) fun ⟨b, hb⟩ => ?_
+  refine TotalTriple.bind (ptrAddr_owned hb (mapping_owns hb)) fun x =>
+    TotalTriple.lift fun hx => ?_
+  subst hx
+  rw [h0, sub_pow_one hk]
+  gen_norm
+  rw [align_add hk hfit]
+  simp only [show ((0 : BitVec 1) != 0) = false from rfl, Bool.false_eq_true, ↓reduceIte]
+  rw [align_sub hk hfit]
+  gen_norm
+  rw [rem_one]
+  gen_norm
+  simp only [show ((0 : BitVec 64) != 0) = false from rfl, Bool.false_eq_true, ↓reduceIte]
+  rw [divTrunc_one]
+  gen_norm
+  exact TotalTriple.conseq (TotalTriple.ret _) (fun h hm => Zig.sep_lift.mpr ⟨rfl, hm⟩) (fun _ _ x => x)
+
+theorem drop_bounds {A k : Nat} (hk12 : 12 < k) (hA : A % P = 0) :
+    drop A (2 ^ k) % P = 0 ∧ drop A (2 ^ k) + P ≤ 2 ^ k ∧ (A + drop A (2 ^ k)) % 2 ^ k = 0 := by
+  have hpos := Nat.two_pow_pos k
+  have hPk : P ∣ 2 ^ k := by
+    show 2 ^ 12 ∣ 2 ^ k; exact Nat.pow_dvd_pow 2 (by omega)
+  have hb := alignUp_bounds (A := A) hpos
+  have hm : alignUp A (2 ^ k) % 2 ^ k = 0 := alignUp_mod_self hpos
+  have hmP : alignUp A (2 ^ k) % P = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.dvd_trans hPk (Nat.dvd_of_mod_eq_zero hm))
+  have hkP : 2 ^ k % P = 0 := Nat.mod_eq_zero_of_dvd hPk
+  have e : (P : Nat) = 4096 := rfl
+  rw [e] at hA hmP hkP ⊢
+  unfold drop
+  refine ⟨by omega, by omega, by rw [Nat.add_sub_cancel' hb.1]; exact hm⟩
+
+theorem drop_small {A k : Nat} (hk : k ≤ 12) (hA : A % P = 0) : drop A (2 ^ k) = 0 := by
+  have hpos := Nat.two_pow_pos k
+  have : A % 2 ^ k = 0 := Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.pow_dvd_pow 2 hk)
+    (Nat.dvd_of_mod_eq_zero (by simpa using hA)))
+  unfold drop; rw [alignUp_of_mod hpos this]; simp
+
+theorem elem_one {p : Ptr} {n : Nat} (hn : n < 2 ^ 64) : p.elem 1 (BitVec.ofNat 64 n) = p.add n := by
+  simp [Ptr.elem, Nat.mod_eq_of_lt hn]
+
+/-- `std.mem.alignPointer` of a page-aligned mapping start, to any alignment: the pointer
+`drop A (2 ^ k)` bytes in (`0` up to a page). -/
+theorem alignPointer_gen {p : Ptr} {A : Nat} {bs : Array Byte} {k : Nat} (hk : k < 64)
+    (h0 : p.off = 0) (hfit : A + 2 ^ k ≤ 2 ^ 64) (hbs : 2 ^ k - P ≤ bs.size) :
+    TotalTriple (mapping P p A 0 bs) (mem_alignPointer__anon_53311c568cf7 p (BitVec.ofNat 64 (2 ^ k)))
+      (fun r => ⌜r = some (p.add (drop A (2 ^ k)))⌝ ∗ mapping P p A 0 bs) := by
+  refine TotalTriple.of_pure (φ := A % P = 0) (fun h hp => hp.2.2.1) fun hA => ?_
+  by_cases hk12 : k ≤ 12
+  · rw [drop_small hk12 hA, Int.natCast_zero, Ptr.add_zero']
+    exact alignPointer_total hk12 h0
+  have hb := drop_bounds (k := k) (by omega) hA
+  unfold mem_alignPointer__anon_53311c568cf7
+  gen_norm
+  refine TotalTriple.bind (alignPointerOffset_big hk (by omega) h0 hfit) fun r =>
+    TotalTriple.lift fun hr => ?_
+  subst hr
+  have hdl : drop A (2 ^ k) < 2 ^ 64 := by have := Ops.two_pow_lt hk; omega
+  simp only [Option.elim_some]
+  refine TotalTriple.bind (TotalTriple.project_mapping (k := BitVec.ofNat 64 (drop A (2 ^ k)))
+    (by rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hdl]; omega)) fun q => TotalTriple.lift fun hq => ?_
+  subst hq
+  rw [elem_one hdl]
+  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b)
+    (fun h hp => let ⟨b, hb, _⟩ := PageSpec.mapping_block hp; ⟨b, hb⟩) fun ⟨b, hb'⟩ => ?_
+  refine TotalTriple.bind (ptrAddr_owned (q := p.add (drop A (2 ^ k))) hb' (mapping_owns hb')) fun x =>
+    TotalTriple.lift fun hx => ?_
+  subst hx
+  have hP : (A + drop A (2 ^ k)) % 4096 = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.pow_dvd_pow 2 (by omega : 12 ≤ k))
+      (Nat.dvd_of_mod_eq_zero hb.2.2))
+  have hoff : (p.add (drop A (2 ^ k))).off = (drop A (2 ^ k) : Int) := by
+    simp [Ptr.add, h0]
+  have hm := Ops.and_mask_eq_zero (k := 12) (x := (A : Int) + (p.add (drop A (2 ^ k))).off)
+    (by decide) (by rw [hoff]; omega) (by rw [hoff]; omega)
+  rw [show BitVec.ofNat 64 (2 ^ 12 - 1) = 4095 from rfl] at hm
+  rw [if_pos hm]
+  exact TotalTriple.conseq (TotalTriple.ret _) (fun h hm => Zig.sep_lift.mpr ⟨rfl, hm⟩)
+    (fun _ _ x => x)
+
+/-! ## `map`'s arithmetic and its `munmap`s -/
 
 theorem and4095 (x : BitVec 64) : x &&& 4095 = 0 ↔ x.toNat % 4096 = 0 := by
   constructor
@@ -117,27 +312,6 @@ theorem andNot_and4095 {x : BitVec 64} (m : BitVec 64) (hx : x &&& 4095 = 0) :
     (x &&& ~~~m) &&& 4095 = 0 := by
   rw [BitVec.and_assoc, BitVec.and_comm (~~~m), ← BitVec.and_assoc, hx]; simp
 
-/-- The page check of the derived hint address passes for a page-aligned hint. -/
-theorem hint_check {v L m : BitVec 64} (hv : v &&& 4095 = 0) (hL : L &&& 4095 = 0) :
-    Zig.subWrap (Zig.subWrap v L &&& ~~~m) 0 &&& 4095 = 0 := by
-  have e : ∀ y : BitVec 64, y - 0 = y := fun y => by simp
-  simp only [Zig.subWrap, e]
-  exact andNot_and4095 m (sub_and4095 hv hL)
-
-theorem sub_two_pow_one {k : Nat} (hk : k ≤ 12) :
-    Zig.sub false (BitVec.ofNat 64 (2 ^ k)) 1 = pure (BitVec.ofNat 64 (2 ^ k) - 1) := by
-  have := Nat.two_pow_pos k
-  have := two_pow_le hk
-  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp; rw [Nat.mod_eq_of_lt (by omega)]; omega)]
-
-theorem divExact_self (v : BitVec 64) : Zig.divExact false (Zig.subWrap v v) 1 = pure 0 := by
-  simp only [Zig.subWrap, BitVec.sub_self]; rfl
-
-theorem gt_self (v : BitVec 64) : Zig.gt false v v = false := by
-  simp [Zig.gt, Zig.lt, BitVec.ult]
-
-/-- `@intFromPtr` of an owned pointer, as the generated `usize`. -/
 theorem addr64_total {X : Assn} {q : Ptr} {b : BlockId} {A : Nat} (hqb : q.block = some b)
     (hown : ∀ h, X h → OwnsIn b A h) :
     TotalTriple X (do let d ← ptrAddr q; pure (BitVec.ofInt 64 d))
@@ -150,13 +324,119 @@ theorem addr64_total {X : Assn} {q : Ptr} {b : BlockId} {A : Nat} (hqb : q.block
 theorem tame_addr64 (q : Ptr) : Full.Tame (do let d ← ptrAddr q; pure (BitVec.ofInt 64 d)) :=
   Full.Tame.bind (Full.Tame.ptrAddr q) fun _ => Full.Tame.pure' _
 
-theorem tame_alignPointer {k : Nat} (hk : k ≤ 12) (p : Ptr) :
+/-- `alignment_bytes -| page_size`: the extra bytes `map` asks for. -/
+theorem subSat_pow {k : Nat} (hk : k < 64) :
+    Zig.subSat false (BitVec.ofNat 64 (2 ^ k)) 4096 = BitVec.ofNat 64 (2 ^ k - P) := by
+  have := Ops.toNat_two_pow hk
+  simp only [Zig.subSat, Zig.clamp, Zig.val, Bool.false_eq_true, ↓reduceIte, this]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_ofInt, BitVec.toNat_ofNat]
+  have hlt := Ops.two_pow_lt hk
+  have e : max (0 : Int) (min (2 ^ 64 - 1) ((2 ^ k : Nat) - (4096 : BitVec 64).toNat)) =
+      ((2 ^ k - 4096 : Nat) : Int) := by
+    simp only [show (4096 : BitVec 64).toNat = 4096 from rfl]; omega
+  rw [e]; show _ = (2 ^ k - 4096) % 2 ^ 64; omega
+
+/-- The extra bytes `2 ^ k -| P` are a page multiple. -/
+theorem extra_mod (k : Nat) : (2 ^ k - P) % P = 0 := by
+  show (2 ^ k - 4096) % 4096 = 0
+  by_cases hk12 : k ≤ 12
+  · have := two_pow_le hk12; rw [show 2 ^ k - 4096 = 0 by omega]
+  · have := Nat.mod_eq_zero_of_dvd (Nat.pow_dvd_pow 2 (by omega : 12 ≤ k)); omega
+
+/-- The page check of the derived hint address passes for a page-aligned hint. -/
+theorem hint_check {v L G m : BitVec 64} (hv : v &&& 4095 = 0) (hL : L &&& 4095 = 0)
+    (hG : G &&& 4095 = 0) : Zig.subWrap (Zig.subWrap v L &&& ~~~m) G &&& 4095 = 0 :=
+  sub_and4095 (andNot_and4095 m (sub_and4095 hv hL)) hG
+
+theorem tame_alignPointer {k : Nat} (hk : k < 64) (p : Ptr) :
     Full.Tame (mem_alignPointer__anon_53311c568cf7 p (BitVec.ofNat 64 (2 ^ k))) := by
-  unfold mem_alignPointer__anon_53311c568cf7
+  unfold mem_alignPointer__anon_53311c568cf7 mem_alignPointerOffset__anon_7004c05f4892
   gen_norm
-  rw [alignPointerOffset_small hk]
-  simp only [pure_bind, Option.elim_some]
+  rw [isValidAlign_pow hk]
+  gen_norm
   tame
+
+/-- `drop` of a page-aligned address: a page multiple, within the extra bytes, to an aligned
+address. -/
+theorem drop_facts {A k : Nat} (hA : A % P = 0) :
+    drop A (2 ^ k) % P = 0 ∧ drop A (2 ^ k) ≤ 2 ^ k - P ∧ (A + drop A (2 ^ k)) % 2 ^ k = 0 := by
+  by_cases hk12 : k ≤ 12
+  · rw [drop_small hk12 hA]
+    refine ⟨rfl, Nat.zero_le _, ?_⟩
+    rw [Nat.add_zero]
+    exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.pow_dvd_pow 2 hk12)
+      (Nat.dvd_of_mod_eq_zero (by simpa using hA)))
+  · obtain ⟨h1, h2, h3⟩ := drop_bounds (k := k) (by omega) hA
+    exact ⟨h1, by omega, h3⟩
+
+theorem addr_diff {p : Ptr} {A d : Nat} (h0 : p.off = 0) :
+    Zig.subWrap (BitVec.ofInt 64 ((A : Int) + (p.add d).off)) (BitVec.ofInt 64 ((A : Int) + p.off)) =
+      BitVec.ofNat 64 d := by
+  simp only [Ptr.add, h0, Int.zero_add, Int.add_zero, Zig.subWrap]
+  rw [BitVec.ofInt_add, BitVec.add_comm, BitVec.add_sub_cancel, BitVec.ofInt_natCast]
+
+theorem divExact_one (x : BitVec 64) : Zig.divExact false x 1 = pure x := by
+  simp [Zig.divExact]
+
+theorem sub_ofNat {M d : Nat} (h : d ≤ M) (hM : M < 2 ^ 64) :
+    Zig.sub false (BitVec.ofNat 64 M) (BitVec.ofNat 64 d) = pure (BitVec.ofNat 64 (M - d)) := by
+  simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hM, Nat.mod_eq_of_lt (show d < 2 ^ 64 by omega)]
+  rw [if_neg (by simp; omega)]
+  congr 1
+  apply BitVec.eq_of_toNat_eq
+  rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def]; simp [Nat.mod_eq_of_lt hM,
+    Nat.mod_eq_of_lt (show d < 2 ^ 64 by omega)]; omega)]
+  simp [Nat.mod_eq_of_lt hM, Nat.mod_eq_of_lt (show d < 2 ^ 64 by omega),
+    Nat.mod_eq_of_lt (show M - d < 2 ^ 64 by omega)]
+
+theorem le_ofNat {a b : Nat} (h : a ≤ b) (hb : b < 2 ^ 64) :
+    Zig.le false (BitVec.ofNat 64 a) (BitVec.ofNat 64 b) = true := by
+  simp [Zig.le, BitVec.ule, Nat.mod_eq_of_lt hb, Nat.mod_eq_of_lt (show a < 2 ^ 64 by omega), h]
+
+theorem gt_ofNat {a b : Nat} (ha : a < 2 ^ 64) (hb : b < 2 ^ 64) :
+    Zig.gt false (BitVec.ofNat 64 a) (BitVec.ofNat 64 b) = decide (b < a) := by
+  rw [Ops.gt_eq]; simp [Nat.mod_eq_of_lt hb, Nat.mod_eq_of_lt ha]
+
+/-- `map`'s first `munmap`: the `d` bytes below the aligned address. -/
+theorem munmap_drop {p : Ptr} {A d M : Nat} (hd0 : 0 < d) (hdP : d % P = 0) (hdM : d < M)
+    (hMP : M % P = 0) (hM : M < 2 ^ 64) :
+    TotalTriple (mapping P p A 0 (Array.replicate M (.int 0)))
+      (Os.munmap Os.Target.linux ⟨p, BitVec.ofNat 64 d⟩)
+      (fun _ => mapping P (p.add d) A d (Array.replicate (M - d) (.int 0))) := by
+  have hdn : (BitVec.ofNat 64 d).toNat = d := by simp; omega
+  have hal : alignUp d P = d := alignUp_of_mod (by decide) hdP
+  refine TotalTriple.conseq (TotalTriple.munmapPrefix Os.Target.linux (p := p) (lo := 0)
+    (bs := Array.replicate M (.int 0)) (len := BitVec.ofNat 64 d) (by omega) ?_) (fun _ x => x)
+    fun _ h x => ?_
+  · rw [hdn, P_eq, hal, Array.size_replicate, alignUp_of_mod (by decide) hMP]; exact hdM
+  · rw [hdn, P_eq, hal, Nat.zero_add, Array.size_replicate, Array.extract_replicate,
+      Nat.min_self] at x
+    exact x
+
+/-- `map`'s second `munmap`: the pages above the `L` granted bytes. -/
+theorem munmap_rest {q : Ptr} {A d L R : Nat} (hL0 : 0 < L) (hLP : L % P = 0) (hLR : L < R)
+    (hRP : R % P = 0) (hR : R < 2 ^ 64) :
+    TotalTriple (mapping P q A d (Array.replicate R (.int 0)))
+      (Os.munmap Os.Target.linux ⟨q.add L, BitVec.ofNat 64 (R - L)⟩)
+      (fun _ => mapping P q A d (Array.replicate L (.int 0))) := by
+  have hn : (BitVec.ofNat 64 (R - L)).toNat = R - L := by simp; omega
+  refine TotalTriple.conseq (TotalTriple.munmapTail Os.Target.linux (p := q) (lo := d) (k := L)
+    (bs := Array.replicate R (.int 0)) (len := BitVec.ofNat 64 (R - L)) hLP hL0
+    (by simpa using hLR) (by rw [hn]; omega) ?_) (fun _ x => x) fun _ h x => ?_
+  · rw [hn, P_eq, Array.size_replicate, alignUp_of_mod (by decide) hRP,
+      alignUp_of_mod (by decide) (by
+        have h1 : L % 4096 = 0 := hLP; have h2 : R % 4096 = 0 := hRP
+        show (R - L) % 4096 = 0; omega)]
+    omega
+  · rw [Array.extract_replicate, Nat.min_eq_left (Nat.le_of_lt hLR), Nat.sub_zero] at x
+    exact x
+
+/-- Weaken the legacy part of a precondition. -/
+theorem pre_up_mono {β : Type} {H : FAssn} {X Y : Assn} {c : ConcM Tgt β} {Q : β → FAssn}
+    (hxy : ∀ h, X h → Y h) (ht : CTriple (H ⋆ up Y) c Q) : CTriple (H ⋆ up X) c Q :=
+  CTriple.pre ht fun _ hr => Full.sep_mono_right (fun _ y => up_mono hxy y) hr
 
 /-- `@ptrFromInt` to `?*T` changes nothing (`FTriple.ptrFromAddr`). -/
 theorem optPtrFromAddr_frame {R : Full.FAssn} (n : Nat) :
@@ -167,7 +447,6 @@ theorem optPtrFromAddr_frame {R : Full.FAssn} (n : Nat) :
   · exact ⟨_, rfl⟩
   · obtain ⟨v, hv⟩ := Full.ptrFromAddr_run n m
     exact ⟨some v, by simp only [Functor.map, StateT.map, StateT.run] at hv ⊢; rw [hv]; rfl⟩
-
 
 /-! ## Rearranging full-state assertions -/
 
@@ -235,8 +514,8 @@ theorem hintKn_some {b : BlockId} {A : Nat} {h : Ptr} {r : Res}
     HintKn (some h) r := by
   unfold HintKn FAssn.ex; exact ⟨b, A, hr⟩
 
-/-- The page allocator's invariant for every entry: alignments up to a page. -/
-def ainv : FAllocInv := { inv own with fits := fun n k => n + 2 ^ k + P ≤ 2 ^ 64 ∧ k ≤ 12 }
+/-- The page allocator's invariant for every entry, for every alignment. -/
+def ainv : FAllocInv := inv own
 
 theorem hintKn_heap (e : Option Ptr) (r : Res) (h : HintKn e r) : r.heap = FHeap.empty := by
   cases e with
@@ -247,40 +526,44 @@ theorem hintKn_heap (e : Option Ptr) (r : Res) (h : HintKn e r) : r.heap = FHeap
     rw [h1, h2]; rfl
 
 /-- The state after a granted mapping: the hint points to it, and the caller owns it. -/
-theorem final_post {p : Ptr} {b : BlockId} {A L k : Nat} {all : Array Byte} {r : Res}
-    (hp : p.block = some b) (hoff : p.off = 0) (hA : A % P = 0) (hk : k ≤ 12)
-    (hsz : all.size = alignUp L P) (hfit : L + P ≤ 2 ^ 64)
-    (h : (aptsE hint (some p) ⋆ (known b A ⋆ up (mapping P p A 0 all))) r) :
+theorem final_post {p : Ptr} {b : BlockId} {A d L k : Nat} {all : Array Byte} {r : Res}
+    (hp : p.block = some b) (hoff : p.off = d) (hA : A % P = 0) (hdP : d % P = 0)
+    (hal : (A + d) % 2 ^ k = 0) (hsz : all.size = alignUp L P) (hfit : L + P ≤ 2 ^ 64)
+    (h : (aptsE hint (some p) ⋆ (known b A ⋆ up (mapping P p A d all))) r) :
     ainv.allocPost L k (some p) r := by
   have hA' : A % 4096 = 0 := hA
-  have hal : (A + p.off.toNat) % 2 ^ k = 0 := by
-    rw [hoff]
-    exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.pow_dvd_pow 2 hk)
-      (Nat.dvd_of_mod_eq_zero (by simpa using hA')))
+  have hdP' : d % 4096 = 0 := hdP
+  have hoff' : p.off.toNat = d := by rw [hoff]; rfl
   have hge := alignUp_ge L
   refine Full.sep_mono (fun _ x => ⟨some p, Full.sep_mono_right (fun _ y =>
       hintKn_some (Full.sep_lift.mpr ⟨⟨hp, by omega, by rw [hoff]; omega⟩, y⟩)) x⟩)
     (fun r' y => (lift_granted_up (J := ainv) (I := legacy) (fun _ _ _ _ _ _ => rfl)).mpr (by
-      have hm : mapping P p A p.off.toNat all r'.heap.erase := by simpa [hoff] using y.1
+      have hm : mapping P p A p.off.toNat all r'.heap.erase := by rw [hoff']; exact y.1
       exact up_ex.mpr ⟨all.extract 0 L, up_lift.mpr ⟨by simp; omega,
-        regrant hm hsz (by omega) hal, y.2⟩⟩))
+        regrant hm hsz (by omega) (by rw [hoff']; exact hal), y.2⟩⟩))
     (Full.sep_assoc' h)
 
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 1600000 in
 theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 0 < len.toNat)
-    (hk : k ≤ 12) (hfit : len.toNat + 2 ^ k + P ≤ 2 ^ 64) :
+    (hk : k < 64) (hfit : len.toNat + 2 ^ k + P ≤ 2 ^ 64) :
     CTriple (Tgt := Tgt) own (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra)
       (ainv.allocPost len.toNat k) := by
-  have h2 := two_pow_le hk
   have h2p : 0 < 2 ^ k := Nat.two_pow_pos k
   have hL := toNat_alignUp (n := len.toNat) (by omega)
   have hLlt := alignUp_lt (n := len.toNat) (P := P) (by decide)
+  have hLge := alignUp_ge len.toNat
+  have hLm : alignUp len.toNat P % P = 0 := alignUp_mod_self (by decide)
+  have hG : (BitVec.ofNat 64 (2 ^ k - P)).toNat = 2 ^ k - P := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hM : (BitVec.ofNat 64 (alignUp len.toNat P + (2 ^ k - P))).toNat =
+      alignUp len.toNat P + (2 ^ k - P) := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   unfold heap_PageAllocator_alloc heap_PageAllocator_map
   conc_norm
-  rw [toByteUnits_eq (by omega), alignForward_eq (by omega)]
+  rw [toByteUnits_eq hk, alignForward_eq (by omega)]
   conc_norm
-  have hadd : BitVec.ofNat 64 (alignUp len.toNat P) + 0 = BitVec.ofNat 64 (alignUp len.toNat P) :=
-    BitVec.add_zero _
-  rw [subSat_small hk, Ops.add_ok (by rw [hL]; simp; omega), hadd, Ops.gt_eq,
+  rw [subSat_pow hk, Ops.add_ok (by rw [hL, hG]; omega), ← BitVec.ofNat_add, Ops.gt_eq,
     show decide ((0 : BitVec 64).toNat < len.toNat) = true by simpa using hlen, debug_assert_true]
   conc_norm
   by_cases hbig : ge false len 18446744073709547519 = true
@@ -295,7 +578,7 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
   case' none => simp only [Option.isNone_none, ↓reduceIte]
   case' some h =>
     simp only [Option.isNone_some, Bool.false_eq_true, ↓reduceIte, optPtrAddr]
-    rw [sub_two_pow_one hk]
+    rw [sub_pow_one hk]
     conc_norm
     refine CTriple.pre (P := FAssn.ex fun b => FAssn.ex fun A : Nat =>
         ⟪h.block = some b ∧ 0 ≤ h.off ∧ ((A : Int) + h.off) % 4096 = 0⟫ ⋆
@@ -316,14 +599,19 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
     have hv : BitVec.ofInt 64 ((A : Int) + off) &&& 4095 = 0 :=
       Ops.and_mask_eq_zero (k := 12) (by decide) (by omega) hal
     have hL4 : BitVec.ofNat 64 (alignUp len.toNat P) &&& 4095 = 0 := by
-      rw [and4095, hL]; exact alignUp_mod_self (by decide)
-    rw [if_pos (hint_check hv hL4), checkAddr_ok ((and4095 _).mp (hint_check hv hL4)), pure_bind]
+      rw [and4095, hL]; exact hLm
+    have hG4 : BitVec.ofNat 64 (2 ^ k - P) &&& 4095 = 0 := by
+      rw [and4095, hG]; exact extra_mod k
+    have hc := hint_check (m := BitVec.ofNat 64 (2 ^ k) - 1) hv hL4 hG4
+    simp only [hc, ↓reduceIte, checkAddr_ok ((and4095 _).mp hc), pure_bind]
     refine CTriple.bind (CTriple.liftMem (optPtrFromAddr_frame _)) fun x => ?_
-    refine CTriple.pre (P := aptsE hint (some (⟨some b, off⟩ : Ptr)) ⋆ HintKn (some (⟨some b, off⟩ : Ptr))) ?_
+    have hpre : ∀ r, (aptsE hint (some (⟨some b, off⟩ : Ptr)) ⋆ known b A) r →
+        (aptsE hint (some (⟨some b, off⟩ : Ptr)) ⋆ HintKn (some (⟨some b, off⟩ : Ptr))) r :=
       fun r hr => Full.sep_mono_right (fun _ hk => hintKn_some (Full.sep_lift.mpr ⟨⟨rfl, ho, hal⟩, hk⟩)) hr
+    refine CTriple.pre ?_ hpre
   all_goals
     refine CTriple.pre (CTriple.step (X := Assn.emp) (TotalTriple.mmap Os.Target.linux _
-      (BitVec.ofNat 64 (alignUp len.toNat P)) (by rw [hL]; exact alignUp_pos hlen))
+      (BitVec.ofNat 64 (alignUp len.toNat P + (2 ^ k - P))) (by rw [hM]; omega))
       (Full.Tame.mmap _ _ _ _ _ _ _) fun v => ?_)
       fun r hr => Full.sep_mono_right (fun _ y => up_emp.mpr y) (Full.sep_emp.mpr hr)
     rcases v with err | s
@@ -333,39 +621,124 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
         ⟨_, Full.sep_emp.mp (Full.sep_mono_right (fun _ y => up_pure y) hr)⟩
     · simp only [isNonErr, isErr, Bool.not_false, ↓reduceIte, unwrapPayload,
         CNorm.liftMem_lift_pure, pure_bind]
-      refine CTriple.pre (P := FAssn.ex fun A : Nat => ⟪s.ptr.off = 0⟫ ⋆
+      refine CTriple.pre (P := FAssn.ex fun A : Nat => ⟪s.ptr.off = 0 ∧
+          s.len = BitVec.ofNat 64 (alignUp len.toNat P + (2 ^ k - P)) ∧
+          A + alignUp (BitVec.ofNat 64 (alignUp len.toNat P + (2 ^ k - P))).toNat
+            Os.Target.linux.pageSize ≤ Os.Target.linux.addrLimit⟫ ⋆
           ((aptsE hint _ ⋆ HintKn _) ⋆ up (mapping P s.ptr A 0
-            (Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0))))) ?_
+            (Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P + (2 ^ k - P))).toNat (.int 0))))) ?_
         fun r hr => by
-          obtain ⟨r₁, r₂, hd, rfl, h1, ⟨-, ho, A, hm⟩, hk⟩ := hr
-          exact ⟨A, Full.sep_lift.mpr ⟨ho, r₁, r₂, hd, rfl, h1, hm, hk⟩⟩
-      refine CTriple.ex fun A => CTriple.lift fun hso => ?_
+          obtain ⟨r₁, r₂, hd, rfl, h1, ⟨hsl, ho, A, hAb, hm⟩, hk⟩ := hr
+          exact ⟨A, Full.sep_lift.mpr ⟨⟨ho, hsl, hAb⟩, r₁, r₂, hd, rfl, h1, hm, hk⟩⟩
+      refine CTriple.ex fun A => CTriple.lift fun ⟨hso, hsl, hAb⟩ => ?_
+      rw [hM] at hAb ⊢
+      have hMm : (alignUp len.toNat P + (2 ^ k - P)) % P = 0 := by
+        have h1 : (2 ^ k - 4096) % 4096 = 0 := extra_mod k
+        have h2 : alignUp len.toNat P % 4096 = 0 := hLm
+        show (alignUp len.toNat P + (2 ^ k - 4096)) % 4096 = 0; omega
+      rw [P_eq, alignUp_of_mod (by decide) hMm] at hAb
+      have hAb' : A + (alignUp len.toNat P + (2 ^ k - P)) ≤ 2 ^ 47 := hAb
       refine CTriple.of_pure (φ := ∃ b, s.ptr.block = some b ∧ A % P = 0) (fun r hr => by
         obtain ⟨-, r₂, -, -, -, hm, -⟩ := hr
         obtain ⟨b, hb, -⟩ := PageSpec.mapping_block hm
         exact ⟨b, hb, hm.2.2.1⟩) fun ⟨b, hb, hA⟩ => ?_
-      have hown : ∀ h, mapping P s.ptr A 0
-          (Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0)) h →
-          OwnsIn b A h := fun h hm => by
-        obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hm
-        rw [hb] at hb'; cases hb'; exact ho
-      refine CTriple.know_intro (b := b) (A := A) (fun r hr => own_cell hown hr) ?_
-      refine CTriple.pre (step_eq (alignPointer_total hk hso) (tame_alignPointer hk _) ?_)
+      have hfA : A + 2 ^ k ≤ 2 ^ 64 := by
+        have : 2 ^ 47 + 4096 ≤ 2 ^ 64 := by decide
+        have hP' : (P : Nat) = 4096 := rfl
+        omega
+      obtain ⟨hdP, hdG, hal'⟩ := drop_facts (k := k) hA
+      have hdlt : drop A (2 ^ k) < 2 ^ 64 := by omega
+      refine CTriple.know_intro (b := b) (A := A) (fun r hr => own_cell (mapping_owns hb) hr) ?_
+      refine CTriple.pre (step_eq (alignPointer_gen hk hso hfA (by rw [Array.size_replicate]; omega))
+          (tame_alignPointer hk _) ?_)
         fun r hr => swap_last hr
       simp only [Option.isSome_some, ↓reduceIte, optPayload, CNorm.liftMem_lift_pure, pure_bind]
-      refine step_eq (addr64_total hb hown) (tame_addr64 _) ?_
-      refine step_eq (addr64_total hb hown) (tame_addr64 _) ?_
-      simp only [divExact_self, CNorm.liftMem_lift_pure, pure_bind, bne_self_eq_false,
-        Bool.false_eq_true, ↓reduceIte, Norm.sub_zero, gt_self]
-      refine CTriple.pick_bind ?_
-      refine CTriple.pre ?_ fun r hr =>
-        Full.sep_mono_right (fun _ y => Full.sep_assoc' y) (Full.sep_assoc (Full.sep_assoc hr))
-      refine CTriple.bind (CTriple.liftMem
-        (FTriple.cmpxchgPtr rfl hint _ (some s.ptr) .relaxed .relaxed).frame) fun _ => ?_
-      refine CTriple.pre ?_ fun r hr => rearr_final hr
-      exact CTriple.forget (hintKn_heap _) (CTriple.ret' _ fun r hr =>
-        final_post (all := Array.replicate (BitVec.ofNat 64 (alignUp len.toNat P)).toNat (.int 0))
-          hb hso hA hk (by rw [Array.size_replicate, hL]) (by omega) hr)
+      have hbd : (s.ptr.add (drop A (2 ^ k) : Nat)).block = some b := by simpa [Ptr.add] using hb
+      refine step_eq (addr64_total hbd (mapping_owns hb)) (tame_addr64 _) ?_
+      refine step_eq (addr64_total hb (mapping_owns hb)) (tame_addr64 _) ?_
+      rw [addr_diff hso, divExact_one]
+      simp only [CNorm.liftMem_lift_pure, pure_bind]
+      have hM64 : alignUp len.toNat P + (2 ^ k - P) < 2 ^ 64 := by omega
+      have hLM : alignUp len.toNat P ≤ alignUp len.toNat P + (2 ^ k - P) - drop A (2 ^ k) := by
+        omega
+      by_cases hd0 : drop A (2 ^ k) = 0
+      case' pos =>
+        have hz : (BitVec.ofNat 64 (drop A (2 ^ k)) != 0) = false := by rw [hd0]; rfl
+        simp only [hz, Bool.false_eq_true, ↓reduceIte]
+        refine pre_up_mono (Y := mapping P (s.ptr.add (drop A (2 ^ k) : Nat)) A (drop A (2 ^ k))
+          (Array.replicate (alignUp len.toNat P + (2 ^ k - P) - drop A (2 ^ k)) (.int 0)))
+          (fun h y => by rw [hd0, Int.natCast_zero, Ptr.add_zero', Nat.sub_zero]; exact y) ?_
+      case' neg =>
+        have hnz : (BitVec.ofNat 64 (drop A (2 ^ k)) != 0) = true := by
+          simp only [bne_iff_ne, ne_eq]
+          intro h
+          have := congrArg BitVec.toNat h
+          simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hdlt] at this
+          exact hd0 (by simpa using this)
+        simp only [hnz, ↓reduceIte, hsl, le_ofNat (by omega : drop A (2 ^ k) ≤
+          alignUp len.toNat P + (2 ^ k - P)) hM64]
+        rw [checkSliceEnd_ok (by simp [Nat.mod_eq_of_lt hM64, Nat.mod_eq_of_lt hdlt]; omega)]
+        simp only [pure_bind, CNorm.liftMem_pure]
+        refine CTriple.step (munmap_drop (Nat.pos_of_ne_zero hd0) hdP (by omega) hMm hM64)
+          (Full.Tame.munmap _ _) fun _ => ?_
+      all_goals
+        rw [sub_ofNat (by omega) hM64]
+        simp only [CNorm.liftMem_lift_pure, pure_bind]
+        rw [gt_ofNat (by omega) (by omega)]
+        by_cases htl : alignUp len.toNat P < alignUp len.toNat P + (2 ^ k - P) - drop A (2 ^ k)
+        case' pos =>
+          simp only [htl, decide_true, ↓reduceIte]
+          refine step_eq (TotalTriple.project_mapping (k := BitVec.ofNat 64 (alignUp len.toNat P))
+            (by rw [Array.size_replicate, hL]; exact hLM)) (Full.Tame.ptrProject _ _) ?_
+          rw [elem_one (by omega)]
+          simp only [le_ofNat (Nat.le_of_lt htl) (by omega), ↓reduceIte]
+          rw [sub_ofNat (Nat.le_of_lt htl) (by omega)]
+          simp only [CNorm.liftMem_lift_pure, pure_bind]
+          have hbq : ((s.ptr.add (drop A (2 ^ k) : Nat)).add (alignUp len.toNat P : Nat)).block =
+              some b := by simpa [Ptr.add] using hb
+          refine step_eq (addr64_total hbq (mapping_owns hbd)) (tame_addr64 _) ?_
+          have e : ((s.ptr.add (drop A (2 ^ k) : Nat)).add (alignUp len.toNat P : Nat)).off =
+              ((drop A (2 ^ k) + alignUp len.toNat P : Nat) : Int) := by
+            simp [Ptr.add, hso]
+          have h1 : A % 4096 = 0 := hA
+          have h2 : drop A (2 ^ k) % 4096 = 0 := hdP
+          have h3 : alignUp len.toNat P % 4096 = 0 := hLm
+          have hal4 : ((A : Int) +
+              ((s.ptr.add (drop A (2 ^ k) : Nat)).add (alignUp len.toNat P : Nat)).off) % 4096 = 0 := by
+            rw [e]; omega
+          have hpage : BitVec.ofInt 64 ((A : Int) +
+              ((s.ptr.add (drop A (2 ^ k) : Nat)).add (alignUp len.toNat P : Nat)).off) &&& 4095 = 0 :=
+            Ops.and_mask_eq_zero (k := 12) (by decide) (by rw [e]; omega) hal4
+          simp only [hpage, beq_self_eq_true, Bool.or_true, ↓reduceIte]
+          refine step_eq (TotalTriple.bind (checkAlign_owned (A := A) hbq (mapping_owns hbd) hal4)
+            fun _ => TotalTriple.conseq (TotalTriple.ret _) (fun _ hx => Zig.sep_lift.mpr ⟨rfl, hx⟩)
+              (fun _ _ x => x))
+            (Full.Tame.bind (Full.Tame.checkAlign _ _) fun _ => Full.Tame.pure' _) ?_
+          refine CTriple.step (munmap_rest (by omega) hLm htl ?_ (by omega))
+            (Full.Tame.munmap _ _) fun _ => ?_
+          have h1 : (alignUp len.toNat P + (2 ^ k - P)) % 4096 = 0 := hMm
+          have h2 : drop A (2 ^ k) % 4096 = 0 := hdP
+          show (alignUp len.toNat P + (2 ^ k - P) - drop A (2 ^ k)) % 4096 = 0
+          omega
+        case' neg =>
+          simp only [htl, decide_false, Bool.false_eq_true, ↓reduceIte]
+          refine pre_up_mono (Y := mapping P (s.ptr.add (drop A (2 ^ k) : Nat)) A (drop A (2 ^ k))
+            (Array.replicate (alignUp len.toNat P) (.int 0)))
+            (fun h y => by
+              rw [show alignUp len.toNat P + (2 ^ k - P) - drop A (2 ^ k) = alignUp len.toNat P by
+                omega] at y
+              exact y) ?_
+      all_goals
+        refine CTriple.pick_bind ?_
+        refine CTriple.pre ?_ fun r hr =>
+          Full.sep_mono_right (fun _ y => Full.sep_assoc' y) (Full.sep_assoc (Full.sep_assoc hr))
+        refine CTriple.bind (CTriple.liftMem
+          (FTriple.cmpxchgPtr rfl hint _ (some (s.ptr.add (drop A (2 ^ k) : Nat))) .relaxed
+            .relaxed).frame) fun _ => ?_
+        refine CTriple.pre ?_ fun r hr => rearr_final hr
+        exact CTriple.forget (hintKn_heap _) (CTriple.ret' _ fun r hr =>
+          final_post (all := Array.replicate (alignUp len.toNat P) (.int 0)) hbd
+            (by simp [Ptr.add, hso]) hA hdP hal' (by rw [Array.size_replicate]) (by omega) hr)
 
 /-! ## The vtable -/
 
@@ -376,23 +749,23 @@ def vt : RawVTable :=
     alloc := fun c len k ra =>
       Sched.soloRun 16 (heap_PageAllocator_alloc c len ⟨BitVec.ofNat 6 k⟩ ra) }
 
-/-- **`alloc`**, for alignments up to a page. -/
+/-- **`alloc`**, for every alignment. -/
 theorem alloc_spec (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 0 < len.toNat)
-    (hfit : ainv.fits len.toNat k) :
+    (hk : k < 64) (hfit : ainv.fits len.toNat k) :
     FTriple ainv.own (vt.alloc c len k ra) (ainv.allocPost len.toNat k) :=
-  alloc_ct c len k ra hlen hfit.2 hfit.1 16
+  alloc_ct c len k ra hlen hk hfit 16
 
-/-- **The translated `PageAllocator` satisfies `FAllocSpec`** (partial correctness), for
-alignments up to a page, from the generated code and OSM-01 only. -/
+/-- **The translated `PageAllocator` satisfies `FAllocSpec`** (partial correctness), for every
+alignment, from the generated code and OSM-01 only. -/
 theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
-  alloc len k ra hlen _ hfit := alloc_spec c len k ra hlen hfit
+  alloc len k ra hlen hk hfit := alloc_spec c len k ra hlen hk hfit
   resize s k n ra bs hk hn hfit hs hpos :=
-    (resize_spec (own := own) c s k n ra bs hk hn hfit.1 hs hpos).toPartial
+    (resize_spec (own := own) c s k n ra bs hk hn hfit hs hpos).toPartial
   remap s k n ra bs hk hn hfit hs hpos :=
-    (remap_spec (own := own) c s k n ra bs hk hn hfit.1 hs hpos).toPartial
+    (remap_spec (own := own) c s k n ra bs hk hn hfit hs hpos).toPartial
   free s k ra bs _ hs hpos := (free_spec (own := own) c s k ra bs hs hpos).toPartial
 
-/-! ## O5: alignments above a page -/
+/-! ## O5 regression: alignments above a page -/
 
 /-- `mem0` with one more (dead, empty) block that ends just below the last page under `2 ^ 64`:
 the fallback address of the next mapping (`Mem.top`, the placement proposes nothing) is that
@@ -402,11 +775,35 @@ def high : Mem :=
     blocks := (mem0 .fresh).blocks.push
       { bytes := #[], align := 1, kind := .heap, live := false, addr := 2 ^ 64 - 4097 } }
 
-/-- **O5.** `alloc(1, align 8192)` from `high` maps two pages at `2 ^ 64 - 4096`; the alignment
-`@intFromPtr(p) + 8191` of `std.mem.alignPointer` overflows, `alignPointer` returns `null`, and
-`PageAllocator.map` panics. So no invariant that `high` satisfies admits `k = 13`. -/
+/-- **O5, fixed.** Before the OS model bounded the address space, `alloc(1, align 8192)` from
+`high` mapped two pages at `2 ^ 64 - 4096`, the alignment `@intFromPtr(p) + 8191` of
+`std.mem.alignPointer` overflowed and `PageAllocator.map` panicked. Now that `mmap` fails with
+`ENOMEM` above `Os.Target.addrLimit` (OSM-01), `alloc` returns `null`, as natively. -/
 theorem alloc_high : (((vt.alloc ⟨none, 0⟩ 1 13 0).run high).run.map fun r =>
-    match r with | .error e => decide (e = .panic) | _ => false) = some true := by
+    match r with | .ok (v, _) => decide (v = none) | _ => false) = some true := by
+  decide +kernel
+
+/-- `mem0` under a placement that proposes the address `A` for the first mapping (block 6,
+after the six globals). -/
+def placedAt (A : Nat) : Mem := mem0 ⟨fun b => if b == 6 then some A else none⟩
+
+/-- Near the end of the address space, `alloc(1, align 8192)` maps two pages at
+`2 ^ 47 - 12288`, unmaps the first one (`TotalTriple.munmapPrefix`) and returns the second. -/
+theorem alloc_top : (((vt.alloc ⟨none, 0⟩ 1 13 0).run (placedAt (2 ^ 47 - 12288))).run.map
+    fun r =>
+    match r with | .ok (some p, _) => decide (p.off = 4096) | _ => false) = some true := by
+  decide +kernel
+
+/-- At the end of the address space, `alloc(1, align 8192)` maps two pages ending exactly at
+`addrLimit = 2 ^ 47`; the address is already aligned, so it unmaps the second page
+(`TotalTriple.munmapTail`; a wrong range would be `.illegal`) and returns the first. -/
+theorem alloc_edge : (((vt.alloc ⟨none, 0⟩ 1 13 0).run (placedAt (2 ^ 47 - 8192))).run.map
+    fun r =>
+    match r with
+    | .ok (some p, m) => match m.blocks[6]? with
+      | some blk => decide (p.off = 0 ∧ blk.addr = 2 ^ 47 - 8192 ∧ blk.live)
+      | none => false
+    | _ => false) = some true := by
   decide +kernel
 
 /-! ## The scheduler's reading -/

@@ -107,7 +107,7 @@ Outside this milestone (the arena milestone), measured on the 0.16.0 `ArenaAlloc
 Allocator milestone 1 proves the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba`,
 `FBA.allocSpec`, `FBA.fallocSpec`) and the translated `PageAllocator`
 (`tests/roadmap/alloc-translated`: `free`/`resize`/`remap` on x86_64-linux and aarch64-macos,
-`alloc` on x86_64-linux for alignments up to a page, partial correctness) against the generic
+`alloc` on x86_64-linux for every alignment, partial correctness) against the generic
 specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), from their Zig
 code down to `posix.mmap`/`munmap`/`mremap` (OSM-01). The `std` mode still carries the
 hand-written models below. They are not removed in milestone 1; each step removes one only after
