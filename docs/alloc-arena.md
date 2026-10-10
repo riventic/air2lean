@@ -101,7 +101,8 @@ group).
 are not bounded by its own `fits`. A new node has size `alignForward(1.5 · (prev_size + 24 +
 alignment + n + 16), 2)` and the in-place growth asks for `24 + aligned_index + n`, where
 `prev_size` is the first node's buffer length; nodes are not shrunk before `reset`. Repeated
-`alloc(1)` therefore asks for nodes at least 1.5 times larger each time. A child that accepts every
+`alloc(1)` therefore asks for ever larger nodes: the in-place growth asks for the current size
+plus the request, and a new node is at least 1.5 times the previous buffer. A child that accepts every
 request up to a bound `B` eventually gets one above `B` and may refuse it (O-E); a child that
 accepts every request eventually makes the arena's overflow-checked size arithmetic panic (O-B).
 So for every child, an invariant that holds after `init` and is kept by `alloc` (for a `fits` that

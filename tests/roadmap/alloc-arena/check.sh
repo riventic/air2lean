@@ -5,12 +5,13 @@
 # fresh ones (the stock arena on both targets, the patched one of upstream/arena-fix.patch on
 # x86_64-linux); they elaborate; the one-thread results equal the native ones (Eval.lean; the stock
 # arena's O-E run is illegal where native code has undefined behaviour); obstructions
-# O-A and O-E are kernel-checked (ArenaObstruction.lean); `free` is proved against
-# FAllocSpec (ArenaSpec.lean); an alloc that reserves nothing is rejected (mutant.sh); the admissions
-# fail closed (test_cli.py).
+# O-A and O-E are kernel-checked (ArenaObstruction.lean); `free`, `resize` and `remap` are proved
+# against FAllocSpec (ArenaSpec.lean); an alloc that reserves nothing is rejected (mutant.sh); the
+# admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
 # ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.AllocSpec.Ops`; runs no compiler. With
-# AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt.
+# AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt, and
+# against expected-fixed.txt over a standard library with upstream/arena-fix.patch (needs `patch`).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -72,8 +73,15 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$work/native" 2> "$work/native.txt"
   diff "$here/expected.txt" "$work/native.txt"
   # The patched arena: the same clients over a standard library with upstream/arena-fix.patch.
-  cp -R "$("$AIR2LEAN_NATIVE_ZIG" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p')" "$work/lib"
-  chmod -R u+w "$work/lib"
+  # Only `std` is copied and patched; the rest of the lib directory (libc headers etc.) is linked.
+  lib_dir=$("$AIR2LEAN_NATIVE_ZIG" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p')
+  [ -d "$lib_dir/std" ] || { echo "no lib directory from '$AIR2LEAN_NATIVE_ZIG env'" >&2; exit 1; }
+  mkdir "$work/lib"
+  for entry in "$lib_dir"/*; do
+    [ "$(basename -- "$entry")" = std ] || ln -s "$entry" "$work/lib/"
+  done
+  cp -R "$lib_dir/std" "$work/lib/std"
+  chmod -R u+w "$work/lib/std"
   patch -s -d "$work/lib" -p1 < "$here/upstream/arena-fix.patch"
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe --zig-lib-dir "$work/lib" "$work/native.zig" \
     --cache-dir "$work/cache-fixed" --global-cache-dir "$work/cache-fixed" -femit-bin="$work/native-fixed"
