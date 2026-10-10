@@ -1,0 +1,1392 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "escaped.poolList",
+ "src": {
+  "file": "escaped.zig",
+  "module": "escaped",
+  "decl_line": 20
+ },
+ "params": [
+  0,
+  0
+ ],
+ "ret": 0,
+ "export": {
+  "name": "poolList",
+  "cc": "x86_64_sysv"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "ty": 3,
+     "null": true
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "head"
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 7,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 8,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 7
+    },
+    {
+     "ty": 0,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 7
+    }
+   ],
+   "name": "i"
+  },
+  {
+   "id": 10,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 11,
+     "tag": "loop",
+     "ty": 5,
+     "body": [
+      {
+       "id": 12,
+       "tag": "block",
+       "ty": 1,
+       "body": [
+        {
+         "id": 13,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 4,
+         "column": 12
+        },
+        {
+         "id": 14,
+         "tag": "load",
+         "ty": 0,
+         "args": [
+          {
+           "inst": 7
+          }
+         ]
+        },
+        {
+         "id": 15,
+         "tag": "cmp_lt",
+         "ty": 6,
+         "args": [
+          {
+           "inst": 14
+          },
+          {
+           "ty": 0,
+           "val": "4"
+          }
+         ]
+        },
+        {
+         "id": 59,
+         "tag": "cond_br",
+         "ty": 5,
+         "args": [
+          {
+           "inst": 15
+          }
+         ],
+         "then": [
+          {
+           "id": 17,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 5,
+           "column": 9
+          },
+          {
+           "id": 18,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 7
+            }
+           ]
+          },
+          {
+           "id": 19,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 5,
+           "column": 13
+          },
+          {
+           "id": 20,
+           "tag": "intcast",
+           "ty": 7,
+           "args": [
+            {
+             "inst": 18
+            }
+           ]
+          },
+          {
+           "id": 21,
+           "tag": "cmp_lt",
+           "ty": 6,
+           "args": [
+            {
+             "inst": 20
+            },
+            {
+             "ty": 7,
+             "val": "4"
+            }
+           ]
+          },
+          {
+           "id": 24,
+           "tag": "block",
+           "ty": 1,
+           "body": [
+            {
+             "id": 25,
+             "tag": "cond_br",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 21
+              }
+             ],
+             "then": [
+              {
+               "id": 26,
+               "tag": "br",
+               "ty": 5,
+               "target": 24,
+               "args": [
+                {
+                 "ty": 1,
+                 "val": "{}"
+                }
+               ]
+              }
+             ],
+             "else": [
+              {
+               "id": 22,
+               "tag": "call",
+               "ty": 5,
+               "callee": {
+                "ty": 8,
+                "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "noreturn": true
+               },
+               "args": [
+                {
+                 "inst": 20
+                },
+                {
+                 "ty": 7,
+                 "val": "4"
+                }
+               ]
+              },
+              {
+               "id": 23,
+               "tag": "unreach",
+               "ty": 5
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "id": 27,
+           "tag": "ptr_elem_ptr",
+           "ty": 9,
+           "args": [
+            {
+             "ty": 10,
+             "ptr": {
+              "global": 0,
+              "off": 0
+             }
+            },
+            {
+             "inst": 20
+            }
+           ]
+          },
+          {
+           "id": 28,
+           "tag": "struct_field_ptr_index_0",
+           "ty": 11,
+           "args": [
+            {
+             "inst": 27
+            }
+           ]
+          },
+          {
+           "id": 29,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 7
+            }
+           ]
+          },
+          {
+           "id": 30,
+           "tag": "mul_wrap",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 29
+            },
+            {
+             "inst": 1
+            }
+           ]
+          },
+          {
+           "id": 31,
+           "tag": "add_wrap",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 0
+            },
+            {
+             "inst": 30
+            }
+           ]
+          },
+          {
+           "id": 32,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 28
+            },
+            {
+             "inst": 31
+            }
+           ]
+          },
+          {
+           "id": 33,
+           "tag": "struct_field_ptr_index_1",
+           "ty": 2,
+           "args": [
+            {
+             "inst": 27
+            }
+           ]
+          },
+          {
+           "id": 34,
+           "tag": "load",
+           "ty": 3,
+           "args": [
+            {
+             "inst": 3
+            }
+           ]
+          },
+          {
+           "id": 35,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 33
+            },
+            {
+             "inst": 34
+            }
+           ]
+          },
+          {
+           "id": 36,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 6,
+           "column": 9
+          },
+          {
+           "id": 37,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 7
+            }
+           ]
+          },
+          {
+           "id": 38,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 6,
+           "column": 21
+          },
+          {
+           "id": 39,
+           "tag": "intcast",
+           "ty": 7,
+           "args": [
+            {
+             "inst": 37
+            }
+           ]
+          },
+          {
+           "id": 40,
+           "tag": "cmp_lt",
+           "ty": 6,
+           "args": [
+            {
+             "inst": 39
+            },
+            {
+             "ty": 7,
+             "val": "4"
+            }
+           ]
+          },
+          {
+           "id": 43,
+           "tag": "block",
+           "ty": 1,
+           "body": [
+            {
+             "id": 44,
+             "tag": "cond_br",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 40
+              }
+             ],
+             "then": [
+              {
+               "id": 45,
+               "tag": "br",
+               "ty": 5,
+               "target": 43,
+               "args": [
+                {
+                 "ty": 1,
+                 "val": "{}"
+                }
+               ]
+              }
+             ],
+             "else": [
+              {
+               "id": 41,
+               "tag": "call",
+               "ty": 5,
+               "callee": {
+                "ty": 8,
+                "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "noreturn": true
+               },
+               "args": [
+                {
+                 "inst": 39
+                },
+                {
+                 "ty": 7,
+                 "val": "4"
+                }
+               ]
+              },
+              {
+               "id": 42,
+               "tag": "unreach",
+               "ty": 5
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "id": 46,
+           "tag": "ptr_elem_ptr",
+           "ty": 9,
+           "args": [
+            {
+             "ty": 10,
+             "ptr": {
+              "global": 0,
+              "off": 0
+             }
+            },
+            {
+             "inst": 39
+            }
+           ]
+          },
+          {
+           "id": 47,
+           "tag": "bitcast",
+           "ty": 3,
+           "args": [
+            {
+             "inst": 46
+            }
+           ]
+          },
+          {
+           "id": 48,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 3
+            },
+            {
+             "inst": 47
+            }
+           ]
+          },
+          {
+           "id": 49,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 7,
+           "column": 5
+          },
+          {
+           "id": 50,
+           "tag": "dbg_empty_stmt",
+           "ty": 1
+          },
+          {
+           "id": 52,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 4,
+           "column": 22
+          },
+          {
+           "id": 53,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 7
+            }
+           ]
+          },
+          {
+           "id": 54,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 4,
+           "column": 24
+          },
+          {
+           "id": 55,
+           "tag": "add_safe",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 53
+            },
+            {
+             "ty": 0,
+             "val": "1"
+            }
+           ]
+          },
+          {
+           "id": 56,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 7
+            },
+            {
+             "inst": 55
+            }
+           ]
+          },
+          {
+           "id": 57,
+           "tag": "br",
+           "ty": 5,
+           "target": 12,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 58,
+           "tag": "br",
+           "ty": 5,
+           "target": 10,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 60,
+       "tag": "repeat",
+       "ty": 5,
+       "target": 11
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 61,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8,
+   "column": 5
+  },
+  {
+   "id": 62,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 63,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 62
+    },
+    {
+     "ty": 0,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 64,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 62
+    }
+   ],
+   "name": "s"
+  },
+  {
+   "id": 65,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 9,
+   "column": 5
+  },
+  {
+   "id": 66,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 67,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 66
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 68,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 66
+    }
+   ],
+   "name": "k"
+  },
+  {
+   "id": 69,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10,
+   "column": 5
+  },
+  {
+   "id": 70,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 71,
+   "tag": "load",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 72,
+   "tag": "store",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 70
+    },
+    {
+     "inst": 71
+    }
+   ]
+  },
+  {
+   "id": 74,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 70
+    }
+   ],
+   "name": "it"
+  },
+  {
+   "id": 75,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 76,
+     "tag": "loop",
+     "ty": 5,
+     "body": [
+      {
+       "id": 77,
+       "tag": "block",
+       "ty": 1,
+       "body": [
+        {
+         "id": 78,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 11,
+         "column": 12
+        },
+        {
+         "id": 79,
+         "tag": "load",
+         "ty": 3,
+         "args": [
+          {
+           "inst": 70
+          }
+         ]
+        },
+        {
+         "id": 80,
+         "tag": "is_non_null",
+         "ty": 6,
+         "args": [
+          {
+           "inst": 79
+          }
+         ]
+        },
+        {
+         "id": 112,
+         "tag": "cond_br",
+         "ty": 5,
+         "args": [
+          {
+           "inst": 80
+          }
+         ],
+         "then": [
+          {
+           "id": 81,
+           "tag": "optional_payload",
+           "ty": 9,
+           "args": [
+            {
+             "inst": 79
+            }
+           ]
+          },
+          {
+           "id": 82,
+           "tag": "alloc",
+           "ty": 12
+          },
+          {
+           "id": 83,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 82
+            },
+            {
+             "inst": 81
+            }
+           ]
+          },
+          {
+           "id": 84,
+           "tag": "bitcast",
+           "ty": 13,
+           "args": [
+            {
+             "inst": 82
+            }
+           ]
+          },
+          {
+           "id": 85,
+           "tag": "dbg_var_val",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 81
+            }
+           ],
+           "name": "n"
+          },
+          {
+           "id": 87,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 12,
+           "column": 9
+          },
+          {
+           "id": 88,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 62
+            }
+           ]
+          },
+          {
+           "id": 89,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 12,
+           "column": 16
+          },
+          {
+           "id": 90,
+           "tag": "load",
+           "ty": 9,
+           "args": [
+            {
+             "inst": 84
+            }
+           ]
+          },
+          {
+           "id": 91,
+           "tag": "struct_field_ptr_index_0",
+           "ty": 11,
+           "args": [
+            {
+             "inst": 90
+            }
+           ]
+          },
+          {
+           "id": 92,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 91
+            }
+           ]
+          },
+          {
+           "id": 93,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 66
+            }
+           ]
+          },
+          {
+           "id": 94,
+           "tag": "mul_wrap",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 92
+            },
+            {
+             "inst": 93
+            }
+           ]
+          },
+          {
+           "id": 95,
+           "tag": "add_wrap",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 88
+            },
+            {
+             "inst": 94
+            }
+           ]
+          },
+          {
+           "id": 96,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 62
+            },
+            {
+             "inst": 95
+            }
+           ]
+          },
+          {
+           "id": 97,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 13,
+           "column": 9
+          },
+          {
+           "id": 98,
+           "tag": "load",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 66
+            }
+           ]
+          },
+          {
+           "id": 99,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 13,
+           "column": 11
+          },
+          {
+           "id": 100,
+           "tag": "add_safe",
+           "ty": 0,
+           "args": [
+            {
+             "inst": 98
+            },
+            {
+             "ty": 0,
+             "val": "1"
+            }
+           ]
+          },
+          {
+           "id": 101,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 66
+            },
+            {
+             "inst": 100
+            }
+           ]
+          },
+          {
+           "id": 102,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 14,
+           "column": 5
+          },
+          {
+           "id": 103,
+           "tag": "dbg_empty_stmt",
+           "ty": 1
+          },
+          {
+           "id": 105,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 11,
+           "column": 29
+          },
+          {
+           "id": 106,
+           "tag": "load",
+           "ty": 9,
+           "args": [
+            {
+             "inst": 84
+            }
+           ]
+          },
+          {
+           "id": 107,
+           "tag": "struct_field_ptr_index_1",
+           "ty": 2,
+           "args": [
+            {
+             "inst": 106
+            }
+           ]
+          },
+          {
+           "id": 108,
+           "tag": "load",
+           "ty": 3,
+           "args": [
+            {
+             "inst": 107
+            }
+           ]
+          },
+          {
+           "id": 109,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 70
+            },
+            {
+             "inst": 108
+            }
+           ]
+          },
+          {
+           "id": 110,
+           "tag": "br",
+           "ty": 5,
+           "target": 77,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 111,
+           "tag": "br",
+           "ty": 5,
+           "target": 75,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 113,
+       "tag": "repeat",
+       "ty": 5,
+       "target": 76
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 114,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 15,
+   "column": 5
+  },
+  {
+   "id": 115,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 62
+    }
+   ]
+  },
+  {
+   "id": 116,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 15,
+   "column": 5
+  },
+  {
+   "id": 117,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 115
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "escaped.pool",
+   "ty": 14,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 14,
+    "elems": [
+     {
+      "ty": 15,
+      "elems": [
+       {
+        "ty": 0,
+        "val": "0"
+       },
+       {
+        "ty": 3,
+        "null": true
+       }
+      ]
+     },
+     {
+      "ty": 15,
+      "elems": [
+       {
+        "ty": 0,
+        "val": "0"
+       },
+       {
+        "ty": 3,
+        "null": true
+       }
+      ]
+     },
+     {
+      "ty": 15,
+      "elems": [
+       {
+        "ty": 0,
+        "val": "0"
+       },
+       {
+        "ty": 3,
+        "null": true
+       }
+      ]
+     },
+     {
+      "ty": 15,
+      "elems": [
+       {
+        "ty": 0,
+        "val": "0"
+       },
+       {
+        "ty": 3,
+        "null": true
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 9,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 15,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 9,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 9,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 4,
+   "child": 15,
+   "sentinel": false,
+   "abi_size": 64,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "escaped.Node",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "value",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "next",
+     "ty": 3,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  }
+ ]
+}

@@ -20,7 +20,9 @@ values come from the C program compiled natively by `zig cc` with UBSan traps. S
   c_native     zig cc (host, -fsanitize=undefined trap): expected results per input
   translate_c  zig translate-c -target x86_64-linux-musl; warnings, demoted C functions
   zig_native   zig test of the translated Zig plus expectEqual against the C results
-  air_export   patched Zig build-obj (x86_64-linux, ReleaseSafe) with the AIR JSON filter
+  air_export   patched Zig build-obj (x86_64-linux, ReleaseSafe) with the AIR JSON filter; a
+               program with libc calls as an executable with Zig's libc and compiler_rt, and
+               a link census of the real link (stock Zig, LLD, nm)
   air2lean     air2lean --diagnostics-json; checked or rejected with diagnostic codes
   lean         emit Gen.lean, append the Q01 #guard checks of `entry`, elaborate with Lean
 """
@@ -48,10 +50,25 @@ from zig_gen import INPUTS, lean_checks  # noqa: E402  (Q01 inputs and #guard em
 SCHEMA = 1
 TC_TARGET = "x86_64-linux-musl"
 AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
-# std code that translate-c output calls is translated from its AIR like user code. Wider
-# prefixes (`mem.zeroes`, `debug.assert`) also select std's own unrelated instances and fail
-# them, so other std callees stay CALLEE_MISSING (docs/c-frontend.md, gap G6).
+# std code that translate-c output calls is translated from its AIR like user code. The export
+# starts from the C module and `zig.c_translation.`, adds the base name of every callee that
+# still has no AIR file (`mem.zeroes`, `debug.assert`, ...) until none is left, and then keeps
+# only the functions reachable from the C module: a prefix such as `mem.asBytes` also selects
+# std's own unrelated instances (docs/c-frontend.md, G6). Panic handlers are not exported:
+# air2lean classifies them by exact name (`Air2Lean/Sem.lean`).
 STD_FILTER = ["zig.c_translation."]
+STD_ROUNDS = 4
+# A program with libc calls is exported as the executable Zig links: lib/c.zig (`c.` names) is
+# a module of the program's compilation, and compiler_rt a library compiled separately with its
+# own flags (Zig 0.16.0 `Compilation.zig`: zigc_strat `.zcu`, compiler_rt_strat `.lib`,
+# `compilerRtOptMode`, `buildOutputFromZig`), exported as the link unit `compiler_rt`.
+LIBC_TARGET = ["-target", "x86_64-linux-musl", "-mcpu=baseline"]
+LIBC_FILTER = ["c."]
+RT_UNIT = "compiler_rt"
+RT_FILTER = "compiler_rt."
+COMPILER_RT_FLAGS = ["-OReleaseFast", "-fno-builtin", "-fno-stack-check", "-fno-error-tracing", "-lc"]
+PANIC_CALLEE = re.compile(r"^debug\.(FullPanic\(|defaultPanic$)")
+ANON = re.compile(r"__anon_\d+$")
 STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "lean"]
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
 WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
@@ -237,36 +254,193 @@ def stage_zig_native(zig, zig_file, expected, work):
     return {"status": status, "log": tail(out)}
 
 
-def stage_air_export(zig_air, zig_file, stem, work):
-    air = work / "air"
+def air_refs(doc):
+    """The functions one AIR file calls or takes the address of (every `"func"` name)."""
+    refs, stack = set(), [doc]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if isinstance(node.get("func"), str):
+                refs.add(node["func"])
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return refs
+
+
+def air_externs(doc):
+    """The extern symbols one AIR file calls (its `externs` table)."""
+    return {e["name"] for e in doc.get("externs", [])}
+
+
+def air_exports(doc):
+    """The linker symbols one AIR file defines (`export`, its `aliases`), except internal ones."""
+    e = doc.get("export")
+    if not e:
+        return set()
+    return {s["name"] for s in [e, *e.get("aliases", [])] if s.get("linkage", "strong") != "internal"}
+
+
+def export_air(zig_air, argv, prefixes, air, work, unit=None):
+    """One patched-compiler export; returns (ok, {name: (path, refs, externs, exports)}, log)."""
     shutil.rmtree(air, ignore_errors=True)
-    air.mkdir()
-    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join([stem + "."] + STD_FILTER))
-    code, out = run([zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
-                     *AIR_TARGET, str(zig_file)], TIMEOUT["air"], cwd=work, env=env)
-    (work / "air_export.log").write_text(out)
-    files = sorted(air.glob("*.json"))
-    incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
-    if code != 0 or incomplete or not files:
-        return {"status": "failed", "files": len(files), "log": tail(out)}, None
-    callees, names = set(), set()
-    for f in files:
+    air.mkdir(parents=True)
+    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join(prefixes))
+    env.pop("ZIG_AIR_JSON_UNIT", None)
+    if unit:
+        env["ZIG_AIR_JSON_UNIT"] = unit
+    code, out = run([zig_air, *argv], TIMEOUT["air"], cwd=work, env=env)
+    (work / f"air_export{'_' + unit if unit else ''}.log").write_text(out)
+    docs = {}
+    for f in sorted(air.glob("*.json")):
         doc = json.loads(f.read_text())
-        names.add(doc.get("name", f.stem))
-        stack = [doc.get("body", [])]
-        while stack:
-            node = stack.pop()
-            if isinstance(node, dict):
-                callee = node.get("callee")
-                if isinstance(callee, dict) and isinstance(callee.get("func"), str):
-                    callees.add(callee["func"])
-                stack.extend(node.values())
-            elif isinstance(node, list):
-                stack.extend(node)
-    external = sorted(c for c in callees - names)
-    std = sorted(n for n in names if not n.startswith(stem + "."))
-    return {"status": "ok", "functions": len(files), "std_functions": std,
-            "unexported_callees": external}, air
+        docs[doc.get("name", f.stem)] = (f, air_refs(doc), air_externs(doc), air_exports(doc))
+    incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
+    return code == 0 and not incomplete and bool(docs), docs, out
+
+
+def closure(docs, roots, definitions):
+    """The functions reachable from `roots`: through calls and function addresses, and through
+    extern calls to the function that `definitions` (symbol -> name) names for the symbol."""
+    live, todo = set(), list(roots)
+    while todo:
+        name = todo.pop()
+        if name in docs and name not in live:
+            live.add(name)
+            todo.extend(docs[name][1])
+            todo.extend(definitions[s] for s in docs[name][2] if s in definitions)
+    return live
+
+
+def export_closure(zig_air, argv, prefixes, air, work, roots_of, unit=None):
+    """Export with `prefixes`, adding the base name of every callee of the live functions that
+    has no AIR file yet (`STD_ROUNDS` times at most). `roots_of(docs)` gives the live roots.
+    Returns (error log or None, docs, live, prefixes)."""
+    for _ in range(STD_ROUNDS):
+        ok, docs, out = export_air(zig_air, argv, prefixes, air, work, unit)
+        if not ok:
+            return tail(out), docs, set(), prefixes
+        definitions = {s: n for n, d in docs.items() for s in d[3]}
+        live = closure(docs, roots_of(docs, definitions), definitions)
+        added = sorted({ANON.sub("", c) for n in live for c in docs[n][1]
+                        if c not in docs and not PANIC_CALLEE.match(c)} - set(prefixes))
+        if not added:
+            break
+        prefixes = prefixes + added
+    return None, docs, live, prefixes
+
+
+def libc_root(zig_file, work):
+    """The root of the executable that links the translated program with Zig's libc."""
+    root = work / "air2lean_root.zig"
+    root.write_text(f'comptime {{\n    _ = @import("{zig_file.name}");\n}}\n\npub fn main() void {{}}\n')
+    return root
+
+
+def compiler_rt_source(zig_air):
+    prefix = Path(zig_air).resolve().parent.parent
+    for candidate in (prefix / "lib" / "zig" / "compiler_rt.zig", prefix / "lib" / "compiler_rt.zig"):
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"no compiler_rt.zig below {prefix}")
+
+
+def link_census(native, root, work, symbols):
+    """Every input of the real static link except the program's own object, and the inputs
+    (archive members) among them that define each symbol: stock Zig links the executable with
+    LLD and prints the command (`--verbose-link`); `nm` lists the definitions."""
+    code, out = run([native, "build-exe", "-lc", "-OReleaseSafe", *LIBC_TARGET, "-flld", "--verbose-link",
+                     str(root), "--name", "census"], TIMEOUT["zig"], cwd=work)
+    line = next((ln for ln in out.splitlines() if ln.startswith("ld.lld ")), None)
+    if code != 0 or line is None:
+        return None, tail(out)
+    inputs = [a for a in line.split() if a.endswith((".a", ".o")) and not a.endswith("_zcu.o")]
+    nm = shutil.which("nm") or "nm"
+    found = {s: [] for s in symbols}
+    for path in inputs:
+        _, listing = run([nm, "-A", path], 120)
+        for ln in listing.splitlines():
+            parts = ln.split()
+            if len(parts) >= 3 and parts[-1] in found and parts[-2] in "TtWwVvDdBbRr":
+                member = parts[0].split(":")
+                where = Path(member[0]).name + (f"({Path(member[1]).name})" if len(member) > 2 and member[1] else "")
+                found[parts[-1]].append(where)
+    return {"inputs": sorted(Path(a).name for a in inputs),
+            "definitions": {s: sorted(set(v)) for s, v in sorted(found.items())}}, None
+
+
+def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
+    air = work / "air"
+    in_c = lambda n: n.startswith(stem + ".")  # noqa: E731
+    if not libc:
+        error, docs, live, prefixes = export_closure(
+            zig_air, ["build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing", *AIR_TARGET,
+                      str(zig_file)], [stem + "."] + STD_FILTER, air, work, lambda d, _: [n for n in d if in_c(n)])
+        if error:
+            return {"status": "failed", "files": len(docs), "log": error}, None
+        for name, d in docs.items():
+            if name not in live:
+                d[0].unlink()
+        callees = {c for name in live for c in docs[name][1]}
+        return {"status": "ok", "functions": len(live),
+                "std_functions": sorted(ANON.sub("", n) for n in live if not in_c(n)),
+                "std_prefixes": prefixes[1 + len(STD_FILTER):],
+                "unexported_callees": sorted(callees - live)}, air
+    # The program as an executable that links Zig's libc (docs/c-frontend.md §libc boundary):
+    # lib/c.zig is a module of the program's own compilation (`c.` names), compiler_rt a
+    # separately compiled library, exported as the link unit `compiler_rt`.
+    root = libc_root(zig_file, work)
+    error, docs, live, prefixes = export_closure(
+        zig_air, ["build-exe", "-fno-emit-bin", "-lc", "-OReleaseSafe", "-fno-error-tracing", *LIBC_TARGET,
+                  str(root)], [stem + "."] + STD_FILTER + LIBC_FILTER, air, work,
+        lambda d, _: [n for n in d if in_c(n)])
+    if error:
+        return {"status": "failed", "files": len(docs), "log": error}, None
+    defined = {s: n for n in live for s in docs[n][3]}
+    needed = sorted({s for n in live for s in docs[n][2]} - set(defined))
+    rt_live, rt_docs, rt_prefixes = set(), {}, []
+    if needed:
+        rt_air = work / "air_compiler_rt"
+        error, rt_docs, rt_live, rt_prefixes = export_closure(
+            zig_air, ["build-lib", "-fno-emit-bin", *COMPILER_RT_FLAGS, *LIBC_TARGET,
+                      str(compiler_rt_source(zig_air))], [RT_FILTER], rt_air, work,
+            lambda d, defs: [defs[s] for s in needed if s in defs], unit=RT_UNIT)
+        if error:
+            return {"status": "failed", "files": len(rt_docs), "log": error}, None
+    rt_defined = {s: n for n in rt_live for s in rt_docs[n][3]}
+    for name, d in docs.items():
+        if name not in live:
+            d[0].unlink()
+    for name, d in rt_docs.items():
+        if name in rt_live:
+            target = air / f"{RT_UNIT}#{d[0].name}"
+            if target.exists():
+                return {"status": "failed", "log": f"{target.name} exists twice"}, None
+            shutil.move(str(d[0]), target)
+    record = {"status": "ok", "link": "exe-lc", "functions": len(live) + len(rt_live),
+              "std_functions": sorted(ANON.sub("", n) for n in live if not in_c(n) and not n.startswith("c.")),
+              "std_prefixes": prefixes[1 + len(STD_FILTER) + len(LIBC_FILTER):],
+              "libc_functions": sorted(n for n in live if n.startswith("c.")),
+              "compiler_rt_functions": sorted(ANON.sub("", n) for n in rt_live),
+              "compiler_rt_prefixes": rt_prefixes[1:],
+              "bound": {s: (f"{RT_UNIT}#{rt_defined[s]}" if s in rt_defined else defined.get(s))
+                        for s in sorted({s for n in live for s in docs[n][2]})},
+              "unexported_callees": sorted({c for n in live for c in docs[n][1]} - live)}
+    # No other input of the real link may define a symbol bound to a translated definition
+    # in the program's compilation; a compiler_rt symbol is compiler_rt's alone.
+    census, error = link_census(native, root, work, sorted(record["bound"]))
+    if census is None:
+        return {**record, "status": "failed", "log": error}, None
+    record["link_census"] = census
+    for s, target in record["bound"].items():
+        defs = census["definitions"][s]
+        if target is None:
+            continue
+        ok = (all(d.startswith("libcompiler_rt.a") for d in defs) and len(defs) == 1) if s in rt_defined else not defs
+        if not ok:
+            return {**record, "status": "failed",
+                    "log": f"symbol '{s}' is bound to {target}, but the link also has {defs}"}, None
+    return record, air
 
 
 def stage_air2lean(binary, air):
@@ -331,7 +505,8 @@ def run_file(stem, tools, out_dir, corpus=CORPUS):
         return entry
     if expected is not None:
         stages["zig_native"] = stage_zig_native(tools["native"], zig_file, expected, work)
-    stages["air_export"], air = stage_air_export(tools["air"], zig_file, stem, work)
+    libc = bool(stages["translate_c"].get("extern_calls"))
+    stages["air_export"], air = stage_air_export(tools["air"], zig_file, stem, work, tools["native"], libc)
     if air is None:
         return entry
     stages["air2lean"] = stage_air2lean(tools["air2lean"], air)

@@ -801,9 +801,28 @@ def parseFuncWith (j : Json) (profile : BuildProfile) : Except String RawFunc :=
   for (e, k) in externs.zipIdx do
     if (externs.extract 0 k).any (·.name == e.name) then
       throw s!"{name}: extern '{e.name}' is declared twice in 'externs'"
+  let exportSymbol (sj : Json) : Except String ExportSymbol := do
+    let symbol ← (← sj.getObjVal? "name").getStr?
+    let tag (k : String) (default : String) (allowed : List String) : Except String String := do
+      let some v := optField sj k | pure default
+      let v ← v.getStr?
+      unless allowed.contains v do throw s!"{name}: export '{symbol}': unknown {k} '{v}'"
+      pure v
+    return { name := symbol,
+             linkage := ← tag "linkage" "strong" ["strong", "weak", "internal", "link_once"],
+             visibility := ← tag "visibility" "default" ["default", "hidden", "protected"] }
   let exportDecl ← match optField j "export" with
-    | some ej => pure (some { name := ← (← ej.getObjVal? "name").getStr?,
-                              cc := ← (← ej.getObjVal? "cc").getStr? : ExportDecl })
+    | some ej => do
+      let primary ← exportSymbol ej
+      let aliases ← match optField ej "aliases" with
+        | some a => (← a.getArr?).mapM exportSymbol
+        | none => pure #[]
+      let decl : ExportDecl := { name := primary.name, cc := ← (← ej.getObjVal? "cc").getStr?,
+                                 linkage := primary.linkage, visibility := primary.visibility, aliases }
+      for (s, k) in decl.symbols.zipIdx do
+        if (decl.symbols.extract 0 k).any (·.name == s.name) then
+          throw s!"{name}: export '{s.name}' is listed twice"
+      pure (some decl)
     | none => pure none
   return {
     schema

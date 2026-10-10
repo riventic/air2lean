@@ -323,7 +323,8 @@ def collectProgram (units : Array FileResult) (initial : Log)
     log := log.add { code := .programFailure, phase := .program, category := .validationFailure,
                      message, prerequisites := #["structurally_valid_selected_functions"] }
   | .ok (resolved, unbound) =>
-    -- `resolved` is `normalized` rewritten, in the same order.
+    -- `resolved` is `normalized` rewritten, in the same order, then the generated C ABI
+    -- conversions, each a unit of its own.
     let mut next := 0
     let mut updated := #[]
     for u in units do
@@ -331,6 +332,9 @@ def collectProgram (units : Array FileResult) (initial : Log)
         updated := updated.push { u with normalized := resolved[next]? }
         next := next + 1
       else updated := updated.push u
+    for thunk in resolved.extract next resolved.size do
+      updated := updated.push { file := "", function := some thunk.name, normalized := some thunk,
+                                structureValid := true, localPassed := true }
     units := updated
     for (caller, message) in unbound do
       let file := ((units.find? (·.function == some caller)).map (·.file)).getD ""
@@ -535,15 +539,30 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     | .ok contents =>
       files := files.push path.toString
       texts := texts.push contents
+  -- Link-unit identities are qualified first (`docs/air-json.md` §Link units).
+  match Anon.qualifyLinkUnits texts with
+  | .ok qualified => texts := qualified
+  | .error message =>
+    log := log.add { code := .programFailure, phase := .program, category := .validationFailure, message }
+    texts := #[]
+    files := #[]
   let renamed := Anon.renumberAll texts
-  let mut firstProfile : Option BuildProfile := none
+  -- The first profile of the program and of each link unit (`docs/air-json.md` §Link units).
+  let mut baselines : Array BuildProfile := #[]
   for (file, contents) in files.zip renamed do
     let result := inspect file contents log device
     log := result.2
     if let some profile := result.1.decodedProfile then
-      let baseline := firstProfile.getD profile
-      firstProfile := some baseline
-      for message in BuildProfile.programViolations #[baseline, profile] a.profile a.allowUnqualified do
+      let own := baselines.find? fun (b : BuildProfile) => b.linkUnit == profile.linkUnit
+      let baseline := ((baselines.find? fun (b : BuildProfile) => b.linkUnit.isNone) <|> baselines[0]?).getD profile
+      let mut messages := BuildProfile.programViolations #[baseline, profile] a.profile a.allowUnqualified
+      -- Across units the build mode is not compared; within one it must agree.
+      if let some own := own then
+        if baseline.linkUnit != profile.linkUnit && own.buildMode != profile.buildMode then
+          messages := messages.push s!"mixed AIR profiles: field 'build_mode' differs within link \
+            unit '{profile.linkUnit.getD "program"}' ({own.buildMode} vs {profile.buildMode})"
+      if own.isNone then baselines := baselines.push profile
+      for message in messages do
         log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))

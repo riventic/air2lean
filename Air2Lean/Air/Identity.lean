@@ -154,6 +154,36 @@ def rewrite (j : Json) : Except String (Json × Array Record) := do
     mapArray j "body" (refs legacy)
   go.run #[]
 
+/-- `j` with `f` applied to the module of every identity that `rewrite` reads: the file's own
+`module`, a named type's or global's `module`, and a function reference's `module` and
+`comptime_fn_module`. -/
+partial def mapModulesM {m : Type → Type} [Monad m] (f : String → m String) (j : Json) : m Json := do
+  let setModule (j : Json) (k : String) : m Json := do
+    let .ok (.str module) := j.getObjVal? k | return j
+    pure (j.setObjVal! k (.str (← f module)))
+  let rec refs (j : Json) : m Json := do
+    match j with
+    | .arr vs => .arr <$> vs.mapM refs
+    | .obj fields =>
+      let mut out : Json := Json.mkObj []
+      for (k, v) in fields.toArray do
+        out := out.setObjVal! k (← refs v)
+      if (out.getObjVal? "func").toOption.isSome then
+        out ← setModule out "module"
+        out ← setModule out "comptime_fn_module"
+      pure out
+    | j => pure j
+  let mapArray (j : Json) (k : String) (g : Json → m Json) : m Json := do
+    let .ok (.arr vs) := j.getObjVal? k | return j
+    pure (j.setObjVal! k (.arr (← vs.mapM g)))
+  let mut j ← setModule j "module"
+  j ← mapArray j "types" fun t =>
+    match (t.getObjValAs? String "k").toOption with
+    | some "struct" | some "enum" | some "union" => setModule t "module"
+    | _ => pure t
+  j ← mapArray j "globals" fun g => do refs (← setModule g "module")
+  mapArray j "body" refs
+
 /-- The (module, name) of a record, for messages. -/
 def Record.describe (r : Record) : String :=
   let suffix := match r.instanceKey with

@@ -297,6 +297,9 @@ private def run (args : List String) : IO UInt32 := do
       times := { times with read := (← IO.monoNanosNow) - readStart }
       -- Preserve the historical <full name>.json emission order even when storage
       -- uses hashes or project staging names. Cache before anonymous renumbering.
+      let texts ← match Anon.qualifyLinkUnits texts with
+        | .ok texts => pure texts
+        | .error e => throw (IO.userError e)
       let ((originalNames, rewrittenTexts), renumberNs) ← timed fun _ => Anon.renumberAllWithNames texts
       times := { times with renumber := renumberNs }
       let mut profiles : Array BuildProfile := #[]
@@ -329,7 +332,7 @@ private def run (args : List String) : IO UInt32 := do
         -- A template lists the extern calls that bind to no definition as model symbols.
         if a.registryTemplate then return (← resolveExternsCollect funcs models).1
         let resolved ← resolveExterns funcs models
-        checkProgram resolved models profiles[0]?
+        checkProgram resolved models (profiles.find? (·.linkUnit.isNone) <|> profiles[0]?)
         if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
         return resolved
         : Except String (Array Func))
@@ -354,9 +357,12 @@ private def run (args : List String) : IO UInt32 := do
             -- Reads and every validation guard retain their original path order.
             -- Only successful emission depends on identity rather than storage keys. With
             -- content-addressed instances (docs/air-json.md §Instances), the renamed identity:
-            -- the compiler's instance numbers must not order the definitions.
+            -- the compiler's instance numbers must not order the definitions. The generated
+            -- C ABI conversions follow the inputs (`resolveExterns`).
             let keyed := funcs.any (·.identities.any (·.instanceKey.isSome))
-            let emissionKeys := (if keyed then funcs.map (·.name) else originalNames).map (· ++ ".json")
+            let names := if keyed then funcs.map (·.name) else
+              originalNames ++ (funcs.extract originalNames.size funcs.size).map (·.name)
+            let emissionKeys := names.map (· ++ ".json")
             let emissionFuncs := ((emissionKeys.zip funcs).qsort
               (fun a b => decide (a.1 < b.1))).map (·.2)
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"

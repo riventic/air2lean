@@ -171,8 +171,13 @@ def topKeys : List Key :=
    opt "externs" .arr, req "params" .arr, req "ret" .nat, req "body" .arr, opt "globals" .arr,
    req "types" .arr]
 
-/-- An `export fn`'s linker symbol and calling convention (`export`, G1). -/
-def exportKeys : List Key := [req "name" .str, req "cc" .str]
+/-- An `export fn`'s or `@export`'s linker symbol, calling convention, linkage, visibility and
+further symbols (`export`, G1; `Json.lean` checks the linkage and visibility values). -/
+def exportKeys : List Key :=
+  [req "name" .str, req "cc" .str, opt "linkage" .str, opt "visibility" .str, opt "aliases" .arr]
+
+/-- One further symbol of an export (`export.aliases`). -/
+def exportAliasKeys : List Key := [req "name" .str, opt "linkage" .str, opt "visibility" .str]
 
 /-- One extern function the body calls (an `externs` entry, G1). -/
 def externKeys : List Key :=
@@ -355,7 +360,10 @@ def checkType (path : String) (j : Json) : Except String Unit := do
 def validate (j : Json) : Except String Unit := do
   checkKeys "AIR file" topKeys j
   if let some src := child? j "src" then checkKeys "AIR file src" srcKeys src
-  if let some e := child? j "export" then checkKeys "AIR file export" exportKeys e
+  if let some e := child? j "export" then
+    checkKeys "AIR file export" exportKeys e
+    for (a, i) in (← items "AIR file export" e "aliases").zipIdx do
+      checkKeys s!"export.aliases[{i}]" exportAliasKeys a
   for (e, i) in (← items "AIR file" j "externs").zipIdx do
     checkKeys s!"externs[{i}]" externKeys e
     for p in (← items s!"externs[{i}]" e "params") do

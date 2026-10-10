@@ -310,8 +310,27 @@ const Compat = struct {
     /// A global's type, flags and initial value. 0.16.0 keeps them in `Nav.resolved`; before
     /// 0.16.0, `Nav.status` has them, and the value of a `var` is a `variable` key that holds the
     /// initial value.
-    fn navInfo(zcu: *Zcu, nav_index: InternPool.Nav.Index) NavInfo {
+    ///
+    /// From 0.16.0, taking a global's address resolves only its type; Sema queues its value
+    /// (`ensureNavValAnalysisQueued`) for later in the same update. A body written before then
+    /// would lack the initial value, so this resolves it now, as `Sema.ensureNavResolved(.fully)`
+    /// would: the same analysis, only earlier. A failure is already a registered compile error;
+    /// the value then stays absent and air2lean rejects the global.
+    fn navInfo(pt: Zcu.PerThread, nav_index: InternPool.Nav.Index) NavInfo {
+        const zcu = pt.zcu;
         const ip = &zcu.intern_pool;
+        if (v16) {
+            if (ip.getNav(nav_index).resolved) |r| if (r.value == .none and !r.is_extern_decl) {
+                const unit: InternPool.AnalUnit = .wrap(.{ .nav_val = nav_index });
+                if (!zcu.analysis_in_progress.contains(unit)) {
+                    const reason: Zcu.DependencyReason = .{
+                        .src = zcu.navSrcLoc(nav_index),
+                        .type_layout_reason = undefined,
+                    };
+                    pt.ensureNavValUpToDate(nav_index, &reason) catch {};
+                }
+            };
+        }
         const nav = ip.getNav(nav_index);
         if (v16) {
             const r = nav.resolved.?;
@@ -538,12 +557,176 @@ fn openOwnedOutput(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8, fqn: []
     };
 }
 
+/// The symbols a function defines (0.16.0 and later). Both `export fn` and `@export` add an
+/// entry to the compilation's export tables (`Zcu.single_exports`, `Zcu.multi_exports`). An
+/// `@export` is registered when the analysis of the `comptime` block that makes it completes,
+/// which can be after the exported function's body was analysed and dumped (compiler_rt's
+/// `clear_cache`). So every dump records the symbols it reported, and `checkExports` (called
+/// once the compilation's analysis is complete) rewrites the `export` of every dumped function
+/// whose symbols have changed since; if it cannot, the compilation fails. Otherwise a file
+/// would miss a definition, and a call could bind to another one (docs/air-json.md §Extern
+/// calls).
+const Exports = struct {
+    const Key = struct { zcu: usize, nav: u32 };
+    const Dumped = struct { signature: u64, cc: []const u8, fqn: []const u8 };
+
+    /// Not `page_allocator`: one page per function name.
+    const allocator = std.heap.smp_allocator;
+    var lock: std.atomic.Mutex = .unlocked;
+    var dumped: std.AutoHashMapUnmanaged(Key, Dumped) = .empty;
+
+    fn acquire() void {
+        while (!lock.tryLock()) std.atomic.spinLoopHint();
+    }
+
+    /// Every export of `nav`, one per symbol name, sorted by name.
+    fn ofNav(zcu: *Zcu, gpa: Allocator, nav: InternPool.Nav.Index) Allocator.Error![]Zcu.Export.Options {
+        const ip = &zcu.intern_pool;
+        var list: std.ArrayListUnmanaged(Zcu.Export.Options) = .empty;
+        for (zcu.single_exports.values()) |index| try add(&list, gpa, ip, nav, index.ptr(zcu));
+        for (zcu.multi_exports.values()) |info| {
+            for (zcu.all_exports.items[info.index..][0..info.len]) |*e| try add(&list, gpa, ip, nav, e);
+        }
+        return list.items;
+    }
+
+    /// Insert `e`'s options into the sorted `list` if it exports `nav` under a new name.
+    fn add(list: *std.ArrayListUnmanaged(Zcu.Export.Options), gpa: Allocator, ip: *const InternPool, nav: InternPool.Nav.Index, e: *const Zcu.Export) Allocator.Error!void {
+        if (e.exported != .nav or e.exported.nav != nav) return;
+        const name = e.opts.name.toSlice(ip);
+        var at: usize = 0;
+        while (at < list.items.len) : (at += 1) {
+            switch (std.mem.order(u8, list.items[at].name.toSlice(ip), name)) {
+                .lt => {},
+                .eq => return,
+                .gt => break,
+            }
+        }
+        try list.insert(gpa, at, e.opts);
+    }
+
+    /// A hash of every symbol's name, linkage and visibility, in order.
+    fn signature(ip: *const InternPool, symbols: []const Zcu.Export.Options) u64 {
+        var h = std.hash.Wyhash.init(0);
+        for (symbols) |e| {
+            h.update(e.name.toSlice(ip));
+            h.update(&.{ 0, @intFromEnum(e.linkage), @intFromEnum(e.visibility) });
+        }
+        return h.final();
+    }
+
+    fn recordDumped(zcu: *Zcu, nav: InternPool.Nav.Index, sig: u64, cc: []const u8, fqn: []const u8) void {
+        acquire();
+        defer lock.unlock();
+        const a = allocator;
+        const owned = a.dupe(u8, fqn) catch fatalOom();
+        const gop = dumped.getOrPut(a, .{ .zcu = @intFromPtr(zcu), .nav = @intFromEnum(nav) }) catch fatalOom();
+        if (gop.found_existing) a.free(gop.value_ptr.fqn);
+        gop.value_ptr.* = .{ .signature = sig, .cc = cc, .fqn = owned };
+    }
+
+    fn fatalOom() noreturn {
+        std.log.err("air2lean: out of memory while recording an exported function", .{});
+        std.process.exit(1);
+    }
+
+    /// One symbol as a JSON object (`W.writeExportSymbol`'s fields).
+    fn symbolValue(a: Allocator, ip: *const InternPool, s: Zcu.Export.Options) !std.json.ObjectMap {
+        var o: std.json.ObjectMap = .empty;
+        try o.put(a, "name", .{ .string = s.name.toSlice(ip) });
+        try o.put(a, "linkage", .{ .string = @tagName(s.linkage) });
+        try o.put(a, "visibility", .{ .string = @tagName(s.visibility) });
+        return o;
+    }
+
+    /// Replace the `export` of `d`'s dumped file with `symbols` (none: remove it).
+    fn rewrite(pt: Zcu.PerThread, a: Allocator, d: Dumped, symbols: []const Zcu.Export.Options) !void {
+        const ip = &pt.zcu.intern_pool;
+        const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return error.NoOutputDirectory;
+        var dir = try Compat.openDir(pt, dir_path);
+        defer Compat.closeDir(pt, &dir);
+        var name_buf: [output_name_capacity]u8 = undefined;
+        const name = outputFileName(d.fqn, &name_buf);
+        if ((try Compat.statPath(pt, dir, name)).kind != .file) return error.ExistingOutputNotRegular;
+        const file = try Compat.openExistingFile(pt, dir, name);
+        defer Compat.closeFile(pt, file);
+        const stat = try Compat.statFile(pt, file);
+        const bytes = try a.alloc(u8, @intCast(stat.size));
+        if (try Compat.readFile(pt, file, bytes) != bytes.len) return error.ExistingOutputChanged;
+        var root = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{ .duplicate_field_behavior = .@"error" });
+        if (root != .object) return error.OutputIdentityCollision;
+        const identity = root.object.get("name") orelse return error.OutputIdentityCollision;
+        if (identity != .string or !std.mem.eql(u8, identity.string, d.fqn)) return error.OutputIdentityCollision;
+        if (symbols.len == 0) {
+            _ = root.object.orderedRemove("export");
+        } else {
+            var e = try symbolValue(a, ip, symbols[0]);
+            try e.put(a, "cc", .{ .string = d.cc });
+            if (symbols.len > 1) {
+                var aliases: std.json.Array = .init(a);
+                for (symbols[1..]) |s| try aliases.append(.{ .object = try symbolValue(a, ip, s) });
+                try e.put(a, "aliases", .{ .array = aliases });
+            }
+            try root.object.put(a, "export", .{ .object = e });
+        }
+        const text = try std.json.Stringify.valueAlloc(a, root, .{ .whitespace = .indent_1 });
+        try Compat.truncateFile(pt, file);
+        var sink: Compat.Sink = undefined;
+        sink.init(pt, file);
+        try sink.fw.interface.writeAll(text);
+        try sink.flush();
+    }
+};
+
+/// Called once a compilation's analysis is complete (after `processExports`, 0.16.0 and later):
+/// every function this compilation dumped gets the symbols it is exported with now
+/// (`Exports`).
+pub fn checkExports(pt: Zcu.PerThread) void {
+    if (Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") == null) return;
+    const zcu = pt.zcu;
+    const ip = &zcu.intern_pool;
+    var arena = std.heap.ArenaAllocator.init(zcu.gpa);
+    defer arena.deinit();
+    Exports.acquire();
+    defer Exports.lock.unlock();
+    var it = Exports.dumped.iterator();
+    while (it.next()) |entry| {
+        if (entry.key_ptr.zcu != @intFromPtr(zcu)) continue;
+        const nav: InternPool.Nav.Index = @enumFromInt(entry.key_ptr.nav);
+        const now = Exports.ofNav(zcu, arena.allocator(), nav) catch Exports.fatalOom();
+        if (Exports.signature(ip, now) == entry.value_ptr.signature) continue;
+        Exports.rewrite(pt, arena.allocator(), entry.value_ptr.*, now) catch |err| {
+            std.log.err("air2lean: '{s}' was dumped with other exported symbols than the compilation exports it with " ++
+                "now, and its file cannot be updated: {s} (docs/air-json.md §Extern calls)", .{ ip.getNav(nav).fqn.toSlice(ip), @errorName(err) });
+            std.process.exit(1);
+        };
+    }
+    // The entries of this compilation are done: a later compilation can reuse its address.
+    var stale: std.ArrayListUnmanaged(Exports.Key) = .empty;
+    var keys = Exports.dumped.keyIterator();
+    while (keys.next()) |k| {
+        if (k.zcu == @intFromPtr(zcu)) stale.append(arena.allocator(), k.*) catch Exports.fatalOom();
+    }
+    for (stale.items) |k| {
+        if (Exports.dumped.fetchRemove(k)) |kv| Exports.allocator.free(kv.value.fqn);
+    }
+}
+
 pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Index) void {
     const dir_path = Compat.getEnv(pt, "ZIG_AIR_JSON_DIR") orelse return;
     const zcu = pt.zcu;
     const ip = &zcu.intern_pool;
     const func = zcu.funcInfo(func_index);
     const fqn = ip.getNav(func.owner_nav).fqn.toSlice(ip);
+
+    if (Compat.getEnv(pt, "ZIG_AIR_JSON_UNIT")) |unit| {
+        var valid = unit.len > 0;
+        for (unit) |byte| valid = valid and (std.ascii.isAlphanumeric(byte) or byte == '_');
+        if (!valid) {
+            std.log.err("air2lean: ZIG_AIR_JSON_UNIT must be a nonempty [A-Za-z0-9_] label, not '{s}'", .{unit});
+            std.process.exit(1);
+        }
+    }
 
     if (Compat.getEnv(pt, "ZIG_AIR_JSON_FILTER")) |prefixes| {
         var it = std.mem.splitScalar(u8, prefixes, ',');
@@ -659,6 +842,12 @@ const W = struct {
         try w.j.write(mod.error_tracing);
         try w.field("export_stage");
         try w.j.write("analyzed-air");
+        // A separately compiled library linked into the program (compiler_rt): its label, from
+        // `ZIG_AIR_JSON_UNIT` (docs/air-json.md §Link units).
+        if (Compat.getEnv(w.pt, "ZIG_AIR_JSON_UNIT")) |unit| {
+            try w.field("link_unit");
+            try w.j.write(unit);
+        }
         try w.j.endObject();
     }
 
@@ -707,9 +896,30 @@ const W = struct {
         try w.j.endArray();
         try w.field("ret");
         try w.writeTypeRef(fn_ty.fnReturnType(zcu));
-        // An `export fn`: the linker symbol it defines, which an extern call elsewhere in the
-        // program can resolve to (docs/air-json.md §Extern calls).
-        if (w.exportedName(owner_nav)) |symbol| {
+        // The linker symbols the function defines (`export fn`, and from 0.16.0 `@export`), which
+        // an extern call elsewhere in the program can resolve to (docs/air-json.md §Extern calls).
+        if (Compat.v16) {
+            const symbols = try Exports.ofNav(zcu, w.gpa, owner_nav);
+            Exports.recordDumped(zcu, owner_nav, Exports.signature(ip, symbols), @tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc), fqn);
+            if (symbols.len > 0) {
+                try w.field("export");
+                try w.j.beginObject();
+                try w.writeExportSymbol(symbols[0]);
+                try w.field("cc");
+                try w.j.write(@tagName(ip.indexToKey(fn_ty.toIntern()).func_type.cc));
+                if (symbols.len > 1) {
+                    try w.field("aliases");
+                    try w.j.beginArray();
+                    for (symbols[1..]) |s| {
+                        try w.j.beginObject();
+                        try w.writeExportSymbol(s);
+                        try w.j.endObject();
+                    }
+                    try w.j.endArray();
+                }
+                try w.j.endObject();
+            }
+        } else if (w.exportedName(owner_nav)) |symbol| {
             try w.field("export");
             try w.j.beginObject();
             try w.field("name");
@@ -745,9 +955,20 @@ const W = struct {
         try w.j.endObject();
     }
 
-    /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
-    /// symbol `f`), else null. `@export` aliases are not reported: an extern call to one stays
-    /// unbound, which the translator rejects.
+    /// One exported symbol's `name`, `linkage` and `visibility` fields.
+    fn writeExportSymbol(w: *W, s: Zcu.Export.Options) Error!void {
+        const ip = &w.pt.zcu.intern_pool;
+        try w.field("name");
+        try w.j.write(s.name.toSlice(ip));
+        try w.field("linkage");
+        try w.j.write(@tagName(s.linkage));
+        try w.field("visibility");
+        try w.j.write(@tagName(s.visibility));
+    }
+
+    /// 0.14.1 and 0.15.2: the symbol of a function declared with the `export` keyword (`export
+    /// fn f` defines the symbol `f`), else null. Their `@export` aliases are not reported: an
+    /// extern call to one stays unbound, which the translator rejects.
     fn exportedName(w: *W, nav_index: InternPool.Nav.Index) ?[]const u8 {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
@@ -1532,7 +1753,7 @@ const W = struct {
                     if (!sizedLayout(zcu, child)) return .{ .unsupported = "payload_layout" };
                     const root_ty = switch (g) {
                         .nav => |nav| blk: {
-                            const info = Compat.navInfo(zcu, nav);
+                            const info = Compat.navInfo(w.pt, nav);
                             if (info.init == null or info.is_extern or info.is_threadlocal)
                                 return .{ .unsupported = "payload_unbacked" };
                             break :blk Type.fromInterned(info.ty);
@@ -1668,7 +1889,7 @@ const W = struct {
         try w.j.beginObject();
         switch (g) {
             .nav => |nav| {
-                const info = Compat.navInfo(zcu, nav);
+                const info = Compat.navInfo(w.pt, nav);
                 const name = ip.getNav(nav).fqn.toSlice(ip);
                 const module = Identity.navModule(zcu, nav);
                 Identity.claim(zcu, .global, module, name, @intFromEnum(nav));

@@ -222,7 +222,11 @@ def renumberAnon (texts : Array String) (marker : String := "__anon_") : Array S
   let keyed := if marker == "__anon_" then programInstanceKeys parsed else {}
   compressParsed texts (renumberParsed texts parsed marker keyed)
 
-private def renumberAllParsed (texts : Array String)
+/-- The `profile.link_unit` of a function's JSON, if any (`docs/air-json.md` §Link units). -/
+def linkUnit? (j : Lean.Json) : Option String :=
+  ((j.getObjVal? "profile").bind (·.getObjValAs? String "link_unit")).toOption
+
+private def renumberCompilation (texts : Array String)
     (initialParsed : Array (Option Lean.Json)) : Array String := Id.run do
   let keyed := programInstanceKeys initialParsed
   let mut parsed := initialParsed
@@ -239,6 +243,22 @@ private def renumberAllParsed (texts : Array String)
         if c then (j.map (·.compress)).getD text else text
     first := false
   return current
+
+/-- The numbers after a marker are the compiler's, so each compilation (the program, and each
+link unit, `linkUnit?`) is renumbered on its own; module keys (`qualifyLinkUnits`) tell the
+same new name in two compilations apart. -/
+private def renumberAllParsed (texts : Array String)
+    (parsed : Array (Option Lean.Json)) : Array String := Id.run do
+  let units := parsed.map (·.bind linkUnit?)
+  let labels := units.foldl (fun acc u => if acc.contains u then acc else acc.push u) #[]
+  if labels.size ≤ 1 then return renumberCompilation texts parsed
+  let mut out := texts
+  for label in labels do
+    let idx := (Array.range texts.size).filter (units[·]! == label)
+    let renamed := renumberCompilation (idx.map (texts[·]!)) (idx.map (parsed[·]!))
+    for (i, t) in idx.zip renamed do
+      out := out.set! i t
+  return out
 
 /-- Each text parsed, with 0.17.0 instance names in the older spelling (`funcInstances017`);
 a text with a `__func_` marker is re-serialized so the marker scan reads the same names. -/
@@ -257,6 +277,36 @@ def renumberAllWithNames (texts : Array String) : Array String × Array String :
   let (texts, parsed) := parseInstances texts
   let names := parsed.map fun j => (j.map Identity.fileKey).getD ""
   (names, renumberAllParsed texts parsed)
+
+/-- A separately compiled library linked into the program (a link unit) has its own `root`,
+`std` and every other module, compiled with its own build mode: its `std.mem.len` is not the
+program's. So every module of a link unit's file (`Identity.mapModulesM`) is qualified with the
+unit's label, `<unit>#<module>`, before anything else reads it: its identities get keys of their
+own (`Identity.key`), and no std model or special std type matches them. A link unit needs
+module identity, and no module of the program's own functions may start with `<unit>#` for a
+unit of the input. Extern calls cross units by linker symbol only (`docs/air-json.md` §Link
+units). -/
+def qualifyLinkUnits (texts : Array String) : Except String (Array String) := do
+  let parsed := texts.map fun text => (StrictJson.parse text).toOption
+  let units := parsed.filterMap fun j => j.bind linkUnit?
+  if units.isEmpty then return texts
+  let mut out := #[]
+  for (text, j) in texts.zip parsed do
+    let some j := j | out := out.push text; continue
+    match linkUnit? j with
+    | some unit =>
+      if (j.getObjVal? "module").toOption.isNone then
+        throw s!"{fnName text}: link unit '{unit}' needs module identity (an export without a \
+          top-level module cannot be a link unit)"
+      out := out.push (Id.run (Identity.mapModulesM (m := Id) (s!"{unit}#" ++ ·) j)).compress
+    | none =>
+      let check (module : String) : Except String String := do
+        if let some unit := units.find? (fun u => module.startsWith s!"{u}#") then
+          throw s!"{fnName text}: the module '{module}' has the form of link unit '{unit}'s"
+        pure module
+      discard <| Identity.mapModulesM check j
+      out := out.push text
+  return out
 
 /-- `renumberAnon` for the generic instances, then for each kind of type without a name. -/
 def renumberAll (texts : Array String) : Array String :=

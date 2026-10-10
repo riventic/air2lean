@@ -42,7 +42,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | Field | Meaning |
 |---|---|
 | `schema` | Supported versions are 1–12. Schema 12 requires complete profile metadata and is decoded against the [schema table](#schema-table) (deny by default). Schemas 1–11 select the named `legacy-abi64-le` assumptions, which the translator accepts only with an explicit `--profile legacy-abi64-le`. Unsupported/future schemas fail closed. |
-| `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program. See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
+| `profile` | Mandatory schema-12 target/build facts from the function's owning module and compiler configuration. All facts must agree across a program, except the build mode of a link unit (§Link units). See [Target and build profiles](profiles.md) for the exact contract, accepted model ABI scopes and numerical-model disclosure. Metadata is not a shipping-binary correspondence theorem. |
 | `target_endian` | Target byte order: `"little"` or `"big"` (additive schema 11 metadata). The translator accepts `"big"` only with a schema-12 big-endian profile of the same byte order (`docs/profiles.md` §Byte order) and rejects any other non-little-endian value. Legacy schema 1–11 files without this field are accepted, behind `--profile legacy-abi64-le`, under the named little-endian reference-target assumption; their target has not been verified. Schema 12 requires the field and `profile.endian`. |
 | `name` | the function's fully qualified name: its path inside its module (`basic.scale`) |
 | `module` | the function's module (§Identity): `root` for the main module, `std` for the standard library, else the module's name. Additive (no schema change); older exports omit it. |
@@ -50,7 +50,7 @@ The patched compiler writes one file per function. Safe short names use `$ZIG_AI
 | `instance_key` | a generic instance only (`name` is `<generic>__anon_<n>`): its content-addressed key, 64 hex digits (§Instances). Additive; older exports omit it, and so does an instance whose comptime arguments have no stable identity. |
 | `params` | type ID of each runtime parameter, in order |
 | `ret` | type ID of the return type |
-| `export` | `{name, cc}`: present only for a function declared with the `export` keyword. `name` is the linker symbol it defines, `cc` its calling convention's tag (`std.builtin.CallingConvention`, e.g. `x86_64_sysv`, `aarch64_aapcs_darwin`). `@export` aliases are not reported (§Extern calls). Additive; AIR golden comparison (`scripts/normalize-air.py`) ignores it. |
+| `export` | `{name, linkage, visibility, cc, aliases}`: present only for a function that defines a linker symbol. `name` is the symbol (the first by name if there are several), `linkage` its `std.builtin.GlobalLinkage` tag (`strong`, `weak`, `internal`, `link_once`), `visibility` its `std.builtin.SymbolVisibility` tag, `cc` the function's calling convention tag (`std.builtin.CallingConvention`, e.g. `x86_64_sysv`, `aarch64_aapcs_darwin`), `aliases` the further symbols `[{name, linkage, visibility}]` (missing if there is one). From Zig 0.16.0 the exporter reports every export of the function, by the `export` keyword or by `@export` (Zig's libc and compiler_rt export with `@export`, weak and hidden); 0.14.1 and 0.15.2 exports report only the `export` keyword, as `{name, cc}`, which the translator reads as strong and default (§Extern calls). Additive; AIR golden comparison (`scripts/normalize-air.py`) ignores it. |
 | `body` | main body (AIR `getMainBody`) |
 | `externs` | the extern functions the body calls (§Extern calls), one entry per symbol, in first-call order. Missing if the body calls none. |
 | `globals` | the globals that pointer constants point into (§Global). A global ID is an index into this array. Missing if the function has no pointer constant (schema 6). |
@@ -77,7 +77,10 @@ contract in prose.
 
 | Object | Required keys | Optional keys |
 |---|---|---|
-| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key` |
+| file | `schema`, `zig_version`, `target_endian`, `profile`, `name`, `params`, `ret`, `body`, `types` | `globals`, `module`¹, `src`, `instance_key`, `export`, `externs` |
+| `export` | `name`, `cc` | `linkage`, `visibility`, `aliases` |
+| `export.aliases` entry | `name` | `linkage`, `visibility` |
+| `externs` entry | `name`, `library`, `cc`, `params`, `ret`, `varargs` | — |
 | `profile` | all fields of the example above ([profiles](profiles.md)) | — |
 | every type | `k` | `abi_size`, `abi_align` |
 | `int` / `float` | `signed`, `bits` / `bits` | — |
@@ -263,15 +266,62 @@ function name has. Before the whole-program checks it binds each extern call
    (`docs/external-models.md` §Extern functions), when the AIR set does not define the symbol
    (that combination is rejected). The call stays a model call. A registry entry
    for the Zig declaration's name does not bind the extern call.
-2. **Translated definition.** Else the one function of the AIR set whose `export.name` is the
-   symbol, with the declared `cc`. The call becomes a direct call of that definition, and its
-   argument and result types are checked against the definition's parameters and return type
-   like any direct call's. This is the static linker's rule for a program linked as one image
-   with that strong definition (for example musl translated through the same route). A call
-   to a symbol that several functions of the AIR set export is rejected.
+2. **Translated definition.** Else the one function of the AIR set that exports the symbol
+   (`export.name` or one of its `aliases`, with any `linkage` but `internal`, which defines no
+   symbol another object can link to), with the declared `cc`. The call becomes a direct call
+   of that definition, through a C ABI conversion if the declared types differ (below), and
+   its argument and result types are checked against the definition's parameters and return
+   type like any direct call's. A call to a symbol that several functions of the AIR set
+   export is rejected (`CALLEE_AMBIGUOUS`) whatever their linkage: the translator never lets a
+   strong definition override a weak one. The AIR set is not the whole link, so the binding
+   is the static linker's only if no other input of the link defines the symbol; Zig rejects
+   two exports of one symbol in one compilation ("exported symbol collision"), and for the
+   other inputs (libc archive, compiler_rt) the C front end records a link census
+   (`docs/c-frontend.md` §libc boundary).
 3. Otherwise the program is rejected with `CALLEE_EXTERN_UNBOUND`, naming the symbol (and its
    library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
    outside the subset. Each call's argument count and result type must be the entry's.
+
+**Completeness of `export`.** An `@export` is registered when the analysis of the `comptime`
+block that makes it completes, which can be after the exported function was dumped (compiler_rt's
+`clear_cache` is). The exporter therefore checks every dumped function again once the
+compilation's analysis is complete (a second hook after `processExports`, Zig 0.16.0 and
+0.17.0) and rewrites the `export` of a file whose symbols have changed since; if it cannot,
+the compilation fails with status 1.
+
+**C ABI conversion.** An extern declaration and its definition are two C declarations of one
+symbol and may name different Zig types: translate-c declares
+`memset(?*anyopaque, c_int, usize) ?*anyopaque` from the musl header, compiler_rt defines
+`memset(?[*]u8, u8, usize) ?[*]u8`. The call passes machine words, so a binding whose types
+differ goes through a generated function `abi:<symbol>:<caller>` with the declared signature,
+which converts each argument, calls the definition and converts the result back
+(`Air2Lean/Check.lean` `abiThunk`, x86_64 and aarch64 only). It is made of ordinary AIR
+instructions and checked like any function. Only value-preserving conversions are admitted:
+a pointer or optional pointer to another (the same address; `null` reaching a pointer that
+cannot be `null` is `unreachable`, since the definition may assume it is not), and an integer
+to an integer (the same value; a value outside the receiving type is `unreachable`, since the
+C calling convention extends a narrow argument by its declared signedness, which the
+definition may rely on). A pointer that the definition declares more aligned than the
+declaration, a slice, a volatile, bit- or function pointer, and every other type difference
+are rejected (`CALLEE_EXTERN_UNBOUND`, "is declared with another signature"). No input
+function may be named with the `abi:` prefix. `noalias` parameters are not modelled (neither
+for a direct call): a call that passes overlapping regions to `memcpy` gets a definite result
+in the model where the compiled program has undefined behaviour.
+
+## Link units
+
+Zig links some libraries that it compiles separately: for an executable, compiler_rt
+(`memcpy`, `memset`, `memcmp`, `strlen`) is its own compilation, with its own root module and
+build mode (`ReleaseFast` under a `ReleaseSafe` program). Its AIR is exported by a separate
+compiler run with `ZIG_AIR_JSON_UNIT=<label>` (`[A-Za-z0-9_]+`), which writes
+`profile.link_unit`, and translated together with the program's AIR. Such a library has its
+own instances of everything, std included (its `mem.len` is compiled `ReleaseFast`), so the
+translator first qualifies every identity of a link unit's file, its name, the functions it
+names, its types and its globals, as `<label>#<name>` (`Air2Lean/Air/Anon.lean`
+`qualifyLinkUnits`), and rejects a program identity that starts with `<label>#`. Calls cross
+from the program into a link unit only by linker symbol (§Extern calls). A link unit's
+profiles agree exactly among themselves and with the program's in everything but
+`build_mode` ([profiles.md](profiles.md)).
 
 ## Global
 
@@ -283,7 +333,7 @@ Schema 6. One entry per global that a pointer constant or a `runtime_nav_ptr` po
 | `ty` | type ID of the value |
 | `const` | `false` only for a `var` |
 | `threadlocal`, `extern` | a named global only. A `threadlocal` global is also listed when a `runtime_nav_ptr` names it. |
-| `init` | the initial value, a Ref. Missing if Sema has not resolved it when the file is written (`Compat.navInfo`), and for an `extern`. |
+| `init` | the initial value, a Ref. Missing for an `extern`, and if the value cannot be resolved when the file is written: from 0.16.0 `Compat.navInfo` resolves a pending value first (Sema resolves only the type of a global whose address a function takes), so it is missing only when that analysis fails or is already in progress; before 0.16.0, if Sema has not resolved it yet. |
 
 `runtime_nav_ptr` (0.15.2+, `ty_nav`) has no `args`; `global` is the global's entry in
 `globals` (an additive field of the current exporter). Zig emits it for a `threadlocal var`, an
