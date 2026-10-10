@@ -723,7 +723,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `MAP.PRIVATE|ANONYMOUS`, `fd = -1`, offset 0 and `length > 0` either returns
   `error.OutOfMemory` (the failure decision is the allocator's `Mem.allocDenied`, one attempt
   index for every request) with no other change, or a fresh block of kind `.mapped 0` of
-  exactly `length` zero bytes at a page-aligned address above every earlier block. The
+  exactly `length` zero bytes at a page-aligned address above every earlier block. A mapping
+  that would end above the target's user address space (`Os.Target.addrLimit`: `2^47` on
+  x86_64-linux, at least `TASK_SIZE_MAX`; `MACH_VM_MAX_ADDRESS = 0x7FFFFE000000` on
+  aarch64-macos) fails with `error.OutOfMemory`, as the kernel's does. The
   kernel fails such a mapping only with `ENOMEM` (no other `MMapError` member). Other argument
   combinations are outside the model (`.unspecified`); `length = 0` is `.illegal`. `munmap` of
   the whole live range of one mapping ends it, of a page-aligned prefix moves its first live
@@ -731,7 +734,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   mapping: a double `munmap`) is `.illegal`, stricter than the kernel. `mremap` (Linux only)
   of a whole live mapping with flags 0 or `MAYMOVE`, no new address and `new_len > 0` shrinks
   in place, or grows (an allocation attempt) in place, by a move to a fresh page-aligned block
-  under `MAYMOVE` (oracle `mremapMoves`, or no room), or fails with `error.OutOfMemory`;
+  under `MAYMOVE` (oracle `mremapMoves`, or no room), or fails with `error.OutOfMemory`
+  (always when the grown or moved mapping would end above `addrLimit`);
   grown bytes up to the old page end are undefined, the rest zero. Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). Addresses are fresh:
   no address is reused after `munmap`.

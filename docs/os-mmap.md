@@ -20,12 +20,21 @@ returns is `error.OutOfMemory`; the translator checks that each call site's erro
 ## Targets
 
 `Os.Target` fixes the page size (`std.heap.pageSize()`, comptime in Zig 0.16.0 for both
-modelled targets) and the flag encodings:
+modelled targets), the end of the user address space (`Os.Target.addrLimit`) and the flag
+encodings:
 
-| Target | Page size | `PROT.READ\|WRITE` | `MAP.PRIVATE\|ANONYMOUS` | `mremap` |
-|---|---|---|---|---|
-| `Os.Target.linux` (x86_64-linux) | 4096 | `3` | `0x22` | yes |
-| `Os.Target.macos` (aarch64-macos) | 16384 | `3` | `0x1002` | no (`posix.MREMAP == void`) |
+| Target | Page size | `addrLimit` | `PROT.READ\|WRITE` | `MAP.PRIVATE\|ANONYMOUS` | `mremap` |
+|---|---|---|---|---|---|
+| `Os.Target.linux` (x86_64-linux) | 4096 | `2^47` | `3` | `0x22` | yes |
+| `Os.Target.macos` (aarch64-macos) | 16384 | `0x7FFFFE000000` | `3` | `0x1002` | no (`posix.MREMAP == void`) |
+
+`addrLimit` is at least the kernel's own bound, so every mapping the kernel makes is one the
+model can make. On x86_64-linux user space ends at `TASK_SIZE_MAX`, a page below `2^47`
+(4-level paging; with 5-level paging the kernel maps above 47 bits only for a hint there, and
+the hint is ignored here). On aarch64-macos it ends at `MACH_VM_MAX_ADDRESS`
+(`0x00007FFFFE000000`, 128 TiB - 32 MiB, `mach/arm/vm_param.h` of the macOS SDK). Both are far
+below `2^64 - 2^63`, so adding any alignment `2^k - 1` (`k < 64`) to an address inside a mapping
+does not overflow.
 
 `Os.noFd` is `-1`, `Os.mremapMayMove` is `MREMAP{ .MAYMOVE = true }` (`1`).
 
@@ -41,8 +50,9 @@ Otherwise the call is one allocation attempt, numbered by `Mem.allocs` like ever
 `std.mem.Allocator` request. The failure decision is the existing allocator one
 (`Mem.mapDenied`, equal to `Mem.allocDenied`: `failAt`, `failures`, `maxBytes`, the oracle
 `fails`, `budget`; `mapDenied_iff`; the budget counts the live `.heap` bytes plus the
-request). A failure returns `error.OutOfMemory` (`ENOMEM`) and changes nothing but the attempt
-count. The premise assumes the kernel fails such a mapping with no other `MMapError` member:
+request). A mapping whose pages would end above `addrLimit` (`Os.Target.fits`) fails the same
+way: the kernel never maps there. A failure returns `error.OutOfMemory` (`ENOMEM`) and changes
+nothing but the attempt count. The premise assumes the kernel fails such a mapping with no other `MMapError` member:
 the process locks no memory (no `EAGAIN`). A success is a new block of kind `.mapped 0` with exactly `length` zero bytes at the
 next page-aligned address; the next block starts above the mapping's last page. Addresses are
 fresh: a later mapping never reuses an unmapped range (address reuse is not on `main` yet).
@@ -80,6 +90,8 @@ are `.unspecified`, as is any call on macOS.
   block when the oracle `AllocPolicy.os.mremapMoves` says so or when another block lies
   above the mapping; the live bytes are copied and the old block ends. Otherwise it grows in
   place if no other block lies above the mapping, else returns `error.OutOfMemory` (`ENOMEM`).
+  A move or an in-place growth whose pages would end above `addrLimit` returns
+  `error.OutOfMemory`.
   The grown bytes up to the old length's page end are undefined (the kernel keeps the stale
   tail of the last page), the rest are zero (`mremapFill`).
 
@@ -91,7 +103,7 @@ address `A`, with `A` and `lo` page-aligned and `bs` nonempty. The module is not
 
 | Theorem | Statement |
 |---|---|
-| `TotalTriple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, or `error.OutOfMemory` and no bytes. For every failure policy. |
+| `TotalTriple.mmap` | `emp` before; after, `mmapPost`: a `mapping` of `length` zero bytes at offset 0 with `s.len = length`, whose block address `A` has `A + alignUp length page ≤ addrLimit`, or `error.OutOfMemory` and no bytes. For every failure policy. |
 | `TotalTriple.munmapWhole` | `mapping p A lo bs` before, `emp` after. |
 | `TotalTriple.munmapPrefix` | `mapping p A lo bs` before; after, `mapping (p.add k) A (lo + k) (bs.extract k)` with `k = alignUp len page`. |
 | `TotalTriple.munmapTail` | `munmap ⟨p.add k, len⟩` of a page tail: `mapping p A lo (bs.extract 0 k)` after. |

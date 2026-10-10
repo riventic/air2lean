@@ -30,9 +30,11 @@ a hint without `MAP.FIXED`). A length of 0 is `EINVAL`, which Zig maps to `unrea
 decision (`Mem.mapDenied`, the same decision as `rawAlloc`'s: `failAt`, `failures`, `maxBytes`,
 the oracle `fails`, `budget`) fails it with `error.OutOfMemory` (`ENOMEM`) and leaves every block
 unchanged. The premise assumes the kernel fails such a mapping with no other `MMapError` (no
-memory locking: no `EAGAIN`). A success is a new block of kind `.mapped 0`: exactly `length` zero
-bytes, at a page-aligned address above every earlier block; the next block starts above the
-mapping's last page (fresh addresses: no address is reused).
+memory locking: no `EAGAIN`). A mapping whose pages would end above the target's user address
+space (`Os.Target.addrLimit`) fails the same way: the kernel never maps there. A success is a new
+block of kind `.mapped 0`: exactly `length` zero bytes, at a page-aligned address above every
+earlier block; the next block starts above the mapping's last page (fresh addresses: no address
+is reused).
 
 **munmap.** `memory` must be a page-aligned range `[off, off + alignUp len page)` of one live
 mapping with live offsets `[lo, hi)` (`BlockKind.mapped lo`, `hi` its byte count), and `len > 0`:
@@ -51,12 +53,18 @@ case), else `.illegal`. `new_len = 0` (`EINVAL`, `error.InvalidSyscallParameters
 model: `.unspecified` (the allocator wrappers never pass it). A shrink stays in place. A growth is
 an allocation attempt: the failure decision fails it with `error.OutOfMemory`; otherwise it grows in place when no other
 block lies above the mapping and the oracle `mremapMoves` does not move it, or moves to a fresh
-mapping under `MAYMOVE`; without `MAYMOVE` and with no room it returns `error.OutOfMemory`. A moved
+mapping under `MAYMOVE`; without `MAYMOVE` and with no room it returns `error.OutOfMemory`. A
+growth or move whose pages would end above `Os.Target.addrLimit` returns `error.OutOfMemory`. A moved
 mapping copies the live bytes and ends the old block. The grown bytes up to the old page end are
 undefined (the kernel keeps the stale tail of the last page), the rest are zero.
 
 **Page size.** Fixed per target (`Os.Target.pageSize`), comptime in Zig 0.16.0's
 `page_allocator` for both modelled targets: 4 KiB on `x86_64-linux`, 16 KiB on `aarch64-macos`.
+
+**Address space.** No mapping ends above `Os.Target.addrLimit`: `2 ^ 47` on `x86_64-linux`
+(4-level paging; with 5-level paging Linux still maps above 47 bits only for a hint there), and
+`MACH_VM_MAX_ADDRESS` on `aarch64-macos` (`0x7FFFFE000000`, `mach/arm/vm_param.h`). Each is at
+least the kernel's own bound, so every mapping the kernel makes is one the model can make.
 -/
 
 namespace Zig
@@ -84,6 +92,17 @@ def Target.protReadWrite (_ : Target) : BitVec 32 := 3
 def Target.mapPrivateAnonymous : Target → BitVec 32
   | .linux => 0x22
   | .macos => 0x1002
+
+/-- The end of the target's user address space: no mapping ends above it (module doc).
+`x86_64-linux`: `2 ^ 47` (`TASK_SIZE_MAX` is a page below it). `aarch64-macos`:
+`MACH_VM_MAX_ADDRESS` = `0x00007FFFFE000000` (128 TiB - 32 MiB). -/
+def Target.addrLimit : Target → Nat
+  | .linux => 2 ^ 47
+  | .macos => 0x7FFFFE000000
+
+/-- A mapping of `n` bytes at the page-aligned address `a` ends inside the address space. -/
+def Target.fits (os : Target) (a n : Nat) : Bool :=
+  decide (a + alignUp n os.pageSize ≤ os.addrLimit)
 
 /-- `posix.MREMAP != void`. -/
 def Target.hasMremap : Target → Bool
@@ -132,7 +151,7 @@ def mmap (os : Target) (_hint : Option Ptr) (len : BitVec 64) (prot flags fd : B
   if len.toNat = 0 then throw .illegal
   let m ← get
   set { m with allocs := m.allocs + 1 }
-  if m.mapDenied len.toNat then
+  if m.mapDenied len.toNat || !os.fits (alignUp m.nextAddr os.pageSize) len.toNat then
     return .error "OutOfMemory"
   let m₁ ← get
   set (m₁.afterMmap os.pageSize len.toNat)
@@ -226,11 +245,12 @@ def mremapLive (os : Target) (p : Ptr) (b : BlockId) (blk : Block) (lo : Nat) (n
     return .error "OutOfMemory"
   let onTop := m.mappingOnTop b blk
   if flags = mremapMayMove ∧ (m.allocPolicy.os.mremapMoves m.allocs n ∨ onTop = false) then
+    if !os.fits (alignUp m.nextAddr P) n then return .error "OutOfMemory"
     recordAccess b lo cur .write
     let m₁ ← get
     set (m₁.mremapMoved P b blk lo n)
     return .ok ⟨⟨some m₁.blocks.size, 0⟩, newLen⟩
-  if onTop = false then return .error "OutOfMemory"
+  if onTop = false ∨ !os.fits (blk.addr + lo) n then return .error "OutOfMemory"
   modify fun m => m.mremapGrown P b blk lo n
   return .ok ⟨p, newLen⟩
 
