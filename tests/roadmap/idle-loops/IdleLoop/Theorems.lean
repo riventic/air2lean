@@ -348,7 +348,8 @@ theorem not_eventuallyReturns :
 `Zig.Conc.Total.EventuallyReturnsUnder`: every `Cooperative` oracle returns. The premise is a
 named argument of the interface, not an axiom. -/
 theorem idle_total_under :
-    Zig.Conc.Total.EventuallyReturnsUnder Cooperative dispatch main (mem0 σ) (fun _ _ => True) := by
+    Zig.Conc.Total.EventuallyReturnsUnder Cooperative ⟨.any, .available⟩ dispatch main (mem0 σ)
+      (fun _ _ => True) := by
   intro o ho
   obtain ⟨b, hb⟩ := idle_progress o ho
   exact ⟨b, fun fuel hf => by obtain ⟨M, hM⟩ := hb fuel hf; exact ⟨(), M, hM, trivial⟩⟩

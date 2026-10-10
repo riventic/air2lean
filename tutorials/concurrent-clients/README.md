@@ -72,8 +72,11 @@ lake env lean tutorials/concurrent-clients/Negative.lean   # must fail
   of `Proofs/Sync/Gen.lean` (x86_64-linux-musl, Zig 0.16.0, ReleaseSafe).
 - [THR-01](../../docs/premises.md#thr-01): threads interleave only at sync operations, and the
   result is partial correctness: a run that runs out of `fuel` (`none`) is not covered.
-- [THR-02](../../docs/premises.md#thr-02): `Thread.spawn` always succeeds under the default
-  `available` policy.
+- [THR-02](../../docs/premises.md#thr-02): `Thread.spawn` always succeeds in an `available`
+  environment (`henv : env.spawn = .available`).
+- [THR-03](../../docs/premises.md#thr-03): the theorems take the run environment `env`; they
+  cover `available` environments only (a `fallible` one lets thread assignment fail).
+- [ALC-10](../../docs/premises.md#alc-10): the allocator is thread-safe in concurrent code.
 - [THR-05](../../docs/premises.md#thr-05): the futex under the mutex is a model.
 - [IOM-01](../../docs/premises.md#iom-01): the `std.Io` parameter is the model `Io`, not
   whatever `Io` a caller passes.

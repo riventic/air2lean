@@ -357,7 +357,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Group.async` is an oracle choice of the run's environment: a recorded task
   thread, the caller at once, or a task deferred until the group's `await`/`cancel` (gated).
-  `concurrent` spawns a recorded task. `Group.await` joins the tasks in spawn order.
+  `concurrent` spawns a recorded task, or returns `ConcurrencyUnavailable` when the
+  environment's assignment fails. `Group.await` joins the tasks in spawn order.
   `Group.cancel` gives each task a cancelation request (`Mem.cancels`) and joins it; a task's
   cancelation point (a cancelable futex wait, its own `Group.await`) delivers a pending request
   as `error.Canceled`. `main` is not an `Io` task and is never canceled.
@@ -373,7 +374,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   spuriously in place of the sleep (an oracle choice, `Sched.spuriousWake`). The kernel's
   compare is an atomic read of the word (a plain write that races with it is `.illegal`). A
   wake of up to `n` waiters wakes the ones the oracle picks (no order is assumed); a sleeping
-  waiter leaves the waiters only through a wake or a cancelation request. A wake adds no
+  waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
+  (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
 - Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
@@ -449,8 +451,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-11 — `Io.Future` tasks and cancelation (0.16.0)
 
 - Kind: environment.
-- Statement: `Io.async` allocates a runtime record and spawns the task as a model thread (or,
-  under `fallible`, runs it in the caller). `await`/`cancel` join it and return the result
+- Statement: `Io.async` allocates a runtime record and spawns the task as a model thread, or
+  runs it in the caller, as the run's environment picks (`SyncOp.asyncChoice`, `Env.spawn`)
+  under every translation policy. `await`/`cancel` join it and return the result
   that it wrote. Only the spawner may consume a future, and an unconsumed future is `.illegal`.
   A cancelation request is delivered only at `Io.checkCancel`. Programs with `Future.cancel`
   whose tasks reach another cancelation point are rejected. Group support does not imply

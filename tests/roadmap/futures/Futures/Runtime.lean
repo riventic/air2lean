@@ -51,27 +51,27 @@ def hDispatch : H → ConcM H Unit
 
 /-- The main thread creates a future; a second thread awaits it (only the spawner may). -/
 def foreignAwait : ConcM H Unit := (do
-  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   let p ← callMC (alloc .stack 16 8)
   callMC (store 8 p f)
-  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let helper := (← spawnC (H.awaiter p)).toOption.getD 0
   joinC helper
   let _ ← awaitC (α := BitVec 32) ⟨⟩ p
   pure () : CM H Unit Unit).run' ()
 
 /-- Two threads consume one future concurrently (`await` is not threadsafe). -/
 def doubleAwait : ConcM H (BitVec 32) := (do
-  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let f ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   let p ← callMC (alloc .stack 16 8)
   callMC (store 8 p f)
-  let helper ← StateT.lift (ConcM.sync (.spawn (H.awaiter p)))
+  let helper := (← spawnC (H.awaiter p)).toOption.getD 0
   let r ← awaitC (α := BitVec 32) ⟨⟩ p
   joinC helper
   pure r : CM H Unit (BitVec 32)).run' ()
 
 /-- `Io.async` without `await`/`cancel`: the task is never consumed. -/
 def leak : ConcM H Unit := (do
-  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3)
+  let _ ← asyncC (α := BitVec 32) (fun slot => H.square slot 3) (pure (3 * 3))
   pure () : CM H Unit Unit).run' ()
 
 def main : IO Unit := do

@@ -428,12 +428,13 @@ with loops under one schedule:
 
 ```lean
 theorem parallelCounter_completes :
-    Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (parallelCounter 1) mem0) = some 4 := by
+    Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1)
+      (mem0 .fresh)) = some 4 := by
   unroll_sched 10
 ```
 
-`unroll_sched k` accepts a goal `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v`
-with concrete arguments. It:
+`unroll_sched k` accepts a goal `Witness.okVal (Sched.run env dispatch fuel o main m₀) = some v`
+with concrete arguments (the environment `env` included). It:
 
 1. unfolds every definition reachable from `dispatch` and `main` that runs a `Zig.loop`
    (`Unroll.expand`), and replaces each `Zig.loop body again` by

@@ -638,7 +638,7 @@ theorem main_spec (d : Nat) :
   obtain ⟨hsz₁₁, r1₁₁, r2₁₁, k1₁₁, k2₁₁, hn₁₁⟩ := hsh
   obtain ⟨tls1, hr1⟩ := r1₁₁
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₁]; decide, ⟨_, B, .inl rfl⟩, by
-    simp [Thread.joinValid, hr1]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr1]⟩,
     fun hfin => ⟨fun _ => join_run hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨hk1, c', ac', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₁
@@ -694,7 +694,7 @@ theorem main_spec (d : Nat) :
   obtain ⟨hsz₁₃, r1₁₃, r2₁₃, k1₁₃, k2₁₃, hn₁₃⟩ := hsh
   obtain ⟨tls2, hr2⟩ := r2₁₃
   refine ⟨fun _ => ⟨by decide, by rw [hsz₁₃]; decide, ⟨_, B, .inr rfl⟩, by
-    simp [Thread.joinValid, hr2]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr2]⟩,
     fun hfin => ⟨fun _ => join_run hr2 rfl rfl, fun m₁₄ hj₂ => ?_⟩⟩
   obtain ⟨hk2, c'', ac'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₃
@@ -716,7 +716,7 @@ theorem main_spec (d : Nat) :
     rw [hth₁₄] at hr
     obtain ⟨i, hi, he⟩ := Array.mem_iff_getElem.mp hr
     have hi' : i < 3 := by simpa [hsz₁₃] using hi
-    have hget : (m₁₃.threads.setIfInBounds 2 { (⟨0, false, tls2⟩ : ThreadRec) with joined := true })[i]? = some r := by
+    have hget : (m₁₃.threads.setIfInBounds 2 { ({ spawner := 0, joined := false, tls := tls2 } : ThreadRec) with joined := true })[i]? = some r := by
       rw [Array.getElem?_eq_getElem hi, he]
     rcases (by omega : i = 0 ∨ i = 1 ∨ i = 2) with rfl | rfl | rfl
     · rw [Array.getElem?_setIfInBounds_ne (by decide), hi₁₃.t0] at hget; cases hget; rfl

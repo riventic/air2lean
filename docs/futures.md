@@ -9,7 +9,7 @@ cancelation or I/O-operation API is rejected with a reason, or has no model.
 
 | Zig API | Model (`ZigLean/Conc/Future.lean`) | Notes |
 | --- | --- | --- |
-| `io.async(function, args)` | `Zig.asyncC`, `Zig.asyncWithPolicyC` | Any worker result type `T` that the memory model encodes. |
+| `io.async(function, args)` | `Zig.asyncWithPolicyC` (outcomes `Zig.asyncC`, `Zig.asyncEagerC`) | Any worker result type `T` that the memory model encodes. |
 | `Future(T).await(io)` | `Zig.awaitC` | Returns the task's complete result. An `E!T` result propagates its error. |
 | `Future(T).cancel(io)` | `Zig.cancelC` | Returns the task's result or the `error.Canceled` that the task propagated. |
 | `io.checkCancel()` | `Zig.checkCancelC` | The only cancelation point that the model delivers. |

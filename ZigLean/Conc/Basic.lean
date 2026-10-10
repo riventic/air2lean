@@ -62,6 +62,10 @@ structure Env where
   spawn : SpawnPolicy
   deriving DecidableEq, Repr
 
+/-- An environment exists (the claim layer's non-vacuity check: a theorem over every `Env` has an
+inhabited domain). Deliberately not `Inhabited`: no environment is a default. -/
+instance : Nonempty Env := ⟨⟨.any, .available⟩⟩
+
 /-- The exact declared SpawnError set in std.Thread 0.14.1, 0.15.2, and 0.16.0.
 The model does not predict which platform resource fails or its frequency. -/
 def spawnErrors : Array ErrName :=

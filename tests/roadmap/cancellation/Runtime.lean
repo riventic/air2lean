@@ -73,7 +73,7 @@ def awaitClient : ConcM Cancel.Tgt (BitVec 32 × BitVec 32) :=
     let done ← callMC (alloc .heap 4 4)
     callMC (store 4 done (0 : BitVec 32))
     let g ← callMC (alloc .stack 16 8)
-    groupAsyncC g ⟨⟩ (Cancel.Tgt.worker status done)
+    groupAsyncC g ⟨⟩ (Cancel.Tgt.worker status done) (Cancel.worker status done)
     spinLoopHintC
     discard (groupAwaitC g ⟨⟩)
     let s ← callMC (load (BitVec 32) 4 status)

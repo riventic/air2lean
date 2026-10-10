@@ -28,8 +28,8 @@ on, the scheduler does that thread's op, and the thread runs to its next stop.
   (`chooseWake`, `Thread.wakeSet`): no queue order is promised. A wake gives no happens-before
   edge (the std code reads the value again with an acquire). A wait that would sleep may
   instead return spuriously: an oracle choice of two options (`spuriousWake`); the thread goes
-  on with the memory before the wait. A sleeping thread leaves the waiters only through a wake
-  (or a cancelation request, `Thread.requestCancel`).
+  on with the memory before the wait. A sleeping thread leaves the waiters only through a wake,
+  a cancelation request (`Thread.requestCancel`) or an OS interrupt (`Os.interrupt`, OSG-01).
   The queue is in `Mem` (`Thread.futexWait`, `Thread.futexWake`).
 - **Ends.** An error in any thread is the result of the run. `main` ends the run; it must have
   consumed every handle it owns (`checkJoinedByChild 0`: joined or detached). A joined thread has

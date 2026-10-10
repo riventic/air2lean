@@ -50,11 +50,11 @@ example {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {b : BlockId} {a : Nat} {v : T
 
 /-- info: 'ThreadLocals.Counters.twoCounters_safe' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
-#print axioms ThreadLocals.Counters.twoCounters_safe env henv
+#print axioms ThreadLocals.Counters.twoCounters_safe
 
 /-- info: 'ThreadLocals.Leak.leaked_never_ok' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
-#print axioms ThreadLocals.Leak.leaked_never_ok env henv
+#print axioms ThreadLocals.Leak.leaked_never_ok
 
 /-- info: 'Zig.TlsWF.no_alias' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in

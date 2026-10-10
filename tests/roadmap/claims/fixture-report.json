@@ -47,6 +47,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -104,6 +105,17 @@
        "default",
        "inst_implicit"
       ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
       "peeled": []
      },
      {
@@ -201,6 +213,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Zig.OsState.mk"
        }
       ],
       "atom": {
@@ -210,6 +225,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -247,9 +263,17 @@
       "peeled": []
      }
     ],
-    "binders": [],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "env",
+      "prop": false,
+      "uses": []
+     }
+    ],
     "head": {
-     "fingerprint": "a2a2bee6dab1482cecec85635a6c8193",
+     "fingerprint": "3c682a6f6f68eb8e6416f65b9d4d1f2b",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.ReturnsWithin"
@@ -281,7 +305,8 @@
     "instLENat",
     "instOfNatNat",
     "LE.le",
-    "OfNat.ofNat"
+    "OfNat.ofNat",
+    "Zig.Env"
    ],
    "module": "tests.roadmap.claims.Fixture",
    "name": "ClaimFixture.countdown_bounded.nonvacuous",
@@ -290,11 +315,11 @@
      {
       "args": [],
       "atom": {
-       "closed": null
+       "closed": "Zig.Env"
       },
       "extra": [],
-      "fn": null,
-      "fn_module": null,
+      "fn": "Zig.Env",
+      "fn_module": "ZigLean.Conc.Basic",
       "params": [],
       "peeled": []
      },
@@ -375,6 +400,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -385,501 +411,6 @@
    ],
    "module": "tests.roadmap.claims.Fixture",
    "name": "ClaimFixture.countdown_eventually",
-   "statement": {
-    "args": [
-     {
-      "args": [],
-      "atom": {
-       "closed": "Unit"
-      },
-      "extra": [],
-      "fn": "Unit",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": "Unit"
-      },
-      "extra": [],
-      "fn": "Unit",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "OfNat.ofNat"
-       }
-      ],
-      "atom": {
-       "closed": "Zig.Conc.Total.countdown"
-      },
-      "extra": [],
-      "fn": "Zig.Conc.Total.countdown",
-      "fn_module": "ZigLean.Conc.Total",
-      "params": [
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "Zig.Placement.fresh"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       },
-       {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "Zig.AllocPolicy.mk"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "Zig.DevState.mk"
-       },
-       {
-        "closed": "Zig.Env.Host.mk"
-       },
-       {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       }
-      ],
-      "atom": {
-       "closed": "Zig.Mem.mk"
-      },
-      "extra": [],
-      "fn": "Zig.Mem.mk",
-      "fn_module": "ZigLean.Mem.Basic",
-      "params": [
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     }
-    ],
-    "binders": [],
-    "head": {
-     "fingerprint": "242544e8f2a04a0ae0bfbcfac07de8c8",
-     "kind": "definition",
-     "module": "ZigLean.Conc.Total",
-     "name": "Zig.Conc.Total.EventuallyReturns"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     }
-    }
-   },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
-   "allowed": true
-  },
-  {
-   "conclusion": {
-    "head": "Zig.Conc.Total.EventuallyReturns"
-   },
-   "conclusion_dependencies": [
-    "BitVec",
-    "Eq",
-    "List",
-    "Nat",
-    "Prod",
-    "String",
-    "Unit",
-    "instOfNatNat",
-    "Applicative.toPure",
-    "Bool.false",
-    "Bool.true",
-    "List.cons",
-    "List.nil",
-    "List.toArray",
-    "Monad.toApplicative",
-    "OfNat.ofNat",
-    "Option.none",
-    "Pure.pure",
-    "Unit.unit",
-    "Zig.ALoc",
-    "Zig.Block",
-    "Zig.BlockId",
-    "Zig.ConcM",
-    "Zig.DevEvent",
-    "Zig.FootprintEntry",
-    "Zig.Mem",
-    "Zig.OwnedAlloc",
-    "Zig.Ptr",
-    "Zig.ThreadId",
-    "Zig.ThreadRec",
-    "Zig.VClock",
-    "Zig.unboundedAllocBytes",
-    "Zig.AllocPolicy.mk",
-    "Zig.ByteRemapMode.fail",
-    "Zig.ConcM.instMonad",
-    "Zig.DevState.mk",
-    "Zig.Env.Event",
-    "Zig.Env.Req",
-    "Zig.Mem.mk",
-    "Zig.Placement.fresh",
-    "Zig.ProvenanceMode.strict",
-    "Zig.ThreadRec.mk",
-    "Zig.Conc.Total.EventuallyReturns",
-    "Zig.Conc.Total.countdown",
-    "Zig.Env.Host.mk",
-    "Zig.Env.Ops.closedAll"
-   ],
-   "module": "tests.roadmap.claims.Fixture",
-   "name": "ClaimFixture.countdown_total",
-   "statement": {
-    "args": [
-     {
-      "args": [],
-      "atom": {
-       "closed": "Unit"
-      },
-      "extra": [],
-      "fn": "Unit",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": "Unit"
-      },
-      "extra": [],
-      "fn": "Unit",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "Zig.Conc.Total.countdown"
-      },
-      "extra": [],
-      "fn": "Zig.Conc.Total.countdown",
-      "fn_module": "ZigLean.Conc.Total",
-      "params": [
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "Zig.Placement.fresh"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       },
-       {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "Zig.AllocPolicy.mk"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "List.toArray"
-       },
-       {
-        "closed": "Zig.DevState.mk"
-       },
-       {
-        "closed": "Zig.Env.Host.mk"
-       },
-       {
-        "closed": "Option.none"
-       },
-       {
-        "closed": "OfNat.ofNat"
-       }
-      ],
-      "atom": {
-       "closed": "Zig.Mem.mk"
-      },
-      "extra": [],
-      "fn": "Zig.Mem.mk",
-      "fn_module": "ZigLean.Mem.Basic",
-      "params": [
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default",
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [],
-      "atom": {
-       "closed": null
-      },
-      "extra": [],
-      "fn": null,
-      "fn_module": null,
-      "params": [],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "n",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "242544e8f2a04a0ae0bfbcfac07de8c8",
-     "kind": "definition",
-     "module": "ZigLean.Conc.Total",
-     "name": "Zig.Conc.Total.EventuallyReturns"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     }
-    }
-   },
-   "opaque_dependencies": [
-    "String.Internal.append"
-   ],
-   "allowed": true
-  },
-  {
-   "conclusion": {
-    "head": "Zig.Conc.Total.EventuallyReturnsUnder"
-   },
-   "conclusion_dependencies": [
-    "BitVec",
-    "Eq",
-    "List",
-    "Nat",
-    "Prod",
-    "String",
-    "Unit",
-    "instOfNatNat",
-    "Applicative.toPure",
-    "Bool.false",
-    "Bool.true",
-    "List.cons",
-    "List.nil",
-    "List.toArray",
-    "Monad.toApplicative",
-    "OfNat.ofNat",
-    "Option.none",
-    "Pure.pure",
-    "Unit.unit",
-    "Zig.ALoc",
-    "Zig.Block",
-    "Zig.BlockId",
-    "Zig.ConcM",
-    "Zig.DevEvent",
-    "Zig.FootprintEntry",
-    "Zig.Mem",
-    "Zig.OwnedAlloc",
-    "Zig.Ptr",
-    "Zig.ThreadId",
-    "Zig.ThreadRec",
-    "Zig.VClock",
-    "Zig.unboundedAllocBytes",
-    "Zig.AllocPolicy.mk",
-    "Zig.ByteRemapMode.fail",
-    "Zig.ConcM.instMonad",
-    "Zig.DevState.mk",
-    "Zig.Env.Event",
-    "Zig.Env.Req",
-    "Zig.Mem.mk",
-    "Zig.Placement.fresh",
-    "Zig.ProvenanceMode.strict",
-    "Zig.ThreadRec.mk",
-    "Zig.Conc.Total.EventuallyReturnsUnder",
-    "Zig.Conc.Total.countdown",
-    "Zig.Env.Host.mk",
-    "Zig.Env.Ops.closedAll"
-   ],
-   "module": "tests.roadmap.claims.Fixture",
-   "name": "ClaimFixture.countdown_under",
    "statement": {
     "args": [
      {
@@ -1010,6 +541,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Zig.OsState.mk"
        }
       ],
       "atom": {
@@ -1019,6 +553,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -1060,13 +595,573 @@
      {
       "binder": "default",
       "defs": [],
+      "name": "env",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "55c181f83e30841d8195822e2c82d707",
+     "kind": "definition",
+     "module": "ZigLean.Conc.Total",
+     "name": "Zig.Conc.Total.EventuallyReturns"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Conc.Total.EventuallyReturns"
+   },
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "List",
+    "Nat",
+    "Prod",
+    "String",
+    "Unit",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "Bool.false",
+    "Bool.true",
+    "List.cons",
+    "List.nil",
+    "List.toArray",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Option.none",
+    "Pure.pure",
+    "Unit.unit",
+    "Zig.ALoc",
+    "Zig.Block",
+    "Zig.BlockId",
+    "Zig.ConcM",
+    "Zig.DevEvent",
+    "Zig.FootprintEntry",
+    "Zig.Mem",
+    "Zig.OwnedAlloc",
+    "Zig.Ptr",
+    "Zig.ThreadId",
+    "Zig.ThreadRec",
+    "Zig.VClock",
+    "Zig.unboundedAllocBytes",
+    "Zig.AllocPolicy.mk",
+    "Zig.ByteRemapMode.fail",
+    "Zig.ConcM.instMonad",
+    "Zig.DevState.mk",
+    "Zig.Env.Event",
+    "Zig.Env.Req",
+    "Zig.Mem.mk",
+    "Zig.OsState.mk",
+    "Zig.Placement.fresh",
+    "Zig.ProvenanceMode.strict",
+    "Zig.ThreadRec.mk",
+    "Zig.Conc.Total.EventuallyReturns",
+    "Zig.Conc.Total.countdown",
+    "Zig.Env.Host.mk",
+    "Zig.Env.Ops.closedAll"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.countdown_total",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "bvar": 1
+       }
+      ],
+      "atom": {
+       "bvars": [
+        1
+       ],
+       "open": "Zig.Conc.Total.countdown"
+      },
+      "extra": [],
+      "fn": "Zig.Conc.Total.countdown",
+      "fn_module": "ZigLean.Conc.Total",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "Zig.Placement.fresh"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "Zig.AllocPolicy.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "Zig.DevState.mk"
+       },
+       {
+        "closed": "Zig.Env.Host.mk"
+       },
+       {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Zig.OsState.mk"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Mem.mk"
+      },
+      "extra": [],
+      "fn": "Zig.Mem.mk",
+      "fn_module": "ZigLean.Mem.Basic",
+      "params": [
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "env",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "n",
+      "prop": false,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "55c181f83e30841d8195822e2c82d707",
+     "kind": "definition",
+     "module": "ZigLean.Conc.Total",
+     "name": "Zig.Conc.Total.EventuallyReturns"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "trivial",
+      "theorem": null
+     }
+    }
+   },
+   "opaque_dependencies": [
+    "String.Internal.append"
+   ],
+   "allowed": true
+  },
+  {
+   "conclusion": {
+    "head": "Zig.Conc.Total.EventuallyReturnsUnder"
+   },
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "List",
+    "Nat",
+    "Prod",
+    "String",
+    "Unit",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "Bool.false",
+    "Bool.true",
+    "List.cons",
+    "List.nil",
+    "List.toArray",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Option.none",
+    "Pure.pure",
+    "Unit.unit",
+    "Zig.ALoc",
+    "Zig.Block",
+    "Zig.BlockId",
+    "Zig.ConcM",
+    "Zig.DevEvent",
+    "Zig.FootprintEntry",
+    "Zig.Mem",
+    "Zig.OwnedAlloc",
+    "Zig.Ptr",
+    "Zig.ThreadId",
+    "Zig.ThreadRec",
+    "Zig.VClock",
+    "Zig.unboundedAllocBytes",
+    "Zig.AllocPolicy.mk",
+    "Zig.ByteRemapMode.fail",
+    "Zig.ConcM.instMonad",
+    "Zig.DevState.mk",
+    "Zig.Env.Event",
+    "Zig.Env.Req",
+    "Zig.Mem.mk",
+    "Zig.OsState.mk",
+    "Zig.Placement.fresh",
+    "Zig.ProvenanceMode.strict",
+    "Zig.ThreadRec.mk",
+    "Zig.Conc.Total.EventuallyReturnsUnder",
+    "Zig.Conc.Total.countdown",
+    "Zig.Env.Host.mk",
+    "Zig.Env.Ops.closedAll"
+   ],
+   "module": "tests.roadmap.claims.Fixture",
+   "name": "ClaimFixture.countdown_under",
+   "statement": {
+    "args": [
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": "Unit"
+      },
+      "extra": [],
+      "fn": "Unit",
+      "fn_module": "Init.Prelude",
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 1
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Conc.Total.countdown"
+      },
+      "extra": [],
+      "fn": "Zig.Conc.Total.countdown",
+      "fn_module": "ZigLean.Conc.Total",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "Zig.Placement.fresh"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "Zig.AllocPolicy.mk"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "List.toArray"
+       },
+       {
+        "closed": "Zig.DevState.mk"
+       },
+       {
+        "closed": "Zig.Env.Host.mk"
+       },
+       {
+        "closed": "Option.none"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Zig.OsState.mk"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Mem.mk"
+      },
+      "extra": [],
+      "fn": "Zig.Mem.mk",
+      "fn_module": "ZigLean.Mem.Basic",
+      "params": [
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default",
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "env",
+      "prop": false,
+      "uses": []
+     },
+     {
+      "binder": "default",
+      "defs": [],
       "name": "Fair",
       "prop": false,
       "uses": []
      }
     ],
     "head": {
-     "fingerprint": "7b59f1214665deb3e39d5fbe076bc2f7",
+     "fingerprint": "a66872fb1a356cfce94fcaa1dffe373c",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"
@@ -4272,6 +4367,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -4293,6 +4389,9 @@
         "closed": "Unit"
        },
        {
+        "bvar": 0
+       },
+       {
         "closed": null
        },
        {
@@ -4306,7 +4405,10 @@
        }
       ],
       "atom": {
-       "closed": "Zig.Conc.Total.EventuallyReturns"
+       "bvars": [
+        0
+       ],
+       "open": "Zig.Conc.Total.EventuallyReturns"
       },
       "extra": [],
       "fn": "Zig.Conc.Total.EventuallyReturns",
@@ -4317,12 +4419,21 @@
        "default",
        "default",
        "default",
+       "default",
        "default"
       ],
       "peeled": []
      }
     ],
-    "binders": [],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "env",
+      "prop": false,
+      "uses": []
+     }
+    ],
     "head": {
      "fingerprint": "1d9820f975500d1f9e6b550c0f4a3425",
      "kind": "definition",
@@ -4387,6 +4498,7 @@
     "Zig.Env.Event",
     "Zig.Env.Req",
     "Zig.Mem.mk",
+    "Zig.OsState.mk",
     "Zig.Placement.fresh",
     "Zig.ProvenanceMode.strict",
     "Zig.ThreadRec.mk",
@@ -4425,6 +4537,17 @@
       "args": [],
       "atom": {
        "closed": null
+      },
+      "extra": [],
+      "fn": null,
+      "fn_module": null,
+      "params": [],
+      "peeled": []
+     },
+     {
+      "args": [],
+      "atom": {
+       "bvar": 0
       },
       "extra": [],
       "fn": null,
@@ -4531,6 +4654,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "Zig.OsState.mk"
        }
       ],
       "atom": {
@@ -4540,6 +4666,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -4577,9 +4704,17 @@
       "peeled": []
      }
     ],
-    "binders": [],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [],
+      "name": "env",
+      "prop": false,
+      "uses": []
+     }
+    ],
     "head": {
-     "fingerprint": "7b59f1214665deb3e39d5fbe076bc2f7",
+     "fingerprint": "a66872fb1a356cfce94fcaa1dffe373c",
      "kind": "definition",
      "module": "ZigLean.Conc.Total",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"
@@ -4695,9 +4830,49 @@
    "kind": "definition"
   },
   {
+   "name": "ClaimFixture.countdown_bounded",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_bounded.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_eventually",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_under",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.diverge",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "definition"
+  },
+  {
+   "name": "ClaimFixture.diverge_not_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.diverge_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.diverge_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
   },
   {
    "name": "ClaimFixture.exitBody",
@@ -4705,13 +4880,168 @@
    "kind": "definition"
   },
   {
+   "name": "ClaimFixture.exit_within",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.panic_pure",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.panic_run",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.panic_some",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.partial_and_returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.premise_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.premise_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.ret",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "definition"
   },
   {
+   "name": "ClaimFixture.ret_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_partial.returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_pure_ok",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_returns.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_run",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_run_ground",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_some",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_thread",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.spinBody",
    "module": "tests.roadmap.claims.Fixture",
+   "kind": "definition"
+  },
+  {
+   "name": "ClaimFixture.spin_no_run",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.spin_not_within",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.stuck_not_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.stuck_under_false",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.wrapped_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.EventuallyReturns",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.EventuallyReturns.under",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.EventuallyReturnsUnder",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.ReturnsWithin",
+   "module": "ZigLean.Conc.Total",
    "kind": "definition"
   },
   {
@@ -4720,9 +5050,104 @@
    "kind": "definition"
   },
   {
+   "name": "Zig.Conc.Total.countdown._f",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown.match_1",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_run",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_run._proof_1_1",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_run._proof_1_3",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_total",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_within",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_1",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_10",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_7",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_8",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_9",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
    "name": "Zig.Conc.Total.stuck",
    "module": "ZigLean.Conc.Total",
    "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.stuck_not_eventuallyReturns",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.stuck_run",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.under_false",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "_private.ZigLean.Conc.Total.0.Zig.Conc.Total.joined_empty",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "_private.ZigLean.Conc.Total.0.Zig.Conc.Total.pending",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "_private.ZigLean.Conc.Total.0.Zig.Conc.Total.singleton_choice",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
   }
  ]
 }

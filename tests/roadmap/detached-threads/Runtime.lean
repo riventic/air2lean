@@ -42,7 +42,10 @@ def dispatch : Tgt → ConcM Tgt Unit
   | .joiner h => do let _ ← ConcM.sync (Tgt := Tgt) (.join h); pure ()
   | .holder => pure ()
 
-def spawn (t : Tgt) : ConcM Tgt ThreadId := ConcM.sync (.spawn t)
+def spawn (t : Tgt) : ConcM Tgt ThreadId := do
+  match ← ConcM.sync (.spawn t) with
+  | .ok c => pure c
+  | .error _ => throw .unspecified
 def join (h : ThreadId) : ConcM Tgt Unit := do let _ ← ConcM.sync (Tgt := Tgt) (.join h); pure ()
 def yield : ConcM Tgt Unit := ConcM.sync (Tgt := Tgt) .yield
 def mem {α : Type} (x : MemM α) : ConcM Tgt α := ConcM.liftMem x
@@ -82,8 +85,10 @@ def stackMain : ConcM Tgt Nat := do
   yield
   pure 0
 
-/-- The reader runs before the frame exit: it reads the live local. -/
-theorem stack_read_before_exit : run (pick [0, 1]) stackMain = .ok := by decide +kernel
+/-- The reader runs before the frame exit: it reads the live local, but the detach gives no
+happens-before edge (`ThreadRec.released`), so the frame exit (a write of the block, audit #3)
+races with that read. -/
+theorem stack_read_before_exit : run (pick [0, 1]) stackMain = .illegal := by decide +kernel
 
 /-- The reader runs after the frame exit: a use after free. -/
 theorem stack_read_after_exit : run (pick [0, 0, 1]) stackMain = .illegal := by decide +kernel

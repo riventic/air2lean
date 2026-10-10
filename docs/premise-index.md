@@ -27,7 +27,7 @@ premise was derived. This index covers the committed generated modules.
 | [IOM-01](premises.md#iom-01) | 364 | Caller-supplied `Io` behaves as the std model |
 | [THR-01](premises.md#thr-01) | 1593 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 200 | Thread spawn/join with the `available` policy |
-| [THR-03](premises.md#thr-03) | 157 | Fallible thread assignment policy |
+| [THR-03](premises.md#thr-03) | 158 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 22 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 871 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
@@ -2652,7 +2652,7 @@ File premises: ALC-01, ALC-02, ALC-04, SEM-01, SEM-02, SEM-07, TRU-01
 
 ## `tests/roadmap/claims/Fixture.lean`
 
-File premises: THR-01, THR-07, THR-08, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01
+File premises: THR-01, THR-03, THR-07, THR-08, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01
 
 | Theorem | Premises |
 |---|---|
@@ -2678,7 +2678,7 @@ File premises: THR-01, THR-07, THR-08, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, S
 | `ClaimFixture.spin_no_run` | SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, TRU-01 |
 | `ClaimFixture.spin_not_within` | SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, TRU-01 |
 | `ClaimFixture.countdown_eventually` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
-| `ClaimFixture.countdown_bounded` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
+| `ClaimFixture.countdown_bounded` | THR-01, THR-03, THR-07, SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
 | `ClaimFixture.stuck_under_false` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
 | `ClaimFixture.countdown_under` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
 | `ClaimFixture.stuck_not_total` | THR-01, THR-07, SEM-01, SEM-02, SEM-04, SEM-07, TRU-01 |
@@ -3083,8 +3083,8 @@ File premises: PRF-02, ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, THR-09, O
 | `example@L22` | PRF-02, ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `example@L24` | PRF-02, ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
 | `example@L28` | PRF-02, ALC-10, THR-01, THR-02, THR-03, THR-07, THR-08, THR-09, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, SEM-07, TRU-01, TRU-02, TRU-03 |
-| `example@L30` | THR-01, THR-09, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `example@L33` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
+| `example@L31` | THR-01, THR-09, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L34` | PRF-02, THR-01, THR-07, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-07, TRU-01, TRU-02, TRU-03 |
 
 ## `tests/roadmap/idle-loops/IdleLoop/Basic.lean`
 
