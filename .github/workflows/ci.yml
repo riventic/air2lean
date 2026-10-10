@@ -600,12 +600,12 @@ jobs:
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
 
-      - name: Memory-model hardening regressions (MM-5, MM-11, MM-13, MM-14)
+      - name: Memory-model hardening regressions (MM-5, MM-10, MM-11, MM-12, MM-13, MM-14)
         if: ${{ !matrix.mutate }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/memory-hardening"
-          lake build ZigLean.Mem.Lemmas Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
+          lake build ZigLean ZigLean.Mem.Lemmas Air2Lean.Check Proofs.Variants.Gen Proofs.Layout.Gen 2>&1 | tee "$RUNNER_TEMP/memory-hardening/build.log"
           for test in tests/roadmap/memory-hardening/*.lean; do
             lake env lean "$test" 2>&1 | tee "$RUNNER_TEMP/memory-hardening/$(basename "$test" .lean).log"
           done

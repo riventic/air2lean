@@ -613,12 +613,27 @@ def CheckCtx.memPtrTy (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String T
     cx.fail line s!"pointer type {pty} has no `ptr_align` in the AIR file"
   pure pty
 
-/-- A memory access through `ptr` (not a place): the pointee must be a type the model encodes. -/
+/-- An access of the zero-size type `ty` is rejected (MM-12,
+`docs/architecture-audit/memory-model.md`). Zig touches no memory for it, through any pointer,
+but `Zig.Mem.access` of zero bytes still needs a live block, in bounds and aligned, so the model
+would report `.illegal` where Zig is defined. Sema emits no load or store of a zero-bit value (it
+is comptime-known) and the exporter gives a zero-size struct no type (`.other`), so this keeps a
+hand-written or future export from reaching that rule. -/
+def CheckCtx.rejectZeroSize (cx : CheckCtx) (line : Nat) (ty : TyId) (what : String) :
+    Except String Unit := do
+  if let .ok (0, _) := modelLayout cx.types cx.layouts ty cx.errBits then
+    cx.fail line s!"{what} of a zero-size type is outside the subset (the model's access of zero \
+      bytes needs a live block)"
+
+/-- A memory access through `ptr` (not a place): the pointee must be a type the model encodes,
+of nonzero size. -/
 def CheckCtx.memAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
   if let .inst p := ptr then
     if cx.places.contains p then return
   let pty ← cx.memPtrTy line ptr
-  checkMemTy cx.fnName cx.types cx.layouts line ((ptrChild cx.types pty).get!) cx.errBits
+  let child := (ptrChild cx.types pty).get!
+  checkMemTy cx.fnName cx.types cx.layouts line child cx.errBits
+  cx.rejectZeroSize line child "a memory access"
 
 /-- Is `ty` a bit-pointer type whose AIR file has no `vector_index`? -/
 def unverifiedBitPtrTy (layouts : Array Layout) (ty : TyId) : Bool :=
@@ -1396,8 +1411,12 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     checkMemTy fnName cx.types cx.layouts line parent cx.errBits
     unless cx.fieldKnown parent idx do
       cx.fail line "`@fieldParentPtr` field index has no known offset"
+    cx.rejectZeroSize line parent "`@fieldParentPtr`"
     pure line
-  | .ptrElemVal p _ => cx.itemAccess line p; pure line
+  | .ptrElemVal p _ =>
+    cx.itemAccess line p
+    cx.rejectZeroSize line ty "an item access"
+    pure line
   -- A pure function indexes the items (`Array`); `checkProgram` checks the item type of a
   -- slice read in a function that uses memory.
   | .sliceElemVal .. => pure line

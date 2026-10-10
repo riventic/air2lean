@@ -27,9 +27,9 @@ fix lands; the fixture then becomes an agreement test.
 | MM-7 | The ReleaseFast premise ("no model throw ⇒ no illegal behaviour") is false | FAIL-OPEN | follows from MM-2, MM-3, MM-5; qualified |
 | MM-8 | The Sep layer exports allocation-order address facts | FAIL-OPEN | code-read (`alloc_run`) |
 | MM-9 | Stale-pointer and address-reuse semantics | FAIL-OPEN (known, M05) | partly on `codex/roadmap-address-reuse` |
-| MM-10 | Fixed-buffer allocations do not alias their buffer | HARDENING | code-read |
+| MM-10 | Fixed-buffer allocations do not alias their buffer | HARDENING | reproduced (`FixedBuffer.lean`); fixed (fail closed) |
 | MM-11 | Pointer bytes read as integers and integer bytes read as pointers are `.unspecified` | HARDENING | code-read |
-| MM-12 | Zero-length accesses and (before MM-3) address-zero projections need a live block | HARDENING (known, L05) | code-read, on `codex/roadmap-null-projection` |
+| MM-12 | Zero-length accesses and (before MM-3) address-zero projections need a live block | HARDENING (known, L05) | reproduced on hand-written AIR (`ZeroLength.lean`); fixed (fail closed) |
 | MM-13 | Value-level tagged-union retagging fills the new payload with `default` | HARDENING | code-read |
 | MM-14 | Race footprint and dead blocks grow without bound in single-threaded runs | HARDENING | measured |
 | MM-15 | Model `@memcpy` copies like `@memmove`; it relies on the ReleaseSafe alias check in AIR | control (agrees) | reproduced (`memcpyOverlap`) |
@@ -62,7 +62,7 @@ build for each fixed finding below.
 | MM-8 | fixed | no allocation-order address facts in Sep (every placement) |
 | MM-9 | fixed | address reuse is one case of the placement (ALC-08) |
 | MM-10 | fixed (fail closed) | `FixedBuffer.init` lends the buffer's block to the allocator: a direct access to the buffer is `.illegal`; allocations can be placed at their native addresses inside it |
-| MM-12 | open | hardening (zero-length accesses) |
+| MM-12 | fixed (fail closed) | the checker rejects accesses of zero-size types (`CheckCtx.rejectZeroSize`); the runtime zero-length rule stays conservative; projections from address zero follow MM-3 |
 | MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
@@ -342,6 +342,24 @@ projections from address zero were `.illegal` even for offset 0 (`ROADMAP.md` L0
 allowed) gives the consistent answer: with MM-3 fixed (`Zig.ptrProject`), an offset-0 projection
 from address zero is defined, except into a nonnullable result type (`ptrProjectNonnull`); the
 zero-length access rule is unchanged.
+
+Reproduced on the zero-length rule: `fn f(p: *const u0) u0 { return p.*; }` with the `load` in
+its AIR passed the checker, the emitter wrote `Zig.load (BitVec 0) 1 p0`, and that is `.illegal`
+for `p0` without a block (`@ptrFromInt(0x1000)`), where Zig accesses nothing. Sema itself emits
+no load or store of a zero-bit value (it is comptime-known), and the exporter gives a zero-size
+struct no type, so no exported fixture reached it (`*void`, `*u0`, `*[0]u8` loads and stores,
+`@fieldParentPtr` into `struct { a: u0, b: [0]u8 }`, all checked against 0.16.0).
+
+**Status: fixed (fail closed) on `codex/fix-mm-remaining`.** The checker rejects a memory
+access, an item access (`ptr_elem_val`) and a `@fieldParentPtr` of a zero-size type
+(`CheckCtx.rejectZeroSize`), so no translated program reaches the zero-length rule. The runtime
+rule stays as it is: making an access of zero bytes succeed without a block would change the
+run lemmas of `loadBytes`/`storeBytes`/`load`/`store` (they record an access of `n` bytes for
+every `n`), and it is conservative (`.illegal` where Zig is defined, never the reverse). The
+projection half is closed by MM-3: an offset-0 projection from address zero is the base itself;
+`ptrProjectNonnull` (address zero into a nonnullable result type, 0.14.1/0.15.2) and nonzero
+offsets from a pointer without a block stay `.illegal` (`ROADMAP.md` L05). Regression:
+`tests/roadmap/memory-hardening/ZeroLength.lean`.
 
 ### MM-13. Value-level union retagging
 
