@@ -15,8 +15,8 @@ proved from the generated code and the OS mapping model only (premise OSM-01,
 
 `free_spec`, `resize_spec`, `remap_spec` are the `free`, `resize` and `remap` fields of
 `FAllocSpec FLogic.total vt ctx (inv own)` (`ZigLean/Sep/Full/AllocSpec.lean`) for every
-allocator state `own : FAssn`. The `alloc` field is open: obstruction O4 (`docs/alloc-page.md`,
-`PageObstruction.lean`).
+allocator state `own : FAssn`. `alloc`, with the hint word as the allocator state, is in
+`PageAlloc.lean`.
 
 The token (`tok`, the O2 fix of `docs/sep-full-state.md` §Concrete changes 4): a grant of `n`
 bytes at `p` is the start of the live range of a mapping (kind `.mapped p.off`) that ends at the

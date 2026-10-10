@@ -202,7 +202,8 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   [sep-full-state.md](sep-full-state.md)) has the same entries and conditions over full-state
   assertions. `FAllocSpec.ofTotal` lifts a total `AllocSpec` of a vtable whose entries are `Tame`
   (the FixedBufferAllocator: `FBA.fallocSpec`). The page allocator's `free`, `resize` and `remap`
-  are proved against it; its `alloc` is blocked by O4 ([alloc-page.md](alloc-page.md)).
+  are proved against it, and its `alloc` for alignments up to a page
+  (`PageAlloc.fallocSpec`, [alloc-page.md](alloc-page.md)).
   `FAllocSpec.toLegacy` turns an `FAllocSpec` whose tokens are legacy assertions into an
   `AllocSpec` in `FLogic.legacy FL O`, so every wrapper contract below holds in the full-state
   logic, with the allocator state `O` framed (`ZigLean/Sep/Full/Wrappers.lean`).

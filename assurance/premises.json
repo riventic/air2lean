@@ -178,6 +178,7 @@
     "ZigLean.Sep.Full.Wrappers": ["SEM-02", "SEM-03", "SEM-04"],
     "ZigLean.Sep.Full.AtomicPtr": ["SEM-02", "SEM-03", "ORD-01", "ORD-05", "THR-08"],
     "ZigLean.Sep.Full.Seq": ["THR-01", "SEM-03"],
+    "ZigLean.Sep.Full.Conc": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01"],
     "ZigLean.VC.Mem": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],

@@ -120,6 +120,9 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
+| `AtomicPtr` | `FTriple.atomicLoadUnorderedEnc`, `FTriple.cmpxchgPtr` | pointer-valued `aptsE`: the `unordered` load reads the value; a strong `cmpxchg` with the held value succeeds |
+| `Seq` | `Sched.run_solo`, `Sched.run_eq_seqRun`, `ThreadFreeC.*` | a one-thread scheduler run of a `ThreadFree` concurrent function is its sequential reading |
+| `Conc` | `CTriple.bind`, `liftMem`, `pick_bind`, `step`, `know_intro`, `forget`, `conc_norm` | full-state triples for a concurrent function called in one thread (`Sched.soloRun`, oracle `0`) |
 | `Toy` | `toyAlloc_spec`, `toyFree_spec`, `cycle_spec` | the hint protocol: alloc, free, alloc from the invariant |
 | `Toy` | `apts_layout`, `inv_no_odd` | **O3**: a memory with a 4-byte location at the hint holds no `inv` |
 | `Toy` | `addrOf_block`, `inv_last_block`, `inv_no_lost` | **O1**: a memory whose remembered pointer's block is missing holds no `inv` |
@@ -257,8 +260,8 @@ sequential run that compares the value it just read needs no address.
       OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. The FixedBufferAllocator gets
       `FBA.fallocSpec` this way (`tests/roadmap/alloc-fba/AllocFba/Full.lean`). The page
       allocator's `free`, `resize` and `remap` are proved against it
-      (`tests/roadmap/alloc-translated/PageSpec.lean`); its `alloc` is blocked by O4
-      (`docs/alloc-page.md`). The wrapper contracts and the FBA client stay on the legacy
+      (`tests/roadmap/alloc-translated/PageSpec.lean`), and its `alloc` for alignments up to a
+      page (`PageAlloc.lean`, `docs/alloc-page.md`; larger alignments: O5). The wrapper contracts and the FBA client stay on the legacy
       `AllocSpec`.
    3. Open: needs the placement fix (`codex/soundness-batch`), which is not on `main` yet. Then add
       `LiveDisjoint` to `FSeq`, an `apart` rule, and the disjointness of a new block to `Tame.alloc`.
@@ -304,7 +307,7 @@ This builds on the FBA branch's O2 shape (`codex/alloc-translated-p4-fba` 02a845
    preconditions `len + 2^k ≤ 2^64 - P` for `alloc` and `n + P - 1 < 2^64` for `resize`/`remap`.
 
 Items 1, 2, 4 and 7 are done (`FAllocSpec`, `PageSpec.tok`, `PageSpec.legacy.fits`). Item 5 is
-not needed for the lifted FBA proof, which keeps its pin byte. Item 3 needs O4 fixed first. Item 6
+not needed for the lifted FBA proof, which keeps its pin byte. Item 3 is done for alignments up to a page (`PageAlloc.own`). Item 6
 needs stage 3.
 
 ## Limits

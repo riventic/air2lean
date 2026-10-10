@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3192 theorems in 183 files.
+3219 theorems in 184 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -14,30 +14,30 @@ premise was derived. This index covers the committed generated modules.
 | [PRF-03](premises.md#prf-03) | 75 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 7 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 8 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 148 | Single modelled allocator |
+| [ALC-01](premises.md#alc-01) | 147 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 86 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 74 | Byte remap policy |
+| [ALC-03](premises.md#alc-03) | 73 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 6 | Byte sentinel allocation |
-| [ALC-05](premises.md#alc-05) | 14 | Byte realloc and sentinel reallocation |
+| [ALC-05](premises.md#alc-05) | 15 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 0 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 3 | Allocator identity, arena and fixed-buffer policies |
 | [ALC-08](premises.md#alc-08) | 8 | Address reuse and provenance recovery |
-| [THR-01](premises.md#thr-01) | 1469 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 204 | Thread spawn/join with the `available` policy |
+| [THR-01](premises.md#thr-01) | 1475 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 206 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 15 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 20 | `Io.Group` tasks are model threads |
 | [THR-05](premises.md#thr-05) | 841 | Futex model |
 | [THR-06](premises.md#thr-06) | 0 | Darwin `os_unfair_lock` contract |
 | [THR-07](premises.md#thr-07) | 84 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 1191 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-08](premises.md#thr-08) | 1195 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
 | [THR-10](premises.md#thr-10) | 21 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 24 | `Io.Future` tasks and cancelation (0.16.0) |
-| [ORD-01](premises.md#ord-01) | 1195 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 1195 | No load buffering in compiled code |
+| [ORD-01](premises.md#ord-01) | 1201 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 1201 | No load buffering in compiled code |
 | [ORD-03](premises.md#ord-03) | 412 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 507 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 34 | Pointer atomics keep provenance and compare identities |
+| [ORD-05](premises.md#ord-05) | 39 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 33 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
 | [MTH-01](premises.md#mth-01) | 130 | Executable IEEE-754 float model |
@@ -46,15 +46,15 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-01](premises.md#asm-01) | 16 | Register-only assembly is an opaque function |
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
-| [SEM-01](premises.md#sem-01) | 3049 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2604 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 1366 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 275 | Total-correctness statements |
+| [SEM-01](premises.md#sem-01) | 3072 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2622 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 1376 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 282 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 31 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 3192 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 3219 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1498 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1498 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
@@ -62,7 +62,7 @@ premise was derived. This index covers the committed generated modules.
 | [ENV-01](premises.md#env-01) | 21 | Selected handle read/write/close contract |
 | [ENV-02](premises.md#env-02) | 7 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 14 | Linux raw read/write/close are the bound models |
-| [OSM-01](premises.md#osm-01) | 45 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-01](premises.md#osm-01) | 51 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 
 ## `Proofs/Asm/Effects.lean`
 
@@ -2507,6 +2507,44 @@ File premises: PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, T
 | `AllocFba.FBA.vtame` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 | `AllocFba.FBA.fallocSpec` | PRF-02, ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, TRU-02, TRU-03 |
 
+## `tests/roadmap/alloc-translated/PageAlloc.lean`
+
+File premises: ALC-01, ALC-03, ALC-05, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageAlloc.two_pow_le` | TRU-01 |
+| `AllocTranslated.PageAlloc.subSat_small` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.alignPointerOffset_small` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.alignPointer_total` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.and4095` | TRU-01 |
+| `AllocTranslated.PageAlloc.sub_and4095` | TRU-01 |
+| `AllocTranslated.PageAlloc.andNot_and4095` | TRU-01 |
+| `AllocTranslated.PageAlloc.hint_check` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.sub_two_pow_one` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.divExact_self` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.gt_self` | SEM-01, TRU-01 |
+| `AllocTranslated.PageAlloc.addr64_total` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageAlloc.tame_addr64` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocTranslated.PageAlloc.tame_alignPointer` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocTranslated.PageAlloc.optPtrFromAddr_frame` | SEM-01, SEM-02, SEM-03, TRU-01 |
+| `AllocTranslated.PageAlloc.lift_out` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.up_lift_out` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.step_eq` | THR-01, ORD-01, ORD-02, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageAlloc.swap_last` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.own_cell` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageAlloc.rearr_final` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.up_pure` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.hintKn_some` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.hintKn_heap` | SEM-01, SEM-02, TRU-01 |
+| `AllocTranslated.PageAlloc.final_post` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_ct` | THR-01, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_spec` | ALC-01, ALC-03, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.fallocSpec` | ALC-01, ALC-03, ALC-05, THR-01, THR-02, THR-08, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_high` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_threadFree` | THR-01, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, TRU-01, OSM-01 |
+| `AllocTranslated.PageAlloc.alloc_run` | THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, TRU-01, OSM-01 |
+
 ## `tests/roadmap/alloc-translated/PageObstruction.lean`
 
 File premises: ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01
@@ -2528,10 +2566,6 @@ File premises: ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, S
 | `AllocTranslated.PageObstruction.alloc_no_triple_after_free` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
 | `AllocTranslated.PageObstruction.hintedAmb_heap` | ALC-01, ALC-03, SEM-01, SEM-02, TRU-01 |
 | `AllocTranslated.PageObstruction.alloc_hintedAmb` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
-| `AllocTranslated.PageObstruction.hintedAmb_fseq` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `AllocTranslated.PageObstruction.holds_hintedAmb` | ALC-01, ALC-03, SEM-01, SEM-02, SEM-03, TRU-01 |
-| `AllocTranslated.PageObstruction.alloc_no_ftriple_O4` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
-| `AllocTranslated.PageObstruction.not_fallocSpec_O4` | ALC-01, ALC-03, THR-01, THR-02, ORD-01, ORD-02, ORD-05, SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
 
 ## `tests/roadmap/alloc-translated/PageSpec.lean`
 

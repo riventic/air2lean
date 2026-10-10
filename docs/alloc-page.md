@@ -6,8 +6,9 @@ Status: the translated `PageAllocator` (Zig 0.16.0, x86_64-linux and aarch64-mac
 that holds at program start. This is a limit of the specification's logic, not a bug of the
 allocator or of the OS model: the native program is fine. This page records the obstructions,
 their kernel-checked evidence, two upstream Zig bugs, the native comparison, and the status with
-the full-state logic: `free`, `resize` and `remap` are proved against `FAllocSpec`; `alloc` is
-blocked by O4, an ambiguous `@ptrFromInt` in the memory model.
+the full-state logic: the whole vtable is proved against `FAllocSpec` for alignments up to a page
+(`alloc` partial, `free`/`resize`/`remap` total); larger alignments are blocked by O5, the
+model's unbounded addresses.
 
 ## The obstructions
 
@@ -83,39 +84,61 @@ knowledge after `free` (`known`, O1).
 | O2 | fixed: the page allocator's token owns the rest of the grant's last page and pins the mapping (`.mapped p.off`, `S = p.off + alignUp n P`) | `PageSpec.tok` |
 | `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only; x86_64-linux and aarch64-macos (no `mremap`: `remap` stays in place) | `tests/roadmap/alloc-translated/PageSpec.lean`, `PageSpecMacos.lean` |
 | size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
-| O1, O3 | specifiable (`known`, `apts`); not needed by `free`/`resize`/`remap` | `ZigLean/Sep/Full/Triple.lean`, `Atomic.lean` |
-| `alloc` | **open: O4** | below |
+| O1, O3 | resolved: the allocator state owns the hint word (`aptsE`) and knows its target's page-aligned address (`known`) | `PageAlloc.own` |
+| O4 | fixed in the memory model: an ambiguous `@ptrFromInt` gives a pointer without provenance | below |
+| `alloc` | proved for alignments up to a page (`k ≤ 12`), partial correctness: `PageAlloc.fallocSpec` is the whole `FAllocSpec FLogic.partial` for x86_64-linux | `tests/roadmap/alloc-translated/PageAlloc.lean` |
+| O5 | open: larger alignments, unbounded model addresses | below |
 
-### O4: an ambiguous `@ptrFromInt`
+### O4: an ambiguous `@ptrFromInt` (fixed)
 
 `alloc` turns the derived hint address back into a pointer (`@ptrFromInt`, `Zig.ptrFromAddr`)
 before it passes it to `mmap`. Both modelled targets grow the stack down, so the address is
 `((@intFromPtr(hint) -% page_aligned_len) & ~(alignment - 1)) -% max_drop_len`, below the last
-mapping. Under the default `.strict` provenance mode, `ptrFromAddr` throws `.unspecified` when two
-or more blocks' ranges `[addr, addr + size]` contain the address (dead blocks count), and
-`.liveBlock` throws when none of them is live.
+mapping. Under the default `.strict` provenance mode, `ptrFromAddr` used to throw `.unspecified`
+when two or more blocks' ranges `[addr, addr + size]` contained the address (dead blocks count).
+No precondition could rule this out: the covering blocks belong to the frame or are dead, and
+`Mem.Seq` (and `FSeq`) allows such layouts (M05 address reuse, any placement oracle that allows
+adjacent blocks).
 
-No precondition can rule this out. The covering blocks belong to the frame or are dead, and
-`Mem.Seq` (and `FSeq`) allows such layouts: they arise under M05 address reuse and under any
-placement oracle that allows adjacent blocks. Knowledge that "only block `b` covers `n`" is not
-stable under later allocations, so it cannot be persistent (`KMono`).
+The fix is in the memory model (`ZigLean/Mem/Basic.lean`, approved by the user): an ambiguous
+recovery returns the provenance-free pointer `⟨none, n⟩`. `ptrAddr` of it is still `n`, and every
+access through it is `.illegal` ([address-reuse.md](address-reuse.md)). This is a conservative
+over-approximation; natively the hint goes only to `mmap`, which may ignore it.
+`PageObstruction.alloc_hintedAmb` is the regression: from `hinted` plus one dead 8-byte block
+that ends at the derived address 4096 (where global block 0 starts), `alloc(1, align 1)` now
+returns a mapping.
 
-`PageObstruction.lean` checks this in the kernel. `hintedAmb` is the real post-`free` state
-`hinted` plus one dead 8-byte block that ends at the derived address 4096, where global block 0
-starts. It holds every full-state resource that `hinted` holds, with the same frame
-(`holds_hintedAmb`), and `alloc(1, align 1)` throws `.unspecified` from it (`alloc_hintedAmb`).
-Hence `alloc_no_ftriple_O4` (no precondition that `hinted` holds gives an `alloc` triple) and
-`not_fallocSpec_O4` (no such invariant satisfies `FAllocSpec`, in any full-state logic).
+### `alloc`
 
-Natively nothing goes wrong: the hint goes only to `mmap`, which may ignore it. The fix is in the
-memory model, not in the specification: an ambiguous recovery returns the provenance-free
-pointer `⟨none, n⟩`. `ptrAddr` of it is still `n`, and every access through it is `.illegal`.
-This is a conservative over-approximation. It is approved by the coordinator but not applied on
-this branch, because it changes `ZigLean/Mem/Basic.lean`, which needs the user's permission.
-The other pieces `alloc` needs exist: the pointer-valued `aptsE` with the `unordered` load and
-`cmpxchg` rules (`ZigLean/Sep/Full/AtomicPtr.lean`), and the sequential reading of the
-scheduler's one-thread run (`Sched.run_eq_seqRun`, `ZigLean/Sep/Full/Seq.lean`). What is left is
-the proof itself, and a `ThreadFree` derivation for the generated `alloc`.
+`PageAlloc.lean` proves `alloc` from the generated code. The allocator state `own` is the hint
+word as a pointer-valued atomic points-to (`aptsE`) and, for a non-null hint, `known b A` of its
+block with `A + off` page-aligned. `alloc` reads the hint (`FTriple.atomicLoadUnorderedEnc`),
+takes its address (`FTriple.ptrAddr`: the hinted mapping may be unmapped), passes the page check
+of the derived address, recovers a pointer (`FTriple.ptrFromAddr`), maps `alignUp len P` bytes
+(`TotalTriple.mmap`), and publishes the new mapping with a `cmpxchg` that succeeds
+(`FTriple.cmpxchgPtr`) and a `known` taken from owning it. The grant is the whole mapping
+(`PageSpec.regrant`).
+
+`alloc` is a concurrent function. The vtable entry is its call in the caller's thread, each
+atomic op's oracle choice `0` (`Sched.soloRun`; `CTriple`, `ZigLean/Sep/Full/Conc.lean`).
+`alloc_threadFree` shows it stops only at the two oracle picks, so the one-thread scheduler run
+is the same reading (`alloc_run`, `Sched.run_eq_seqRun`). The scheduler's run itself is not an
+`FAllocSpec` entry: it runs as thread `0` from any memory and ends the thread
+(`checkJoinedByChild`), which fails in an `FSeq` memory with another current thread or an
+unjoined child, whatever the allocator does.
+
+### O5: alignments above a page
+
+For `2^k > P`, `map` asks for `2^k - P` extra bytes, and `std.mem.alignPointer` adds
+`2^k - 1` to the mapping's address with an overflow check. The model's addresses are unbounded:
+`Mem.nextAddr` is a `Nat`, and `mmap` places a mapping at the next page address however high.
+From `mem0` with `nextAddr = 2^64 - 4096`, `alloc(1, align 8192)` maps two pages there, the check
+overflows, `alignPointer` returns `null` and `map` panics (`PageAlloc.alloc_high`, kernel-checked).
+So no invariant that such a memory satisfies admits `k ≥ 13`, and `ainv.fits` requires
+`k ≤ 12`. Natively the kernel never maps that high. The fix is in the OS model (OSM-01): an
+`mmap` whose mapping would end above the address space fails with `ENOMEM`. Then the larger
+alignments need the prefix and tail `munmap`s of `map`, which `TotalTriple.munmapPrefix` and
+`munmapTail` already cover.
 
 ### Negative check
 
