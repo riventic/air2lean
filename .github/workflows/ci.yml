@@ -599,7 +599,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
 
       - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
         if: ${{ !matrix.mutate }}
@@ -776,6 +776,16 @@ jobs:
           set -euo pipefail
           lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr
           bash tests/roadmap/alloc-translated/check.sh
+      # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
+      # one-thread results equal to the native run, obstruction O-A kernel-checked.
+      - name: Translated ArenaAllocator
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.Full.Conc
+          bash tests/roadmap/alloc-arena/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
       - name: Translated FixedBufferAllocator against AllocSpec

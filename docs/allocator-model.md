@@ -61,7 +61,7 @@ original rejection.
 - **`*anyopaque` casts.** Erasing a pointer to `*anyopaque` is admitted; recovering `*T` from
   `*anyopaque` (an allocator's `ctx`) requires `T` to be provably free of error storage, as
   for a pointer recovered from an integer.
-- **`unordered` atomic loads** of integers and pointers (`ZigLean/Conc/AtomicWord.lean`): the
+- **`unordered` atomic loads** of integers, packed structs and pointers (`ZigLean/Conc/AtomicWord.lean`): the
   load reads any message not older than the newest one that happened before it. It neither
   uses nor updates the thread's own read view, so it admits every outcome of a `monotonic`
   load and more. `unordered` stores stay rejected.
@@ -92,15 +92,11 @@ exported with it (`provenance.json`).
 reset) for x86_64-linux and aarch64-macos, elaborates them, evaluates the
 `FixedBufferAllocator` clients against the native results, and checks the negative cases.
 
-Outside this milestone (the arena milestone), measured on the 0.16.0 `ArenaAllocator` export:
-
-- Header/bytes punning: `Node.allocatedSliceUnsafe`, `beginResize`, `loadBuf`, `reset`, `alloc`,
-  `free`, `resize` cast between `*Node` and the buffer bytes (`a pointer cast has unresolved or
-  cyclic symbolic storage provenance`).
-- `ctx` recovery of the arena state: its type reaches the cyclic `Node` list, so error-freedom
-  is not provable (`recovering a symbolic error pointer from an integer or opaque value…`).
-- Lock-free atomics: an `unordered` load of the packed `Node.Size` (`endResize`) and pointer
-  atomic stores/RMWs in `pushFreeList`/`stealFreeList` stay rejected.
+`std.heap.ArenaAllocator` (allocator milestone 2, [alloc-arena.md](alloc-arena.md),
+[`tests/roadmap/alloc-arena`](../tests/roadmap/alloc-arena/README.md)) needs three more
+admissions, also translated mode only: pointer casts whose pointee graph is cyclic but provably
+free of error storage (`Node` and its bytes), `*anyopaque` fields in such a graph (the arena's
+`child_allocator.ptr`), and `unordered` loads of packed structs (`Node.Size`).
 
 ## Removing the hand-written allocator models (plan)
 
@@ -130,9 +126,9 @@ Steps, one PR each, in this order:
    or a split-then-renormalize step. Then delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
    `OwnedAlloc.starts`, their `Owned.lean`/`Sep/Owned.lean` cases and the fixed-buffer cases of
    `tests/roadmap/allocator-identity`; narrow ALC-07 to the arena.
-2. **Translated `ArenaAllocator`** (prerequisite of L2), the arena milestone: the three blockers
-   listed under "Regression and scope" (header/bytes punning, the cyclic `Node` type behind
-   `ctx`, the lock-free atomics). Then delete `OwnedPolicy`, `OwnedAlloc`, `AllocRef.owned`,
+2. **Translated `ArenaAllocator`** (prerequisite of L2), the arena milestone: translated
+   ([alloc-arena.md](alloc-arena.md)); its specification needs the obstructions there resolved
+   (O-A needs ghost state, O-E an upstream fix). Then delete `OwnedPolicy`, `OwnedAlloc`, `AllocRef.owned`,
    `BlockKind.owned`, `Mem.allocators`, `ZigLean/Sep/ArenaClient.lean` and ALC-07; rewrite the
    owned-allocator cases of `tests/roadmap/address-reuse/Check.lean` over the translated arena.
 3. **Client contract over `FAllocSpec`** (prerequisite of L3 and L4). A function that takes a
