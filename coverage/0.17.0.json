@@ -626,7 +626,9 @@
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilI8.json",
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU32.json",
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU64.json",
-          "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU8.json"
+          "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU8.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -2806,7 +2808,7 @@
     },
     {
       "tag": "mul_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2843,19 +2845,18 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "mulOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -3103,7 +3104,9 @@
           "tests/golden/layout/air/layout.bumpDigit.json",
           "tests/golden/pointers/air/pointers.sumTo.json",
           "tests/golden/variants/air/variants.advance.json",
-          "tests/golden/vectors/air/vectors.twiceInMem.json"
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -4004,7 +4007,9 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/vectors/air/vectors.vBits.json"
+          "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -4551,7 +4556,9 @@
           "tests/golden/0.17.0/variants/air/variants.area.json",
           "tests/golden/0.17.0/variants/air/variants.radius.json",
           "tests/golden/0.17.0/variants/air/variants.scale.json",
-          "tests/golden/0.17.0/vectors/air/vectors.vOverflow.json"
+          "tests/golden/0.17.0/vectors/air/vectors.vOverflow.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -9561,7 +9568,9 @@
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilI8.json",
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU32.json",
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU64.json",
-          "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU8.json"
+          "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU8.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -10065,7 +10074,9 @@
           "tests/golden/pointers/air/pointers.bumpOpt.json",
           "tests/golden/pointers/air/pointers.swap.json",
           "tests/golden/vectors/air/vectors.splatAdd.json",
-          "tests/golden/vectors/air/vectors.vShift.json"
+          "tests/golden/vectors/air/vectors.vShift.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -10868,7 +10879,9 @@
           "tests/golden/slices/air/slices.bump.json",
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/vectors/air/vectors.addTo.json",
-          "tests/golden/vectors/air/vectors.twiceInMem.json"
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -11351,7 +11364,9 @@
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilI8.json",
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU32.json",
           "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU64.json",
-          "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU8.json"
+          "tests/roadmap/zig017/divceil/air/0.17.0/divceil.divCeilU8.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -11847,7 +11862,9 @@
           "tests/golden/threads/air/atomic.Value(u32).init.json",
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/vectors/air/vectors.addTo.json",
-          "tests/golden/vectors/air/vectors.twiceInMem.json"
+          "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -12191,7 +12208,9 @@
           "tests/golden/0.17.0/pointers/air/pointers.addTo.json",
           "tests/golden/0.17.0/slices/air/slices.sumZ.json",
           "tests/golden/0.17.0/variants/air/variants.area.json",
-          "tests/golden/0.17.0/vectors/air/vectors.vOverflow.json"
+          "tests/golden/0.17.0/vectors/air/vectors.vOverflow.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -13298,7 +13317,9 @@
           "tests/golden/layout/air/layout.wordOf.json",
           "tests/golden/pointers/air/pointers.setOptJob.json",
           "tests/golden/threads/air/atomic.Value(threads.Phase).init.json",
-          "tests/golden/threads/air/atomic.Value(u32).init.json"
+          "tests/golden/threads/air/atomic.Value(u32).init.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -13418,7 +13439,9 @@
           "tests/golden/0.17.0/variants/air/variants.scale.json",
           "tests/golden/0.17.0/vectors/air/vectors.vOverflow.json",
           "tests/golden/layout/air/layout.setNum.json",
-          "tests/golden/pointers/air/pointers.setOptJob.json"
+          "tests/golden/pointers/air/pointers.setOptJob.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json",
+          "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json"
         ]
       },
       "proofs": {
@@ -18337,7 +18360,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "8718380f32ae0990ff03615eb0f764cb84a2ff1da1745b869fdb37fdda622c5e",
+      "scripts/coverage.py": "1bf533d0a788e10d5aa7479d7cc38d1495ec5ab203340589edaa49df212f0ea9",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -19760,6 +19783,8 @@
       "tests/roadmap/bitcast-017/air/0.17.0/bitcast017.vecToInt.json": "913bc811660bdf3029aa70e968e336c8a5f11212d58439eb9517e43303976a06",
       "tests/roadmap/zig017/casts/air/0.17.0/casts.errorCode.json": "86b610e5dd85dc4751a3b8147e95faecd265ed4a41a0ddc426fbb526a9987b2d",
       "tests/roadmap/zig017/casts/air/0.17.0/casts.errorOfCode.json": "0ae1e27904d6067bb055fe718f407fc0b08aca42b368c64a1230bba7f7b41783",
+      "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json": "83e865669472dbc5cc9f9d92ed45988d6c26ca2c9b0d840daef447f32c66b564",
+      "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json": "238ba64ab940da54a078c5cb4cf8272a7ecfdf531e0e0d8cb3ed7bda3a247e3e",
       "tests/roadmap/extern-calls/air/0.14.1/extern_calls.fillSum.json": "bf8c97466015b9ea09de5f1e03c0ecabb26de538ad3239a697f42079b040c7f5",
       "tests/roadmap/extern-calls/air/0.14.1/extern_calls.greetLen.json": "c97334b2bd9a8162f565b07636f52d27fce2746345f8b3072b598e0b519ade70",
       "tests/roadmap/extern-calls/air/0.14.1/libc_ref.memset.json": "8b5f12a7b7f5ef07c64676f49d8be9cc252302511fc03f17faddeeb909ec0b47",
@@ -19817,9 +19842,9 @@
     }
   },
   "summary": {
-    "emitted-unqualified": 135,
+    "emitted-unqualified": 136,
     "rejected-fast-math": 20,
-    "emitted-unfixtured": 35,
+    "emitted-unfixtured": 34,
     "rejected-compiler-state-or-effect": 13,
     "rejected-exporter-unsupported": 16,
     "erased-at-emission": 5

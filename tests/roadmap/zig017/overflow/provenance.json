@@ -1,0 +1,22 @@
+{
+  "fixture": "Zig 0.17.0 @mulWithOverflow, compiler-exported AIR (coverage evidence for mul_with_overflow)",
+  "source": {"path": "tests/roadmap/zig017/overflow/overflow.zig", "sha256": "90565c602faf153ad6d72e434575ce636a3c40f77bf96c2c7f0030b1bcc278f0"},
+  "export": {
+    "command": "ZIG_AIR_JSON_DIR=tests/roadmap/zig017/overflow/air/0.17.0 ZIG_AIR_JSON_FILTER=overflow. <zig-patch/build.sh 0.17.0 PREFIX>/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline tests/roadmap/zig017/overflow/overflow.zig",
+    "schema": 12,
+    "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+    "patched_compiler_note": "hash of the bin/zig lock wrapper (zig-patch/lock.sh), the convention of the other fixtures; the compiler it runs is bin/zig-unlocked, below",
+    "patched_compiler_unlocked_sha256": "c1a081e0fcb3cc5ed476b183b2c6eecd57538e37aa3a74dd69bfa4e4c4608a40",
+    "built_from": "zig-patch tree of codex/soundness-batch ab2e95e3 (hook 0.17.0/hook.patch sha256 af9ff0529ca156f9b04cb4a5402738399a34f474ebd540aeda6d5151a7aebd93), `zig-patch/build.sh 0.17.0` with the host zig 0.17.0, Debug, no LLVM. This includes the content-addressed instance keys (identity.zig), which the shared /opt/dev/air2lean-build/zig-air-0.17.0 (zig-unlocked ee662e35...) predates.",
+    "exporter_json_zig_sha256": "022d9b94ac8feaeb36d93b3d9aacea78a0f9726d5a753b33ecebd1646570ba49",
+    "exporter_identity_zig_sha256": "a03eea3791f047909d370569c24c65d8be0ffae662968cd3000b01c39a970f7e",
+    "exporter_pointer_offset_zig_sha256": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a",
+    "export_host": "aarch64-macos",
+    "air_shape": "each function: arg, arg, mul_with_overflow (tuple of the wrapped result and the overflow bit), alloc/store_safe/ptr_cast, two struct_field_ptr_index loads, (i16: int_cast of the bit), xor, ret_safe"
+  },
+  "translation": "air2lean tests/roadmap/zig017/overflow/air/0.17.0 --namespace Ov --prefix overflow. translates (withOverflow) and the generated Lean elaborates. Evidence that the 0.17.0 exporter writes mul_with_overflow and the translator accepts it; no semantic contract or differential run (support:tags:mul_with_overflow stays emitted-unqualified).",
+  "air_sha256": {
+    "air/0.17.0/overflow.mulOverflowI16.json": "83e865669472dbc5cc9f9d92ed45988d6c26ca2c9b0d840daef447f32c66b564",
+    "air/0.17.0/overflow.mulOverflowU32.json": "238ba64ab940da54a078c5cb4cf8272a7ecfdf531e0e0d8cb3ed7bda3a247e3e"
+  }
+}
