@@ -49,6 +49,9 @@ inductive Value where
   | void
   /-- A single or many pointer. Its alignment and pointee come from its AIR type (`Env`). -/
   | ptr (p : Zig.Ptr)
+  /-- The address of a register local (`regAlloc`): only `load` and `store` take it, which read
+  and write the local's cell in the frame. Every other operation on it is stuck. -/
+  | cell (id : InstId)
   deriving DecidableEq, Inhabited
 
 /-- No behaviour: an ill-typed or out-of-fragment step. Distinct from every panic
@@ -58,8 +61,27 @@ def stuck {α : Type} : Result α := ExceptT.mk none
 /-- SSA environment: the AIR type and the value of each instruction that has run. -/
 abbrev Env := InstId → Option (TyId × Value)
 
-/-- The stack blocks the running function has allocated, in allocation order. -/
-abbrev Frame := List Zig.Ptr
+/-- The frame of a running function: the stack blocks it has allocated, in allocation order,
+and the contents of its register locals (`none`: undefined). -/
+structure Frame where
+  blocks : List Zig.Ptr := []
+  cells : InstId → Option Value := fun _ => none
+
+def Frame.setCell (fr : Frame) (id : InstId) (v : Option Value) : Frame :=
+  { fr with cells := fun j => if j = id then v else fr.cells j }
+
+theorem Frame.setCell_cells (fr : Frame) (id j : InstId) (v : Option Value) :
+    (fr.setCell id v).cells j = if j = id then v else fr.cells j := rfl
+
+theorem Frame.setCell_blocks (fr : Frame) (id : InstId) (v : Option Value) :
+    (fr.setCell id v).blocks = fr.blocks := rfl
+
+theorem Frame.setCell_setCell (fr : Frame) (id : InstId) (v w : Option Value) :
+    (fr.setCell id v).setCell id w = fr.setCell id w := by
+  cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> rfl
+
+theorem Frame.setCell_self (fr : Frame) (id : InstId) : fr.setCell id (fr.cells id) = fr := by
+  cases fr; simp only [setCell, mk.injEq, true_and]; funext j; split <;> simp_all
 
 def Env.set (env : Env) (id : InstId) (t : TyId) (v : Value) : Env :=
   fun j => if j = id then some (t, v) else env j
@@ -371,6 +393,95 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     | _ => StateT.lift (evalPure f env i)
   | _ => StateT.lift (evalPure f env i)
 
+/-- Does `v` have the AIR type `t`? Only the fragment's parameter types (integers, `bool`,
+`void`, single and many pointers) have values here. -/
+def valOk (t : Ty) (v : Value) : Bool :=
+  match t, v with
+  | .int s w, .int s' w' _ => s == s' && w == w'
+  | .bool, .bool _ => true
+  | .void, .void => true
+  | .ptr size _ _, .ptr _ => size == "one" || size == "many"
+  | _, _ => false
+
+/-! ## Register locals
+
+An `alloc` whose address is never taken — every use is the pointer of a `load` or `store`, or
+debug information — is a *register local*: a cell of the frame, not a memory block (Clight's
+non-addressable temporaries). Its address is unobservable, and a block for it would only shift
+the ids and placement proposals of later blocks (`docs/air-semantics.md` §Locals). The test is
+on the decoded AIR alone and conservative: an operation not listed in `regUse` counts as taking
+the address, so the `alloc` stays a block. -/
+
+/-- `v` does not name the instruction `a`. A composite constant counts as possibly naming it. -/
+def clearOf (a : InstId) : Val → Bool
+  | .inst b => b != a
+  | .int .. | .bool _ | .void | .undef _ | .func .. => true
+  | _ => false
+
+/-- `op` uses `a` (directly, not in its nested bodies) at most as the pointer of `load`/`store`
+or in debug information. -/
+def regUse (a : InstId) : Op → Bool
+  | .arg _ | .alloc | .line _ | .dbg .. | .unreach | .trap | .«repeat» _ | .block _ | .loop _
+  | .load _ => true
+  | .store _ v => clearOf a v
+  | .arith _ _ x y | .div _ x y | .minMax _ x y | .bit _ x y | .cmp _ x y | .boolAnd x y
+  | .boolOr x y => clearOf a x && clearOf a y
+  | .not x | .intCast x | .trunc x | .br _ x | .ret x | .bitcast x | .fieldPtr x _
+  | .condBr x _ _ => clearOf a x
+  | .call c args => clearOf a c && args.toList.all (clearOf a ·)
+  | .switchBr v cs _ => clearOf a v && cs.toList.all fun sc =>
+      sc.items.toList.all (clearOf a ·) && sc.ranges.toList.all fun (l, h) => clearOf a l && clearOf a h
+  | _ => false
+
+mutual
+
+/-- Every instruction of the body uses `a` only as a register (`regUse`). -/
+def regBody (a : InstId) : List Inst → Bool
+  | [] => true
+  | i :: rest => regInst a i && regBody a rest
+termination_by l => (sizeOf l, 0)
+
+def regInst (a : InstId) (i : Inst) : Bool :=
+  regUse a i.op && match _h : i.op with
+    | .block b | .loop b => regBody a b.toList
+    | .condBr _ t e => regBody a t.toList && regBody a e.toList
+    | .switchBr _ cs e => regCases a cs.toList && regBody a e.toList
+    | _ => true
+termination_by (sizeOf i, 1)
+decreasing_by
+  all_goals
+    obtain ⟨id, ty, op⟩ := i
+    simp only at _h
+    subst _h
+    simp_wf
+    try simp only [sizeOf_toList]
+    omega
+
+def regCases (a : InstId) : List SwitchCase → Bool
+  | [] => true
+  | sc :: more => regBody a sc.body.toList && regCases a more
+termination_by l => (sizeOf l, 0)
+decreasing_by
+  all_goals simp_wf
+  all_goals try simp only [sizeOf_toList]
+  all_goals (try have := sizeOf_case_body sc); omega
+
+end
+
+/-- A load of a register local of type `t`: its value; `.unspecified` if it is undefined, as
+undefined bytes read through `Zig.load`. -/
+def cellRead (t : Ty) : Option Value → Result Value
+  | some v => if valOk t v then pure v else stuck
+  | none => throw .unspecified
+
+/-- The new contents of a register local stored `v`: `undefined` makes it undefined. -/
+def cellVal (f : Func) (env : Env) : Val → Result (Option Value)
+  | .undef _ => pure none
+  | v => some <$> operand f env v
+
+/-- The `alloc` `a` of `f` is a register local. -/
+def regAlloc (f : Func) (a : InstId) : Bool := regBody a f.body.toList
+
 mutual
 
 /-- Run an instruction sequence until it exits. Falling off the end is stuck (a well-formed
@@ -392,9 +503,7 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
     match e with
     | .br t v => if t = i.id then execBody c rest (env.set i.id i.ty v) else pure e
     | _ => pure e
-  | .loop body =>
-    -- A loop never falls through: it repeats on its own `repeat` and otherwise propagates.
-    Zig.loop (execBody c body.toList env) (Exit.again i.id)
+  | .loop body => execLoop c i.id body env
   | .br t v => do pure (.br t (← liftR (operand c.func env v)))
   | .«repeat» t => pure (.rep t)
   | .ret v => do pure (.ret (← liftR (operand c.func env v)))
@@ -407,14 +516,31 @@ def execInst (c : Ctx) (i : Inst) (rest : List Inst) (env : Env) : SM Exit :=
     match ← liftR (operand c.func env v) with
     | .int s _ x => execSwitch c s x cases.toList el env
     | _ => liftR stuck
-  | .alloc => do
-    -- The block's alignment is the pointer type's `align(N)` (MM-1).
-    match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
-    | some (size, _), some align => do
-      let p ← liftMem (Zig.allocStack size align)
-      modify (· ++ [p])
-      execBody c rest (env.set i.id i.ty (.ptr p))
-    | _, _ => liftR stuck
+  | .alloc =>
+    if regAlloc c.func i.id then do
+      -- A register local starts undefined.
+      modify (·.setCell i.id none)
+      execBody c rest (env.set i.id i.ty (.cell i.id))
+    else
+      -- The block's alignment is the pointer type's `align(N)` (MM-1).
+      match (pointee? c.func i.ty).bind (layoutOf c.func), ptrAlignOf c.func i.ty with
+      | some (size, _), some align => do
+        let p ← liftMem (Zig.allocStack size align)
+        modify fun fr => { fr with blocks := fr.blocks ++ [p] }
+        execBody c rest (env.set i.id i.ty (.ptr p))
+      | _, _ => liftR stuck
+  | .load p => do
+    let v ← (do
+      match ← liftR (operand c.func env p) with
+      | .cell k => liftR (cellRead (tyOf c.func i.ty) ((← get).cells k))
+      | _ => liftMem (evalMem c.func env i))
+    execBody c rest (env.set i.id i.ty v)
+  | .store p v => do
+    (do
+      match ← liftR (operand c.func env p) with
+      | .cell k => modify (·.setCell k (← liftR (cellVal c.func env v)))
+      | _ => do let _ ← liftMem (evalMem c.func env i))
+    execBody c rest (env.set i.id i.ty .void)
   | .call (.func name _ _) args => do
     match panicOf? name with
     | some e => liftR (throw e)
@@ -450,17 +576,15 @@ decreasing_by
   all_goals try simp only [sizeOf_toList]
   all_goals (try have := sizeOf_case_body sc); omega
 
-end
+/-- The loop `id`: its body until an exit other than its own `repeat`. A loop never falls
+through. A separate definition, so that a certificate rewrites a whole loop by its own lemma
+instead of unfolding the body. -/
+def execLoop (c : Ctx) (id : InstId) (body : Array Inst) (env : Env) : SM Exit :=
+  Zig.loop (execBody c body.toList env) (Exit.again id)
+termination_by (sizeOf body, 1)
+decreasing_by simp_wf; simp only [sizeOf_toList]; omega
 
-/-- Does `v` have the AIR type `t`? Only the fragment's parameter types (integers, `bool`,
-`void`, single and many pointers) have values here. -/
-def valOk (t : Ty) (v : Value) : Bool :=
-  match t, v with
-  | .int s w, .int s' w' _ => s == s' && w == w'
-  | .bool, .bool _ => true
-  | .void, .void => true
-  | .ptr size _ _, .ptr _ => size == "one" || size == "many"
-  | _, _ => false
+end
 
 /-- Do the arguments match the parameter types, one for one? -/
 def argsOk (f : Func) : List TyId → List Value → Bool
@@ -473,9 +597,9 @@ binds its parameter) and no local cells. A call whose arguments do not match the
 types, and a function that ends other than by `ret`, are stuck. -/
 def execFunc (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
   if argsOk f f.params.toList args then do
-    let (e, frame) ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run []
+    let (e, frame) ← (execBody ⟨f, args, call⟩ f.body.toList (fun _ => none)).run {}
     -- The stack frame ends at the return (a panic leaves the memory behind).
-    frame.forM Zig.free
+    frame.blocks.forM Zig.free
     match e with
     | .ret v => pure v
     | _ => StateT.lift stuck
@@ -566,40 +690,36 @@ theorem execBody_mono (f : Func) (args : List Value) :
   apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck⟩
     (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o⟩ i rest env))
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o⟩ s x cs el env))
-  case case1 => intros; simp only [execBody]; exact monotone_const _
-  case case2 => intros; simp only [execBody]; assumption
-  case case21 => intros; simp only [execSwitch]; assumption
-  case case22 => intros; unfold execSwitch; repeat' mono_step
-  case case20 =>
-    intro i rest env n1 n2 n3 n4 n5 n6 n7 n8 n9 n10 n11 n12 n13 n14 ih
-    unfold execInst
-    split <;> (try (exfalso; first
-      | exact n1 _ ‹_› | exact n2 _ ‹_› | exact n3 _ ‹_› | exact n4 _ _ ‹_› | exact n5 _ ‹_›
-      | exact n6 _ ‹_› | exact n7 ‹_› | exact n8 ‹_› | exact n9 _ _ _ ‹_› | exact n10 _ _ _ ‹_›
-      | exact n11 ‹_› | exact n12 _ _ _ _ ‹_› | exact n13 _ ‹_› | exact n14 _ _ ‹_›))
-    apply monotone_bind
-    · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
-    · apply monotone_of_monotone_apply; intro v; exact ih v
-  case case17 =>
-    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
-    simp only at *
-    subst_vars
-    simp only [execInst]
-    try simp only [*]
-    apply monotone_bind
-    · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
-    · apply monotone_of_monotone_apply; intro vs
-      apply monotone_bind
-      · apply monotone_liftMem
-        exact monotone_apply _ _ (monotone_apply _ _ monotone_id)
-      · apply monotone_of_monotone_apply; intro v; apply_assumption
-  all_goals
-    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
-    simp only at *
-    subst_vars
-    simp only [execInst]
-    try simp only [*]
-    repeat' mono_step
+    (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o⟩ id body env))
+  case case25 => intros; unfold execSwitch; repeat' mono_step
+  all_goals first
+    | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
+    | (intros; simp only [execSwitch]; assumption)
+    | (intros; unfold execSwitch; dsimp only; repeat' mono_step; done)
+    | (intros; simp only [execLoop]; apply monotone_loopMM; assumption)
+    | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+       simp only at *
+       subst_vars
+       simp only [execInst]
+       try simp only [*, ↓reduceIte, Bool.false_eq_true]
+       repeat' mono_step
+       done)
+    | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+       simp only at *
+       subst_vars
+       simp only [execInst]
+       try simp only [*]
+       apply monotone_bind
+       · first | exact monotone_const _ | (dsimp only; exact monotone_const _)
+       · apply monotone_of_monotone_apply; intro vs
+         apply monotone_bind
+         · apply monotone_liftMem
+           exact monotone_apply _ _ (monotone_apply _ _ monotone_id)
+         · apply monotone_of_monotone_apply; intro v; apply_assumption
+       done)
+    | (intros
+       unfold execInst
+       split <;> first | (exfalso; solve_by_elim) | (repeat' mono_step; done))
 
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
@@ -608,7 +728,7 @@ theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : mo
   apply monotone_ite _ _ _ _ (monotone_const _)
   apply monotone_bind
   · exact monotone_compose (g := fun o : Oracle =>
-      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run []) hg
+      (execBody ⟨f, args, o⟩ f.body.toList (fun _ => none)).run {}) hg
       (monotone_stateTRun _ (execBody_mono f args _ _) _)
   · exact monotone_const _
 
@@ -697,6 +817,90 @@ theorem execFunc_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (f : Func) (args : 
 
 end Complete
 
+/-! ## Loops
+
+A certificate relates the semantics' loop (`execLoop`, over `Frame` and `Exit`) to the generated
+`f.loop<n>` (over the function's `Locals` and its own exit type) by an encoding of the exit
+and a map of the state (`docs/air-semantics.md` §Loops). -/
+
+/-- The value an instruction holds in `env` (`.void` if it has not run). -/
+def Env.val (env : Env) (k : InstId) : Value :=
+  match env k with
+  | some (_, v) => v
+  | none => .void
+
+/-- The contents of a register local (`.void` if undefined). -/
+def Frame.cell (fr : Frame) (k : InstId) : Value := (fr.cells k).getD .void
+
+/-- A body's result, its exit encoded and its state mapped. -/
+abbrev mapRes {σ₁ σ₂ ε₁ ε₂ : Type} (enc : ε₂ → ε₁) (F : σ₂ → σ₁) (r : ε₂ × σ₂) : ε₁ × σ₁ :=
+  (enc r.1, F r.2)
+
+section LoopComm
+open Lean.Order
+
+theorem adm_le {α : Type} [CCPO α] (k : α) : admissible (fun x : α => x ⊑ k) :=
+  fun _ hc h => csup_le hc h
+
+/-- Loop commutation: if one run of body `b₁` from a mapped state is the mapped run of `b₂`,
+and the exit encoding commutes with the repeat test, then the loops commute too. Proved by
+fixpoint induction in both directions. -/
+theorem loop_comm {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (b₂ : Zig.MM σ₂ ε₂)
+    (a₁ : ε₁ → Bool) (a₂ : ε₂ → Bool) (enc : ε₂ → ε₁) (F : σ₂ → σ₁)
+    (hb : ∀ s, b₁.run (F s) = mapRes enc F <$> b₂.run s)
+    (ha : ∀ e, a₁ (enc e) = a₂ e) (s : σ₂) :
+    (Zig.loop b₁ a₁).run (F s) = mapRes enc F <$> (Zig.loop b₂ a₂).run s := by
+  apply PartialOrder.rel_antisymm
+  · revert s
+    apply Zig.loop.fixpoint_induct b₁ a₁
+      (motive := fun l => ∀ s, l.run (F s) ⊑ mapRes enc F <$> (Zig.loop b₂ a₂).run s)
+    · apply admissible_pi; intro s
+      exact admissible_apply (fun _ (v : MemM (ε₁ × σ₁)) => v ⊑ mapRes enc F <$> (Zig.loop b₂ a₂).run s)
+        (F s) (adm_le _)
+    · intro l hl s
+      rw [Zig.loop.eq_1 b₂ a₂]
+      show (b₁ >>= fun e => if a₁ e then l else pure e).run (F s) ⊑ _
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _
+      · exact PartialOrder.rel_refl
+  · revert s
+    apply Zig.loop.fixpoint_induct b₂ a₂
+      (motive := fun l => ∀ s, mapRes enc F <$> l.run s ⊑ (Zig.loop b₁ a₁).run (F s))
+    · apply admissible_pi; intro s
+      apply admissible_apply (fun x (v : MemM (ε₂ × σ₂)) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F x)) s
+      have e : (fun v : MemM (ε₂ × σ₂) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F s)) =
+          (fun v => ∀ m, (fun p => (mapRes enc F p.1, p.2)) <$> v m ⊑ (Zig.loop b₁ a₁).run (F s) m) := by
+        funext v
+        apply propext
+        constructor
+        · intro h m
+          have := h m
+          change StateT.run (mapRes enc F <$> v) m ⊑ _ at this
+          rw [StateT.run_map] at this
+          exact this
+        · intro h m
+          have := h m
+          change StateT.run (mapRes enc F <$> v) m ⊑ _
+          rw [StateT.run_map]
+          exact this
+      rw [e]
+      exact admissible_pi_apply _ fun _ => adm_app0 _ _
+    · intro l hl s
+      rw [Zig.loop.eq_1 b₁ a₁]
+      show mapRes enc F <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
+        (b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)
+      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _
+      · exact PartialOrder.rel_refl
+
+end LoopComm
+
 /-- A program as a table of fully qualified names and functions (`progOf`). -/
 abbrev Table := List (String × Func)
 
@@ -746,7 +950,7 @@ theorem run_throwMem {α : Type} (e : Zig.Error) (s : Zig.Mem) :
 theorem map_throw {α β : Type} (e : Zig.Error) (f : α → β) :
     f <$> (throw e : Result α) = throw e := rfl
 
-theorem free_nil : List.forM ([] : Frame) Zig.free = pure () := rfl
+theorem free_nil : List.forM ([] : List Zig.Ptr) Zig.free = pure () := rfl
 
 theorem bind_ite {m : Type → Type} [Monad m] {α β : Type} (c : Prop) [Decidable c]
     (a b : m α) (f : α → m β) : (if c then a else b) >>= f = if c then a >>= f else b >>= f := by
@@ -789,6 +993,9 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   List.nil_append List.foldr_cons List.foldr_nil true_and and_true Bool.and_true
   Bool.true_and beq_self_eq_true List.toList_toArray
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
+  regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
+  Frame.setCell_blocks Frame.setCell_setCell
+  List.forM_cons List.forM_nil List.all_cons List.all_nil Bool.and_self
 
 end Cert
 
