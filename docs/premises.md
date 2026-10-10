@@ -616,11 +616,15 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### MTH-04 — aarch64 float lowering
 
 - Kind: environment.
-- Statement: The translation targets aarch64-macos, whose float lowering differs from
-  x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3` division;
-  before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f16`/`f32`/`f64` is a fused
-  instruction. The rules are read from the Zig 0.16.0 LLVM backend and compiler_rt sources and
-  checked by the macOS differential test; no other aarch64 target is qualified.
+- Statement: The translation targets aarch64-macos or aarch64-linux, whose float lowering
+  differs from x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3`
+  division; before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f32`/`f64` is a fused
+  instruction, on `f16` too where the baseline CPU has `fullfp16` (aarch64-macos `apple_m1`; not
+  aarch64-linux `generic`, which rounds through `f32` like x86_64). The rules are those of the
+  baseline CPU (`Target.floatRules`); they are read from the Zig 0.16.0 LLVM backend and
+  compiler_rt sources and checked by each host's differential test. On aarch64-linux the
+  `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: a program linked with
+  libc is outside the premise.
 - Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
 - Sources: [floats.md](floats.md#targets).
 

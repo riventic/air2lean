@@ -6,7 +6,8 @@ for wasm32 ([generated-code.md](generated-code.md#pointer-width)), and a big-end
 makes the source assumptions visible; it does not prove correspondence with a
 shipping executable. Existing type, pointer, layout, and unsupported-instruction
 checks still apply. Schema 12 retains the existing Linux x86_64 reference and macOS aarch64
-model workflows, and admits wasm32-freestanding and wasm32-wasi with the 32-bit pointer
+model workflows, admits aarch64-linux-gnu (Zig 0.14.1 to 0.16.0, [§aarch64](#aarch64-abi-profiles-t04)),
+and admits wasm32-freestanding and wasm32-wasi with the 32-bit pointer
 model and s390x-linux with the big-endian model. These are
 accepted model ABI scopes with per-type layout checks, not hardware or binary
 qualification claims.
@@ -24,7 +25,7 @@ Every schema-12 function has a mandatory `profile` object:
 | Field | Accepted value or meaning |
 | --- | --- |
 | `name` | The model profile of the byte order: `"abi64-le-v1"` for a little-endian target (also a 32-bit one), `"abi64-be-v1"` for a big-endian one; the exporter writes it and a name that differs from `endian`'s is rejected |
-| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `s390x-linux-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
+| `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `aarch64-linux-gnu` (Zig 0.14.1, 0.15.2 and 0.16.0 only), `s390x-linux-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
 | `pointer_bits` | `64` for x86_64/aarch64/s390x, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
 | `endian` | The triple's byte order: `"little"` for x86_64/aarch64/wasm32, `"big"` for s390x; any other value or a mismatch is rejected |
 | `abi` | Target ABI tag; must equal the triple's ABI component before a version suffix |
@@ -260,9 +261,8 @@ this fragment, and the existing float probe remains a separate reference gate.
 ReleaseFast is a separate observation profile, not inferred from ReleaseSafe
 ([build-modes.md](build-modes.md)).
 
-This tool does not change the translator's accepted target profiles. In particular,
-aarch64-linux translation remains guarded, and wasm32 pointer parameterization
-remains absent. The native probe records a bounded candidate for T04/T05/T06.
+This tool does not change the translator's accepted target profiles. The native probe
+records a bounded candidate for T04/T05/T06.
 
 ## aarch64 ABI profiles (T04)
 
@@ -283,8 +283,16 @@ kernel-checks each profile's layout table against the model and compares the fil
 and atomic results with it. Six declared divergences (eight before Zig 0.16.0) are reported and
 not counted as matches: soft-float f80 unnormal and pseudo-denormal handling, padding-sensitive
 `u24`/`u40` cmpxchg, signed `Max` of a negative `i24`/`i40` cell, and (before 0.16.0)
-f64-precision `@sqrt` of f80 and f128. These are ABI-only profiles. aarch64-linux AIR is still rejected by
-`BuildProfile.parse`.
+f64-precision `@sqrt` of f80 and f128.
+
+The translator accepts both profiles (`Target.qualified`, `Air2Lean/Air/Dialect.lean`), each with
+its own row: pointer width, byte order, `c_longdouble` (aarch64-linux `f128`, aarch64-macos
+`f64`), float rules (premise MTH-04, [floats.md](floats.md#targets)) and the widest atomic (128
+bits). aarch64-linux fails closed outside the probes: a Zig version without an expected file
+(0.17.0) and an ABI other than `gnu` are profile errors. The declared divergences are outside the
+translation: a noncanonical `f80` operand is `.unspecified` (`softF80Chk`), the pre-0.16.0 `@sqrt`
+is the `f64`-precision helper, and `cmpxchg` and `.Max`/`.Min` on a padded width are rejected
+(`PADDED_ATOMIC`).
 
 ## Byte order (big endian)
 

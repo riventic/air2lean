@@ -11,9 +11,10 @@ ReleaseSafe. Each profile has three pieces of evidence:
 3. A Lean check tied to that file. Kernel-checked layout tables are compared with the file, and
    the recorded results are compared with the model.
 
-This is ABI qualification only. aarch64-linux AIR stays outside the translator's accepted
-profiles (`Air2Lean/Air/Profile.lean`). No native differential test or proof build runs on
-that host. See [target-matrix.md](target-matrix.md).
+The translator accepts both profiles (`Target.qualified` in `Air2Lean/Air/Dialect.lean`;
+[profiles.md](profiles.md#aarch64-abi-profiles-t04)). aarch64-linux only for the Zig versions
+with an expected file (0.16.0, 0.15.2 and 0.14.1) and the `gnu` ABI: any other is a profile error.
+See [target-matrix.md](target-matrix.md) and §Translation below.
 
 ```sh
 # On the profile's host (aarch64 Linux or Apple silicon macOS), with a stock Zig whose version
@@ -123,15 +124,15 @@ files line for line (apart from `meta zig`).
 
 The signed `Max` row is an unsound corner of the model: the model's `RmwOp.apply` is the
 signed maximum, and the native result of a padded signed width (`i24`, `i40`) is not. `Min` and
-the unpadded widths (`i8`, `i64`, `i128`) agree. The translator's atomic checker does not
-reject padded widths yet.
+the unpadded widths (`i8`, `i64`, `i128`) agree. The translator rejects `.Max` and `.Min` on a
+padded width (`CheckCtx.checkPaddedAtomic`, diagnostic `PADDED_ATOMIC`).
 
 The cmpxchg rows are a synchronization boundary. Zig widens a `u24`/`u40` atomic to its
 4-/8-byte ABI cell and compares the whole cell, padding included. A plain store writes only
 the value bytes. The model leaves padding undefined and compares only the value bits. So
 the model's strong cmpxchg claim is not valid for widths with whole padding bytes (`u24`,
-`u40`, `u48`, `u56`, `u65`…`u120`). The translator's atomic checker (`atomicIntChild`)
-does not reject them yet (see the risks in the T04 handoff). The LLVM IR that Zig 0.16.0
+`u40`, `u48`, `u56`, `u65`…`u120`). The translator rejects a `cmpxchg` on them
+(`PADDED_ATOMIC`). The LLVM IR that Zig 0.16.0
 emits shows the mechanism: `store i40` for the plain store, and `cmpxchg ptr, i64, i64` for
 the atomic. The widening comes from Zig's frontend lowering, so other targets probably behave
 the same way. This has been observed only on aarch64. Widths without padding (`u8`,
@@ -158,6 +159,22 @@ Both profiles share the rest:
 - Subnormal rounding and conversions are as the model predicts.
 - Atomics are accepted up to 128 bits and the cache line is 128 bytes.
 
+## Translation
+
+Each profile's facts are a row of `Target.qualified`: 64-bit little-endian pointers, the
+integer and float layouts of `Zig.intSize`/`Zig.intAlign` (the layout tables above),
+`c_longdouble` (`f128` on aarch64-linux-gnu, `f64` on aarch64-macos-none), the float rules
+(`FloatRules.aarch64`, premise MTH-04, [floats.md](floats.md#targets)) and 128-bit atomics. The
+two rows differ in `c_longdouble` and in `f16` `@mulAdd`: `apple_m1` has `fullfp16` and fuses it,
+the aarch64-linux `generic` CPU rounds it through `f32`. Both differ from x86_64 in `f80` (soft
+float) and in `f32`/`f64` `@mulAdd` (fused). The declared divergences above stay outside every
+translation: a noncanonical `f80` operand is `.unspecified`, the pre-0.16.0 `@sqrt` is the
+`f64`-precision helper, and a padded `cmpxchg` or `.Max`/`.Min` is rejected.
+
+The examples are translated, built and differentially tested natively on both hosts
+(`scripts/check.sh`); aarch64-linux AIR differs from the x86_64-linux goldens only where
+`tests/golden/<version>/<ex>/air-linux-aarch64/` and `Gen-linux-aarch64.lean` say so.
+
 ## Scope
 
 Not covered:
@@ -171,4 +188,7 @@ Not covered:
 - instruction-level ordering strength (LDAR/STLR vs LL/SC) and futex/mutex behaviour;
 - atomics on `f80`, and the `-mcpu` features other than `baseline`;
 - other Zig versions (0.17.0 included). A new version needs its own `expected/<version>/`
-  files; without them `compare` reports `excluded`.
+  files; without them `compare` reports `excluded`, and the translator rejects its
+  aarch64-linux AIR;
+- programs linked with libc on aarch64-linux: `f128` `long double` libcalls then resolve to
+  glibc, not compiler_rt.
