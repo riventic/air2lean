@@ -59,7 +59,7 @@
     "air_export": {
      "status": "failed",
      "files": 0,
-     "log": "...@void_value)\n            }, {\n              %277 = break(%242, @void_value)\n            }) node_offset:37:9 to :37:14\n          }) node_offset:37:9 to :37:14\n          %251 = repeat() node_offset:37:9 to :37:14\n        }) node_offset:37:9 to :37:14\n        %278 = ensure_result_used(%242) node_offset:37:9 to :37:14\n        %279 = restore_err_ret_index_unconditional(%235) node_offset:34:5 to :34:5\n        %280 = break(%235, @void_value)\n      }) node_offset:34:5 to :34:5\n      %281 = dbg_stmt(33, 5)\n      %282 = decl_val(\"trace\") token_offset:41:13 to :41:18\n      %283 = dbg_stmt(33, 18)\n      %284 = call(.auto, %282, [\n        {\n          %285 = dbg_stmt(33, 19)\n          %286 = extended(ptr_cast_full(ptr_cast, align_cast, %284, %86)) node_offset:41:19 to :41:43\n          %287 = break_inline(%284, %286)\n        },\n      ]) node_offset:41:13 to :41:44\n      %288 = int(7)\n      %289 = as_node(@c_uint_type, %288) node_offset:41:60 to :41:61\n      %290 = mulwrap(%284, %289) node_offset:41:13 to :41:62\n      %291 = load(%229) node_offset:41:67 to :41:68\n      %292 = addwrap(%290, %291) node_offset:41:12 to :41:68\n      %293 = restore_err_ret_index_unconditional(.none) node_offset:41:5 to :41:68\n      %294 = dbg_stmt(33, 5)\n      %295 = ret_node(%292) node_offset:41:5 to :41:68\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t arrays_2d.zig\n\n\nthread 74252825 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+     "log": "...@void_value)\n            }, {\n              %277 = break(%242, @void_value)\n            }) node_offset:37:9 to :37:14\n          }) node_offset:37:9 to :37:14\n          %251 = repeat() node_offset:37:9 to :37:14\n        }) node_offset:37:9 to :37:14\n        %278 = ensure_result_used(%242) node_offset:37:9 to :37:14\n        %279 = restore_err_ret_index_unconditional(%235) node_offset:34:5 to :34:5\n        %280 = break(%235, @void_value)\n      }) node_offset:34:5 to :34:5\n      %281 = dbg_stmt(33, 5)\n      %282 = decl_val(\"trace\") token_offset:41:13 to :41:18\n      %283 = dbg_stmt(33, 18)\n      %284 = call(.auto, %282, [\n        {\n          %285 = dbg_stmt(33, 19)\n          %286 = extended(ptr_cast_full(ptr_cast, align_cast, %284, %86)) node_offset:41:19 to :41:43\n          %287 = break_inline(%284, %286)\n        },\n      ]) node_offset:41:13 to :41:44\n      %288 = int(7)\n      %289 = as_node(@c_uint_type, %288) node_offset:41:60 to :41:61\n      %290 = mulwrap(%284, %289) node_offset:41:13 to :41:62\n      %291 = load(%229) node_offset:41:67 to :41:68\n      %292 = addwrap(%290, %291) node_offset:41:12 to :41:68\n      %293 = restore_err_ret_index_unconditional(.none) node_offset:41:5 to :41:68\n      %294 = dbg_stmt(33, 5)\n      %295 = ret_node(%292) node_offset:41:5 to :41:68\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t arrays_2d.zig\n\n\nthread 75764855 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
     }
    },
    "c_defined_functions": [
@@ -828,12 +828,12 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 hash_table_native.test.c_frontend_native...error: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/a6a1e692b253d513ed9fc6cca2e374e0/test --seed=0xa74d137\n"
+     "log": "1/1 hash_table_native.test.c_frontend_native...error: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/a6a1e692b253d513ed9fc6cca2e374e0/test --seed=0xdb93cb39\n"
     },
     "air_export": {
      "status": "failed",
      "files": 1,
-     "log": "... = validate_deref(%471) node_offset:91:25 to :91:28\n          %473 = dbg_stmt(16, 28)\n          %474 = field_ptr_load(%471, \"value\") node_offset:91:25 to :91:34\n          %475 = store_node(%469, %474) node_offset:91:17 to :91:34\n          %476 = dbg_stmt(17, 17)\n          %477 = decl_val(\"true\") token_offset:92:24 to :92:31\n          %478 = cmp_neq(%477, @zero) node_offset:92:24 to :92:36\n          %479 = restore_err_ret_index_unconditional(.none) node_offset:92:17 to :92:36\n          %480 = dbg_stmt(17, 17)\n          %481 = ret_node(%478) node_offset:92:17 to :92:36\n        }, {\n          %482 = break(%467, @void_value)\n        }) node_offset:90:13 to :90:15\n      }) node_offset:90:13 to :90:15\n      %483 = ensure_result_used(%467) node_offset:90:13 to :90:15\n      %484 = dbg_stmt(19, 9)\n      %485 = extended(dbg_empty_stmt())\n      %486 = break(%405, @void_value)\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t hash_table.zig\n\n  in hash_table.zig\n    > %405 = block({%413..%486}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %403 = condbr(%402, {%405..%487}, {%488}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %404 = block({%399..%403}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %398 = loop({%404, %406}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %391 = block({%392..%491}) node_offset:83:5 to :83:5\n\nthread 74264342 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+     "log": "... = validate_deref(%471) node_offset:91:25 to :91:28\n          %473 = dbg_stmt(16, 28)\n          %474 = field_ptr_load(%471, \"value\") node_offset:91:25 to :91:34\n          %475 = store_node(%469, %474) node_offset:91:17 to :91:34\n          %476 = dbg_stmt(17, 17)\n          %477 = decl_val(\"true\") token_offset:92:24 to :92:31\n          %478 = cmp_neq(%477, @zero) node_offset:92:24 to :92:36\n          %479 = restore_err_ret_index_unconditional(.none) node_offset:92:17 to :92:36\n          %480 = dbg_stmt(17, 17)\n          %481 = ret_node(%478) node_offset:92:17 to :92:36\n        }, {\n          %482 = break(%467, @void_value)\n        }) node_offset:90:13 to :90:15\n      }) node_offset:90:13 to :90:15\n      %483 = ensure_result_used(%467) node_offset:90:13 to :90:15\n      %484 = dbg_stmt(19, 9)\n      %485 = extended(dbg_empty_stmt())\n      %486 = break(%405, @void_value)\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t hash_table.zig\n\n  in hash_table.zig\n    > %405 = block({%413..%486}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %403 = condbr(%402, {%405..%487}, {%488}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %404 = block({%399..%403}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %398 = loop({%404, %406}) node_offset:86:9 to :86:14\n  in hash_table.zig\n    > %391 = block({%392..%491}) node_offset:83:5 to :83:5\n\nthread 75777572 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
     }
    },
    "c_defined_functions": [
@@ -1165,7 +1165,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 74271177 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10037691b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:124:10: 0x100338bbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:545:57: 0x100338a8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x100377277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0xc865f7d2\n"
+     "log": "1/1 libc_stdlib_native.test.c_frontend_native...thread 75785235 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:106:32: 0x10045291b in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18beda07b in ??? (/usr/lib/system/libsystem_c.dylib)\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:124:10: 0x100414bbf in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/libc_stdlib/libc_stdlib_native.zig:545:57: 0x100414a8b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x100453277 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/cc2c7a499b392e972727217900324c15/test --seed=0x6b38376f\n"
     },
     "air_export": {
      "status": "ok",
@@ -1326,7 +1326,7 @@
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_BLOCKED": 16,
+      "CALLEE_BLOCKED": 15,
       "CALLEE_EXTERN_UNBOUND": 6,
       "CALLEE_MISSING": 54,
       "CONSTANT_FAILURE": 3,
@@ -1617,7 +1617,7 @@
        "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       }
      ],
-     "diagnostic_count": 90
+     "diagnostic_count": 89
     }
    },
    "c_defined_functions": [
@@ -1760,119 +1760,14 @@
      }
     },
     "air2lean": {
-     "status": "rejected",
-     "codes": {
-      "CALLEE_BLOCKED": 1,
-      "INSTRUCTION_FAILURE": 14
-     },
-     "diagnostics": [
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 18: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 19: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 18: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 19: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 18: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 19: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 18: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 19: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 18: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 19: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 14: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 14: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 18: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "compiler_rt#root:compiler_rt.memcpy.memcpyFast",
-       "message": "compiler_rt#root:compiler_rt.memcpy.memcpyFast: near line 19: a pointer cast between a vector and another pointee type is illegal behaviour (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "abi:memcpy:libc_string.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      }
-     ],
-     "diagnostic_count": 15
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 1733
     }
    },
    "c_defined_functions": [
@@ -2225,7 +2120,7 @@
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_BLOCKED": 21,
+      "CALLEE_BLOCKED": 19,
       "CALLEE_EXTERN_UNBOUND": 7,
       "CALLEE_MISSING": 29,
       "CONSTANT_FAILURE": 7,
@@ -2514,7 +2409,7 @@
        "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       }
      ],
-     "diagnostic_count": 74
+     "diagnostic_count": 72
     }
    },
    "c_defined_functions": [
@@ -2806,7 +2701,7 @@
     "air_export": {
      "status": "failed",
      "files": 1,
-     "log": "...node_offset:23:13 to :23:18\n        %120 = load(%109) node_offset:23:13 to :23:24\n        %121 = typeof(%120) node_offset:23:13 to :23:24\n        %122 = as_node(%121, @one) node_offset:23:23 to :23:24\n        %123 = addwrap(%120, %122) node_offset:23:13 to :23:24\n        %124 = store_node(%109, %123) node_offset:23:13 to :23:24\n        %125 = dbg_stmt(12, 13)\n        %126 = extended(restore_err_ret_index(%104.none) node_offset:24:24 to :24:27\n        %127 = break(%104, %114)\n      }) node_offset:20:10 to :20:10\n      %128 = decl_val(\"CAP\") token_offset:25:15 to :25:18\n      %129 = as_node(@c_uint_type, @one) node_offset:25:34 to :25:35\n      %130 = subwrap(%128, %129) node_offset:25:15 to :25:36\n      %131 = bit_and(%104, %130) node_offset:25:12 to :25:12\n      %132 = dbg_stmt(7, 13)\n    > %133 = elem_ptr_node(%103, %131) node_offset:19:5 to :19:5\n      %134 = load(%73) node_offset:26:9 to :26:10\n      %135 = store_node(%133, %134) node_offset:26:7 to :26:10\n      %136 = dbg_stmt(15, 5)\n      %137 = decl_val(\"true\") token_offset:27:12 to :27:19\n      %138 = cmp_neq(%137, @zero) node_offset:27:12 to :27:24\n      %139 = restore_err_ret_index_unconditional(.none) node_offset:27:5 to :27:24\n      %140 = dbg_stmt(15, 5)\n      %141 = ret_node(%138) node_offset:27:5 to :27:24\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t ring_buffer.zig\n\n\nthread 74295361 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+     "log": "...node_offset:23:13 to :23:18\n        %120 = load(%109) node_offset:23:13 to :23:24\n        %121 = typeof(%120) node_offset:23:13 to :23:24\n        %122 = as_node(%121, @one) node_offset:23:23 to :23:24\n        %123 = addwrap(%120, %122) node_offset:23:13 to :23:24\n        %124 = store_node(%109, %123) node_offset:23:13 to :23:24\n        %125 = dbg_stmt(12, 13)\n        %126 = extended(restore_err_ret_index(%104.none) node_offset:24:24 to :24:27\n        %127 = break(%104, %114)\n      }) node_offset:20:10 to :20:10\n      %128 = decl_val(\"CAP\") token_offset:25:15 to :25:18\n      %129 = as_node(@c_uint_type, @one) node_offset:25:34 to :25:35\n      %130 = subwrap(%128, %129) node_offset:25:15 to :25:36\n      %131 = bit_and(%104, %130) node_offset:25:12 to :25:12\n      %132 = dbg_stmt(7, 13)\n    > %133 = elem_ptr_node(%103, %131) node_offset:19:5 to :19:5\n      %134 = load(%73) node_offset:26:9 to :26:10\n      %135 = store_node(%133, %134) node_offset:26:7 to :26:10\n      %136 = dbg_stmt(15, 5)\n      %137 = decl_val(\"true\") token_offset:27:12 to :27:19\n      %138 = cmp_neq(%137, @zero) node_offset:27:12 to :27:24\n      %139 = restore_err_ret_index_unconditional(.none) node_offset:27:5 to :27:24\n      %140 = dbg_stmt(15, 5)\n      %141 = ret_node(%138) node_offset:27:5 to :27:24\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t ring_buffer.zig\n\n\nthread 75808162 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
     }
    },
    "c_defined_functions": [
@@ -2852,7 +2747,7 @@
     },
     "zig_native": {
      "status": "mismatch",
-     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0xbfdd7d3d\n"
+     "log": "1/1 setjmp_longjmp_native.test.c_frontend_native...expected 1006, found 1000\nFAIL (TestExpectedEqual)\n0 passed; 0 skipped; 1 failed.\nerror: the following test command failed with exit code 1:\n$HOME/.cache/zig/o/2c1c181cc931d5da20df4ad58a98d1c5/test --seed=0xbb12dda9\n"
     },
     "air_export": {
      "status": "ok",
@@ -3051,7 +2946,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 sort_callback_native.test.c_frontend_native...thread 74303773 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/sort_callback/sort_callback_native.zig:72:32: 0x1025e7097 in by_value (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/sort_callback/sort_callback_native.zig:57:50: 0x1025a8dd3 in isort (test)\n            while ((j > @as(usize, 0)) and (cmp.?(@ptrCast(@alignCast(b + ((j -% @as(usize, 1)) *% size))), @ptrCast(@alignCast(b + (j *% size)))) > @as(c_int, 0))) : (j -%= 1) {\n                                                 ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x1025e7ca3 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/81bad258cdbac36e880e3a5e1ec60855/test --seed=0x4ff93c22\n"
+     "log": "1/1 sort_callback_native.test.c_frontend_native...thread 75812808 panic: integer overflow\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/sort_callback/sort_callback_native.zig:72:32: 0x102c57097 in by_value (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n/opt/dev/air2lean/.claude/worktrees/agent-a14b3d6b74c227e08/.scratch/cfe-before/sort_callback/sort_callback_native.zig:57:50: 0x102c18dd3 in isort (test)\n            while ((j > @as(usize, 0)) and (cmp.?(@ptrCast(@alignCast(b + ((j -% @as(usize, 1)) *% size))), @ptrCast(@alignCast(b + (j *% size)))) > @as(c_int, 0))) : (j -%= 1) {\n                                                 ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:291:25: 0x102c57ca3 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x18bc6fe7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/81bad258cdbac36e880e3a5e1ec60855/test --seed=0x6f12c690\n"
     },
     "air_export": {
      "status": "ok",
@@ -3294,7 +3189,7 @@
     "air_export": {
      "status": "failed",
      "files": 1,
-     "log": "...node(@c_int_type, %146) node_offset:42:154 to :42:177\n      %148 = as_node(@c_int_type, %147) node_offset:42:143 to :42:178\n      %149 = bitcast(@u32_type, %148) node_offset:42:123 to :42:180\n      %150 = as_node(@u32_type, %149) node_offset:42:123 to :42:180\n      %151 = addwrap(%137, %150) node_offset:42:14 to :42:181\n      %152 = load(%110) node_offset:42:205 to :42:206\n      %153 = validate_deref(%152) node_offset:42:205 to :42:208\n      %154 = dbg_stmt(4, 208)\n      %155 = field_ptr_load(%152, \"wide\") node_offset:42:205 to :42:213\n      %156 = dbg_stmt(4, 195)\n      %157 = truncate(@u32_type, %155) node_offset:42:195 to :42:214\n      %158 = as_node(@u32_type, %157) node_offset:42:195 to :42:214\n      %159 = addwrap(%151, %158) node_offset:42:13 to :42:215\n      %160 = load(%110) node_offset:42:229 to :42:230\n      %161 = validate_deref(%160) node_offset:42:229 to :42:232\n      %162 = dbg_stmt(4, 232)\n      %163 = field_ptr_load(%160, \"tag\") node_offset:42:229 to :42:236\n      %164 = as_node(@u32_type, %163) node_offset:42:229 to :42:236\n      %165 = addwrap(%159, %164) node_offset:42:12 to :42:237\n      %166 = restore_err_ret_index_unconditional(.none) node_offset:42:5 to :42:237\n      %167 = dbg_stmt(4, 5)\n      %168 = ret_node(%165) node_offset:42:5 to :42:237\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t struct_layout.zig\n\n\nthread 74309425 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
+     "log": "...node(@c_int_type, %146) node_offset:42:154 to :42:177\n      %148 = as_node(@c_int_type, %147) node_offset:42:143 to :42:178\n      %149 = bitcast(@u32_type, %148) node_offset:42:123 to :42:180\n      %150 = as_node(@u32_type, %149) node_offset:42:123 to :42:180\n      %151 = addwrap(%137, %150) node_offset:42:14 to :42:181\n      %152 = load(%110) node_offset:42:205 to :42:206\n      %153 = validate_deref(%152) node_offset:42:205 to :42:208\n      %154 = dbg_stmt(4, 208)\n      %155 = field_ptr_load(%152, \"wide\") node_offset:42:205 to :42:213\n      %156 = dbg_stmt(4, 195)\n      %157 = truncate(@u32_type, %155) node_offset:42:195 to :42:214\n      %158 = as_node(@u32_type, %157) node_offset:42:195 to :42:214\n      %159 = addwrap(%151, %158) node_offset:42:13 to :42:215\n      %160 = load(%110) node_offset:42:229 to :42:230\n      %161 = validate_deref(%160) node_offset:42:229 to :42:232\n      %162 = dbg_stmt(4, 232)\n      %163 = field_ptr_load(%160, \"tag\") node_offset:42:229 to :42:236\n      %164 = as_node(@u32_type, %163) node_offset:42:229 to :42:236\n      %165 = addwrap(%159, %164) node_offset:42:12 to :42:237\n      %166 = restore_err_ret_index_unconditional(.none) node_offset:42:5 to :42:237\n      %167 = dbg_stmt(4, 5)\n      %168 = ret_node(%165) node_offset:42:5 to :42:237\n    For full context, use the command\n      $AIR2LEAN_ZIG_AIR/bin/zig-unlocked ast-check -t struct_layout.zig\n\n\nthread 75816986 panic: reached unreachable code\nCannot print stack trace: stack tracing is disabled\n"
     }
    },
    "c_defined_functions": [
@@ -3683,27 +3578,27 @@
     "ok": 36
    },
    "air2lean": {
-    "checked": 25,
-    "rejected": 11
+    "checked": 26,
+    "rejected": 10
    },
    "lean": {
-    "ok": 24
+    "ok": 25
    }
   },
   "headline": {
-   "air2lean": 5,
+   "air2lean": 4,
    "air_export": 4,
-   "lean_ok": 24,
+   "lean_ok": 25,
    "translate_c": 6,
    "zig_native": 1
   },
   "rejection_codes_by_file": {
-   "CALLEE_BLOCKED": 4,
+   "CALLEE_BLOCKED": 3,
    "CALLEE_EXTERN_UNBOUND": 8,
    "CALLEE_MISSING": 2,
    "CONSTANT_FAILURE": 2,
    "INPUT_READ": 2,
-   "INSTRUCTION_FAILURE": 4,
+   "INSTRUCTION_FAILURE": 3,
    "PREREQUISITE_SKIPPED": 1,
    "PROGRAM_FAILURE": 8,
    "STRUCTURE_FAILURE": 1
@@ -3748,7 +3643,7 @@
     "air2lean": 2
    },
    "libc string": {
-    "air2lean": 1,
+    "lean_ok": 1,
     "translate_c": 1
    },
    "loops/break/continue": {
