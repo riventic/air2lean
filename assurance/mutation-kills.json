@@ -27,7 +27,7 @@
         "kind": "proof",
         "target": "Proofs.Sync.Mutex"
       },
-      "block_sha256": "9a97934dc1aff2166420a4f8b3c6db519145698e00c1d01abcc5a41606a5aa81"
+      "block_sha256": "cc8c30b6d180b0559939c13dafaec01b5817dbd630f34d9440ed7671e190ac34"
     },
     "ad": {
       "killed_by": {
