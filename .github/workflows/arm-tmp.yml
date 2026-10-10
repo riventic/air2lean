@@ -10,7 +10,7 @@ permissions:
 jobs:
   harness:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -19,8 +19,6 @@ jobs:
             mode: ReleaseFast
           - variant: fixed
             mode: ReleaseFast
-          - variant: fixed
-            mode: ReleaseSmall
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,31 +54,50 @@ jobs:
           git checkout 9cdefbbd -- tests/diff/common.zig tests/diff/compat.zig
           git status --short
 
-      - name: Harness runs
+      - name: Install elan (aarch64-linux)
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake
+          key: lake-root-linux-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-linux-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator
+        run: lake build
+
+      - name: diff.sh with watchdog
         env:
           MODE: ${{ matrix.mode }}
         run: |
           set +e
           (while true; do
             echo "--- WATCHDOG $(date +%T) $(uptime | sed 's/.*load/load/') $(free -m | awk '/Mem/{print "used="$3" avail="$7}') procs=$(ps -e | wc -l)"
-            ps -eo pid,ppid,stat,etimes,pcpu,rss,args --sort=-pcpu | head -6 | cut -c1-160
-            sleep 20
+            ps -eo pid,ppid,stat,etimes,pcpu,rss,wchan:20,args --sort=-etimes | grep -E "air2lean-diff|difftest|zig|scripts/diff" | head -8 | cut -c1-200
+            tail -n 2 "$RUNNER_TEMP/diff.log" | cut -c1-200
+            sleep 30
           done) &
-          mkdir -p "$RUNNER_TEMP/b"
-          for ex in $(ls examples); do
-            [ -d "examples/$ex" ] || continue
-            [ "$ex" = asm ] && continue
-            if [ -f "examples/$ex/zig-versions" ] && ! grep -qx 0.16.0 "examples/$ex/zig-versions"; then continue; fi
-            zig build-exe -O"$MODE" -mcpu=baseline -fllvm -femit-bin="$RUNNER_TEMP/b/$ex" \
-              --dep "$ex" --dep common -Mroot="tests/diff/$ex/harness.zig" -M"$ex"="examples/$ex/$ex.zig" -Mcommon=tests/diff/common.zig || exit 1
-            echo "=== RUN $ex $(date +%T)"
-            start=$(date +%s)
-            timeout -k 5 420 "$RUNNER_TEMP/b/$ex" > "$RUNNER_TEMP/out.$ex.log" 2>&1
-            st=$?
-            echo "=== DONE $ex status=$st secs=$(( $(date +%s) - start ))"
-            grep -c TRACE "$RUNNER_TEMP/out.$ex.log"; grep -v '^TRACE' "$RUNNER_TEMP/out.$ex.log" | head -c 2000
-            grep TRACE "$RUNNER_TEMP/out.$ex.log" | awk '{print $2, $5}' | sed 's/#[0-9]*//' | sort | uniq -c | sort -rn | head -8
-            grep 'killed after' "$RUNNER_TEMP/out.$ex.log" | head -5
-            pgrep -c -f "$RUNNER_TEMP/b/" || true
-          done
+          AIR2LEAN_DIFF_OPTIMIZE=$MODE AIR2LEAN_DIFF_BACKEND=llvm \
+            AIR2LEAN_DIFF_REPORT="$RUNNER_TEMP/$MODE.json" timeout -k 10 1200 scripts/diff.sh > "$RUNNER_TEMP/diff.log" 2>&1
+          echo "diff.sh exit $?"
+          tail -c 8000 "$RUNNER_TEMP/diff.log"
           kill %1
+          tail -c 3000 "$RUNNER_TEMP/$MODE.json" 2>/dev/null | head -c 1500
