@@ -637,10 +637,21 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
   if cx.types[c]? == some .bool then return
   let some bits := packedBits cx.types c | return
   if bits != 8 * Zig.intSize bits then
+    -- A signed `.Max`/`.Min` is wrong even with zero padding (natively on 0.14.1-0.17.0,
+    -- x86_64 and aarch64; `docs/upstream/padded-rmw-minmax.md`): LLVM gets the sign-extended
+    -- operand but the cell's raw bytes, so a negative cell orders as a large unsigned value.
+    let signedMinMax := match op, cx.types[c]? with
+      | .atomicRmw .max .., some (.int true _) | .atomicRmw .min .., some (.int true _) => true
+      | _, _ => false
+    let why := if signedMinMax then
+        "the native op orders a negative signed cell as a large unsigned value (its padding is not \
+        sign-extended), where the model compares the signed value bits"
+      else
+        "the native op compares the whole ABI cell, padding included, which the model leaves \
+        undefined"
     cx.fail line s!"{what} on type {c}, a {bits}-bit integer representation with padding bits \
-      (ABI size {Zig.intSize bits} bytes), is outside the subset: the native op compares the whole \
-      ABI cell, padding included, which the model leaves undefined; use an integer whose width \
-      is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
+      (ABI size {Zig.intSize bits} bytes), is outside the subset: {why}; use an integer whose \
+      width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
 
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
