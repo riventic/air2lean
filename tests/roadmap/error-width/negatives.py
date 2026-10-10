@@ -39,9 +39,14 @@ def with_version(doc, version):
     return doc
 
 
-# `@errorName` (Zig 0.16.0 export of `tests/golden/slices`), relabelled as other versions.
-ERROR_NAME = json.loads((HERE.parents[1] / "golden" / "0.16.0" / "slices" / "air" /
-                         "slices.failName.json").read_text())
+def error_name(version):
+    """`@errorName`: the `tests/golden/slices` export of `failName` by Zig `version`."""
+    path = HERE.parents[1] / "golden" / version / "slices" / "air" / "slices.failName.json"
+    return json.loads(path.read_text())
+
+
+# The 0.16.0 export, relabelled as other versions.
+ERROR_NAME = error_name("0.16.0")
 
 CASES = {
     # `--error-limit 0`: no error integer and no storage.
@@ -67,7 +72,9 @@ CASES = {
 
 # The same `@errorName` function is accepted by the other versions: the rejection is the
 # 0.14.1 dialect, not the operation.
+# 0.17.0 renamed AIR tags, so its own export of the same function is used.
 ACCEPTED = {f"@errorName on {v}": [with_version(ERROR_NAME, v)] for v in ("0.15.2", "0.16.0")}
+ACCEPTED["@errorName on 0.17.0"] = [error_name("0.17.0")]
 
 
 def translate(docs):

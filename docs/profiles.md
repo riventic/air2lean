@@ -137,7 +137,7 @@ name-table lookup reads out of bounds for a code of at least `2^(bits-1)`
 | Configuration | `error_set_bits` | Status |
 | --- | --- | --- |
 | Default `--error-limit` (65534) | 16 | Qualified. Native/model observations come from the finite error-storage gate ([error-storage](../tests/roadmap/error-storage/README.md)), plus the width proofs and the hand-written fixtures |
-| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Model-qualified only. The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1, 0.15.2 and 0.16.0 are executed, and stock-compiler observations at 1–32 bits match the model ([error-width](../tests/roadmap/error-width/README.md)) |
+| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Not qualified as a profile. The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1, 0.15.2 and 0.16.0 are executed. Stock-compiler observations on aarch64-macos match the model at 1–32 bits for 0.15.2 and 0.16.0, and at 4–32 bits for 0.14.1, where narrower widths cannot be observed ([error-width](../tests/roadmap/error-width/README.md)) |
 | `--error-limit 0` | 0 | Rejected (no error storage) |
 
 The project workflow (`scripts/project.py`), golden receipts (`scripts/normalize-generated.py`)

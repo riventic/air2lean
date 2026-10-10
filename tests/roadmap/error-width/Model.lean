@@ -125,6 +125,14 @@ private def expected (version : String) (hidden : Nat) (c : Cfg) : List String :
       (errorEncW bits d).encode e == bytesOf e
     -- 0.14.1: no name is read from code `unread` up (`topBitUnread`).
     let unread := if topBitUnread version ∧ 2 ^ (bits - 1) ≤ c.total then some (2 ^ (bits - 1)) else none
+    let nerr := c.total
+    -- The codes `native.py` names: 1..N up to 1000 errors, else the first four and last three;
+    -- none from `unread` up.
+    let ranges : List (Nat × Nat) := if nerr ≤ 1000 then [(1, nerr)] else [(1, 4), (nerr - 2, nerr)]
+    let ranges : List (Nat × Nat) := match unread with
+      | some u => (ranges.filter fun p : Nat × Nat => p.1 < u).map fun (lo, hi) => (lo, Nat.min hi (u - 1))
+      | none => ranges
+    let namedCodes := ranges.flatMap fun (lo, hi) => (List.range (hi + 1 - lo)).map (lo + ·)
     let printed := names c
     let tbl := printed.map (·.2)
     -- The printed codes of `Bad`, `Other` and the last error lie in 1..N, `Bad` and `Other` apart.
@@ -132,15 +140,15 @@ private def expected (version : String) (hidden : Nat) (c : Cfg) : List String :
       | some ["code", "Bad", x, "Other", y, "top", z] =>
         [x, y, z].all (fun s => 1 ≤ s.toNat! && s.toNat! ≤ c.total) && (isSingle || x != y)
       | _ => false
-    -- With a printed numbering (at most 1000 errors): unique, fits the width, inverse casts.
-    let tableOk : Bool := printed.all (fun (k, _) => unread.all (k < ·)) && tbl.all (· != "") &&
+    -- With a printed numbering (at most 1000 errors): exactly the named codes, unique, fits the
+    -- width, inverse casts.
+    let tableOk : Bool := printed.toList.map (·.1) == namedCodes && tbl.all (· != "") &&
       match ErrorTable.check tbl bits with
       | .error _ => false
       | .ok t => (List.range tbl.size).all fun i =>
           verdict (intFromErrorW bits t tbl[i]!) (fun v => toString v.toNat) == toString (i + 1) &&
           verdict (errorFromIntW bits t (BitVec.ofNat bits (i + 1))) id == tbl[i]!
     -- `@errorFromInt` over the compilation's N errors: panic outside 1..N, in `Code` or not.
-    let nerr := c.total
     let mkTable (k : Nat) : Option (ErrorTable) :=
       if k ≤ 1000 then
         (ErrorTable.check ((Array.range k).map toString) bits).toOption else none
@@ -151,7 +159,7 @@ private def expected (version : String) (hidden : Nat) (c : Cfg) : List String :
     let maxCode := 2 ^ bits - 1
     let tableLines := c.body.filter (·.startsWith "name ")
     [head c "ok",
-     s!"enc size {n} {a}", s!"enc defined {if padded then defined else n}", s!"enc anyerror {n} {a} {bits}",
+     s!"enc size {n} {a}", s!"enc defined {if padded then toString defined else "not-a-prefix"}", s!"enc anyerror {n} {a} {bits}",
      s!"enc optional {(optionalErrorEncW bits d).size} {(optionalErrorEncW bits d).align}",
      flag "nonzero" (nonzero && ownBytes), flag "distinct" distinct,
      flag "le_code" (ownBytes && codesOk && nerr ≤ errCapacity bits && (tbl.size ≤ 1000 → tableOk)),

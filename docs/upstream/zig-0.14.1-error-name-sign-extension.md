@@ -33,8 +33,8 @@ The bug needs a compilation with at least `2^(bits-1)` errors. With the default
 
 ```zig
 // zig build-exe -lc -OReleaseSafe -fno-error-tracing --error-limit 255 repro.zig
-// errs.zig declares `pub const Big = error{ E1, ..., E242 };` and
-// `pub const last: anyerror = Big.E242;`, so the compilation has 255 errors (0.14.1's start
+// errs.zig declares `pub const Big = error{ E1, ..., E243 };` and
+// `pub const last: anyerror = Big.E243;`, so the compilation has 255 errors (0.14.1's start
 // code names 12 itself). No `std` beyond `no_panic`: `std` names hundreds of errors.
 const std = @import("std");
 const errs = @import("errs.zig");
@@ -58,7 +58,7 @@ as its limit allows:
 
 | `--error-limit` | bits | code | `@errorFromInt` | `@errorName` |
 | --- | --- | --- | --- | --- |
-| 255 | 8 | 127 | ok | `E117` (correct) |
+| 255 | 8 | 127 | ok | `E115` (correct) |
 | 255 | 8 | 128, 200, 253 | ok | `""` |
 | 255 | 8 | 254, 255 | ok | a garbage slice (length 4303785312, 6643796016) |
 | 65534 | 16 | 32767 | ok | correct |

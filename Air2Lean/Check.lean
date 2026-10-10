@@ -2341,6 +2341,11 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
         fail "`@fieldParentPtr` from a byte pointer to a packed struct field"
     | _ => pure ()
 
+/-- `@errorName` (`error_name`). -/
+def Op.isErrorName : Op → Bool
+  | .errorName _ => true
+  | _ => false
+
 /-- Reject anything `Emit.lean` cannot translate: see the module doc. `device`: the
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
@@ -2372,7 +2377,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   -- code with the error integer's top bit set reads out of bounds ("", garbage or a crash;
   -- `tests/roadmap/error-width`, docs/upstream/zig-0.14.1-error-name-sign-extension.md). AIR
   -- does not export the compilation's error count, so no code is known to stay below that bit.
-  if f.zigVersion == "0.14.1" && insts.any (fun i => match i.op with | .errorName _ => true | _ => false) then
+  if f.zigVersion == "0.14.1" && insts.any (·.op.isErrorName) then
     throw s!"{f.name}: `@errorName` is rejected for Zig 0.14.1: it reads out of bounds for an \
       error whose code is at least 2^{f.errorSetBits - 1}, and the AIR export does not bound the \
       compilation's error codes; use Zig 0.15.2 or later"
