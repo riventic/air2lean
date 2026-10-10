@@ -26,8 +26,10 @@ the allocator that owns it.
 
 Remap keeps lengths and shrinks in place; growth fails (Zig grows the last allocation in place
 when it fits, M02). Owned blocks get the placement's addresses (`Mem.place`), possibly the
-address of a freed or reset block; the model does not place them inside the buffer or the arena's
-nodes (MM-10). Reset and deinit record no access for the race check: like Zig's,
+address of a freed or reset block. A fixed buffer's allocations are blocks of their own, not
+ranges of the buffer's block: `FixedBuffer.init` makes the buffer's block dead, so no direct
+access can observe that they do not alias it, and a placement can give them their native
+addresses inside the buffer (MM-10). An arena's blocks are not placed inside its nodes. Reset and deinit record no access for the race check: like Zig's,
 they are not thread-safe.
 -/
 
@@ -62,8 +64,20 @@ def Owned.init (p : OwnedPolicy) : MemM AllocId := do
 /-- `ArenaAllocator.init(child)`, over the model's `std.mem.Allocator`. -/
 def Arena.init : MemM AllocId := Owned.init .arena
 
-/-- `FixedBufferAllocator.init(buffer)`, for a buffer of `cap` bytes at address `base`. -/
-def FixedBuffer.init (base cap : Nat) : MemM AllocId := Owned.init (.fixedBuffer base cap)
+/-- `FixedBufferAllocator.init(buffer)`, for the buffer of `cap` bytes at `buf` (MM-10). The
+allocator takes the buffer: the block that holds it must be live and writable for the `cap`
+bytes, and it dies (it is lent to the allocator for good; Zig's allocator has no `deinit`). So a
+direct access to the buffer, or to the rest of its block, and a free of the block throw
+`.illegal` from here on, even after a `reset`: natively such an access aliases the allocations,
+which the model keeps in their own blocks. The allocations get the placement's addresses
+(`Mem.place`); with the buffer's block dead, a placement can give each one its native address
+inside the buffer. An empty buffer lends nothing. -/
+def FixedBuffer.init (buf : Ptr) (cap : Nat) : MemM AllocId := do
+  let base ← ptrAddr buf
+  if cap ≠ 0 then
+    let (b, blk, _) ← (← get).accessW buf cap 1
+    modify fun m => { m with blocks := m.blocks.set! b { blk with live := false } }
+  Owned.init (.fixedBuffer base.toNat cap)
 
 /-- The buffer index of an allocation of `n` bytes with alignment `align` after `used`
 bytes, and the new `used`: Zig's `alignPointerOffset` from the buffer's address. -/
