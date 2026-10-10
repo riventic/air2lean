@@ -2104,12 +2104,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # T04: native aarch64-linux ABI qualification (docs/aarch64-abi.md). Probe and compare only:
-  # aarch64-linux translation stays undeclared, so this job builds no patched compiler, Lean
-  # or proofs (the profile's proofs run in the test job, against the same expected file).
+  # T04: native aarch64-linux ABI qualification (docs/aarch64-abi.md), then the declared
+  # aarch64-linux translation paths (Zig 0.16.0, 0.15.2, 0.14.1; docs/target-matrix.md): fresh
+  # AIR, translation, differential test and proofs on this host. The profile's Model.lean
+  # proofs run in the test job, against the same expected files.
   aarch64-linux:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 20
+    timeout-minutes: 150
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -2164,6 +2165,144 @@ jobs:
           name: abi-aarch64-linux
           path: ${{ runner.temp }}/aarch64-linux-gnu-*-ReleaseSafe.txt
           if-no-files-found: ignore
+
+      # T04: translation on this host. The patched compilers, Lean and the examples' goldens:
+      # AIR is the x86_64-linux golden set (plus any air-linux-aarch64/ overlay), the translation
+      # is Proofs/<Ex>/Gen.lean unless tests/golden/<version>/<ex>/Gen-linux-aarch64.lean exists.
+      - name: Cache patched zig (aarch64-linux)
+        id: cache-zig-air-arm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            zig-air-0.16.0/
+            zig-air-0.15.2/
+            zig-air-0.14.1/
+          key: zig-air-linux-arm64-${{ hashFiles('zig-patch/air-json/*.zig', 'zig-patch/0.16.0/hook.patch', 'zig-patch/0.15.2/hook.patch', 'zig-patch/0.14.1/hook.patch', 'zig-patch/versions.toml', 'zig-patch/build.sh', 'zig-patch/lock.sh') }}
+
+      - name: Build patched zig (aarch64-linux)
+        if: steps.cache-zig-air-arm.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          for v in 0.16.0 0.15.2 0.14.1; do
+            PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+              || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
+          done
+
+      - name: Install elan (aarch64-linux)
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan-aarch64]' sha256)
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" "$url"
+          echo "$sha256  $RUNNER_TEMP/elan.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lake build (aarch64-linux root package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-linux-arm64-translate-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache Lake build (aarch64-linux tests/diff package)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-linux-arm64-translate-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      - name: Prune absent-source Lake modules (aarch64-linux)
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator (aarch64-linux)
+        run: lake build
+
+      # Fresh native AIR export, compared with the goldens, translated, built and differentially
+      # tested against stock Zig on this host. Never writes a tracked file.
+      - name: aarch64-linux golden AIR, translate, differential test (0.16.0)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.16.0/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.16.0
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.16.0/report.json
+        run: scripts/check.sh
+
+      - name: aarch64-linux proofs (0.16.0)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          tree=$(cat .lake/check-reports/0.16.0/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      - name: aarch64-linux golden AIR, translate, differential test (0.15.2)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.15.2/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.15.2
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.15.2/report.json
+        run: scripts/check.sh
+
+      - name: aarch64-linux proofs (0.15.2)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          tree=$(cat .lake/check-reports/0.15.2/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      - name: aarch64-linux golden AIR, translate, differential test (0.14.1)
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.14.1/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.14.1
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.14.1/report.json
+        run: scripts/check.sh
+
+      - name: aarch64-linux proofs (0.14.1)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          tree=$(cat .lake/check-reports/0.14.1/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      # Q04/Q05: this host's rows of the accounting table (docs/host-accounting.md), kept even
+      # when a differential gate fails.
+      - name: Upload the aarch64-linux differential summaries
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-aarch64-linux
+          path: ${{ runner.temp }}/diff-summary
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Checkout unchanged by verification (aarch64-linux)
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
+
+      # The aarch64-linux dumps are the source of tests/golden/<version>/<ex>/air-linux-aarch64/.
+      - name: Upload the dumped aarch64-linux AIR
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: air-linux-arm64
+          path: ${{ runner.temp }}/air-out
+          if-no-files-found: ignore
+          retention-days: 7
 
   # T06: ReleaseSafe and Debug on LLVM, natively on aarch64-linux hardware, verified against the
   # committed run records (assurance/build-mode-runs/*--aarch64-linux--*, docs/build-modes.md).

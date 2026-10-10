@@ -1,0 +1,756 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "aarch64-linux.7.0.14...7.0.14-gnu.2.39",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "generic",
+  "features": [
+   "enable_select_opt",
+   "ete",
+   "fp_armv8",
+   "fuse_adrp_add",
+   "fuse_aes",
+   "neon",
+   "trbe",
+   "use_postra_scheduler"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "Thread.Mutex.FutexImpl.tryLock",
+ "module": "std",
+ "src": {
+  "file": "Thread/Mutex.zig",
+  "module": "std",
+  "decl_line": 157
+ },
+ "params": [
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "bitcast",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 13
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 42
+  },
+  {
+   "id": 7,
+   "tag": "dbg_inline_block",
+   "ty": 3,
+   "src": {
+    "file": "Target.zig",
+    "module": "std",
+    "decl_line": 1396
+   },
+   "body": [
+    {
+     "id": 8,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "ty": 5,
+       "enum": "6"
+      }
+     ],
+     "name": "arch"
+    },
+    {
+     "id": 9,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 2,
+     "column": 13
+    },
+    {
+     "id": 12,
+     "tag": "br",
+     "ty": 6,
+     "target": 7,
+     "args": [
+      {
+       "ty": 3,
+       "val": "{}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 12,
+   "column": 20
+  },
+  {
+   "id": 15,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 12,
+   "column": 38
+  },
+  {
+   "id": 18,
+   "tag": "dbg_inline_block",
+   "ty": 8,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 25
+   },
+   "body": [
+    {
+     "id": 19,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 16
+      }
+     ],
+     "name": "self"
+    },
+    {
+     "id": 20,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "ty": 9,
+       "val": "0"
+      }
+     ],
+     "name": "expected_value"
+    },
+    {
+     "id": 21,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "ty": 9,
+       "val": "1"
+      }
+     ],
+     "name": "new_value"
+    },
+    {
+     "id": 22,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "ty": 10,
+       "enum": "2"
+      }
+     ],
+     "name": "success_order"
+    },
+    {
+     "id": 23,
+     "tag": "dbg_arg_inline",
+     "ty": 3,
+     "args": [
+      {
+       "ty": 10,
+       "enum": "1"
+      }
+     ],
+     "name": "fail_order"
+    },
+    {
+     "id": 24,
+     "tag": "alloc",
+     "ty": 11
+    },
+    {
+     "id": 25,
+     "tag": "store_safe",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 24
+      },
+      {
+       "inst": 16
+      }
+     ]
+    },
+    {
+     "id": 26,
+     "tag": "bitcast",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 24
+      }
+     ]
+    },
+    {
+     "id": 27,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 8,
+     "column": 41
+    },
+    {
+     "id": 28,
+     "tag": "load",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 26
+      }
+     ]
+    },
+    {
+     "id": 29,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 13,
+     "args": [
+      {
+       "inst": 28
+      }
+     ]
+    },
+    {
+     "id": 30,
+     "tag": "cmpxchg_weak",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 29
+      },
+      {
+       "ty": 9,
+       "val": "0"
+      },
+      {
+       "ty": 9,
+       "val": "1"
+      }
+     ],
+     "success_order": "acquire",
+     "failure_order": "monotonic"
+    },
+    {
+     "id": 31,
+     "tag": "dbg_stmt",
+     "ty": 3,
+     "line": 8,
+     "column": 13
+    },
+    {
+     "id": 32,
+     "tag": "br",
+     "ty": 6,
+     "target": 18,
+     "args": [
+      {
+       "inst": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "tag": "is_null",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 18
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 12,
+   "column": 9
+  },
+  {
+   "id": 35,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 33
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "enum",
+   "name": "Target.Cpu.Arch",
+   "module": "std",
+   "tag": 15,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "amdgcn",
+     "value": "0"
+    },
+    {
+     "name": "arc",
+     "value": "1"
+    },
+    {
+     "name": "arm",
+     "value": "2"
+    },
+    {
+     "name": "armeb",
+     "value": "3"
+    },
+    {
+     "name": "thumb",
+     "value": "4"
+    },
+    {
+     "name": "thumbeb",
+     "value": "5"
+    },
+    {
+     "name": "aarch64",
+     "value": "6"
+    },
+    {
+     "name": "aarch64_be",
+     "value": "7"
+    },
+    {
+     "name": "avr",
+     "value": "8"
+    },
+    {
+     "name": "bpfel",
+     "value": "9"
+    },
+    {
+     "name": "bpfeb",
+     "value": "10"
+    },
+    {
+     "name": "csky",
+     "value": "11"
+    },
+    {
+     "name": "hexagon",
+     "value": "12"
+    },
+    {
+     "name": "kalimba",
+     "value": "13"
+    },
+    {
+     "name": "lanai",
+     "value": "14"
+    },
+    {
+     "name": "loongarch32",
+     "value": "15"
+    },
+    {
+     "name": "loongarch64",
+     "value": "16"
+    },
+    {
+     "name": "m68k",
+     "value": "17"
+    },
+    {
+     "name": "mips",
+     "value": "18"
+    },
+    {
+     "name": "mipsel",
+     "value": "19"
+    },
+    {
+     "name": "mips64",
+     "value": "20"
+    },
+    {
+     "name": "mips64el",
+     "value": "21"
+    },
+    {
+     "name": "msp430",
+     "value": "22"
+    },
+    {
+     "name": "or1k",
+     "value": "23"
+    },
+    {
+     "name": "nvptx",
+     "value": "24"
+    },
+    {
+     "name": "nvptx64",
+     "value": "25"
+    },
+    {
+     "name": "powerpc",
+     "value": "26"
+    },
+    {
+     "name": "powerpcle",
+     "value": "27"
+    },
+    {
+     "name": "powerpc64",
+     "value": "28"
+    },
+    {
+     "name": "powerpc64le",
+     "value": "29"
+    },
+    {
+     "name": "propeller",
+     "value": "30"
+    },
+    {
+     "name": "riscv32",
+     "value": "31"
+    },
+    {
+     "name": "riscv64",
+     "value": "32"
+    },
+    {
+     "name": "s390x",
+     "value": "33"
+    },
+    {
+     "name": "sparc",
+     "value": "34"
+    },
+    {
+     "name": "sparc64",
+     "value": "35"
+    },
+    {
+     "name": "spirv32",
+     "value": "36"
+    },
+    {
+     "name": "spirv64",
+     "value": "37"
+    },
+    {
+     "name": "ve",
+     "value": "38"
+    },
+    {
+     "name": "wasm32",
+     "value": "39"
+    },
+    {
+     "name": "wasm64",
+     "value": "40"
+    },
+    {
+     "name": "x86",
+     "value": "41"
+    },
+    {
+     "name": "x86_64",
+     "value": "42"
+    },
+    {
+     "name": "xcore",
+     "value": "43"
+    },
+    {
+     "name": "xtensa",
+     "value": "44"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 16,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 9,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "builtin.AtomicOrder",
+   "module": "std",
+   "tag": 17,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "unordered",
+     "value": "0"
+    },
+    {
+     "name": "monotonic",
+     "value": "1"
+    },
+    {
+     "name": "acquire",
+     "value": "2"
+    },
+    {
+     "name": "release",
+     "value": "3"
+    },
+    {
+     "name": "acq_rel",
+     "value": "4"
+    },
+    {
+     "name": "seq_cst",
+     "value": "5"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 7,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 9,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "Thread.Mutex.FutexImpl",
+   "module": "std",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "state",
+     "ty": 16,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 9,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 3,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

@@ -29,10 +29,10 @@ def load(name, path):
 fs = load('float_semantics', 'scripts/float-semantics.py')
 audit = load('assumptions', 'scripts/assumptions.py')
 ALL = ['0.14.1', '0.15.2', '0.16.0']
-BOTH = ['aarch64-macos', 'x86_64-linux']
-IEEE = {'semantics': 'ieee', 'targets': BOTH, 'correspondence': 'model'}
-ABSTRACT = {'semantics': 'abstract-spec', 'targets': BOTH, 'correspondence': 'model'}
-RT = {'semantics': 'compiler-rt', 'zig_versions': ALL, 'targets': BOTH, 'correspondence': 'model'}
+ALL_TARGETS = ['aarch64-linux', 'aarch64-macos', 'x86_64-linux']
+IEEE = {'semantics': 'ieee', 'targets': ALL_TARGETS, 'correspondence': 'model'}
+ABSTRACT = {'semantics': 'abstract-spec', 'targets': ALL_TARGETS, 'correspondence': 'model'}
+RT = {'semantics': 'compiler-rt', 'zig_versions': ALL, 'targets': ALL_TARGETS, 'correspondence': 'model'}
 
 
 def write(path, text):
@@ -89,8 +89,8 @@ class RegistryTests(unittest.TestCase):
     def test_malformed_labels_are_rejected(self):
         key = 'Proofs.Floatops.Proofs::op16_spec'
         cases = [
-            ({'semantics': 'x87', 'targets': BOTH, 'correspondence': 'model'}, 'unknown float semantics'),
-            ({'semantics': 'compiler-rt', 'targets': BOTH, 'correspondence': 'model'}, 'invalid label fields'),
+            ({'semantics': 'x87', 'targets': ALL_TARGETS, 'correspondence': 'model'}, 'unknown float semantics'),
+            ({'semantics': 'compiler-rt', 'targets': ALL_TARGETS, 'correspondence': 'model'}, 'invalid label fields'),
             ({'semantics': 'ieee', 'correspondence': 'model'}, 'sorted unique targets'),
             (dict(IEEE, targets=[]), 'sorted unique targets'),
             (dict(IEEE, targets=['x86_64-linux', 'aarch64-macos']), 'sorted unique targets'),
@@ -281,7 +281,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(report['status'], 'pass', report['violations'])
         records = {t['name']: t['float_semantics'] for t in report['theorems']}
         self.assertEqual(records['mul_spec'], {'scope': 'stated', 'label': 'compiler-rt@0.14.1,0.15.2,0.16.0',
-                                               'semantics': 'compiler-rt', 'zig_versions': ALL, 'targets': BOTH,
+                                               'semantics': 'compiler-rt', 'zig_versions': ALL, 'targets': ALL_TARGETS,
                                                'correspondence': 'model', 'binary_correspondence': 'not_claimed'})
         self.assertEqual(records['add_spec']['label'], 'ieee')
         self.assertEqual(records['round_spec']['label'], 'abstract-spec')
@@ -305,7 +305,7 @@ class GraphTests(unittest.TestCase):
                 self.assertEqual(self.classes(report), [(name, trust)])
 
     def test_labels_record_targets(self):
-        for targets in (['aarch64-macos'], ['x86_64-linux'], BOTH):
+        for targets in (['aarch64-macos'], ['x86_64-linux'], ALL_TARGETS):
             with self.subTest(targets=targets):
                 report = self.report(self.raw([('div_spec', ['Zig.Float.divXf3'])]),
                                      self.labels(div_spec=dict(RT, targets=targets)))

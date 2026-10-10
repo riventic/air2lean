@@ -35,7 +35,7 @@
       {
         "version": "0.16.0",
         "status": "qualified",
-        "hosts": ["x86_64-linux", "aarch64-macos"],
+        "hosts": ["x86_64-linux", "aarch64-macos", "aarch64-linux"],
         "source": {
           "url": "https://ziglang.org/download/0.16.0/zig-0.16.0.tar.xz",
           "sha256": "43186959edc87d5c7a1be7b7d2a25efffd22ce5807c7af99067f86f99641bfdf"
@@ -50,7 +50,7 @@
       {
         "version": "0.15.2",
         "status": "qualified",
-        "hosts": ["x86_64-linux", "aarch64-macos"],
+        "hosts": ["x86_64-linux", "aarch64-macos", "aarch64-linux"],
         "source": {
           "url": "https://ziglang.org/download/0.15.2/zig-0.15.2.tar.xz",
           "sha256": "d9b30c7aa983fcff5eed2084d54ae83eaafe7ff3a84d8fb754d854165a6e521c"
@@ -65,7 +65,7 @@
       {
         "version": "0.14.1",
         "status": "qualified",
-        "hosts": ["x86_64-linux"],
+        "hosts": ["x86_64-linux", "aarch64-linux"],
         "source": {
           "url": "https://ziglang.org/download/0.14.1/zig-0.14.1.tar.xz",
           "sha256": "237f8abcc8c3fd68c70c66cdbf63dce4fb5ad4a2e6225ac925e3d5b4c388f203"
@@ -93,7 +93,7 @@
     "error_tracing": false
   },
   "profiles": [
-    {"name": "abi64-le-v1", "air_json_schema": 12, "target_triples": ["x86_64-linux-<abi>", "aarch64-macos-<abi>"], "pointer_bits": 64, "endian": "little"},
+    {"name": "abi64-le-v1", "air_json_schema": 12, "target_triples": ["x86_64-linux-<abi>", "aarch64-macos-<abi>", "aarch64-linux-gnu"], "pointer_bits": 64, "endian": "little"},
     {"name": "legacy-abi64-le", "air_json_schema": "1-11", "target_triples": ["unverified"], "pointer_bits": 64, "endian": "little"}
   ],
   "resources": {

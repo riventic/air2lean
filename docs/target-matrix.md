@@ -10,7 +10,7 @@ its exact `include` row, and names the steps that provide three kinds of evidenc
 | Kind | Counts when the step runs |
 | --- | --- |
 | `native_execution` | `scripts/check.sh` with the differential test (`AIR2LEAN_DIFF` not `0`), `scripts/diff.sh`, or a roadmap gate's `check.sh --native[-only]` |
-| `target_probe` | `scripts/floatprobe.sh` or `scripts/abi-probe.py observe` |
+| `target_probe` | `scripts/floatprobe.sh`, `scripts/abi-probe.py observe` or the T04 probe `scripts/aarch64-abi.py check` |
 | `proof_check` | `lake build … Proofs` |
 
 ```sh
@@ -46,6 +46,9 @@ must stay undeclared.
 | 0.14.1 | x86_64-linux | `test` (restricted row) | dispatch `--native-only` | ABI probe (`0.14.1/x86_64-linux-gnu`) | `lake build Proofs` |
 | 0.16.0 | aarch64-macos | `macos` | Darwin AIR export, check.sh + diff test | ABI probe (`aarch64-macos-none`) | `lake build Proofs` |
 | 0.15.2 | aarch64-macos | `macos` | Darwin AIR export, check.sh + diff test | ABI probe (`0.15.2/aarch64-macos-none`) | `lake build Proofs` (with `Gen-darwin.lean`) |
+| 0.16.0 | aarch64-linux | `aarch64-linux` | aarch64-linux AIR export, check.sh + diff test | T04 probe (`0.16.0/aarch64-linux-gnu`) | `lake build Proofs` |
+| 0.15.2 | aarch64-linux | `aarch64-linux` | aarch64-linux AIR export, check.sh + diff test | T04 probe (`0.15.2/aarch64-linux-gnu`) | `lake build Proofs` |
+| 0.14.1 | aarch64-linux | `aarch64-linux` | aarch64-linux AIR export, check.sh + diff test | T04 probe (`0.14.1/aarch64-linux-gnu`) | `lake build Proofs` |
 
 The `macos` job is one job without a matrix (macOS runner concurrency is limited). It
 installs the checksum-pinned stock aarch64-macos Zig releases, caches the patched
@@ -70,15 +73,23 @@ through `abi-probe.py observe`. Rosetta rejected the ReleaseFast binary (`bss_si
 so its output came from the same build run under `qemu-x86_64` and was checked against the
 contract. CI runs both modes on a native `ubuntu-24.04` runner.
 
+The `aarch64-linux` job (`ubuntu-24.04-arm`, no matrix) does the same for aarch64-linux-gnu
+with Zig 0.16.0, 0.15.2 and 0.14.1, the versions with a T04 expected file (the translator rejects
+other versions' aarch64-linux AIR): it builds the patched compilers, exports fresh AIR, compares it
+with the goldens and their `air-linux-aarch64`/`Gen-linux-aarch64` overrides, runs the
+differential test and builds the proofs against that translation. Its target probe is the T04
+native probe of the same version (`scripts/aarch64-abi.py check`, below). The summaries are
+uploaded as `diff-summary-aarch64-linux`.
+
 Not declared: `wasm32-wasi` (needs T02 pointer-width parameterization and T05
-native/WASM correspondence) and `aarch64-linux` (translation stays guarded).
+native/WASM correspondence).
 WASM execution joins this matrix only when `compatibility.json` declares it, and the
 checker then requires its native-execution, probe and proof steps like any other path.
 
 ## ABI-only profiles (T04)
 
-`abi_profiles` in the map lists profiles that are ABI-qualified without being declared
-translation paths ([aarch64-abi.md](aarch64-abi.md)). The checker requires each entry to have:
+`abi_profiles` in the map lists the ABI-qualified profiles ([aarch64-abi.md](aarch64-abi.md)),
+whether or not they are also declared translation paths. The checker requires each entry to have:
 
 - its versioned expected file (`tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt`);
 - a `probe` step in a job whose runner is the profile's host. The step must run
@@ -95,6 +106,6 @@ translation paths ([aarch64-abi.md](aarch64-abi.md)). The checker requires each 
 | 0.14.1 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
 | 0.14.1 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
 
-The `aarch64-linux` job installs only the checksum-pinned stock Zig and runs the probe
-and compare. Like `macos`, it is a native-runner job that `scripts/local-ci.sh` does not
+The `aarch64-linux` job installs the checksum-pinned stock Zig releases and runs the probe
+and compare before its translation steps. Like `macos`, it is a native-runner job that `scripts/local-ci.sh` does not
 reproduce and `scripts/release-record.py` covers with GitHub evidence only.
