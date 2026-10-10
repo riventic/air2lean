@@ -496,8 +496,18 @@ def qualify(mode, destination):
                 mutant.write_text(source.replace(before, after) + template)
                 gate.run(label, lean + ["-R", str(destination), "--run", str(mutant)], expected=1, marker="SOURCE_REJECTED:")
             if version == "0.16.0":
+                # `Group.async`'s outcome is the run environment's (the policy argument selects
+                # nothing), so the mutant drops the caller execution: the eager outcome must then
+                # differ from the task's result.
+                lines = source.splitlines(keepends=True)
+                hits = [i for i, line in enumerate(lines) if "groupAsyncWithPolicyC .fallible" in line
+                        and "discard (Zig.ConcM.liftMem (writeWorker" in line]
+                if len(hits) != 1:
+                    raise RuntimeError("mutation target missing")
+                lines[hits[0]] = re.sub(r"discard \(Zig\.ConcM\.liftMem \(writeWorker [^)]*\)\)", "pure ()",
+                                        lines[hits[0]])
                 mutant = destination / "no-fallback.lean"
-                mutant.write_text(source.replace("groupAsyncWithPolicyC .fallible", "groupAsyncWithPolicyC .available") + template)
+                mutant.write_text("".join(lines) + template)
                 gate.run("no-fallback", lean + ["-R", str(destination), "--run", str(mutant)], expected=1, marker="SOURCE_REJECTED:")
             gate.run("native-allowed-outcomes", [str(native), "test", "-OReleaseSafe", "--cache-dir",
                      str(destination / "native-cache"), "--dep", "spawn_failure_source",
