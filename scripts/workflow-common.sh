@@ -6,7 +6,7 @@ workflow_error() { printf 'error: %s\n' "$*" >&2; }
 workflow_version() {
   case "$zig_version" in
     0.17.0 | 0.16.0 | 0.15.2 | 0.14.1) ;;
-    *) workflow_error "unsupported Zig version '$zig_version'; choose 0.16.0, 0.15.2, 0.14.1 or 0.17.0 (in qualification)"; return 1 ;;
+    *) workflow_error "unsupported Zig version '$zig_version'; choose 0.16.0, 0.15.2, 0.14.1 or 0.17.0"; return 1 ;;
   esac
   if [ "$zig_version" = 0.14.1 ] && [ "$(uname -s)" != Linux ]; then
     workflow_error 'Zig 0.14.1 is supported on Linux only; choose 0.16.0, 0.15.2 or 0.17.0 on this host'

@@ -1,8 +1,10 @@
 # Zig 0.17.0 in CI and release metadata
 
-Zig 0.17.0 (released 2026-10-01, LLVM 22) is **in qualification**. CI runs it, and the
-release metadata lists it, but Zig 0.16.0 stays the default and every gate that is
-qualified only on particular versions stays on those versions. This page covers the CI,
+Zig 0.17.0 (released 2026-10-01, LLVM 22) is **qualified**: `qualification/0.17.0.json`
+(from 0.16.0, `scripts/qualify-upgrade.py check` exit 0) records its upgrade obligations as
+passed, and `compatibility.json` gives it `status: qualified`. Zig 0.16.0 stays the default,
+and every gate that is qualified only on particular versions stays on those versions
+(the 0.17.0 job does not run them). This page covers the CI,
 metadata and version-list part of the 0.17.0 work. The exporter pin and hook
 (`zig-patch/`), the coverage inventory (`coverage/0.17.0.json`), the translator's
 `supportedVersions` and CLI help, and the example and std-model version lists are owned
@@ -13,7 +15,7 @@ by the other 0.17.0 tracks.
 | Row | Decision |
 |---|---|
 | `0.17.0` full job | Added (`full: true`, every example `scripts/example-selection.sh` selects for 0.17.0). It runs every gate that applies to every version: the compiler inventory check, the float probe, the patched compiler build, golden AIR/translation/diff (`scripts/check.sh`), proofs, VCs, exporter review (`AIR2LEAN_REVIEW_ZIG17`), allocation policy, progress kernel and `no-sorry`. |
-| Mutation shards | Stay on 0.16.0, the default, until 0.17.0 is qualified. |
+| Mutation shards | Stay on 0.16.0, the default; moving them to 0.17.0 is a separate decision. |
 | 0.16.0 / 0.15.2 / 0.14.1 rows | Unchanged. |
 
 The 0.17.0 job is a blocking job, not `continue-on-error`. Its gates fail until the
@@ -41,7 +43,7 @@ row but rejects unknown versions. Its condition now lists the qualified versions
 
 | Field | 0.17.0 |
 |---|---|
-| `status` | `in-qualification` (new field; all other versions are `qualified`) |
+| `status` | `qualified` (was `in-qualification` until the qualification record passed; `default` stays 0.16.0) |
 | `hosts` | `x86_64-linux`, `aarch64-macos` |
 | `source` | `https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz`, sha256 `b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd` |
 | `hook` | `0.17.0/hook.patch` |
@@ -52,8 +54,9 @@ Both checksums match `index.json`. They were also confirmed by downloading each 
 and hashing it on 2026-10-07. `scripts/compat.py check` now also requires a `status`
 of `qualified` or `in-qualification` for every version, and requires `zig.default` to be
 `qualified`. `scripts/doctor.py` adds a `zig-version-status` note when the selected
-version is in qualification. `scripts/support-matrix.py` reads the status, labels
-0.17.0 "(in qualification)" in the README/PLAN regions, adds a Status column to
+version is `in-qualification` (no pinned version is at present). `scripts/support-matrix.py`
+reads the status, labels a version in qualification "(in qualification)" in the README/PLAN
+regions, adds a Status column to
 `docs/support-matrix.md`, and checks that `compatibility.json` lists the same versions as
 `supportedVersions`.
 
@@ -106,8 +109,9 @@ read example cells by version column. They pass once those inputs are merged. A
 simulation of the merged inputs on this tree passed `compat.py check`, `support-matrix.py generate`,
 and both suites.
 
-To qualify 0.17.0 later: set `status` to `qualified`, extend each class (b) gate after
-running it on 0.17.0, and then decide whether to move the default and the mutation shards.
+0.17.0 is qualified (`status: qualified`, `qualification/0.17.0.json`). Still open: extending each
+class (b) gate after running it on 0.17.0, and the decision whether to move the default and the
+mutation shards.
 
 ## Probe contracts (0.17.0)
 
