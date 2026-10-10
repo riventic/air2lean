@@ -38,8 +38,8 @@ instance : Zig.Enc Ctx where
   encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.sum), (4, Zig.Enc.encode v.scale)]
   decode bs := do pure { sum := ← Zig.Enc.decodeAt bs 0, scale := ← Zig.Enc.decodeAt bs 4 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals []
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 
 structure byteAsBoolLocals where
   x : Zig.Ptr
@@ -179,7 +179,7 @@ def listSum.loop83  : Zig.MM listSumLocals listSumExit := do
     if i86 then (do
       let i88 ← Zig.optPayload i85
       let i89 ← pure ((← get).s)
-      let i90 ← pure (i88.add 0)
+      let i90 ← pure i88
       let i91 ← Zig.load (BitVec 32) 8 i90
       let i92 ← pure ((← get).k)
       let i93 ← pure (Zig.mulWrap i91 i92)
@@ -188,7 +188,7 @@ def listSum.loop83  : Zig.MM listSumLocals listSumExit := do
       let i96 ← pure ((← get).k)
       let i97 ← Zig.add false i96 (1 : BitVec 32)
       modify (fun s => { s with k := i97 })
-      let i99 ← pure (i88.add 8)
+      let i99 ← Zig.callM (Zig.ptrProject i88 (·.add 8))
       let i100 ← Zig.load (Option (Zig.Ptr)) 8 i99
       modify (fun s => { s with it := i100 })
       pure .br84)
@@ -206,18 +206,18 @@ def listSum.loop51  : Zig.MM listSumLocals listSumExit := do
     if i55 then (do
       let i57 ← Zig.optPayload i54
       match ← ((do
-        let i59 ← pure (i57.add 0)
+        let i59 ← pure i57
         let i60 ← Zig.load (BitVec 32) 8 i59
         let i61 ← pure (i60 &&& (1 : BitVec 32))
         let i62 ← pure (i61 != (0 : BitVec 32))
         if i62 then (do
           let i64 ← pure ((← get).link)
-          let i65 ← pure (i57.add 8)
+          let i65 ← Zig.callM (Zig.ptrProject i57 (·.add 8))
           let i66 ← Zig.load (Option (Zig.Ptr)) 8 i65
           Zig.store (α := Option (Zig.Ptr)) 8 i64 i66
           pure .br58)
         else (do
-          let i69 ← pure (i57.add 8)
+          let i69 ← Zig.callM (Zig.ptrProject i57 (·.add 8))
           modify (fun s => { s with link := i69 })
           pure .br58)) : Zig.MM listSumLocals listSumExit) with
       | .br58 => (do
@@ -243,13 +243,13 @@ def listSum.loop9 (p0 : BitVec 32) (p1 : BitVec 32) (i2 : Zig.Ptr) (i4 : Zig.Ptr
         else (do
           throw .outOfBounds)) : Zig.MM listSumLocals listSumExit) with
       | .br17 => (do
-        let i22 ← pure (i2.elem 16 i15)
-        let i23 ← pure (i22.add 0)
+        let i22 ← Zig.callM (Zig.ptrProject i2 (·.elem 16 i15))
+        let i23 ← pure i22
         let i24 ← pure ((← get).i)
         let i25 ← pure (Zig.mulWrap i24 p1)
         let i26 ← pure (Zig.addWrap p0 i25)
         Zig.store (α := BitVec 32) 8 i23 i26
-        let i28 ← pure (i22.add 8)
+        let i28 ← Zig.callM (Zig.ptrProject i22 (·.add 8))
         let i29 ← Zig.load (Option (Zig.Ptr)) 8 i4
         Zig.store (α := Option (Zig.Ptr)) 8 i28 i29
         let i31 ← pure ((← get).i)
@@ -261,7 +261,7 @@ def listSum.loop9 (p0 : BitVec 32) (p1 : BitVec 32) (i2 : Zig.Ptr) (i4 : Zig.Ptr
           else (do
             throw .outOfBounds)) : Zig.MM listSumLocals listSumExit) with
         | .br34 => (do
-          let i39 ← pure (i2.elem 16 i32)
+          let i39 ← Zig.callM (Zig.ptrProject i2 (·.elem 16 i32))
           let i40 ← pure (i39)
           Zig.store (α := Option (Zig.Ptr)) 8 i4 i40
           let i42 ← pure ((← get).i)
@@ -320,24 +320,24 @@ inductive misalignedCheckedExit where
   | br32
 
 def misalignedChecked (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
-  let s2 ← Zig.allocStack 8 1
+  let s2 ← Zig.allocStack 8 4
   let e ← ((do
     let i2 ← pure (← get).buf
-    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i3 ← pure i2
     Zig.store (α := BitVec 8) 4 i3 (1 : BitVec 8)
-    let i5 ← pure (i2.elem 1 (1 : BitVec 64))
+    let i5 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (1 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i5 (2 : BitVec 8)
-    let i7 ← pure (i2.elem 1 (2 : BitVec 64))
+    let i7 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (2 : BitVec 64)))
     Zig.store (α := BitVec 8) 2 i7 (3 : BitVec 8)
-    let i9 ← pure (i2.elem 1 (3 : BitVec 64))
+    let i9 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (3 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i9 (4 : BitVec 8)
-    let i11 ← pure (i2.elem 1 (4 : BitVec 64))
+    let i11 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (4 : BitVec 64)))
     Zig.store (α := BitVec 8) 4 i11 (5 : BitVec 8)
-    let i13 ← pure (i2.elem 1 (5 : BitVec 64))
+    let i13 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (5 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i13 (6 : BitVec 8)
-    let i15 ← pure (i2.elem 1 (6 : BitVec 64))
+    let i15 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (6 : BitVec 64)))
     Zig.store (α := BitVec 8) 2 i15 (7 : BitVec 8)
-    let i17 ← pure (i2.elem 1 (7 : BitVec 64))
+    let i17 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (7 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i17 (8 : BitVec 8)
     let i19 ← pure (p0 &&& (1 : BitVec 32))
     let i20 ← pure (i19 ||| (1 : BitVec 32))
@@ -349,7 +349,7 @@ def misalignedChecked (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) :
       else (do
         throw .outOfBounds)) : Zig.MM misalignedCheckedLocals misalignedCheckedExit) with
     | .br23 => (do
-      let i28 ← pure (i2.elem 1 i21)
+      let i28 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 i21))
       let i29 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i28)))
       let i30 ← pure (i29 &&& (3 : BitVec 64))
       let i31 ← pure (i30 == (0 : BitVec 64))
@@ -359,7 +359,7 @@ def misalignedChecked (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) :
         else (do
           throw .panic)) : Zig.MM misalignedCheckedLocals misalignedCheckedExit) with
       | .br32 => (do
-        let i37 ← pure (i28)
+        let i37 ← Zig.callM (Zig.checkAlign 4 i28 >>= fun _ => pure i28)
         let i38 ← Zig.load (BitVec 32) 4 i37
         let i39 ← pure (Zig.addWrap i38 p1)
         pure (.ret i39))
@@ -378,30 +378,30 @@ inductive misalignedUncheckedExit where
   | ret (v : BitVec 32)
 
 def misalignedUnchecked (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
-  let s2 ← Zig.allocStack 8 1
+  let s2 ← Zig.allocStack 8 4
   let e ← ((do
     let i2 ← pure (← get).buf
-    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i3 ← pure i2
     Zig.store (α := BitVec 8) 4 i3 (1 : BitVec 8)
-    let i5 ← pure (i2.elem 1 (1 : BitVec 64))
+    let i5 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (1 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i5 (2 : BitVec 8)
-    let i7 ← pure (i2.elem 1 (2 : BitVec 64))
+    let i7 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (2 : BitVec 64)))
     Zig.store (α := BitVec 8) 2 i7 (3 : BitVec 8)
-    let i9 ← pure (i2.elem 1 (3 : BitVec 64))
+    let i9 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (3 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i9 (4 : BitVec 8)
-    let i11 ← pure (i2.elem 1 (4 : BitVec 64))
+    let i11 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (4 : BitVec 64)))
     Zig.store (α := BitVec 8) 4 i11 (5 : BitVec 8)
-    let i13 ← pure (i2.elem 1 (5 : BitVec 64))
+    let i13 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (5 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i13 (6 : BitVec 8)
-    let i15 ← pure (i2.elem 1 (6 : BitVec 64))
+    let i15 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (6 : BitVec 64)))
     Zig.store (α := BitVec 8) 2 i15 (7 : BitVec 8)
-    let i17 ← pure (i2.elem 1 (7 : BitVec 64))
+    let i17 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 (7 : BitVec 64)))
     Zig.store (α := BitVec 8) 1 i17 (8 : BitVec 8)
     let i19 ← pure (p0 &&& (1 : BitVec 32))
     let i20 ← pure (i19 ||| (1 : BitVec 32))
     let i21 ← Zig.intCast false false 64 i20
-    let i22 ← pure (i2.elem 1 i21)
-    let i23 ← pure (i22)
+    let i22 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 i21))
+    let i23 ← Zig.callM (Zig.checkAlign 4 i22 >>= fun _ => pure i22)
     let i24 ← Zig.load (BitVec 32) 4 i23
     let i25 ← pure (Zig.addWrap i24 p1)
     pure (.ret i25)) : Zig.MM misalignedUncheckedLocals misalignedUncheckedExit).run' { (default : misalignedUncheckedLocals) with buf := s2 }
@@ -428,9 +428,9 @@ def visit (p0 : Option (Zig.Ptr)) (p1 : BitVec 32) : Zig.MemM (Unit) := do
         throw .panic)) : Zig.MM visitLocals visitExit) with
     | .br5 => (do
       let i10 ← pure (Zig.ptrOfOptional p0)
-      let i11 ← Zig.callM (Zig.ptrProjectNullable i10 (·.add 0))
+      let i11 ← pure i10
       let i12 ← Zig.load (BitVec 32) 4 i11
-      let i13 ← Zig.callM (Zig.ptrProjectNullable i10 (·.add 4))
+      let i13 ← Zig.callM (Zig.ptrProject i10 (·.add 4))
       let i14 ← Zig.load (BitVec 32) 4 i13
       let i15 ← pure (Zig.mulWrap p1 i14)
       let i16 ← pure (Zig.addWrap i12 i15)
@@ -487,7 +487,7 @@ def opaqueContext (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
     match ← ((do
       Zig.loop (opaqueContext.loop10 p0 i2) opaqueContext.again10) : Zig.MM opaqueContextLocals opaqueContextExit) with
     | .br9 => (do
-      let i25 ← pure (i2.add 0)
+      let i25 ← pure i2
       let i26 ← Zig.load (BitVec 32) 4 i25
       pure (.ret i26))
     | e => pure e) : Zig.MM opaqueContextLocals opaqueContextExit).run' { (default : opaqueContextLocals) with c := s2 }
@@ -558,6 +558,7 @@ inductive treeSumExit where
 mutual
 
 def treeSum (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  Zig.enterFrame 0
   let e ← ((do
     match ← ((do
       let i3 ← Zig.callM (Zig.ptrIsNull p0)
@@ -566,21 +567,22 @@ def treeSum (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       else (do
         pure .br2)) : Zig.MM treeSumLocals treeSumExit) with
     | .br2 => (do
-      let i7 ← Zig.callM (Zig.ptrProjectNullable p0 (·.add 0))
+      let i7 ← pure p0
       let i8 ← Zig.load (BitVec 32) 8 i7
       let i9 ← pure (Zig.mulWrap i8 p1)
-      let i10 ← Zig.callM (Zig.ptrProjectNullable p0 (·.add 8))
+      let i10 ← Zig.callM (Zig.ptrProject p0 (·.add 8))
       let i11 ← (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.load (Zig.Ptr) 8 i10)
       let i12 ← Zig.add false p1 (1 : BitVec 32)
       let i13 ← Zig.callM (treeSum i11 i12)
       let i14 ← pure (Zig.addWrap i9 i13)
-      let i15 ← Zig.callM (Zig.ptrProjectNullable p0 (·.add 16))
+      let i15 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
       let i16 ← (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.load (Zig.Ptr) 8 i15)
       let i17 ← Zig.add false p1 (1 : BitVec 32)
       let i18 ← Zig.callM (treeSum i16 i17)
       let i19 ← pure (Zig.addWrap i14 i18)
       pure (.ret i19))
     | e => pure e) : Zig.MM treeSumLocals treeSumExit).run' (default : treeSumLocals)
+  Zig.leaveFrame 0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -625,18 +627,18 @@ def treeInsert.loop38 (i18 : BitVec 32) : Zig.MM treeInsertLocals treeInsertExit
       match ← ((do
         let i45 ← pure ((← get).slot)
         let i46 ← (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.load (Zig.Ptr) 8 i45)
-        let i47 ← Zig.callM (Zig.ptrProjectNullable i46 (·.add 0))
+        let i47 ← pure i46
         let i48 ← Zig.load (BitVec 32) 8 i47
         let i49 ← pure (Zig.lt false i18 i48)
         if i49 then (do
           let i51 ← pure ((← get).slot)
           let i52 ← (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.load (Zig.Ptr) 8 i51)
-          let i53 ← Zig.callM (Zig.ptrProjectNullable i52 (·.add 8))
+          let i53 ← Zig.callM (Zig.ptrProject i52 (·.add 8))
           pure (.br44 i53))
         else (do
           let i55 ← pure ((← get).slot)
           let i56 ← (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.load (Zig.Ptr) 8 i55)
-          let i57 ← Zig.callM (Zig.ptrProjectNullable i56 (·.add 16))
+          let i57 ← Zig.callM (Zig.ptrProject i56 (·.add 16))
           pure (.br44 i57))) : Zig.MM treeInsertLocals treeInsertExit) with
       | .br44 v44 => (do
         modify (fun s => { s with slot := v44 })
@@ -667,12 +669,12 @@ def treeInsert.loop9 (p0 : BitVec 32) (p1 : BitVec 32) (i2 : Zig.Ptr) (i4 : Zig.
           else (do
             throw .outOfBounds)) : Zig.MM treeInsertLocals treeInsertExit) with
         | .br22 => (do
-          let i27 ← pure (i2.elem 24 i20)
-          let i28 ← pure (i27.add 0)
+          let i27 ← Zig.callM (Zig.ptrProject i2 (·.elem 24 i20))
+          let i28 ← pure i27
           Zig.store (α := BitVec 32) 8 i28 i18
-          let i30 ← pure (i27.add 8)
+          let i30 ← Zig.callM (Zig.ptrProject i27 (·.add 8))
           (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.store (α := Zig.Ptr) 8 i30 Zig.Ptr.null)
-          let i32 ← pure (i27.add 16)
+          let i32 ← Zig.callM (Zig.ptrProject i27 (·.add 16))
           (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.store (α := Zig.Ptr) 8 i32 Zig.Ptr.null)
           let i35 ← pure (i4)
           modify (fun s => { s with slot := i35 })
@@ -689,7 +691,7 @@ def treeInsert.loop9 (p0 : BitVec 32) (p1 : BitVec 32) (i2 : Zig.Ptr) (i4 : Zig.
               else (do
                 throw .outOfBounds)) : Zig.MM treeInsertLocals treeInsertExit) with
             | .br67 => (do
-              let i72 ← pure (i2.elem 24 i65)
+              let i72 ← Zig.callM (Zig.ptrProject i2 (·.elem 24 i65))
               let i73 ← pure (i72)
               (letI : Zig.Enc (Zig.Ptr) := Zig.nullablePtrEnc; Zig.store (α := Zig.Ptr) 8 i63 i73)
               pure .br14)
@@ -763,7 +765,7 @@ def voidRoundTrip (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
       let i18 ← pure (← get).pair
       let i19 ← pure (#v[p0, p1] : Vector (BitVec 32) 2)
       Zig.store (α := Vector (BitVec 32) 2) 4 i18 i19
-      let i21 ← pure (i18.elem 4 (1 : BitVec 64))
+      let i21 ← Zig.callM (Zig.ptrProject i18 (·.elem 4 (1 : BitVec 64)))
       let i22 ← pure (i21)
       let i23 ← pure (i2)
       let i24 ← Zig.callM (readThrough i23)

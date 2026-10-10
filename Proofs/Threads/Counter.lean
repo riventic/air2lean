@@ -1659,7 +1659,7 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
     obtain ⟨bk1, hbk1, hk1, hsz64, hacc1⟩ := access_blk (o := 16 * s.local6.toNat)
       (len := (Enc.encode counterPtr).size) (a := 8) hpb.1 (by rw [e8]; omega)
       (fun A h => by omega) (p := (⟨some 0, 0⟩ : Ptr).elem 16 s.local6)
-      (by simp [Ptr.elem, Ptr.add])
+      (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add])
     -- `&ctxs[i]` (`ptrProject`, MM-3): in bounds of the 64-byte block
     have pr₁ : (ptrProject (⟨some 0, 0⟩ : Ptr) (·.elem 16 s.local6)).run m =
         pure ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6, m) := by
@@ -1672,9 +1672,9 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
       fun _ m₁ hs₁ => ?_)
     obtain ⟨b, blk, o, ha, -, rfl⟩ := Proto.store_ok hs₁
     obtain ⟨hb, hblk, -, -, hsz1, -, ho⟩ := access_eq ha
-    simp only [Ptr.elem, Ptr.add, Option.some.injEq] at hb
+    simp (disch := omega) only [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add, Option.some.injEq] at hb
     subst hb
-    have ho' : o = 16 * s.local6.toNat := by rw [ho]; simp only [Ptr.elem, Ptr.add]; omega
+    have ho' : o = 16 * s.local6.toNat := by rw [ho]; simp (disch := omega) only [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]; omega
     subst ho'
     refine ⟨rfl, ?_⟩
     have hbe : blk = bk1 := by
@@ -1691,7 +1691,7 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
     obtain ⟨bk2, hbk2, hk2, -, hacc2⟩ := access_blk (o := 16 * s.local6.toNat + 8)
       (len := (Enc.encode n).size) (a := 4) hpb1.1 (by rw [e4]; omega)
       (fun A h => by omega) (p := ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6).add 8)
-      (by simp [Ptr.elem, Ptr.add] <;> omega)
+      (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add] <;> omega)
     -- `&ctxs[i].n`
     have pr₂ : (ptrProject ((⟨some 0, 0⟩ : Ptr).elem 16 s.local6) (·.add 8)).run
         (Mem.write (m.recordAt 0 (16 * s.local6.toNat) (Enc.encode counterPtr).size .write) 0 blk
@@ -1701,7 +1701,7 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
           (Enc.encode counterPtr)) := by
       obtain ⟨-, hblk2, -, h02, hn2, -⟩ := access_eq hacc2
       exact ptrProject_add_run
-        (inBounds_of (by simp [Ptr.elem]) hblk2 (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add] at hn2 ⊢; omega))
+        (inBounds_of (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt]) hblk2 (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]; omega) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add] at hn2 ⊢; omega))
         (by simpa using inBounds_of_access hacc2 0 (Nat.zero_le _))
     refine WP.bind (WP.callMC_ptrProject pr₂ ?_)
     dsimp only
@@ -1709,9 +1709,9 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
       fun _ m₂ hs₂ => ?_)
     obtain ⟨b2, blk2, o2, ha2, -, rfl⟩ := Proto.store_ok hs₂
     obtain ⟨hb2, hblk2, -, -, hsz2, -, ho2⟩ := access_eq ha2
-    simp only [Ptr.elem, Ptr.add, Option.some.injEq] at hb2
+    simp (disch := omega) only [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add, Option.some.injEq] at hb2
     subst hb2
-    have ho2' : o2 = 16 * s.local6.toNat + 8 := by rw [ho2]; simp only [Ptr.elem, Ptr.add]; omega
+    have ho2' : o2 = 16 * s.local6.toNat + 8 := by rw [ho2]; simp (disch := omega) only [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]; omega
     subst ho2'
     have hb0 : 0 < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
     have hblk2' : blk2 = Block.mk (writeBytes blk.bytes (16 * s.local6.toNat)
@@ -1741,7 +1741,7 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
       simp only [Mem.write, Mem.recordAt, Array.set!_eq_setIfInBounds] at hb'
       rw [Array.getElem?_setIfInBounds_self_of_lt (by simpa using hb0), Option.some.injEq] at hb'
       subst hb'
-      simp only [Ptr.elem, Ptr.add, e8, e4] at hsz1 hsz2
+      simp (disch := omega) only [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add, e8, e4] at hsz1 hsz2
       have hsz8 : 16 * s.local6.toNat + 8 ≤ blk.bytes.size := by omega
       have hsz12 : 16 * s.local6.toNat + 12 ≤ blk.bytes.size := by
         rw [writeBytes_size _ _ _ (by rw [e8]; exact hsz8)] at hsz2; omega
@@ -1753,8 +1753,9 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
     simp only [parallelCounter.again9, Bool.false_eq_true, ↓reduceIte]
     exact ⟨rfl, rfl, hhd, hpa, hpb, hcnt, fun blk hb k hk => hsl blk hb k (by omega)⟩
 
-theorem ctxPtr_elem (i : BitVec 64) : (⟨some 0, 0⟩ : Ptr).elem 16 i = ctxPtr i.toNat := by
-  simp [Ptr.elem, Ptr.add, ctxPtr]
+theorem ctxPtr_elem (i : BitVec 64) (hi : i.toNat < 2 ^ 63) :
+    (⟨some 0, 0⟩ : Ptr).elem 16 i = ctxPtr i.toNat := by
+  simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add, ctxPtr]
 
 /-- A thread id reads back. -/
 theorem decode_tid (t : ThreadId) (h : t < 2 ^ 64) :
@@ -1878,12 +1879,12 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
         pure ((⟨some 2, 0⟩ : Ptr).elem 8 s.local29, m) := by
       obtain ⟨blk, hb, -, hsz, -⟩ := he.2.2.1
       exact ptrProject_run _ rfl (inBounds_of rfl hb (by decide) (by simp))
-        (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add, hsz]; omega))
+        (inBounds_of rfl hb (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]; omega) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add, hsz]; omega))
     have prC : (ptrProject (⟨some 0, 0⟩ : Ptr) (·.elem 16 s.local29)).run m =
         pure ((⟨some 0, 0⟩ : Ptr).elem 16 s.local29, m) := by
       obtain ⟨blk, hb, -, hsz, -⟩ := he.1
       exact ptrProject_run _ rfl (inBounds_of rfl hb (by decide) (by simp))
-        (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by simp [Ptr.elem, Ptr.add, hsz]; omega))
+        (inBounds_of rfl hb (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]; omega) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add, hsz]; omega))
     refine WP.bind (WP.callMC_ptrProject prH ?_)
     refine WP.bind (WP.callMC_ptrProject prC ?_)
     dsimp only
@@ -1900,17 +1901,17 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
       (len := (Enc.encode child).size) (a := 8) he₂.2.2.1
       (by rw [show (Enc.encode child).size = 8 from LawfulEnc.size_encode (α := BitVec 64) _]; omega)
       (fun A h => by omega) (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local29)
-      (by simp [Ptr.elem, Ptr.add])
+      (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add])
     simp only [StateT.run_bind, bind_assoc]
     refine WP.bind (WP.liftM (fun e h => (MemM.noErr_of_run
       (storeBytes_run hacc hkk (noRace_b2 he₂.2.2.2.1 hcur₂)) e h).elim) fun _ m₃ hs₃ => ?_)
-    obtain ⟨hc, hcur₃, hi₃⟩ := inv_spawn n hi₁ hg₁ hlt' hf hs₃ (by simp [Ptr.elem, Ptr.add])
+    obtain ⟨hc, hcur₃, hi₃⟩ := inv_spawn n hi₁ hg₁ hlt' hf hs₃ (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add])
     subst hc
     have he₃ := ex_handle (G := G₁)
       (G' := Conc.upd (Conc.upd G₁ (s.local29.toNat + 1) (.bump (ctxPtr s.local29.toNat) 0 false))
         0 (.main (s.local29.toNat + 1) [])) he₂ hg₁ (Conc.upd_self _ _ _) hlt' hcur₂
       (by obtain ⟨_, h⟩ := (fork_ok hf); rw [(fork_eq hf).2]; simp [hcs₁])
-      (by rw [(fork_ok hf).2]; omega) (by simp [Ptr.elem, Ptr.add]) hs₃
+      (by rw [(fork_ok hf).2]; omega) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]) hs₃
     refine ⟨by obtain ⟨b, blk, o, -, -, rfl⟩ := Proto.store_ok hs₃; rfl, ?_⟩
     simp only [StateT.run_pure, pure_bind, StateT.run_bind, StateT.run_get]
     refine WP.bind (WP.callRC (fun e h => (add_one_noErr (a := s.started)
@@ -1927,10 +1928,10 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     refine ⟨⟨BitVec.eq_of_toNat_eq (hstartedNat.trans hkn.symm),
       by show k'.toNat ≤ 4; omega, hcur₃, ?_, ?_⟩, .inl (by omega)⟩
     · show Inv n (Conc.upd _ 0 (.main k'.toNat [])) m₃
-      rw [hkn, ctxPtr_elem]
+      rw [hkn, ctxPtr_elem _ (by omega)]
       exact hi₃
     · show Ex (Conc.upd _ 0 (.main k'.toNat [])) m₃
-      rw [hkn, ctxPtr_elem]
+      rw [hkn, ctxPtr_elem _ (by omega)]
       exact he₃
   · rename_i hge
     have hge' : ¬ s.local29.toNat < 4 := by simpa [lt, BitVec.ult] using hge
@@ -2006,7 +2007,7 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
     rw [hG4] at hG'; cases hG'
     obtain ⟨bk, hbk, -, hbs, hacc⟩ := access_blk (o := 8 * s.local85.toNat)
       (len := Enc.size ThreadId) (a := 8) B2 (by show _ + 8 ≤ 32; omega) (fun A h => by omega)
-      (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local85) (by simp [Ptr.elem, Ptr.add])
+      (p := (⟨some 2, 0⟩ : Ptr).elem 8 s.local85) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add])
     have hdec := hd bk hbk s.local85.toNat hlt'
     refine WP.bind (WP.callMC (fun e h => (MemM.noErr_of_run
       (load_run (v := s.local85.toNat + 1) hacc hdec (noRace_b2 hfp hcur)) e h).elim)

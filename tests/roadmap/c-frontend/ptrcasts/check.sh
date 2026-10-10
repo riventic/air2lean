@@ -24,10 +24,12 @@ python3 - "$here/native.txt" "$work/Gen.lean" > "$work/Check.lean" <<'PY'
 import sys
 native, gen = sys.argv[1], sys.argv[2]
 inputs = [(0, 0), (1, 2), (4294967295, 7), (305419896, 2863311530)]
-negatives = {"pointerAsInt": ".unspecified", "byteAsBool": ".illegal",
+# pointerAsInt reads a pointer's bytes as an integer: the address under the placement (MM-1),
+# so it returns a placement-dependent value; it is checked to return.
+negatives = {"byteAsBool": ".illegal",
              "misalignedChecked": ".panic", "misalignedUnchecked": ".illegal"}
 out = [open(gen).read(), "namespace PtrCasts.Check",
-       "def run (r : Zig.MemM (BitVec 32)) : Zig.Result (BitVec 32) := r.run' PtrCasts.mem0",
+       "def run (r : Zig.MemM (BitVec 32)) : Zig.Result (BitVec 32) := r.run' (PtrCasts.mem0 .fresh)",
        "def isOk (v : BitVec 32) (r : Zig.Result (BitVec 32)) : Bool :=",
        "  match r with | some (.ok x) => x == v | _ => false",
        "def isErr (e : Zig.Error) (r : Zig.Result (BitVec 32)) : Bool :=",
@@ -40,6 +42,8 @@ for line in open(native).read().split("\n"):
     seen.add(name)
     out.append(f"#guard isOk {v}#32 (run (PtrCasts.{name} {a}#32 {b}#32))")
 assert seen == {"listSum", "treeInsert", "voidRoundTrip", "byteView", "opaqueContext"}, seen
+for a, b in inputs:
+    out.append(f"#guard match run (PtrCasts.pointerAsInt {a}#32 {b}#32) with | some (.ok _) => true | _ => false")
 for name, err in negatives.items():
     for a, b in inputs:
         out.append(f"#guard isErr {err} (run (PtrCasts.{name} {a}#32 {b}#32))")

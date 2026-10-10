@@ -1,13 +1,21 @@
 {
   "fixture": "G2 (docs/c-frontend.md): pointer casts through *anyopaque/byte views and self-referential structs, compiler-exported AIR",
   "sources": [
-    {"path": "tests/roadmap/c-frontend/ptrcasts/ptrcasts.zig", "sha256": "717f7e6a0596b601787e075fc9b5c98eafbb272f647ef4a06407375dff2d34bd", "air": "tests/roadmap/c-frontend/ptrcasts/air/0.16.0"},
-    {"path": "tests/roadmap/c-frontend/ptrcasts/reject.zig", "sha256": "b0113fb25937248af8bcb7e842f7bc0ef9a074c39e9706c05c75f1113df26801", "air": "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0"}
+    {
+      "path": "tests/roadmap/c-frontend/ptrcasts/ptrcasts.zig",
+      "sha256": "717f7e6a0596b601787e075fc9b5c98eafbb272f647ef4a06407375dff2d34bd",
+      "air": "tests/roadmap/c-frontend/ptrcasts/air/0.16.0"
+    },
+    {
+      "path": "tests/roadmap/c-frontend/ptrcasts/reject.zig",
+      "sha256": "b0113fb25937248af8bcb7e842f7bc0ef9a074c39e9706c05c75f1113df26801",
+      "air": "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0"
+    }
   ],
   "export": {
     "command": "ZIG_AIR_JSON_DIR=<air> ZIG_AIR_JSON_FILTER=<stem>. zig-air-0.16.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>",
-    "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
-    "exporter_json_zig_sha256": "38b83e6a15ac83cb72499107bff5ca8f903e9bc7d41dddf2b8b81083a65f5840",
+    "patched_compiler_sha256": "b0861aab2279bb504767adc25434bb2743c97034b0f681cacc01d05022631c8f",
+    "exporter_json_zig_sha256": "10b624027c07f0ad9cba6e0f0971b2e3b57c07aa0958cadda466bad193aa7952",
     "export_host": "aarch64-macos"
   },
   "native": "native.txt: stock Zig 0.16.0 `zig run -OReleaseSafe native.zig` on aarch64-macos (the values do not depend on the little-endian host)",

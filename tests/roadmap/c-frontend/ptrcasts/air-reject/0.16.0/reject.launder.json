@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.launder",
+ "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 9
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 2,
@@ -126,6 +133,7 @@
        "callee": {
         "ty": 6,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -153,7 +161,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 12,
@@ -175,6 +184,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -188,6 +198,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

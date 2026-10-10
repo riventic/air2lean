@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "escaped.poolList",
+ "module": "root",
  "src": {
   "file": "escaped.zig",
   "module": "escaped",
@@ -47,6 +48,8 @@
  "ret": 0,
  "export": {
   "name": "poolList",
+  "linkage": "strong",
+  "visibility": "default",
   "cc": "x86_64_sysv"
  },
  "body": [
@@ -276,6 +279,7 @@
                "callee": {
                 "ty": 8,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -490,6 +494,7 @@
                "callee": {
                 "ty": 8,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -1169,6 +1174,7 @@
  "globals": [
   {
    "name": "escaped.pool",
+   "module": "root",
    "ty": 14,
    "const": false,
    "threadlocal": false,
@@ -1253,6 +1259,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1272,6 +1279,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1304,6 +1312,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1317,6 +1326,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1330,6 +1340,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1343,6 +1354,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1356,6 +1368,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1372,6 +1385,7 @@
   {
    "k": "struct",
    "name": "escaped.Node",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

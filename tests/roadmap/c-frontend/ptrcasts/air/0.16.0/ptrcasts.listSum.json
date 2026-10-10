@@ -35,11 +35,23 @@
   "export_stage": "analyzed-air"
  },
  "name": "ptrcasts.listSum",
+ "module": "root",
+ "src": {
+  "file": "ptrcasts.zig",
+  "module": "ptrcasts",
+  "decl_line": 11
+ },
  "params": [
   0,
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "listSum",
+  "linkage": "strong",
+  "visibility": "default",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -57,7 +69,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -93,7 +106,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 7,
@@ -129,7 +143,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 11,
@@ -180,7 +195,8 @@
          "id": 17,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 5
+         "line": 5,
+         "column": 12
         },
         {
          "id": 18,
@@ -220,7 +236,8 @@
            "id": 21,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 9
           },
           {
            "id": 22,
@@ -236,7 +253,8 @@
            "id": 23,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 13
           },
           {
            "id": 24,
@@ -298,6 +316,7 @@
                "callee": {
                 "ty": 10,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -428,7 +447,8 @@
            "id": 40,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 7
+           "line": 7,
+           "column": 9
           },
           {
            "id": 41,
@@ -444,7 +464,8 @@
            "id": 42,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 7
+           "line": 7,
+           "column": 21
           },
           {
            "id": 43,
@@ -506,6 +527,7 @@
                "callee": {
                 "ty": 10,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -567,7 +589,8 @@
            "id": 53,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 8
+           "line": 8,
+           "column": 5
           },
           {
            "id": 54,
@@ -578,7 +601,8 @@
            "id": 56,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 5
+           "line": 5,
+           "column": 22
           },
           {
            "id": 57,
@@ -594,7 +618,8 @@
            "id": 58,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 5
+           "line": 5,
+           "column": 24
           },
           {
            "id": 59,
@@ -667,7 +692,8 @@
    "id": 65,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 66,
@@ -717,7 +743,8 @@
          "id": 72,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 10
+         "line": 10,
+         "column": 12
         },
         {
          "id": 73,
@@ -812,7 +839,8 @@
            "id": 82,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 11
+           "line": 11,
+           "column": 13
           },
           {
            "id": 83,
@@ -823,7 +851,8 @@
              "id": 84,
              "tag": "dbg_stmt",
              "ty": 1,
-             "line": 11
+             "line": 11,
+             "column": 14
             },
             {
              "id": 85,
@@ -897,7 +926,8 @@
                "id": 90,
                "tag": "dbg_stmt",
                "ty": 1,
-               "line": 11
+               "line": 11,
+               "column": 31
               },
               {
                "id": 91,
@@ -913,7 +943,8 @@
                "id": 92,
                "tag": "dbg_stmt",
                "ty": 1,
-               "line": 11
+               "line": 11,
+               "column": 41
               },
               {
                "id": 93,
@@ -976,7 +1007,8 @@
                "id": 98,
                "tag": "dbg_stmt",
                "ty": 1,
-               "line": 11
+               "line": 11,
+               "column": 61
               },
               {
                "id": 99,
@@ -1031,7 +1063,8 @@
            "id": 104,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 12
+           "line": 12,
+           "column": 5
           },
           {
            "id": 105,
@@ -1082,7 +1115,8 @@
    "id": 111,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 13
+   "line": 13,
+   "column": 5
   },
   {
    "id": 112,
@@ -1118,7 +1152,8 @@
    "id": 115,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 14
+   "line": 14,
+   "column": 5
   },
   {
    "id": 116,
@@ -1154,7 +1189,8 @@
    "id": 119,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 15
+   "line": 15,
+   "column": 5
   },
   {
    "id": 120,
@@ -1214,7 +1250,8 @@
          "id": 128,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 16
+         "line": 16,
+         "column": 12
         },
         {
          "id": 129,
@@ -1299,7 +1336,8 @@
            "id": 137,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 17
+           "line": 17,
+           "column": 9
           },
           {
            "id": 138,
@@ -1315,7 +1353,8 @@
            "id": 139,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 17
+           "line": 17,
+           "column": 16
           },
           {
            "id": 140,
@@ -1400,7 +1439,8 @@
            "id": 147,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 18
+           "line": 18,
+           "column": 9
           },
           {
            "id": 148,
@@ -1416,7 +1456,8 @@
            "id": 149,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 18
+           "line": 18,
+           "column": 11
           },
           {
            "id": 150,
@@ -1449,7 +1490,8 @@
            "id": 152,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 19
+           "line": 19,
+           "column": 5
           },
           {
            "id": 153,
@@ -1460,7 +1502,8 @@
            "id": 155,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 16
+           "line": 16,
+           "column": 29
           },
           {
            "id": 156,
@@ -1549,7 +1592,8 @@
    "id": 164,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 20
+   "line": 20,
+   "column": 5
   },
   {
    "id": 165,
@@ -1565,7 +1609,8 @@
    "id": 166,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 20
+   "line": 20,
+   "column": 5
   },
   {
    "id": 167,
@@ -1599,6 +1644,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1620,6 +1666,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1639,6 +1686,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1671,6 +1719,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1684,6 +1733,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1697,6 +1747,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1710,6 +1761,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1723,6 +1775,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1731,6 +1784,7 @@
   {
    "k": "struct",
    "name": "ptrcasts.Node",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

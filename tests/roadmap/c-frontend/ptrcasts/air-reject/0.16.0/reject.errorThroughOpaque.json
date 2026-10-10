@@ -35,10 +35,22 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.errorThroughOpaque",
+ "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 14
+ },
  "params": [
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "errorThroughOpaque",
+  "linkage": "strong",
+  "visibility": "default",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -50,7 +62,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -66,7 +79,8 @@
      "id": 4,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 25
     },
     {
      "id": 5,
@@ -159,7 +173,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 20
   },
   {
    "id": 13,
@@ -175,7 +190,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 19
   },
   {
    "id": 15,
@@ -184,6 +200,7 @@
    "callee": {
     "ty": 8,
     "func": "reject.launder",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -206,7 +223,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 18,
@@ -240,6 +258,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -268,6 +287,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -281,6 +301,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

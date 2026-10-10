@@ -375,10 +375,11 @@ theorem byteValues?_map (buf : List UInt8) : byteValues? (buf.map enc) = some bu
     apply UInt8.toNat_inj.mp
     simp
 
-/-- `buf`'s bytes are at `p` (a live block, alignment 1). -/
+/-- `buf`'s bytes are at `p` (a live block, alignment 1, smaller than `2 ^ 63` bytes like every
+native object: `Ptr.elem` takes a signed index). -/
 def BytesAt (m : Mem) (p : Ptr) (buf : List UInt8) : Prop :=
   ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live ∧ 0 ≤ p.off ∧
-    p.off.toNat + buf.length ≤ blk.bytes.size ∧
+    p.off.toNat + buf.length ≤ blk.bytes.size ∧ blk.bytes.size < 2 ^ 63 ∧
     (blk.bytes.toList.drop p.off.toNat).take buf.length = buf.map enc
 
 theorem BytesAt.blocks {m m' : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf)
@@ -390,11 +391,11 @@ theorem BytesAt.blocks {m m' : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m 
 theorem BytesAt.sub {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (i k : Nat)
     (hik : i + k ≤ buf.length) (hi64 : i < 2 ^ 64) :
     BytesAt m (p.elem 1 (BitVec.ofNat 64 i)) ((buf.drop i).take k) := by
-  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hbytes⟩ := h
-  have hi : (BitVec.ofNat 64 i).toNat = i := by simp; omega
-  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by simp [Ptr.elem, Ptr.add, hi]
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, h63, hbytes⟩ := h
+  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by
+    rw [Ptr.elem_eq_of_lt _ _ (by simp; omega)]; simp [Ptr.add]; omega
   have hlen : ((buf.drop i).take k).length = k := by simp; omega
-  refine ⟨b, blk, hb, hblk, hl, by rw [hoff]; omega, by rw [hoff, hlen]; omega, ?_⟩
+  refine ⟨b, blk, hb, hblk, hl, by rw [hoff]; omega, by rw [hoff, hlen]; omega, h63, ?_⟩
   rw [hoff, hlen]
   have ht : (p.off + i).toNat = p.off.toNat + i := by omega
   rw [ht, ← List.drop_drop, List.map_take, List.map_drop, ← hbytes, List.drop_take]
@@ -404,8 +405,8 @@ theorem BytesAt.sub {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf)
 
 theorem BytesAt.take {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (k : Nat) :
     BytesAt m p (buf.take k) := by
-  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hbytes⟩ := h
-  refine ⟨b, blk, hb, hblk, hl, h0, by simp; omega, ?_⟩
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, h63, hbytes⟩ := h
+  refine ⟨b, blk, hb, hblk, hl, h0, by simp; omega, h63, ?_⟩
   rw [List.map_take, ← hbytes]
   simp [List.take_take, Nat.min_comm]
 
@@ -420,9 +421,9 @@ the end included) succeeds and leaves memory as it is (`ptrProject`, MM-3). -/
 theorem BytesAt.ptrProject_run {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) (i : Nat)
     (hi : i ≤ buf.length) (hi64 : i < 2 ^ 64) :
     (ptrProject p (·.elem 1 (BitVec.ofNat 64 i))).run m = pure (p.elem 1 (BitVec.ofNat 64 i), m) := by
-  obtain ⟨b, blk, hb, hblk, -, h0, hn, -⟩ := h
-  have hi' : (BitVec.ofNat 64 i).toNat = i := by simp; omega
-  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by simp [Ptr.elem, Ptr.add, hi']
+  obtain ⟨b, blk, hb, hblk, -, h0, hn, h63, -⟩ := h
+  have hoff : (p.elem 1 (BitVec.ofNat 64 i)).off = p.off + i := by
+    rw [Ptr.elem_eq_of_lt _ _ (by simp; omega)]; simp [Ptr.add]; omega
   have hblock : (p.elem 1 (BitVec.ofNat 64 i)).block = p.block := rfl
   exact Zig.ptrProject_run (·.elem 1 (BitVec.ofNat 64 i)) hblock (inBounds_of hb hblk h0 (by omega))
     (inBounds_of (hblock.trans hb) hblk (by rw [hoff]; omega) (by rw [hoff]; omega))
@@ -430,7 +431,7 @@ theorem BytesAt.ptrProject_run {m : Mem} {p : Ptr} {buf : List UInt8} (h : Bytes
 theorem BytesAt.access {m : Mem} {p : Ptr} {buf : List UInt8} (h : BytesAt m p buf) :
     ∃ b blk, m.access p buf.length 1 = pure (b, blk, p.off.toNat) ∧
       blk.bytes.extract p.off.toNat (p.off.toNat + buf.length) = received buf := by
-  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hbytes⟩ := h
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, -, hbytes⟩ := h
   refine ⟨b, blk, access_of hb hblk hl h0 (by omega) (Nat.mod_one _), ?_⟩
   rw [received_eq]
   apply Array.ext'
@@ -455,10 +456,11 @@ theorem write_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {buf : List 
   simp [ExceptT.run, pure, ExceptT.pure, ExceptT.mk, hext, received_eq, byteValues?_map]
   try rfl
 
-/-- The buffer at `p` has room for `k` bytes and may be written. -/
+/-- The buffer at `p` has room for `k` bytes and may be written (in a block smaller than
+`2 ^ 63` bytes, as `BytesAt`). -/
 def WritableAt (m : Mem) (p : Ptr) (k : Nat) : Prop :=
   ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live ∧ 0 ≤ p.off ∧
-    p.off.toNat + k ≤ blk.bytes.size ∧ blk.kind ≠ .constGlobal
+    p.off.toNat + k ≤ blk.bytes.size ∧ blk.bytes.size < 2 ^ 63 ∧ blk.kind ≠ .constGlobal
 
 /-- The raw return of a `read` result. -/
 def readRet : Except IoError (List UInt8) → BitVec 64
@@ -476,7 +478,7 @@ theorem read_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {k : Nat}
     ∃ m' : Mem, read (fd, p, BitVec.ofNat 64 k) m = pure (readRet (m.host.afterRead h k).1, m') ∧
       m'.host = (m.host.afterRead h k).2 ∧ m'.SingleThread ∧
       (∀ bytes, (m.host.afterRead h k).1 = .ok bytes → BytesAt m' p bytes) := by
-  obtain ⟨b, blk, hb, hblk, hl, h0, hn, hK⟩ := hw
+  obtain ⟨b, blk, hb, hblk, hl, h0, hn, h63, hK⟩ := hw
   have hkn : (BitVec.ofNat 64 k).toNat = k := by simp; omega
   have hoh : (openHandle fd m).run = some (.ok h) := by simp [openHandle, ho.1, ho.2]
   simp only [read, hoh, hkn, hk0, if_false]
@@ -491,7 +493,7 @@ theorem read_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {k : Nat}
       · subst he
         refine ⟨_, rfl, rfl, hst, fun bytes' hb' => ?_⟩
         cases hb'
-        exact ⟨b, blk, hb, hblk, hl, h0, by simp; omega, by simp⟩
+        exact ⟨b, blk, hb, hblk, hl, h0, by simp; omega, h63, by simp⟩
       · have hne : bytes.isEmpty = false := by simpa using he
         simp only [hne, Bool.false_eq_true, ite_false]
         let m1 : Mem := { m with host := ⟨m.host.ops, s', m.host.log ++ [.received h bytes]⟩ }
@@ -507,7 +509,7 @@ theorem read_run {m : Mem} {fd : BitVec 32} {h : Handle} {p : Ptr} {k : Nat}
         have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
         have hfit : p.off.toNat + (received bytes).size ≤ blk.bytes.size := by rw [hsz]; omega
         refine ⟨b, { blk with bytes := writeBytes blk.bytes p.off.toNat (received bytes) }, hb, ?_, hl,
-          h0, ?_, ?_⟩
+          h0, ?_, by rw [writeBytes_size _ _ _ hfit]; exact h63, ?_⟩
         · simp only [Mem.write, Mem.recordAt, Array.set!_eq_setIfInBounds]
           exact Array.getElem?_setIfInBounds_self_of_lt hlt
         · rw [writeBytes_size _ _ _ hfit]; omega

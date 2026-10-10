@@ -322,14 +322,14 @@ blocked (alone or with other gaps).
 | G1 | **calls to `extern` C functions** (libc, and every function translate-c demoted) | `pub extern fn strlen([*c]const u8) usize;`, called directly; variadic `snprintf(…, ...)` | the exporter writes the callee as a constant `{"ty": <fn type>, "val": "(extern 'memset')"}` whose type is `k: other` (`"fn (…) callconv(.c) …"`); `Air2Lean/Air/Json.lean` `parseLeafVal` → `AIR_DECODE` "constant of unsupported type" | 9 (`AIR_DECODE`) | M (exporter callee/fn-type schema, decoder, checker binding to the E01 registry by exact symbol) + per-symbol models below | E01, E03, E04, L01, Q07 (schema bump), zig-patch |
 | G2 | **closed** (codex/c-frontend-ptrcasts): pointer casts through `void *`/`char *` views and self-referential structs | `@ptrCast(@alignCast(p))` to/from `?*anyopaque`, `[*c]u8`; `struct node **link = &head` | was `Air2Lean/Check.lean` `errorCapabilityScan`: an opaque child (`.other`) or a type cycle gave "unresolved or cyclic symbolic storage provenance". Now the error capability is a least fixpoint over the type graph (`typeReach`, §Pointer casts below) | 0 (was 5) | done | L10, L07, L05 |
 | G3 | **Zig 0.16.0 `p.*.f[i]` through `[*c]` pointers** (compiler bug, trusted base) | `r.*.data[i]`, `o.*.in[0].a`, `row.*[2]` | stock Zig: compile error or **silent miscompile** (`&p.*.e[i]` points at item 0); patched Debug compiler: `reached unreachable` | 4 | S for a fail-closed gate (reject translated sources with the shape, or rewrite it and re-verify natively); upstream fix; 0.15.2 and 0.17.0 compile the repro correctly | Q07, T06, V03 |
-| G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | S: wrap the C-pointer offset modulo 2⁶⁴ (two's-complement index) in the `[*c]` `ptr_elem_*`/`ptr_add` emission | L05 |
+| G4 | **closed** (codex/c-frontend-next): negative `[*c]` index | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | was: the model's `p.elem 4 (2^64-1)` read the index as a natural number, past the block, so `entry` was `.illegal` while native Zig and C are defined. `Ptr.elem` now takes the index signed, as LLVM's `getelementptr` (§Signed index below) | 0 (was 1) | done | L05 |
 | G5 | **closed** (codex/c-frontend-g3): globals whose initial value is a comptime call and whose address escapes | `pub var pool: [8]struct_node = std.mem.zeroes([8]struct_node);` with `&pool[i]` / `@intFromPtr(&data[1])` | was: AIR global without `init` → `STRUCTURE_FAILURE` "global has no initial value". Zig 0.16.0 Sema resolves only the *type* of a global whose address a function takes and queues its value; the exporter now resolves the value first (§Escaped globals below). A pure-Zig gap, not C-specific | 0 (was 2) | done | L12, L06 |
 | G6 | **closed** (codex/c-frontend-g3): std callees other than `zig.c_translation` | `std.mem.zeroes(T)` in function bodies (compound literals), `debug.assert` inside `signedRemainder` | was `CALLEE_MISSING`. The harness now exports the std callee closure of the C module (§Std callees below) | 0 (was 2) | done | I02, E04 |
 | G7 | **translate-c refusals** | `goto`/labels: function demoted ("TODO goto"); bitfields: record `opaque`, users demoted; variadic definitions: demoted; case labels inside nested statements (Duff): "TODO complex switch" | translate-c 0.15.2/0.16.0/0.17.0 alike (the demoted functions then reach G1) | 6 | goto: gate S now, forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L (`@cVaStart`/`@cVaArg` and AIR va tags); Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | ReleaseSafe `integerOverflow` panic natively where C yields −1 (the standard `qsort` comparator idiom); `setjmp` loses a `volatile` local (Zig has no `returns_twice`) | 3 | S: upstream promotion fix; reject `setjmp`/`longjmp`/`sigsetjmp` at the libc boundary | upstream translate-c; G1 |
 | G9 | **patched compiler on invalid Zig** | any compile error (G3, demotions) | the Debug-built AIR exporter reaches `unreachable` instead of exiting with the compile error | 4 | S | V03, I08 |
 
-Order of attack: G4 and a G3 gate unblock the last libc-free kernels (Phase 1); G1 opens
+Order of attack: a G3 gate unblocks the last libc-free kernels (Phase 1); G1 opens
 the libc boundary (Phase 2); G7/G8 are translate-c work (Phase 3).
 
 G1's exporter and binding are done (EXT-03, `docs/air-json.md` §Extern calls): each libc call
@@ -340,12 +340,23 @@ which is outside the subset". Variadic calls therefore stay rejected until a var
 can be translated (G7); there is no variadic model. A `noreturn` extern (`longjmp`) is rejected
 by name at the call. What remains of G1 is the libc side (§libc boundary).
 
-G4 stays open on purpose: `Ptr.elem` (`ZigLean/Mem/Basic.lean`) reads the `usize` index as a
-natural number, so index 2⁶⁴−1 is past the block and the model is `.illegal` (conservative).
-Native Zig computes the address modulo 2⁶⁴ (LLVM's GEP takes the index as signed), so the fix
-is a model change for every many-item pointer, not a C one: `Ptr.elem` over `i.toInt`, with
-the 28 proof files that unfold `Ptr.elem` over `toNat` re-proved under an `i < 2⁶³` side
-condition. That is a separate model change with its own proof sweep.
+### Signed index (G4)
+
+`Ptr.elem` (`ZigLean/Mem/Basic.lean`, and `elemSub`, `elemOf`, `elemSubOf`) moves
+`size * i.toInt` bytes: the `usize` index is read in two's complement, as LLVM's
+`getelementptr` reads it, so translate-c's `p[@bitCast(@as(isize, -1))]` is the item before `p`.
+Before, the index was a natural number and such a pointer was past the block (`.illegal`). The
+change is a model change for every many-item pointer, not a C one.
+
+The proofs keep their statements. An index below `2 ^ 63` is the same either way
+(`Ptr.elem_eq_of_lt`), and every index the proofs use is bounded: an array assertion `arr p vs`
+(`ZigLean/Sep/Triple.lean`) now says that its items end below byte `2 ^ 63` of the block, as in
+every native object (an object has at most `isize` bytes), so an item index is below `2 ^ 63`
+(`arr_index_lt`); `BytesAt`/`WritableAt` (`ZigLean/Env/Linux.lean`) are in a block smaller than
+`2 ^ 63` bytes; a constant pointer's offset (`ConstPtr.addrLimit`) is below `2 ^ 63`. Two helper
+lemmas gained the bound as a hypothesis: `pts_arr_singleton` (the element ends below `2 ^ 63`)
+and `Witness.mem1_arr1` (`Enc.size T < 2 ^ 63`); in the proofs, `Threads.Counter.ctxPtr_elem`
+and `Lists.addOneAssumeCapacity_run` (`4 * cap < 2 ^ 64`, which the list invariant carries).
 
 ### Escaped globals (G5)
 
@@ -488,7 +499,7 @@ so it is not a boundary symbol of the translated Zig.
 | phase | scope | acceptance |
 |---|---|---|
 | 0 (this change) | corpus, harness, generator, committed records, CI record check | `check.sh --light` exits 0 in CI; `--heavy` reproduces `record.json` on a host with the patched 0.16.0 compiler |
-| 1: libc-free C kernels | G2, G5, G6 (done), G4, G9, a fail-closed G3 gate and a named gate for translate-c demotions (goto, bitfields, variadic definitions); generator gains `void *` casts and struct pointers | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or rejected by a named G3 gate (today 23 of 29); `cgen.py` seeds 0–299 all `lean_ok` |
+| 1: libc-free C kernels | G2, G4, G5, G6 (done), G9, a fail-closed G3 gate and a named gate for translate-c demotions (goto, bitfields, variadic definitions); generator gains `void *` casts and struct pointers | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or rejected by a named G3 gate (today 23 of 29); `cgen.py` seeds 0–299 all `lean_ok` |
 | 2: libc boundary | G1; musl string/ctype/`abs`/`qsort` translated with the musl revision recorded; malloc family as trusted base with contracts in `docs/premises.md`; `setjmp` rejected by name | `libc_string`, `libc_stdlib`, `malloc_vec` `lean_ok`; every `extern_calls` symbol in the record is either a registered trusted-base row or translated AIR; a proof of one libc-using function (e.g. a `memcpy`/`strlen` specification) is kernel-checked |
 | 3: translate-c completeness | G7, G8 upstream or as a pinned, reviewed translate-c patch; move the route to the first Zig version without G3 (Q07 qualification) | `goto_*`, `bitfields`, `bitfield_packet`, `varargs_sum`, `switch_fallthrough`, `arrays_2d`, `ring_buffer`, `struct_layout`, `hash_table`, `sort_callback` `lean_ok`; the comparator idiom agrees natively |
 | 4: realistic programs and proofs | project manifests accept C sources (I01); csmith (Docker image) differential at ≥ 1000 seeds; tutorial | csmith seeds with no out-of-scope constructs are `lean_ok` or carry a typed rejection; two kernel-checked proofs over translated C (ring buffer invariant, linked-list reversal) using P01–P05 tactics |

@@ -1,12 +1,16 @@
 {
   "fixture": "G5 (docs/c-frontend.md): globals with a comptime-call initial value whose address escapes, compiler-exported AIR",
   "sources": [
-    {"path": "tests/roadmap/c-frontend/escaped-globals/escaped.zig", "sha256": "2bb72eee8237709c261dfb56f0162ebc8ff431319200f00d63bb37a6c764ab97", "air": "tests/roadmap/c-frontend/escaped-globals/air/0.16.0"}
+    {
+      "path": "tests/roadmap/c-frontend/escaped-globals/escaped.zig",
+      "sha256": "2bb72eee8237709c261dfb56f0162ebc8ff431319200f00d63bb37a6c764ab97",
+      "air": "tests/roadmap/c-frontend/escaped-globals/air/0.16.0"
+    }
   ],
   "export": {
     "command": "ZIG_AIR_JSON_DIR=<air> ZIG_AIR_JSON_FILTER=escaped. zig-air-0.16.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline escaped.zig",
-    "patched_compiler_sha256": "9725a3f8b5c171ce5f07008d73f1e132ff57e94756369e62334dbfaf26d84055",
-    "exporter_json_zig_sha256": "066fab374988da0aaae734830acf3a600de436621a1de2efbb3d9726d40e0e5b",
+    "patched_compiler_sha256": "b0861aab2279bb504767adc25434bb2743c97034b0f681cacc01d05022631c8f",
+    "exporter_json_zig_sha256": "10b624027c07f0ad9cba6e0f0971b2e3b57c07aa0958cadda466bad193aa7952",
     "export_host": "aarch64-macos",
     "before_fix": "the exporter without eager value resolution writes escaped.pool and escaped.data without `init` (STRUCTURE_FAILURE \"global has no initial value\")"
   },

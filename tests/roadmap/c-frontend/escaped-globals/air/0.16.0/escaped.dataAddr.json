@@ -35,6 +35,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "escaped.dataAddr",
+ "module": "root",
  "src": {
   "file": "escaped.zig",
   "module": "escaped",
@@ -47,6 +48,8 @@
  "ret": 0,
  "export": {
   "name": "dataAddr",
+  "linkage": "strong",
+  "visibility": "default",
   "cc": "x86_64_sysv"
  },
  "body": [
@@ -431,6 +434,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).castToNull",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -508,6 +512,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -658,6 +663,7 @@
  "globals": [
   {
    "name": "escaped.data",
+   "module": "root",
    "ty": 11,
    "const": false,
    "threadlocal": false,
@@ -701,6 +707,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -741,6 +748,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -754,6 +762,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

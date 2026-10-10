@@ -35,11 +35,23 @@
   "export_stage": "analyzed-air"
  },
  "name": "ptrcasts.misalignedUnchecked",
+ "module": "root",
+ "src": {
+  "file": "ptrcasts.zig",
+  "module": "ptrcasts",
+  "decl_line": 124
+ },
  "params": [
   0,
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "misalignedUnchecked",
+  "linkage": "strong",
+  "visibility": "default",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -57,7 +69,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 3,
@@ -303,7 +316,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 22,
@@ -358,7 +372,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 45
   },
   {
    "id": 27,
@@ -377,7 +392,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 21
   },
   {
    "id": 29,
@@ -404,7 +420,8 @@
    "id": 31,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 32,
@@ -433,7 +450,8 @@
    "id": 34,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 35,
@@ -467,6 +485,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -480,6 +499,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -507,6 +527,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -520,6 +541,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -533,6 +555,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

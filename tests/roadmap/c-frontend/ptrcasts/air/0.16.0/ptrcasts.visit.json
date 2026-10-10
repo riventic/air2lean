@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "ptrcasts.visit",
+ "module": "root",
+ "src": {
+  "file": "ptrcasts.zig",
+  "module": "ptrcasts",
+  "decl_line": 83
+ },
  "params": [
   0,
   1
@@ -57,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 24
   },
   {
    "id": 3,
@@ -133,6 +140,7 @@
        "callee": {
         "ty": 6,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -171,7 +179,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 8
   },
   {
    "id": 14,
@@ -197,7 +206,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 25
   },
   {
    "id": 17,
@@ -316,6 +326,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -329,6 +340,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -342,6 +354,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -350,6 +363,7 @@
   {
    "k": "struct",
    "name": "ptrcasts.Ctx",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

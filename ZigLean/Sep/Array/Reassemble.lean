@@ -108,7 +108,7 @@ theorem arr_append_of_heap {T : Type} [Enc T] {p : Ptr} {xs ys : List T}
       rw [hm, Heap.union_comm hd, Heap.union_assoc]
     obtain ⟨blk, hblk, _, _, _⟩ := Mem.heap_some (bytesAt_cell hb hm₁ hpb hnbs)
     obtain ⟨haddr, hsize, hkind⟩ := bytesAt_metadata hb hm₁ hpb hblk hnbs
-    obtain ⟨A₂, S₂, K₂, bs₂, _, hsz₂, hv₂, hb₂, _⟩ := hp₂
+    obtain ⟨A₂, S₂, K₂, bs₂, _, hsz₂, hv₂, hb₂, -, hend₂⟩ := hp₂
     have hb₂' := bytesAt_retag_of_heap hb₂ hm₂
       (by simpa [Ptr.add] using hpb) hblk
     have hb₁' : bytesAt p blk.addr blk.bytes.size blk.kind bs h₁ := by
@@ -117,8 +117,11 @@ theorem arr_append_of_heap {T : Type} [Enc T] {p : Ptr} {xs ys : List T}
       rw [hsz]; simp [Int.natCast_mul]
     have hbytes : bytesAt p blk.addr blk.bytes.size blk.kind (bs ++ bs₂) (h₁ ∪ h₂) :=
       bytesAt_append ⟨h₁, h₂, hd, rfl, hb₁', hptr ▸ hb₂'⟩
+    have hoff₂ : (p.add (Enc.size T * xs.length)).off.toNat = p.off.toNat + bs.size := by
+      obtain ⟨_, _, h0, _⟩ := id hb
+      rw [hsz]; simp only [Ptr.add]; omega
     refine ⟨blk.addr, blk.bytes.size, blk.kind, bs ++ bs₂, haddr ▸ hA, ?_, ?_, hbytes,
-      hkind ▸ hK⟩
+      hkind ▸ hK.1, by rw [Array.size_append]; omega⟩
     · simp [hsz, hsz₂, List.length_append, Nat.mul_add]
     · intro j hj
       by_cases hleft : j < xs.length
@@ -145,11 +148,12 @@ theorem arr_append_of_heap {T : Type} [Enc T] {p : Ptr} {xs ys : List T}
         rw [List.getElem_append_right (as := xs) (bs := ys) (i := j) (by omega)]
         exact hv₂ _ hj₂
 
-/-- A typed element at full ABI alignment is also a singleton array. -/
+/-- A typed element at full ABI alignment that ends below byte `2 ^ 63` is also a singleton
+array. -/
 theorem pts_arr_singleton {T : Type} [Enc T] {p : Ptr} {v : T} {h : Heap}
-    (hp : pts p (Enc.align T) v h) : arr p [v] h := by
+    (hp : pts p (Enc.align T) v h) (hend : p.off.toNat + Enc.size T < 2 ^ 63) : arr p [v] h := by
   obtain ⟨A, S, K, bs, hA, hs, hv, hb, hK⟩ := hp
-  refine ⟨A, S, K, bs, hA, by simpa using hs, ?_, hb, hK⟩
+  refine ⟨A, S, K, bs, hA, by simpa using hs, ?_, hb, hK, by rw [hs]; exact hend⟩
   intro i hi
   have he : i = 0 := by simp only [List.length_cons, List.length_nil] at hi; omega
   subst he
@@ -161,9 +165,21 @@ theorem arr_reassemble {T : Type} [Enc T] {p : Ptr} {xs : List T} {k : Nat} {w :
     (hp : (arr p (xs.take k) ∗ (pts (p.add (Enc.size T * k)) (Enc.align T) w ∗
       arr (p.add (Enc.size T * (k + 1))) (xs.drop (k + 1)))) h)
     (hm : m.heap = h ∪ hF) : arr p (xs.set k w) h := by
+  -- The element ends where the suffix begins, below byte `2 ^ 63`.
   have hsingle := sep_mono (fun _ hpre => hpre)
-    (fun _ htail => sep_mono (fun _ helem => pts_arr_singleton helem)
-      (fun _ hsuf => hsuf) htail) hp
+    (fun h' (htail : (pts (p.add (Enc.size T * k)) (Enc.align T) w ∗
+        arr (p.add (Enc.size T * (k + 1))) (xs.drop (k + 1))) h') =>
+      (by
+        obtain ⟨h₁, h₂, hd, rfl, helem, hsuf⟩ := htail
+        have hend : (p.add (Enc.size T * k)).off.toNat + Enc.size T < 2 ^ 63 := by
+          obtain ⟨-, -, -, -, -, -, -, ⟨_, _, h0, _⟩, -⟩ := helem
+          obtain ⟨-, -, -, bs, -, -, -, -, -, hend⟩ := hsuf
+          simp only [Ptr.add] at h0 hend ⊢
+          rw [Int.mul_add, Int.mul_one] at hend
+          omega
+        exact ⟨h₁, h₂, hd, rfl, pts_arr_singleton helem hend, hsuf⟩ :
+        (arr (p.add (Enc.size T * k)) [w] ∗
+          arr (p.add (Enc.size T * (k + 1))) (xs.drop (k + 1))) h')) hp
   obtain ⟨hpre, htail, hd, rfl, hpre', htail'⟩ := hsingle
   have hptr : (p.add (Enc.size T * k)).add (Enc.size T * ([w] : List T).length) =
       p.add (Enc.size T * (k + 1)) := by simp [Ptr.add, Int.mul_add, Int.add_assoc]
@@ -217,7 +233,14 @@ theorem Triple.arr_store_reassemble {T : Type} [Enc T] [LawfulEnc T] {p : Ptr}
     {xs : List T} {i : BitVec 64} {R : Assn} (hn : 0 < Enc.size T)
     (hs : Enc.align T ∣ Enc.size T) (hi : i.toNat < xs.length) (w : T) :
     Triple (arr p xs ∗ R) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
-      (fun _ => arr p (xs.set i.toNat w) ∗ R) :=
-  Triple.arr_update hn hi hs (Triple.store hn w)
+      (fun _ => arr p (xs.set i.toNat w) ∗ R) := by
+  intro m hP hF hd hm hp hst
+  have hi63 : i.toNat < 2 ^ 63 := by
+    obtain ⟨-, -, -, -, ⟨A, S, K, bs, -, hsz, -, -, -, hend⟩, -⟩ := hp
+    exact arr_index_lt hend hn (by rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi)
+  have he : p.elem (Enc.size T) i = p.add (↑(Enc.size T) * ↑i.toNat) := by
+    rw [Ptr.elem_eq_of_lt _ _ hi63]; push_cast; rfl
+  rw [he]
+  exact Triple.arr_update hn hi hs (Triple.store hn w) m hP hF hd hm hp hst
 
 end Zig

@@ -193,7 +193,7 @@ liveness_witness bump_spec :=
     Witness.Live.of_heap Witness.pts32 (Witness.mem1_seq _ _) (Witness.ok_of_okb (by decide +kernel))⟩
 
 theorem arr8_pre : arr Witness.p0 [(0 : BitVec 8)] (Witness.mem1 (Enc.encode (0 : BitVec 8))).heap :=
-  Witness.mem1_arr1 0 (by decide +kernel)
+  Witness.mem1_arr1 0 (by decide +kernel) (by decide)
 
 nonvacuity_witness copyWithin_spec :=
   ⟨⟨Witness.p0, 1⟩, [0], 0, 0, 0, rfl, by decide, by decide,

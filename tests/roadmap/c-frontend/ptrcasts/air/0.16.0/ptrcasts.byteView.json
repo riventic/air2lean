@@ -35,11 +35,23 @@
   "export_stage": "analyzed-air"
  },
  "name": "ptrcasts.byteView",
+ "module": "root",
+ "src": {
+  "file": "ptrcasts.zig",
+  "module": "ptrcasts",
+  "decl_line": 73
+ },
  "params": [
   0,
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "byteView",
+  "linkage": "strong",
+  "visibility": "default",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -57,7 +69,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -105,7 +118,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 27
   },
   {
    "id": 8,
@@ -160,7 +174,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 14,
@@ -196,7 +211,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 18,
@@ -247,7 +263,8 @@
          "id": 24,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 6
+         "line": 6,
+         "column": 12
         },
         {
          "id": 25,
@@ -297,7 +314,8 @@
            "id": 29,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 30
           },
           {
            "id": 30,
@@ -337,7 +355,8 @@
            "id": 33,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 50
           },
           {
            "id": 34,
@@ -412,7 +431,8 @@
            "id": 40,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 52
           },
           {
            "id": 41,
@@ -423,7 +443,8 @@
            "id": 43,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 22
           },
           {
            "id": 44,
@@ -439,7 +460,8 @@
            "id": 45,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 6
+           "line": 6,
+           "column": 24
           },
           {
            "id": 46,
@@ -512,7 +534,8 @@
    "id": 52,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 10
   },
   {
    "id": 53,
@@ -556,7 +579,8 @@
    "id": 56,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 57,
@@ -595,7 +619,8 @@
    "id": 60,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 61,
@@ -629,6 +654,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -642,6 +668,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -655,6 +682,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -668,6 +696,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -681,6 +710,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -716,6 +746,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -736,6 +767,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

@@ -85,7 +85,10 @@ theorem subZ_oob (s : Slice) (a b : BitVec 64) (ha0 : a.toNat ≠ 0) (m : Mem)
     (ha : m.inBounds (s.ptr.elem 1 a) = false) :
     (subZ s a b).run m = throw .illegal := by
   have hne : s.ptr.elem 1 a ≠ s.ptr := by
-    intro he; have := congrArg Ptr.off he; simp [Ptr.elem, Ptr.add_off] at this; omega
+    intro he; have := congrArg Ptr.off he; simp [Ptr.elem, Ptr.add_off] at this
+    apply ha0
+    have : a = 0#64 := BitVec.eq_of_toInt_eq (by simp; omega)
+    simp [this]
   have hp := ptrProject_illegal (m := m) (·.elem 1 a) hne (by simp [ha])
   simp only [StateT.run] at hp
   simp [subZ, zig_unfold, hp]

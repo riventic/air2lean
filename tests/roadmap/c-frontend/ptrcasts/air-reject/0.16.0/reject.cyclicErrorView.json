@@ -35,10 +35,22 @@
   "export_stage": "analyzed-air"
  },
  "name": "reject.cyclicErrorView",
+ "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 21
+ },
  "params": [
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "cyclicErrorView",
+  "linkage": "strong",
+  "visibility": "default",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -50,7 +62,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -109,7 +122,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 6
   },
   {
    "id": 9,
@@ -148,7 +162,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 33
   },
   {
    "id": 13,
@@ -203,7 +218,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 15
   },
   {
    "id": 19,
@@ -239,7 +255,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 23,
@@ -283,6 +300,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -298,6 +316,7 @@
   {
    "k": "struct",
    "name": "reject.Tagged",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -328,6 +347,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -341,6 +361,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -354,6 +375,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -367,6 +389,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -380,6 +403,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -407,6 +431,7 @@
   {
    "k": "struct",
    "name": "reject.ErrNode",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {
@@ -437,6 +462,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

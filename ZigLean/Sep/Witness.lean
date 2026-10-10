@@ -66,14 +66,14 @@ theorem mem1_pts' {T : Type} [Enc T] [LawfulEnc T] (v : T) {a : Nat} (ha : 4096 
 theorem mem1_arr0 {T : Type} [Enc T] (ha : 4096 % Enc.align T = 0) :
     arr p0 ([] : List T) (mem1 #[]).heap :=
   ⟨4096, _, .heap, #[], by simpa [p0] using ha, by simp, fun i hi => by simp at hi,
-    mem1_bytesAt _ _, by decide⟩
+    mem1_bytesAt _ _, by decide, by simp [p0]⟩
 
 /-- `p0` points to the one-item array `[v]`. -/
-theorem mem1_arr1 {T : Type} [Enc T] [LawfulEnc T] (v : T) (ha : 4096 % Enc.align T = 0) :
-    arr p0 [v] (mem1 (Enc.encode v)).heap := by
+theorem mem1_arr1 {T : Type} [Enc T] [LawfulEnc T] (v : T) (ha : 4096 % Enc.align T = 0)
+    (hT : Enc.size T < 2 ^ 63) : arr p0 [v] (mem1 (Enc.encode v)).heap := by
   have hs := LawfulEnc.size_encode v
   refine ⟨4096, _, .heap, Enc.encode v, by simpa [p0] using ha, by simp [hs], fun i hi => ?_,
-    mem1_bytesAt _ _, by decide⟩
+    mem1_bytesAt _ _, by decide, by simp [p0, hs, hT]⟩
   have : i = 0 := by simp at hi; omega
   subst this
   simpa [← hs] using LawfulEnc.decode_encode v
@@ -83,7 +83,7 @@ theorem pts32 : pts p0 4 (0 : BitVec 32) (mem1 (Enc.encode (0 : BitVec 32))).hea
   mem1_pts' 0 (by decide)
 
 theorem arr32 : arr p0 [(0 : BitVec 32)] (mem1 (Enc.encode (0 : BitVec 32))).heap :=
-  mem1_arr1 0 (by decide +kernel)
+  mem1_arr1 0 (by decide +kernel) (by decide)
 
 theorem byte1 (kind : BlockKind) : bytesAt p0 4096 1 kind #[.undef] (mem1 #[.undef] kind).heap :=
   mem1_bytesAt _ _

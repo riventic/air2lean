@@ -35,11 +35,23 @@
   "export_stage": "analyzed-air"
  },
  "name": "ptrcasts.voidRoundTrip",
+ "module": "root",
+ "src": {
+  "file": "ptrcasts.zig",
+  "module": "ptrcasts",
+  "decl_line": 62
+ },
  "params": [
   0,
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "voidRoundTrip",
+  "linkage": "strong",
+  "visibility": "default",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -57,7 +69,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -105,7 +118,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 29
   },
   {
    "id": 8,
@@ -132,7 +146,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 27
   },
   {
    "id": 11,
@@ -208,6 +223,7 @@
        "callee": {
         "ty": 7,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -246,7 +262,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 22,
@@ -289,7 +306,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 26,
@@ -337,7 +355,8 @@
    "id": 31,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 58
   },
   {
    "id": 32,
@@ -357,7 +376,8 @@
    "id": 33,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 33
   },
   {
    "id": 34,
@@ -384,7 +404,8 @@
    "id": 36,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 24
   },
   {
    "id": 37,
@@ -400,7 +421,8 @@
    "id": 38,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 23
   },
   {
    "id": 39,
@@ -409,6 +431,7 @@
    "callee": {
     "ty": 11,
     "func": "ptrcasts.readThrough",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -421,7 +444,8 @@
    "id": 40,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 64
   },
   {
    "id": 41,
@@ -430,6 +454,7 @@
    "callee": {
     "ty": 11,
     "func": "ptrcasts.readThrough",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -469,7 +494,8 @@
    "id": 44,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 45,
@@ -503,6 +529,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -541,6 +568,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -554,6 +582,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -579,6 +608,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

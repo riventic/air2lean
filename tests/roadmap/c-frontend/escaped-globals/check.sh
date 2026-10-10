@@ -33,7 +33,7 @@ python3 - "$here/native.txt" "$work/Gen.lean" > "$work/Check.lean" <<'PY'
 import sys
 native, gen = sys.argv[1], sys.argv[2]
 out = [open(gen).read(), "namespace EscapedGlobals.Check",
-       "def run (r : Zig.MemM (BitVec 32)) : Zig.Result (BitVec 32) := r.run' EscapedGlobals.mem0",
+       "def run (r : Zig.MemM (BitVec 32)) : Zig.Result (BitVec 32) := r.run' (EscapedGlobals.mem0 .fresh)",
        "def isOk (v : BitVec 32) (r : Zig.Result (BitVec 32)) : Bool :=",
        "  match r with | some (.ok x) => x == v | _ => false"]
 seen = set()

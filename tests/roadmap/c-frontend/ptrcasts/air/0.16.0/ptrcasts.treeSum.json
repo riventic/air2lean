@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "ptrcasts.treeSum",
+ "module": "root",
+ "src": {
+  "file": "ptrcasts.zig",
+  "module": "ptrcasts",
+  "decl_line": 33
+ },
  "params": [
   0,
   1
@@ -57,7 +63,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 3,
@@ -88,7 +95,8 @@
        "id": 5,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 20
       },
       {
        "id": 6,
@@ -123,7 +131,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 15
   },
   {
    "id": 10,
@@ -162,7 +171,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 43
   },
   {
    "id": 14,
@@ -188,7 +198,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 56
   },
   {
    "id": 17,
@@ -208,7 +219,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 39
   },
   {
    "id": 19,
@@ -217,6 +229,7 @@
    "callee": {
     "ty": 7,
     "func": "ptrcasts.treeSum",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -245,7 +258,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 75
   },
   {
    "id": 22,
@@ -271,7 +285,8 @@
    "id": 24,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 89
   },
   {
    "id": 25,
@@ -291,7 +306,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 71
   },
   {
    "id": 27,
@@ -300,6 +316,7 @@
    "callee": {
     "ty": 7,
     "func": "ptrcasts.treeSum",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -328,7 +345,8 @@
    "id": 29,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 30,
@@ -350,6 +368,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -383,6 +402,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -396,6 +416,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": true,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -408,6 +429,7 @@
   {
    "k": "struct",
    "name": "ptrcasts.Tree",
+   "module": "root",
    "layout": "extern",
    "fields": [
     {

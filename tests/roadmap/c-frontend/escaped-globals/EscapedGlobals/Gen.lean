@@ -15,8 +15,8 @@ instance : Zig.Enc Node where
   encode v := Zig.Enc.fields 16 [(0, Zig.Enc.encode v.value), (8, Zig.Enc.encode v.next)]
   decode bs := do pure { value := ← Zig.Enc.decodeAt bs 0, next := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: escaped.counter
   (Zig.Enc.encode ((10 : BitVec 32) : BitVec 32), 4, .global),
   -- 1: escaped.data
@@ -64,7 +64,7 @@ def dataAddr.loop5 (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MM dataAddrLocals dat
     let i8 ← pure (i6)
     let i9 ← pure (Zig.lt false i8 (4 : BitVec 64))
     if i9 then (do
-      let i11 ← pure ((⟨some 1, 0⟩ : Zig.Ptr).elem 4 i6)
+      let i11 ← Zig.callM (Zig.ptrProject (⟨some 1, 0⟩ : Zig.Ptr) (·.elem 4 i6))
       let i12 ← Zig.intCast false false 32 i6
       let i13 ← pure (Zig.mulWrap i12 p1)
       let i14 ← pure (Zig.addWrap p0 i13)
@@ -101,7 +101,7 @@ def dataAddr (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
           else (do
             throw .panic)) : Zig.MM dataAddrLocals dataAddrExit) with
         | .br31 => (do
-          let i36 ← Zig.callM (Zig.ptrFromAddr (i22).toNat)
+          let i36 ← Zig.callM (Zig.checkAddr 4 true (i22).toNat >>= fun _ => Zig.ptrFromAddr (i22).toNat)
           let i37 ← Zig.load (BitVec 32) 4 i36
           let i38 ← Zig.rem false i21 (4 : BitVec 64)
           let i39 ← pure (i38)
@@ -151,7 +151,7 @@ def poolList.loop54  : Zig.MM poolListLocals poolListExit := do
     if i57 then (do
       let i59 ← Zig.optPayload i56
       let i60 ← pure ((← get).s)
-      let i61 ← pure (i59.add 0)
+      let i61 ← pure i59
       let i62 ← Zig.load (BitVec 32) 8 i61
       let i63 ← pure ((← get).k)
       let i64 ← pure (Zig.mulWrap i62 i63)
@@ -160,7 +160,7 @@ def poolList.loop54  : Zig.MM poolListLocals poolListExit := do
       let i67 ← pure ((← get).k)
       let i68 ← Zig.add false i67 (1 : BitVec 32)
       modify (fun s => { s with k := i68 })
-      let i70 ← pure (i59.add 8)
+      let i70 ← Zig.callM (Zig.ptrProject i59 (·.add 8))
       let i71 ← Zig.load (Option (Zig.Ptr)) 8 i70
       modify (fun s => { s with it := i71 })
       pure .br55)
@@ -184,13 +184,13 @@ def poolList.loop7 (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MM poolListLocals poo
         else (do
           throw .outOfBounds)) : Zig.MM poolListLocals poolListExit) with
       | .br15 => (do
-        let i20 ← pure ((⟨some 2, 0⟩ : Zig.Ptr).elem 16 i13)
-        let i21 ← pure (i20.add 0)
+        let i20 ← Zig.callM (Zig.ptrProject (⟨some 2, 0⟩ : Zig.Ptr) (·.elem 16 i13))
+        let i21 ← pure i20
         let i22 ← pure ((← get).i)
         let i23 ← pure (Zig.mulWrap i22 p1)
         let i24 ← pure (Zig.addWrap p0 i23)
         Zig.store (α := BitVec 32) 8 i21 i24
-        let i26 ← pure (i20.add 8)
+        let i26 ← Zig.callM (Zig.ptrProject i20 (·.add 8))
         let i27 ← pure ((← get).head)
         Zig.store (α := Option (Zig.Ptr)) 8 i26 i27
         let i29 ← pure ((← get).i)
@@ -202,7 +202,7 @@ def poolList.loop7 (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MM poolListLocals poo
           else (do
             throw .outOfBounds)) : Zig.MM poolListLocals poolListExit) with
         | .br32 => (do
-          let i37 ← pure ((⟨some 2, 0⟩ : Zig.Ptr).elem 16 i30)
+          let i37 ← Zig.callM (Zig.ptrProject (⟨some 2, 0⟩ : Zig.Ptr) (·.elem 16 i30))
           let i38 ← pure (i37)
           modify (fun s => { s with head := i38 })
           let i40 ← pure ((← get).i)

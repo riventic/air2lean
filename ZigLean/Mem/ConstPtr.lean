@@ -97,8 +97,9 @@ inductive Failure where
 /-- The exporter's projection budget (`pointer-offset.zig`, `Walk.remaining`). -/
 def maxDepth : Nat := 64
 
-/-- Offsets are `u64` in the exporter; a sum that does not fit is rejected. -/
-def addrLimit : Nat := 2 ^ 64
+/-- Offsets are `u64` in the exporter; a sum that an `isize` cannot hold (no object is that
+large; `Ptr.elem` takes a signed index) is rejected. -/
+def addrLimit : Nat := 2 ^ 63
 
 /-- The total byte offset of a projection chain. -/
 def total (ps : List Proj) : Nat := (ps.map Proj.delta).sum
@@ -144,8 +145,14 @@ theorem Proj.step_eq_add (s : Proj) (p : Ptr) (h : s.delta < addrLimit) :
       · have := Nat.le_mul_of_pos_left index hs
         simp only [Proj.delta, addrLimit] at h
         rw [Nat.mod_eq_of_lt (by omega)]
-    simp only [Proj.step, Proj.delta, Ptr.elem, BitVec.toNat_ofNat]
-    rw [← Int.natCast_mul, hmod]
+    rcases Nat.eq_zero_or_pos stride with hs | hs
+    · simp [Proj.step, Proj.delta, Ptr.elem, hs]
+    · have hi : (BitVec.ofNat 64 index).toNat < 2 ^ 63 := by
+        have := Nat.le_mul_of_pos_left index hs
+        simp only [Proj.delta, addrLimit] at h
+        simp; omega
+      simp only [Proj.step, Proj.delta, Ptr.elem_eq_of_lt _ _ hi, BitVec.toNat_ofNat]
+      rw [hmod]
 
 theorem runtime_append (root : Ptr) (ps qs : List Proj) :
     runtime root (ps ++ qs) = runtime (runtime root ps) qs := by

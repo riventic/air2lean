@@ -116,6 +116,24 @@ theorem Ptr.add_off (p : Ptr) (n : Int) : (p.add n).off = p.off + n := rfl
 @[simp] theorem Ptr.elemSub_block (p : Ptr) (size : Nat) (i : BitVec 64) :
     (p.elemSub size i).block = p.block := rfl
 
+/-- An index below `2 ^ 63` is the same signed and unsigned: `Ptr.elem` moves `size * i`
+bytes forward. -/
+theorem Ptr.elem_eq_of_lt (p : Ptr) (size : Nat) {i : BitVec 64} (hi : i.toNat < 2 ^ 63) :
+    p.elem size i = p.add ((size * i.toNat : Nat) : Int) := by
+  simp only [Ptr.elem, BitVec.toInt_eq_toNat_of_lt (show 2 * i.toNat < 2 ^ 64 by omega)]
+  push_cast; rfl
+
+/-- `Ptr.elemSub` of an index below `2 ^ 63`: `size * i` bytes back. -/
+theorem Ptr.elemSub_eq_of_lt (p : Ptr) (size : Nat) {i : BitVec 64} (hi : i.toNat < 2 ^ 63) :
+    p.elemSub size i = p.add (-((size * i.toNat : Nat) : Int)) := by
+  simp only [Ptr.elemSub, BitVec.toInt_eq_toNat_of_lt (show 2 * i.toNat < 2 ^ 64 by omega)]
+  push_cast; rfl
+
+/-- An item `i` that starts below `2 ^ 63` bytes (`size * i < 2 ^ 63`, items of `size > 0` bytes)
+has an index below `2 ^ 63`. -/
+theorem index_lt_of_mul_lt {size i : Nat} (hs : 0 < size) (h : size * i < 2 ^ 63) : i < 2 ^ 63 :=
+  Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_left i hs) h
+
 theorem Ptr.add_add (p : Ptr) (x y : Int) : (p.add x).add y = p.add (x + y) := by
   simp [Ptr.add, Int.add_assoc]
 

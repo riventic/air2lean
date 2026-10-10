@@ -1051,7 +1051,7 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have hf16 : ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off ≤ 16 := by
     rcases hu with rfl | rfl <;> decide
   have hf0 : 0 ≤ ((sPtr.add 4).elem 4 (BitVec.ofNat 64 u)).off := by
-    simp [sPtr, Ptr.elem, Ptr.add]; omega
+    rcases hu with rfl | rfl <;> decide
   simp only [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hi₂.proj (b := 0) (p := sPtr.add 4)
     (f := (·.elem 4 (BitVec.ofNat 64 u))) (.inl rfl) rfl (by decide) rfl hf0 (by decide) hf16) ?_)
@@ -1846,7 +1846,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hH₅ : U32At m₅ 0 0 0 := by
     unfold U32At; rw [hk₅ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₄
   refine WP.bind (WP.callMC_ptrProject (hp₅.proj (b := 0) (o := 4) (f := (·.elem 4 1)) (.inl rfl)
-    rfl (by simp [Ptr.elem, Ptr.add]) (by decide) (by simp [Ptr.elem, Ptr.add])) ?_)
+    rfl (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]) (by decide) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add])) ?_)
   dsimp only
   rw [show (⟨some 0, ((4 : Nat) : Int)⟩ : Ptr).elem 4 1 = ⟨some 0, ((8 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₅ hp₅.b0 (by rw [size_encode_u32]; omega)
@@ -1856,7 +1856,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hH₆ : U32At m₆ 0 0 0 := by
     unfold U32At; rw [hk₆ 0 0 4 (.inr ⟨rfl, by decide, .inr (by decide)⟩)]; exact hH₅
   refine WP.bind (WP.callMC_ptrProject (hp₆.proj (b := 0) (o := 4) (f := (·.elem 4 2)) (.inl rfl)
-    rfl (by simp [Ptr.elem, Ptr.add]) (by decide) (by simp [Ptr.elem, Ptr.add])) ?_)
+    rfl (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add]) (by decide) (by simp (disch := omega) [Ptr.elem, BitVec.toInt_eq_toNat_of_lt, Ptr.add])) ?_)
   dsimp only
   rw [show (⟨some 0, ((4 : Nat) : Int)⟩ : Ptr).elem 4 2 = ⟨some 0, ((12 : Nat) : Int)⟩ from rfl]
   refine WP.bind (WP.liftM (fun e he => (pre_store_noErr hp₆ hp₆.b0 (by rw [size_encode_u32]; omega)

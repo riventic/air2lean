@@ -22,7 +22,7 @@ variable {T : Type} [Enc T] {p : Ptr} {vs : List T} {h : Heap}
 theorem arr_split (hp : arr p vs h) {k : Nat} (hk : k ≤ vs.length)
     (hs : Enc.align T ∣ Enc.size T) :
     (arr p (vs.take k) ∗ arr (p.add (Enc.size T * k)) (vs.drop k)) h := by
-  obtain ⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩ := hp
+  obtain ⟨A, S, K, bs, hA, hsz, hv, hb, hK, hend⟩ := hp
   have hbnd : Enc.size T * k ≤ bs.size := by
     rw [hsz]; exact Nat.mul_le_mul_left _ hk
   have hoff : (p.add (Enc.size T * k)).off.toNat = p.off.toNat + Enc.size T * k := by
@@ -32,7 +32,8 @@ theorem arr_split (hp : arr p vs h) {k : Nat} (hk : k ≤ vs.length)
     (Q := bytesAt (p.add (Enc.size T * k)) A S K (bs.extract (Enc.size T * k) bs.size))
     ?_ ?_ (bytesAt_split hb hbnd)
   · intro hpre hbytes
-    refine ⟨A, S, K, bs.extract 0 (Enc.size T * k), hA, ?_, ?_, hbytes, hK⟩
+    refine ⟨A, S, K, bs.extract 0 (Enc.size T * k), hA, ?_, ?_, hbytes, hK,
+      by simp only [Array.size_extract]; omega⟩
     · simp [List.length_take, Nat.min_eq_left hk, Nat.min_eq_left hbnd]
     · intro j hj
       have hjk : j < k := by simpa [List.length_take, Nat.min_eq_left hk] using hj
@@ -42,7 +43,8 @@ theorem arr_split (hp : arr p vs h) {k : Nat} (hk : k ≤ vs.length)
       simpa only [Array.extract_extract, Nat.zero_add, Nat.min_eq_left hend,
         List.getElem_take] using hv j hjv
   · intro hsuf hbytes
-    refine ⟨A, S, K, bs.extract (Enc.size T * k) bs.size, ?_, ?_, ?_, hbytes, hK⟩
+    refine ⟨A, S, K, bs.extract (Enc.size T * k) bs.size, ?_, ?_, ?_, hbytes, hK,
+      by rw [hoff]; simp only [Array.size_extract]; omega⟩
     · rw [hoff]
       simpa only [Nat.add_assoc] using
         (item_aligned (T := T) (i := k) hA (Nat.dvd_refl _) hs)
@@ -64,7 +66,7 @@ theorem arr_split (hp : arr p vs h) {k : Nat} (hk : k ≤ vs.length)
 /-- A singleton array provides the typed element assertion at any weaker alignment. -/
 theorem arr_singleton_pts {v : T} (hp : arr p [v] h) {a : Nat}
     (ha : a ∣ Enc.align T) : pts p a v h := by
-  obtain ⟨A, S, K, bs, hA, hsz, hv, hb, hK⟩ := hp
+  obtain ⟨A, S, K, bs, hA, hsz, hv, hb, hK, -⟩ := hp
   have hsize : bs.size = Enc.size T := by simpa using hsz
   refine ⟨A, S, K, bs, ?_, hsize, ?_, hb, hK⟩
   · exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans ha (Nat.dvd_of_mod_eq_zero hA))
@@ -126,6 +128,13 @@ theorem Triple.arr_store_focus {T : Type} [Enc T] [LawfulEnc T] {p : Ptr}
       (fun _ => (pts (p.elem (Enc.size T) i) a w ∗
         (arr p (vs.take i.toNat) ∗
           arr (p.add (Enc.size T * (i.toNat + 1))) (vs.drop (i.toNat + 1)))) ∗ R) := by
-  exact Triple.arr_focus_frame hi ha hs (Triple.store hn w)
+  intro m hP hF hd hm hp hst
+  have hi63 : i.toNat < 2 ^ 63 := by
+    obtain ⟨-, -, -, -, ⟨A, S, K, bs, -, hsz, -, -, -, hend⟩, -⟩ := hp
+    exact arr_index_lt hend hn (by rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi)
+  have he : p.elem (Enc.size T) i = p.add (↑(Enc.size T) * ↑i.toNat) := by
+    rw [Ptr.elem_eq_of_lt _ _ hi63]; push_cast; rfl
+  rw [he]
+  exact Triple.arr_focus_frame hi ha hs (Triple.store hn w) m hP hF hd hm hp hst
 
 end Zig

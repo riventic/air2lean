@@ -389,7 +389,7 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
     (hd : Heap.Disjoint h hF) (hst : m.Seq) (hlt : len.toNat < cap.toNat)
     {hB hR : Heap} (hFB : hF = hB ∪ hR) {A' S' : Nat} {K' : BlockKind} {bs' : Array Byte}
     (hbuf : bytesAt ptr A' S' K' bs' hB) (hlen4 : 4 * len.toNat ≤ bs'.size)
-    (hpos : 0 < bs'.size) :
+    (hpos : 0 < bs'.size) (hc4 : 4 * cap.toNat < 2 ^ 64) :
     ∃ m', (array_list_Aligned_u32_null_addOneAssumeCapacity p).run m =
         pure (ptr.elem 4 len, m') ∧ m'.Seq ∧ m'.blocks.size = m.blocks.size ∧ m.SameAllocs m' ∧
       ∃ h', Heap.Disjoint h' hF ∧ m'.heap = h' ∪ hF ∧ hdr p ptr (len + 1) cap h' := by
@@ -461,7 +461,7 @@ theorem addOneAssumeCapacity_run (hh : hdr p ptr len cap h) (hm : m.heap = h ∪
     rw [hm₆, hFB, ← Heap.union_assoc, Heap.union_comm dB, Heap.union_assoc]
   have hpr := ptrProject_run (m := m₆) (p := ptr) (·.elem 4 len) rfl
     (by simpa using bytesAt_inBounds hbuf hmB (k := 0) (by omega) hpos)
-    (by rw [Ptr.elem_eq]; exact bytesAt_inBounds hbuf hmB hlen4 hpos)
+    (by rw [Ptr.elem_eq_of_lt _ _ (by omega)]; exact bytesAt_inBounds hbuf hmB hlen4 hpos)
   refine ⟨m₆, ?_, hs₆, by rw [hb₆, hb₅, hz₄, hb₃, hb₂, hb₁], hc, h₄, hd₄, hm₆,
     A, S, K, hA, hK, hb₄⟩
   simp only [StateT.run] at l₁ l₂ l₃ s₄ l₅ l₆ hpr
@@ -597,7 +597,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
       (by rw [hNs]; omega)
     have fN : ptrProject sl.ptr (·.elem 4 len) m₅ = pure (sl.ptr.elem 4 len, m₅) :=
       ptrProject_run (m := m₅) (p := sl.ptr) (·.elem 4 len) rfl (by simpa using iN0)
-        (by rw [Ptr.elem_eq]; exact iNl)
+        (by rw [Ptr.elem_eq_of_lt _ _ (by omega)]; exact iNl)
     simp only [StateT.run] at l₄ l₅
     have dHN' : Heap.Disjoint hH (hN ∪ hF) := Heap.disjoint_union_right.mpr ⟨dHN, dHF⟩
     by_cases hc0 : cap.toNat = 0
@@ -651,7 +651,7 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
       have fO : ptrProject ptr (·.elem 4 len) m₅ = pure (ptr.elem 4 len, m₅) := by
         have := ptrProject_run (m := m₅) (p := ptr) (·.elem 4 len) rfl
           (by simpa using bytesAt_inBounds hbO (hm₅'.trans vB) (k := 0) (by omega) (by omega))
-          (by rw [Ptr.elem_eq]; exact bytesAt_inBounds hbO (hm₅'.trans vB) (by omega) (by omega))
+          (by rw [Ptr.elem_eq_of_lt _ _ (by omega)]; exact bytesAt_inBounds hbO (hm₅'.trans vB) (by omega) (by omega))
         exact this
       -- The new block's address range is clear of the live old block (`alloc_run`), above or
       -- below it: the placement decides.
@@ -671,7 +671,8 @@ theorem precise_run (a : Allocator) (g : BitVec 64) {xs : List (BitVec 32)} {hH 
       have hle1 : (blkO.addr : Int) + (ptr.elem 4 len).off ≤ (blkN.addr : Int) + sl.ptr.off ∨
           (blkN.addr : Int) + (sl.ptr.elem 4 len).off ≤ (blkO.addr : Int) + ptr.off := by
         have : len.toNat ≤ g.toNat := by omega
-        simp [Ptr.elem, Ptr.add, hoffO, hoff, haddrO, haddrN]; omega
+        have hl63 : len.toInt = (len.toNat : Int) := BitVec.toInt_eq_toNat_of_lt (by omega)
+        simp [Ptr.elem, hl63, Ptr.add, hoffO, hoff, haddrO, haddrN]; omega
       -- The new block is not the old one, so `@memcpy`'s overlap check passes.
       have hne : sl.ptr.block ≠ ptr.block := by
         rw [hpN, hpO]; intro h; cases h
@@ -926,13 +927,13 @@ theorem append_cost_run (a : Allocator) (v : BitVec 32) {xs : List (BitVec 32)} 
         bs.size = 4 * cap'.toNat ∧ ItemsOk bs xs ∧ bytesAt ptr' A (4 * cap'.toNat) .heap bs hB₂ := by
       simpa [buf, hc0] using h2
     obtain ⟨m₃, a₃, hs₃, hz₃, c₃, hH₃, dH₃, hm₃, h3⟩ := addOneAssumeCapacity_run h1 vH dvH hs₂
-      (by omega) rfl hbuf (by omega) (by omega)
+      (by omega) rfl hbuf (by omega) (by omega) (by omega)
     obtain ⟨dH₃B, dH₃F⟩ := Heap.disjoint_union_right.mp dH₃
     have vB₃ : m₃.heap = hB₂ ∪ (hH₃ ∪ hF) := by
       rw [hm₃, ← Heap.union_assoc, Heap.union_comm dH₃B, Heap.union_assoc]
     have dB₃ : Heap.Disjoint hB₂ (hH₃ ∪ hF) := Heap.disjoint_union_right.mpr ⟨dH₃B.symm, dBF₂⟩
     obtain ⟨m₄, s₄, hs₄, hz₄, hB₄, dB₄, hm₄, hb₄⟩ := bytesAt_store_run (a := 4) hbuf vB₃ dB₃ hs₃ v
-      (q := ptr'.elem 4 len) (k := 4 * len.toNat) (by simp [Ptr.elem, Ptr.add])
+      (q := ptr'.elem 4 len) (k := 4 * len.toNat) (Ptr.elem_eq_of_lt _ _ (by omega))
       (by decide) (by rw [hbsz, show Enc.size (BitVec 32) = 4 from rfl]; omega)
       (by simp [hoff]; omega) (by decide)
     obtain ⟨dB₄H, dB₄F⟩ := Heap.disjoint_union_right.mp dB₄

@@ -271,18 +271,19 @@ theorem writeTable_illegal (σ : Placement) (i : BitVec 64) (v : BitVec 32) (h :
       (20 : BitVec 32), (30 : BitVec 32)] : Vector (BitVec 32) 3), 4, .constGlobal, true, A⟩ :=
     ⟨_, by simp [mem0, Mem.ofGlobals_getElem?]; rfl⟩
   have hA : A % 4 = 0 := by simpa using Mem.ofGlobals_addr_mod hb (by simp)
+  have hi63 : i.toInt = (i.toNat : Int) := BitVec.toInt_eq_toNat_of_lt (by omega)
   have hacc : (mem0 σ).access ((⟨some 3, 0⟩ : Ptr).elem 4 i) (Enc.size (BitVec 32)) 4 =
       pure (3, _, ((⟨some 3, 0⟩ : Ptr).elem 4 i).off.toNat) :=
-    access_of rfl hb rfl (by simp [Ptr.elem, Ptr.add]; omega)
-      (by simp [Ptr.elem, Ptr.add, Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign,
+    access_of rfl hb rfl (by simp [Ptr.elem, hi63, Ptr.add]; omega)
+      (by simp [Ptr.elem, hi63, Ptr.add, Enc.encode, Enc.size, padTo, intBytes, intSize, intAlign,
         alignUp]; omega)
-      (by simp [Ptr.elem, Ptr.add]; omega)
+      (by simp [Ptr.elem, hi63, Ptr.add]; omega)
   have hst := store_constGlobal v hacc rfl
   have hpr := ptrProject_run (m := mem0 σ) (·.elem 4 i) (p := ⟨some 3, 0⟩) rfl
     (inBounds_of rfl hb (by decide) (by simp [Enc.encode, padTo, intBytes, intSize,
       intAlign, alignUp]))
-    (inBounds_of rfl hb (by simp [Ptr.elem, Ptr.add]; omega) (by
-      simp [Ptr.elem, Ptr.add, Enc.encode, padTo, intBytes, intSize, intAlign, alignUp]
+    (inBounds_of rfl hb (by simp [Ptr.elem, hi63, Ptr.add]; omega) (by
+      simp [Ptr.elem, hi63, Ptr.add, Enc.encode, padTo, intBytes, intSize, intAlign, alignUp]
       omega))
   simp only [StateT.run] at hst hpr
   simp [writeTable, zig_unfold, Zig.lt, BitVec.ult, h, hst, hpr]
