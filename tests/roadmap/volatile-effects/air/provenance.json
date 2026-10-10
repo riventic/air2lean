@@ -8,13 +8,13 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
   "qualification": "Fresh export of device_effects.zig (filter device-filter) with the patched 0.16.0 compiler (aarch64-macos host build of zig-patch 5715fa4a); check-device.sh --export re-exports and requires the same translation. The 0.15.2 and 0.14.1 exports translate to the same Gen.lean except for the profile header. Re-export and refresh this record when device_effects.zig changes.",
   "air_sha256": {
-    "device_effects.clearStatus.json": "07bb7451a13c430358a0278ea0eab7e50bc7628b30bba5423c08d9fb6477d6b2",
-    "device_effects.putc.json": "0adbf540eb1ed2589a5e205b2b66cb5086c9c45a8eba7205596569e6242dfc2d",
-    "device_effects.sendThenStatus.json": "3a65263195650ef98bf01532e7f6ec6f422484cae09fc76fdf600173d8570e66",
-    "device_effects.statusTwice.json": "756daf71119b3348c44a58cab5b92e058e4c7c9bede060bddcee22d7354ccacb",
-    "device_effects.writeAll.json": "42802ff8c2a4a50fa3b35ab6d58191a71a78c9f847ab1329e498624b470041e4"
+    "device_effects.clearStatus.json": "2613b5dea5f042bbcd0aeacb9b783c0d0586c724c0b49c9e1b07ed6999c79d27",
+    "device_effects.putc.json": "261aa592ae830185016e844849b59e8bcfb3b0fc19aa3d04c9f4527775f4c10e",
+    "device_effects.sendThenStatus.json": "fd5748bc1ea60c369780887a55e78dec80466c1f31103ba51d67fa8eafe2a436",
+    "device_effects.statusTwice.json": "e8b34e73263272ef59cf08827fcae51391ad598b391d293e2fea74616b26a25b",
+    "device_effects.writeAll.json": "4a29596fd8d55a9afa80e02858dc9e5373934e087d1a691b445780de021aa5e4"
   }
 }

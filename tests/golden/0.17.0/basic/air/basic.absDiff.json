@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,12 +118,21 @@
  },
  "name": "basic.absDiff",
  "module": "root",
+ "src": {
+  "file": "basic.zig",
+  "module": "basic",
+  "decl_line": 15
+ },
  "params": [
   0,
   0
  ],
  "noalias": [],
  "ret": 1,
+ "export": {
+  "name": "absDiff",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -141,7 +150,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 3,
@@ -175,7 +185,8 @@
        "id": 5,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 34
       },
       {
        "id": 6,
@@ -194,7 +205,8 @@
        "id": 7,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 23
       },
       {
        "id": 8,
@@ -210,7 +222,8 @@
        "id": 9,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 16
       },
       {
        "id": 10,
@@ -244,7 +257,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 23
   },
   {
    "id": 14,
@@ -263,7 +277,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 12
   },
   {
    "id": 16,
@@ -279,7 +294,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 18,

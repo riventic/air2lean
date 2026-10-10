@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "threads.claim",
  "module": "root",
+ "src": {
+  "file": "threads.zig",
+  "module": "threads",
+  "decl_line": 112
+ },
  "params": [
   0
  ],
@@ -162,7 +167,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 5,
@@ -173,7 +179,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 12
     },
     {
      "id": 7,
@@ -199,7 +206,8 @@
      "id": 9,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 32
     },
     {
      "id": 10,
@@ -215,12 +223,18 @@
      "id": 11,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 32
     },
     {
      "id": 12,
      "tag": "dbg_inline_block",
      "ty": 6,
+     "src": {
+      "file": "atomic.zig",
+      "module": "std",
+      "decl_line": 42
+     },
      "body": [
       {
        "id": 13,
@@ -313,7 +327,8 @@
        "id": 21,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 8
+       "line": 8,
+       "column": 43
       },
       {
        "id": 22,
@@ -359,7 +374,8 @@
        "id": 25,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 8
+       "line": 8,
+       "column": 13
       },
       {
        "id": 26,
@@ -398,7 +414,8 @@
        "id": 28,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 3
+       "line": 3,
+       "column": 16
       },
       {
        "id": 29,
@@ -424,7 +441,8 @@
        "id": 31,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 3
+       "line": 3,
+       "column": 30
       },
       {
        "id": 32,
@@ -440,12 +458,18 @@
        "id": 33,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 3
+       "line": 3,
+       "column": 30
       },
       {
        "id": 34,
        "tag": "dbg_inline_block",
        "ty": 15,
+       "src": {
+        "file": "atomic.zig",
+        "module": "std",
+        "decl_line": 52
+       },
        "body": [
         {
          "id": 35,
@@ -514,7 +538,8 @@
          "id": 41,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 2
+         "line": 2,
+         "column": 39
         },
         {
          "id": 42,
@@ -556,7 +581,8 @@
          "id": 45,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 2
+         "line": 2,
+         "column": 13
         },
         {
          "id": 46,

@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "atomics.mpWriter",
  "module": "root",
+ "src": {
+  "file": "atomics.zig",
+  "module": "atomics",
+  "decl_line": 14
+ },
  "params": [
   0
  ],
@@ -162,7 +167,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 6
   },
   {
    "id": 5,
@@ -212,7 +218,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 6
   },
   {
    "id": 10,
@@ -238,7 +245,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 17
   },
   {
    "id": 13,
@@ -254,12 +262,18 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 17
   },
   {
    "id": 15,
    "tag": "dbg_inline_block",
    "ty": 1,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 24
+   },
    "body": [
     {
      "id": 16,
@@ -328,7 +342,8 @@
      "id": 22,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 34
     },
     {
      "id": 23,

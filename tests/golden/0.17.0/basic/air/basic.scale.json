@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,12 +118,21 @@
  },
  "name": "basic.scale",
  "module": "root",
+ "src": {
+  "file": "basic.zig",
+  "module": "basic",
+  "decl_line": 7
+ },
  "params": [
   0,
   1
  ],
  "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "scale",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -141,7 +150,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 14
   },
   {
    "id": 3,
@@ -170,7 +180,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 6,

@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
@@ -39,6 +39,11 @@
  },
  "name": "slices.subZ",
  "module": "root",
+ "src": {
+  "file": "slices.zig",
+  "module": "slices",
+  "decl_line": 72
+ },
  "params": [
   0,
   1,
@@ -97,7 +102,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 7,
@@ -386,6 +392,7 @@
         "ty": 11,
         "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_8737",
         "module": "std",
+        "instance_key": "1459dd027f9da3b39ee94bd2218d5a090eaba2b99f58f03696bdd91af2d96a1e",
         "noreturn": true
        },
        "args": [
@@ -411,7 +418,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 36,

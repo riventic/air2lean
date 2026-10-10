@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "Io.Event.set",
  "module": "std",
+ "src": {
+  "file": "Io.zig",
+  "module": "std",
+  "decl_line": 2055
+ },
  "params": [
   0,
   1
@@ -169,7 +174,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 6,
@@ -191,7 +197,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 17
   },
   {
    "id": 8,
@@ -221,7 +228,8 @@
          "id": 9,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 4
+         "line": 4,
+         "column": 37
         },
         {
          "id": 10,
@@ -247,7 +255,8 @@
          "id": 14,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 4
+         "line": 4,
+         "column": 37
         },
         {
          "id": 16,
@@ -257,6 +266,7 @@
           "ty": 8,
           "func": "Io.futexWake__func_753",
           "module": "std",
+          "instance_key": "4452949d4fe36abb0db980a0ff268fb4524d3bcdd95ad69c79bbb648dbd60b55",
           "noreturn": false
          },
          "args": [
@@ -319,7 +329,8 @@
        "id": 19,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 17
       },
       {
        "id": 20,

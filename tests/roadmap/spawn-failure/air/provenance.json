@@ -8,14 +8,14 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
   "stock_compiler_sha256": "2317bbb91798556d9d0f38aabdac23db83f0979b25f767259ae474546724087c",
   "qualification": "Retained fresh AIR of a passed --full spawn-failure qualification (Zig 0.16.0); every file hash below equals that report's artifact record. Re-export and refresh this record when spawn_failure.zig changes. The strict-schema exporter (pointer address_space) re-exported these files byte-identical to the committed ones; the hashes are of that export.",
   "air_sha256": {
-    "spawn_failure.groupAsync.json": "fff829db9742bff4c568927bb4bb35fef8a9f1629f2e609f6c853453462d565a",
-    "spawn_failure.groupConcurrent.json": "a302a45c6b3034bd141359b29ac451de8a4dbb14b95c9a50c3c8c8000ac4759c",
-    "spawn_failure.threadCatch.json": "97b475dc14746f203f5e4e204404e594e5abcbaf10fe1fe3e0b5972560c59141",
-    "spawn_failure.threadPair.json": "03b375b15fe07d05ae9f732591195f34f08cdf4a44412cef3cbfb640d2bb0f8b",
-    "spawn_failure.writeWorker.json": "a854b6e881dc81a1ec10bf1366d97ee28116d03611832557886f3fafe658b92d"
+    "spawn_failure.groupAsync.json": "70442983604c8b2be3d5a734c3ddaacf5007bf1c5dd39d9c08b2035382f582c7",
+    "spawn_failure.groupConcurrent.json": "6686467dadbe7a9e4e1b5d0c8e3e67d04c0bfa50f0c9c8e9303110814ccb7609",
+    "spawn_failure.threadCatch.json": "ea2f373b686e53357df759b89912817cdd500084fc30c9e37fc9c3a1c6318d9a",
+    "spawn_failure.threadPair.json": "2a9010316f4c5d6abf5e82b5972b68c68af6f4fe60889b82e79ef431f1a525cf",
+    "spawn_failure.writeWorker.json": "1783e7e5699d80917276f38057bc01c5384943346a89ce46047a9b9e7ab4ffab"
   }
 }

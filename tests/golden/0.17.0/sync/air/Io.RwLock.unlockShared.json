@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "Io.RwLock.unlockShared",
  "module": "std",
+ "src": {
+  "file": "Io/RwLock.zig",
+  "module": "std",
+  "decl_line": 147
+ },
  "params": [
   0,
   1
@@ -169,7 +174,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 40
   },
   {
    "id": 6,
@@ -222,7 +228,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 9
   },
   {
    "id": 11,
@@ -363,7 +370,8 @@
        "id": 22,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 11
       },
       {
        "id": 23,
@@ -389,7 +397,8 @@
        "id": 25,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 26
       },
       {
        "id": 26,

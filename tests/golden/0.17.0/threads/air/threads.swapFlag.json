@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "threads.swapFlag",
  "module": "root",
+ "src": {
+  "file": "threads.zig",
+  "module": "threads",
+  "decl_line": 84
+ },
  "params": [
   0
  ],
@@ -162,7 +167,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 12
   },
   {
    "id": 5,
@@ -188,7 +194,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 22
   },
   {
    "id": 8,
@@ -204,7 +211,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 26
   },
   {
    "id": 10,
@@ -240,12 +248,18 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 22
   },
   {
    "id": 14,
    "tag": "dbg_inline_block",
    "ty": 7,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 28
+   },
    "body": [
     {
      "id": 15,
@@ -313,7 +327,8 @@
      "id": 21,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 39
     },
     {
      "id": 22,
@@ -354,7 +369,8 @@
      "id": 25,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 26,

@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
@@ -39,6 +39,11 @@
  },
  "name": "slices.sumZ",
  "module": "root",
+ "src": {
+  "file": "slices.zig",
+  "module": "slices",
+  "decl_line": 64
+ },
  "params": [
   0
  ],
@@ -83,7 +88,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -119,7 +125,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 9,
@@ -170,7 +177,8 @@
          "id": 15,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 4
+         "line": 4,
+         "column": 12
         },
         {
          "id": 16,
@@ -186,7 +194,8 @@
          "id": 17,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 4
+         "line": 4,
+         "column": 13
         },
         {
          "id": 18,
@@ -249,7 +258,8 @@
            "id": 23,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 34
           },
           {
            "id": 24,
@@ -275,7 +285,8 @@
            "id": 26,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 42
           },
           {
            "id": 27,
@@ -324,7 +335,8 @@
            "id": 31,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 38
           },
           {
            "id": 32,
@@ -356,7 +368,8 @@
            "id": 34,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 44
           },
           {
            "id": 35,
@@ -367,7 +380,8 @@
            "id": 37,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 26
           },
           {
            "id": 38,
@@ -383,7 +397,8 @@
            "id": 39,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 4
+           "line": 4,
+           "column": 28
           },
           {
            "id": 40,
@@ -456,7 +471,8 @@
    "id": 46,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 47,
@@ -472,7 +488,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 49,

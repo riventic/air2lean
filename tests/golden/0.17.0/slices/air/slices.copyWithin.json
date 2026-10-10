@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "slices.copyWithin",
  "module": "root",
+ "src": {
+  "file": "slices.zig",
+  "module": "slices",
+  "decl_line": 29
+ },
  "params": [
   0,
   1,
@@ -183,7 +188,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 22
   },
   {
    "id": 8,
@@ -328,7 +334,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 40
   },
   {
    "id": 21,

@@ -8,13 +8,13 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "b6f238187649068f46201c879fddf9289c5fd2bcc07a1e0061c6446ca71d7459",
+  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
   "qualification": "Fresh export of device_asm.zig (filter device_asm.) with the patched 0.16.0 compiler (aarch64-macos host build of zig-patch 5715fa4a); check-device.sh --export re-exports and requires the same DeviceAsm translation. The 0.15.2 export translates to the same Gen.lean except for the profile header; 0.14.1 cannot parse the 0.15 clobber syntax. Re-export and refresh this record when device_asm.zig changes.",
   "air_sha256": {
-    "device_asm.barrier.json": "55c9dbcb4069cc4cbb1954546429b8180985c2350c310e0c5aca30fb178150c3",
-    "device_asm.elapsed.json": "a237b534a6a2288a21f0ef4d8619c3dfed4a91d40a2289cd36d43f1cf8a3f5dd",
-    "device_asm.fence.json": "22333579bb7ce78ce68be6992c543707014555c11828f37819e983f2baba4ecd",
-    "device_asm.random.json": "aadbc7cf7b8bea2df670964435f3e40c643c710090cf325c95ac1a0ab47c9e43",
-    "device_asm.ticksPlain.json": "c391431e6a5e06a32520592fd5118f0baa2b12b8e530ac9104bc9bfc37f3e780"
+    "device_asm.barrier.json": "6ebc08e599874d10f5413775f8c87c4334cd860577d9a4c253fcf3d344a197dc",
+    "device_asm.elapsed.json": "36f324811b9c3ff2f9d4e970245c93df65007de63adc735b125307a9ab9a18db",
+    "device_asm.fence.json": "bd5577adb7143bff8b00083a2cb5b3d266dd2bf5e8907a4813cd56874447821d",
+    "device_asm.random.json": "f92499d33b319b021b03fc02e165fabd65aa71072cd0f3879dd3d87d64df3162",
+    "device_asm.ticksPlain.json": "40d160d2bcf026bff0d7fb69478d0f6dbc2af288509ac05f1dee39232564ba85"
   }
 }

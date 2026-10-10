@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "basic.sum",
  "module": "root",
+ "src": {
+  "file": "basic.zig",
+  "module": "basic",
+  "decl_line": 29
+ },
  "params": [
   0
  ],
@@ -134,7 +139,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -189,7 +195,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 10
   },
   {
    "id": 8,
@@ -297,7 +304,8 @@
            "id": 18,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 3
+           "line": 3,
+           "column": 18
           },
           {
            "id": 19,
@@ -323,7 +331,8 @@
            "id": 21,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 3
+           "line": 3,
+           "column": 24
           },
           {
            "id": 22,
@@ -355,7 +364,8 @@
            "id": 24,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 3
+           "line": 3,
+           "column": 27
           },
           {
            "id": 25,
@@ -433,7 +443,8 @@
    "id": 32,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 33,
@@ -449,7 +460,8 @@
    "id": 34,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 35,

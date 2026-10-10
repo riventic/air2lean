@@ -11,18 +11,18 @@
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
-  "patched_compiler_sha256": "fe2ff13fca8b6825ae90e97993e229e00798a70ab86cdfc2c344f953f79f0790",
+  "patched_compiler_sha256": "db1acb80d37221443e035aa73cc8e2fa4182076d931f6dad118f16403afbffd9",
   "stock_compiler_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
   "qualification": "Fresh AIR exported by the patched 0.16.0 compiler (zig-patch tree 5715fa4a); `check.sh --export` re-exports and compares, `check.sh --native` runs both sources' tests with the stock compiler. Re-export and refresh this record when a source changes.",
   "air_sha256": {
-    "air/0.16.0/const_locals.bump.json": "c70cf828982a5ec3a5f74d629711f53356063d3836236c14bb83adbf96de45e8",
-    "air/0.16.0/const_locals.dead.json": "91c3e58ec2f5278fa562623059af67eac5c0aa470dc079c52b69d36b97b4f67c",
-    "air/0.16.0/const_locals.entry.json": "602848530f5887774de024a07cdddaecd3fa0a36b1222050c4ececafc9e26789",
-    "air/0.16.0/const_locals.live.json": "80e98be7f628eea429f3fed57c477bd01a0c8dbfbe486503c92fa1341e84e7a0",
-    "air/0.16.0/const_locals.read.json": "471872dd975b2ba895d22194e3711bbc56fec18e2d9998187aca2500307452b7",
-    "air/0.16.0/const_locals.roundTrip.json": "1d1d5e33719690353c4992e5fdcc1b93fc23ccd78a1ae848205dde3c17a6bf2f",
-    "air/0.16.0/const_locals.stack.json": "c842a563290d7451b1f15ff9ccbf1920ace753e65396e7352dda395ac8fa5cf3",
-    "air-fuzz_s19/0.16.0/fuzz_s19.entry.json": "b9eae93fdf5a718273c85e3769a2bf59e2767ce79a9273a8d0640a1244f535a4",
-    "air-fuzz_s19/0.16.0/fuzz_s19.work.json": "ac9b61efad372c803486fc3d8e16178d02a0a711a071a58aeaf5230305d89de0"
+    "air/0.16.0/const_locals.bump.json": "8d8b0a9141b420a547cc55ccba6cade345e6015a15fb18f4aa6e254223ab4c8d",
+    "air/0.16.0/const_locals.dead.json": "69cf51eedab70ba91a6ed9ac20ef6435f9e9f0eb6e39b23a3800d8c8dfa385b7",
+    "air/0.16.0/const_locals.entry.json": "d4984c888cac4f4f19fb731f6350d944236a4e490c13f7efcf88049846717a05",
+    "air/0.16.0/const_locals.live.json": "cb0ece9b152810de1a915240c743cf2cf68a8be3e72ca70485d2a42882f3ee79",
+    "air/0.16.0/const_locals.read.json": "799fc928c4d05fd4d2be96928c77fe0e4a4c060d9818b2393958dba2cb4a80b5",
+    "air/0.16.0/const_locals.roundTrip.json": "1256c7a0282de17ce06fa47c90f29802df97c16934bc4825bfeca0d21bced3a3",
+    "air/0.16.0/const_locals.stack.json": "e54e5ecd0c99a1542725a7aa3d4db5e1efa5c2914fb10127d143550b0aa449db",
+    "air-fuzz_s19/0.16.0/fuzz_s19.entry.json": "916f6a098e4daffd225a036fe262575079961b5856917af49dd60f8d3037e2d1",
+    "air-fuzz_s19/0.16.0/fuzz_s19.work.json": "8d2b05acd22cf7e402424aef37b1bb34dad93effddcd016503455946e7f00e61"
   }
 }

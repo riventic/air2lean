@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
@@ -39,6 +39,11 @@
  },
  "name": "mem.Allocator.dupeZ__anon_11266",
  "module": "std",
+ "src": {
+  "file": "mem/Allocator.zig",
+  "module": "std",
+  "decl_line": 461
+ },
  "instance_key": "ad013b83a6438d6899b7b3f0810c84369882f5df90246d68508992e0ce1c9349",
  "params": [
   0,
@@ -91,7 +96,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 34
   },
   {
    "id": 6,
@@ -107,7 +113,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 34
   },
   {
    "id": 10,
@@ -133,7 +140,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 12,

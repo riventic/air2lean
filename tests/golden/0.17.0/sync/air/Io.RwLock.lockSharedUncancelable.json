@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "Io.RwLock.lockSharedUncancelable",
  "module": "std",
+ "src": {
+  "file": "Io/RwLock.zig",
+  "module": "std",
+  "decl_line": 111
+ },
  "params": [
   0,
   1
@@ -169,7 +174,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 6,
@@ -180,7 +186,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 39
   },
   {
    "id": 8,
@@ -266,7 +273,8 @@
          "id": 18,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 3
+         "line": 3,
+         "column": 12
         },
         {
          "id": 19,
@@ -330,7 +338,8 @@
            "id": 24,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 4
+           "line": 4,
+           "column": 9
           },
           {
            "id": 25,
@@ -341,7 +350,8 @@
              "id": 26,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 6
+             "line": 6,
+             "column": 16
             },
             {
              "id": 27,
@@ -387,7 +397,8 @@
              "id": 31,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 8
+             "line": 8,
+             "column": 19
             },
             {
              "id": 32,
@@ -468,7 +479,8 @@
                "id": 37,
                "tag": "dbg_stmt",
                "ty": 2,
-               "line": 11
+               "line": 11,
+               "column": 18
               },
               {
                "id": 38,
@@ -502,7 +514,8 @@
            "id": 41,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 12
+           "line": 12,
+           "column": 5
           },
           {
            "id": 42,
@@ -553,7 +566,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 14
+   "line": 14,
+   "column": 7
   },
   {
    "id": 49,
@@ -579,7 +593,8 @@
    "id": 51,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 14
+   "line": 14,
+   "column": 30
   },
   {
    "id": 52,
@@ -604,7 +619,8 @@
    "id": 53,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 15
+   "line": 15,
+   "column": 30
   },
   {
    "id": 54,
@@ -646,7 +662,8 @@
    "id": 57,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 16
+   "line": 16,
+   "column": 7
   },
   {
    "id": 58,
@@ -672,7 +689,8 @@
    "id": 60,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 16
+   "line": 16,
+   "column": 20
   },
   {
    "id": 61,

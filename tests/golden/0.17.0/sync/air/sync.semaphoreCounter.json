@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "sync.semaphoreCounter",
  "module": "root",
+ "src": {
+  "file": "sync.zig",
+  "module": "sync",
+  "decl_line": 77
+ },
  "params": [
   0
  ],
@@ -134,7 +139,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -269,7 +275,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 12,
@@ -285,7 +292,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 15,
@@ -295,6 +303,7 @@
     "ty": 19,
     "func": "Thread.spawn__func_743",
     "module": "std",
+    "instance_key": "3649a8600f52142742ce15ac86a37e9133d15081d850e6d2db6e6a40e56bc649",
     "noreturn": false,
     "comptime_fn": "sync.semWork",
     "comptime_fn_module": "root"
@@ -342,7 +351,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 15
     },
     {
      "id": 18,
@@ -419,7 +429,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 12
   },
   {
    "id": 27,
@@ -441,7 +452,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 29,
@@ -457,7 +469,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 31,
@@ -479,7 +492,8 @@
    "id": 32,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 13
   },
   {
    "id": 33,
@@ -505,7 +519,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 36,

@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,12 +118,21 @@
  },
  "name": "vectors.vOverflow",
  "module": "root",
+ "src": {
+  "file": "vectors.zig",
+  "module": "vectors",
+  "decl_line": 140
+ },
  "params": [
   0,
   0
  ],
  "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "vOverflow",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -141,7 +150,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -199,7 +209,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 13
   },
   {
    "id": 9,
@@ -225,7 +236,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 29
   },
   {
    "id": 12,
@@ -274,7 +286,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 17,

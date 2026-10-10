@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "layout.setHalf",
  "module": "root",
+ "src": {
+  "file": "layout.zig",
+  "module": "layout",
+  "decl_line": 329
+ },
  "params": [
   0,
   1
@@ -169,7 +174,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 6
   },
   {
    "id": 6,
@@ -208,7 +214,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 13
   },
   {
    "id": 10,
@@ -244,7 +251,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 14,

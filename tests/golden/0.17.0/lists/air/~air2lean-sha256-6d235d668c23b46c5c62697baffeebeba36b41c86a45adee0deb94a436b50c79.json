@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "array_list.Aligned(u32,null).addOneAssumeCapacity",
  "module": "std",
+ "src": {
+  "file": "array_list.zig",
+  "module": "std",
+  "decl_line": 1414
+ },
  "params": [
   0
  ],
@@ -162,7 +167,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 24
   },
   {
    "id": 5,
@@ -188,7 +194,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 30
   },
   {
    "id": 8,
@@ -214,7 +221,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 41
   },
   {
    "id": 11,
@@ -283,7 +291,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 19
   },
   {
    "id": 18,
@@ -305,7 +314,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 17
   },
   {
    "id": 20,
@@ -331,7 +341,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 23
   },
   {
    "id": 23,
@@ -357,7 +368,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 28
   },
   {
    "id": 26,
@@ -390,7 +402,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 25
   },
   {
    "id": 29,
@@ -416,7 +429,8 @@
    "id": 31,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 36
   },
   {
    "id": 32,
@@ -442,7 +456,8 @@
    "id": 34,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 42
   },
   {
    "id": 35,
@@ -468,7 +483,8 @@
    "id": 37,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 47
   },
   {
    "id": 38,
@@ -488,7 +504,8 @@
    "id": 39,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 31
   },
   {
    "id": 40,
@@ -597,7 +614,8 @@
    "id": 49,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 13
   },
   {
    "id": 50,

@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -118,6 +118,11 @@
  },
  "name": "Io.Semaphore.post",
  "module": "std",
+ "src": {
+  "file": "Io/Semaphore.zig",
+  "module": "std",
+  "decl_line": 61
+ },
  "params": [
   0,
   1
@@ -169,7 +174,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 6
   },
   {
    "id": 6,
@@ -195,7 +201,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 29
   },
   {
    "id": 9,
@@ -220,7 +227,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 6
   },
   {
    "id": 11,
@@ -256,7 +264,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 15
   },
   {
    "id": 15,
@@ -289,7 +298,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 6
   },
   {
    "id": 18,
@@ -315,7 +325,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 18
   },
   {
    "id": 21,
@@ -340,7 +351,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 12
   },
   {
    "id": 23,
@@ -366,7 +378,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 25
   },
   {
    "id": 26,

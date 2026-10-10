@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
@@ -39,6 +39,11 @@
  },
  "name": "mem.Allocator.dupeSentinel__anon_11280",
  "module": "std",
+ "src": {
+  "file": "mem/Allocator.zig",
+  "module": "std",
+  "decl_line": 466
+ },
  "instance_key": "294b7c9823bd7a920bd4318aabd9bece440acf1ac48a33be7063bcd50f025fa4",
  "params": [
   0,
@@ -119,7 +124,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 40
   },
   {
    "id": 9,
@@ -135,7 +141,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 45
   },
   {
    "id": 12,
@@ -161,7 +168,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 50
   },
   {
    "id": 15,
@@ -181,7 +189,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 40
   },
   {
    "id": 18,
@@ -227,7 +236,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 7
+     "line": 7,
+     "column": 21
     },
     {
      "id": 21,
@@ -294,7 +304,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 8
+   "line": 8,
+   "column": 25
   },
   {
    "id": 29,
@@ -320,7 +331,8 @@
    "id": 31,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 8
+   "line": 8,
+   "column": 20
   },
   {
    "id": 32,
@@ -698,7 +710,8 @@
    "id": 65,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 9
+   "line": 9,
+   "column": 14
   },
   {
    "id": 66,
@@ -724,7 +737,8 @@
    "id": 68,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 9
+   "line": 9,
+   "column": 12
   },
   {
    "id": 69,
@@ -847,7 +861,8 @@
    "id": 79,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 10
+   "line": 10,
+   "column": 24
   },
   {
    "id": 80,
@@ -873,7 +888,8 @@
    "id": 82,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 10
+   "line": 10,
+   "column": 19
   },
   {
    "id": 83,
@@ -1120,7 +1136,8 @@
    "id": 105,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 10
+   "line": 10,
+   "column": 5
   },
   {
    "id": 106,
