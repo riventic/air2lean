@@ -29,8 +29,8 @@ when it fits, M02). Owned blocks get the placement's addresses (`Mem.place`), po
 address of a freed or reset block. A fixed buffer's allocations are blocks of their own, not
 ranges of the buffer's block: `FixedBuffer.init` makes the buffer's block dead, so no direct
 access can observe that they do not alias it, and a placement can give them their native
-addresses inside the buffer (MM-10). An arena's blocks are not placed inside its nodes. Reset and deinit record no access for the race check: like Zig's,
-they are not thread-safe.
+addresses inside the buffer (MM-10). An arena's blocks are not placed inside its nodes. Reset
+and deinit record no access for the race check: like Zig's, they are not thread-safe.
 -/
 
 namespace Zig
@@ -71,11 +71,17 @@ direct access to the buffer, or to the rest of its block, and a free of the bloc
 `.illegal` from here on, even after a `reset`: natively such an access aliases the allocations,
 which the model keeps in their own blocks. The allocations get the placement's addresses
 (`Mem.place`); with the buffer's block dead, a placement can give each one its native address
-inside the buffer. An empty buffer lends nothing. -/
+inside the buffer. Like a free, the end of the block records a write of all its bytes for the
+race check: a concurrent access to the buffer races with it, as it would with the allocations
+that alias it natively. A buffer in a block of another arena or fixed buffer is `.illegal`
+(conservative): that allocator's `reset` would not end the allocations made from it. An empty
+buffer lends nothing. -/
 def FixedBuffer.init (buf : Ptr) (cap : Nat) : MemM AllocId := do
   let base ← ptrAddr buf
   if cap ≠ 0 then
     let (b, blk, _) ← (← get).accessW buf cap 1
+    if blk.kind matches .owned _ then throw .illegal
+    recordAccess b 0 blk.bytes.size .write
     modify fun m => { m with blocks := m.blocks.set! b { blk with live := false } }
   Owned.init (.fixedBuffer base.toNat cap)
 
