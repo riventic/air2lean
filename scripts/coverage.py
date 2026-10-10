@@ -286,6 +286,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/futures/air/{version}': 'tests/roadmap/futures/check.sh',
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
     'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/README.md',
+    'tests/roadmap/union-bases/air/{version}': 'tests/roadmap/union-bases/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
@@ -322,6 +323,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/pointer-width/air/0.16.0/wasm32-reject':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
+    'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',
