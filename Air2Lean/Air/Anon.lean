@@ -287,8 +287,15 @@ module identity, and no module of the program's own functions may start with `<u
 unit of the input. Extern calls cross units by linker symbol only (`docs/air-json.md` §Link
 units). -/
 def qualifyLinkUnits (texts : Array String) : Except String (Array String) := do
+  -- A text that spells no `link_unit` (a `\u` escape could spell it otherwise) is no link
+  -- unit: without one, no input is parsed for nothing.
+  let mentions (text : String) : Bool :=
+    (text.splitOn "link_unit").length > 1 || (text.splitOn "\\u").length > 1
+  unless texts.any mentions do return texts
   let parsed := texts.map fun text => (StrictJson.parse text).toOption
-  let units := parsed.filterMap fun j => j.bind linkUnit?
+  let units := parsed.foldl (fun acc j => match j.bind linkUnit? with
+    | some u => if acc.contains u then acc else acc.push u
+    | none => acc) #[]
   if units.isEmpty then return texts
   let mut out := #[]
   for (text, j) in texts.zip parsed do

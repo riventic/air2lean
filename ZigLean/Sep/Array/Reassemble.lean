@@ -235,12 +235,7 @@ theorem Triple.arr_store_reassemble {T : Type} [Enc T] [LawfulEnc T] {p : Ptr}
     Triple (arr p xs ∗ R) (Zig.store (Enc.align T) (p.elem (Enc.size T) i) w)
       (fun _ => arr p (xs.set i.toNat w) ∗ R) := by
   intro m hP hF hd hm hp hst
-  have hi63 : i.toNat < 2 ^ 63 := by
-    obtain ⟨-, -, -, -, ⟨A, S, K, bs, -, hsz, -, -, -, hend⟩, -⟩ := hp
-    exact arr_index_lt hend hn (by rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi)
-  have he : p.elem (Enc.size T) i = p.add (↑(Enc.size T) * ↑i.toNat) := by
-    rw [Ptr.elem_eq_of_lt _ _ hi63]; push_cast; rfl
-  rw [he]
+  rw [arr_sep_elem_eq hp hn hi]
   exact Triple.arr_update hn hi hs (Triple.store hn w) m hP hF hd hm hp hst
 
 end Zig

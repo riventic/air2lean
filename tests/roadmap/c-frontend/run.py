@@ -361,7 +361,10 @@ def link_census(native, root, work, symbols):
     nm = shutil.which("nm") or "nm"
     found = {s: [] for s in symbols}
     for path in inputs:
-        _, listing = run([nm, "-A", path], 120)
+        code, listing = run([nm, "-A", path], 120)
+        if code != 0:
+            # An unread input would leave its definitions out: the census would pass vacuously.
+            return None, tail(listing)
         for ln in listing.splitlines():
             parts = ln.split()
             if len(parts) >= 3 and parts[-1] in found and parts[-2] in "TtWwVvDdBbRr":
@@ -376,9 +379,10 @@ def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
     air = work / "air"
     in_c = lambda n: n.startswith(stem + ".")  # noqa: E731
     if not libc:
+        initial = [stem + "."] + STD_FILTER
         error, docs, live, prefixes = export_closure(
             zig_air, ["build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing", *AIR_TARGET,
-                      str(zig_file)], [stem + "."] + STD_FILTER, air, work, lambda d, _: [n for n in d if in_c(n)])
+                      str(zig_file)], initial, air, work, lambda d, _: [n for n in d if in_c(n)])
         if error:
             return {"status": "failed", "files": len(docs), "log": error}, None
         for name, d in docs.items():
@@ -387,15 +391,16 @@ def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
         callees = {c for name in live for c in docs[name][1]}
         return {"status": "ok", "functions": len(live),
                 "std_functions": sorted(ANON.sub("", n) for n in live if not in_c(n)),
-                "std_prefixes": prefixes[1 + len(STD_FILTER):],
+                "std_prefixes": prefixes[len(initial):],
                 "unexported_callees": sorted(callees - live)}, air
     # The program as an executable that links Zig's libc (docs/c-frontend.md §libc boundary):
     # lib/c.zig is a module of the program's own compilation (`c.` names), compiler_rt a
     # separately compiled library, exported as the link unit `compiler_rt`.
     root = libc_root(zig_file, work)
+    initial = [stem + "."] + STD_FILTER + LIBC_FILTER
     error, docs, live, prefixes = export_closure(
         zig_air, ["build-exe", "-fno-emit-bin", "-lc", "-OReleaseSafe", "-fno-error-tracing", *LIBC_TARGET,
-                  str(root)], [stem + "."] + STD_FILTER + LIBC_FILTER, air, work,
+                  str(root)], initial, air, work,
         lambda d, _: [n for n in d if in_c(n)])
     if error:
         return {"status": "failed", "files": len(docs), "log": error}, None
@@ -422,7 +427,7 @@ def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
             shutil.move(str(d[0]), target)
     record = {"status": "ok", "link": "exe-lc", "functions": len(live) + len(rt_live),
               "std_functions": sorted(ANON.sub("", n) for n in live if not in_c(n) and not n.startswith("c.")),
-              "std_prefixes": prefixes[1 + len(STD_FILTER) + len(LIBC_FILTER):],
+              "std_prefixes": prefixes[len(initial):],
               "libc_functions": sorted(n for n in live if n.startswith("c.")),
               "compiler_rt_functions": sorted(ANON.sub("", n) for n in rt_live),
               "compiler_rt_prefixes": rt_prefixes[len(needed):],

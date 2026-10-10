@@ -143,7 +143,11 @@ private def typeReach (types : Array Ty) (id : TyId) : TypeReach := Id.run do
       | .errorSet _ | .errorUnion .. => found := .error
       | .allocator | .thread | .io => if found == .plain then found := .symbolic
       | _ => pure ()
-      let children := childTys ty
+      -- A function pointer is a code address: its pointee is no data storage
+      -- (`errorCapabilityScan`). The function type itself, reached otherwise, stays unknown.
+      let children := match ty with
+        | .ptr _ _ c => if (types[c]?.map isFnTy).getD false then #[] else childTys ty
+        | _ => childTys ty
       if budget == 0 || children.size > budget - 1 then return .unknown
       budget := budget - 1
       pending := children.toList ++ pending
@@ -3539,8 +3543,7 @@ private inductive AbiClass where
 
 private def abiPtrChildOk (types : Array Ty) (c : TyId) : Bool :=
   match types[c]? with
-  | some (.other n) => !(n.startsWith "fn ") && !(n.startsWith "fn(")
-  | some _ => true
+  | some t => !isFnTy t
   | none => false
 
 /-- A pointer type's size and alignment, if the ABI conversion admits it (its alignment must

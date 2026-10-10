@@ -554,7 +554,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     log := result.2
     if let some profile := result.1.decodedProfile then
       let own := baselines.find? fun (b : BuildProfile) => b.linkUnit == profile.linkUnit
-      let baseline := ((baselines.find? fun (b : BuildProfile) => b.linkUnit.isNone) <|> baselines[0]?).getD profile
+      let baseline := (BuildProfile.programProfile? baselines).getD profile
       let mut messages := BuildProfile.programViolations #[baseline, profile] a.profile a.allowUnqualified
       -- Across units the build mode is not compared; within one it must agree.
       if let some own := own then

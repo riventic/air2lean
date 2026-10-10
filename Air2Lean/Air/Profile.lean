@@ -248,6 +248,11 @@ def admit (p : BuildProfile) (expected : Option String) (allowUnqualified : Bool
       Pass --allow-unqualified-build-mode to translate it anyway; the generated header \
       records the opt-in"
 
+/-- The program's own profile: the first without a link unit, else the first
+(`docs/air-json.md` §Link units). -/
+def programProfile? (profiles : Array BuildProfile) : Option BuildProfile :=
+  profiles.find? (·.linkUnit.isNone) <|> profiles[0]?
+
 /-- Exact agreement includes schema, Zig version, CPU feature order, and all build facts.
 A separately compiled library (`linkUnit`) agrees exactly within itself, and with the rest of
 the program in everything but its build mode (`docs/air-json.md` §Link units). Every differing
@@ -256,7 +261,7 @@ field of every profile is a separate violation, after a selected-name mismatch; 
 pass `admit`. Their order matches the fail-fast `checkProgram`. -/
 def programViolations (profiles : Array BuildProfile) (expected : Option String := none)
     (allowUnqualified : Bool := false) : Array String := Id.run do
-  let some first := (profiles.find? (·.linkUnit.isNone)) <|> profiles[0]?
+  let some first := programProfile? profiles
     | return #["no AIR profiles supplied"]
   let mut errors := #[]
   if let some expected := expected then
@@ -291,7 +296,7 @@ def programViolations (profiles : Array BuildProfile) (expected : Option String 
 
 def checkProgram (profiles : Array BuildProfile) (expected : Option String := none)
     (allowUnqualified : Bool := false) : Except String BuildProfile := do
-  let some first := (profiles.find? (·.linkUnit.isNone)) <|> profiles[0]?
+  let some first := programProfile? profiles
     | throw "no AIR profiles supplied"
   if let some error := (programViolations profiles expected allowUnqualified)[0]? then throw error
   pure first

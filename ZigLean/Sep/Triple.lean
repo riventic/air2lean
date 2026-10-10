@@ -42,6 +42,16 @@ theorem arr_index_lt {p : Ptr} {bs : Array Byte} {size i : Nat} (hend : p.off.to
     (hs : 0 < size) (hk : size * i + size ≤ bs.size) : i < 2 ^ 63 :=
   index_lt_of_mul_lt hs (by omega)
 
+/-- Item `i` of an owned array (with a frame `R`) is `size * i` bytes after `p`: its index is
+below `2 ^ 63` (`arr_index_lt`). -/
+theorem arr_sep_elem_eq {T : Type} [Enc T] {R : Assn} {p : Ptr} {vs : List T} {i : BitVec 64}
+    {h : Heap} (hp : (arr p vs ∗ R) h) (hn : 0 < Enc.size T) (hi : i.toNat < vs.length) :
+    p.elem (Enc.size T) i = p.add (↑(Enc.size T) * ↑i.toNat) := by
+  obtain ⟨-, -, -, -, ⟨-, -, -, bs, -, hsz, -, -, -, hend⟩, -⟩ := hp
+  have hi63 := arr_index_lt hend hn
+    (by rw [hsz, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi)
+  rw [Ptr.elem_eq_of_lt _ _ hi63]; push_cast; rfl
+
 section Lemmas
 
 variable {m : Mem} {h hF : Heap} {T : Type} [Enc T]

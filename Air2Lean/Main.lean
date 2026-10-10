@@ -332,7 +332,7 @@ private def run (args : List String) : IO UInt32 := do
         -- A template lists the extern calls that bind to no definition as model symbols.
         if a.registryTemplate then return (← resolveExternsCollect funcs models).1
         let resolved ← resolveExterns funcs models
-        checkProgram resolved models (profiles.find? (·.linkUnit.isNone) <|> profiles[0]?)
+        checkProgram resolved models (BuildProfile.programProfile? profiles)
         if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
         return resolved
         : Except String (Array Func))
