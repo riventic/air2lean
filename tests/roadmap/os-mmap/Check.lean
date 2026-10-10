@@ -119,6 +119,13 @@ def value {α : Type} [Inhabited α] (c : MemM α) (m : Mem := {}) : α :=
 def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Except ErrName Slice) :=
   mremap lx (some s.ptr) s.len (BitVec.ofNat 64 n) flags none
 
+/-- The placement puts the second mapping (block 1) right after a one-page first mapping (block 0,
+at the fallback address 4096): the first has no room to grow in place. -/
+def adj : Mem := { place := ⟨fun b => if b = 1 then some 8192 else none⟩ }
+
+-- The placement takes that address.
+#guard ((final (do let _ ← mapOk 4096; mapOk 4096) adj).blocks.map (·.addr)) == #[4096, 8192]
+
 -- Shrink in place: same pointer, fewer bytes; the cut bytes are gone.
 #guard
   let c := do let s ← mapOk 8192; remap s 4096
@@ -134,11 +141,11 @@ def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Exc
   | .error _ => false
 -- Grow of an unaligned length: the stale page tail is undefined.
 #guard ((final (do let s ← mapOk 100; remap s 8192)).blocks[0]!).bytes[200]! == .undef
--- Grow with a block above it and MAYMOVE: moves, copies, ends the old block.
+-- Grow with a block right after it and MAYMOVE: moves, copies, ends the old block.
 #guard
   let c := do let s ← mapOk 4096; store 1 s.ptr (9 : BitVec 8); let _ ← mapOk 4096; remap s 8192
-  let m := final c
-  match value c with
+  let m := final c adj
+  match value c adj with
   | .ok r => r.ptr == ⟨some 2, 0⟩ && (m.blocks[0]!).live == false && (m.blocks[2]!).bytes[0]! == .int 9 &&
       (m.blocks[2]!).addr % P == 0 && (m.blocks[2]!).kind == .mapped 0
   | .error _ => false
@@ -151,7 +158,14 @@ def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Exc
 -- Grow without MAYMOVE and without room: OutOfMemory, the mapping unchanged.
 #guard
   let c := do let s ← mapOk 4096; let _ ← mapOk 4096; remap s 8192 0
-  value c == .error "OutOfMemory" && ((final c).blocks[0]!).live && ((final c).blocks[0]!).bytes.size == 4096
+  value c adj == .error "OutOfMemory" && ((final c adj).blocks[0]!).live &&
+    ((final c adj).blocks[0]!).bytes.size == 4096
+-- With a gap page after it (the fallback placement), the same growth stays in place.
+#guard
+  let c := do let s ← mapOk 4096; let _ ← mapOk 4096; remap s 8192 0
+  match value c with
+  | .ok r => r.ptr == ⟨some 0, 0⟩ && ((final c).blocks[0]!).bytes.size == 8192
+  | .error _ => false
 -- Failure oracle on a growth: `error.OutOfMemory`, the mapping unchanged.
 #guard
   let m0 : Mem := { allocPolicy := { fails := fun i _ => i == 1 } }
@@ -166,8 +180,8 @@ def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Exc
 #guard tag (run (do let p ← alloc .heap 4096 4096; remap ⟨p, 4096⟩ 100)) == "Zig.Error.illegal"
 -- Use of the old pointer after a move: illegal.
 #guard
-  tag (run (do let s ← mapOk 4096; let _ ← mapOk 4096; let _ ← remap s 8192; load (BitVec 8) 1 s.ptr)) ==
-    "Zig.Error.illegal"
+  tag (run (do let s ← mapOk 4096; let _ ← mapOk 4096; let _ ← remap s 8192; load (BitVec 8) 1 s.ptr)
+    adj) == "Zig.Error.illegal"
 -- FIXED/DONTUNMAP flags, a new address, macOS: unspecified.
 #guard tag (run (do let s ← mapOk 4096; remap s 8192 2)) == "Zig.Error.unspecified"
 #guard tag (run (do let s ← mapOk 4096; mremap lx (some s.ptr) s.len 8192 1 (some s.ptr))) == "Zig.Error.unspecified"
