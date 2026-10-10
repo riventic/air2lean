@@ -682,8 +682,17 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
     · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.eW, FV.nR, FV.cR, FV.tR, FV.F]
       ac_rfl
 
+/-- **`free` meets `FAllocSpec`'s `free` field** for the arena invariant at every epoch, every
+child invariant `CI`, and every depth of the one-thread reading (`Sched.soloRun`). -/
+theorem free_spec (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
+    (ra : BitVec 64) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
+    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k bs)
+      (Sched.soloRun fuel (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra))
+      (fun _ => (inv CI γ e ctx).own) :=
+  free_ct CI γ e ctx s k ra bs hlen hpos fuel
+
 end FreeProof
 
 end AllocArena.ArenaSpec
 
-#print axioms AllocArena.ArenaSpec.free_ct
+#print axioms AllocArena.ArenaSpec.free_spec

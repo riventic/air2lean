@@ -3,9 +3,11 @@
 # its child allocators (FixedBufferAllocator, page_allocator) down to posix.mmap/munmap/mremap
 # (`--allocator-model translated`, docs/alloc-arena.md). Checks: the retained translations are the
 # fresh ones; they elaborate; the one-thread results equal the native ones (Eval.lean); obstructions
-# O-A and O-E are kernel-checked (ArenaObstruction.lean); an alloc that reserves nothing is rejected
-# (mutant.sh); the admissions fail closed (test_cli.py).
-# Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc`; runs no compiler. With
+# O-A and O-E are kernel-checked (ArenaObstruction.lean); `free` is proved against
+# FAllocSpec (ArenaSpec.lean); an alloc that reserves nothing is rejected (mutant.sh); the admissions
+# fail closed (test_cli.py).
+# Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules
+# ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.AllocSpec.Ops`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -47,6 +49,16 @@ import re, sys
 text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+EOF
+# ArenaSpec.lean: the arena's entries against FAllocSpec over the ghost-epoch invariant; it prints
+# its axioms.
+"${lean_cmd[@]}" "$here/ArenaSpec.lean" > "$work/spec.txt"
+python3 - "$work/spec.txt" <<'EOF'
+import re, sys
+text = open(sys.argv[1]).read()
+used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+assert 'sorryAx' not in text and text.count('depends on axioms') >= 1, text
+assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"

@@ -15,11 +15,9 @@ fresh arena: the translated program panics, as the native one does
 
 So an `FAllocSpec` invariant `I` of the arena that holds for an empty arena must make
 `I.own ⋆ I.granted p k bs` unsatisfiable there: the token must say that the arena issued the region
-in its current generation. Full-state resources (`ZigLean/Sep/Full/Res.lean`) have owned bytes
-and duplicable block knowledge only, so a token cannot be revoked by a reset or tied to the
-arena's current node list: it needs ghost state (an authoritative node set in `own`, a fragment
-per region in `tok`). Without it, `free`, `resize` and `remap` can be specified only for an arena
-that has a node (`used_list = some N`), where any slice is harmless (`docs/alloc-arena.md`).
+in its current generation. Owned bytes and duplicable block knowledge cannot say that; the
+ghost epoch ledgers of `ZigLean/Sep/Full/Ghost.lean` can: `ArenaSpec.lean`'s token is a ghost token
+of the current epoch, which shows that the arena has a node (`ArenaSpec.free_pre`).
 
 ## O-E: `free` after a failed `alloc` forms an out-of-bounds pointer
 

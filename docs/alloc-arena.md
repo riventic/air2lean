@@ -1,7 +1,10 @@
 # The translated `ArenaAllocator` (allocator milestone 2)
 
-Status: translation, executable checks, kernel-checked obstructions and a mutant are done. The
-specification is not proved (obstructions O-A to O-F below). Fixture:
+Status: translation, executable checks, kernel-checked obstructions and a mutant are done.
+`free` is proved against `FAllocSpec` (`ArenaSpec.free_spec`) over an invariant whose tokens are
+ghost tokens of the arena's current epoch, which closes O-A; O-F is closed by live-block
+disjointness in the memory invariant. `resize`, `remap`, `alloc` and `reset` are not proved yet
+(§What is proved). Fixture:
 [`tests/roadmap/alloc-arena`](../tests/roadmap/alloc-arena/README.md). The plan and the earlier
 milestone: [alloc-spec.md](alloc-spec.md), [allocator-model.md](allocator-model.md),
 [alloc-page.md](alloc-page.md).
@@ -63,15 +66,14 @@ statement.
 **O-A: a foreign or stale `free` on an empty arena panics** (kernel-checked:
 `ArenaObstruction.foreign_free_panics`; natively `panic: attempt to use null value`).
 `free` and `resize` start with `loadFirstNode().?`. An arena without a node (fresh, or after
-`reset(.free_all)`) panics for every slice. An invariant that holds for an empty arena must
-therefore make `own ⋆ granted p k bs` unsatisfiable there: the token must record that this
-arena issued the region in its current generation. Full-state resources have owned bytes and
-duplicable block knowledge only (`ZigLean/Sep/Full/Res.lean`), so a token cannot be revoked by a
-reset. This needs ghost state: an authoritative node set in `own` and a fragment per region in
-`tok`. Without it, the entries are specified for an arena that has a node (`used_list = some N`).
-There any slice is harmless: a region of another block never matches the first node's end (the
-pointer comparison sees the block), and a region of the node's block that ends at `end_index`
-cannot start inside the header, which `own` holds.
+`reset(.free_all)`) panics for every slice. So `own ⋆ granted p k bs` must be unsatisfiable there:
+the token must record that this arena issued a region in its current generation.
+**Resolved by ghost state** ([sep-full-state.md](sep-full-state.md) §Ghost state): `own` holds the
+authority `gauth γ e n` of an epoch ledger (`n` grants of epoch `e` outstanding, `n = 0` without a
+first node), and the token is `gfrag γ e`. A token of the current epoch shows `n ≥ 1`
+(`gfrag_count`), so the arena has a node (`ArenaSpec.free_pre`). `reset` will bump the epoch
+(`Upd.bump`): tokens the client kept become stale, and a stale token belongs to the invariant of an
+older epoch, whose `own` no longer exists. A foreign slice has no token of the current epoch.
 
 **O-E: after a failed `alloc`, `free` and `resize` form an out-of-bounds pointer**
 (kernel-checked: `ArenaObstruction.oob_free_illegal`; [upstream draft](upstream/arena-oob-gep.md)).
@@ -90,12 +92,11 @@ successful `alloc` returns to, but `alloc` cannot keep it after an out-of-memory
 **O-F: deciding a foreign slice needs live-block disjointness.** `free` and `resize` compare
 `buf_ptr + end_index` with `memory.ptr + memory.len` by address (`Zig.ptrEqAddr`, MM-1). For
 a slice in another block, equal addresses would make `free` give back bytes of the node that the
-caller does not own. Zig rules this out: live objects have disjoint storage, and the placement
-oracle places every block clear of the live ones. But the triple's memory invariant `Mem.FSeq`
-does not carry that (`Mem.LiveDisjoint` and `Holds.apart` exist; adding them to `FSeq` is
-stage 3 of [sep-full-state.md](sep-full-state.md)). With it, a slice that ends at the node's
-end lies in the node's block, past its header (which `own` holds). So `free` and `resize` are
-specifiable for an arena with a node, with `tok = emp`.
+caller does not own. **Resolved by stage 3** of [sep-full-state.md](sep-full-state.md): live
+blocks have disjoint address ranges in every `Mem.FSeq` memory (`Mem.LiveDisjoint`), and
+`Holds.apart` turns ownership of a byte in each of two blocks into disjoint ranges. A slice of
+another block never matches; a slice of the node's block that ends at `buf_ptr + end_index` lies
+past the header, which `own` holds (`ArenaSpec.region_apart`). No premise per triple.
 
 **O-B: unbounded node growth overflows.** A new node has size
 `alignForward(big + big / 2, 2)` with `big = prev_size + @sizeOf(Node) + alignment + n + 16`,
@@ -116,27 +117,45 @@ free list) is not attempted.
 
 ## What is proved and checked
 
+* `ArenaSpec.free_spec` (`tests/roadmap/alloc-arena/ArenaSpec.lean`): the translated `free`
+  (x86_64-linux) meets `FAllocSpec`'s `free` field, `FLogic.partial.T (I.own ⋆ I.granted s.ptr k bs)
+  (Sched.soloRun fuel free) (fun _ => I.own)` with `I = inv CI γ e ctx`, for every child invariant
+  `CI`, epoch `e` and depth `fuel`, from the generated code only. The invariant (`own`): the arena
+  struct with `used_list`/`free_list` as pointer-valued atomic words, the epoch ledger's authority,
+  the first node (header words, the child's token, the unused tail of its buffer), the other used
+  nodes and the free list as `next`-linked chains, the child's `own`, and `Junk` (bytes that frees
+  of earlier allocations leaked back). On a match the slice's bytes rejoin the tail and
+  `end_index` moves back (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the token
+  is retired (`Upd.retire`). Axioms: `propext`, `Classical.choice`, `Quot.sound`.
+* **O-E is a stated limit, not a premise per triple**: the invariant keeps `end_index` within the
+  first node's buffer (`FirstNode`: `24 + ei ≤ sz`). A successful `alloc` returns to such a state;
+  a failed one leaves `end_index` past the buffer, so the reachable states covered end at the first
+  failed `alloc`.
 * `ArenaObstruction.foreign_free_panics` (O-A) and `ArenaObstruction.oob_free_illegal` (O-E),
   from the generated code and `mem0 .fresh`, by kernel evaluation.
 * `mutant.sh`: an `alloc` whose fast path reserves nothing (the `end_index` bump adds `0`) hands
-  out the same bytes twice; `Eval.lean` rejects it (`arena_two`: 22 instead of 21). This is an
-  executable rejection, not a failed proof: there is no `alloc` proof yet.
+  out the same bytes twice; `Eval.lean` rejects it (`arena_two`: 22 instead of 21).
 * The atomic rules the entries need beyond the earlier ones (`ZigLean/Sep/Full/AtomicRules.lean`):
-  `FTriple.atomicLoadPtr` (an atomic load of an owned pointer word, any order) and
-  `FTriple.cmpxchgHit` (a strong 64-bit `cmpxchg` that finds the expected value).
+  `FTriple.atomicLoadPtr` and `FTriple.cmpxchgHit`.
 
-The fixture is ported to the hardened memory model (`codex/alloc-milestone1`: placement,
-in-bounds projections, `checkAlign`, pointer equality by address). Not yet proved: `free`,
-`resize` and `remap` for an arena with a node (need O-F's stage 3), and `alloc` and `reset`. These
-also need rules that do not exist yet: `CTriple` rules for the generated loops (`Zig.loop`), and an
-equation-based reading of the `partial_fixpoint` group.
+Not proved yet, in order:
+
+* `resize` and `remap` (`remap` is `resize` and returns `memory.ptr`). The no-match and shrink paths
+  follow `free` (the cut bytes go to the tail or to `Junk`, the token stays). The growth path reads
+  the node's `size` word through `Node.loadBuf` (`atomicLoadAs` of the packed `Node.Size`, then
+  `toInt`); it needs the `size` word as an integer `apts` in `Header` (it is `aptsE` now) and the
+  bit-level fact that clearing the `resizing` bit of an even size is the size.
+* `alloc`: `CTriple` rules for the generated loops (`Zig.loop`), an equation-based reading of the
+  `partial_fixpoint` group (the child dispatch includes `ArenaAllocator.alloc`), the child's
+  `FAllocSpec` with the bounded-child premise of O-B/O-C, and `Upd.issue` for each grant.
+* `reset`: the precondition gives back every byte of every node (`Covers`); `Upd.bump` revokes the
+  outstanding tokens.
 
 ## Legacy models
 
 The hand-written arena model (`.owned a` blocks, `ZigLean/Sep/ArenaClient.lean`, ALC-07) stays
 until the translated arena's specification replaces it ([allocator-model.md](allocator-model.md),
 removal plan step 2). In that specification a use after a retaining reset is a permission
-violation: `reset` takes back every byte of every node (`Covers`, as for the
-`FixedBufferAllocator`'s `reset_spec`), so the caller keeps no region of the arena. A foreign
-free is one only with ghost tokens (O-A); without them a foreign slice must be harmless, which
-it is for an arena that has a node.
+violation twice over: `reset` takes back every byte of every node (`Covers`, as for the
+`FixedBufferAllocator`'s `reset_spec`), and its epoch bump makes every kept token stale. A foreign
+free is a permission violation: there is no token of the current epoch for it.

@@ -784,7 +784,7 @@ jobs:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.Sep.Full.Conc
+          lake build ZigLean ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.AllocSpec ZigLean.Sep.AllocSpec.Ops
           bash tests/roadmap/alloc-arena/check.sh
       # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
       # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
