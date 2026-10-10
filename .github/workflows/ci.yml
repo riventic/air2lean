@@ -1155,7 +1155,9 @@ jobs:
           trap 'rm -rf "$fresh"' EXIT
           bash tests/roadmap/global-payload-pointers/check.sh --export "$fresh/air"
           bash tests/roadmap/global-payload-pointers/check.sh --export-reject "$fresh/reject-air"
-          .lake/build/bin/air2lean "$fresh/air" -o "$fresh/Gen.lean" --namespace GlobalPayload --prefix global_payloads.
+          # The payload fixture is a stage2_x86_64 export: an unqualified build mode, opted in.
+          .lake/build/bin/air2lean "$fresh/air" -o "$fresh/Gen.lean" --namespace GlobalPayload --prefix global_payloads. \
+            --allow-unqualified-build-mode
           python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
           AIR2LEAN_GLOBAL_ACTUAL_GEN="$fresh/Gen.lean" AIR2LEAN_GLOBAL_CLIENT_OUT="$fresh/clients" \
             bash tests/roadmap/global-payload-pointers/check-generated.sh

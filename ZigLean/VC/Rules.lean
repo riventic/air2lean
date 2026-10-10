@@ -121,6 +121,26 @@ end Prim
       by rw [hm, Heap.empty_union], ⟨rfl, rfl⟩, hst⟩
     simp [ptrEqAddr, ptrAddr, hpb, hqb, zig_unfold]
 
+/-! ## Pointer formation (MM-3) -/
+
+/-- Owned bytes of `p` reaching `k` bytes past it (one past the end included): the block's bytes
+`bs` with alignment `A`, size `S` and kind `K` (`bytesAt`). -/
+def ownsOffset (p : Ptr) (k : Int) : Assn :=
+  Assn.ex fun (x : Nat × Nat × BlockKind × Array Byte) =>
+    ⌜0 ≤ k ∧ k ≤ x.2.2.2.size ∧ 0 < x.2.2.2.size⌝ ∗ bytesAt p x.1 x.2.1 x.2.2.1 x.2.2.2
+
+/-- `&p.f`, `p + k` for a byte offset (`struct_field_ptr`, `ptr_add`): checked pointer
+formation (`ptrProject`, `getelementptr inbounds`) needs base and result in bounds of the same
+block. Owning `p`'s bytes up to `k` (`ownsOffset`) gives both; nothing is read or changed. -/
+@[vc_contract] theorem ptrProject_bytes (p : Ptr) (k : Int) :
+    Triple (ownsOffset p k) (ptrProject p (·.add k)) (fun q => ⌜q = p.add k⌝ ∗ ownsOffset p k) :=
+  Triple.of_run fun m hP _ hd hm hown hs => by
+    obtain ⟨⟨A, S, K, bs⟩, hx⟩ := hown
+    obtain ⟨⟨h0, hk, hpos⟩, hb⟩ := sep_lift.mp hx
+    have hrun := bytesAt_ptrProject_run hb hm (k := k.toNat) (by omega) hpos
+    simp only [Int.toNat_of_nonneg h0] at hrun
+    exact ⟨_, m, hP, hrun, hd, hm, sep_lift.mpr ⟨rfl, ⟨⟨A, S, K, bs⟩, hx⟩⟩, hs⟩
+
 /-! ## Contract postconditions -/
 
 /-- A memory postcondition in two parts: the functional `result` and the `heap` effect.
