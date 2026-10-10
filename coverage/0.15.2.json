@@ -17826,7 +17826,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "8718380f32ae0990ff03615eb0f764cb84a2ff1da1745b869fdb37fdda622c5e",
+      "scripts/coverage.py": "1bf533d0a788e10d5aa7479d7cc38d1495ec5ab203340589edaa49df212f0ea9",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -19249,6 +19249,8 @@
       "tests/roadmap/bitcast-017/air/0.17.0/bitcast017.vecToInt.json": "913bc811660bdf3029aa70e968e336c8a5f11212d58439eb9517e43303976a06",
       "tests/roadmap/zig017/casts/air/0.17.0/casts.errorCode.json": "86b610e5dd85dc4751a3b8147e95faecd265ed4a41a0ddc426fbb526a9987b2d",
       "tests/roadmap/zig017/casts/air/0.17.0/casts.errorOfCode.json": "0ae1e27904d6067bb055fe718f407fc0b08aca42b368c64a1230bba7f7b41783",
+      "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowI16.json": "83e865669472dbc5cc9f9d92ed45988d6c26ca2c9b0d840daef447f32c66b564",
+      "tests/roadmap/zig017/overflow/air/0.17.0/overflow.mulOverflowU32.json": "238ba64ab940da54a078c5cb4cf8272a7ecfdf531e0e0d8cb3ed7bda3a247e3e",
       "tests/roadmap/extern-calls/air/0.14.1/extern_calls.fillSum.json": "bf8c97466015b9ea09de5f1e03c0ecabb26de538ad3239a697f42079b040c7f5",
       "tests/roadmap/extern-calls/air/0.14.1/extern_calls.greetLen.json": "c97334b2bd9a8162f565b07636f52d27fce2746345f8b3072b598e0b519ade70",
       "tests/roadmap/extern-calls/air/0.14.1/libc_ref.memset.json": "8b5f12a7b7f5ef07c64676f49d8be9cc252302511fc03f17faddeeb909ec0b47",
