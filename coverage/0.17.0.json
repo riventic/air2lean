@@ -12815,6 +12815,7 @@
         "paths": [
           "ZigLean/Mem/ConstPtr.lean",
           "ZigLean/Mem/Enc.lean",
+          "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Try.lean",
           "ZigLean/Sep/TryAlias.lean"
         ]
@@ -12931,6 +12932,7 @@
         "paths": [
           "ZigLean/Mem/ConstPtr.lean",
           "ZigLean/Mem/Enc.lean",
+          "ZigLean/Mem/Lemmas.lean",
           "ZigLean/Sep/Try.lean",
           "ZigLean/Sep/TryAlias.lean"
         ]
