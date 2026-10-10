@@ -2,7 +2,7 @@
 
 Status: translation, executable checks, kernel-checked obstructions and a mutant are done.
 `free` is proved against `FAllocSpec` (`ArenaSpec.free_spec`) over an invariant whose tokens are
-ghost tokens of the arena's current epoch, which closes O-A; O-F is closed by live-block
+ghost tokens of the arena's current epoch that name their regions, which closes O-A; O-F is closed by live-block
 disjointness in the memory invariant. `resize`, `remap`, `alloc` and `reset` are not proved yet
 (§What is proved). Fixture:
 [`tests/roadmap/alloc-arena`](../tests/roadmap/alloc-arena/README.md). The plan and the earlier
@@ -69,13 +69,14 @@ statement.
 `reset(.free_all)`) panics for every slice. So `own ⋆ granted p k bs` must be unsatisfiable there:
 the token must record that this arena issued a region in its current generation.
 **Resolved by ghost state** ([sep-full-state.md](sep-full-state.md) §Ghost state): `own` holds the
-authority `gauth γ e n` of an epoch ledger (`n` grants of epoch `e` outstanding, `n = 0` without a
-first node), and the token is `gfrag γ e`. A token of the current epoch shows `n ≥ 1`
-(`gfrag_count`), so the arena has a node (`ArenaSpec.free_pre`). `reset` will bump the epoch
-(`Upd.bump`): tokens the client kept become stale, and a stale token belongs to the invariant of an
-older epoch, whose `own` no longer exists. The token does not name its region (`tok _ … _ :=
-gfrag γ e`), so a current token can come with any owned slice; such a slice never matches the
-first node's end (O-F) and its bytes become `Junk`.
+authority `gauth γ e M` of an epoch ledger of named grants (`M`: grant id ↦ region, empty without
+a first node), and the token of the slice at `p` of `n` bytes is `∃ i, gfrag γ e i (p, n)`. A
+token of the current epoch names a grant of `M` (`gfrag_mem`), so the arena has a node
+(`ArenaSpec.free_pre`). Because the token names its region, a `free`, `resize` or `remap` of a
+slice that this arena did not grant in its current epoch has no token: it is a permission
+violation, not a case the proof covers. `reset` will bump the epoch (`Upd.bump`): tokens the
+client kept become stale, and a stale token belongs to the invariant of an older epoch, whose
+`own` no longer exists.
 
 **O-E: after a failed `alloc`, `free` and `resize` form an out-of-bounds pointer**
 (kernel-checked: `ArenaObstruction.oob_free_illegal`; [upstream draft](upstream/arena-oob-gep.md)).
@@ -127,8 +128,8 @@ free list) is not attempted.
   the first node (header words, the child's token, the unused tail of its buffer), the other used
   nodes and the free list as `next`-linked chains, the child's `own`, and `Junk` (bytes that frees
   of earlier allocations leaked back). On a match the slice's bytes rejoin the tail and
-  `end_index` moves back (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the token
-  is retired (`Upd.retire`). Axioms: `propext`, `Classical.choice`, `Quot.sound`.
+  `end_index` moves back (`FTriple.cmpxchgHit`); otherwise (a grant that is not the first node's
+  last one) they become junk. Either way the grant is retired (`Upd.retire`). Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 * **O-E is a stated limit, not a premise per triple**: the invariant keeps `end_index` within the
   first node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A successful `alloc` returns to such a state;
   a failed one leaves `end_index` past the buffer, so the reachable states covered end at the first

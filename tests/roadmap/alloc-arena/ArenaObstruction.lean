@@ -17,7 +17,8 @@ So an `FAllocSpec` invariant `I` of the arena that holds for an empty arena must
 `I.own ⋆ I.granted p k bs` unsatisfiable there: the token must say that the arena issued the region
 in its current generation. Owned bytes and duplicable block knowledge cannot say that; the
 ghost epoch ledgers of `ZigLean/Sep/Full/Ghost.lean` can: `ArenaSpec.lean`'s token is a ghost token
-of the current epoch, which shows that the arena has a node (`ArenaSpec.free_pre`).
+of the current epoch that names the region, which shows that the arena granted it and so has a
+node (`ArenaSpec.free_pre`).
 
 ## O-E: `free` after a failed `alloc` forms an out-of-bounds pointer
 

@@ -19,7 +19,7 @@ the generated code only. No model of the arena is used.
 
 * the arena struct at `ctx`: the child allocator (16 bytes, not read here), `used_list` and
   `free_list` as pointer-valued atomic words (`aptsE`);
-* the ghost authority `gauth γ e n`: `n` grants of epoch `e` outstanding
+* the ghost authority `gauth γ e M`: the grant map `M` of epoch `e`, grant id ↦ region
   (`docs/sep-full-state.md` §Ghost state);
 * the first node of `used_list`, if any (`FirstPart`): its header words (`size` and `end_index`
   atomic, `next` plain), the unused tail of its buffer (from `end_index` on), and the child's
@@ -28,17 +28,20 @@ the generated code only. No model of the arena is used.
 * the child's state `CI.own`, and `Junk`: bytes that frees which were not the last allocation
   leaked back (any bytes; the arena never touches them until `reset`).
 
-With no first node, `n = 0`. A token is `gfrag γ e`, so a token of the current epoch shows `n ≥ 1`
-(`gfrag_count`), hence a first node: **O-A is excluded by ghost state**, not by a premise. A
-token of an older epoch (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose
-`own` needs the authority of epoch `e'`, which no longer exists.
+With no first node, `M` is empty. A token for the slice `(p, n)` is `gfrag γ e i (p, n)` for some
+grant id `i`: it names exactly that region, so a token of the current epoch shows `M i = some (p,
+n)` (`gfrag_mem`), hence a first node: **O-A is excluded by ghost state**, not by a premise, and a
+`free` of a slice that this arena did not grant has no token: a permission violation. A token of
+an older epoch (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose `own` needs
+the authority of epoch `e'`, which no longer exists.
 
 **`free`** loads the first node, compares `buf + end_index` with the slice's end by address
 (`ptrEqAddr`), and on a match moves `end_index` back by a strong `cmpxchg`. The comparison is
 decided by ownership alone (O-F): a slice of another block lies at disjoint addresses
 (`FTriple.apart`, `Mem.LiveDisjoint` in `Mem.FSeq`), and a slice of the node's block that ends at
 `buf + end_index` lies past the header, which the arena owns. On a match the slice's bytes rejoin
-the tail; otherwise they become junk. Either way the token is retired (`Upd.retire`).
+the tail; otherwise (a grant that is not the last one) they become junk. Either way the grant is
+retired (`Upd.retire`).
 
 **O-E** (`ArenaObstruction.oob_free_illegal`): the invariant keeps `end_index` within the first
 node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A failed `alloc` leaves it past the buffer, so the reachable
@@ -188,7 +191,7 @@ theorem junk_absorb {X : Assn} {r : Res} (h : (up X ⋆ Junk) r) : Junk r := by
   rw [← e2]; exact FHeap.erase_union _ _
 
 /-- The arena's variables: the struct (`Ac`, `Sc`, `Kc`, `cbs`: the child allocator's bytes), the
-lists' heads, the ghost count `n`, and the first node (`nxt`, `A`, `S`, `K`, `sz`, `ei`, `tail`;
+lists' heads, the grant map `M`, and the first node (`nxt`, `A`, `S`, `K`, `sz`, `ei`, `tail`;
 unused without one). -/
 structure OV where
   Ac : Nat
@@ -197,7 +200,7 @@ structure OV where
   cbs : Array Byte
   first : Option Ptr
   fl : Option Ptr
-  n : Nat
+  M : GMap
   nxt : Option Ptr
   A : Nat
   S : Nat
@@ -206,11 +209,14 @@ structure OV where
   ei : Nat
   tail : Array Byte
 
-/-- The facts of the arena's variables. -/
-def OV.Facts (w : OV) : Prop :=
-  w.cbs.size = 16 ∧ match w.first with
-    | none => w.n = 0
+/-- The facts of the first node: none means no grant. -/
+def OV.FirstFacts (w : OV) : Prop :=
+  match w.first with
+    | none => w.M = GMap.empty
     | some N => NodeFacts N w.A w.S w.sz ∧ 24 + w.ei ≤ w.sz ∧ w.tail.size = w.sz - 24 - w.ei
+
+/-- The facts of the arena's variables. -/
+def OV.Facts (w : OV) : Prop := w.cbs.size = 16 ∧ w.M.Fin ∧ w.FirstFacts
 
 /-- The first node of `used_list`: header and token, and the unused tail of its buffer. -/
 def FirstPart (CI : FAllocInv) (w : OV) : FAssn :=
@@ -222,16 +228,17 @@ def FirstPart (CI : FAllocInv) (w : OV) : FAssn :=
 /-- The arena's resources. -/
 def OV.body (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) (w : OV) : FAssn :=
   up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
-    gauth γ e w.n ⋆ CI.own ⋆ Junk ⋆ FirstPart CI w ⋆ UsedRest CI w.nxt ⋆ FreeList CI w.fl
+    gauth γ e w.M ⋆ CI.own ⋆ Junk ⋆ FirstPart CI w ⋆ UsedRest CI w.nxt ⋆ FreeList CI w.fl
 
 /-- The arena's state (module doc). -/
 def own (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) : FAssn :=
   FAssn.ex fun w : OV => ⟪w.Facts⟫ ⋆ w.body CI γ e ctx
 
-/-- The arena's invariant at epoch `e`: its tokens are the ghost tokens of epoch `e`. -/
+/-- The arena's invariant at epoch `e`: the token of a region is a ghost token of epoch `e` that
+names it. -/
 def inv (CI : FAllocInv) (γ e : Nat) (ctx : Ptr) : FAllocInv where
   own := own CI γ e ctx
-  tok _ _ _ _ _ _ := gfrag γ e
+  tok p n _ _ _ _ := FAssn.ex fun i => gfrag γ e i (p, n)
 
 /-! ## Rules -/
 
@@ -247,9 +254,10 @@ theorem CTriple.preM {β : Type} {P P' : FAssn} {x : ConcM Tgt β} {Q : β → F
 /-! ## `free` -/
 
 /-- The variables of `free`'s precondition on an arena with a first node `N` (block `bN`), a
-slice in block `bp`, and the struct in block `bc`. -/
+slice in block `bp` granted under id `i`, and the struct in block `bc`. -/
 structure FV where
   w : OV
+  i : Nat
   N : Ptr
   bc : BlockId
   bN : BlockId
@@ -268,7 +276,7 @@ def FV.Facts (v : FV) : Prop :=
     0 < bs.size ∧ 0 ≤ ctx.off ∧ 0 ≤ s.ptr.off
 
 /-- The atoms of `free`'s precondition. -/
-def FV.gA (v : FV) : FAssn := gauth γ e v.w.n
+def FV.gA (v : FV) : FAssn := gauth γ e v.w.M
 def FV.uW (v : FV) : FAssn := aptsE (ctx.add 16) (some v.N)
 def FV.eW (v : FV) (ei : Nat) : FAssn := apts (v.N.add 8) (BitVec.ofNat 64 ei)
 def FV.nR (v : FV) : FAssn := up (regionIn (v.N.add 16) v.w.A v.w.S v.w.K 8 (Enc.encode v.w.nxt))
@@ -283,7 +291,7 @@ def FV.F (v : FV) : FAssn :=
 
 /-- What `free`'s steps do not change before the `cmpxchg`, besides the two words. -/
 def FV.R0 (v : FV) : FAssn :=
-  v.gA γ e ⋆ gfrag γ e ⋆ v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ v.rg s k bs ⋆ Junk ⋆ v.F CI ctx
+  v.gA γ e ⋆ gfrag γ e v.i (s.ptr, bs.size) ⋆ v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ v.rg s k bs ⋆ Junk ⋆ v.F CI ctx
 
 /-- `free`'s precondition: the two words it reads, then the rest. -/
 def FV.L (v : FV) : FAssn := v.uW ctx ⋆ (v.eW v.w.ei ⋆ v.R0 CI γ e ctx s k bs)
@@ -310,23 +318,28 @@ theorem free_pre {m : Mem} {r rF : Res} (hh : Holds m r rF) (hlen : s.len.toNat 
   obtain ⟨A', hp⟩ := sep_ex.mp (sep_comm hp)
   obtain ⟨S', hp⟩ := sep_ex.mp hp
   obtain ⟨K', hp⟩ := sep_ex.mp hp
+  obtain ⟨i, hp⟩ := sep_ex.mp (of_eq (Q := (FAssn.ex fun i => gfrag γ e i (s.ptr, bs.size)) ⋆
+    (up (regionIn s.ptr A' S' K' (2 ^ k) bs) ⋆ w.body CI γ e ctx)) (by simp only [inv]; ac_rfl) hp)
+  have hp := of_eq (Q := (up (regionIn s.ptr A' S' K' (2 ^ k) bs) ⋆ gfrag γ e i (s.ptr, bs.size)) ⋆
+    w.body CI γ e ctx) (by ac_rfl) hp
   -- hp : ((up rg ⋆ gfrag) ⋆ body) r
   cases hfirst : w.first with
   | none =>
     exfalso
-    have hn : w.n = 0 := by have := hwf.2; rw [hfirst] at this; exact this
-    have hp' := of_eq (Q := (gauth γ e w.n ⋆ gfrag γ e) ⋆ (up (regionIn s.ptr A' S' K' (2 ^ k) bs) ⋆
+    have hn : w.M = GMap.empty := by have := hwf.2.2; unfold OV.FirstFacts at this; rw [hfirst] at this; exact this
+    have hp' := of_eq (Q := (gauth γ e w.M ⋆ gfrag γ e i (s.ptr, bs.size)) ⋆ (up (regionIn s.ptr A' S' K' (2 ^ k) bs) ⋆
       up (regionIn ctx w.Ac w.Sc w.Kc 8 w.cbs) ⋆ aptsE (ctx.add 16) w.first ⋆ aptsE (ctx.add 24) w.fl ⋆
       CI.own ⋆ Junk ⋆ FirstPart CI w ⋆ UsedRest CI w.nxt ⋆ FreeList CI w.fl))
       (by simp only [OV.body, inv]; ac_rfl) hp
     obtain ⟨r₁, r₂, -, rfl, h1, -⟩ := hp'
-    have := gfrag_count h1 (Ghost.Ok.assoc.mp hh.ghost)
-    omega
+    have := gfrag_mem h1 (Ghost.Ok.assoc.mp hh.ghost)
+    rw [hn] at this; cases this
   | some N =>
-    have hwf' := hwf.2
+    have hwf' := hwf.2.2
+    unfold OV.FirstFacts at hwf'
     rw [hfirst] at hwf'
     -- the shape with dummy block ids, to read the blocks off the regions
-    have hL : ∀ bc bN bp, (FV.L CI γ e ctx s k bs ⟨w, N, bc, bN, bp, A', S', K'⟩) r := by
+    have hL : ∀ bc bN bp, (FV.L CI γ e ctx s k bs ⟨w, i, N, bc, bN, bp, A', S', K'⟩) r := by
       intro bc bN bp
       refine of_eq ?_ hp
       simp only [OV.body, inv, FirstPart, hfirst, Header, FV.L, FV.R0, FV.gA, FV.uW, FV.eW, FV.nR,
@@ -345,7 +358,7 @@ theorem free_pre {m : Mem} {r rF : Res} (hh : Holds m r rF) (hlen : s.len.toNat 
     obtain ⟨⟨bc, hbc⟩, hac, hc0⟩ := region_facts hc
     obtain ⟨⟨bN, hbN⟩, -, -⟩ := region_facts hn
     obtain ⟨⟨bp, hbp⟩, -, hp0⟩ := region_facts hg
-    exact ⟨⟨w, N, bc, bN, bp, A', S', K'⟩, sep_lift.mpr ⟨⟨hwf, hfirst, hbc, by simpa [Ptr.add] using hbN,
+    exact ⟨⟨w, i, N, bc, bN, bp, A', S', K'⟩, sep_lift.mpr ⟨⟨hwf, hfirst, hbc, by simpa [Ptr.add] using hbN,
       hbp, hac, hlen, hpos, hc0, hp0⟩, hL _ _ _⟩⟩
 
 end Free
@@ -407,7 +420,7 @@ theorem free_mem {v : FV} (hv : v.Facts ctx s bs) {m : Mem} {r rF : Res} (hh : H
       s.ptr.off.toNat + bs.size ≤ v.S' ∧
       (v.bp ≠ v.bN → v.A' + v.S' ≤ v.w.A ∨ v.w.A + v.w.S ≤ v.A') ∧
       (v.bp = v.bN → v.A' = v.w.A ∧ v.S' = v.w.S ∧ v.K' = v.w.K) := by
-  obtain ⟨⟨hc16, -⟩, -, hbc, hbN, hbp, -, -, hpos, -⟩ := hv
+  obtain ⟨⟨hc16, -, -⟩, -, hbc, hbN, hbp, -, -, hpos, -⟩ := hv
   have hoC : Owns v.bc (ctx.off.toNat + 15) v.w.Ac v.w.Sc v.w.Kc (v.L CI γ e ctx s k bs) :=
     Owns.sepR (Owns.sepR (Owns.sepR (Owns.sepR (Owns.sepR (Owns.sepL
       (Owns.region (a := 8) hbc (i := 15) (by omega)))))))
@@ -438,7 +451,8 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
   refine CTriple.preM (fun m r rF hh hp hs => free_pre hh hlen hpos hp) ?_
   refine CTriple.ex fun v => CTriple.lift fun hv => ?_
   have hv' := hv
-  obtain ⟨⟨hc16, hwf⟩, hfirst, hbc, hbN, hbp, hac, -, -, hc0, hp0⟩ := hv'
+  obtain ⟨⟨hc16, hfin, hwf⟩, hfirst, hbc, hbN, hbp, hac, -, -, hc0, hp0⟩ := hv'
+  unfold OV.FirstFacts at hwf
   rw [hfirst] at hwf
   obtain ⟨hnf, hei, htail⟩ := hwf
   have hmem := fun m r rF (hh : Holds m r rF) hp hs => free_mem (CI := CI) (γ := γ) (e := e) (k := k) hv hh hp hs
@@ -515,7 +529,7 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
       · obtain ⟨hA, hS, hK⟩ := hsame hb
         rw [hA] at heq
         have hoff : s.ptr.off.toNat + bs.size = v.N.off.toNat + 24 + v.w.ei := by omega
-        have hr := of_eq (Q := (v.nR ⋆ v.rg s k bs) ⋆ (v.uW ctx ⋆ v.eW v.w.ei ⋆ v.gA γ e ⋆ gfrag γ e ⋆
+        have hr := of_eq (Q := (v.nR ⋆ v.rg s k bs) ⋆ (v.uW ctx ⋆ v.eW v.w.ei ⋆ v.gA γ e ⋆ gfrag γ e v.i (s.ptr, bs.size) ⋆
           v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ Junk ⋆ v.F CI ctx)) (by simp only [FV.L, FV.R0]; ac_rfl) hp
         obtain ⟨_, _, -, -, hr, -⟩ := hr
         have := region_apart (by simpa [Ptr.add] using hbN) (hb ▸ hbp)
@@ -581,13 +595,13 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
       · have : s.ptr.add bs.size = v.N.add (24 + (v.w.ei : Int)) := by
           rw [hpq]; simp only [Ptr.add, Ptr.mk.injEq, true_and]; omega
         rw [this]; exact x2
-    have h' := of_eq (Q := (v.rg s k bs ⋆ v.tR v.w.ei v.w.tail) ⋆ (gauth γ e (v.w.n - 1) ⋆
+    have h' := of_eq (Q := (v.rg s k bs ⋆ v.tR v.w.ei v.w.tail) ⋆ (gauth γ e (v.w.M.set v.i none) ⋆
       apts (v.N.add 8) (BitVec.ofNat 64 v.w.ei - s.len) ⋆ v.uW ctx ⋆ v.nR ⋆ v.cR ctx ⋆ Junk ⋆
       v.F CI ctx)) (by ac_rfl) h
     have h'' := sep_mono_left hjoin h'
-    refine ⟨{ v.w with n := v.w.n - 1, ei := v.w.ei - bs.size, tail := bs ++ v.w.tail },
-      sep_lift.mpr ⟨⟨hc16, ?_⟩, of_eq ?_ h''⟩⟩
-    · simp only [hfirst]
+    refine ⟨{ v.w with M := v.w.M.set v.i none, ei := v.w.ei - bs.size, tail := bs ++ v.w.tail },
+      sep_lift.mpr ⟨⟨hc16, hfin.set _ _, ?_⟩, of_eq ?_ h''⟩⟩
+    · simp only [OV.FirstFacts, hfirst]
       exact ⟨hnf, by omega, by simp only [Array.size_append, htail]; have := hnf.hdr; omega⟩
     · rw [hnew]
       simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.nR, FV.cR, FV.F]
@@ -598,11 +612,12 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
         simp only [FV.L, FV.R0, FV.gA]; ac_rfl) h) (Upd.frame (R := v.uW ctx ⋆ v.eW v.w.ei ⋆ v.nR ⋆
           v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ (v.rg s k bs ⋆ Junk) ⋆ v.F CI ctx) Upd.retire)) ?_
     refine CTriple.ret' () fun r h => ?_
-    have h' := of_eq (Q := (v.rg s k bs ⋆ Junk) ⋆ (gauth γ e (v.w.n - 1) ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆
+    have h' := of_eq (Q := (v.rg s k bs ⋆ Junk) ⋆ (gauth γ e (v.w.M.set v.i none) ⋆ v.uW ctx ⋆ v.eW v.w.ei ⋆
       v.nR ⋆ v.cR ctx ⋆ v.tR v.w.ei v.w.tail ⋆ v.F CI ctx)) (by ac_rfl) h
     have h'' := sep_mono_left (Q := Junk) (fun _ x => junk_absorb x) h'
-    refine ⟨{ v.w with n := v.w.n - 1 }, sep_lift.mpr ⟨⟨hc16, ?_⟩, of_eq ?_ h''⟩⟩
-    · simp only [hfirst]; exact ⟨hnf, hei, htail⟩
+    refine ⟨{ v.w with M := v.w.M.set v.i none }, sep_lift.mpr ⟨⟨hc16, hfin.set _ _, ?_⟩,
+      of_eq ?_ h''⟩⟩
+    · simp only [OV.FirstFacts, hfirst]; exact ⟨hnf, hei, htail⟩
     · simp only [OV.body, FirstPart, hfirst, Header, FV.uW, FV.eW, FV.nR, FV.cR, FV.tR, FV.F]
       ac_rfl
 
