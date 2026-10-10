@@ -519,7 +519,13 @@ private def collectorChecks : IO Unit := do
     { id := 0, ty := 5, op := (.call (.func "Thread.spawn__anon_1" false (some "worker"))
       #[.agg 2 #[.int 7 16777216, .undef 9], .agg 1 #[.int 0 7]]) },
     { id := 1, ty := 6, op := .ret (.inst 0) }] } "custom allocators"
-  policyBoundary { group with zigVersion := "0.15.2" } "requires Zig 0.16.0"
+  -- Before 0.16.0 `Io.Group` has no reviewed std source: the ordinary program check rejects it
+  -- before the spawn policy runs.
+  match checkProgram #[{ group with zigVersion := "0.15.2" }, worker] with
+  | .ok _ => throw (IO.userError "pre-0.16 Io.Group accepted")
+  | .error message =>
+    require ((message.splitOn "no reviewed std source for Zig 0.15.2").length > 1)
+      "pre-0.16 Io.Group rejected for an unrelated reason"
   let blockedPolicy := collectProgram #[policyUnit audited, policyUnit wrongWorker] {} .fallible
   require (blockedPolicy.failed && !blockedPolicy.complete &&
     blockedPolicy.items.any (fun d => d.code == .prerequisiteSkipped &&
