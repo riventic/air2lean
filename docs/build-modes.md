@@ -102,14 +102,31 @@ follows x86_64-linux, `host.txt`) and the aarch64-linux runs 755; the x86_64-lin
 container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain from
 `lean-toolchain`) on an Apple-silicon Docker VM: an aarch64 Linux kernel and aarch64 code, no
 instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
-(`ubuntu-24.04-arm`, hosted hardware) re-runs ReleaseSafe and Debug against the records and
-checks the case count, examples and mismatches; its first run gave the container's counts
-(86209 cases, 0 mismatches). It does not run ReleaseFast or ReleaseSmall: the harness run of
-those modes (4975 inputs that are illegal behaviour without safety checks) took the hosted
-runner down in two attempts (the runner was lost and the step log never uploaded; disabling
-core dumps and apport did not help), while the container finished each mode in about two
-minutes. So the aarch64-linux ReleaseFast and ReleaseSmall records rest on the container run
-alone, and the cause on the hosted runner is open.
+(`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
+checks the case count, examples, mismatches and exclusions; its counts are the container's
+(86209 cases; 85 triaged float `@divExact` mismatches and 4975 exclusions in ReleaseFast and
+ReleaseSmall, none otherwise).
+
+**Crashing inputs and the hosted runner.** In ReleaseFast and ReleaseSmall about 700 of the
+4975 excluded inputs crash the tested call with SIGSEGV or SIGBUS (wild pointers in
+`layout` and `slices`: `ptrFromAddr`, `applyOp`, `sumMid`, `sentinelArr`, `subZ`,
+`copyWithin`); ReleaseSafe and Debug trap on them instead. The hosted `ubuntu-24.04-arm`
+image has `kernel.core_pattern = |/usr/lib/systemd/systemd-coredump ...`, and
+systemd-coredump hands each crash to apport (a Python process). The kernel starts a piped
+handler even when `RLIMIT_CORE` is 0, and the crashed child is reaped without waiting for
+it, so the harness went on to the next input while the handlers piled up: on the runner the
+unmodified `layout` harness reached about 450 processes (many blocked in `vfs_coredump`), a
+load average above 300 and all 16 GB of memory within five minutes. The runner then stopped
+answering the service (the two earlier runs were lost; `timeout` killed `diff.sh` but the
+step never ended). `ulimit -c 0` and stopping apport, as tried then, do not change that.
+The Docker VM used for the container runs has `core_pattern = core`, so the same run took
+about two minutes there. The harness (`tests/diff/common.zig`, `containChild` in
+`compat.zig`) now starts every tested call as an undumpable child (`PR_SET_DUMPABLE 0` and
+`RLIMIT_CORE 0`; no handler process appeared on the hosted runner with both set), caps its
+address space at 4 GiB (Linux), makes it die with the harness (`PR_SET_PDEATHSIG`), and
+kills it after 20 seconds. A killed case is a fatal `native_harness_failure`
+(docs/outcome-accounting.md); none occurs in the recorded runs. With this, the four
+LLVM modes run on the hosted runner in about 16 minutes, Lean build excluded.
 
 **stage2_x86_64 findings.** The self-hosted backend disagrees with the LLVM backend and the
 model on legal inputs, in every optimize mode

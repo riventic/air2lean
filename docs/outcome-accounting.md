@@ -29,6 +29,13 @@ SIGKILL/SIGTERM and other interruption/resource signals, missing or malformed tr
 pipe errors, and renderer-stage failures remain fatal `native_harness_failure`, even when
 the model reports `illegal`. These observations are test evidence, not proof of signal cause.
 
+Each tested call runs in a forked child that cannot dump core (so a `core_pattern` handler
+such as systemd-coredump or apport is not started per crash), has a 4 GiB address-space limit
+on Linux, dies with the harness, and is killed with SIGKILL when it has not finished after 20
+seconds. A call killed at that deadline is a `native_harness_failure` with the legacy
+`unknown` marker, like any other resource kill; the parent prints the function and input
+index on stderr.
+
 Missing, stale, malformed or unsupported metadata causes a setup failure. It does not infer runtime categories from diagnostic messages. Unsupported translator inputs that never reach this runner remain outside this protocol.
 
 Mutation detection requires a failing run with typed semantic mismatch evidence, or an unspecified-count pin change without capped, bounded, host-dependent or setup-failure cases in that function. Raw capped/bounded/no-result search metadata blocks pin-change detection even when the selected model constructor is `illegal`; a concrete matching value or panic witness remains a match. Cap changes, missing baselines, host exclusions and unsupported setup never count as detections. The old counter-only fallback is retained for isolated legacy mock runners that produce no report; the real differential runner initializes a report before building. Proof mutation gates retain their existing separate baseline/build accounting. The composed branch retains the weak-CAS proof-import isolation and current mutation-target repairs. Typed scheduler observations flow through the bounded FIFO probes and original DFS fallback; the bounded Linux Zig15/Zig16 checks of the repaired composition passed as recorded below; final composed-source CI remains pending.
