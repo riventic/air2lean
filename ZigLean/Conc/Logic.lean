@@ -469,9 +469,14 @@ theorem recordAccess_keeps {b o l : Nat} {k : AccessKind} {m m' : Mem} {x : Unit
   obtain ⟨a, m₁, hg, h₁⟩ := MemM.bind_ok h
   obtain ⟨rfl, rfl⟩ := MemM.get_ok hg
   dsimp only at h₁
-  split at h₁
-  · exact (MemM.throw_ok h₁).elim
-  · have := MemM.set_ok h₁; subst this; exact ⟨rfl, rfl, rfl⟩
+  -- Without a case split when the race check reduces (`scripts/mutate.sh` mutation (l) replaces
+  -- it by `none`), so the runtime mutant still builds.
+  first
+  | (split at h₁ <;>
+      first
+      | exact (MemM.throw_ok h₁).elim
+      | (have := MemM.set_ok h₁; subst this; exact ⟨rfl, rfl, rfl⟩))
+  | (have := MemM.set_ok h₁; subst this; exact ⟨rfl, rfl, rfl⟩)
 
 /-- What a futex wait did: a woken thread goes on (it leaves `woken`); else the kernel read the
 `u32` `v` at `p` with a recorded atomic read (memory `m₁`), and the thread sleeps (it joins
