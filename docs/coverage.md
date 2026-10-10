@@ -203,7 +203,7 @@ Compiler-generated fixtures are the selected goldens (exported by `check.sh`'s
 patched-compiler dump and compared on each run) plus the exports with
 recorded provenance in `tests/roadmap/thread-tuples/air`, `tests/roadmap/try-pointers/air`,
 `tests/roadmap/bitops/qualified/0.16.0/air`, `tests/roadmap/spawn-failure/air`,
-`tests/roadmap/idle-loops/air`, and the 0.16.0 and 0.15.2 exports in
+`tests/roadmap/idle-loops/air`, `tests/roadmap/runtime-tags/air` (all three versions), and the 0.16.0 and 0.15.2 exports in
 `tests/roadmap/env-boundaries/air` and `tests/roadmap/noreturn-variants/air`. Hand-written AIR (`undef-operands`, `undef-locals`,
 `global-init`, `aggregate-casts`, `packed-fields`, `error-width`, `try-pointers/aliases`),
 compiler AIR for layout rejections (`noreturn-variants/air-reject`), fuzzer mutants and synthetic model/profile inputs are explicitly excluded. Shared golden files are a single export reused across
@@ -214,11 +214,15 @@ Counts (AIR tags passing every source stage):
 
 | Zig | With compiler fixture (`emitted-unqualified`) | Without (`emitted-unfixtured`) | Rejected with reason and guidance |
 | --- | ---: | ---: | ---: |
-| 0.14.1 | 95 | 65 | 42 |
-| 0.15.2 | 130 | 34 | 43 |
-| 0.16.0 | 135 | 29 | 45 |
+| 0.14.1 | 156 | 4 | 42 |
+| 0.15.2 | 160 | 4 | 43 |
+| 0.16.0 | 161 | 3 | 45 |
 
-0.14.1's larger gap comes from examples whose `zig-versions` excludes 0.14.1.
+The four remaining `emitted-unfixtured` tags have no Sema producer that a
+`-fno-error-tracing` export can reach: `is_null_ptr`, `is_err` and `is_err_ptr` have none in
+any supported compiler, and `is_non_err_ptr` is produced on 0.15.2 and 0.14.1 only by
+`zirRetLoad` under error return tracing (0.16.0 produces it for a by-reference error-union
+capture with an error switch, exported). Before the runtime-tags export, 0.14.1's larger gap came from examples whose `zig-versions` excludes 0.14.1.
 
 **Stage decisions for rejected tags.** Each rejection message names the tag and
 appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
@@ -233,23 +237,30 @@ appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
 | `wasm_memory_*`, `work_*` | Outside qualified targets | Keep out of translated functions |
 | `assembly` (0.14.1) | Exporter does not decode the 0.14.1 layout | Use 0.15.2/0.16.0 for assembly wrappers |
 
-**Fixture requests.** `tests/roadmap/runtime-tags/runtime_tags.zig` holds one
-candidate function per `emitted-unfixtured` tag (mapped by `FIXTURE_REQUESTS`). It
-type-checks with a stock compiler but has never been exported: the expected tags
-come from reading Sema, not from an AIR dump. To produce fixtures, with a patched
-compiler per version:
+**Runtime-tags export.** `tests/roadmap/runtime-tags/runtime_tags.zig` holds one function
+per tag that no golden or earlier roadmap export contained. `export.sh` exports it with each
+patched compiler into `tests/roadmap/runtime-tags/air/<version>` (a `COMPILER_FIXTURE_ROOTS`
+entry; `provenance.json` records the source, exporter and compiler hashes and every file's
+hash, checked by `test_provenance.py`):
 
 ```sh
-out=$(mktemp -d)
-ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER=runtime_tags. \
-  zig-air-0.16.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-  -target x86_64-linux -mcpu=baseline tests/roadmap/runtime-tags/runtime_tags.zig
+AIR2LEAN_ZIG_AIR=<dir holding zig-air-<version>/bin/zig> tests/roadmap/runtime-tags/export.sh
+python3 tests/roadmap/runtime-tags/test_provenance.py --refresh
 ```
 
-Then review which tags actually appear, commit the dump as an example golden or a
-new `COMPILER_FIXTURE_ROOTS` entry with provenance, and regenerate the
-inventories; a tag that then has a fixture becomes `emitted-unqualified`, and its
-request row may be dropped once no version needs it. `is_null_ptr`, `is_err` and
+The canonical compilers are built by `zig-patch/build.sh` from this checkout's `zig-patch` tree;
+`export.sh --check` refuses a compiler whose `bin/zig-unlocked` hash differs from
+`provenance.json` and otherwise compares a fresh export byte for byte.
+
+Some tags need a particular lowering, so a function can differ from what one would expect:
+`div_exact` and `shl_exact` appear only with runtime safety off (safe builds lower them to
+`div_trunc`/`rem` and `shl_with_overflow` checks), `bool_and` comes from the invalid-error-code
+safety check, and 0.16.0 lowers `p[i]` of a many-pointer to `ptr_elem_ptr` plus `load`, so its
+`ptr_elem_val` comes from the sentinel check of a comptime-length sentinel slice. A tag with a
+fixture drops out of the requests (`FIXTURE_REQUESTS` keeps rows only while an inventory,
+here 0.17.0, still lacks an export).
+
+`is_null_ptr`, `is_err` and
 `is_err_ptr` have no candidate: no Sema producer was found in any supported
 compiler source, so they need an `unreachable-at-export` review or a
 compiler-generated counterexample.

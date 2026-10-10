@@ -35,7 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "const_bases.projectRes",
- "module": "root",
+ "src": {
+  "file": "const_bases.zig",
+  "module": "const_bases",
+  "decl_line": 43
+ },
  "params": [
   0
  ],
@@ -79,7 +83,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -90,7 +95,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 15
     },
     {
      "id": 7,
@@ -169,7 +175,8 @@
        "id": 13,
        "tag": "dbg_stmt",
        "ty": 3,
-       "line": 2
+       "line": 2,
+       "column": 26
       },
       {
        "id": 14,
@@ -178,7 +185,6 @@
        "callee": {
         "ty": 10,
         "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
-        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -196,7 +202,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 38
   },
   {
    "id": 18,
@@ -216,7 +223,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 20,
@@ -238,7 +246,6 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
-   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -252,7 +259,6 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
-   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -266,7 +272,6 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
-   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -285,7 +290,6 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
-   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -299,7 +303,6 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
-   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -313,7 +316,6 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
-   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -348,7 +350,6 @@
   {
    "k": "struct",
    "name": "const_bases.Holder",
-   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -421,7 +422,6 @@
   {
    "k": "struct",
    "name": "const_bases.Cell",
-   "module": "root",
    "layout": "auto",
    "fields": [
     {

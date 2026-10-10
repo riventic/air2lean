@@ -97,7 +97,9 @@ jobs:
       - name: Runtime tag fixture and guidance gate
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+        run: |
+          python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
+          python3 -B tests/roadmap/runtime-tags/test_provenance.py
 
       - name: Schedule exploration cap accounting regressions
         run: python3 -I -B tests/roadmap/schedule-caps/test_exploration.py

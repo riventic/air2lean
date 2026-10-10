@@ -8,6 +8,7 @@ misplaced `eu_payload` constants are rejected on the `stage2_llvm` profile. Neve
 invokes compilers: air/0.16.0 is hand-written AIR in the exporter's schema.
 """
 import copy
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -16,7 +17,8 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 AIR = HERE / "air" / "0.16.0"
-FRESH = HERE / "air-fresh" / "0.16.0"
+FRESH_ROOT = HERE / "air-fresh"
+VERSIONS = ["0.16.0", "0.15.2", "0.14.1"]
 CONSTANTS = ["resElemPtr", "maybeElemPtr", "maybeBytePtr", "maybeSlice", "resCodePtr"]
 GEN = HERE / "ConstBases" / "Gen.lean"
 # The fixtures are `stage2_x86_64` exports (L06's backend-specific lowering): not the qualified
@@ -24,6 +26,7 @@ GEN = HERE / "ConstBases" / "Gen.lean"
 ARGS = ["--namespace", "ConstBases", "--prefix", "const_bases.", "--allow-unqualified-build-mode"]
 UNBACKED = "a pointer constant without a global ({}) is outside the subset"
 LLVM = "such constants are outside the stage2_llvm profile"
+LEGACY = "outside the unverified profile (a legacy profile names no backend, so the LLVM backend cannot be excluded)"
 
 
 def fixtures(directory=AIR):
@@ -104,6 +107,12 @@ def llvm(document):
     document["profile"]["backend"] = "stage2_llvm"
 
 
+def legacy(document):
+    """A schema 1-11 file: no profile, so no backend (`unverified`)."""
+    document["schema"] = 11
+    document.pop("profile", None)
+
+
 def main():
     binary = Path(sys.argv[1] if len(sys.argv) > 1 else HERE.parents[2] / ".lake/build/bin/air2lean")
     checks = 0
@@ -168,69 +177,98 @@ def main():
                      "a pointer constant at offset 40 is outside global 0 (32 bytes)",
                      "STRUCTURE_FAILURE")
 
-    # LLVM: every constant into the alignment-1 `Failure![3]u8` payload (offsets 22..25, one
-    # past its end included) is rejected on stage2_llvm; the same program is accepted on
+    # LLVM and legacy: every constant into the alignment-1 `Failure![3]u8` payload (offsets
+    # 22..25, one past its end included) is rejected; the same program is accepted on
     # stage2_x86_64 (above). `resCodePtr` is retargeted to each offset.
     misplaced = ("const_bases.resElemPtr.json", "const_bases.readResElem.json")
 
-    def retarget(off):
+    # `profile` is `llvm` or `legacy`: both make the backend one that misplaces the payload.
+    def retarget(profile, off):
         def edit(d):
-            llvm(d)
+            profile(d)
             if d["name"] == "const_bases.resCodePtr":
                 ret_value(d)["ptr"]["off"] = off
         return {k: v for k, v in program(edit).items() if k not in misplaced}
 
-    checks += reject(binary, program(llvm), "offset 24 of global 0 may address")
-    checks += reject(binary, program(llvm), LLVM)
-    # The wasm backend's `lowerPtr` has the same `eu_payload` measure (codegen/wasm/CodeGen.zig).
-    def wasm(d):
-        d["profile"]["backend"] = "stage2_wasm"
-    checks += reject(binary, program(wasm), "such constants are outside the stage2_wasm profile")
-    for off in (22, 25):
-        checks += reject(binary, retarget(off), f"offset {off} of global 0 may address")
-
-    # Controls on stage2_llvm: the error union itself (20) and its code (21), the optional
-    # payload's nested element and slice (15), other fields, and runtime projections.
-    llvm_text = accept(binary, {k: v for k, v in program(llvm).items() if k not in misplaced})
-    assert "(⟨some 0, 20⟩ : Zig.Ptr)" in llvm_text and "(⟨some 0, 15⟩ : Zig.Ptr)" in llvm_text
-    for off in (8, 20, 21, 26):
-        accept(binary, retarget(off))
-    checks += 1
-
-    # An aligned (`Failure!u16`) payload starts at 0 on every backend: offsets 20 (payload)
-    # and 22 (code) are accepted on stage2_llvm.
-    for off in (20, 22):
-        def aligned(d, off=off):
-            llvm(d)
+    def aligned(profile, off):
+        def edit(d):
+            profile(d)
             d["types"][9]["payload"] = 1
             d["types"][9]["abi_size"] = 4
             if "globals" in d:
                 d["globals"][0]["init"]["elems"][2] = {"ty": 9, "payload": {"ty": 1, "val": "7"}}
             if d["name"] == "const_bases.resCodePtr":
                 ret_value(d)["ptr"]["off"] = off
-        accept(binary, {k: v for k, v in program(aligned).items() if k in (
-            "const_bases.resCodePtr.json", "const_bases.maybeElemPtr.json")})
-    checks += 1
+        return {k: v for k, v in program(edit).items() if k in (
+            "const_bases.resCodePtr.json", "const_bases.maybeElemPtr.json")}
 
-    # Fresh export (patched 0.16.0 compiler, stage2_x86_64 x86_64-linux-musl baseline
-    # ReleaseSafe; README §Fresh export). Each returned constant has the hand-written global,
-    # offset and payload marker, and its generated definition is identical. Sema's ReleaseSafe
-    # safety checks in the runtime projections and its folded read are the recorded differences.
-    fresh = fixtures(FRESH)
+    checks += reject(binary, program(llvm), LLVM)
+    # The wasm backend's `lowerPtr` has the same `eu_payload` measure (codegen/wasm/CodeGen.zig).
+    def wasm(d):
+        d["profile"]["backend"] = "stage2_wasm"
+    checks += reject(binary, program(wasm), "such constants are outside the stage2_wasm profile")
+    # Legacy schema 1-11: no profile, so the backend that compiled the program is unknown and the
+    # LLVM backend cannot be excluded. The rejection says why.
+    checks += reject(binary, program(legacy), LEGACY)
+
+    for profile in (llvm, legacy):
+        checks += reject(binary, program(profile), "offset 24 of global 0 may address")
+        for off in (22, 25):
+            checks += reject(binary, retarget(profile, off), f"offset {off} of global 0 may address")
+
+        # Controls: the error union itself (20) and its code (21), the optional payload's nested
+        # element and slice (15), other fields, and runtime projections.
+        text_ok = accept(binary, {k: v for k, v in program(profile).items() if k not in misplaced})
+        assert "(⟨some 0, 20⟩ : Zig.Ptr)" in text_ok and "(⟨some 0, 15⟩ : Zig.Ptr)" in text_ok
+        for off in (8, 20, 21, 26):
+            accept(binary, retarget(profile, off))
+        # An aligned (`Failure!u16`) payload starts at 0 on every backend: offsets 20 (payload)
+        # and 22 (code) are accepted.
+        for off in (20, 22):
+            accept(binary, aligned(profile, off))
+        checks += 1
+    assert '"backend":"unverified"' in text_ok
+
+    # Fresh exports (patched 0.16.0, 0.15.2 and 0.14.1 compilers, stage2_x86_64 x86_64-linux-musl
+    # baseline ReleaseSafe; README §Fresh export). Each returned constant has the hand-written
+    # global, offset and payload marker, and its generated definition is identical. Sema's
+    # ReleaseSafe safety checks in the runtime projections and its folded read are the recorded
+    # differences. The three versions translate to the same program but for the profile header.
     hand = fixtures()
-    for name in CONSTANTS:
-        key = f"const_bases.{name}.json"
-        mine = list(pointers(hand[key]["body"]))
-        theirs = list(pointers(fresh[key]["body"]))
-        assert theirs and theirs[-1] == mine[-1], (name, theirs, mine)
-        assert fresh[key]["globals"][0]["name"] == "const_bases.table", name
-        assert fresh[key]["profile"] == hand[key]["profile"], name
-    fresh_text = accept(binary, fresh)
-    for name in CONSTANTS:
-        assert definition(fresh_text, name) == definition(text, name), name
-    assert "pure (.ret (22 : BitVec 8))" in definition(fresh_text, "readResElem")
-    checks += reject(binary, {k: dict(v, profile=dict(v["profile"], backend="stage2_llvm"))
-                              for k, v in fresh.items()}, "offset 24 of global 0 may address")
+    provenance = json.loads((HERE / "provenance.json").read_text())
+    assert sorted(provenance["air_sha256"]) == sorted(
+        f"{v}/{n}" for v in VERSIONS for n in fixtures(FRESH_ROOT / v)), "provenance lists other files"
+    texts = {}
+    for version in VERSIONS:
+        fresh = fixtures(FRESH_ROOT / version)
+        assert sorted(fresh) == sorted(hand), version
+        for name, document in fresh.items():
+            digest = hashlib.sha256((FRESH_ROOT / version / name).read_bytes()).hexdigest()
+            assert provenance["air_sha256"][f"{version}/{name}"] == digest, (version, name)
+            assert document["zig_version"] == version and document["profile"]["zig_version"] == version
+            assert document["profile"]["backend"] == "stage2_x86_64", (version, name)
+        for name in CONSTANTS:
+            key = f"const_bases.{name}.json"
+            mine = list(pointers(hand[key]["body"]))
+            theirs = list(pointers(fresh[key]["body"]))
+            assert theirs and theirs[-1] == mine[-1], (version, name, theirs, mine)
+            assert fresh[key]["globals"][0]["name"] == "const_bases.table", (version, name)
+            ignored = ("zig_version", "target_triple")
+            assert {k: v for k, v in fresh[key]["profile"].items() if k not in ignored} == \
+                {k: v for k, v in hand[key]["profile"].items() if k not in ignored}, (version, name)
+        texts[version] = accept(binary, fresh)
+        for name in CONSTANTS:
+            assert definition(texts[version], name) == definition(text, name), (version, name)
+        assert "pure (.ret (22 : BitVec 8))" in definition(texts[version], "readResElem"), version
+        checks += reject(binary, {k: dict(v, profile=dict(v["profile"], backend="stage2_llvm"))
+                                  for k, v in fresh.items()}, "offset 24 of global 0 may address")
+        downgraded = copy.deepcopy(fresh)
+        for document in downgraded.values():
+            legacy(document)
+        checks += reject(binary, downgraded, "offset 24 of global 0 may address")
+    bodies = {v: t.split("\n", 1)[1] for v, t in texts.items()}
+    assert len(set(bodies.values())) == 1, "the versions' fresh translations differ beyond the profile header"
+    checks += 1
 
     print(f"{checks} constant-pointer-base CLI checks passed")
 

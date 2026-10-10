@@ -1991,21 +1991,31 @@ instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wa
 (observed in 0.16.0). -/
 def euPayloadMisplacedBackends : List String := ["stage2_llvm", "stage2_wasm"]
 
+/-- The profile may use a backend of `euPayloadMisplacedBackends`: it names one, or it names none
+(a legacy schema 1–11 file, a constructed function: `unverified`), so the backend that compiled
+the program is unknown and the LLVM backend, the default of every optimized build, cannot be
+excluded. -/
+def mayMisplaceEuPayload (backend : String) : Bool :=
+  euPayloadMisplacedBackends.contains backend || backend == BuildProfile.unverified
+
 /-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
 (`euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
-affected payload of its global. Other backends lower these constants with the payload offset
-that the model uses. -/
+affected payload of its global. A legacy profile with no backend (`mayMisplaceEuPayload`) is
+treated alike. Other backends lower these constants with the payload offset that the model
+uses. -/
 private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
     Except String Unit := do
-  unless euPayloadMisplacedBackends.contains f.backend do return
+  unless mayMisplaceEuPayload f.backend do return
   let affected : Bool := match llvmPayloadTypeScan f global.ty 1024 with
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
   if affected then
+    let legacyNote := if f.backend == BuildProfile.unverified then
+      " (a legacy profile names no backend, so the LLVM backend cannot be excluded)" else ""
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
       alignment-1 error-union payload, which this backend lowers at the error code \
       (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
-      outside the {f.backend} profile"
+      outside the {f.backend} profile{legacyNote}"
 
 /-- A constant pointer stays within its global or one past its end. -/
 private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do
@@ -2071,7 +2081,7 @@ private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat :
 included. A profile limit, so it runs with the constant checks, not structural validation. -/
 private partial def checkLlvmPayloadConstants (f : Func) (v : Val) (fuel : Nat := 256) :
     Except String Unit := do
-  unless euPayloadMisplacedBackends.contains f.backend do return
+  unless mayMisplaceEuPayload f.backend do return
   if fuel == 0 then throw s!"{f.name}: pointer constant traversal exceeds 256 levels"
   match v with
   | .ptrConst _ g off =>
