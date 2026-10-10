@@ -119,9 +119,8 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
     unless (Endian.ofString? endian).isSome do
       report s!"profile.endian '{endian}' is outside the little/big-endian memory model"
   let abi ← take? (strField p "abi")
-  -- The qualified target's byte order, which names the profile (`nameOf`).
-  let mut targetEndian : Option Endian := none
-  -- The qualified target, for the checks of fields parsed below (`features`).
+  -- The qualified target: its byte order names the profile (`nameOf`), and the fields parsed
+  -- below (`features`) are checked against it.
   let mut qualifiedTarget : Option Target := none
   if let some triple := targetTriple then
     -- Zig triples have arch-os-abi components (version suffixes are permitted).
@@ -135,7 +134,6 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
       match Target.find? arch osName with
       | none => report s!"profile.target_triple: outside the {Target.scope} model ABI scope"
       | some target =>
-        targetEndian := some target.endian
         qualifiedTarget := some target
         let name := s!"{arch}-{osName}"
         unless target.abis.isEmpty || target.abis.contains abiName do
@@ -160,7 +158,7 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   -- The exporter names the profile by its target's byte order (`nameOf`); without a qualified
   -- target, by the declared one. A conflicting `endian` was reported above.
   if let some name := name then
-    let want := nameOf (((targetEndian <|> endian.bind Endian.ofString?)).getD .little)
+    let want := nameOf ((qualifiedTarget.map (·.endian) <|> endian.bind Endian.ofString?).getD .little)
     unless name == want do report s!"unsupported profile '{name}' (want '{want}')"
   if let some profileVersion ← take? (strField p "zig_version") then
     unless profileVersion == zigVersion do
