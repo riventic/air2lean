@@ -1795,6 +1795,7 @@
    "size": "one",
    "const": true,
    "child": 41,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "sentinel": false,
@@ -1822,11 +1823,98 @@
    "k": "struct",
    "name": "mem.Allocator.VTable",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 43,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 44,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 45,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 46,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
   },
   {
    "k": "other",
-   "name": "c.pthread_t__opaque_365"
+   "name": "c.pthread_t__opaque_360"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 47,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 48,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 49,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 50,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
   }
  ]
 }

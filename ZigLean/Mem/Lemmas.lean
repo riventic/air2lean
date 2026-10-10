@@ -92,15 +92,32 @@ theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o
       · rename_i hc
         simp [pure, ExceptT.pure, ExceptT.mk] at h
         obtain ⟨rfl, rfl, rfl⟩ := h
-        exact ⟨hb, hblk, hc.1, hc.2.1, hc.2.2.1, hc.2.2.2, rfl⟩
+        exact ⟨hb, hblk, hc.1, hc.2.1, hc.2.2.1, hc.2.2.2.1, rfl⟩
+      · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
+        cases h
+
+/-- A successful access starts at or above its block's first live offset. -/
+theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
+    (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
+  unfold Mem.access at h
+  split at h
+  · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h; cases h
+  · split at h
+    · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h; cases h
+    · split at h
+      · rename_i hc
+        simp [pure, ExceptT.pure, ExceptT.mk] at h
+        obtain ⟨rfl, rfl, rfl⟩ := h
+        exact hc.2.2.2.2
       · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
         cases h
 
 theorem access_of {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block}
     (hb : p.block = some b) (hblk : m.blocks[b]? = some blk) (hl : blk.live) (h0 : 0 ≤ p.off)
-    (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0) :
+    (hn : p.off + n ≤ blk.bytes.size) (ha : (blk.addr + p.off.toNat) % a = 0)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat := by first | simp_all [BlockKind.mappedLo] | omega) :
     m.access p n a = pure (b, blk, p.off.toNat) := by
-  simp [Mem.access, hb, hblk, hl, h0, hn, ha]
+  simp [Mem.access, hb, hblk, hl, h0, hn, ha, hlo]
 
 /-! ### Pointer formation (`ptrProject`, MM-3) -/
 
@@ -177,6 +194,13 @@ theorem ptrProject_illegal {m : Mem} {p : Ptr} (project : Ptr → Ptr) (h : proj
     (ptrProject p project).run m = throw .illegal := by
   simp only [ptrProject, StateT.run]
   rw [if_neg (by simp only [not_or]; exact ⟨h, hout⟩)]
+
+/-- A pointer without a block (an `@ptrFromInt` address, the provenance-free result of an
+ambiguous `ptrFromAddr`, `Zig.undefPtr`) has no bounds: any nonzero offset from it is
+`.illegal` (MM-3), only the same pointer is formed. -/
+theorem ptrProject_blockless_add_illegal (m : Mem) (a : Int) {k : Int} (hk : k ≠ 0) :
+    (ptrProject ⟨none, a⟩ (·.add k)).run m = throw .illegal :=
+  ptrProject_illegal _ (by simp [Ptr.add]; omega) (by simp [Mem.inBounds])
 
 /-- Pointer formation never changes memory and keeps the base's block. -/
 theorem ptrProject_block {m m' : Mem} {p q : Ptr} {project : Ptr → Ptr}
@@ -520,10 +544,11 @@ theorem access_write_same {m : Mem} {p q : Ptr} {a n' a' : Nat} {bs : Array Byte
     (m.write b blk o bs).access q n' a' =
       pure (b, { blk with bytes := writeBytes blk.bytes o bs }, o') := by
   obtain ⟨hpb, hblk, hl, h0, hn, _, rfl⟩ := access_eq hw
+  have hlo' := access_lo hq
   obtain ⟨hqb, -, -, h0', hn', ha', rfl⟩ := access_eq hq
   have hlt : b < m.blocks.size := by
     rcases Array.getElem?_eq_some_iff.mp hblk with ⟨h, _⟩; exact h
-  apply access_of hqb
+  refine access_of hqb ?_ ?_ ?_ ?_ ?_ hlo'
   · simp [Mem.write, hlt]
   · exact hl
   · exact h0'
@@ -535,8 +560,10 @@ theorem access_write_other {m : Mem} {q : Ptr} {n' a' : Nat} {bs : Array Byte}
     {b c : BlockId} {blk blk' : Block} {o o' : Nat}
     (hq : m.access q n' a' = pure (c, blk', o')) (hbc : b ≠ c) :
     (m.write b blk o bs).access q n' a' = pure (c, blk', o') := by
+  have hlo := access_lo hq
   obtain ⟨hqb, hblk', hl, h0, hn, ha, rfl⟩ := access_eq hq
   exact access_of hqb (by simp [Mem.write, Array.getElem?_setIfInBounds_ne hbc, hblk']) hl h0 hn ha
+    hlo
 
 /-! ## Typed access -/
 

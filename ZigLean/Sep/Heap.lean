@@ -89,7 +89,8 @@ end Heap
 def Mem.heap (m : Mem) : Heap := fun (b, o) =>
   match m.blocks[b]? with
   | some blk =>
-    if h : blk.live ∧ o < blk.bytes.size then some ⟨blk.bytes[o], blk.addr, blk.bytes.size, blk.kind⟩
+    if h : blk.live ∧ o < blk.bytes.size ∧ blk.kind.mappedLo ≤ o then
+      some ⟨blk.bytes[o]'h.2.1, blk.addr, blk.bytes.size, blk.kind⟩
     else none
   | none => none
 
@@ -101,9 +102,27 @@ theorem Mem.heap_some {m : Mem} {b : BlockId} {o : Nat} {c : Cell} (h : m.heap (
   | none => simp [hb] at h
   | some blk =>
     simp only [hb] at h
-    by_cases hc : blk.live ∧ o < blk.bytes.size
-    · rw [dite_eq_left_of_eq_true (eq_true hc)] at h; cases h; exact ⟨blk, rfl, hc.1, hc.2, rfl⟩
+    by_cases hc : blk.live ∧ o < blk.bytes.size ∧ blk.kind.mappedLo ≤ o
+    · rw [dite_eq_left_of_eq_true (eq_true hc)] at h; cases h; exact ⟨blk, rfl, hc.1, hc.2.1, rfl⟩
     · rw [dite_eq_right_of_eq_false (eq_false hc)] at h; cases h
+
+/-- A live byte is at or above its block's first live offset (`BlockKind.mappedLo`). -/
+theorem Mem.heap_some_lo {m : Mem} {b : BlockId} {o : Nat} {c : Cell} (h : m.heap (b, o) = some c) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.kind.mappedLo ≤ o := by
+  unfold Mem.heap at h
+  cases hb : m.blocks[b]? with
+  | none => simp [hb] at h
+  | some blk =>
+    simp only [hb] at h
+    by_cases hc : blk.live ∧ o < blk.bytes.size ∧ blk.kind.mappedLo ≤ o
+    · exact ⟨blk, rfl, hc.2.2⟩
+    · rw [dite_eq_right_of_eq_false (eq_false hc)] at h; cases h
+
+/-- The heap of a block with a known state, as a cell or none. -/
+theorem Mem.heap_of {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat) :
+    m.heap (b, o) = if h : blk.live ∧ o < blk.bytes.size ∧ blk.kind.mappedLo ≤ o then
+      some ⟨blk.bytes[o]'h.2.1, blk.addr, blk.bytes.size, blk.kind⟩ else none := by
+  simp only [Mem.heap, hb]
 
 theorem writeBytes_getElem? (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size)
     (i : Nat) : (writeBytes a o bs)[i]? = if o ≤ i ∧ i < o + bs.size then bs[i - o]? else a[i]? := by
@@ -138,7 +157,8 @@ theorem Mem.heap_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} (l
     (m.recordAt block off len kind).heap l = m.heap l := by simp [Mem.heap, Mem.recordAt]
 
 theorem Mem.heap_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
-    (hblk : m.blocks[b]? = some blk) (hl : blk.live) (hn : o + bs.size ≤ blk.bytes.size) (l : Loc) :
+    (hblk : m.blocks[b]? = some blk) (hl : blk.live) (hn : o + bs.size ≤ blk.bytes.size)
+    (hlo : blk.kind.mappedLo ≤ o) (l : Loc) :
     (m.write b blk o bs).heap l =
       if l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + bs.size then some ⟨bs[l.2 - o]!, blk.addr, blk.bytes.size, blk.kind⟩
       else m.heap l := by
@@ -152,20 +172,72 @@ theorem Mem.heap_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Arr
       rw [Array.set!_eq_setIfInBounds]; exact Array.getElem?_setIfInBounds_self_of_lt hb
     unfold Mem.heap Mem.write
     simp only [e, hblk, true_and]
-    by_cases hx : x < blk.bytes.size
+    by_cases hx : x < blk.bytes.size ∧ blk.kind.mappedLo ≤ x
     · have hx' : x < (writeBytes blk.bytes o bs).size := by omega
-      rw [dite_eq_left_of_eq_true (eq_true ⟨hl, hx'⟩), dite_eq_left_of_eq_true (eq_true ⟨hl, hx⟩),
+      rw [dite_eq_left_of_eq_true (eq_true ⟨hl, hx', hx.2⟩),
+        dite_eq_left_of_eq_true (eq_true ⟨hl, hx.1, hx.2⟩),
         writeBytes_getElem _ _ _ hn _ hx', hs]
       by_cases hc : o ≤ x ∧ x < o + bs.size
       · simp only [hc, and_self, ↓reduceIte]
-      · simp only [hc, ↓reduceIte, getElem!_pos blk.bytes x hx]
-    · have hx' : ¬ x < (writeBytes blk.bytes o bs).size := by omega
+      · simp only [hc, ↓reduceIte, getElem!_pos blk.bytes x hx.1]
+    · have hx' : ¬ (x < (writeBytes blk.bytes o bs).size ∧ blk.kind.mappedLo ≤ x) := by omega
       have hc : ¬ (o ≤ x ∧ x < o + bs.size) := by omega
-      simp [hx, hx', hc]
+      simp [hx', hc]
+      intros; omega
   · have e : (m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })[b']? = m.blocks[b']? := by
       rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [Ne.symm hbb]
     unfold Mem.heap Mem.write
     simp only [e, hbb, false_and, ↓reduceIte]
+
+/-- A write to block `b` keeps every cell outside the written range. -/
+theorem Mem.heap_write_out {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hblk : m.blocks[b]? = some blk) (hn : o + bs.size ≤ blk.bytes.size) (l : Loc)
+    (hl : ¬ (l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + bs.size)) : (m.write b blk o bs).heap l = m.heap l := by
+  obtain ⟨b', x⟩ := l
+  have hb : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+  have hs := writeBytes_size blk.bytes o bs hn
+  by_cases hbb : b' = b
+  · subst hbb
+    have hx : ¬ (o ≤ x ∧ x < o + bs.size) := fun h => hl ⟨rfl, h⟩
+    have e : (m.blocks.set! b' { blk with bytes := writeBytes blk.bytes o bs })[b']? =
+        some { blk with bytes := writeBytes blk.bytes o bs } := by
+      rw [Array.set!_eq_setIfInBounds]; exact Array.getElem?_setIfInBounds_self_of_lt hb
+    unfold Mem.heap Mem.write
+    simp only [e, hblk]
+    split <;> split
+    · rename_i h1 h2
+      simp only [Option.some.injEq, Cell.mk.injEq, hs, and_true]
+      rw [writeBytes_getElem _ _ _ hn _ h1.2.1]
+      simp only [hx, ↓reduceIte, getElem!_pos blk.bytes x h2.2.1]
+    · rename_i h1 h2; exact absurd ⟨h1.1, by omega, h1.2.2⟩ h2
+    · rename_i h1 h2; exact absurd ⟨h2.1, by omega, h2.2.2⟩ h1
+    · rfl
+  · have e : (m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })[b']? = m.blocks[b']? := by
+      rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [Ne.symm hbb]
+    unfold Mem.heap Mem.write
+    simp only [e]
+
+/-- Each cell after a write is at the place, address and size of a cell before it. -/
+theorem Mem.heap_write_cell {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hblk : m.blocks[b]? = some blk) (hn : o + bs.size ≤ blk.bytes.size) {l : Loc} {c : Cell}
+    (hc : (m.write b blk o bs).heap l = some c) :
+    ∃ c', m.heap l = some c' ∧ c'.addr = c.addr ∧ c'.size = c.size := by
+  obtain ⟨x, y⟩ := l
+  by_cases hx : x = b ∧ o ≤ y ∧ y < o + bs.size
+  · obtain ⟨rfl, -, -⟩ := hx
+    have hb : x < m.blocks.size := (Array.getElem?_eq_some_iff.mp hblk).1
+    have e : (m.write x blk o bs).blocks[x]? = some { blk with bytes := writeBytes blk.bytes o bs } := by
+      simp only [Mem.write, Array.set!_eq_setIfInBounds]
+      exact Array.getElem?_setIfInBounds_self_of_lt hb
+    obtain ⟨blk', hblk', hl', hy', hc'⟩ := Mem.heap_some hc
+    obtain ⟨blk'', hblk'', hlo''⟩ := Mem.heap_some_lo hc
+    rw [e] at hblk' hblk''; cases hblk'; cases hblk''
+    have hs := writeBytes_size blk.bytes o bs hn
+    refine ⟨⟨blk.bytes[y]'(by simp at hy'; omega), blk.addr, blk.bytes.size, blk.kind⟩, ?_, ?_, ?_⟩
+    · rw [Mem.heap_of hblk, dif_pos ⟨hl', by simp at hy'; omega, hlo''⟩]
+    · rw [hc']
+    · rw [hc']; simp [hs]
+  · exact ⟨c, by rw [← Mem.heap_write_out hblk hn _ hx]; exact hc, rfl, rfl⟩
 
 theorem writeBytes_getElem! (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size)
     (i : Nat) : (writeBytes a o bs)[i]! = if o ≤ i ∧ i < o + bs.size then bs[i - o]! else a[i]! := by

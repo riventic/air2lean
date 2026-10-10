@@ -117,6 +117,9 @@ def localPlacePaths (types : Array Ty) (layouts : Array Layout) (insts : Array I
 (`Effects.places`) and `dbg`'s. -/
 def valueOperands (op : Op) : Array Val := op.effects.values
 
+/-- The pointer operands that `valueOperands` leaves out (`Effects.places`). -/
+def ptrOperands (op : Op) : Array Val := op.effects.places
+
 /-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
 default (`0`, `false`), so a partly undefined global initializer fails closed. -/
 partial def Val.hasNestedUndef (v : Val) : Bool :=
@@ -358,16 +361,33 @@ def Op.isDeviceAsm (arch : String) (op : Op) : Bool :=
   | .asm .. => (op.asmAllowEntry? arch).isNone
   | _ => false  -- keep: only `asm` can be a device event
 
-/-- An op that only a function that uses memory has (`Effects.memoryOnly`). -/
-def memoryOp (op : Op) : Bool := op.effects.memoryOnly
+/-- An op that only a function that uses memory has (`Effects.memoryOnly`). A call's std model
+depends on `--allocator-model` (`modelledStdFn`). -/
+def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool := (op.effectsIn mode).memoryOnly
 
 /-- A constant that points into memory. -/
 partial def Val.pointsToMem (v : Val) : Bool :=
   match v with
-  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .sliceConst .. => true
+  | .ptrConst .. | .ptrNull .. | .ptrOther .. | .ptrInt .. | .sliceConst .. => true
   | .agg _ elems => elems.any Val.pointsToMem
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
+
+/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
+partial def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
+  match v with
+  | .undef t => !admit t
+  | .agg _ elems => elems.any (Val.hasUndefExcept admit)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
+  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
+  | _ => false
+
+/-- `--allocator-model translated`: an `undefined` operand of type `t` is an arbitrary
+non-dereferenceable pointer (`Zig.undefPtr`, an oracle read): `t` is a single/many-item
+pointer. -/
+def Func.admitsUndefPtr (f : Func) (t : TyId) : Bool :=
+  f.allocatorModel == .translated &&
+    (match f.types[t]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false)
 
 /-- `f` uses memory by itself, not counting its calls. -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
@@ -381,8 +401,13 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
     | .inst id => (insts.find? (·.id == id)).map (·.ty)
     | v => v.constTy?
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    insts.any fun i => memoryOp i.op || i.op.isDeviceAsm f.targetArch ||
-      (valueOperands i.op).any Val.pointsToMem ||
+    insts.any fun i =>
+      let values := valueOperands i.op
+      memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.targetArch ||
+      values.any Val.pointsToMem ||
+      -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`);
+      -- `checkUndefOperands` admits it as a pointer operand too.
+      (values ++ ptrOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
       -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
       (match i.op with
        | .bitcast a => ptrLike (some i.ty) && !ptrLike (tyOf a)

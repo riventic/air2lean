@@ -136,14 +136,14 @@ class InventoryTests(unittest.TestCase):
         # A supported tag whose only fixture is hand-written or missing AIR has no witness.
         rows['add']['tests']['paths'] = ['tests/roadmap/global-init/air/0.16.0/x.json', 'tests/golden/missing.json']
         # An unfixtured tag needs a current request; a rejected tag needs the current reason.
-        rows['sub_sat']['fixture_request'] = None
+        rows['mul_sat']['fixture_request'] = None
         rows['prefetch']['rejection']['reason'] = 'stale text'
         rows['add_optimized']['rejection'] = None
         # A reason recorded under the wrong translator definition is not current.
         rows['breakpoint']['rejection']['definition'] = 'runtimeTagReason?'
         problems = coverage.l14_problems(inventory)
         self.assertEqual(len(problems), 5, problems)
-        for tag in ('add', 'sub_sat', 'prefetch', 'add_optimized', 'breakpoint'):
+        for tag in ('add', 'mul_sat', 'prefetch', 'add_optimized', 'breakpoint'):
             self.assertTrue(any(f': {tag}:' in p for p in problems), tag)
         self.assertIsNone(coverage.fixture_request('no_such_tag', ''))
         with patch.dict(coverage.FIXTURE_REQUESTS, {'sub_sat': 'missingFunction'}):

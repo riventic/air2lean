@@ -587,6 +587,20 @@ jobs:
           lake build ZigLean.Conc.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
+      - name: Generic allocator specification
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/alloc-spec"
+          lake build ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Region ZigLean.Sep.AllocSpec.Wrap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.AllocSpec.Wrappers ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.AllocSpec.Toy 2>&1 | tee "$RUNNER_TEMP/alloc-spec/build.log"
+
+      - name: Full-state separation logic
+        if: ${{ !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sep-full"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Toy ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+
       - name: Loop template, recursion, nested-loop, inference and range-conversion regressions
         if: ${{ !matrix.mutate }}
         run: |
@@ -751,6 +765,25 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/roadmap/illegal-behavior/check.sh
+      # --allocator-model translated: page_allocator and FixedBufferAllocator clients translated
+      # down to the trusted posix.mmap boundary; retained P0-exporter AIR, no compiler run.
+      - name: Translated allocators
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        env:
+          # The stock 0.16.0 compiler: also compares the native run with expected-linux.txt.
+          AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr
+          bash tests/roadmap/alloc-translated/check.sh
+      # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
+      # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
+      - name: Translated FixedBufferAllocator against AllocSpec
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.AllocSpec.Dispatch ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame
+          bash tests/roadmap/alloc-fba/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers
@@ -1064,6 +1097,15 @@ jobs:
           set -euo pipefail
           lake build ZigLean ZigLean.Mem.ErrWidthLemmas Air2Lean air2lean
           bash tests/roadmap/error-width/check.sh
+
+      # OSM-01: the trusted OS page-mapping model (posix mmap/munmap/mremap): the proof-only
+      # separation-logic rules and kernel-checked examples, and the runtime regressions.
+      - name: OS page-mapping model rules and runtime regressions
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean ZigLean.Sep.Mmap
+          lake env lean tests/roadmap/os-mmap/Check.lean
 
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane

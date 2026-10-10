@@ -36,6 +36,11 @@
  },
  "name": "atomics.mpRelAcq",
  "module": "root",
+ "src": {
+  "file": "atomics.zig",
+  "module": "atomics",
+  "decl_line": 26
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -43,7 +48,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,
@@ -79,7 +85,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,
@@ -90,7 +97,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 22
   },
   {
    "id": 7,
@@ -137,7 +145,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 12,
@@ -205,7 +214,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 31
   },
   {
    "id": 20,
@@ -221,7 +231,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 31
   },
   {
    "id": 23,
@@ -231,6 +242,7 @@
     "ty": 12,
     "func": "Thread.spawn__func_0",
     "module": "std",
+    "instance_key": "ae7cf9c7699fb6750d8020e8eecc050a89c2f79f8b5e11b3fbe35a69d5f0ba4f",
     "noreturn": false,
     "comptime_fn": "atomics.mpWriter",
     "comptime_fn_module": "root"
@@ -278,7 +290,8 @@
      "id": 25,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 5
+     "line": 5,
+     "column": 15
     },
     {
      "id": 26,
@@ -355,7 +368,8 @@
    "id": 34,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 19
   },
   {
    "id": 35,
@@ -366,7 +380,8 @@
      "id": 36,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 6
+     "line": 6,
+     "column": 28
     },
     {
      "id": 37,
@@ -382,12 +397,18 @@
      "id": 38,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 6
+     "line": 6,
+     "column": 28
     },
     {
      "id": 39,
      "tag": "dbg_inline_block",
      "ty": 3,
+     "src": {
+      "file": "atomic.zig",
+      "module": "std",
+      "decl_line": 20
+     },
      "body": [
       {
        "id": 40,
@@ -444,7 +465,8 @@
        "id": 45,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 40
       },
       {
        "id": 46,
@@ -481,7 +503,8 @@
        "id": 49,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 13
       },
       {
        "id": 50,
@@ -574,7 +597,8 @@
    "id": 57,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 11
   },
   {
    "id": 58,
@@ -590,7 +614,8 @@
    "id": 59,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 11
   },
   {
    "id": 60,
@@ -612,7 +637,8 @@
    "id": 61,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 62,
@@ -1050,6 +1076,7 @@
    "size": "one",
    "const": true,
    "child": 37,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -1063,6 +1090,7 @@
    "size": "one",
    "const": false,
    "child": 38,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -1080,14 +1108,209 @@
    "name": "mem.Allocator.VTable",
    "module": "std",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 39,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 40,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 41,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 42,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
   },
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
    "module": "std",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "completion",
+     "ty": 43,
+     "offset": 24
+    },
+    {
+     "name": "child_tid",
+     "ty": 44,
+     "offset": 16
+    },
+    {
+     "name": "parent_tid",
+     "ty": 45,
+     "offset": 20
+    },
+    {
+     "name": "mapped",
+     "ty": 46,
+     "offset": 0
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 47,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 48,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 49,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 50,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(Thread.Completion__enum_1)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 51,
+     "offset": 0
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(i32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 45,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 52,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
+  },
+  {
+   "k": "enum",
+   "name": "Thread.Completion__enum_1",
+   "module": "std",
+   "tag": 52,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "running",
+     "value": "0"
+    },
+    {
+     "name": "detached",
+     "value": "1"
+    },
+    {
+     "name": "completed",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

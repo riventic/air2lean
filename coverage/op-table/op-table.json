@@ -1,6 +1,13 @@
 {"unknown_tags": "rejected",
  "tags":
- [{"tag": "arg",
+ [{"tag": "ret_addr",
+   "runtime_reason": null,
+   "exporter_reason":
+   "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument",
+   "emit": "straight-line",
+   "effect": "value",
+   "constructor": "retAddr"},
+  {"tag": "arg",
    "runtime_reason": null,
    "exporter_reason": null,
    "emit": "straight-line",
@@ -1136,13 +1143,6 @@
    "runtime_reason": null,
    "exporter_reason":
    "@breakpoint debugger traps have no modelled effect; remove @breakpoint from translated functions or guard it behind a comptime flag",
-   "emit": null,
-   "effect": null,
-   "constructor": null},
-  {"tag": "ret_addr",
-   "runtime_reason": null,
-   "exporter_reason":
-   "@returnAddress exposes machine return addresses outside the memory model; pass any needed identity as an explicit argument",
    "emit": null,
    "effect": null,
    "constructor": null},

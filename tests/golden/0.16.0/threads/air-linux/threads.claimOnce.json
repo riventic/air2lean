@@ -1401,6 +1401,7 @@
    "size": "one",
    "const": true,
    "child": 43,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "sentinel": false,
@@ -1413,6 +1414,7 @@
    "size": "one",
    "const": false,
    "child": 44,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "sentinel": false,
@@ -1428,13 +1430,200 @@
    "k": "struct",
    "name": "mem.Allocator.VTable",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 45,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 46,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 47,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 48,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
   },
   {
    "k": "struct",
    "name": "Thread.LinuxThreadImpl.ThreadCompletion",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "completion",
+     "ty": 49,
+     "offset": 24
+    },
+    {
+     "name": "child_tid",
+     "ty": 50,
+     "offset": 16
+    },
+    {
+     "name": "parent_tid",
+     "ty": 51,
+     "offset": 20
+    },
+    {
+     "name": "mapped",
+     "ty": 52,
+     "offset": 0
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 53,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 54,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 55,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 56,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(Thread.Completion__enum_848)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 57,
+     "offset": 0
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(i32)",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 51,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 58,
+   "ptr_align": 4096,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
+  },
+  {
+   "k": "enum",
+   "name": "Thread.Completion__enum_848",
+   "tag": 58,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "running",
+     "value": "0"
+    },
+    {
+     "name": "detached",
+     "value": "1"
+    },
+    {
+     "name": "completed",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   }
  ]
 }

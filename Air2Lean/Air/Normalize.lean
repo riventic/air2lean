@@ -159,6 +159,9 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   if raw.unsupported then
     throw s!"{fnName}: inst {raw.id}: tag '{raw.tag}' is unsupported by the exporter{markedTagGuidance raw.tag}"
   match raw.tag with
+  -- Reached only under `--allocator-model translated` (`Raw.admitRetAddr`); std mode keeps the
+  -- exporter's `unsupported` marker and rejects above.
+  | "ret_addr" => return .retAddr
   | "arg" =>
     let some p := raw.param
       | throw s!"{fnName}: inst {raw.id}: 'arg' needs 'param'"
@@ -448,7 +451,7 @@ end
 /-- Every tag that `normalizeOp` decodes, in its arm order. `air2lean --print-op-table`
 probes each; `tests/roadmap/op-effects` checks this list against `normalizeOp`'s arms. -/
 def decodedTags : Array String := #[
-  "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
+  "ret_addr", "arg", "add", "add_safe", "add_wrap", "add_sat", "sub", "sub_safe", "sub_wrap", "sub_sat",
   "mul", "mul_safe", "mul_wrap", "mul_sat", "div_trunc", "div_floor", "div_exact", "div_ceil", "div_float",
   "rem", "mod", "min", "max", "add_with_overflow", "sub_with_overflow", "mul_with_overflow",
   "shl_with_overflow", "clz", "ctz", "popcount", "byte_swap", "bit_reverse", "bit_and", "bit_or",
@@ -521,7 +524,8 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
            targetArch := if raw.profile.targetTriple == "unverified" then ""
              else (raw.profile.targetTriple.splitOn "-").headD "",
            bigEndian := raw.profile.endian == "big", identities := raw.identities,
-           externs := raw.externs, exportDecl := raw.exportDecl }
+           externs := raw.externs, exportDecl := raw.exportDecl, allocatorModel := raw.allocatorModel,
+           targetOs := BuildProfile.tripleOs raw.profile.targetTriple }
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `supportedVersions`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func := do

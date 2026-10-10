@@ -36,12 +36,13 @@ def p1 : Ptr := ⟨some 1, 0⟩
 def domA : ErrorDomain := ⟨#["A"], by decide, by decide⟩
 
 theorem mem1_access {bs : Array Byte} {kind : BlockKind} {o n a : Nat} (hn : o + n ≤ bs.size)
-    (ha : (4096 + o) % a = 0) :
+    (ha : (4096 + o) % a = 0)
+    (hlo : kind.mappedLo ≤ o := by first | simp [BlockKind.mappedLo] | omega) :
     (mem1 bs kind).access (p0.add o) n a = pure (0, blk bs kind, o) := by
   have hle : ((o : Int) + n) ≤ (bs.size : Int) := by omega
-  simp [Mem.access, mem1, p0, Ptr.add, blk, hle, ha]
+  simp [Mem.access, mem1, p0, Ptr.add, blk, hle, ha, hlo]
 
-nonvacuity_witness mem1_access := ⟨#[], .heap, 0, 0, 1, Nat.le_refl 0, by decide, trivial⟩
+nonvacuity_witness mem1_access := ⟨#[], .heap, 0, 0, 1, Nat.le_refl 0, by decide, Nat.le_refl 0, trivial⟩
 
 theorem mem1_noRace (bs : Array Byte) (kind : BlockKind) (b o n : Nat) (k : AccessKind) :
     NoRace (mem1 bs kind) b o n k :=

@@ -115,6 +115,11 @@
  },
  "name": "threads.claimOnce",
  "module": "root",
+ "src": {
+  "file": "threads.zig",
+  "module": "threads",
+  "decl_line": 120
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -122,7 +127,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,
@@ -133,7 +139,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 45
   },
   {
    "id": 4,
@@ -180,7 +187,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 9,
@@ -191,7 +199,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 42
   },
   {
    "id": 11,
@@ -238,7 +247,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 16,
@@ -306,7 +316,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 32
   },
   {
    "id": 24,
@@ -322,7 +333,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 32
   },
   {
    "id": 27,
@@ -332,6 +344,7 @@
     "ty": 15,
     "func": "Thread.spawn__func_2",
     "module": "std",
+    "instance_key": "2fe511292441497b0b567852805d21ce73cb37b9bc38ad9128983d97ea64831a",
     "noreturn": false,
     "comptime_fn": "threads.claim",
     "comptime_fn_module": "root"
@@ -379,7 +392,8 @@
      "id": 29,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 5
+     "line": 5,
+     "column": 16
     },
     {
      "id": 30,
@@ -456,7 +470,8 @@
    "id": 38,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 32
   },
   {
    "id": 40,
@@ -472,7 +487,8 @@
    "id": 42,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 32
   },
   {
    "id": 43,
@@ -482,6 +498,7 @@
     "ty": 15,
     "func": "Thread.spawn__func_2",
     "module": "std",
+    "instance_key": "2fe511292441497b0b567852805d21ce73cb37b9bc38ad9128983d97ea64831a",
     "noreturn": false,
     "comptime_fn": "threads.claim",
     "comptime_fn_module": "root"
@@ -529,7 +546,8 @@
      "id": 45,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 6
+     "line": 6,
+     "column": 21
     },
     {
      "id": 46,
@@ -545,7 +563,8 @@
      "id": 47,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 6
+     "line": 6,
+     "column": 21
     },
     {
      "id": 48,
@@ -567,7 +586,8 @@
      "id": 49,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 7
+     "line": 7,
+     "column": 16
     },
     {
      "id": 50,
@@ -644,7 +664,8 @@
    "id": 58,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 12
   },
   {
    "id": 59,
@@ -660,7 +681,8 @@
    "id": 60,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 12
   },
   {
    "id": 61,
@@ -682,7 +704,8 @@
    "id": 62,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 12
   },
   {
    "id": 63,
@@ -698,7 +721,8 @@
    "id": 64,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 9
+   "line": 9,
+   "column": 12
   },
   {
    "id": 65,
@@ -720,7 +744,8 @@
    "id": 66,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 21
   },
   {
    "id": 67,
@@ -736,12 +761,18 @@
    "id": 68,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 21
   },
   {
    "id": 69,
    "tag": "dbg_inline_block",
    "ty": 9,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 20
+   },
    "body": [
     {
      "id": 70,
@@ -798,7 +829,8 @@
      "id": 75,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 40
     },
     {
      "id": 76,
@@ -835,7 +867,8 @@
      "id": 79,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 80,
@@ -854,7 +887,8 @@
    "id": 81,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 57
   },
   {
    "id": 82,
@@ -870,12 +904,18 @@
    "id": 83,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 57
   },
   {
    "id": 84,
    "tag": "dbg_inline_block",
    "ty": 5,
+   "src": {
+    "file": "atomic.zig",
+    "module": "std",
+    "decl_line": 20
+   },
    "body": [
     {
      "id": 85,
@@ -932,7 +972,8 @@
      "id": 90,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 40
     },
     {
      "id": 91,
@@ -969,7 +1010,8 @@
      "id": 94,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 2
+     "line": 2,
+     "column": 13
     },
     {
      "id": 95,
@@ -998,7 +1040,8 @@
    "id": 97,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 32
   },
   {
    "id": 98,
@@ -1017,7 +1060,8 @@
    "id": 99,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 10
+   "line": 10,
+   "column": 5
   },
   {
    "id": 100,
@@ -1548,6 +1592,7 @@
    "size": "one",
    "const": true,
    "child": 43,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -1578,11 +1623,102 @@
    "name": "mem.Allocator.VTable",
    "module": "std",
    "layout": "auto",
-   "no_fields": true
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 45,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 46,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 47,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 48,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
   },
   {
    "k": "other",
    "name": "c.pthread_t__opaque_0"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 49,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 50,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 51,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 52,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
   }
  ]
 }

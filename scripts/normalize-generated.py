@@ -128,9 +128,12 @@ def split_generated(data, required=False):
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
     # `admission` is present only when the translator was given an admission opt-in
     # (`--allow-unqualified-build-mode`, docs/build-modes.md).
+    # `allocator_model` is present only under `--allocator-model translated`
+    # (docs/allocator-model.md): its trust base is the OS boundary (OSM-01).
     if (not isinstance(metadata, dict) or
-            set(metadata) - {"admission"} != {"profile", "float_semantics", "correspondence"} or
+            set(metadata) - {"admission", "allocator_model"} != {"profile", "float_semantics", "correspondence"} or
             metadata.get("admission", "unqualified-build-mode") != "unqualified-build-mode" or
+            metadata.get("allocator_model", "translated") != "translated" or
             not isinstance(metadata["float_semantics"], str) or
             metadata["float_semantics"] not in {"ieee", "compiler-rt"} or metadata["correspondence"] != "model"):
         raise ValueError("unsupported generated profile record")

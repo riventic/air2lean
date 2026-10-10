@@ -83,7 +83,24 @@ inductive BlockKind where
   `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
   free through one allocator of a block that another one made throws `.illegal`. -/
   | owned (a : AllocId)
+  /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OSM-01). The mapping's
+  live bytes are the offsets from `lo` to the block's size: `munmap` of a page prefix moves `lo`
+  up, of a page tail shrinks the bytes, of the whole mapping ends the block. An access below
+  `lo` throws `.illegal` (`Mem.access`), as one past the size does. -/
+  | mapped (lo : Nat)
   deriving DecidableEq, Repr
+
+/-- The first live offset of a block: `lo` for an OS mapping (`.mapped lo`), 0 otherwise. -/
+def BlockKind.mappedLo : BlockKind → Nat
+  | .mapped lo => lo
+  | _ => 0
+
+@[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
+@[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_global : BlockKind.global.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_constGlobal : BlockKind.constGlobal.mappedLo = 0 := rfl
+@[simp] theorem BlockKind.mappedLo_owned (a : AllocId) : (BlockKind.owned a).mappedLo = 0 := rfl
 
 structure Block where
   bytes : Array Byte
@@ -228,15 +245,24 @@ the address (`ptrFromAddr`): a freed block and a later block at its address (add
 `docs/address-reuse.md`), or one block's one-past-the-end address that starts the next block (two
 blocks may be adjacent, `docs/address-placement.md`). -/
 inductive ProvenanceMode where
-  /-- The default: the integer does not say which block it came from, so the recovery throws
-  `.unspecified`. A stale integer never gains the provenance of the block that reuses its
-  address. -/
+  /-- The default: the integer does not say which block it came from, so the recovery gives no
+  provenance (`⟨none, n⟩`: the address only, every access `.illegal`). A stale integer never
+  gains the provenance of the block that reuses its address. -/
   | strict
   /-- The address-sensitive contract: the address recovers the provenance of the live block that
   covers it (live blocks never share an address). A program that declares it asserts that each
   integer it converts belongs to that block, also a stale one. -/
   | liveBlock
   deriving DecidableEq, Repr, Inhabited
+
+/-- The OS page-mapping oracle (premise OSM-01, `ZigLean/Os/Mmap.lean`). Whether an `mmap` or a
+growing `mremap` fails is the allocator failure decision (`Mem.allocDenied`, one attempt index
+for every request); this picks only whether a growth that may move does move, from the attempt
+index and the requested length in bytes. -/
+structure OsPolicy where
+  /-- A growth with `MREMAP.MAYMOVE` moves the mapping to a fresh address. -/
+  mremapMoves : Nat → Nat → Bool := fun _ _ => false
+  deriving Inhabited
 
 /-- Selected allocator environment: a per-request cap, finite failure indices, an arbitrary
 failure oracle over (attempt index, request bytes) and an optional live-heap budget.
@@ -254,13 +280,15 @@ structure AllocPolicy where
   budget : Option Nat := none
   /-- `@ptrFromInt` of an address that more than one block covers. -/
   provenance : ProvenanceMode := .strict
+  /-- The move choice of the OS page-mapping model (`ZigLean/Os/Mmap.lean`). -/
+  os : OsPolicy := {}
   deriving Inhabited
 
 /-- The oracles are functions, so they are shown opaquely. -/
 instance : Repr AllocPolicy where
   reprPrec p _ := f!"\{ maxBytes := {repr p.maxBytes}, failures := {repr p.failures}, " ++
     f!"byteRemap := {repr p.byteRemap}, fails := <oracle>, budget := {repr p.budget}, " ++
-    f!"provenance := {repr p.provenance} }"
+    f!"provenance := {repr p.provenance}, os := <oracle> }"
 
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
@@ -396,6 +424,14 @@ structure Mem where
   stackLimit : Option Nat := none
   /-- The bytes that the frames of the calls in progress take (`Zig.enterFrame`). -/
   stackUsed : Nat := 0
+  /-- The explicit oracle of arbitrary words (`arbitraryWord`, `--allocator-model translated`,
+  `docs/allocator-model.md`): query `k` (from 0, in execution order) returns `arbitrary[k]`,
+  `0` past the end. `@returnAddress()` and an `undefined` pointer operand read it. Every finite
+  run makes finitely many queries, so a theorem about every initial `Mem` holds for every
+  sequence of values; nothing ties a value to a real code address. -/
+  arbitrary : Array (BitVec 64) := #[]
+  /-- The number of `arbitraryWord` queries so far. -/
+  arbitraryNext : Nat := 0
   deriving Repr, Inhabited
 
 /-- The state of a function that uses memory. -/
@@ -404,12 +440,29 @@ abbrev MemM (α : Type) := StateT Mem Result α
 /-- The body monad of a function that uses memory: its locals over `MemM`. -/
 abbrev MM (σ α : Type) := StateT σ MemM α
 
+/-- The next value of the explicit oracle `Mem.arbitrary`. No memory access. -/
+def arbitraryWord : MemM (BitVec 64) := do
+  let m ← get
+  set { m with arbitraryNext := m.arbitraryNext + 1 }
+  pure (m.arbitrary.getD m.arbitraryNext 0)
+
+/-- `@returnAddress()`: an arbitrary `usize` (`arbitraryWord`). Allocators only pass it along
+as `ret_addr`. -/
+def returnAddress : MemM (BitVec 64) := arbitraryWord
+
+/-- An `undefined` pointer operand (`--allocator-model translated`, e.g. the `ptr` of
+`std.heap.page_allocator`): a pointer without a block at an arbitrary address
+(`arbitraryWord`), so every access through it throws `.illegal`. -/
+def undefPtr : MemM Ptr := do
+  pure ⟨none, (← arbitraryWord).toNat⟩
+
 /-- `n` rounded up to a multiple of `a` (`a = 0`: `n`). -/
 def alignUp (n a : Nat) : Nat := if a = 0 then n else (n + a - 1) / a * a
 
 /-- The block and the offset of an access of `n` bytes at `p` that needs alignment `align`.
-Throws `.illegal` if the block is dead, the bytes are not all in the block, or the address is
-not a multiple of `align`. -/
+Throws `.illegal` if the block is dead, the bytes are not all in the block (for an OS mapping:
+not all at or above its first live offset, `BlockKind.mappedLo`), or the address is not a
+multiple of `align`. -/
 def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block × Nat) :=
   match p.block with
   | none => throw .illegal
@@ -417,7 +470,8 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
     match m.blocks[b]? with
     | none => throw .illegal
     | some blk =>
-      if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0
+      if blk.live ∧ 0 ≤ p.off ∧ p.off + n ≤ blk.bytes.size ∧ (blk.addr + p.off.toNat) % align = 0 ∧
+          blk.kind.mappedLo ≤ p.off.toNat
       then pure (b, blk, p.off.toNat) else throw .illegal
 
 /-- `Mem.access` for a write: a write to a `const` global throws `.illegal`. -/
@@ -772,8 +826,16 @@ block's bytes, if no other block covers the address.
 More than one block covers `n` when a freed block and a later block share addresses (reuse), or
 when `n` is one past the end of a block and the start of an adjacent one: the integer does not
 say which one it came from. Then the policy's `provenance` decides: `.strict` (the default)
-throws `.unspecified`; the address-sensitive contract `.liveBlock` takes the live block that
-contains `n`, else a live block that ends at `n` (`docs/address-reuse.md`). -/
+gives no provenance; the address-sensitive contract `.liveBlock` takes the live block that
+contains `n`, else a live block that ends at `n`, and gives no provenance if none of the
+covering blocks is live (`docs/address-reuse.md`).
+
+**No provenance** is `⟨none, n⟩`, as when no block covers `n`: its address is `n` (`ptrAddr`, so
+`@intFromPtr` round-trips and `==` compares addresses), and every load, store, atomic op, `free`
+or `munmap` through it is `.illegal` (`Mem.access` needs a block). This is a conservative
+over-approximation: native code may dereference the address; the model claims nothing about such
+an access. A program that only passes the address on (`std.heap.PageAllocator`'s `mmap` hint) is
+unaffected. -/
 def ptrFromAddr (n : Nat) : MemM Ptr := do
   let m ← get
   let hits := m.blocks.zipIdx.filterMap fun (blk, b) =>
@@ -783,12 +845,12 @@ def ptrFromAddr (n : Nat) : MemM Ptr := do
   | [(b, blk)] => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
   | _ =>
     match m.allocPolicy.provenance with
-    | .strict => throw .unspecified
+    | .strict => pure ⟨none, n⟩
     | .liveBlock =>
       match (hits.find? fun (_, blk) => blk.live ∧ n < blk.addr + blk.bytes.size) <|>
           hits.find? (·.2.live) with
       | some (b, blk) => pure ⟨some b, (n : Int) - (blk.addr : Int)⟩
-      | none => throw .unspecified
+      | none => pure ⟨none, n⟩
 
 /-- `<`, `<=`, `>`, `>=` on pointers compare the addresses. The order of two blocks is the
 placement's (`Mem.place`): nothing fixes it. -/

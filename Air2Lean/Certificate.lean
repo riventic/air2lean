@@ -72,6 +72,7 @@ partial def printVal : Val → String
   | .ptrConst t g o => s!"(.ptrConst {t} {g} {o})"
   | .ptrNull t => s!"(.ptrNull {t})"
   | .ptrOther t k => s!"(.ptrOther {t} {str k})"
+  | .ptrInt t a => s!"(.ptrInt {t} {a})"
   | .sliceConst t p l => s!"(.sliceConst {t} {printVal p} {printVal l})"
 
 def arithOp : ArithOp → String | .add => ".add" | .sub => ".sub" | .mul => ".mul"
