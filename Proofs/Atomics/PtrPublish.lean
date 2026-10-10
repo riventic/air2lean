@@ -497,7 +497,7 @@ theorem node_noErr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 1 = .s
   have hacc : (allocM m).access nPtr (Enc.size (BitVec 32)) 4 = pure (1, nodeBlk m, 0) :=
     access_of rfl (allocM_node hs1) rfl (by simp [nPtr])
       (by simp [nPtr, nodeBlk, show Enc.size (BitVec 32) = 4 from rfl])
-      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m 4 4 (by decide))
+      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m 4 4 (by decide)) (by simp [nodeBlk])
   have ht : (allocM m).current < (allocM m).threads.size := by
     show m.current < m.threads.size; rw [hc, (thr_of hi.thr (.inr (.inr (.inr (.inl hg))))).1]; decide
   have hnr : NoRace (allocM m) 1 0 (Enc.size (BitVec 32)) .write := noRace_of fun e he hb _ _ => by
@@ -521,7 +521,7 @@ theorem step_node {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : G 1 = 
   obtain ⟨b, blk, o, hacc, -, rfl⟩ := store_ok h
   have hacc' : (allocM m).access nPtr (Enc.encode (42 : BitVec 32)).size 4 = pure (1, nodeBlk m, 0) :=
     access_of rfl (allocM_node hs1) rfl (by simp [nPtr]) (by rw [size_encode_u32]; simp [nPtr, nodeBlk])
-      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m 4 4 (by decide))
+      (by simpa [nodeBlk, nPtr] using Mem.newAddr_mod m 4 4 (by decide)) (by simp [nodeBlk])
   rw [hacc'] at hacc
   cases hacc
   have ht : m.current < m.threads.size := by

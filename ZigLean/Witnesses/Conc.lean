@@ -81,9 +81,9 @@ liveness_witness TTriple.storeBytesAt :=
     by decide +kernel, by decide +kernel, by decide, by decide,
     TLive.mem1 tbytes32 (ok_of_okb (by decide +kernel))⟩
 
-nonvacuity_witness TTriple.alloc := ⟨.stack, 1, 1, by decide, TAdmit.of_empty rfl⟩
+nonvacuity_witness TTriple.alloc := ⟨.stack, 1, 1, by decide, rfl, TAdmit.of_empty rfl⟩
 liveness_witness TTriple.alloc :=
-  ⟨.stack, 1, 1, by decide, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
+  ⟨.stack, 1, 1, by decide, rfl, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩
 
 nonvacuity_witness alloc_next := ⟨emp, 1, 1, by decide, TAdmit.of_empty rfl⟩
 liveness_witness alloc_next := ⟨emp, 1, 1, by decide, TLive.of_empty rfl (ok_of_okb (by decide +kernel))⟩

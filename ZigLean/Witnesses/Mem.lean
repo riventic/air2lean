@@ -68,7 +68,7 @@ nonvacuity_witness Raw.get_set :=
 
 nonvacuity_witness access_of :=
   ⟨mem1 w32, p0, 4, 4, 0, blk w32, rfl, rfl, rfl, by decide, by simp [blk, w32_size, p0],
-    by decide, trivial⟩
+    by decide, by decide, trivial⟩
 
 nonvacuity_witness access_write_other :=
   ⟨mem1 w32, p0.add 0, 4, 4, #[], 1, 0, blk w32, blk w32, 0, 0, w32_access, by decide, trivial⟩

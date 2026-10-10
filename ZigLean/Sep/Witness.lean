@@ -34,29 +34,31 @@ open Assn
 
 /-! ## One block of bytes -/
 
-theorem mem1_heap (bs : Array Byte) (kind : BlockKind) (l : Loc) :
+theorem mem1_heap (bs : Array Byte) (kind : BlockKind) (l : Loc)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     (mem1 bs kind).heap l =
       if l.1 = 0 ∧ l.2 < bs.size then some ⟨bs[l.2]!, 4096, bs.size, kind⟩ else none := by
   obtain ⟨b, o⟩ := l
   rcases b with _ | b
-  · by_cases h : o < bs.size <;> simp [Mem.heap, mem1, blk, h]
+  · by_cases h : o < bs.size <;> simp [Mem.heap, mem1, blk, h, hk]
   · simp [Mem.heap, mem1]
 
 theorem mem1_seq (bs : Array Byte) (kind : BlockKind) : (mem1 bs kind).Seq :=
   ⟨singleThread_empty rfl Nat.zero_lt_one⟩
 
-theorem mem1_bytesAt (bs : Array Byte) (kind : BlockKind) :
+theorem mem1_bytesAt (bs : Array Byte) (kind : BlockKind) (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     bytesAt p0 4096 bs.size kind bs (mem1 bs kind).heap :=
-  ⟨0, rfl, by decide, fun l => by simp [mem1_heap, p0]⟩
+  ⟨0, rfl, by decide, fun l => by simp [mem1_heap _ _ _ hk, p0]⟩
 
-theorem mem1_bytesAt' {bs : Array Byte} {kind : BlockKind} {S : Nat} (h : bs.size = S) :
-    bytesAt p0 4096 S kind bs (mem1 bs kind).heap := h ▸ mem1_bytesAt bs kind
+theorem mem1_bytesAt' {bs : Array Byte} {kind : BlockKind} {S : Nat} (h : bs.size = S) (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    bytesAt p0 4096 S kind bs (mem1 bs kind).heap := h ▸ mem1_bytesAt bs kind hk
 
 /-- `p0` points to the value that the block holds. -/
 theorem mem1_pts {T : Type} [Enc T] {bs : Array Byte} {kind : BlockKind} {a : Nat} {v : T}
     (hs : bs.size = Enc.size T) (hv : Enc.decode bs = pure v) (ha : 4096 % a = 0)
-    (hk : kind ≠ .constGlobal) : pts p0 a v (mem1 bs kind).heap :=
-  ⟨4096, bs.size, kind, bs, by simpa [p0] using ha, hs, hv, mem1_bytesAt bs kind, hk⟩
+    (hk : kind ≠ .constGlobal) (hlo : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    pts p0 a v (mem1 bs kind).heap :=
+  ⟨4096, bs.size, kind, bs, by simpa [p0] using ha, hs, hv, mem1_bytesAt bs kind hlo, hk⟩
 
 theorem mem1_pts' {T : Type} [Enc T] [LawfulEnc T] (v : T) {a : Nat} (ha : 4096 % a = 0) :
     pts p0 a v (mem1 (Enc.encode v)).heap :=
@@ -85,8 +87,10 @@ theorem pts32 : pts p0 4 (0 : BitVec 32) (mem1 (Enc.encode (0 : BitVec 32))).hea
 theorem arr32 : arr p0 [(0 : BitVec 32)] (mem1 (Enc.encode (0 : BitVec 32))).heap :=
   mem1_arr1 0 (by decide +kernel)
 
-theorem byte1 (kind : BlockKind) : bytesAt p0 4096 1 kind #[.undef] (mem1 #[.undef] kind).heap :=
-  mem1_bytesAt _ _
+theorem byte1 (kind : BlockKind)
+    (hk : kind.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
+    bytesAt p0 4096 1 kind #[.undef] (mem1 #[.undef] kind).heap :=
+  mem1_bytesAt _ _ hk
 
 /-- Two values one after the other: `p0` points to `v` and `p0.add (Enc.size T)` to `w`. -/
 theorem mem1_pts₂ {T U : Type} [Enc T] [LawfulEnc T] [Enc U] [LawfulEnc U] (v : T) (w : U)
@@ -111,14 +115,16 @@ theorem mem1_pts₂ {T U : Type} [Enc T] [LawfulEnc T] [Enc U] [LawfulEnc U] (v 
 
 /-! ## Two blocks of bytes -/
 
-theorem mem2_heap (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) (l : Loc) :
+theorem mem2_heap (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) (l : Loc)
+    (hk₁ : k₁.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo])
+    (hk₂ : k₂.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     (mem2 bs₁ bs₂ k₁ k₂).heap l =
       if l.1 = 0 ∧ l.2 < bs₁.size then some ⟨bs₁[l.2]!, 4096, bs₁.size, k₁⟩
       else if l.1 = 1 ∧ l.2 < bs₂.size then some ⟨bs₂[l.2]!, 8192, bs₂.size, k₂⟩ else none := by
   obtain ⟨b, o⟩ := l
   rcases b with _ | _ | b
-  · by_cases h : o < bs₁.size <;> simp [Mem.heap, mem2, blk, h]
-  · by_cases h : o < bs₂.size <;> simp [Mem.heap, mem2, blk, h]
+  · by_cases h : o < bs₁.size <;> simp [Mem.heap, mem2, blk, h, hk₁]
+  · by_cases h : o < bs₂.size <;> simp [Mem.heap, mem2, blk, h, hk₂]
   · simp [Mem.heap, mem2]
 
 theorem mem2_seq {bs₁ bs₂ : Array Byte} (k₁ k₂ : BlockKind) (h : bs₁.size < 4096) :
@@ -126,7 +132,9 @@ theorem mem2_seq {bs₁ bs₂ : Array Byte} (k₁ k₂ : BlockKind) (h : bs₁.s
   ⟨singleThread_empty rfl Nat.zero_lt_one⟩
 
 /-- Each block of `mem2` is owned separately. -/
-theorem mem2_bytesAt (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) :
+theorem mem2_bytesAt (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind)
+    (hk₁ : k₁.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo])
+    (hk₂ : k₂.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     (bytesAt p0 4096 bs₁.size k₁ bs₁ ∗ bytesAt p1 8192 bs₂.size k₂ bs₂) (mem2 bs₁ bs₂ k₁ k₂).heap := by
   refine ⟨fun l => if l.1 = 0 ∧ l.2 < bs₁.size then some ⟨bs₁[l.2]!, 4096, bs₁.size, k₁⟩ else none,
     fun l => if l.1 = 1 ∧ l.2 < bs₂.size then some ⟨bs₂[l.2]!, 8192, bs₂.size, k₂⟩ else none,
@@ -135,15 +143,16 @@ theorem mem2_bytesAt (bs₁ bs₂ : Array Byte) (k₁ k₂ : BlockKind) :
   · by_cases h : l.1 = 0
     · right; simp [h]
     · left; simp [h]
-  · rw [mem2_heap]
+  · rw [mem2_heap _ _ _ _ _ hk₁ hk₂]
     by_cases h : l.1 = 0 ∧ l.2 < bs₁.size
     · simp [h]
     · simp only [h, ↓reduceIte, Heap.union_apply, Option.none_or]
 
 theorem mem2_bytesAt' {bs₁ bs₂ : Array Byte} {k₁ k₂ : BlockKind} {S₁ S₂ : Nat} (h₁ : bs₁.size = S₁)
-    (h₂ : bs₂.size = S₂) :
+    (h₂ : bs₂.size = S₂) (hk₁ : k₁.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo])
+    (hk₂ : k₂.mappedLo = 0 := by first | rfl | simp_all [BlockKind.mappedLo]) :
     (bytesAt p0 4096 S₁ k₁ bs₁ ∗ bytesAt p1 8192 S₂ k₂ bs₂) (mem2 bs₁ bs₂ k₁ k₂).heap := by
-  subst h₁ h₂; exact mem2_bytesAt bs₁ bs₂ k₁ k₂
+  subst h₁ h₂; exact mem2_bytesAt bs₁ bs₂ k₁ k₂ hk₁ hk₂
 
 /-! ## Admissible inputs and returning runs -/
 
