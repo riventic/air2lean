@@ -93,11 +93,6 @@ def gauth (γ e n : Nat) : FAssn := fun r =>
 def gfrag (γ e : Nat) : FAssn := fun r =>
   r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.at γ (GCell.frag1 e 1)
 
-/-- A ghost-only assertion owns no bytes. -/
-theorem gauth_heap {γ e n : Nat} {r : Res} (h : gauth γ e n r) : r.heap = FHeap.empty := h.1
-
-theorem gfrag_heap {γ e : Nat} {r : Res} (h : gfrag γ e r) : r.heap = FHeap.empty := h.1
-
 /-- The resource of `gauth γ e n ⋆ gfrag γ e`. -/
 theorem gauth_gfrag {γ e n : Nat} {r : Res} (h : (gauth γ e n ⋆ gfrag γ e) r) :
     r = ⟨FHeap.empty, Know.none, Ghost.at γ ((GCell.auth1 e n).add (GCell.frag1 e 1))⟩ := by

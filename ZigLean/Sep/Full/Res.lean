@@ -546,6 +546,26 @@ theorem abytesAt_bytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
   simp only [FHeap.erase, hl l]
   split <;> rfl
 
+/-! ### `⋆` as an associative, commutative operation (`ac_rfl` on `FAssn`) -/
+
+theorem sep_comm_eq (P Q : FAssn) : (P ⋆ Q) = (Q ⋆ P) :=
+  funext fun _ => propext ⟨sep_comm, sep_comm⟩
+
+theorem sep_assoc_eq (P Q R : FAssn) : ((P ⋆ Q) ⋆ R) = (P ⋆ (Q ⋆ R)) :=
+  funext fun _ => propext ⟨sep_assoc, sep_assoc'⟩
+
+instance : Std.Associative (α := FAssn) (· ⋆ ·) := ⟨sep_assoc_eq⟩
+instance : Std.Commutative (α := FAssn) (· ⋆ ·) := ⟨sep_comm_eq⟩
+
+theorem sep_left_comm_eq (P Q R : FAssn) : (P ⋆ (Q ⋆ R)) = (Q ⋆ (P ⋆ R)) := by ac_rfl
+
+theorem sep_ex_eq {γ : Type} (P : γ → FAssn) (Q : FAssn) :
+    (FAssn.ex P ⋆ Q) = FAssn.ex fun x => P x ⋆ Q :=
+  funext fun _ => propext sep_ex
+
+/-- Rewrite a held assertion along an equation (`ac_rfl`). -/
+theorem of_eq {P Q : FAssn} {r : Res} (e : P = Q) (h : P r) : Q r := e ▸ h
+
 end Laws
 
 end Full
