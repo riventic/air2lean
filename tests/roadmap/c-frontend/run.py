@@ -65,6 +65,9 @@ STD_ROUNDS = 4
 LIBC_TARGET = ["-target", "x86_64-linux-musl", "-mcpu=baseline"]
 LIBC_FILTER = ["c."]
 RT_UNIT = "compiler_rt"
+# compiler_rt's functions are exported by the needed symbols' names (`compiler_rt.memcpy`, ...):
+# its whole namespace has generic-type methods with one name (`atomics.fetch_op_N.Updater.update`
+# per operation), which the exporter refuses as one identity (docs/air-json.md §Identity).
 RT_FILTER = "compiler_rt."
 COMPILER_RT_FLAGS = ["-OReleaseFast", "-fno-builtin", "-fno-stack-check", "-fno-error-tracing", "-lc"]
 PANIC_CALLEE = re.compile(r"^debug\.(FullPanic\(|defaultPanic$)")
@@ -403,7 +406,7 @@ def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
         rt_air = work / "air_compiler_rt"
         error, rt_docs, rt_live, rt_prefixes = export_closure(
             zig_air, ["build-lib", "-fno-emit-bin", *COMPILER_RT_FLAGS, *LIBC_TARGET,
-                      str(compiler_rt_source(zig_air))], [RT_FILTER], rt_air, work,
+                      str(compiler_rt_source(zig_air))], [RT_FILTER + s for s in needed], rt_air, work,
             lambda d, defs: [defs[s] for s in needed if s in defs], unit=RT_UNIT)
         if error:
             return {"status": "failed", "files": len(rt_docs), "log": error}, None
@@ -422,7 +425,7 @@ def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
               "std_prefixes": prefixes[1 + len(STD_FILTER) + len(LIBC_FILTER):],
               "libc_functions": sorted(n for n in live if n.startswith("c.")),
               "compiler_rt_functions": sorted(ANON.sub("", n) for n in rt_live),
-              "compiler_rt_prefixes": rt_prefixes[1:],
+              "compiler_rt_prefixes": rt_prefixes[len(needed):],
               "bound": {s: (f"{RT_UNIT}#{rt_defined[s]}" if s in rt_defined else defined.get(s))
                         for s in sorted({s for n in live for s in docs[n][2]})},
               "unexported_callees": sorted({c for n in live for c in docs[n][1]} - live)}
@@ -443,8 +446,15 @@ def stage_air_export(zig_air, zig_file, stem, work, native=None, libc=False):
     return record, air
 
 
+def admission(air):
+    """compiler_rt is compiled `ReleaseFast`, outside the qualified build modes: a program with
+    the link unit needs the opt-in, which the generated header records (docs/profiles.md)."""
+    return ["--allow-unqualified-build-mode"] if any(air.glob(f"{RT_UNIT}#*.json")) else []
+
+
 def stage_air2lean(binary, air):
-    code, out = run([binary, "--diagnostics-json", str(air), "--diagnostic-limit", "256"], TIMEOUT["diag"])
+    code, out = run([binary, "--diagnostics-json", str(air), "--diagnostic-limit", "256", *admission(air)],
+                    TIMEOUT["diag"])
     try:
         doc = json.loads(out)
     except ValueError:
@@ -465,8 +475,8 @@ def stage_air2lean(binary, air):
 def stage_lean(binary, air, stem, expected, work):
     namespace = "CFront" + "".join(part.capitalize() for part in stem.split("_"))
     gen = work / "Gen.lean"
-    code, out = run([binary, str(air), "-o", str(gen), "--namespace", namespace, "--prefix", stem + "."],
-                    TIMEOUT["emit"])
+    code, out = run([binary, str(air), "-o", str(gen), "--namespace", namespace, "--prefix", stem + ".",
+                     *admission(air)], TIMEOUT["emit"])
     if code != 0 or not gen.exists():
         return {"status": "emit_failed", "log": tail(out)}
     text = gen.read_text()
