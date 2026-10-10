@@ -2688,6 +2688,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- `unordered`: `--allocator-model translated` only (`Check.lean`).
     let expr := if order == .unordered then
         if fc.atomicPtr ptr then s!"Zig.atomicLoadUnorderedEncC ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
+        else if fc.atomicTyped ptr then s!"Zig.atomicLoadUnorderedAsC ({fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr}"
         else s!"Zig.atomicLoadUnorderedC (n := {bits}) {fc.ptrAlign ptr} {rv ptr}"
       else if fc.atomicPtr ptr then s!"Zig.atomicLoadPtrC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"
       else if fc.atomicTyped ptr then s!"Zig.atomicLoadAsC ({fc.pointeeTy ptr}) {o} {fc.ptrAlign ptr} {rv ptr}"

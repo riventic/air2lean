@@ -105,9 +105,11 @@ private def hasErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
   (errorCapabilityScan types id 1024).map (·.2)
 
 /-- A closed error-free graph may contain sharing or cycles. This bounded absence proof
-is used only for global aliases whose strict capability traversal could not finish;
-casts and parent recovery retain the strict cycle-rejecting traversal. -/
-private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : Bool := Id.run do
+is used for global aliases whose strict capability traversal could not finish, and for pointer
+casts under `--allocator-model translated` (`translatedErrorCapability`); other casts and parent
+recovery retain the strict cycle-rejecting traversal. -/
+private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
+    (opaquePtrs : Bool := false) : Bool := Id.run do
   let mut pending : List TyId := [root, child]
   let mut visited : Std.HashSet TyId := {}
   for step in [:1024] do
@@ -130,7 +132,11 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : B
       let remaining := 1023 - step
       if count > remaining || rest.length + count > remaining then return false
       visited := visited.insert id
-      pending := (childTys ty).toList ++ rest
+      -- `opaquePtrs`: a `*anyopaque` edge is not followed (`translatedErrorCapability`).
+      let opaqueEdge := opaquePtrs && match ty with
+        | .ptr _ _ c => types[c]? == some (.other "anyopaque")
+        | _ => false
+      pending := (if opaqueEdge then [] else (childTys ty).toList) ++ rest
   return pending.isEmpty
 
 /-- The fields of a non-packed struct or tuple occupy disjoint byte ranges inside the type.
@@ -158,6 +164,16 @@ def checkFieldRanges (fnName : String) (types : Array Ty) (layouts : Array Layou
   for (a, b) in sorted.zip (sorted.extract 1 sorted.size) do
     if b.1 < a.2 then
       throw s!"{fnName}: near line {line}: type {id}: fields at offsets {a.1} and {b.1} overlap"
+
+/-- `--allocator-model translated`: the error capability of a pointer cast's pointee.
+`hasErrorCapability`, or, where its strict traversal does not finish (the cycle of a list node such
+as `ArenaAllocator.Node`, or a `*anyopaque` field such as `Allocator.ptr`), `some false` for a closed
+error-free type graph whose `*anyopaque` edges are not followed: an opaque pointee is no typed
+storage, and every recovery of a typed pointer from it is itself a checked cast (`fromOpaque`). -/
+private def translatedErrorCapability (types : Array Ty) (id : TyId) : Option Bool :=
+  match hasErrorCapability types id with
+  | some c => some c
+  | none => if closedErrorFreeAliasGraph types id id (opaquePtrs := true) then some false else none
 
 /-- Reject unsupported types and pointer representations, recursively through fields and
 tuple fields. `seen`: the types on the path to `id`; a type can point to itself (a list node). -/
@@ -1219,8 +1235,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- A code address carries no data storage: a function pointer may be reinterpreted,
       -- and a call through it dispatches over the table of its type (`.illegal` for any
       -- other block, L11).
+      let capability (t : TyId) : Option Bool :=
+        if cx.allocatorModel == .translated then translatedErrorCapability cx.types t
+        else hasErrorCapability cx.types t
       let castCapability (t : TyId) : Option Bool :=
-        if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
+        if (cx.types[t]?.map isFnTy).getD false then some false else capability t
       -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no
       -- typed storage, like an integer: the target must be provably error-free.
       let fromOpaque := cx.allocatorModel == .translated &&
@@ -1229,11 +1248,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- passes `fromOpaque`.
       let toOpaque := cx.allocatorModel == .translated &&
         ((ptrOrOptChild cx.types ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
-        ((ptrOrOptChild cx.types aty).bind (hasErrorCapability cx.types)) == some false
+        ((ptrOrOptChild cx.types aty).bind capability) == some false
       -- A qualifier-only or optional-wrap cast of `*anyopaque` keeps its pointee: no recovery.
       if fromOpaque && !qualifierOnly && !optionalWrapOnly then
         if let some target := ptrOrOptChild cx.types ty then
-          unless hasErrorCapability cx.types target == some false do
+          unless capability target == some false do
             cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       match ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty with
       | some source, some target =>
@@ -1384,7 +1403,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     pure line
   | .atomicLoad ptr .unordered =>
     -- `--allocator-model translated`: an `unordered` load reads any message not older than the
-    -- newest one that happened before it (`Zig.atomicLoadUnorderedC`); integer or pointer only.
+    -- newest one that happened before it (`Zig.atomicLoadUnorderedC`); integer, packed struct
+    -- (`ArenaAllocator.Node.Size`) or pointer only.
     unless cx.allocatorModel == .translated do
       cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
     cx.memAccess line ptr
@@ -1394,8 +1414,8 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let some c := (cx.valTy? ptr).bind (ptrChild cx.types)
       | cx.fail line "an atomic op through a value that is not a pointer"
     unless atomicPtrPointee cx.types cx.layouts c ||
-        (match cx.types[c]? with | some (.int ..) => true | _ => false) do
-      cx.fail line "an `unordered` load of a type other than an integer or a pointer is outside the subset"
+        (match cx.types[c]? with | some (.int ..) | some (.struct _ "packed" _) => true | _ => false) do
+      cx.fail line "an `unordered` load of a type other than an integer, a packed struct or a pointer is outside the subset"
     pure line
   | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
