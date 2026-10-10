@@ -3,14 +3,16 @@ import ZigLean.Sep.Full.AtomicPtr
 /-!
 # More sequential atomic rules (the translated `ArenaAllocator`)
 
-The rules of `Atomic.lean` and `AtomicPtr.lean`, for the two further atomic ops that the arena's
+The rules of `Atomic.lean` and `AtomicPtr.lean`, for the further atomic ops that the arena's
 `free`, `resize` and `remap` reach (`tests/roadmap/alloc-arena`):
 
 * `FTriple.atomicLoadPtr`: an atomic load (any order) of an owned pointer-valued word
   (`loadFirstNode`: `@atomicLoad(?*Node, &state.used_list, .acquire)`), choice `0`: the newest
   message, which holds the owned bytes;
 * `FTriple.cmpxchgHit`: a strong `cmpxchg` of an owned 64-bit word that holds the expected value
-  (choice `0`): it succeeds and the word holds the new value.
+  (choice `0`): it succeeds and the word holds the new value;
+* `FTriple.atomicLoadAs`: an atomic load of a packed type over an owned 64-bit word
+  (`Node.loadBuf`: `@atomicLoad(Node.Size, &node.size, .monotonic)`), decoded by `Packed.ofBits`.
 
 Both are sequential readings (one thread, the oracle's choice `0`), as the other rules here.
 -/
@@ -296,6 +298,19 @@ theorem FTriple.cmpxchgHit (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrde
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
             (singleThread_acqM hst₃ _) _ ?_)
         rfl
+
+/-- **Typed atomic load** of an owned word (`atomicLoadAs`, a packed type of 64 bits whose bits
+`v` are `valid`), choice `0`: the integer load, decoded by `Packed.ofBits`. -/
+theorem FTriple.atomicLoadAs {α : Type} [Packed α 64] (p : Ptr) (v : BitVec 64) (ord : AtomicOrder)
+    (hv : Packed.valid (α := α) v = true) :
+    FTriple (apts p v) (Zig.atomicLoadAs α 0 ord 8 p) (fun w => ⟪w = Packed.ofBits v⟫ ⋆ apts p v) := by
+  unfold Zig.atomicLoadAs
+  refine FTriple.bind (FTriple.atomicLoad p v ord) fun w => FTriple.lift fun hw => ?_
+  subst hw
+  have e : (StateT.lift (Packed.ofBits? (α := α) w) : MemM α) = pure (Packed.ofBits w) := by
+    simp only [Packed.ofBits?, hv, ↓reduceIte]; rfl
+  rw [e]
+  exact FTriple.ret' _ fun _ h => sep_lift.mpr ⟨rfl, h⟩
 
 end Full
 end Zig
