@@ -22,11 +22,18 @@ structure CheckArgs where
   /-- `--device-contract <json>` (L13): check volatile integer accesses as device events. -/
   deviceContract : Option String := none
   allowUnqualified : Bool := false
+  allocatorModel : AllocatorModel := .std
+  allocatorModelSeen : Bool := false
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
   match args with
   | [] => return out
+  | "--allocator-model" :: value :: rest =>
+    if out.allocatorModelSeen then throw "duplicate --allocator-model"
+    let allocatorModel ← parseAllocatorModel value
+    parseOptions rest { out with allocatorModel, allocatorModelSeen := true } spawnPolicySeen
+  | ["--allocator-model"] => throw "missing value for --allocator-model"
   | "--profile" :: p :: rest =>
     unless p == BuildProfile.legacyName || p == BuildProfile.currentName do throw "invalid --profile"
     if out.profile.isSome then throw "duplicate --profile"
@@ -50,15 +57,15 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
     if out.deviceContract.isSome then throw "duplicate --device-contract"
     parseOptions rest { out with deviceContract := some path } spawnPolicySeen
   | ["--device-contract"] => throw "missing value for --device-contract"
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy and --device-contract; emission flags are incompatible"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy, --device-contract and --allocator-model; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
   | "--diagnostics-json" :: directory :: options =>
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
-    parseOptions options { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]"
+    parseOptions (splitAllocatorModelFlag options) { directory := directory }
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>] [--allocator-model std|translated]"
 
 structure FileResult where
   file : String
@@ -90,7 +97,7 @@ structure Edge where
 
 /-- Only named direct calls and explicit comptime spawn workers are observed.
 Recognized runtime models do not need an AIR definition. -/
-def edges (units : Array FileResult) : Array Edge := Id.run do
+def edges (units : Array FileResult) (mode : AllocatorModel := .std) : Array Edge := Id.run do
   let mut result := #[]
   for u in units do
     let source := if u.structureValid then
@@ -100,7 +107,7 @@ def edges (units : Array FileResult) : Array Edge := Id.run do
       for i in insts do
         if let .call (.func callee false worker) _ := i.op then
           -- An extern call is bound or reported by `resolveExternsCollect`.
-          if !modelledStdFn callee && (externSymbol? callee).isNone then
+          if !modelledStdFn callee mode && (externSymbol? callee).isNone then
             result := result.push { caller, callee, instruction := i.id, file := u.file }
           if ((threadFn? callee).bind (·.spawnArgs?)).isSome then
             if let some callee := worker then
@@ -224,7 +231,8 @@ def collectNormalization (file : String) (canonical : Raw.RawFunc) (hasMarkers :
 /-- Pure per-file boundary used by both the CLI and kernel-checked regressions. Fatal
 malformed input (JSON syntax, undecodable AIR, a structurally unusable profile, invalid
 references) stops the unit; within each phase, independent findings are all reported. -/
-def inspect (file contents : String) (initial : Log) (device : Option DeviceContract := none) :
+def inspect (file contents : String) (initial : Log) (device : Option DeviceContract := none)
+    (mode : AllocatorModel := .std) :
     FileResult × Log := Id.run do
   let mut log := initial
   let empty : FileResult := { file }
@@ -258,7 +266,7 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
       fatal := profile?.isNone }
   let some profile := profile?
     | return (unit, log.add (skipped file name .normalize "decoded_AIR_profile"))
-  let decoded := (Raw.parseFuncWith json profile).map ({ · with identities })
+  let decoded := (Raw.parseFuncWith json profile mode).map ({ · with identities })
   let .ok raw := decoded
     | log := log.record decodeFailure decoded
       return (unit, log.add (skipped file name .normalize "decoded_AIR"))
@@ -312,7 +320,7 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
     localPassed := profileValid && checked.structureValid && log.observed == before }, log)
 
 def collectProgram (units : Array FileResult) (initial : Log)
-    (spawnPolicy : SpawnSemantics := .available) : Log := Id.run do
+    (spawnPolicy : SpawnSemantics := .available) (mode : AllocatorModel := .std) : Log := Id.run do
   let mut log := initial
   -- Bind extern calls first (`docs/air-json.md` §Extern calls): a bound call is a direct call
   -- of its definition below; each unbound one is its own diagnostic.
@@ -353,7 +361,7 @@ def collectProgram (units : Array FileResult) (initial : Log)
     if let some f := u.normalized then
       log := collectCallChecksIndexed u.file f (u.operandIndex f) snapshot log
   if !log.exhausted then
-    let graph := edges units
+    let graph := edges units mode
     let mut blockers : Array (Edge × Code × Option String) := #[]
     for edge in graph do
       let targets := selected[edge.callee]?.getD #[]
@@ -538,7 +546,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
   let renamed := Anon.renumberAll texts
   let mut firstProfile : Option BuildProfile := none
   for (file, contents) in files.zip renamed do
-    let result := inspect file contents log device
+    let result := inspect file contents log device a.allocatorModel
     log := result.2
     if let some profile := result.1.decodedProfile then
       let baseline := firstProfile.getD profile
@@ -547,7 +555,7 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
         log := log.add (boundary file result.1.function .profileFailure .profile .validationFailure message)
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
-  return (units, collectProgram units log a.spawnPolicy)
+  return (units, collectProgram units log a.spawnPolicy a.allocatorModel)
 
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with

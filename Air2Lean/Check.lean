@@ -118,7 +118,8 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId) : B
       if visited.contains id then continue
       let some ty := types[id]? | return false
       match ty with
-      | .other _ | .errorSet _ | .errorUnion .. => return false
+      | .other n => unless n.startsWith "fn (" do return false
+      | .errorSet _ | .errorUnion .. => return false
       | _ => pure ()
       let count := match ty with
         | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
@@ -564,6 +565,8 @@ structure CheckCtx where
   targetArch : String := ""
   /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
   sentinelChecked : Array InstId := #[]
+  /-- `Func.allocatorModel` (`--allocator-model`). -/
+  allocatorModel : AllocatorModel := .std
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -917,7 +920,7 @@ def CheckCtx.checkVolatile (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op) :
         cx.fail line s!"volatile pointer type {pty} becomes type {ty} without `volatile`, which \
           would make device accesses ordinary memory accesses: {guidance}"
   if let .call (.func name ..) args := op then
-    if (stdModel? name).isSome then
+    if (stdModel? name cx.allocatorModel).isSome then
       for a in args do
         if let some aty := cx.valTy? a then
           if containsVolatilePtr cx.types cx.layouts aty then
@@ -1176,7 +1179,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         let be ← cx.layouts[bset]?
         let _ ← cx.types[apayload]?
         let payload ← cx.layouts[apayload]?
-        return apayload == bpayload && anames == bnames && validErrorDomainNames anames &&
+        -- Distinct IDs of one payload type (same entry and layout) decode identically.
+        let samePayload := apayload == bpayload ||
+          (cx.types[apayload]? == cx.types[bpayload]? && cx.layouts[apayload]? == cx.layouts[bpayload]?)
+        return samePayload && anames == bnames && validErrorDomainNames anames &&
           a.size.isSome && a.align.isSome && ae.size.isSome && ae.align.isSome &&
           payload.size.isSome && payload.align.isSome && a == b && ae == be : Option Bool)).getD false
       if aty != ty && !bothErrors && !sameFiniteErrorUnion && (hasErrorStorage cx.types aty || hasErrorStorage cx.types ty) then
@@ -1215,9 +1221,23 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- other block, L11).
       let castCapability (t : TyId) : Option Bool :=
         if (cx.types[t]?.map isFnTy).getD false then some false else hasErrorCapability cx.types t
+      -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no
+      -- typed storage, like an integer: the target must be provably error-free.
+      let fromOpaque := cx.allocatorModel == .translated &&
+        ((pointerChild aty).bind (cx.types[·]?)) == some (.other "anyopaque")
+      -- Erasing an error-free pointer to `*anyopaque` (an allocator's `ctx`); every recovery
+      -- passes `fromOpaque`.
+      let toOpaque := cx.allocatorModel == .translated &&
+        ((pointerChild ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
+        ((pointerChild aty).bind (hasErrorCapability cx.types)) == some false
+      -- A qualifier-only or optional-wrap cast of `*anyopaque` keeps its pointee: no recovery.
+      if fromOpaque && !qualifierOnly && !optionalWrapOnly then
+        if let some target := pointerChild ty then
+          unless hasErrorCapability cx.types target == some false do
+            cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
       match ptrOrOptChild cx.types aty, ptrOrOptChild cx.types ty with
       | some source, some target =>
-        unless qualifierOnly || optionalWrapOnly do
+        unless qualifierOnly || optionalWrapOnly || fromOpaque || toOpaque do
           let some sourceCap := castCapability source
             | cx.fail line "a pointer cast has unresolved or cyclic symbolic storage provenance"
           let some targetCap := castCapability target
@@ -1362,7 +1382,22 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     if v matches .undef _ && (cx.valTy? ptr).any (laneBitPtrTy cx.layouts) then
       cx.fail line "a store of `undefined` to a vector lane is outside the subset"
     pure line
-  | .atomicLoad _ .unordered | .atomicStore _ _ .unordered =>
+  | .atomicLoad ptr .unordered =>
+    -- `--allocator-model translated`: an `unordered` load reads any message not older than the
+    -- newest one that happened before it (`Zig.atomicLoadUnorderedC`); integer or pointer only.
+    unless cx.allocatorModel == .translated do
+      cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
+    cx.memAccess line ptr
+    -- The pointer checks of every atomic op (vector lanes, C/allowzero pointees), then the
+    -- narrower pointee set of `unordered`.
+    cx.atomicChild line ptr
+    let some c := (cx.valTy? ptr).bind (ptrChild cx.types)
+      | cx.fail line "an atomic op through a value that is not a pointer"
+    unless atomicPtrPointee cx.types cx.layouts c ||
+        (match cx.types[c]? with | some (.int ..) => true | _ => false) do
+      cx.fail line "an `unordered` load of a type other than an integer or a pointer is outside the subset"
+    pure line
+  | .atomicStore _ _ .unordered =>
     cx.fail line "an `unordered` atomic op is outside the subset (it has no read-read coherence)"
   | .atomicLoad ptr _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .atomicStore ptr _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
@@ -1510,6 +1545,13 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     let _ ← checkInsts cx line errBody
     pure line
   | .line n => pure n
+  | .retAddr =>
+    -- Only `Raw.admitRetAddr` (translated mode) produces it; std mode keeps the marker.
+    unless cx.allocatorModel == .translated do
+      cx.fail line "@returnAddress is admitted only under --allocator-model translated"
+    unless cx.types[ty]? == some (.int false 64) do
+      cx.fail line "@returnAddress must have type usize"
+    pure line
   | .asm source isVolatile clobbers outputs inputs =>
     if op.isSpinHint && cx.types[ty]? != some .void then
       throw s!"{fnName}: near line {line}: a spin hint must return void"
@@ -1676,17 +1718,30 @@ partial def checkNullConstants (fnName : String) (types : Array Ty) (layouts : A
     checkNullConstants fnName types layouts l
   | _ => pure ()
 
-/-- A pointer constant without a global in `v` (`Val.ptrOther`). -/
-partial def Val.ptrOther? (v : Val) : Option String :=
+/-- A pointer constant without a global in `v` (`Val.ptrOther`, or a `Val.ptrInt` that
+`admitInt` does not admit). -/
+partial def Val.ptrOther? (v : Val) (admitInt : TyId → Nat → Bool := fun _ _ => false) :
+    Option String :=
   match v with
   | .ptrOther _ k => some k
-  | .agg _ elems => elems.findSome? Val.ptrOther?
-  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.ptrOther?
-  | .sliceConst _ p l => p.ptrOther? <|> l.ptrOther?
+  | .ptrInt ty addr => if admitInt ty addr then none else some "int"
+  | .agg _ elems => elems.findSome? (Val.ptrOther? · admitInt)
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.ptrOther? admitInt
+  | .sliceConst _ p l => p.ptrOther? admitInt <|> l.ptrOther? admitInt
   | _ => none
 
-/-- The pointer operands that `valueOperands` leaves out (`Effects.places`). -/
-def ptrOperands (op : Op) : Array Val := op.effects.places
+
+/-- `--allocator-model translated` admits a comptime integer pointer constant as a pointer
+without a block (`⟨none, addr⟩`, every access `.illegal`): the zero-length allocation
+sentinel of `mem.Allocator.allocBytesWithAlignment`. Only a single/many-item pointer with a
+nonzero `usize` address that its `align` divides; anything else stays rejected. -/
+def admitIntPtr (f : Func) (ty : TyId) (addr : Nat) : Bool :=
+  f.allocatorModel == .translated && addr != 0 && addr < 2 ^ 64 &&
+  (match f.types[ty]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false) &&
+  (match f.layouts[ty]? with
+    | some l => l.hostSize == 0 && !l.isVolatile && !l.sentinel &&
+        (match l.ptrAlign with | some a => a != 0 && addr % a == 0 | none => false)
+    | none => false)
 
 /-- `undefined` in an instruction operand is never replaced by a default (`0`, `false`) that a
 later read could observe. A store writes undefined bytes: a wholly `undefined` value
@@ -1701,9 +1756,9 @@ def checkUndefOperands (f : Func) (tyOf : Val → Option TyId) (i : Inst) : Exce
   let fail {α : Type} (what : String) : Except String α :=
     throw s!"{f.name}: inst {i.id}: {what} is outside the subset (`undefined` is never read as \
       a default; only a store or `memset` writes it, as undefined bytes)"
-  let hasUndef (v : Val) : Bool := match v with
-    | .undef _ => true
-    | v => v.hasNestedUndef
+  -- `--allocator-model translated`: an `undefined` single/many-item pointer operand is an
+  -- arbitrary non-dereferenceable pointer (`Zig.undefPtr`), e.g. `page_allocator.ptr`.
+  let hasUndef (v : Val) : Bool := v.hasUndefExcept f.admitsUndefPtr
   let (written, rest) : Option Val × Array Val := match i.op with
     | .store p v => (some v, #[p])
     | .memset p v => (some v, #[p])
@@ -2292,13 +2347,14 @@ private def checkErrorGlobalInstruction (enabled : Bool) (f : Func) (insts : Arr
   -- the other stored operands (atomics, asm) are integers (`checkOp`).
   | _ => pure ()
 
-private def checkPointerPresence (v : Val) (message : String → String) : Except String Unit := do
-  if let some k := v.ptrOther? then throw (message k)
+private def checkPointerPresence (f : Func) (v : Val) (message : String → String) :
+    Except String Unit := do
+  if let some k := v.ptrOther? (admitIntPtr f) then throw (message k)
 
 /-- One pointer/global alignment policy, with caller-specific display context. -/
 private def checkPointerConstant (f : Func) (v : Val) (missing : String → String)
     (alignment : Nat → Nat → String) : Except String Unit := do
-  checkPointerPresence v missing
+  checkPointerPresence f v missing
   checkGlobalAliasConstants f v
   checkLlvmPayloadConstants f v
   if let .ptrConst pty g _ := v then
@@ -2410,7 +2466,7 @@ def checkGlobal (f : Func) (g : Global) : Except String Unit := do
       ((init.constTy?).map (fun t => carriesPointer f t)).getD false &&
       dependsOnErrorGlobal f f.allInsts init then
     throw s!"{f.name}: a global initializer cannot retain a pointer into an error-bearing global"
-  checkPointerPresence init fun k =>
+  checkPointerPresence f init fun k =>
     s!"{f.name}: global {what}: a pointer constant without a global ({k}) is outside the subset"
   -- A function: a function pointer points to it (a 1-byte block, `Emit.lean`).
   if let .func .. := init then return
@@ -2501,7 +2557,7 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
     | .tagName _ => fail "`@tagName`"
     | .errorName _ => fail "`@errorName`"
     | .call (.func callee ..) _ =>
-      if modelledStdFn callee then fail s!"the std model '{callee}'"
+      if modelledStdFn callee f.allocatorModel then fail s!"the std model '{callee}'"
     -- The little-endian byte offset of a byte-aligned packed field (`FCtx.fieldOffsetIn`).
     | .fieldPtr b _ =>
       if (tyOf b).any packedPtr && hostOf i.ty == 0 then fail "a byte pointer to a packed struct field"
@@ -2609,7 +2665,8 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
                          zigVersion := f.zigVersion, device, targetArch := f.targetArch,
-                         sentinelChecked := sentinelCheckedSlices insts }
+                         sentinelChecked := sentinelCheckedSlices insts,
+                         allocatorModel := f.allocatorModel }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
@@ -2746,7 +2803,7 @@ private partial def checkConstant (f : Func) (index : OperandTypes) (expected : 
   | .bool _, .bool | .void, .void | .optNull _, .optional _ => pure ()
   | .ptrConst .., .ptr "one" .. | .ptrConst .., .ptr "many" ..
   | .ptrConst .., .ptr "c" .. => checkGlobalAliasConstants f v
-  | .ptrOther .., .ptr .. => pure ()
+  | .ptrOther .., .ptr .. | .ptrInt .., .ptr .. => pure ()
   | .optSome _ payload, .optional child => recur child payload
   | .errUnionOk _ payload, .errorUnion _ child => recur child payload
   | .unionVal _ field payload, .union name _ _ fields =>
@@ -3110,6 +3167,71 @@ def checkProgressCall (f : Func) (callee : String) (fn : ThreadFn) (args : Array
       throw s!"{f.name}: '{callee}' must return void"
   | _ => pure ()
 
+/-- The page size of the trusted OS model's target (`Zig.Os.Target.pageSize`): the
+`page_size_min` alignment of `posix.mmap`'s pointers. `none`: no OS model for the target. -/
+def osPageSize? (targetOs : String) : Option Nat :=
+  match targetOs with
+  | "linux" => some 4096
+  | "macos" => some 16384
+  | _ => none
+
+/-- `posix.mmap`/`munmap`/`mremap` (`--allocator-model translated`, OS-01): the exact 0.16.0
+signatures the emitter passes to `Zig.Os.*`. Pointers are page-aligned `u8` pointers,
+`prot`/`flags` are 32-bit packed structs (passed as their bits), the result of a mapping is an
+error union over a mutable page-aligned byte slice whose error set admits `OutOfMemory` (the
+only error the model returns). `mremap` exists only on Linux. -/
+def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret : TyId)
+    (index : OperandTypes) : Except String Unit := do
+  let fail (what : String) : Except String Unit :=
+    throw s!"{f.name}: model callee '{callee}' has an incompatible {what} signature"
+  let require (ok : Bool) (what : String) := if ok then pure () else fail what
+  let some page := osPageSize? f.targetOs
+    | throw s!"{f.name}: '{callee}' has no OS model for target OS '{f.targetOs}' (linux, macos)"
+  let argId (k : Nat) := args[k]?.bind index.valTy?
+  let argTy (k : Nat) := (argId k).bind (f.types[·]?)
+  let pageBytes (id : Option TyId) (size : String) (isConst : Bool) : Bool := match id with
+    | some t => match f.types[t]?, f.layouts[t]? with
+      | some (.ptr s c child), some l =>
+        s == size && c == isConst && f.types[child]? == some (.int false 8) &&
+          l.ptrAlign == some page && !l.sentinel && !l.isVolatile && !l.allowzero && l.hostSize == 0
+      | _, _ => false
+    | none => false
+  let optPage (k : Nat) : Bool := match argTy k with
+    | some (.optional p) => pageBytes (some p) "many" false
+    | _ => false
+  let isSize (k : Nat) := argTy k == some (.int false 64)
+  -- TODO(module identity, codex/fix-module-identity): bind on std's `posix` module, not on the
+  -- module-less fqn. Until then, guard: the flag structs must be std's own OS types, which a
+  -- user module named `posix` does not produce.
+  let stdFlags : List String := if f.targetOs == "linux" then ["os.linux."] else ["macho.", "c."]
+  let packed32 (k : Nat) : Bool := match argId k, argTy k with
+    | some t, some (.struct name "packed" _) =>
+      packedBits f.types t == some 32 && stdFlags.any (name.startsWith ·)
+    | _, _ => false
+  let mapping : Bool := match f.types[ret]? with
+    | some (.errorUnion set p) =>
+      pageBytes (some p) "slice" false && match f.types[set]? with
+        | some (.errorSet (some names)) => names.contains "OutOfMemory"
+        | some (.errorSet none) => true
+        | _ => false
+    | _ => false
+  match fn with
+  | .mmap =>
+    require (args.size == 6) "argument count"
+    require (optPage 0 && isSize 1 && packed32 2 && packed32 3) "hint/length/prot/flags"
+    require (argTy 4 == some (.int true 32)) "fd"
+    require (match argTy 5 with | some (.int _ 64) => true | _ => false) "offset"
+    require mapping "error-union page slice result"
+  | .munmap =>
+    require (args.size == 1) "argument count"
+    require (pageBytes (argId 0) "slice" true) "page slice argument"
+    require (f.types[ret]? == some .void) "void result"
+  | .mremap =>
+    require (f.targetOs == "linux") "Linux-only mremap"
+    require (args.size == 5) "argument count"
+    require (optPage 0 && isSize 1 && isSize 2 && packed32 3 && optPage 4) "address/lengths/flags/new address"
+    require mapping "error-union page slice result"
+
 /-- Recognized model names still require the runtime signature the emitter applies.
 Comptime-only arguments are absent from AIR; worker arguments are checked separately. -/
 def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : TyId)
@@ -3149,11 +3271,13 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       | _ => c
     require (packedBits f.types child == some 32) "32-bit futex pointee"
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
-  if let some model := stdModel? callee then
+  if let some model := stdModel? callee f.allocatorModel then
     -- A rejected row reports its own reason (`checkProgram`); a modelled one needs a review.
-    if modelledStdFn callee && !model.qualifies f.zigVersion then
+    if modelledStdFn callee f.allocatorModel && !model.qualifies f.zigVersion then
       fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}; no reviewed std source for Zig {f.zigVersion}"
-  if let some fn := allocFn? callee then
+  if let some fn := osFn? callee f.allocatorModel then
+    checkOsCall f callee fn args ret index
+  else if let some fn := allocFn? callee f.allocatorModel then
     -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
     if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
         fn == .destroy || fn == .free) then
@@ -3520,6 +3644,20 @@ def resolveExterns (funcs : Array Func) (models : Array ModelBinding := #[]) :
   if let some (_, message) := unbound[0]? then throw message
   return resolved
 
+/-- Shared CLI spelling of `--allocator-model` (`AllocatorModel`, `docs/allocator-model.md`). -/
+def parseAllocatorModel (value : String) : Except String AllocatorModel :=
+  match value with
+  | "std" => .ok .std
+  | "translated" => .ok .translated
+  | _ => .error "invalid --allocator-model (expected std or translated)"
+
+/-- `--allocator-model=V` is the same flag as `--allocator-model V`. -/
+def splitAllocatorModelFlag (args : List String) : List String :=
+  args.flatMap fun a =>
+    if a.startsWith "--allocator-model=" then
+      ["--allocator-model", (a.drop "--allocator-model=".length).toString]
+    else [a]
+
 /-- The checks that need every function. A function that uses memory reads a slice item from
 memory, and a call to a pure function copies each `[]const T` argument from memory
 (`Zig.readSlice`): `T` must be a type that the model encodes. Each callee is a translated
@@ -3552,7 +3690,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
   let mem := memoryFunctions funcs (models.map (·.symbol) ++ selectedCallees)
   let mut functionNames : Std.HashMap String Nat := {}
   for (f, fileIndex) in funcs.zipIdx do
-    if let some model := stdModel? f.name then
+    if let some model := stdModel? f.name f.allocatorModel then
       issues := issues.push { kind := .stdConflict, function := f.name, message :=
         s!"{f.name}: translated function conflicts with built-in std model '{model.symbol}' (narrow the example's `filter`, docs/std-models.md)" }
     functionNames := functionNames.insert f.name fileIndex
@@ -3583,7 +3721,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
       if let .call (.func callee false spawnFn) args := i.op then
         if let .error message := checkModelSignature f callee args i.ty index then
           issues := issues.push (issue .modelSignature message)
-        if !modelledStdFn callee then
+        if !modelledStdFn callee f.allocatorModel then
           if let some (targetIndex, target) := lookupFunction callee then
             match checkCallSignatureCached f target fileIndex targetIndex i args index signatures with
             | .ok cache => signatures := cache
@@ -3620,7 +3758,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
               §Extern calls)")
           else if let some reason := rejectedThreadFn? callee then
             issues := issues.push (issue .callee s!"{f.name}: the callee '{callee}' is outside the subset: {reason}")
-          else if !modelledStdFn callee then
+          else if !modelledStdFn callee f.allocatorModel then
             issues := issues.push (issue .callee
               s!"{f.name}: the callee '{callee}' has no AIR file and no model (add its name to the example's `filter` file, docs/std-models.md)")
   -- Needs the whole program (before the memory items, as `checkProgram` always reported them): every task an `Io.async` reaches (`checkFutureCancelation`).
@@ -3812,7 +3950,8 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     zigVersion := f.zigVersion
     device
     targetArch := f.targetArch
-    sentinelChecked := sentinelCheckedSlices insts }
+    sentinelChecked := sentinelCheckedSlices insts
+    allocatorModel := f.allocatorModel }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 
 /-- Compatibility wrapper for clients that need only diagnostics. -/
@@ -3853,7 +3992,7 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
     | .call (.func callee false worker) args =>
       log := log.record { diagnostic with code := .modelFailure }
         (checkModelSignature f callee args i.ty index)
-      if !modelledStdFn callee then
+      if !modelledStdFn callee f.allocatorModel then
         if let some target := snapshot.unique callee then
           log := log.record diagnostic (checkCallSignature f target i args index)
       if let some kind := threadFn? callee then

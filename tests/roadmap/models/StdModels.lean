@@ -52,11 +52,24 @@ def main : IO Unit := do
     require (m.qualifies "0.17.0" == m.reviewed.any (·.zigVersion == "0.17.0"))
       s!"{m.symbol}: 0.17.0 qualification without its reviewed std source"
     require (!m.qualifies "0.18.0") s!"{m.symbol}: qualified for unreviewed Zig 0.18.0"
-    -- The typed projections agree with the row, including anonymous instances.
-    for name in #[m.symbol, m.symbol ++ "__anon_7"] do
-      require ((stdModel? name).map (·.symbol) == some m.symbol) s!"{name}: lookup"
-      require (modelledStdFn name == !(rejectedThreadFn? name).isSome) s!"{name}: disposition"
-      require ((allocFn? name).isSome || (threadFn? name).isSome || (rejectedThreadFn? name).isSome) s!"{name}: projection"
+    -- The typed projections agree with the row in its `--allocator-model`, including
+    -- anonymous instances; the row is absent in the other mode.
+    for mode in #[AllocatorModel.std, .translated] do
+      for name in #[m.symbol, m.symbol ++ "__anon_7"] do
+        if m.activeIn mode then
+          require ((stdModel? name mode).map (·.symbol) == some m.symbol) s!"{name}: lookup"
+          require (modelledStdFn name mode == !(rejectedThreadFn? name).isSome) s!"{name}: disposition"
+          require ((allocFn? name mode).isSome || (threadFn? name).isSome || (osFn? name mode).isSome ||
+            (rejectedThreadFn? name).isSome) s!"{name}: projection"
+        else
+          require ((stdModel? name mode).isNone && !modelledStdFn name mode) s!"{name}: inactive row"
+  -- Allocator rows are std-only, OS rows translated-only (`docs/allocator-model.md`).
+  require (stdModels.all fun m => match m.kind with
+    | .alloc _ => m.allocatorModel == some .std
+    | .os _ => m.allocatorModel == some .translated && m.zigVersions == #["0.16.0"]
+    | _ => m.allocatorModel.isNone) "allocator-model row scopes"
+  require ((allocFn? "mem.Allocator.alloc__anon_3" .translated).isNone) "translated allocator wrappers"
+  require (osFn? "posix.mmap" .translated == some .mmap && (osFn? "posix.mmap").isNone) "OS projection"
   require ((stdModel? "mem.Allocator.dupeSentinel__anon_1").isNone) "prefix is not a model name"
   require ((stdModel? "project.mem.Allocator.create").isNone) "qualified names are exact"
   require (allocFn? "mem.Allocator.create__anon_3" == some .create) "allocator projection"

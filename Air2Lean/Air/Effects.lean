@@ -255,6 +255,8 @@ def Op.effects (op : Op) : Effects :=
     { Effects.flow .control (.try errBody) #[p] with access := #[(p, .load)], memoryOnly := true }
   | .ret v => .flow .control .exit #[v]
   | .unreach | .trap => .flow .noreturn .exit #[]
+  -- `@returnAddress` reads the oracle in `Zig.Mem` (`Zig.returnAddress`).
+  | .retAddr => { Effects.pure #[] with memoryOnly := true }
   | .line _ => { Effects.pure #[] with cls := .debug }
   | .dbg _ v => { Effects.pure #[] with cls := .debug, debug := v.toArray }
   -- Only the inputs are read as values (like `call`'s args); an output's `ref` (if present) is
@@ -326,5 +328,6 @@ def Op.ctorName : Op → String
   | .loopSwitchBr .. => "loopSwitchBr" | .switchDispatch .. => "switchDispatch"
   | .«try» .. => "try" | .tryPtr .. => "tryPtr" | .ret .. => "ret" | .unreach => "unreach"
   | .trap => "trap" | .line .. => "line" | .dbg .. => "dbg" | .asm .. => "asm"
+  | .retAddr => "retAddr"
 
 end Air2Lean

@@ -200,16 +200,16 @@ theorem own_none {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (u : Threa
 
 /-- The cell of byte `x < 8` of the `Counter`. -/
 theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 8) : m.heap (0, x) ≠ none := by
-  obtain ⟨blk, hblk, hl, hs, -⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hrest_lo⟩ := hb
   simp only [Mem.heap, hblk]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
 /-- The same first cell: the same block 0. -/
 theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)) : BlkOk m' := by
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
   have hc : m.heap (0, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
   simp only [Cell.mk.injEq] at he
@@ -601,7 +601,7 @@ theorem inv_pre {m : Mem} {A : Nat} {h : Heap} (ho : Owned (upd (fun _ => Heap.e
 
 /-- The cells of block 0 (8 bytes) are its bytes. -/
 theorem blk_bytes {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
-    (hs : blk.bytes.size = 8) :
+    (hs : blk.bytes.size = 8) (hlo : blk.kind.mappedLo = 0) :
     bytesAt cPtr blk.addr 8 blk.kind blk.bytes
       (fun l => if l.1 = 0 ∧ l.2 < 8 then m.heap l else none) := by
   refine ⟨0, rfl, by decide, fun l => ?_⟩
@@ -613,7 +613,7 @@ theorem blk_bytes {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : b
   · obtain ⟨rfl, ho⟩ := h
     rw [if_pos ⟨rfl, ho⟩, if_pos ⟨rfl, Nat.zero_le _, by omega⟩]
     simp only [Mem.heap, hb]
-    rw [dif_pos ⟨hl, by omega⟩, Nat.sub_zero, getElem!_pos blk.bytes o (by omega)]
+    rw [dif_pos ⟨hl, by omega, by omega⟩, Nat.sub_zero, getElem!_pos blk.bytes o (by omega)]
     simp only [Option.some.injEq, Cell.mk.injEq, hs, and_self]
   · rw [if_neg h, if_neg fun h' => h ⟨h'.1, by omega⟩]
 
@@ -819,7 +819,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
     rw [hx']
     show (Enc.decode (α := BitVec 32) bs).run = _
     rw [hbdec]; rfl
-  have hbytes := blk_bytes hb₉ hl₀ hs₀
+  have hbytes := blk_bytes hb₉ hl₀ hs₀ (by rw [hk₀]; rfl)
   rw [← cnt_heap ⟨A', S', K', bs, hbal, hbsz, hbdec, hbA, hbK⟩ hLs] at hbytes
   -- the load of the `Counter`
   have heq : own₉ 0 ∪ (hL ∪ L.wordH m₉) = (hL ∪ L.wordH m₉) ∪ own₉ 0 := Heap.union_comm hd

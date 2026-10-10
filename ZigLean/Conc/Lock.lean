@@ -336,7 +336,8 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   idle : ∀ u, L.ph (G u) ≠ .holds → L.held (G u) = Heap.empty
   live : ∀ u, L.ph (G u) ≠ .gone → u < m.threads.size ∧ joinedB m u = false
   blk : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
-    (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal
+    (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal ∧
+    blk.kind.mappedLo = 0
   word : ∃ w, L.Val w ∧ L.U32 m (BitVec.ofNat 32 w) ∧ (w = 0 ↔ L.Free G)
   one : ∀ u v, L.ph (G u) = .holds → L.ph (G v) = .holds → u = v
   loc : L.LocOk m
@@ -538,9 +539,9 @@ theorem Inv.congr {G G' : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
 /-- Each byte of the word is in the heap. -/
 theorem Inv.wordIn {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {x : Nat} (h1 : L.o ≤ x)
     (h2 : x < L.o + 4) : m.heap (L.b, x) ≠ none := by
-  obtain ⟨blk, hb, hl, hs, -⟩ := hi.blk
+  obtain ⟨blk, hb, hl, hs, hrest_lo⟩ := hi.blk
   simp only [Mem.heap, hb]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
 /-- The rest of the heap outside a thread's part has each byte of the word. -/
@@ -598,14 +599,14 @@ theorem plainHit_false_of {e : FootprintEntry} {h : Heap}
 theorem word_congr {m m' : Mem}
     (hw : ∀ x, L.o ≤ x → x < L.o + 4 → m'.heap (L.b, x) = m.heap (L.b, x))
     (hb : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
-      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal) :
+      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo = 0) :
     (∃ blk, m'.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
-      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal) ∧
+      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo = 0) ∧
       curBytes m' L.b L.o 4 = curBytes m L.b L.o 4 := by
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
   have hc : m.heap (L.b, L.o) =
       some ⟨blk.bytes[L.o]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   have hc' := hw L.o (Nat.le_refl _) (by omega)
   rw [hc] at hc'
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some hc'
@@ -620,7 +621,7 @@ theorem word_congr {m m' : Mem}
   rw [Array.getElem_extract, Array.getElem_extract]
   have := hw (L.o + i) (by omega) (by omega)
   simp only [Mem.heap, hblk, hblk'] at this
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl', by omega⟩), dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)] at this
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl', by omega, by rw [← hK, hk.2]; omega⟩), dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by rw [hk.2]; omega⟩)] at this
   simp only [Option.some.injEq, Cell.mk.injEq] at this
   exact this.1
 
@@ -1078,7 +1079,7 @@ theorem Inv.make {G : ThreadId → γ} {m : Mem} {own : ThreadId → Heap} {t : 
       L.ph (G u) = .gone) (hheld : ∀ u, L.held (G u) = Heap.empty)
     (hR : L.R G hL) (hWw : ∀ x, L.o ≤ x → x < L.o + 4 → hW (L.b, x) ≠ none)
     (hblk : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
-      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal)
+      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo = 0)
     (h0 : L.U32 m 0) (hat : ∀ l ∈ m.atomics, l.block ≠ L.b) (hq : m.waiters = #[])
     (hall : AllLe m (m.clocks[t]!)) (ht : t < m.threads.size) :
     L.Inv G m := by

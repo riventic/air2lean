@@ -1,4 +1,5 @@
 import ZigLean.Mem.Owned
+import ZigLean.Mem.Null
 
 /-! Executable regressions of the address-reuse policy and provenance recovery (M05,
 `docs/address-reuse.md`). Run: `lake env lean --run tests/roadmap/address-reuse/Check.lean`. -/
@@ -102,8 +103,9 @@ def main : IO Unit := do
     let nq ← addr q
     let r ← ptrFromAddr (if useOld then n else nq).toNat
     pure (← load (BitVec 64) 8 r).toNat
-  expect "stale int strict" (outcome (fromInt true) (reuseMem at4096)) "unspecified"
-  expect "fresh int strict" (outcome (fromInt false) (reuseMem at4096)) "unspecified"
+  -- Ambiguous under `.strict`: no provenance, so the load is `.illegal` (not `.unspecified`).
+  expect "stale int strict" (outcome (fromInt true) (reuseMem at4096)) "illegal"
+  expect "fresh int strict" (outcome (fromInt false) (reuseMem at4096)) "illegal"
   expect "stale int liveBlock" (outcome (fromInt true) (reuseMem at4096 .liveBlock)) "ok 7"
   expect "stale int fresh model" (outcome (fromInt true) {}) "illegal"
   expect "new int fresh model" (outcome (fromInt false) {}) "ok 7"
@@ -114,9 +116,23 @@ def main : IO Unit := do
     let _ ← alloc .heap 4 4
     pure (← ptrFromAddr ((← addr p) + 4).toNat).block
   expect "one-past shared strict" (outcome onePast (reuseMem fun b =>
-    if b = 1 then some 4096 else none)) "unspecified"
+    if b = 1 then some 4096 else none)) "ok none"
   expect "one-past shared liveBlock" (outcome onePast (reuseMem (fun b =>
     if b = 1 then some 4096 else none) .liveBlock)) "ok (some 1)"
+  -- The ambiguous recovery keeps its address: round trip and `==` by address.
+  let roundTrip : MemM Bool := do
+    let p ← alloc .heap 8 8
+    let n ← addr p
+    free p
+    let q ← alloc .heap 8 8
+    let r ← ptrFromAddr n.toNat
+    pure (decide ((← addr r) = n) && (← ptrEqAddr r q))
+  expect "ambiguous round trip and ==" (outcome roundTrip (reuseMem at4096)) "ok true"
+  -- With one cover (no reuse), the recovery keeps the block's provenance (unchanged).
+  let single : MemM (Option BlockId) := do
+    let p ← alloc .heap 8 8
+    pure (← ptrFromAddr (← addr p).toNat).block
+  expect "single cover provenance" (outcome single {}) "ok (some 0)"
   -- The dead block alone still recovers its own (dangling) provenance.
   let deadAlone : MemM (Option BlockId) := do
     let p ← alloc .heap 8 8
@@ -126,7 +142,7 @@ def main : IO Unit := do
   -- Mutants: a model that ignores the selected provenance mode or the reuse policy must fail
   -- the expectations above (each mutant runs the expectation's program under the mutated setting).
   -- `provenance-mode-ignored`: strict recovery behaves as `.liveBlock`.
-  mutant "provenance-mode-ignored" (outcome (fromInt true) (reuseMem at4096 .liveBlock)) "unspecified"
+  mutant "provenance-mode-ignored" (outcome (fromInt true) (reuseMem at4096 .liveBlock)) "illegal"
   -- `reuse-policy-ignored`: the opt-in policy behaves as the default fresh-address one.
   mutant "reuse-policy-ignored" (outcome (twoAddrs .heap .heap) {}) "ok (4096, 4096)"
   IO.println "address-reuse regressions passed"

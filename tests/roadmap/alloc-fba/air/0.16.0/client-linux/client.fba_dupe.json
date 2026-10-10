@@ -1,0 +1,1025 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "client.fba_dupe",
+ "params": [
+  0
+ ],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 2,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2
+  },
+  {
+   "id": 4,
+   "tag": "call",
+   "ty": 3,
+   "callee": {
+    "ty": 4,
+    "func": "heap.FixedBufferAllocator.init",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "ty": 5,
+     "slice_ptr": {
+      "ty": 6,
+      "ptr": {
+       "global": 0,
+       "off": 0
+      }
+     },
+     "slice_len": {
+      "ty": 7,
+      "val": "12"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "store",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    }
+   ],
+   "name": "fba"
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 9,
+   "tag": "call",
+   "ty": 8,
+   "callee": {
+    "ty": 9,
+    "func": "heap.FixedBufferAllocator.allocator",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "alloc",
+   "ty": 10
+  },
+  {
+   "id": 11,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 10
+    },
+    {
+     "inst": 9
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "bitcast",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 10
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 9
+    }
+   ],
+   "name": "a"
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4
+  },
+  {
+   "id": 15,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "2"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "aggregate_init",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 15
+    },
+    {
+     "inst": 16
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "alloc",
+   "ty": 13
+  },
+  {
+   "id": 19,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 18
+    },
+    {
+     "inst": 17
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "bitcast",
+   "ty": 14,
+   "args": [
+    {
+     "inst": 18
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 17
+    }
+   ],
+   "name": "src"
+  },
+  {
+   "id": 22,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5
+  },
+  {
+   "id": 23,
+   "tag": "block",
+   "ty": 5,
+   "body": [
+    {
+     "id": 24,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 5
+    },
+    {
+     "id": 25,
+     "tag": "load",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 12
+      }
+     ]
+    },
+    {
+     "id": 27,
+     "tag": "array_to_slice",
+     "ty": 15,
+     "args": [
+      {
+       "inst": 20
+      }
+     ]
+    },
+    {
+     "id": 29,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 5
+    },
+    {
+     "id": 30,
+     "tag": "call",
+     "ty": 16,
+     "callee": {
+      "ty": 17,
+      "func": "mem.Allocator.dupe__anon_9652",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 25
+      },
+      {
+       "inst": 27
+      }
+     ]
+    },
+    {
+     "id": 31,
+     "tag": "is_non_err",
+     "ty": 18,
+     "args": [
+      {
+       "inst": 30
+      }
+     ]
+    },
+    {
+     "id": 37,
+     "tag": "cond_br",
+     "ty": 19,
+     "args": [
+      {
+       "inst": 31
+      }
+     ],
+     "then": [
+      {
+       "id": 32,
+       "tag": "unwrap_errunion_payload",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 30
+        }
+       ]
+      },
+      {
+       "id": 33,
+       "tag": "br",
+       "ty": 19,
+       "target": 23,
+       "args": [
+        {
+         "inst": 32
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 34,
+       "tag": "unwrap_errunion_err",
+       "ty": 20,
+       "args": [
+        {
+         "inst": 30
+        }
+       ]
+      },
+      {
+       "id": 35,
+       "tag": "dbg_stmt",
+       "ty": 1,
+       "line": 5
+      },
+      {
+       "id": 36,
+       "tag": "ret_safe",
+       "ty": 19,
+       "args": [
+        {
+         "ty": 0,
+         "val": "0"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "tag": "alloc",
+   "ty": 21
+  },
+  {
+   "id": 39,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 38
+    },
+    {
+     "inst": 23
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "bitcast",
+   "ty": 22,
+   "args": [
+    {
+     "inst": 38
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 23
+    }
+   ],
+   "name": "d"
+  },
+  {
+   "id": 42,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6
+  },
+  {
+   "id": 43,
+   "tag": "load",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  },
+  {
+   "id": 44,
+   "tag": "slice_len",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 43
+    }
+   ]
+  },
+  {
+   "id": 45,
+   "tag": "cmp_lt",
+   "ty": 18,
+   "args": [
+    {
+     "ty": 7,
+     "val": "2"
+    },
+    {
+     "inst": 44
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 49,
+     "tag": "cond_br",
+     "ty": 19,
+     "args": [
+      {
+       "inst": 45
+      }
+     ],
+     "then": [
+      {
+       "id": 50,
+       "tag": "br",
+       "ty": 19,
+       "target": 48,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 46,
+       "tag": "call",
+       "ty": 19,
+       "callee": {
+        "ty": 23,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "ty": 7,
+         "val": "2"
+        },
+        {
+         "inst": 44
+        }
+       ]
+      },
+      {
+       "id": 47,
+       "tag": "unreach",
+       "ty": 19
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "tag": "slice_elem_ptr",
+   "ty": 24,
+   "args": [
+    {
+     "inst": 43
+    },
+    {
+     "ty": 7,
+     "val": "2"
+    }
+   ]
+  },
+  {
+   "id": 52,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 51
+    }
+   ]
+  },
+  {
+   "id": 53,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 52
+    }
+   ],
+   "name": "r"
+  },
+  {
+   "id": 54,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7
+  },
+  {
+   "id": 55,
+   "tag": "load",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 58,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7
+  },
+  {
+   "id": 59,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 25,
+    "func": "mem.Allocator.free__anon_800",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 55
+    },
+    {
+     "inst": 23
+    }
+   ]
+  },
+  {
+   "id": 60,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8
+  },
+  {
+   "id": 61,
+   "tag": "ret_safe",
+   "ty": 19,
+   "args": [
+    {
+     "inst": 52
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "client.buffer",
+   "ty": 26,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 26,
+    "undef": true
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "heap.FixedBufferAllocator",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "end_index",
+     "ty": 7,
+     "offset": 0
+    },
+    {
+     "name": "buffer",
+     "ty": 5,
+     "offset": 8
+    }
+   ],
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn ([]u8) heap.FixedBufferAllocator"
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 0,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": false,
+   "child": 0,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "ptr",
+     "ty": 27,
+     "offset": 0
+    },
+    {
+     "name": "vtable",
+     "ty": 28,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*heap.FixedBufferAllocator) mem.Allocator"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 3,
+   "child": 0,
+   "sentinel": false,
+   "abi_size": 3,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 12,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": true,
+   "child": 0,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "error_union",
+   "error": 20,
+   "payload": 5,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (mem.Allocator, []const u8) error{OutOfMemory}![]u8"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "OutOfMemory"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 5,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (mem.Allocator, []u8) void"
+  },
+  {
+   "k": "array",
+   "len": 16,
+   "child": 0,
+   "sentinel": false,
+   "abi_size": 16,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 29,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 30,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "anyopaque"
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator.VTable",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 31,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 32,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 33,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 34,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 35,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 36,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 37,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 38,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
+  }
+ ]
+}

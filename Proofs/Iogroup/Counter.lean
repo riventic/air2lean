@@ -129,7 +129,7 @@ structure U (G : ThreadId → Gh) (m : Mem) : Prop where
   io : IoOk m
   parts : ∀ u, (G u).1.part = Heap.empty
   blk : BlkOk m
-  blk1 : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16
+  blk1 : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0
   jle : Jle G m
 
 /-- The protocol, in strict mode. -/
@@ -154,8 +154,8 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 
 /-- Block 1 after a lock step: the same. -/
 theorem blk1_step {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
-    (h : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16) :
-    ∃ blk, m'.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 := by
+    (h : ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0) :
+    ∃ blk, m'.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0 := by
   obtain ⟨blk, hb, hl, hsz⟩ := h
   rcases hs.blocks with e | ⟨blk', bs, h1, h2, h3, h4, h5⟩
   · exact ⟨blk, by rw [e]; exact hb, hl, hsz⟩
@@ -428,16 +428,16 @@ theorem own_none {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) (u : Threa
 
 /-- The cell of byte `x < 24` of the `Counter`. -/
 theorem blk_heap {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 24) : m.heap (0, x) ≠ none := by
-  obtain ⟨blk, hblk, hl, hs, -⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hrest_lo⟩ := hb
   simp only [Mem.heap, hblk]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   simp
 
 /-- The same first cell: the same block 0. -/
 theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)) : BlkOk m' := by
   obtain ⟨blk, hblk, hl, hs, ha, hk⟩ := hb
   have hc : m.heap (0, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by simp_all⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
   simp only [Cell.mk.injEq] at he
@@ -445,21 +445,21 @@ theorem blk_keep {m m' : Mem} (hb : BlkOk m) (h : m'.heap (0, 0) = m.heap (0, 0)
   exact ⟨blk', hblk', by simpa using hl', by rw [← hS, hs], by rw [← hA, ha], by rw [← hK, hk]⟩
 
 /-- Block 1, live with 16 bytes. -/
-def Blk1 (m : Mem) : Prop := ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16
+def Blk1 (m : Mem) : Prop := ∃ blk, m.blocks[1]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 16 ∧ blk.kind.mappedLo = 0
 
 theorem blk1_keep {m m' : Mem} (hb : Blk1 m) (h : m'.heap (1, 0) = m.heap (1, 0)) : Blk1 m' := by
-  obtain ⟨blk, hblk, hl, hs⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hlo⟩ := hb
   have hc : m.heap (1, 0) = some ⟨blk.bytes[0]'(by omega), blk.addr, blk.bytes.size, blk.kind⟩ := by
-    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+    simp only [Mem.heap, hblk]; rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by omega⟩)]
   rw [hc] at h
   obtain ⟨blk', hblk', hl', ho', he⟩ := Mem.heap_some h
   simp only [Cell.mk.injEq] at he
-  exact ⟨blk', hblk', by simpa using hl', by rw [← he.2.2.1, hs]⟩
+  exact ⟨blk', hblk', by simpa using hl', by rw [← he.2.2.1, hs], by rw [← he.2.2.2, hlo]⟩
 
 theorem blk1_heap {m : Mem} (hb : Blk1 m) : m.heap (1, 0) ≠ none := by
-  obtain ⟨blk, hblk, hl, hs⟩ := hb
+  obtain ⟨blk, hblk, hl, hs, hlo⟩ := hb
   simp only [Mem.heap, hblk]
-  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega⟩)]
+  rw [dite_eq_left_of_eq_true (eq_true ⟨hl, by omega, by omega⟩)]
   simp
 
 /-- A step of thread `t` (not joined) on its own part keeps `U`, with `t`'s new ghost value `g`
@@ -798,7 +798,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
   obtain ⟨blk', hblk', -, -, -, -, hx⟩ := bytesAt_blk (m := m) hw hsW rfl
     (by rw [enc_mutex, enc_u32]; decide)
   rw [hblk] at hblk'; cases hblk'
-  obtain ⟨blkG, hblkG, hlG, -, hSG, -, -⟩ := bytesAt_blk (m := m) hg hsG rfl
+  obtain ⟨blkG, hblkG, hlG, -, hSG, hKG, -⟩ := bytesAt_blk (m := m) hg hsG rfl
     (by rw [enc_group]; decide)
   have hbk : BlkOk m := ⟨blk, hblk, hl, hS', by rw [hA']; exact hA, hK'⟩
   have h0 : L.U32 m 0 := by
@@ -848,7 +848,7 @@ theorem inv_start {m : Mem} {io : Io} {A A' : Nat} {h hG : Heap}
     subst this; exact VClock.le_refl _
   · refine ⟨⟨by rw [hth]; rfl, fun u hu1 hu => by rw [h1] at hu; unfold ThreadId at *; omega,
       fun u hu => ?_, .inl ⟨0, by decide, ?_, h1, by rw [hgr]; simp [grp], hjb⟩⟩,
-      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG⟩,
+      fun e he hb ho16 => .inr fun u hu => ?_, fun u => ?_, hbk, ⟨blkG, hblkG, hlG, hSG, by rw [hKG]; rfl⟩,
       fun v hv => by rw [hjb v] at hv; cases hv⟩
     · show (upd G0 0 (gSpawn 0) u).2 = _
       rw [hGu u (by rw [h1] at hu; unfold ThreadId at *; omega)]; rfl

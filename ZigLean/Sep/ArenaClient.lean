@@ -133,7 +133,7 @@ theorem Grows.dropOwned {a : AllocId} {m m' : Mem} (h : Grows a m m') :
 /-- Slice `s` holds the bytes of `f` in a live block. -/
 def Holds (m : Mem) (s : Slice) (f : Array (BitVec 8)) : Prop :=
   s.len.toNat = f.size ∧ (f.size ≠ 0 → ∃ b blk, s.ptr = ⟨some b, 0⟩ ∧ m.blocks[b]? = some blk ∧
-    blk.live ∧ blk.bytes = f.map .int)
+    blk.live ∧ blk.bytes = f.map .int ∧ blk.kind.mappedLo = 0)
 
 theorem Holds.grow {a : AllocId} {m m' : Mem} {s : Slice} {f : Array (BitVec 8)}
     (h : Holds m s f) (hg : Grows a m m') : Holds m' s f := by
@@ -212,7 +212,7 @@ theorem dupeBytes_spec {m : Mem} {a : AllocId} {st : OwnedAlloc}
           Array.getElem?_setIfInBounds_self_of_lt hlt]
         simp [nb, writeBytes_all (a := Array.replicate bs.size .undef)]
       refine ⟨.ok ⟨⟨some B, 0⟩, BitVec.ofNat 64 bs.size⟩, m₃, ?_, ⟨?_, ?_, ?_, rfl⟩, ?_,
-        hlen, fun _ => ⟨B, _, rfl, hblk₃, rfl, rfl⟩⟩
+        hlen, fun _ => ⟨B, _, rfl, hblk₃, rfl, rfl, rfl⟩⟩
       · simp only [StateT.run] at hA hS
         simp [dupeBytes, AllocRef.alloc, ownedAllocBytes, h0, hmod, hov, zig_unfold, hA, hS, m₃, m₂, m₁, B]
       · simp [m₃, Mem.write, Mem.recordAt, m₂, Mem.afterAlloc, m₁]
@@ -280,11 +280,11 @@ theorem sumAll_spec (a : AllocId) (ss : List Slice) (fs : List (Array (BitVec 8)
       · have hf : f = #[] := Array.eq_empty_of_size_eq_zero (by rw [← hh.1, h0])
         subst hf
         exact ⟨#[], m, by simp [readBytes, h0, zig_unfold], by simp [byteSum], Grows.refl a m, hst⟩
-      · obtain ⟨b, blk, hpb, hblk, hl, hbytes⟩ := hh.2 (by rw [← hh.1]; exact h0)
+      · obtain ⟨b, blk, hpb, hblk, hl, hbytes, hblo⟩ := hh.2 (by rw [← hh.1]; exact h0)
         have hacc : m.access s.ptr s.len.toNat 1 = pure (b, blk, 0) := by
           rw [hpb]
           simpa using access_of (p := ⟨some b, 0⟩) (n := s.len.toNat) (a := 1) rfl hblk hl
-            (by simp) (by simp [hbytes, hh.1]) (Nat.mod_one _)
+            (by simp) (by simp [hbytes, hh.1]) (Nat.mod_one _) (by simp [hblo])
         have hL := loadBytes_run (kind := .read) hacc (noRace_of_singleThread hst.single _ _ _ _)
         refine ⟨f.map .int, m.recordAt b 0 s.len.toNat .read, ?_, byteSum_map f,
           Grows.of_blocks rfl rfl, hst.recordAt _ _ _ _⟩
