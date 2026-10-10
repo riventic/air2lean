@@ -11,7 +11,7 @@ bodies are stubs until the page-mapping model lands.
 | File | Content |
 |---|---|
 | `air/0.16.0/<prog>-<os>/` | Zig 0.16.0 AIR, x86_64-linux and aarch64-macos, `ReleaseSafe`: the call/function-value closure of the exported functions, cut at the panic handlers and at `posix.mmap`/`munmap`/`mremap` |
-| `provenance.json` | source, compiler and per-file hashes. The exporter is `codex/alloc-translated-p0`'s (vtable initializers and `VTable` fields); `main`'s exporter fails on these programs |
+| `provenance.json` | source, compiler and per-file hashes. The exporter is this repository's (`zig-patch`: vtable initializers, `VTable` fields, schema 12 module identity); exporters before P0 fail on these programs |
 | `AllocTranslated/*.lean` | the retained translations; `check.sh` requires the fresh ones to be byte-identical |
 | `Eval.lean` | `#guard`s: the `FixedBufferAllocator` clients evaluate to the native results on both targets, also with other `@returnAddress` values; the page clients reach the OS stub (`.unspecified`), and a zero-length allocation returns the integer sentinel without reaching it |
 | `native.zig`, `expected.txt`, `expected-linux.txt` | the native run of the same functions with a stock Zig 0.16.0 on aarch64-macos (16 KiB pages) and on x86_64-linux (4 KiB pages: `page_resize(10, 5000)` is `false`, `resize` never calls `mremap` on a stack-grows-down target); `check.sh` picks the file by the host's page size |
