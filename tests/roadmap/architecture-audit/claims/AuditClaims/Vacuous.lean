@@ -43,6 +43,13 @@ satisfiable (witness below), so only the missing liveness witness (S6) caps it. 
 theorem spin_partial : Triple emp spin (fun _ _ => False) := by
   intro m hP hF hd hm hp hs; trivial
 
+/-- Equation shapes (`conclusion.lhs`, `conclusion.reflexive`): a reflexive equation states
+nothing about the root; a relational one relates two different applications of it. Neither is
+an exact-success claim. -/
+theorem root_refl (x : BitVec 8) : root x = root x := rfl
+
+theorem root_rel (x : BitVec 8) : root (x + 0) = root x := by simp
+
 nonvacuity_witness spin_partial :=
   ⟨{}, Heap.empty, Heap.empty, Heap.disjoint_empty _, Mem.heap_default_split, rfl, Mem.seq_default, trivial⟩
 

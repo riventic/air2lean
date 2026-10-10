@@ -9,7 +9,7 @@ src=tests/roadmap/architecture-audit/claims
 out=.lake/architecture-audit/claims
 mkdir -p "$out/lib/AuditClaims"
 export LEAN_PATH="$repo_root/$out/lib"
-for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal; do
+for module in Gen Vacuous Shadow Unchecked AsmTotal ShadowWithin Universal Escapes; do
   lake env lean -R "$src" -o "$out/lib/AuditClaims/$module.olean" "$src/AuditClaims/$module.lean"
 done
 # Separate audits: Shadow declares its own Zig.TotalTriple, exactly as a project contract audited
@@ -17,8 +17,9 @@ done
 # imports the registered claim heads (tools/Assurance.lean), so both audits must fail with a
 # name clash; their stderr is kept.
 # Unchecked and Universal are audited apart because kernel replay (S1) rejects them and so
-# fails their whole report.
-for group in "Vacuous AsmTotal" "Shadow" "ShadowWithin" "Unchecked Universal"; do
+# fails their whole report. Escapes (H4) is audited apart because its policy violations fail its
+# report.
+for group in "Vacuous AsmTotal" "Shadow" "ShadowWithin" "Unchecked Universal" "Escapes"; do
   name=${group%% *}
   args=()
   for module in $group; do args+=(--module "AuditClaims.$module"); done

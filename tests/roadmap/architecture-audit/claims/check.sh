@@ -10,7 +10,7 @@ python3 -B "$here/snapshot.py" check
 python3 -B "$here/test_exposure.py" "$@"
 # S1 structural-fix probe: the toolchain's leanchecker re-checks honest fixtures and rejects the
 # kernel-unchecked ones that assumptions.py and claims.py accept.
-bash "$here/kernel-replay.sh" AuditClaims.Vacuous AuditClaims.Shadow AuditClaims.AsmTotal AuditClaims.ShadowWithin
+bash "$here/kernel-replay.sh" AuditClaims.Vacuous AuditClaims.Shadow AuditClaims.AsmTotal AuditClaims.ShadowWithin AuditClaims.Escapes
 for module in AuditClaims.Unchecked AuditClaims.Universal; do
   if bash "$here/kernel-replay.sh" "$module"; then
     echo "error: leanchecker accepted $module" >&2

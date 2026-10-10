@@ -62,7 +62,8 @@ LEAN_CASES = {
 FINDINGS = {name: finding for name, (_, _, finding) in LEAN_CASES.items()}
 FINDINGS.update({'spoofed-total-head': 'S2', 'spoofed-registered-head': 'S2', 'receipt-schema-skew': 'F1',
                  'host-allowlist-masks-panic': 'F3', 'model-illegal-masks-native-value': 'F3',
-                 'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1'})
+                 'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1',
+                 'escape-hatches-allowed': 'H4'})
 # Fixed: S1 (kernel replay rejects AuditClaims.Unchecked), F2, H1 (codex/fix-evidence-integrity),
 # S2-S6 (codex/fix-claim-binding), S7 and F3 (codex/fix-asm-faults-hostdiff), F1 (batch 8's I06
 # coverage binding, kept in step with the schema-3 receipt of codex/fix-model-premises).
@@ -237,10 +238,38 @@ def stale_report_accepted():
     return 'stale' not in result.stderr, f'claims.py check on a stale report exits {result.returncode}: {result.stderr.strip()[-120:]}'
 
 
+def escape_hatches_allowed():
+    """H4: a contract's `partial def` (an opaque constant without equations) or `implemented_by`
+    constant (compiled code differs from the kernel value) must not back a claim, although the
+    module passes kernel replay (check.sh replays AuditClaims.Escapes)."""
+    details, exposed = [], False
+    for name in ('AuditClaims.partial_hyp', 'AuditClaims.redirected_spec'):
+        if name not in THEOREMS:
+            return True, f'{name} is missing from the exposure snapshot'
+        case_exposed, detail = verdict(name, 'AuditClaims.root', 'total_correctness')
+        exposed = exposed or case_exposed or not THEOREMS[name]['violations']
+        details.append(f'{name.split(".")[-1]}: violations={THEOREMS[name]["violations"]} {detail}')
+    return exposed, '; '.join(details)
+
+
+def equation_sides():
+    """tools/Assurance.lean records an equation's left side and whether both sides are one term,
+    so `f x = f x` (states nothing) is told apart from `f (x + 0) = f x` (relates two
+    applications). Errors, or [] when both fixtures carry the expected shape."""
+    expected = {'AuditClaims.root_refl': True, 'AuditClaims.root_rel': False}
+    errors = []
+    for name, reflexive in expected.items():
+        shape = THEOREMS.get(name, {}).get('conclusion') or {}
+        if shape.get('reflexive') is not reflexive or claims._head(shape.get('lhs')) != 'AuditClaims.root':
+            errors.append(f'{name}: conclusion {shape} lacks lhs AuditClaims.root with reflexive={reflexive}')
+    return errors
+
+
 PY_CASES = {'spoofed-total-head': spoofed_total_head, 'spoofed-registered-head': spoofed_registered_head,
             'receipt-schema-skew': receipt_schema_skew, 'host-allowlist-masks-panic': host_allowlist_masks_panic,
             'model-illegal-masks-native-value': model_illegal_masks_native_value,
-            'indexed-theorems-unaudited': indexed_theorems_unaudited, 'stale-report-accepted': stale_report_accepted}
+            'indexed-theorems-unaudited': indexed_theorems_unaudited, 'stale-report-accepted': stale_report_accepted,
+            'escape-hatches-allowed': escape_hatches_allowed}
 
 
 def main(argv):
@@ -252,7 +281,7 @@ def main(argv):
         elif arg.startswith('--require-fixed='):
             required = set(arg.split('=', 1)[1].split(','))
     selected = lambda name: not findings or FINDINGS[name] in findings
-    failures = []
+    failures = equation_sides()
     results = {name: lean_case(name) for name in LEAN_CASES if selected(name)}
     results.update({name: case() for name, case in PY_CASES.items() if selected(name)})
     for name, (exposed, detail) in results.items():

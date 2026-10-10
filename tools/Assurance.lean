@@ -110,13 +110,18 @@ private partial def valueShape (depth : Nat) (e : Expr) : Json :=
   else Json.mkObj [head]
 
 /-- Raw conclusion shape for claim classification; policy is applied in `scripts/claims.py`.
-Only an equation's right-hand side is expanded: the left side is the computation it states. -/
+`args` holds an equation's right-hand side, `lhs` its left side (the computation it states),
+and `reflexive` whether both sides are the same term up to binder names: `f x = f x` states
+nothing, while `f a b = f b a` relates two different applications. -/
 private def conclusionShape (depth : Nat) (e : Expr) : Json :=
   let e := (stripBinders e).consumeMData
   let head := ("head", headJson e)
   if depth == 0 then Json.mkObj [head]
   else if e.isAppOfArity ``Eq 3 then
-    Json.mkObj [head, ("args", Json.arr #[valueShape (depth - 1) e.appArg!])]
+    let lhs := (e.getArg! 1).consumeMData
+    let rhs := e.appArg!.consumeMData
+    Json.mkObj [head, ("args", Json.arr #[valueShape (depth - 1) rhs]),
+      ("lhs", valueShape (depth - 1) lhs), ("reflexive", toJson (lhs.eqv rhs))]
   else Json.mkObj [head]
 
 /-- Statement-only constants, read from the kernel type without the proof term or any

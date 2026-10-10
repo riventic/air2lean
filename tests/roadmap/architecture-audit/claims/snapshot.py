@@ -22,14 +22,16 @@ CLASH = "environment already contains 'Zig.TotalTriple"
 
 def extract():
     theorems, nodes = [], {}
-    for name in ('Vacuous', 'Unchecked'):
+    # A report may fail only for its expected reason: kernel replay rejects AuditClaims.Unchecked
+    # (S1 fixed), and the policy refuses AuditClaims.Escapes' partial def and compiler redirection (H4).
+    expected_failures = {'Vacuous': set(), 'Unchecked': {'kernel-replay-rejected'},
+                         'Escapes': {'unexpected-opaque', 'unexpected-compiler-redirection'}}
+    for name, expected in expected_failures.items():
         path = OUT / f'assurance-{name}.json'
         report = json.loads(path.read_text())
-        # Kernel replay rejects AuditClaims.Unchecked (S1 fixed): its report fails on exactly that.
         violations = report.get('violations') or []
-        replay_only = bool(violations) and all(v['trust_class'] == 'kernel-replay-rejected' for v in violations)
-        if report.get('status') != 'pass' and not (name == 'Unchecked' and report.get('status') == 'fail'
-                                                   and replay_only):
+        explained = bool(violations) and all(v['trust_class'] in expected for v in violations)
+        if report.get('status') != 'pass' and not (report.get('status') == 'fail' and explained):
             raise SystemExit(f'{path}: assurance audit did not pass: {report.get("violations") or report.get("error")}')
         theorems += [{k: t[k] for k in FIELDS} for t in report['theorems'] if '._proof' not in t['name']]
         nodes.update({n['name']: {'module': n['module'], 'kind': n['kind']} for n in report['nodes']
