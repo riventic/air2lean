@@ -33,7 +33,8 @@ The LLVM section records the Zig 0.14.1–0.17.0 `codegen/llvm.zig` `lowerPtr` o
 `eu_payload` constant (it measures the error union type instead of its payload) and proves
 exactly which payloads it misplaces (`llvmPayloadOffset_ne_iff`): a nonzero-size payload of
 alignment below 2, which it addresses at the error code. The translator rejects such
-constants on the `stage2_llvm` profile (`tests/roadmap/const-bases`).
+constants on the `stage2_llvm` profile (`tests/roadmap/const-bases`). Union-member bases:
+`tests/roadmap/union-bases`.
 
 Proof-only module: it imports `ZigLean.Mem.Lemmas`, so it is not part of `ZigLean.lean`.
 -/

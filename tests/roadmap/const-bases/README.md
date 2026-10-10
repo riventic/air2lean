@@ -124,8 +124,9 @@ bug, not from a model or exporter mismatch.
 
 The translator fails closed. On a `stage2_llvm` profile it rejects every pointer constant
 whose offset can lie at or one past such a payload of its global. The type scan is
-structural and over-approximating: it visits every struct/tuple field, array item and
-optional payload that contains the offset, and it rejects through unions and unknown layouts.
+structural and over-approximating: it visits every struct/tuple field, array item, optional
+payload and union member (any member can be active) that contains the offset, and it rejects
+unknown layouts. Union-member bases are in `tests/roadmap/union-bases`.
 Other backends are unaffected, and the generated model keeps the correct, Sema-given offset.
 The check reads the schema-12 `profile.backend`. Legacy schema 1–11 inputs carry no backend
 (`unverified`, the named legacy reference model), so the check cannot apply to them. Their
