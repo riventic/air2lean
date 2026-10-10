@@ -1,5 +1,6 @@
 import UnionBases.Gen
 import ZigLean.Mem.ConstPtr
+import Air2Lean.Check
 
 /-!
 # Union-member constant pointer bases: generated clients
@@ -25,8 +26,6 @@ def blocks : Nat → Option BlockId := fun g => if g < 2 then some g else none
 
 /-- `&table.wide.cells[2]` (`cells` is member 2 of `Wide`). -/
 def wideCellPath : Path := ⟨.global 0, [.field 40, .unionPayload 2 4 4 2, .elem 2 2]⟩
-/-- `table.wide.cells[1..3]`'s pointer. -/
-def wideSlicePath : Path := ⟨.global 0, [.field 40, .unionPayload 2 4 4 2, .elem 2 1]⟩
 /-- `&table.wide.half` (member 1): the same payload address as `cells`. -/
 def wideHalfPath : Path := ⟨.global 0, [.field 40, .unionPayload 1 4 4 2]⟩
 /-- `&table.low.pair[1]`: payload first. -/
@@ -45,8 +44,7 @@ def resBytePath : Path := ⟨.global 0, [.field 68, .errPayload 4 4, .elem 1 3]�
 def extWordPath : Path := ⟨.global 0, [.field 36]⟩
 def extHiPath : Path := ⟨.global 0, [.field 36, .field 2]⟩
 def extBytePath : Path := ⟨.global 0, [.field 36, .elem 1 2]⟩
-/-- `&mixed.raw[1]`, `&mixed.raw[3]` (`raw` is member 1 of `Mixed`, payload at 4). -/
-def mixedLowPath : Path := ⟨.global 1, [.unionPayload 1 4 4 2, .elem 1 1]⟩
+/-- `&mixed.raw[3]` (`raw` is member 1 of `Mixed`, payload at 4). -/
 def mixedHighPath : Path := ⟨.global 1, [.unionPayload 1 4 4 2, .elem 1 3]⟩
 
 private def root : Ptr := ⟨some 0, 0⟩
@@ -138,6 +136,14 @@ theorem low_payload_tag_disjoint {p q : Ptr}
 
 /-- The tags the model's `Zig.Enc` writes are at these offsets (`Wide` at 0, `Low` at 8). -/
 theorem tag_offsets : unionTagOffset 4 6 2 = 0 ∧ unionTagOffset 1 8 8 = 8 := by decide
+
+/-- The model's offsets are the translator's `unionLayout` (which places the tag and payload in
+the generated `Zig.Enc`), for every union. -/
+theorem unionLayout_offsets (ts ta ps pa : Nat) :
+    (Air2Lean.unionLayout ts ta ps pa).1 = unionTagOffset ta ps pa ∧
+      (Air2Lean.unionLayout ts ta ps pa).2.1 = unionPayloadOffset ts ta pa := by
+  unfold Air2Lean.unionLayout unionTagOffset unionPayloadOffset
+  by_cases h : pa ≤ ta <;> simp [h]
 
 /-! ## Reads -/
 

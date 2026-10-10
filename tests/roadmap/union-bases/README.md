@@ -63,6 +63,8 @@ export the same constants. Apart from the profile line, they translate to the sa
 * `extern` members alias (`extHi_alias`), as do tagged members (`wideMembers_alias`).
   Payloads are disjoint from their tags (`wide_payload_tag_disjoint`,
   `low_payload_tag_disjoint`).
+* The model's union offsets are the translator's `unionLayout`, which places tag and payload
+  in the generated `Zig.Enc`, for every union (`unionLayout_offsets`).
 * Reads through the constants give the active members' bytes (`*_read`, `readWideCell_mem0`,
   `readExtByte_mem0`).
 
@@ -81,7 +83,7 @@ version and an edited copy of the accepted program:
 ## Running
 
 ```sh
-lake build ZigLean ZigLean.Mem.ConstPtr air2lean
+lake build ZigLean ZigLean.Mem.ConstPtr Air2Lean air2lean
 bash tests/roadmap/union-bases/check.sh
 # x86_64 Linux with a stock 0.16.0 compiler: the source's test on stage2_x86_64 and LLVM.
 AIR2LEAN_ZIG_NATIVE=/path/to/zig bash tests/roadmap/union-bases/check.sh --native

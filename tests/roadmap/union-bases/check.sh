@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Union-member constant pointer bases (L06): retained translation, generated-client proofs,
 # per-version exports and CLI rejections. Needs a built translator and
-# `lake build ZigLean ZigLean.Mem.ConstPtr`; runs no compiler. `--native` additionally runs the
+# `lake build ZigLean ZigLean.Mem.ConstPtr Air2Lean`; runs no compiler. `--native` additionally runs the
 # source's test with a stock Zig on x86_64 Linux (AIR2LEAN_ZIG_NATIVE), on stage2_x86_64 and LLVM.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
