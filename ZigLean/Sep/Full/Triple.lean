@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.Res
 import ZigLean.Conc.Lemmas
 import ZigLean.Sep.Block
+import ZigLean.Sep.Full.Disjoint
 
 /-!
 # Full-state triples (prototype, `docs/sep-full-state.md`)
@@ -28,9 +29,9 @@ namespace Full
 
 open FAssn Conc
 
-/-- The memory invariant of `FTriple`: one thread (`Mem.Seq`), and a
-well-formed atomic layout. -/
-def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m)
+/-- The memory invariant of `FTriple`: one thread (`Mem.Seq`), a well-formed atomic layout, and
+live blocks at disjoint addresses (`Mem.LiveDisjoint`, stage 3 of `docs/sep-full-state.md`). -/
+def _root_.Zig.Mem.FSeq (m : Mem) : Prop := m.Seq ∧ ShapesWF (shapes m) ∧ m.LiveDisjoint
 
 /-- `m` holds the resource `r` and the frame `rF`: its full heap is exactly their disjoint union,
 and their knowledge is true in `m`. -/
@@ -222,41 +223,42 @@ theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) :
 
 /-! ## Lifting legacy triples -/
 
-/-- `c` keeps the atomic layout and every block's address. -/
+/-- `c` keeps the atomic layout and every block's address, and keeps live blocks apart. -/
 def Tame {α : Type} (c : MemM α) : Prop :=
-  ∀ m v m', (c.run m).run = some (.ok (v, m')) → shapes m' = shapes m ∧ KMono m m'
+  ∀ m v m', (c.run m).run = some (.ok (v, m')) → shapes m' = shapes m ∧ KMono m m' ∧ LDMono m m'
 
 namespace Tame
 
 variable {α β : Type}
 
 theorem pure' (v : α) : Tame (pure v : MemM α) := fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨rfl, KMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
 
 theorem bind {c : MemM α} {f : α → MemM β} (hc : Tame c) (hf : ∀ v, Tame (f v)) :
     Tame (c >>= f) := fun m v m'' h => by
   obtain ⟨a, m', h1, h2⟩ := Conc.Proto.MemM.bind_ok h
-  obtain ⟨s1, k1⟩ := hc m a m' h1
-  obtain ⟨s2, k2⟩ := hf a m' v m'' h2
-  exact ⟨s2.trans s1, k1.trans k2⟩
+  obtain ⟨s1, k1, d1⟩ := hc m a m' h1
+  obtain ⟨s2, k2, d2⟩ := hf a m' v m'' h2
+  exact ⟨s2.trans s1, k1.trans k2, d1.trans d2⟩
 
 /-- A step that changes only clocks, footprint and bytes or liveness of blocks. -/
 theorem of_eq {c : MemM α}
-    (h : ∀ m v m', (c.run m).run = some (.ok (v, m')) → m'.atomics = m.atomics ∧ KMono m m') :
+    (h : ∀ m v m', (c.run m).run = some (.ok (v, m')) →
+      m'.atomics = m.atomics ∧ KMono m m' ∧ LDMono m m') :
     Tame c := fun m v m' hr => by
-  obtain ⟨ha, hk⟩ := h m v m' hr
-  exact ⟨by simp [shapes, ha], hk⟩
+  obtain ⟨ha, hk, hd⟩ := h m v m' hr
+  exact ⟨by simp [shapes, ha], hk, hd⟩
 
 theorem loadBytes (p : Ptr) (n a : Nat) (k : AccessKind) : Tame (Zig.loadBytes p n a k) :=
   of_eq fun _ _ _ h => by
     obtain ⟨-, -, -, -, -, -, rfl⟩ := Conc.Proto.loadBytes_ok h
-    exact ⟨rfl, KMono.of_blocks rfl⟩
+    exact ⟨rfl, KMono.of_blocks rfl, LDMono.of_blocks rfl⟩
 
 theorem lift (r : Result α) : Tame (StateT.lift r : MemM α) := of_eq fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.lift_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
 
 theorem get' : Tame (get : MemM Mem) := of_eq fun _ _ _ h => by
-  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _⟩
+  obtain ⟨-, rfl⟩ := Conc.Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
 
 theorem load (T : Type) [Enc T] (a : Nat) (p : Ptr) : Tame (Zig.load T a p) :=
   bind (loadBytes p _ a .read) fun bs => bind get' fun m => lift (decodeLoad m.blocks bs)
@@ -265,7 +267,10 @@ theorem storeBytes (p : Ptr) (a : Nat) (bs : Array Byte) (k : AccessKind) :
     Tame (Zig.storeBytes p a bs k) := of_eq fun _ _ _ h => by
   obtain ⟨b, blk, o, hacc, -, -, rfl⟩ := Conc.Proto.storeBytes_ok h
   exact ⟨rfl, KMono.set (blk' := { blk with bytes := writeBytes blk.bytes o bs })
-    (access_eq hacc).2.1 rfl rfl⟩
+    (access_eq hacc).2.1 rfl rfl, LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs })
+    (access_eq hacc).2.1 id rfl (by
+      obtain ⟨-, -, -, h0, hn, -, rfl⟩ := access_eq hacc
+      simp only; rw [writeBytes_size _ _ _ (by omega)]; exact Nat.le_refl _) rfl⟩
 
 theorem store {T : Type} [Enc T] (a : Nat) (p : Ptr) (v : T) : Tame (Zig.store a p v) :=
   storeBytes p a _ .write
@@ -274,7 +279,7 @@ theorem alloc (kind : BlockKind) (size align : Nat) : Tame (Zig.alloc kind size 
   of_eq fun m v m' h => by
     rw [alloc_run_eq] at h
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h
-    exact ⟨rfl, KMono.push rfl⟩
+    exact ⟨rfl, KMono.push rfl, LDMono.push (fun _ => by simpa using m.newAddr_addrFree size align) rfl⟩
 
 theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
   unfold Zig.free at h
@@ -287,18 +292,19 @@ theorem free (p : Ptr) : Tame (Zig.free p) := of_eq fun m v m' h => by
       split at h₁
       · have := Conc.Proto.MemM.set_ok h₁
         subst this
-        exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl⟩
+        exact ⟨rfl, KMono.set (blk' := { blk with live := false }) hblk rfl rfl,
+          LDMono.set (nb := { blk with live := false }) hblk (by simp) rfl (Nat.le_refl _) rfl⟩
       · exact (Conc.Proto.MemM.throw_ok h₁).elim
     · exact (Conc.Proto.MemM.throw_ok h₁).elim
 
 theorem ptrAddr (p : Ptr) : Tame (Zig.ptrAddr p) := of_eq fun m v m' h => by
   unfold Zig.ptrAddr at h
   split at h
-  · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨rfl, KMono.refl _⟩
+  · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
   · obtain ⟨a₁, m₁, hg, h₁⟩ := Conc.Proto.MemM.bind_ok h
     obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok hg
     split at h₁
-    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h₁; exact ⟨rfl, KMono.refl _⟩
+    · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h₁; exact ⟨rfl, KMono.refl _, LDMono.refl _⟩
     · exact (Conc.Proto.MemM.throw_ok h₁).elim
 
 end Tame
@@ -322,7 +328,7 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
     | ok x =>
       obtain ⟨v, m'⟩ := x
       rintro ⟨hQ, hdQ, hmQ, hq, hs'⟩
-      obtain ⟨hsh, hkm⟩ := hc m v m' hrun
+      obtain ⟨hsh, hkm, hld⟩ := hc m v m' hrun
       -- The frame's cells carry `m`'s tags, which are `m'`'s.
       have hF : ∀ l fc, rF.heap l = some fc → fc.atom = tagOf (shapes m') l.1 l.2 := by
         intro l fc hl
@@ -335,7 +341,7 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
         · rw [h1] at hl; cases hl
       let hQ' : FHeap := fun l => (hQ l).map fun c => ⟨c, tagOf (shapes m') l.1 l.2⟩
       refine ⟨⟨hQ', Know.none⟩, ⟨fun l => ?_, ?_, Know.sub_none _, hkF.trans hkm⟩,
-        ⟨?_, rfl⟩, ⟨hs', by rw [hsh]; exact hs.2⟩⟩
+        ⟨?_, rfl⟩, ⟨hs', by rw [hsh]; exact hs.2.1, hld hs.2.2⟩⟩
       · rcases hdQ l with e | e
         · left; simp [hQ', e]
         · right
@@ -358,25 +364,42 @@ theorem FTriple.ofTriple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn} 
           funext l; simp only [hQ', Option.map_map]; cases hQ l <;> rfl
         rw [this]; exact hq
 
-/-! ## Address disjointness of live blocks (input for `@memcpy` overlap checks) -/
+/-! ## Address disjointness of live blocks (stage 3) -/
 
-/-- Live blocks occupy disjoint address ranges. Every new block's address keeps it (the placement
-oracle's `Mem.placeOk`/`addrFree`, `Mem.newAddr_clear`), so it holds of reachable memories, but
-it is not part of `Mem.Seq`; stage 3 adds it to the memory invariant (`docs/sep-full-state.md`). -/
-def _root_.Zig.Mem.LiveDisjoint (m : Mem) : Prop :=
-  ∀ (b b' : BlockId) (blk blk' : Block), b ≠ b' → m.blocks[b]? = some blk →
-    m.blocks[b']? = some blk' → blk.live → blk'.live → blk.addr + blk.bytes.size ≤ blk'.addr ∨ blk'.addr + blk'.bytes.size ≤ blk.addr
+/-- An owned byte is a byte of a live block, whose address and size its cell records. -/
+theorem Holds.block {m : Mem} {r rF : Res} (hh : Holds m r rF) {b : BlockId} {x : Nat} {fc : FCell}
+    (h : r.heap (b, x) = some fc) : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      x < blk.bytes.size ∧ fc.cell.addr = blk.addr ∧ fc.cell.size = blk.bytes.size := by
+  obtain ⟨blk, hb, hl, hx, he⟩ := Mem.heap_some (hh.cell h)
+  exact ⟨blk, hb, hl, hx, by rw [he], by rw [he]⟩
 
-/-- Two owned bytes of different blocks lie in disjoint address ranges: a Sep-level fact from
-ownership alone (no pinned byte, no premise per client). -/
-theorem Holds.apart {m : Mem} {r rF : Res} (hh : Holds m r rF) (hd : m.LiveDisjoint)
+/-- **Owned bytes of two different blocks lie in disjoint address ranges**: a Sep-level fact from
+ownership and the memory invariant (`Mem.LiveDisjoint`, part of `Mem.FSeq`). -/
+theorem Holds.apart {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
     {b b' : BlockId} {x x' : Nat} {fc fc' : FCell} (hbb : b ≠ b') (h1 : r.heap (b, x) = some fc)
     (h2 : r.heap (b', x') = some fc') :
     fc.cell.addr + fc.cell.size ≤ fc'.cell.addr ∨ fc'.cell.addr + fc'.cell.size ≤ fc.cell.addr := by
-  obtain ⟨blk, hb, hl, _, he⟩ := Mem.heap_some (hh.cell h1)
-  obtain ⟨blk', hb', hl', _, he'⟩ := Mem.heap_some (hh.cell h2)
-  rw [he, he']
-  exact hd b b' blk blk' hbb hb hb' hl hl'
+  obtain ⟨blk, hb, hl, hx, ha, hsz⟩ := hh.block h1
+  obtain ⟨blk', hb', hl', hx', ha', hsz'⟩ := hh.block h2
+  have := clearOf_iff.mp (hs.2.2 b b' blk blk' hbb hb hb' hl')
+  rw [ha, ha', hsz, hsz']
+  rcases this with h | h | h | h | h
+  · simp_all
+  · omega
+  · omega
+  · right; exact h
+  · left; exact h
+
+/-- **The `apart` rule**: owning a byte of each of two different blocks gives the disjointness of
+their address ranges as a fact. -/
+theorem FTriple.apart {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {b b' : BlockId}
+    {A S A' S' : Nat} (hbb : b ≠ b')
+    (hc : ∀ r, P r → (∃ x fc, r.heap (b, x) = some fc ∧ fc.cell.addr = A ∧ fc.cell.size = S) ∧
+      ∃ x fc, r.heap (b', x) = some fc ∧ fc.cell.addr = A' ∧ fc.cell.size = S')
+    (ht : FTriple (⟪A + S ≤ A' ∨ A' + S' ≤ A⟫ ⋆ P) c Q) : FTriple P c Q := by
+  intro m r rF hh hp hs
+  obtain ⟨⟨x, fc, h1, rfl, rfl⟩, ⟨x', fc', h2, rfl, rfl⟩⟩ := hc r hp
+  exact ht m r rF hh (sep_lift.mpr ⟨hh.apart hs hbb h1 h2, hp⟩) hs
 
 end Full
 end Zig

@@ -319,6 +319,14 @@ theorem holds_after {m m' : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S
       simp only [hc, hcov, ↓reduceIte, h', hc', Option.none_or]
       exact e
 
+/-- A write inside a block keeps live blocks apart. -/
+theorem ld_write {m m' : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) (hn : o + bs.size ≤ blk.bytes.size)
+    (h : m'.blocks = m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs })
+    (hd : m.LiveDisjoint) : m'.LiveDisjoint :=
+  LDMono.set (nb := { blk with bytes := writeBytes blk.bytes o bs }) hb id rfl
+    (by simp only; rw [writeBytes_size _ _ _ hn]; exact Nat.le_refl _) h hd
+
 theorem kmono_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : KMono m m' := KMono.of_blocks h
 
 theorem heap_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m'.heap = m.heap := by
@@ -351,7 +359,7 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
     simp only [curBytes, e, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2
+  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1
     (by decide) htok e
   -- A successful preparation reads the newest message, which has the owned bytes.
   have hnewest : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
@@ -364,7 +372,7 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
         if Covers b' x (b, p.off.toNat, 8) then some (p.off.toNat, 8) else tagOf (shapes m) b' x := by
     intro li m₁ hl
     rw [intSize_64] at hl
-    have := locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2 (by decide) htok
+    have := locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1 (by decide) htok
       (by rw [hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl, hsz]) hl
     obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ := this
     refine ⟨readOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur (m.recordAt b p.off.toNat 8 .atomicRead) rfl], ?_⟩
@@ -411,7 +419,8 @@ theorem FTriple.atomicLoad (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) :
           · rfl)
         (fun b' x => by rw [hshapes, htag, hsz]) (kmono_of_blocks hblocks)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, _, hal, hK, hsz, hv, .inr (by rw [hsz]), hab'⟩,
-        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _⟩, by rw [hshapes]; exact hwf⟩⟩
+        ⟨⟨singleThread_loadM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _⟩, by rw [hshapes]; exact hwf,
+          LDMono.of_blocks hblocks hs.2.2⟩⟩
 
 theorem shapes_insertM_last {m : Mem} {li : Nat} {msg : Msg} {blk : Block}
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hli : li < m.atomics.size) :
@@ -448,7 +457,7 @@ theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
   have hcur : (curBytes (m.recordAt b p.off.toNat 8 .atomicWrite) b p.off.toNat 8).size = 8 := by
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some, Array.size_extract]
     omega
-  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2
+  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2.1
     (by decide) htok e
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
@@ -461,7 +470,7 @@ theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
     intro li m₁ hl
     rw [intSize_64] at hl
     obtain ⟨hupd, hli, hb, ho, hpos, -, hwf, htag⟩ :=
-      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2 (by decide) htok hcur hl
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicWrite) hs.2.1 (by decide) htok hcur hl
     exact ⟨writeSlots_zero hpos, hli, hb, ho, hupd, hwf, htag⟩
   cases hrun : ((Zig.atomicStoreAt 0 ord 8 p w).run m).run with
   | none => trivial
@@ -503,7 +512,8 @@ theorem FTriple.atomicStore (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) :
         (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode w) })
           hblk rfl hblocks)
       refine ⟨r', hh', ⟨A, S, K, Enc.encode w, _, hal, hK, henc, LawfulEnc.decode_encode w,
-        .inr (by rw [hsz]), hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf⟩⟩
+        .inr (by rw [hsz]), hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
+          ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
       unfold storeM observeM
       exact singleThread_insertM (by rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _) _ _ _
 

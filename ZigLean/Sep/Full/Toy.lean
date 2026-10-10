@@ -321,7 +321,7 @@ theorem apts_layout {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq) {p 
   have ht := tagOk_of_own hh hab hsz htg hpb
   have hmem : ALoc.shape l ∈ shapes m :=
     List.mem_map.mpr ⟨l, Array.mem_toList_iff.mpr hl, rfl⟩
-  exact overlap_eq hs.2 (by decide) ht hmem hb h1 h2
+  exact overlap_eq hs.2.1 (by decide) ht hmem hb h1 h2
 
 theorem inv_no_odd {hint last : Ptr} {m : Mem} (hs : m.FSeq) {b : BlockId}
     (hpb : hint.block = some b) {l : ALoc} (hl : l ∈ m.atomics) (hb : l.block = b)
@@ -432,7 +432,12 @@ theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none⟩ ∧ inv hi
         LawfulEnc.decode_encode (α := BitVec 64) _, .inl rfl, glob_abytes enc0_size⟩
     · refine ⟨⟨4112, 8, .global, enc1, rfl, enc1_size, LawfulEnc.decode_encode (α := Ptr) _,
         abytesAt_bytesAt (glob_abytes enc1_size), by decide⟩, rfl⟩
-  · exact ⟨⟨singleThread_empty rfl (by decide)⟩, ⟨by simp [shapes, start], by simp [shapes, start]⟩⟩
+  · refine ⟨⟨singleThread_empty rfl (by decide)⟩, ⟨by simp [shapes, start], by simp [shapes, start]⟩, ?_⟩
+    intro b b' blk blk' hbb h1 h2 _
+    rcases b with _ | _ | b <;> rcases b' with _ | _ | b' <;>
+      simp only [start, List.getElem?_toArray, List.getElem?_cons_zero, List.getElem?_cons_succ,
+        List.getElem?_nil, Option.some.injEq, reduceCtorEq] at h1 h2 hbb <;>
+      first | exact absurd rfl hbb | (subst h1 h2; simp [Block.clearOf, enc0_size, enc1_size])
 
 /-- So the specs are not vacuous: at program start the allocator invariant holds, and
 `cycle_spec` applies to the real run (alloc, free, alloc). -/

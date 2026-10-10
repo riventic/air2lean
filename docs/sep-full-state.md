@@ -58,9 +58,10 @@ A memory holds `r` with frame `rF` (`Holds`) when two things are true:
 * both knowledge sets are true in `m`, i.e. contained in `Mem.kn m` (every block, live or dead,
   with its address).
 
-The memory invariant is `Mem.FSeq := Mem.Seq ∧ ShapesWF (shapes m)`: every atomic location has a
-byte, and no two overlap. `locIdx` only creates a location where none overlaps, so every
-reachable memory satisfies this.
+The memory invariant is `Mem.FSeq := Mem.Seq ∧ ShapesWF (shapes m) ∧ Mem.LiveDisjoint m`: every
+atomic location has a byte, no two overlap, and no two live blocks share an address (stage 3,
+below). `locIdx` only creates a location where none overlaps, and every new block is placed clear
+of the live ones, so every reachable memory satisfies this.
 
 `FTriple P c Q` (in `ZigLean/Sep/Full/Triple.lean`) is `Triple` with `Holds` in place of the heap
 split and `FSeq` in place of `Seq`.
@@ -116,7 +117,8 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Triple` | `FTriple.ofTriple` | **lifting**: `Triple P c Q → Tame c → FTriple (up P) c (up ∘ Q)` |
 | `Triple` | `Tame.load`, `store`, `loadBytes`, `storeBytes`, `alloc`, `free`, `ptrAddr`, `pure'`, `bind` | the plain primitives keep the layout and every block's address |
 | `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run`, `FTriple.ptrFromAddr` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing and never fails (an ambiguous address gives a pointer without provenance: O4 fix, `docs/address-reuse.md`) |
-| `Triple` | `Mem.LiveDisjoint`, `Holds.apart` | owned bytes of two different blocks lie in disjoint address ranges (given the placement invariant) |
+| `Disjoint` | `Mem.LiveDisjoint`, `LDMono.set`/`push`/`grow`, `Mem.newAddr_addrFree` | live blocks have disjoint address ranges (`Block.clearOf`); every block update of the memory model keeps it |
+| `Triple` | `Holds.apart`, `FTriple.apart` | owned bytes of two different blocks lie in disjoint address ranges (`LiveDisjoint` is part of `FSeq`) |
 | `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
@@ -190,14 +192,22 @@ sequential run that compares the value it just read needs no address.
 * A dead block's address may later be reused by a live block. `known b A` says nothing about
   uniqueness, so `ptrFromAddr` (which may return either block) and `ptrEqAddr` comparisons of a
   dangling pointer stay unconstrained. This is sound and matches the native behaviour.
-* `placeOk`/`addrFree` keep live blocks pairwise disjoint (`Mem.LiveDisjoint`). With
-  `FSeq := Seq ∧ ShapesWF ∧ LiveDisjoint`, `Holds.apart` turns ownership of a byte in each of two
-  blocks into `A + S ≤ A' ∨ A' + S' ≤ A`. The planned rule is
-  `FTriple.apart : FTriple (P ⋆ ⟪disjoint⟫) c Q → FTriple P c Q`, with the same side condition
-  shape as `know_intro`. This replaces the per-client placement premise for the generated
-  `@memcpy` overlap checks.
-* `Tame.alloc` must then also show that the new block is disjoint from live ones, which
-  `placeOk` gives.
+* `placeOk`/`addrFree` keep live blocks pairwise disjoint (`Mem.LiveDisjoint`, in the sense of
+  `Block.clearOf`, so a block of size 0 constrains nothing). `FSeq := Seq ∧ ShapesWF ∧
+  LiveDisjoint` (stage 3, done). `Holds.apart` turns ownership of a byte in each of two blocks
+  into `A + S ≤ A' ∨ A' + S' ≤ A`, and the rule
+  `FTriple.apart : FTriple (⟪disjoint⟫ ⋆ P) c Q → FTriple P c Q` (side condition shaped as
+  `know_intro`'s) adds that fact to a precondition. This replaces per-client placement premises
+  (the generated `@memcpy` overlap checks, the arena's foreign-slice comparison O-F).
+* `Tame` includes `LDMono` (the step keeps `LiveDisjoint`). For the primitives:
+  * `alloc` and `mmap` push a block at `Mem.newAddr`, which is clear of every live block
+    (`Mem.newAddr_addrFree`: `placeOk` checks it, and the fallback `Mem.top` is past every block);
+  * stores, atomics, `free`, `munmap` and an `mremap` shrink keep each block's address and do not
+    grow it (`LDMono.set`);
+  * an `mremap` growth in place grows only into a range that `Mem.mappingRoom` checked
+    (`LDMono.grow`; the mapping is live from `lo ≤ size`, which `mremap`'s length check gives);
+  * a moving `mremap` ends the old block and pushes the new one at `Mem.newAddr`
+    (`LDMono.set_dead_push`).
 
 ## Concurrency (RC11 approximation, `ZigLean/Conc`)
 
@@ -263,8 +273,8 @@ sequential run that compares the value it just read needs no address.
       (`tests/roadmap/alloc-translated/PageSpec.lean`), and its `alloc` for alignments up to a
       page (`PageAlloc.lean`, `docs/alloc-page.md`; larger alignments: O5). The wrapper contracts and the FBA client stay on the legacy
       `AllocSpec`.
-   3. Open: needs the placement fix (`codex/soundness-batch`), which is not on `main` yet. Then add
-      `LiveDisjoint` to `FSeq`, an `apart` rule, and the disjointness of a new block to `Tame.alloc`.
+   3. Done (`Disjoint.lean`, `Triple.lean`, `Tame.lean`): `LiveDisjoint` in `FSeq`, `LDMono` in
+      `Tame`, `Holds.apart` and `FTriple.apart`.
    4. Once everything uses `FTriple`, fold the tag into `Cell` and make `Triple := FTriple`. Every
       `bytesAt`-based lemma keeps its statement, because tags are "any" under `up`.
 4. **Cost.** The atomic rules took about 500 lines (`Atomic.lean`) on top of the existing
@@ -307,8 +317,8 @@ This builds on the FBA branch's O2 shape (`codex/alloc-translated-p4-fba` 02a845
    preconditions `len + 2^k ≤ 2^64 - P` for `alloc` and `n + P - 1 < 2^64` for `resize`/`remap`.
 
 Items 1, 2, 4 and 7 are done (`FAllocSpec`, `PageSpec.tok`, `PageSpec.legacy.fits`). Item 5 is
-not needed for the lifted FBA proof, which keeps its pin byte. Item 3 is done for alignments up to a page (`PageAlloc.own`). Item 6
-needs stage 3.
+not needed for the lifted FBA proof, which keeps its pin byte. Item 3 is done for alignments up to
+a page (`PageAlloc.own`). Item 6's rule exists (stage 3); the FBA proof still uses its premise.
 
 ## Limits
 
@@ -317,8 +327,6 @@ needs stage 3.
   (`FTriple.atomicLoadUnorderedEnc`) and the strong pointer `cmpxchg` that succeeds
   (`FTriple.cmpxchgPtr`). There is no RMW rule. `Seq.lean` reads a one-thread scheduler run
   with the oracle `0` as a `MemM` program (`Sched.run_eq_seqRun`, for a `ThreadFree` function).
-* `LiveDisjoint` is stated and used (`Holds.apart`) but not part of `FSeq`, because main has no
-  placement invariant that maintains it.
 * `FTriple.ptrFromAddr` frames everything but says nothing about the result's provenance: an
   ambiguous address gives `⟨none, n⟩` (O4 fix), so a proof that dereferences the result needs
   its own argument that one block covers the address.

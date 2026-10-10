@@ -139,7 +139,7 @@ theorem FTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :
         if Covers b' x (b, p.off.toNat, 8) then some (p.off.toNat, 8) else tagOf (shapes m) b' x := by
     intro li m₁ hl
     obtain ⟨hupd, -, -, -, hpos, hlast, hwf, htag⟩ :=
-      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2 (by decide) htok
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1 (by decide) htok
         (by rw [hcur, hsz]) hl
     exact ⟨unorderedOpts_zero hpos, by rw [lastBytes_eq hpos, hlast, hcur], hupd, hwf, htag⟩
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
@@ -155,7 +155,7 @@ theorem FTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :
       exfalso
       rcases MemM.bind_err hrun with he | ⟨⟨li, opts⟩, m₁, hp1, h1⟩
       · exact unorderedPrep_noErr hacc8 (noRace_of_singleThread hs.1.single _ _ _ _)
-          (fun e' => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2 (by decide)
+          (fun e' => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1 (by decide)
             htok e') e he
       · obtain ⟨b', blk', o', ha', hl, rfl⟩ := unorderedPrep_ok hp1
         rw [hacc8] at ha'; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at ha'
@@ -197,7 +197,7 @@ theorem FTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) :
           · rfl)
         (fun b' x => by rw [htag, hsz]) (kmono_of_blocks hblocks)
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, _, hal, hK, hsz, hv, .inr (by rw [hsz]), hab'⟩,
-        ⟨⟨?_⟩, hwf⟩⟩
+        ⟨⟨?_⟩, hwf, LDMono.of_blocks hblocks hs.2.2⟩⟩
       rw [hm₁]; exact singleThread_recordAt hs.1.single _ _ _ _
 
 /-! ## Pointer `cmpxchg` -/
@@ -311,7 +311,7 @@ theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
-  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2
+  have hlocok := fun e => locIdx_noErr_tag (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1
     (by decide) htok e
   have hdec : (Enc.decode bs : Result α).run = some (.ok v) := by rw [hv]; rfl
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
@@ -328,7 +328,7 @@ theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
     intro li m₁ hl
     rw [intSize_64] at hl
     obtain ⟨hupd, hli, hb, ho, hpos, hlast, hwf, htag⟩ :=
-      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2 (by decide) htok
+      locIdx_post (m := m.recordAt b p.off.toNat 8 .atomicRead) hs.2.1 (by decide) htok
         (by rw [hcur, hsz]) hl
     refine ⟨filter_head (readOpts_zero hpos) ?_, by rw [lastBytes_eq hpos, hlast, hcur], hli, hb, ho,
       hupd, hwf, htag, hpos⟩
@@ -474,7 +474,8 @@ theorem FTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
           (KMono.set (blk' := { blk with bytes := writeBytes blk.bytes p.off.toNat (Enc.encode new) })
             hblk rfl hblocks)
         refine ⟨r', hh', ⟨A, S, K, Enc.encode new, _, hal, hK, henc, LawfulEnc.decode_encode new,
-          .inr (by rw [hsz]), hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf⟩⟩
+          .inr (by rw [hsz]), hab'⟩, ⟨⟨?_⟩, by rw [hshapes]; exact hwf,
+          ld_write hblk (by rw [henc]; omega) hblocks hs.2.2⟩⟩
         unfold observeM
         exact singleThread_insertM hst _ _ _
       have hst₀ : m₀.SingleThread := by
