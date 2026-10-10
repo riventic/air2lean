@@ -207,16 +207,11 @@ theorem ptrFromAddr_run (n : Nat) (m : Mem) :
   simp only [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
     ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Option.bind_some]
   generalize (Array.filterMap _ m.blocks.zipIdx).toList = l
-  rcases l with _ | ⟨⟨b, blk⟩, _ | ⟨x, rest⟩⟩
+  rcases l with _ | ⟨⟨b, blk⟩, _ | ⟨x, rest⟩⟩ <;> try exact ⟨_, rfl⟩
+  cases m.allocPolicy.provenance
   · exact ⟨_, rfl⟩
-  · exact ⟨_, rfl⟩
-  · cases m.allocPolicy.provenance with
-    | strict => exact ⟨_, rfl⟩
-    | liveBlock =>
-      generalize Array.find? _ _ = r
-      rcases r with _ | ⟨b', blk'⟩
-      · exact ⟨_, rfl⟩
-      · exact ⟨_, rfl⟩
+  · generalize Array.find? _ _ = r
+    rcases r with _ | ⟨b', blk'⟩ <;> exact ⟨_, rfl⟩
 
 /-- `@ptrFromInt` frames everything. -/
 theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) :

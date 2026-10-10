@@ -147,10 +147,6 @@ theorem step {H : FAssn} {X : Assn} {c : MemM α} {Y : α → Assn} {f : α → 
     CTriple (H ⋆ up X) (ConcM.liftMem c >>= f) S :=
   bind (liftMem (FTotalTriple.ofTotal ht hc).toPartial.frameL) hf
 
-/-- A precondition that no full-state sequential memory holds. -/
-theorem of_false (h : ∀ m r rF, Holds m r rF → P r → m.FSeq → False) : CTriple P x Q :=
-  fun _ m r rF hh hp hs => (h m r rF hh hp hs).elim
-
 end CTriple
 
 end Full
