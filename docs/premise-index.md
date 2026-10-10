@@ -2374,11 +2374,11 @@ File premises: MTH-01, SEM-01, SEM-02, SEM-07, TRU-01
 |---|---|
 | `T04.linuxGnu_layouts` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `T04.macosNone_layouts` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `example@L77` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `example@L78` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `example@L79` | SEM-01, SEM-02, SEM-07, TRU-01 |
-| `example@L81` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
-| `example@L82` | MTH-01, TRU-01 |
+| `example@L83` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L84` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L85` | SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L87` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
+| `example@L88` | MTH-01, TRU-01 |
 
 ## `tests/roadmap/address-reuse/Kernel.lean`
 
