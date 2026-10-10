@@ -6,9 +6,9 @@ Status: the translated `PageAllocator` (Zig 0.16.0, x86_64-linux and aarch64-mac
 that holds at program start. This is a limit of the specification's logic, not a bug of the
 allocator or of the OS model: the native program is fine. This page records the obstructions,
 their kernel-checked evidence, two upstream Zig bugs, the native comparison, and the status with
-the full-state logic: the whole vtable is proved against `FAllocSpec` for alignments up to a page
-(`alloc` partial, `free`/`resize`/`remap` total); larger alignments are blocked by O5, the
-model's unbounded addresses.
+the full-state logic: the whole vtable is proved against `FAllocSpec` for every alignment
+(`alloc` partial, `free`/`resize`/`remap` total). O5, the model's unbounded fallback address, is
+fixed in the OS model: no mapping ends above the target's user address space.
 
 ## The obstructions
 
@@ -86,8 +86,8 @@ knowledge after `free` (`known`, O1).
 | size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
 | O1, O3 | resolved: the allocator state owns the hint word (`aptsE`) and knows its target's page-aligned address (`known`) | `PageAlloc.own` |
 | O4 | fixed in the memory model: an ambiguous `@ptrFromInt` gives a pointer without provenance | below |
-| `alloc` | proved for alignments up to a page (`k ≤ 12`), partial correctness: `PageAlloc.fallocSpec` is the whole `FAllocSpec FLogic.partial` for x86_64-linux | `tests/roadmap/alloc-translated/PageAlloc.lean` |
-| O5 | open: larger alignments, unbounded model addresses | below |
+| `alloc` | proved for every alignment (`k < 64`, `fits`), partial correctness: `PageAlloc.fallocSpec` is the whole `FAllocSpec FLogic.partial` for x86_64-linux | `tests/roadmap/alloc-translated/PageAlloc.lean` |
+| O5 | fixed in the OS model (OSM-01): `mmap` fails with `ENOMEM` above `Os.Target.addrLimit` | below |
 
 ### O4: an ambiguous `@ptrFromInt` (fixed)
 
@@ -127,7 +127,7 @@ is the same reading (`alloc_run`, `Sched.run_eq_seqRun`). The scheduler's run it
 (`checkJoinedByChild`), which fails in an `FSeq` memory with another current thread or an
 unjoined child, whatever the allocator does.
 
-### O5: alignments above a page
+### O5: alignments above a page (fixed)
 
 For `2^k > P`, `map` asks for `2^k - P` extra bytes, and `std.mem.alignPointer` adds
 `2^k - 1` to the mapping's address with an overflow check. A placement proposal is taken only
@@ -135,12 +135,25 @@ if the mapping's pages end at or below 2^64 (`Mem.placeOk`), and then the check 
 But the fallback address after every block (`Mem.top`, when the proposal is not valid) is a
 `Nat` without a bound. From a memory whose last block ends just below `2^64 - 4096`,
 `alloc(1, align 8192)` maps two pages at `2^64 - 4096`, the check overflows, `alignPointer`
-returns `null` and `map` panics (`PageAlloc.alloc_high`, kernel-checked).
-So no invariant that such a memory satisfies admits `k ≥ 13`, and `ainv.fits` requires
-`k ≤ 12`. Natively the kernel never maps that high. The approved fix (`mmap`/`mremap` fail with
-`ENOMEM` above the target's user address space) follows on `codex/alloc-o5`. Then the larger
-alignments need the prefix and tail `munmap`s of `map`, which `TotalTriple.munmapPrefix` and
-`munmapTail` already cover.
+returned `null` and `map` panicked (`PageAlloc.alloc_high`, kernel-checked before the fix).
+So no invariant that such a memory satisfies admitted `k ≥ 13`, and `ainv.fits` required
+`k ≤ 12`. Natively the kernel never maps that high.
+
+The fix is in the OS model (OSM-01, user-approved): an `mmap` or `mremap` move or growth whose
+mapping would end above the target's user address space (`Os.Target.addrLimit`: `2^47` on
+x86_64-linux, `MACH_VM_MAX_ADDRESS = 0x7FFFFE000000` on aarch64-macos), at a proposed address or
+at the fallback `Mem.top`, fails with `ENOMEM`, and `TotalTriple.mmap` gives the bound
+`A + alignUp len P ≤ addrLimit` ([os-mmap.md](os-mmap.md)). With it `alignPointer`'s check
+`A + 2^k - 1 < 2^64` always passes (`PageAlloc.alignPointer_gen`): the aligned pointer is
+`drop A (2^k) = alignUp A 2^k - A` bytes in. `map` unmaps those bytes
+(`TotalTriple.munmapPrefix`, `PageAlloc.munmap_drop`) and the pages above the granted ones
+(`TotalTriple.munmapTail`, `PageAlloc.munmap_rest`), and `ainv` is `PageSpec.inv own` with the
+unrestricted `fits`. `PageAlloc.alloc_high` is now the regression: from the same memory the
+`mmap` fails and `alloc` returns `null`. `PageAlloc.alloc_top` runs the prefix `munmap` on a
+mapping that a placement proposal puts three pages below `2^47`, `PageAlloc.alloc_edge` the tail
+`munmap` on an aligned mapping that ends exactly at `2^47`. Still open: the model never
+places a later mapping into the unmapped prefix while the rest is live, which the kernel may do
+([os-mmap.md](os-mmap.md)).
 
 ### Negative check
 

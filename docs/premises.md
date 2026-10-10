@@ -849,16 +849,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `MAP.PRIVATE|ANONYMOUS`, `fd = -1`, offset 0 and `length > 0` either returns
   `error.OutOfMemory` (the failure decision is the allocator's `Mem.allocDenied`, one attempt
   index for every request) with no other change, or a new block of kind `.mapped 0` of
-  exactly `length` zero bytes at the placement's page-aligned address for its pages (SEM-07). The
+  exactly `length` zero bytes at the placement's page-aligned address for its pages (SEM-07). A
+  mapping that would end above the target's user address space (`Os.Target.addrLimit`: `2^47`
+  on x86_64-linux, at least `TASK_SIZE_MAX`; `MACH_VM_MAX_ADDRESS = 0x7FFFFE000000` on
+  aarch64-macos) fails with `error.OutOfMemory`, as the kernel's does; assumed: no call passes a
+  hint above `TASK_SIZE_MAX = 2^47 - 4096` (5-level-paging Linux maps above `2^47` for one,
+  a hint of `2^47` included). The
   kernel fails such a mapping only with `ENOMEM` (no other `MMapError` member). Other argument
   combinations are outside the model (`.unspecified`); `length = 0` is `.illegal`. `munmap` of
   the whole live range of one mapping ends it, of a page-aligned prefix moves its first live
   offset, of a page tail shrinks it; any other range (middle, past the mapping, not a live
   mapping: a double `munmap`) is `.illegal`, stricter than the kernel. `mremap` (Linux only)
   of a whole live mapping with flags 0 or `MAYMOVE`, no new address and `new_len > 0` shrinks
-  in place, or grows (an allocation attempt) in place when the grown pages are below 2^64 and
-  clear of every other live block, by a move to a new mapping at the placement's address
-  under `MAYMOVE` (oracle `mremapMoves`, or no room), or fails with `error.OutOfMemory`;
+  in place, or grows (an allocation attempt) in place when the grown pages end at or below
+  `addrLimit` and are clear of every other live block, by a move to a new mapping at the placement's address
+  under `MAYMOVE` (oracle `mremapMoves`, or no room) whose pages end at or below `addrLimit`,
+  or fails with `error.OutOfMemory`;
   grown bytes up to the old page end are undefined, the rest zero. Page size: 4 KiB
   (`linux`), 16 KiB (`macos`), fixed per target (`Os.Target.pageSize`). An address can be
   reused after `munmap` (the placement oracle).

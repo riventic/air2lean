@@ -198,7 +198,9 @@ theorem mremapLive_ok {os : Os.Target} {p : Ptr} {b : BlockId} {blk : Block} {lo
     split at h6
     · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6; exact ⟨rfl, KMono.of_blocks rfl⟩
     split at h6
-    · obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
+    · split at h6
+      · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok h6; exact ⟨rfl, KMono.of_blocks rfl⟩
+      obtain ⟨_, m₄, h7, h8⟩ := Proto.MemM.bind_ok h6
       obtain ⟨-, rfl⟩ := Proto.recordAccess_ok h7
       obtain ⟨_, m₅, h9, h10⟩ := Proto.MemM.bind_ok h8
       obtain ⟨rfl, rfl⟩ := Proto.MemM.get_ok h9

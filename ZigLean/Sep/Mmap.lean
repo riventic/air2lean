@@ -14,7 +14,8 @@ points at the mapping's first live offset `lo`, in a block at the page-aligned a
 
 Every rule is a total triple (the OS calls return).
 
-* `TotalTriple.mmap`: a fresh mapping of `len` zero bytes, or `error.OutOfMemory` and no change.
+* `TotalTriple.mmap`: a fresh mapping of `len` zero bytes that ends inside the address space
+  (`Os.Target.addrLimit`), or `error.OutOfMemory` and no change.
 * `TotalTriple.munmapWhole`, `TotalTriple.munmapPrefix`, `TotalTriple.munmapTail`: `munmap`
   consumes the permission of exactly the unmapped range; a trim leaves the rest as a mapping.
 * `TotalTriple.mremapShrink`, `TotalTriple.mremapGrow`: the new mapping (in place or moved), or
@@ -171,14 +172,16 @@ theorem mapDenied_iff (m : Mem) (n : Nat) : m.mapDenied n = true ↔ m.allocDeni
 theorem Os.mmap_run (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (hlen : len.toNat ≠ 0)
     (m : Mem) :
     (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0).run m =
-      if m.mapDenied len.toNat then
+      if m.mapDenied len.toNat || !os.fits (m.mapAddr os.pageSize len.toNat) len.toNat then
         pure (.error "OutOfMemory", { m with allocs := m.allocs + 1 })
       else
         pure (.ok ⟨⟨some m.blocks.size, 0⟩, len⟩,
           ({ m with allocs := m.allocs + 1 } : Mem).afterMmap os.pageSize len.toNat) := by
-  by_cases hd : m.mapDenied len.toNat
-  · simp [Os.mmap, hlen, hd, zig_unfold, set, StateT.set, MonadStateOf.set]
-  · simp [Os.mmap, hlen, hd, zig_unfold, set, StateT.set, MonadStateOf.set]
+  by_cases hd : (m.mapDenied len.toNat || !os.fits (m.mapAddr os.pageSize len.toNat) len.toNat)
+  · simp only [Bool.or_eq_true, Bool.not_eq_true'] at hd
+    rcases hd with hd | hd <;> simp [Os.mmap, hlen, hd, zig_unfold, set, StateT.set, MonadStateOf.set]
+  · simp only [Bool.or_eq_true, Bool.not_eq_true', not_or, Bool.not_eq_false] at hd
+    simp [Os.mmap, hlen, hd, zig_unfold, set, StateT.set, MonadStateOf.set]
 
 /-- The heap after `mmap`: the old one and the new block's cells. -/
 theorem Mem.heap_afterMmap (m : Mem) (P n : Nat) :
@@ -197,9 +200,9 @@ theorem Mem.Seq.afterMmap {m : Mem} (hst : m.Seq) (P n : Nat) : (m.afterMmap P n
   ⟨hst.single⟩
 
 /-- What `mmap` returns: a fresh mapping of `len` zero bytes, or an `MMapError`. -/
-def mmapPost (P : Nat) (len : BitVec 64) : Except ErrName Slice → Assn
+def mmapPost (P L : Nat) (len : BitVec 64) : Except ErrName Slice → Assn
   | .ok s => fun h => s.len = len ∧ s.ptr.off = 0 ∧
-      ∃ A, mapping P s.ptr A 0 (Array.replicate len.toNat (.int 0)) h
+      ∃ A, A + alignUp len.toNat P ≤ L ∧ mapping P s.ptr A 0 (Array.replicate len.toNat (.int 0)) h
   | .error e => ⌜e = "OutOfMemory"⌝
 
 /-- **mmap.** From nothing: a fresh, page-aligned mapping of exactly `len` zero bytes that
@@ -207,14 +210,14 @@ nothing else owns, or an `MMapError` with the heap unchanged. For every failure 
 theorem TotalTriple.mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64)
     (hlen : 0 < len.toNat) :
     TotalTriple emp (Os.mmap os hint len os.protReadWrite os.mapPrivateAnonymous Os.noFd 0)
-      (mmapPost os.pageSize len) :=
+      (mmapPost os.pageSize os.addrLimit len) :=
   TotalTriple.of_run fun m hP' hF hd hm hp hst => by
     have hP := os.pageSize_pos
     have hP0 : hP' = Heap.empty := hp
     subst hP0
     rw [Heap.empty_union] at hm
     have hst₁ : ({ m with allocs := m.allocs + 1 } : Mem).Seq := ⟨hst.single⟩
-    by_cases hdn : m.mapDenied len.toNat
+    by_cases hdn : (m.mapDenied len.toNat || !os.fits (m.mapAddr os.pageSize len.toNat) len.toNat)
     · refine ⟨.error "OutOfMemory",
         { m with allocs := m.allocs + 1 }, Heap.empty, ?_, (Heap.disjoint_empty hF).symm,
         by rw [Heap.empty_union]; exact hm, ⟨rfl, rfl⟩, hst₁⟩
@@ -231,10 +234,13 @@ theorem TotalTriple.mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64)
         rw [Mem.heap_none_size] at this; exact this.symm
       refine ⟨.ok ⟨⟨some m.blocks.size, 0⟩, len⟩, m₁.afterMmap os.pageSize len.toNat,
         liveCells m.blocks.size nb, ?_,
-        liveCells_disjoint hfree, ?_, ⟨rfl, rfl, m₁.mapAddr os.pageSize len.toNat, rfl, ?_, ?_,
+        liveCells_disjoint hfree, ?_, ⟨rfl, rfl, m₁.mapAddr os.pageSize len.toNat, ?_, rfl, ?_, ?_,
           by simp, ?_⟩, hst₁.afterMmap _ _⟩
       · rw [Os.mmap_run os hint len (by omega), if_neg hdn]
       · rw [Mem.heap_afterMmap]; show _ ∪ m.heap = _; rw [hm]
+      · simp only [Bool.or_eq_true, Bool.not_eq_true', not_or, Bool.not_eq_false, Os.Target.fits,
+          decide_eq_true_eq] at hdn
+        exact hdn.2
       · simp [nb]; omega
       · exact Mem.newAddr_mod m₁ _ _ hP
       · have := liveCells_bytesAt (b := m.blocks.size) (nb := nb) (lo := 0) rfl rfl (Nat.zero_le _)
@@ -560,10 +566,11 @@ theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (b
     (Os.mremapLive os p b blk lo newLen flags).run m =
       if m.mapDenied n then pure (.error "OutOfMemory", m₁)
       else if flags = Os.mremapMayMove ∧
-          (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom b blk lo (alignUp n os.pageSize) = false) then
-        pure (.ok ⟨⟨some m.blocks.size, 0⟩, newLen⟩,
+          (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false) then
+        if os.fits (m.mapAddr os.pageSize n) n = false then pure (.error "OutOfMemory", m₁)
+        else pure (.ok ⟨⟨some m.blocks.size, 0⟩, newLen⟩,
           (m₁.recordAt b lo (blk.bytes.size - lo) .write).mremapMoved os.pageSize b blk lo n)
-      else if m.mappingRoom b blk lo (alignUp n os.pageSize) = false then pure (.error "OutOfMemory", m₁)
+      else if m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false then pure (.error "OutOfMemory", m₁)
       else pure (.ok ⟨p, newLen⟩, m₁.mremapGrown os.pageSize b blk lo n) := by
   intro n m₁
   have hn0 : newLen.toNat ≠ 0 := by omega
@@ -573,16 +580,19 @@ theorem Os.mremapLive_grow {m : Mem} (os : Os.Target) (p : Ptr) (b : BlockId) (b
   by_cases hd : m.mapDenied n
   · simp [Os.mremapLive, hn0, hn', hd, zig_unfold, n, m₁, set, StateT.set, MonadStateOf.set]
   by_cases hmv : flags = Os.mremapMayMove ∧
-      (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom b blk lo (alignUp n os.pageSize) = false)
+      (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false)
   · simp only [hd, hmv, if_true, if_false, Bool.false_eq_true]
+    by_cases hf : os.fits (m.mapAddr os.pageSize n) n = false
+    · simp [Os.mremapLive, hn0, hn', hd, hmv, hf, zig_unfold, n, m₁, set, StateT.set,
+        MonadStateOf.set, ExceptT.bindCont]
     simp only [m₁] at hnr
-    simp [hnr, Os.mremapLive, hn0, hn', hd, hmv, zig_unfold, n, set, StateT.set, MonadStateOf.set,
+    simp [hf, hnr, Os.mremapLive, hn0, hn', hd, hmv, zig_unfold, n, set, StateT.set, MonadStateOf.set,
       recordAccess, get, getThe, MonadStateOf.get, StateT.get, bind, StateT.bind, pure, StateT.run,
       ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, Option.bind_some,
       Mem.recordAt, liftM, monadLift, MonadLift.monadLift, StateT.lift]
     rfl
   · simp only [hd, hmv, if_false, Bool.false_eq_true]
-    by_cases ht : m.mappingRoom b blk lo (alignUp n os.pageSize) = false
+    by_cases ht : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false
     · have hf : ¬ flags = Os.mremapMayMove := fun h => hmv ⟨h, .inr ht⟩
       simp [Os.mremapLive, hn0, hn', hd, hf, ht, zig_unfold, n, m₁, set, StateT.set,
         MonadStateOf.set, ExceptT.bindCont]
@@ -683,8 +693,12 @@ theorem TotalTriple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
       exact ⟨_, _, h, rfl, hd, hm, ⟨rfl, hp⟩, hst₁⟩
     rw [if_neg hd₁]
     by_cases hmv : flags = Os.mremapMayMove ∧
-        (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom b blk lo (alignUp n os.pageSize) = false)
+        (m.allocPolicy.os.mremapMoves m.allocs n = true ∨ m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false)
     · rw [if_pos hmv]
+      by_cases hf : os.fits (m.mapAddr os.pageSize n) n = false
+      · rw [if_pos hf]
+        exact ⟨_, _, h, rfl, hd, hm, ⟨rfl, hp⟩, hst₁⟩
+      rw [if_neg hf]
       -- The move: the old block ends, the new one is pushed.
       let m₁ : Mem := { m with allocs := m.allocs + 1 }
       let mr := m₁.recordAt b lo (blk.bytes.size - lo) .write
@@ -714,7 +728,7 @@ theorem TotalTriple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
         rw [Nat.zero_add]
         exact hc
     rw [if_neg hmv]
-    by_cases ht : m.mappingRoom b blk lo (alignUp n os.pageSize) = false
+    by_cases ht : m.mappingRoom os.addrLimit b blk lo (alignUp n os.pageSize) = false
     · rw [if_pos ht]
       exact ⟨_, _, h, rfl, hd, hm, ⟨rfl, hp⟩, hst₁⟩
     rw [if_neg ht]
