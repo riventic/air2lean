@@ -68,7 +68,7 @@ FIXTURES = [
     ("tests/roadmap/packed-fields/PackedFieldsFresh/Gen.lean", "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm",
      ["--namespace", "PackedFieldsFresh", "--prefix", "packed_fields."], "exact"),
     ("tests/roadmap/packed-fields/PackedFieldsX86/Gen.lean", "tests/roadmap/packed-fields/air-fresh/0.16.0/x86_64",
-     ["--namespace", "PackedFieldsX86", "--prefix", "packed_fields."], "exact"),
+     ["--namespace", "PackedFieldsX86", "--prefix", "packed_fields.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/spawn-failure/SpawnFailure/Gen.lean", "tests/roadmap/spawn-failure/air/0.16.0",
      ["--namespace", "SpawnFailure", "--prefix", "spawn_failure.", "--spawn-policy", "fallible"], "exact"),
     # Its check.sh compares with normalize-generated.py compare (body only); schema-11 AIR.

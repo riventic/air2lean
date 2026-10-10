@@ -46,6 +46,10 @@
   1
  ],
  "ret": 2,
+ "export": {
+  "name": "storeSeqCst",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,

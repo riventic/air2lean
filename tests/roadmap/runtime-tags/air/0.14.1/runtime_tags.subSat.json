@@ -46,6 +46,10 @@
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "subSat",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,

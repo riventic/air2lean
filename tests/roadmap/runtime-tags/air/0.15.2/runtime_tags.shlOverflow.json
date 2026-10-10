@@ -46,6 +46,10 @@
   1
  ],
  "ret": 0,
+ "export": {
+  "name": "shlOverflow",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,

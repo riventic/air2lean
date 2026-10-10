@@ -3,10 +3,10 @@
   "source": "packed_fields.zig",
   "source_sha256": "55d85249ff459dc24d851e29089d3287cc745991fd9805a647cb05762f40b0aa",
   "exporter": {
-    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 6bc790af7677e861b73d88dff2c5079c8052da38c6b12846ea332cdebf4d0082",
-    "zig_patch_json_zig": "zig-patch/air-json/json.zig at efd353ed",
-    "json_zig_sha256": "c470a8c9041176fd3fde7b74fb4edcbe32e0459ca37191dbae83fde68521aa03",
-    "install": "/opt/dev/air2lean-build/zig-air-0.16.0-b10"
+    "compiler": "patched AIR-only Zig 0.16.0 (aarch64-macos host, Debug, no LLVM), zig-unlocked sha256 59b90ea989358bec4e81e4545514a3d54f2b2b91b2421ac07534a66a8cf91be7",
+    "zig_patch_json_zig": "zig-patch/air-json/json.zig of the batch-10 integration tree",
+    "json_zig_sha256": "022d9b94ac8feaeb36d93b3d9aacea78a0f9726d5a753b33ecebd1646570ba49",
+    "install": "built by zig-patch/build.sh from that tree"
   },
   "commands": {
     "llvm": "ZIG_AIR_JSON_FILTER=packed_fields. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline packed_fields.zig",

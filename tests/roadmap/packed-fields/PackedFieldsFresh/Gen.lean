@@ -93,8 +93,8 @@ instance : Zig.Enc Word where
   encode v := v.bytes.toArray
   decode bs := pure ⟨Zig.Raw.ofArray 4 bs⟩
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: packed_fields.reg
   (Array.replicate (Zig.Enc.size (Reg)) .undef, 4, .global),
   -- 1: packed_fields.inner_g
@@ -185,12 +185,12 @@ inductive innerCKeepsAPtrExit where
 
 def innerCKeepsAPtr (p0 : Zig.Ptr) : Zig.MemM (BitVec 4) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     Zig.storeBits (α := BitVec 4) 3 4 0 i1 (1 : BitVec 4)
-    let i3 ← pure (p0.add 0)
-    let i4 ← pure (i3.add 0)
+    let i3 ← pure p0
+    let i4 ← pure i3
     Zig.storeBits (α := BitVec 8) 3 4 8 i4 (171 : BitVec 8)
-    let i6 ← pure (p0.add 0)
+    let i6 ← pure p0
     let i7 ← Zig.loadBits (BitVec 4) 3 4 0 i6
     pure (.ret i7)) : Zig.MM innerCKeepsAPtrLocals innerCKeepsAPtrExit).run' (default : innerCKeepsAPtrLocals)
   match e with
@@ -204,13 +204,13 @@ inductive innerCPtrExit where
 
 def innerCPtr (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     Zig.storeBits (α := BitVec 4) 3 4 0 i1 (1 : BitVec 4)
-    let i3 ← pure (p0.add 0)
-    let i4 ← pure (i3.add 0)
+    let i3 ← pure p0
+    let i4 ← pure i3
     Zig.storeBits (α := BitVec 8) 3 4 8 i4 (171 : BitVec 8)
-    let i6 ← pure (p0.add 0)
-    let i7 ← pure (i6.add 0)
+    let i6 ← pure p0
+    let i7 ← pure i6
     let i8 ← Zig.loadBits (BitVec 8) 3 4 8 i7
     pure (.ret i8)) : Zig.MM innerCPtrLocals innerCPtrExit).run' (default : innerCPtrLocals)
   match e with
@@ -242,12 +242,12 @@ def localUndef  : Zig.MemM (BitVec 4) := do
   let e ← ((do
     let i0 ← pure (← get).r
     Zig.storeUndef (Reg) 4 i0
-    let i2 ← pure (i0.add 0)
+    let i2 ← pure i0
     Zig.storeBits (α := BitVec 4) 3 4 0 i2 (6 : BitVec 4)
-    let i4 ← pure (i0.add 0)
-    let i5 ← pure (i4.add 0)
+    let i4 ← pure i0
+    let i5 ← pure i4
     Zig.storeUndefBits 4 3 4 4 i5
-    let i7 ← pure (i0.add 0)
+    let i7 ← pure i0
     let i8 ← Zig.loadBits (BitVec 4) 3 4 0 i7
     pure (.ret i8)) : Zig.MM localUndefLocals localUndefExit).run' { (default : localUndefLocals) with r := s0 }
   Zig.free s0
@@ -305,12 +305,12 @@ inductive setInnerPtrExit where
 
 def setInnerPtr (p0 : Zig.Ptr) : Zig.MemM (Inner) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
-    let i2 ← pure (i1.add 0)
+    let i1 ← pure p0
+    let i2 ← pure i1
     Zig.storeBits (α := BitVec 4) 3 4 4 i2 (2 : BitVec 4)
-    let i4 ← pure (i1.add 0)
+    let i4 ← pure i1
     Zig.storeBits (α := BitVec 8) 3 4 8 i4 (90 : BitVec 8)
-    let i6 ← pure (p0.add 0)
+    let i6 ← pure p0
     let i7 ← Zig.loadBits (Inner) 3 4 4 i6
     pure (.ret i7)) : Zig.MM setInnerPtrLocals setInnerPtrExit).run' (default : setInnerPtrLocals)
   match e with

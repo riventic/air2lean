@@ -87,6 +87,11 @@
  },
  "name": "gap.gap",
  "module": "root",
+ "src": {
+  "file": "gap.zig",
+  "module": "gap",
+  "decl_line": 5
+ },
  "params": [
   0,
   0
@@ -109,7 +114,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 16
   },
   {
    "id": 3,
@@ -143,7 +149,8 @@
        "id": 5,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 25
       },
       {
        "id": 6,
@@ -175,7 +182,8 @@
        "id": 8,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 2
+       "line": 2,
+       "column": 36
       },
       {
        "id": 9,
@@ -209,7 +217,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 13,

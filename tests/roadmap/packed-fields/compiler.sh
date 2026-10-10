@@ -45,7 +45,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$here/compiler-check.py"
   --namespace PackedFieldsFresh --prefix packed_fields.
 cmp "$work/PackedFieldsFresh/Gen.lean" "$here/PackedFieldsFresh/Gen.lean"
 "$translator" "$here/air-fresh/0.16.0/x86_64" -o "$work/PackedFieldsX86/Gen.lean" \
-  --namespace PackedFieldsX86 --prefix packed_fields.
+  --namespace PackedFieldsX86 --prefix packed_fields. --allow-unqualified-build-mode
 cmp "$work/PackedFieldsX86/Gen.lean" "$here/PackedFieldsX86/Gen.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/PackedFieldsFresh/Gen.olean" "$work/PackedFieldsFresh/Gen.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/PackedFieldsX86/Gen.olean" "$work/PackedFieldsX86/Gen.lean"

@@ -47,6 +47,10 @@
   1
  ],
  "ret": 2,
+ "export": {
+  "name": "casWeak",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,

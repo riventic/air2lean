@@ -217,7 +217,7 @@ class SeededLoop(unittest.TestCase):
     def translate(cls, buggy):
         directory = Path(cls.temp.name)/('bad' if buggy else 'good')
         air = loopsum.write(directory/'air', buggy)
-        result = subprocess.run([str(AIR2LEAN), str(air), '-o', str(directory/'Gen.lean'), '--namespace', 'Loops', '--prefix', 'loops.'],
+        result = subprocess.run([str(AIR2LEAN), str(air), '-o', str(directory/'Gen.lean'), '--namespace', 'Loops', '--prefix', 'loops.', '--profile', 'legacy-abi64-le'],
                                 capture_output=True, text=True, cwd=ROOT)
         assert result.returncode == 0, result.stderr
         return directory

@@ -587,9 +587,25 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToPadded.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.paddedToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.pairToU64.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.ptrWrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.shortToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u24x2ToU56.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToWord.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u56ToU24x2.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u64ToPair.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.close.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
@@ -624,6 +640,72 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vTag.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.arraySlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.divExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fetchAdd.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.isNull.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.loadAcquire.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.manyElem.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.narrow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.retreat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseBits.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseLanes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.splatLanes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeMonotonic.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeRelease.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeSeqCst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeUnordered.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subWrap.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.swapBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.toFloat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.truncUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.unsafeReturn.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.widen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.xorBits.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.boolRead.json",
@@ -712,7 +794,8 @@
           "tests/golden/slices/air/slices.indexOfScalar.json",
           "tests/golden/slices/air/slices.sumSlice.json",
           "tests/golden/variants/air/variants.totalArea.json",
-          "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json"
+          "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -814,6 +897,10 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.bump.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
         ]
@@ -937,6 +1024,9 @@
           "tests/golden/vectors/air/vectors.addTo.json",
           "tests/golden/vectors/air/vectors.splatAdd.json",
           "tests/golden/vectors/air/vectors.vMinMax.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json"
         ]
       },
@@ -1068,7 +1158,8 @@
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumMid.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
-          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -1209,7 +1300,7 @@
     },
     {
       "tag": "sub_wrap",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -1246,7 +1337,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subWrap.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1256,19 +1349,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "subWrap",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "sub_sat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -1305,7 +1394,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1315,12 +1406,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "subSat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -1570,7 +1657,7 @@
     },
     {
       "tag": "mul_sat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -1607,7 +1694,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulSat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -1617,12 +1706,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "mulSat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -1988,7 +2073,7 @@
     },
     {
       "tag": "div_exact",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2032,7 +2117,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.divExact.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -2043,12 +2130,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "divExact",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -2405,7 +2488,11 @@
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumMid.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
-          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -2459,7 +2546,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/slices/air/slices.prevItem.json"
+          "tests/golden/slices/air/slices.prevItem.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.retreat.json"
         ]
       },
       "proofs": {
@@ -2633,7 +2721,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/0.15.2/vectors/air/vectors.vOverflow.json"
+          "tests/golden/0.15.2/vectors/air/vectors.vOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json"
         ]
       },
       "proofs": {
@@ -2689,7 +2778,8 @@
         "paths": [
           "tests/golden/0.15.2/threadsync/air-linux/math.sub__anon_16053.json",
           "tests/golden/0.15.2/threadsync/air-linux/math.sub__anon_4535.json",
-          "tests/golden/0.15.2/threadsync/air-linux/math.sub__anon_4576.json"
+          "tests/golden/0.15.2/threadsync/air-linux/math.sub__anon_4576.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json"
         ]
       },
       "proofs": {
@@ -2705,7 +2795,7 @@
     },
     {
       "tag": "mul_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2742,26 +2832,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "mulOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "shl_with_overflow",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -2800,19 +2888,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shlOverflow",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -2976,6 +3062,8 @@
           "tests/golden/variants/air/variants.advance.json",
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/std_io15.readAllClose.json",
@@ -2989,6 +3077,14 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -3197,7 +3293,8 @@
           "tests/golden/threads/air/atomic.Value(u32).init.json",
           "tests/golden/variants/air/variants.scale.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json"
         ]
       },
       "proofs": {
@@ -3380,6 +3477,8 @@
           "tests/golden/layout/air/layout.ptrRoundTrip.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
           "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
         ]
       },
@@ -3391,6 +3490,7 @@
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Sync/RwLock.lean",
           "Proofs/Vectors/Proofs.lean"
         ]
@@ -3493,6 +3593,7 @@
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Sync/RwLock.lean",
           "Proofs/Vectors/Proofs.lean"
         ]
@@ -3572,7 +3673,7 @@
     },
     {
       "tag": "shr_exact",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3616,19 +3717,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shrExact",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -3686,6 +3785,8 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
@@ -3704,7 +3805,7 @@
     },
     {
       "tag": "shl_exact",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3748,26 +3849,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shlExact",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "shl_sat",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -3811,19 +3910,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "shlSat",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -3902,6 +3999,11 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/vectors/air/vectors.vBits.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.xorBits.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json"
         ]
       },
@@ -3913,6 +4015,7 @@
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Sync/RwLock.lean",
           "Proofs/Vectors/Proofs.lean"
         ]
@@ -4094,6 +4197,7 @@
           "Proofs/Lists/Container.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Pointers/Sep.lean",
+          "Proofs/Provenance/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Proofs.lean",
           "Proofs/Slices/Proofs.lean",
@@ -4282,7 +4386,23 @@
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
           "tests/golden/variants/air/variants.prioValue.json",
           "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToPadded.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.paddedToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.pairToU64.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.ptrWrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.shortToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u24x2ToU56.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToWord.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u56ToU24x2.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u64ToPair.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
@@ -4298,6 +4418,17 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vTag.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
@@ -4521,8 +4652,12 @@
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
@@ -4540,6 +4675,16 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
@@ -4708,7 +4853,8 @@
           "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
           "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json",
-          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json"
+          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -4852,7 +4998,8 @@
           "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
           "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json",
-          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json"
+          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -5044,8 +5191,12 @@
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
@@ -5063,6 +5214,16 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
@@ -5083,7 +5244,7 @@
     },
     {
       "tag": "trap",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5122,7 +5283,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5131,12 +5294,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "trapZero",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -5474,8 +5633,12 @@
           "tests/golden/vectors/air/vectors.twiceInMem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.close.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
@@ -5503,6 +5666,16 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vTag.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -5522,6 +5695,8 @@
           "Proofs/Options/Gen.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Gen.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
@@ -5538,7 +5713,7 @@
     },
     {
       "tag": "call_always_tail",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5604,7 +5779,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5619,6 +5796,8 @@
           "Proofs/Options/Gen.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Gen.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
@@ -5627,19 +5806,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "alwaysTail",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "call_never_tail",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5705,7 +5880,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5720,6 +5897,8 @@
           "Proofs/Options/Gen.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Gen.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
@@ -5728,19 +5907,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "neverTail",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "call_never_inline",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5806,7 +5981,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -5821,6 +5998,8 @@
           "Proofs/Options/Gen.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
+          "Proofs/ProvenanceGap/Gen.lean",
+          "Proofs/ProvenanceGap/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
@@ -5829,19 +6008,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "neverInline",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "clz",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5878,26 +6053,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "leading",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "ctz",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5934,26 +6107,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "trailing",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "popcount",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -5990,26 +6161,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "population",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "byte_swap",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -6046,26 +6215,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.swapBytes.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "swapBytes",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "bit_reverse",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -6102,19 +6269,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseBits.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "reverseBits",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -7201,7 +7366,9 @@
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
           "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json",
-          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json"
+          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -7321,7 +7488,9 @@
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumMid.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
-          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -7471,12 +7640,19 @@
           "tests/golden/variants/air/variants.isRound.json",
           "tests/golden/variants/air/variants.isUrgent.json",
           "tests/golden/variants/air/variants.radius.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
           "tests/roadmap/extern-calls/air/0.15.2/extern_calls.greetLen.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.colorOf.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json"
         ]
       },
       "proofs": {
@@ -7592,7 +7768,8 @@
           "tests/golden/0.15.2/lists/air/mem.Allocator.dupeZ__anon_N.json",
           "tests/golden/floatops/air/floatops.cmp64.json",
           "tests/golden/pointers/air/pointers.maxPtr.json",
-          "tests/golden/slices/air/slices.copy.json"
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json"
         ]
       },
       "proofs": {
@@ -7837,8 +8014,10 @@
           "tests/golden/slices/air/slices.sumZ.json",
           "tests/golden/vectors/air/vectors.sMod.json",
           "tests/golden/vectors/air/vectors.sRem.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json"
         ]
       },
@@ -8163,8 +8342,12 @@
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
@@ -8178,7 +8361,19 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json"
         ]
       },
       "proofs": {
@@ -8257,7 +8452,8 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.get.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json"
         ]
       },
       "proofs": {
@@ -8275,7 +8471,7 @@
     },
     {
       "tag": "loop_switch_br",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8312,26 +8508,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "dispatch",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "switch_dispatch",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8368,19 +8562,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "dispatch",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -8502,7 +8694,7 @@
     },
     {
       "tag": "try_cold",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8563,7 +8755,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -8578,19 +8772,15 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "coldTry",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "try_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8627,26 +8817,24 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "tryPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
     },
     {
       "tag": "try_ptr_cold",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -8683,19 +8871,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "tryPtrCold",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -8993,9 +9179,31 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToPadded.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.paddedToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.pairToU64.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.ptrWrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.shortToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u24x2ToU56.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToWord.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u56ToU24x2.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u64ToPair.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeBytePtr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeElemPtr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeSlice.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.readResElem.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.resCodePtr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.resElemPtr.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.close.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
@@ -9030,6 +9238,72 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vTag.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.arraySlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.divExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fetchAdd.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.isNull.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.loadAcquire.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.manyElem.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.narrow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.retreat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseBits.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseLanes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.splatLanes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeMonotonic.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeRelease.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeSeqCst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeUnordered.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subWrap.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.swapBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.toFloat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.truncUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.unsafeReturn.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.widen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.xorBits.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
@@ -9134,6 +9408,7 @@
           "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json"
         ]
@@ -9432,6 +9707,8 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.memV.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -9566,6 +9843,7 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeBytePtr.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.errno__anon_1522.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
@@ -9579,6 +9857,17 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -9722,7 +10011,10 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/threads/air/threads.claim.json"
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.isNull.json"
         ]
       },
       "proofs": {
@@ -9901,7 +10193,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/pointers/air/pointers.bumpOpt.json"
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json"
         ]
       },
       "proofs": {
@@ -10029,7 +10322,10 @@
           "tests/golden/errors/air/errors.digitOrZero.json",
           "tests/golden/layout/air/layout.bump.json",
           "tests/golden/layout/air/layout.bumpDigit.json",
-          "tests/golden/threadsync/air/Thread.ResetEvent.wait.json"
+          "tests/golden/threadsync/air/Thread.ResetEvent.wait.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json"
         ]
       },
       "proofs": {
@@ -10158,9 +10454,9 @@
       },
       "rejection": null,
       "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "nonErrPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
+        "source": null,
+        "function": null,
+        "reason": "0.15.2 and 0.14.1 call analyzePtrIsNonErr only from zirRetLoad under error return tracing (the -fno-error-tracing export profile never reaches it; a ReleaseSafe probe of a large error-union return emitted no ret_load); 0.16.0 emits it for a by-reference error-union capture with an error switch (switchErrRef, exported)"
       },
       "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
@@ -10169,7 +10465,7 @@
     },
     {
       "tag": "bool_and",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "fallback-named-decoder",
         "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
@@ -10206,19 +10502,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "threeWay",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -10267,7 +10561,9 @@
           "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
           "tests/golden/0.15.2/lists/air/mem.Allocator.dupeZ__anon_N.json",
           "tests/golden/slices/air/slices.copy.json",
-          "tests/golden/vectors/air/vectors.vDiv.json"
+          "tests/golden/vectors/air/vectors.vDiv.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json"
         ]
       },
       "proofs": {
@@ -10484,6 +10780,8 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/golden/vectors/air/vectors.addTo.json",
           "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/std_io15.readAllClose.json",
@@ -10500,6 +10798,19 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.readV.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
@@ -10569,7 +10880,7 @@
     },
     {
       "tag": "ret",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -10620,7 +10931,14 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.divExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.truncUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.unsafeReturn.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -10644,6 +10962,7 @@
           "Proofs/Options/Proofs.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Provenance/Gen.lean",
+          "Proofs/ProvenanceGap/Gen.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Slices/Gen.lean",
@@ -10663,12 +10982,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "unsafeReturn",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -10970,9 +11285,31 @@
           "tests/golden/vectors/air/vectors.vShift.json",
           "tests/golden/vectors/air/vectors.vToFloat.json",
           "tests/golden/vectors/air/vectors.xorLanes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToPadded.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.paddedToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.pairToU64.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.ptrWrap.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.shortToU32.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u24x2ToU56.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToBytes.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToWord.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u56ToU24x2.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u64ToPair.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeBytePtr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeElemPtr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeSlice.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.readResElem.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.resCodePtr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.resElemPtr.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.close.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
@@ -11005,6 +11342,65 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vTag.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.advance.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.arraySlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fetchAdd.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.helper.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.isNull.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.loadAcquire.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.manyElem.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.narrow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.retreat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseBits.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseLanes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.splatLanes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeMonotonic.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeRelease.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeSeqCst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeUnordered.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subWrap.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.swapBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tailTarget.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.toFloat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.widen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.xorBits.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
@@ -11042,6 +11438,7 @@
           "Proofs/Options/Proofs.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Provenance/Gen.lean",
+          "Proofs/ProvenanceGap/Gen.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Slices/Gen.lean",
@@ -11113,7 +11510,8 @@
           "tests/golden/threads/air/atomic.Value(u32).init.json",
           "tests/golden/variants/air/variants.scale.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json"
         ]
       },
       "proofs": {
@@ -11487,6 +11885,8 @@
           "tests/golden/variants/air/variants.totalArea.json",
           "tests/golden/vectors/air/vectors.addTo.json",
           "tests/golden/vectors/air/vectors.twiceInMem.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/std_io15.readAllClose.json",
@@ -11502,6 +11902,19 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.bumpTwice.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leak.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
@@ -11655,8 +12068,12 @@
           "tests/golden/vectors/air/vectors.sRem.json",
           "tests/golden/vectors/air/vectors.vDiv.json",
           "tests/golden/vectors/air/vectors.vMod.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json",
+          "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl40.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.close.json",
@@ -11665,7 +12082,17 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.get.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -11722,7 +12149,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/floatconv/air/floatconv.f64ToF16.json",
-          "tests/golden/floatconv/air/floatconv.f80ToF64.json"
+          "tests/golden/floatconv/air/floatconv.f80ToF64.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.narrow.json"
         ]
       },
       "proofs": {
@@ -11776,7 +12204,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/floatconv/air/floatconv.f16ToF128.json"
+          "tests/golden/floatconv/air/floatconv.f16ToF128.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.widen.json"
         ]
       },
       "proofs": {
@@ -11866,6 +12295,13 @@
           "tests/roadmap/extern-calls/air/0.15.2/extern_calls.fillSum.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.get.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json",
           "tests/roadmap/vector-layouts/air-reads/0.15.2/lane_reads.u3Read.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
@@ -12040,6 +12476,11 @@
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shl64.json",
           "tests/roadmap/bitops-native/shift-panic/air/0.15.2/shift.shr40.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u9Lane.json"
@@ -12194,7 +12635,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/pointers/air/pointers.bumpOpt.json"
+          "tests/golden/pointers/air/pointers.bumpOpt.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json"
         ]
       },
       "proofs": {
@@ -12453,6 +12895,7 @@
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/std_io15.writeAllClose.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
         ]
@@ -12513,7 +12956,10 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/layout/air/layout.bump.json"
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json"
         ]
       },
       "proofs": {
@@ -12570,7 +13016,11 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/layout/air/layout.bump.json"
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json"
         ]
       },
       "proofs": {
@@ -12586,7 +13036,7 @@
     },
     {
       "tag": "errunion_payload_ptr_set",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -12628,7 +13078,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -12638,12 +13090,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "setPayload",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -12717,6 +13165,9 @@
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
         ]
@@ -12803,6 +13254,9 @@
           "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
           "tests/roadmap/env-boundaries/air/0.15.2/std_io15.writeAllClose.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json"
         ]
@@ -12859,7 +13313,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.handoff.json",
-          "tests/golden/0.15.2/threadsync/air-linux/threadsync.producer.json"
+          "tests/golden/0.15.2/threadsync/air-linux/threadsync.producer.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json"
         ]
       },
       "proofs": {
@@ -12988,7 +13443,8 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mk.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.mkV.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.setMode.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json"
         ]
       },
       "proofs": {
@@ -13090,8 +13546,10 @@
           "tests/golden/threadsync/air/Thread.WaitGroup.finish.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
           "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneRoundTrip.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json"
         ]
       },
       "proofs": {
@@ -13155,6 +13613,7 @@
           "tests/golden/layout/air/layout.setMode.json",
           "tests/golden/pointers/air/pointers.setOptJob.json",
           "tests/golden/variants/air/variants.scale.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.bump.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.roundTrip.json"
         ]
@@ -13293,7 +13752,14 @@
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.get.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.holderRoundTrip.json",
           "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.oneValue.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.vValue.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json"
         ]
       },
       "proofs": {
@@ -13501,7 +13967,8 @@
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumMid.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
-          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json"
+          "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -13593,7 +14060,15 @@
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
-          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -13659,7 +14134,11 @@
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.readAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/fs.File.writeAll.json",
           "tests/roadmap/env-boundaries/air/0.15.2/posix.read.json",
-          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json"
+          "tests/roadmap/env-boundaries/air/0.15.2/posix.write.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json"
         ]
       },
       "proofs": {
@@ -13714,7 +14193,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
-          "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).clearAndFree.json"
+          "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).clearAndFree.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json"
         ]
       },
       "proofs": {
@@ -13769,7 +14249,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).allocatedSlice.json",
-          "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json"
+          "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json"
         ]
       },
       "proofs": {
@@ -13906,7 +14387,8 @@
           "tests/golden/slices/air/slices.reverse.json",
           "tests/golden/slices/air/slices.subZ.json",
           "tests/golden/slices/air/slices.sumSlice.json",
-          "tests/golden/variants/air/variants.totalArea.json"
+          "tests/golden/variants/air/variants.totalArea.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json"
         ]
       },
       "proofs": {
@@ -13963,7 +14445,8 @@
           "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).addOneAssumeCapacity.json",
           "tests/golden/0.15.2/lists/air/lists.sumRange.json",
           "tests/golden/0.15.2/lists/air/mem.Allocator.dupeZ__anon_N.json",
-          "tests/golden/slices/air/slices.reverse.json"
+          "tests/golden/slices/air/slices.reverse.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json"
         ]
       },
       "proofs": {
@@ -14021,7 +14504,8 @@
           "tests/golden/slices/air/slices.prevItem.json",
           "tests/golden/slices/air/slices.second.json",
           "tests/golden/slices/air/slices.sumZ.json",
-          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json"
+          "tests/roadmap/extern-calls/air/0.15.2/libc_ref.strlen.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.manyElem.json"
         ]
       },
       "proofs": {
@@ -14085,7 +14569,11 @@
           "tests/golden/slices/air/slices.bumpAt.json",
           "tests/golden/slices/air/slices.indexOfScalar.json",
           "tests/golden/slices/air/slices.localArr.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json",
+          "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json",
           "tests/roadmap/extern-calls/air/0.15.2/libc_ref.memset.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u24Lane.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.u3Lane.json",
@@ -14143,7 +14631,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/slices/air/slices.total.json"
+          "tests/golden/slices/air/slices.total.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.arraySlice.json"
         ]
       },
       "proofs": {
@@ -14159,7 +14648,7 @@
     },
     {
       "tag": "int_from_float",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -14200,7 +14689,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.truncUnsafe.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -14209,12 +14700,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "truncUnsafe",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -14429,7 +14916,8 @@
         "paths": [
           "tests/golden/floatconv/air/floatconv.fromI64.json",
           "tests/golden/floatconv/air/floatconv.fromU128.json",
-          "tests/golden/vectors/air/vectors.vToFloat.json"
+          "tests/golden/vectors/air/vectors.vToFloat.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.toFloat.json"
         ]
       },
       "proofs": {
@@ -14616,7 +15104,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/vectors/air/vectors.splatAdd.json"
+          "tests/golden/vectors/air/vectors.splatAdd.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.splatLanes.json"
         ]
       },
       "proofs": {
@@ -14675,7 +15164,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/vectors/air/vectors.reverse.json"
+          "tests/golden/vectors/air/vectors.reverse.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseLanes.json"
         ]
       },
       "proofs": {
@@ -14815,7 +15305,7 @@
     },
     {
       "tag": "memset",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -14859,7 +15349,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -14870,12 +15362,8 @@
         ]
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "clearUnsafe",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -14928,7 +15416,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/slices/air/slices.clear.json",
-          "tests/golden/slices/air/slices.fill.json"
+          "tests/golden/slices/air/slices.fill.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json"
         ]
       },
       "proofs": {
@@ -14994,7 +15483,8 @@
           "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).ensureTotalCapacityPrecise.json",
           "tests/golden/0.15.2/lists/air/array_list.Aligned(u32,null).toOwnedSlice.json",
           "tests/golden/0.15.2/lists/air/mem.Allocator.dupeZ__anon_N.json",
-          "tests/golden/slices/air/slices.copy.json"
+          "tests/golden/slices/air/slices.copy.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json"
         ]
       },
       "proofs": {
@@ -15128,7 +15618,8 @@
         "paths": [
           "tests/golden/0.15.2/atomics/air/atomics.push.json",
           "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wait.json",
-          "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wake__anon_11357.json"
+          "tests/golden/0.15.2/threadsync/air-linux/Thread.Condition.FutexImpl.wake__anon_11357.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json"
         ]
       },
       "proofs": {
@@ -15200,7 +15691,8 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/0.15.2/threadsync/air-linux/Thread.ResetEvent.FutexImpl.waitUntilSet.json",
-          "tests/golden/threads/air/threads.claim.json"
+          "tests/golden/threads/air/threads.claim.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json"
         ]
       },
       "proofs": {
@@ -15276,7 +15768,8 @@
           "tests/golden/0.15.2/threadsync/air-linux/Thread.Mutex.FutexImpl.lockSlow.json",
           "tests/golden/0.15.2/threadsync/air-linux/Thread.ResetEvent.FutexImpl.waitUntilSet.json",
           "tests/golden/threadsync/air/Thread.ResetEvent.FutexImpl.isSet.json",
-          "tests/golden/threadsync/air/Thread.ResetEvent.FutexImpl.set.json"
+          "tests/golden/threadsync/air/Thread.ResetEvent.FutexImpl.set.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.loadAcquire.json"
         ]
       },
       "proofs": {
@@ -15292,7 +15785,7 @@
     },
     {
       "tag": "atomic_store_unordered",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -15329,19 +15822,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeUnordered.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "storeUnordered",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -15388,7 +15879,8 @@
         "paths": [
           "tests/golden/0.15.2/atomics/air/atomics.mpWriterRelaxed.json",
           "tests/golden/0.15.2/atomics/air/atomics.sb.json",
-          "tests/golden/atomics/air/atomics.ww.json"
+          "tests/golden/atomics/air/atomics.ww.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeMonotonic.json"
         ]
       },
       "proofs": {
@@ -15442,7 +15934,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/0.15.2/atomics/air/atomics.mpWriter.json"
+          "tests/golden/0.15.2/atomics/air/atomics.mpWriter.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeRelease.json"
         ]
       },
       "proofs": {
@@ -15458,7 +15951,7 @@
     },
     {
       "tag": "atomic_store_seq_cst",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -15495,19 +15988,17 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeSeqCst.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "storeSeqCst",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -15563,7 +16054,8 @@
           "tests/golden/threadsync/air/Thread.ResetEvent.FutexImpl.set.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.finish.json",
           "tests/golden/threadsync/air/Thread.WaitGroup.startMany.json",
-          "tests/golden/threadsync/air/Thread.WaitGroup.wait.json"
+          "tests/golden/threadsync/air/Thread.WaitGroup.wait.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fetchAdd.json"
         ]
       },
       "proofs": {
@@ -15619,7 +16111,8 @@
         "paths": [
           "tests/golden/0.15.2/layout/air/layout.growCircle.json",
           "tests/golden/slices/air/slices.colorName.json",
-          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json"
+          "tests/roadmap/noreturn-variants/air/0.15.2/noreturn_variants.isColor.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json"
         ]
       },
       "proofs": {
@@ -15673,7 +16166,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/slices/air/slices.colorName.json"
+          "tests/golden/slices/air/slices.colorName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json"
         ]
       },
       "proofs": {
@@ -15730,7 +16224,8 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/slices/air/slices.failName.json"
+          "tests/golden/slices/air/slices.failName.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json"
         ]
       },
       "proofs": {
@@ -15851,6 +16346,9 @@
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.handoff.json",
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.mutexCounter.json",
           "tests/golden/0.15.2/threadsync/air-linux/threadsync.waitGroup.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json",
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.leaked.json",
           "tests/roadmap/thread-locals/air/0.15.2/thread_locals.twoCounters.json",
           "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json",
@@ -16238,7 +16736,9 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
@@ -17826,7 +18326,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "8718380f32ae0990ff03615eb0f764cb84a2ff1da1745b869fdb37fdda622c5e",
+      "scripts/coverage.py": "e35725039e6cfaca339ae256e1ff8630f68376798212c48288fb76da2764575d",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -17838,14 +18338,14 @@
       "Air2Lean/Air/Json.lean": "503400bfd9012bb713cb8b7afcd40d9a768e05080141fb0902bba7e6d7aeb865",
       "Air2Lean/Air/Normalize.lean": "401847ac132e7511e48badbd72e2bd19f54cccccd2755839299b3753979daada",
       "Air2Lean/Air/Op.lean": "5dec0231b785ba4c48eb2b6c011d94e6e755d45eb6f917e79d417395ba544ceb",
-      "Air2Lean/Air/Profile.lean": "ca4b87ba7f2d17c48aaf5b66344a66c7904f92e891f00178eb1d1e07b6ce4b7e",
+      "Air2Lean/Air/Profile.lean": "a2a8757a6d9a2b6500389065bc068059945b0c0464785cc4e94b533511603085",
       "Air2Lean/Air/Schema.lean": "333b0a1968430d91c26a2cbeadd2fee3fd4fbc73cc19eb7940cc6240f6757a7a",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
       "Air2Lean/AsmAllowlist.lean": "0e027624cd692428b9fa4bd92ad5a36e102f1cdc36f44519fe8f5ebb1eebae6b",
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
       "Air2Lean/BitCast.lean": "c4ee2ca5d0b60a0a7d1251d71499e0bcd53a865fb15bb7a78ceb49c0802aadc0",
       "Air2Lean/Certificate.lean": "68b341b96966bee817670a1073550316f0f329d6d07a5947a7c5f969a9223f99",
-      "Air2Lean/Check.lean": "864a6f12df0ebc733569e70f139efbe1ac8682b38a15b764c079108554396436",
+      "Air2Lean/Check.lean": "d6038147478be9c8d6999c695287b240fae641bdf4a0ae6574515aeae9cce591",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "832691c5dd220f54523e2dc2fd99fcac46e8509bb0935aef9a1046804c69446e",
       "Air2Lean/Diagnostic.lean": "b4eb8936309c08e347eb46efda85024aff252bca7814fbc06c1bad1a95d974c1",
@@ -18050,7 +18550,9 @@
       "Proofs/Pointers/Proofs.lean": "a77bd2cb94a4e12c77fc689bf5d887c36eba14092b2e1e614829d7644b5e11c3",
       "Proofs/Pointers/Sep.lean": "a9c09fcc515d936766c4152774d4e10b912bb10dff47d6ed7b879e0a1b578576",
       "Proofs/Provenance/Gen.lean": "a26afa583941dee2760df356713517b70a5370d7b6075e04597abb86f14a7daa",
-      "Proofs/Provenance/Proofs.lean": "3f48bcacd2fabb8021ed89a20ed3a3588525bd2dc6d10973880a806ad574deed",
+      "Proofs/Provenance/Proofs.lean": "d6a38ee33edda4ac56da01990788ef2b6da5d76a2deed2d3dbe2805f08e2aef5",
+      "Proofs/ProvenanceGap/Gen.lean": "2832c2a061c03e05553ac5fbbe558c881f2f631164012ad8e931cc0df3ff1877",
+      "Proofs/ProvenanceGap/Proofs.lean": "e477163adc3fdef52699f91047b6c3518ff874edf9edf8cfac6ab2d484161dc3",
       "Proofs/Recursion/AirCert.lean": "8e5aba8261e23ff0d2c812527cbae252a269384d4f2e9ffee2a1542a05db87f2",
       "Proofs/Recursion/Gen.lean": "d40d069ca39cee2fff2e4588ed04caa130c19e7214a7a24dc78f5317c2428584",
       "Proofs/Recursion/Proofs.lean": "7a3f40d0b149bc29b207cb99739964a417c9c934970e6ae9cb3e88af7c364c2d",
@@ -19018,7 +19520,208 @@
       "tests/roadmap/diagnostics/Collector.lean": "0b44b0e6641d01e1c08b8dc882eb9f3fb8de29444de5f11ac706670a984233d1",
       "tests/roadmap/diagnostics/RuntimeTags.lean": "7653c5e231b47c061e232607123c3d87d5403deb8e3a7323c31383a162cec68f",
       "tests/roadmap/diagnostics/test_cli.py": "249fac47d3249fd8358d86a465374c4e606faa722cac175b3feba975f56b335b",
-      "tests/roadmap/runtime-tags/runtime_tags.zig": "23422983282b3a6475593ed50e00cbc39cd39ee22aa15d56acaa9ea8365dd3df",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.addOverflow.json": "116ce92c49a22ecc0aaec0b71ecee449bd37f406edbd7f67ffb5419869b7a8a0",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.advance.json": "03cc4390db21733f125756826f231d32a731b8886498b34a47f9f9e899e50d49",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alignSlice.json": "8bfbd63f147506fe295ad9a824e5a78463d32773c7547f8f4463862a4e2801b1",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.alwaysTail.json": "76e374380eff80967e69aa2dd651dfe985896d6ab76933d4137512241d980db6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.arraySlice.json": "c0abcc201410696ebca595d95f04a16ff01eb906393073b873e3ecea3b9c665f",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casStrong.json": "7f6ea0525dd216f62b0ea3bd6d1cab5481001d9dfe62aa12b3050a43f3d7c9f4",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.casWeak.json": "48496bf99be6096baa9eab941579679b98c65220575042fb22b50c057aeb3fd1",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearSafe.json": "2ac39fee645e7c175f85a7b0bdcbbced94459778f0c70c1147422b61805b57dd",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.clearUnsafe.json": "67feb1100e3cc49b04a7067239cfa0ba9d27f80e12ec4d24b0f4d1acff550728",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.coldTry.json": "1d2aa2e384e3125de27312d60e71c4e1dcb665030c13515848fbf9d63a7abfc2",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.colorName.json": "a790724d69ab5098dfbfe98dc2c636c12fa86b80304255105f0c597a8a40ac60",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.copyBytes.json": "dd80b9098ccae326fb74c2428a464f16e56b8f0cd31bd9310b2155475ac60e2f",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.dispatch.json": "e4edcf3e1de0521882d20ef47418cfd7e91c0f17aeddc60f65a35fd2c6cd4d59",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.divExact.json": "766481607872b139e15a353bf3a441ce7de3c1fd837ef3f2400f75000a48cef2",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.elemPtr.json": "a3c0ea124421bca63cb7a53a226db8a3cee543ccb3f01262f5634ddd3955b4ea",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errFromInt.json": "6d28164fe89316e9c843ac9bde9d070c00b625affc854a877d7b131d4da53888",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.errorName.json": "24e1541fc1eea4f0af817874bb2b62f3bce98bd8c55086b926a0c1a9334c4386",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fetchAdd.json": "0b291c0072e4a0e5f4e8fe4102968717c799b0c960bbe0e7fcb1dfcbc92c4fed",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.fieldPtr.json": "239f3806bab0602a0448476dab7bf8bd657f2e4cbf576383041a76c91e160115",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.helper.json": "6c701aa4116fd19230398be3caf3b83a433af11fa6510c70e6ea99dbf5ee6284",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.isNull.json": "677afff7893efb192d1f1f8ffcd2b1bace1ac916501ad8b827298f6137308336",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.leading.json": "bdbcf27d97eb8df3ce6610f3f28bcdf7bbc0ed56866ce0ef4b7b5650aa1cb60d",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.loadAcquire.json": "9d919f8b6e9914e1c22f323316b5f9a713571eea2eeaeb25f4d083046cd0be23",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.makePair.json": "9b5bf255f5061f442182fd83c8fead4f90d49046bea2cd59b9950422bf5788a6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.manyElem.json": "d4e3fcbb020d2cac2f641f3a78326aef9dfbb1596d5f12e1b5be5ce52ec1e918",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulOverflow.json": "96596257869a69a37c186e1e35c49ac022933e5174fb9e9380d2c0c01ef39b3a",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.mulSat.json": "d6eca4921beec0df914e07d1ea26b867c920135cf42082df047da602c3830124",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.narrow.json": "38d24729fff8a4e16989fe9d500cf690bbcd424ec8060272d544b00099c9bd7b",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverInline.json": "f90ad3f4140514a73edd8bd49111bf64bc74200aed082edcd3e2139d24b50033",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.neverTail.json": "46b65cb561fa8a80c38d10fd658efac6c161ee2097e7e928a0a4151b9da5ea0d",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.nonErrPtr.json": "d8a2f087000094c1b98ba636b54bdbcba6bc842e33e84f7e587ea2b575e70877",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.population.json": "0eec44fbd2153fc1f45eac7c92ab6149b566ca0fe5fbe84dd21ee1a5c5a61ce0",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.retreat.json": "cc378ea41d309d8641cdf450eb81f60dccedaafbff4a700e98a640ed1ba09866",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseBits.json": "24d6e5c80b7e2cf209293c073c29f8b45473310ffc4ce4962c3f20694e1b4457",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.reverseLanes.json": "dc53fe8ca6f613e731a36cd219b98de0fc7efbf5aa2a4b03823a86b52a4e6e04",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.sentinelConst.json": "639e7759b6cf2110703b8b8c430c89e1978af2be291695fbd5e570fdd89f5928",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setLen.json": "61ed21290bd077f178558ad009436f8a1b919791cdab6600c640a50a82cc6b34",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPayload.json": "a191aa85644d96d45292c311cdaf850bd4795e66c611657a15d5bf6e70a04485",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.setPtr.json": "08f85de39337b0cc97a9f35092816cc85950fedd77e49c500995bd07edce5f23",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlExact.json": "6af56591d0d5fcfb17d90d9c66c0410c16e0b94b0926ba891bb0b0d6b48e64ec",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlOverflow.json": "2ace0ce8949e7677a410e65ebf5a22c5e4507ac562d0a6ab9129441e8f66cd20",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlPlain.json": "60414eb33150ca5c518e0a9c21145c109ede8c30444667c72011b4ca890c72b3",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shlSat.json": "adab7643290688161fd1fc1e50dd1569f905e78853189e95591304321e8a3baa",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.shrExact.json": "5e9a499483a3647f86350380c6019e71e5c5cbf10cecc27ffd8e7bfc68444301",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.splatLanes.json": "54c9edb7195c7bda330198cc745b5a401360543027a346a3d5532f75a26ba158",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeMonotonic.json": "be3ba8960ae093c97459b2f55ac62e3cad82f4f73f09f4edcb8f0f800370635c",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeRelease.json": "d2d69c04c37b652ed5bea3c5abe328d0b14e009fa821dd6f638b26fccbbb5d9f",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeSeqCst.json": "19f4df309fa4c4806aebcffa0ce3388376676db59fe754bbb9759ba50df1a95e",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.storeUnordered.json": "1b025f3a088a8dffcde2ae285391d48ca980f2bf69ebdc0ef29fd5870c7ef4c0",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subOverflow.json": "0d539c7d4727e4217de050b58f264a4c02adedc26165b6838f483558801e7b13",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSat.json": "6a9ad43e14630aee0de40c931d110709b7cdd03053b908e46fff542088ca26a6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subSlice.json": "a485ef0cabda383bb5235a44bcdaef11fefb65cf2fbf23d3bd14109de4a06aff",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.subWrap.json": "98b1adbd6125bfd7525cdef43e78c0a11aa52028c416671b0b7b876004878ee7",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.swapBytes.json": "3dde38dfabd4040480d99221122a6cd6eb9aace28c8a0cf536dda2bb5cdf28bc",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.switchErrRef.json": "9cbe48ab9cac87361e69f97f6dd6aa1ee6552b3e9452e79788d2328735fbdcec",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tailTarget.json": "af5dd1e795fe5967f61aa764b420768c53d1dfac69f4b88c6bcf0aa5577925d5",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.threeWay.json": "0a18bb8367dbf9053e5c5f6195b1a4f5f39eba84194dbf177e12ad9473544da5",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.toFloat.json": "ab40fe0e9a077e12e605f4054f01e6e4a8545a8b43f8d0b18e820f48977566ad",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trailing.json": "1f58e17922f9a83cb45fa154c722bd885b380e0022f4c8710a41c201191a44ca",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.trapZero.json": "f24a67d365bc5f4df0bd7cdf1d106193c140fdbc6705f967ca92683fc6e1774b",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.truncUnsafe.json": "34653cacfd8b736c568e98b67f4204b25bf769f6052170b2c8668f5968e5c918",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtr.json": "8795e790b8e7f89a3710b5c3084095623d08642dd2d4b5966d7f08808456a7d6",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.tryPtrCold.json": "e6cd156fcb29a52e4e2cdcb7cee1b463d2ee32610bb7c51ad9e5e6de63d77244",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.unsafeReturn.json": "7c50b02c70cfc84f1926623421c58fc98cf112d0e1b867e920a0b0330ea48930",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.widen.json": "73270ff1c83d0df46526577d85eb8e89373a9a866888a146a193ce7702877a4d",
+      "tests/roadmap/runtime-tags/air/0.14.1/runtime_tags.xorBits.json": "d07b7ad2ce054af260f2fd2076afd225c5909cc0a62d2e20c071bd364a140393",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.addOverflow.json": "359a2e21506e0726fb63ea7f1f14abf04890df2da7faa27c8407f591b6db7382",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.advance.json": "efa24d19b6b2c0b87a4b19902099379d1c4dea95d1e71d2bf6c00fb4c68e115f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alignSlice.json": "833ed284eedc88c8e668aa86de1183cf68f0be2a6e2479246ced4b42d75029c3",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.alwaysTail.json": "e3ae28f706722739359cec41ed4c6dc41b60458bf18f1493cda2c9145b4d9af4",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.arraySlice.json": "d0f220c627b38ecadde5699b6b67c4f5b2ec78d625e1782fa744a3d7fdfa2737",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casStrong.json": "080ee8cdebc8110d506ad835c2cffa0c2c5cf5d3ad980e1c2098bfcc8cc84fcc",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.casWeak.json": "70aa65719d1f0afd3747efb0c5cb8b561deb4dada304e9285482c60ac5d92fe6",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearSafe.json": "35b0e88f6fa6e5d52fe792dd24932a62fc585e2910c9aee021ed307f4e6fdc4b",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.clearUnsafe.json": "9e5e2f251cd7d71c69ec60a4710fb37ce917cabf02aa3643aa1522a60f83f52c",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.coldTry.json": "7dee4066d37064cd78fa3fb9d53652dc682eb153a09c95d32d88dfa395b08f7b",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.colorName.json": "a94a22b94454d99d3c1e5914861a7d1e6763da5b059c27ed8060337d2bdc7991",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.copyBytes.json": "b44af155806db545333a310f04e91ec27012a4f85ecc0681d4fc334c19d20b93",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.dispatch.json": "c1dc2d8985358bea9ae2a0e4abf8f732009e911b0df9ed5cfaec6d916036da60",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.divExact.json": "682e6930621206a27fc89e7774dcb627d9758245443410d93999495a2ad8bebd",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.elemPtr.json": "b6af6e0b04a66aa2d62434c45d7264838ac529054268022b1b40509ec990865d",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errFromInt.json": "7c20ec50f2cfa95d7c5f96f633764095e5dc711e620deb9060da4715c787359a",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.errorName.json": "1888c928eb3ff7ae8336119c59db934015da8905c73f5319a45acd6d23bcd5f6",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fetchAdd.json": "36b200a8775e1c8130c8167763632e7c7702b80bd7844d560216940673460447",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.fieldPtr.json": "3fbd96ec53ad24af93d2a6cbbe35ca5fe811af03b7d8ba5eb880b134bac62130",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.helper.json": "ffe3ccbb3c83ee52a95c62cebd8109c3651852192d91513e66ced393137d55e3",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.isNull.json": "cbe50dd8d84f6661f454614d7dc789bcb6f79932b1faf313892f6010dcbf87a0",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.leading.json": "16b4ed73d78228c3bc367fa8959ac32d0c1c076755bf97808f50abab4261758f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.loadAcquire.json": "e2899c134b73d0c294d6e9a46cf54a6413069814843c6f89b2b1b306506cb5ed",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.makePair.json": "7f6eb9b86e815a80489ceb4de3a6a17e8d2068c01745f6e469408bb6e376d977",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.manyElem.json": "b8da5f2dbc7cc3ed1b995f7a5c00b004bc7e891ede8a2ac06673dd59bc9bc161",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulOverflow.json": "d362315b09c291662a74c30d476a08dbd4498df14495ba7c5fb2558e0ffbd5fa",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.mulSat.json": "b49a7a1e6fe894f23e19f2f39899b12a7065b2af06551c5f8ed78f00f4849946",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.narrow.json": "e938d2cc253bea1fc619fc28ba5a25ca1047614384d1b20a5e99626c6a4f4038",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverInline.json": "904719fa9f53aeb61b255c70762e22470fc2d519c7620dfcc3ac38c2ee9468d9",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.neverTail.json": "934c4de9540b649d3dd0dd1e4171a8f87459d3ded556829d99c9ab4ba039dd72",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.nonErrPtr.json": "ad5228664b75eab1eed8553c028dc00c0587d2f9d7a92412802c7654567a710c",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.population.json": "4b1811e412b4956c633f8ae406105c4c8c34456e1d2dc54716038a9f8c4fbfa0",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.retreat.json": "01bf5ccdabacd100c8711d91235e3efb8831d364f2a94cbc71562748fb2db99d",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseBits.json": "be7fa994b8be437041c7d6dba95e78dcd043fa6525740c40b067d1470937bad4",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.reverseLanes.json": "1a71bc83f8d38f4de76866cdfc2432cce0a42a2cd4991061ac847e646a399c02",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.sentinelConst.json": "5341c81e2a596e2533f0a4a753429608041b74d679e32c7d1b505b1ef3b5c19d",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setLen.json": "601f43586eaa32d7db9eb9e4226ea273efe15a6102f9bc9bb4ee560de7fa521a",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPayload.json": "60e9d7b57078857104c739e59607e9ef5acdeabd0bdc8146156a03a9485ad8b7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.setPtr.json": "d4f472c5678f4148a7d0805195cd4d7ee10b2f8198133e0a7b496ea01fe5138b",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlExact.json": "fb63d37c53ff581a4f1768f2fecf45ba294d46fb4ed449806d681e20410c4d61",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlOverflow.json": "ad7455b0231468f249ab8a458b06fdf108f93b29787a623eb0c6c6633709c0fe",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlPlain.json": "f677b62630d927f81c94d4df6df7c49497c3608bea2cb6a813ed471eb4aff0a3",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shlSat.json": "e6bac95ddc21d50bc2503d7ab820993fb41a297f7fc18864d3f4bdbc8bda5cad",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.shrExact.json": "b06a86b4a2dcda40960378447611814942b71f4574e9cd1c353aca8ec62d3d3f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.splatLanes.json": "7eda96c26bc99f428109536f6389c4e325a5548e149c2b52ac7f3b5100660de7",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeMonotonic.json": "4b07a79debafd0b5fbb23df35424288644dcb9b0226c7e63d4aae6e507f56d29",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeRelease.json": "0902cc44e5c94841c82e2093e68cb41c8e295353ad963be87f24f298fc047577",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeSeqCst.json": "5949cc0e7d4c4dfedb67b69f56577caffc0f8a1564623d19b079c0dd61f10c5e",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.storeUnordered.json": "a049d99da7e6f0c382d9cc98ba1dcbb595756cb5e31cc56bcc4d01f7b2c86c90",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subOverflow.json": "ed43cd18005a8daef086ab787fe3d32dd901d801bdae51dc49dd344c0e8a0c7f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSat.json": "721f2a6ca0c0b6777cd4af029b52e0f682c07cd1412bf8b3b3aaee1a22b16792",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subSlice.json": "00f53aff074d43618fed2e9bb470496b2b4ac240e19fde7dedac090691699792",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.subWrap.json": "ce3934bb04a6fac0a1e0494679910881bc8bbc81ee039db18e2cb36d63aefe17",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.swapBytes.json": "7f49184b0ffa7180b8e8cf7a518494b442067569a568fbae9a2d0aa4c480924d",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.switchErrRef.json": "e0b2f53370f14acaeab90c7976e48006376c013ecc588da9e0c77128e399a294",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tailTarget.json": "607c06cbaff13100b42f20276ea90eb0c8566662252228da4e2570d0ca29982b",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.threeWay.json": "764491c92e5e2ec151f680a6ea88e7f9dcdd905a222428d34fa627dd0da07862",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.toFloat.json": "db892a9b82daa462bbbef56223d7b5f57ff040535bc12c96fb2ab7a0ade221fc",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trailing.json": "07282c6a7dc2a759588297db2791564690c0f30e9e089be97f0f08a6d4376d3e",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.trapZero.json": "642d243719dc543b3af39e359a5cd8ae5973fdf050b48f6a116a16fc3903b0dd",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.truncUnsafe.json": "cdeb97016b49083e3b3593b5b256f157b12cab7252d6c4dee2692c75f5252b7f",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtr.json": "5d9fd26cfcebd36b07e02c6ac75e1479ad54e6d69dfc4b85905949188e1d1965",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.tryPtrCold.json": "46d57841aca115693f58bcd6c5d292f445c9cb0baaf79e8679af90df6cb1f7cf",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.unsafeReturn.json": "2d3dc96b26949483f16c763e22085c3a00fb4c416bf08773172742bd1ec9a2bc",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.widen.json": "229f13028e92c419faf849d92d5940f6d1195322b52229d3a7255359afcc73b0",
+      "tests/roadmap/runtime-tags/air/0.15.2/runtime_tags.xorBits.json": "e6a3ccbacf0a597cf0f9f2eda042d11e7d77670ae15bc583d5f207a4a10b79a2",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.addOverflow.json": "bd702b16726ca8b5ecc4945228527556a852b2f16434889c88ebc66d282c7c76",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.advance.json": "217ceb60684a9c00fb04ce1048d22e5ddf035024abe56516c1c592147d7f4b94",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.alignSlice.json": "d22c5f93da0f01917feaa0c54341657a5358f00df8fb4e39978439fa991bdde8",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.alwaysTail.json": "7cc54eb7e33023406ff1195a3366931290accf4bc2f9a510a33b4422854c47c1",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.arraySlice.json": "95b311aff4de1179bf1fea408a90501e01f26f015791126045315fc138c7b0a0",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.casStrong.json": "d4bd09e162dacf286ff1d1b7ed3b7f7594a2ffcaec1f180489aed306e3cc1f2d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.casWeak.json": "84ed99218498bfcc788f652eedf9e8418d706b994078fbf6c50023f2f101335f",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.clearSafe.json": "fdf7da157236598577baaaeba2da5596b89ac31dbb9f687f89a257a3fe84a50b",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.clearUnsafe.json": "e0bb329254d6fe82ac7c2e7a4ba40bb00ccb6209c7cb0b37f4e5a0b782236233",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.coldTry.json": "f68eefb1894591405250ed0d4442124d456949188c380e2f2a7f54cc0c72526f",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.colorName.json": "22b7afda394a02c0a058ab8185ec297530c9ff9979dca939075e8682ab8b5597",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.copyBytes.json": "e46777f754782f97da0c169e70290fb411d7ebcb8405732099ea30e0f04d2eb6",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.dispatch.json": "264130c8b4d9eefca59cb737d30bede3962b0888038bfcdf64112d53d5f7baf0",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.divExact.json": "20953148ffb06537669223971cb0e1eec0c4cc4fe69054132fb6adc36a8e0dbe",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.elemPtr.json": "625f857b2d51aa2fc390b95ecaa98a537f4f8146714190a56cca29acde790dea",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.errFromInt.json": "bb9db0e5eb4fbd21e97bdff631b1c69504bc8ac7ad82435de3b11a810ec5eaee",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.errorName.json": "832f0786961609002cde070ecdd72d83b5ee8defb150396680f11059ea2cf73b",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.fetchAdd.json": "06f9a503a2736208f83c12a018afa8526dcd4b80024b99c2b85eb3d6d717bf1b",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.fieldPtr.json": "3be356e0f4cb5779947dce5c02af94656efd8fc9ec6ea7a906ef9cb7b26b9b48",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.helper.json": "2c0069f47a16b912ca785b55f7d115f49e790fd1a517e25dca7a300c4343b412",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.isNull.json": "d46788b2b737257a71039967baf83ece77e754aa56a7e20549de3d2c4178ba1e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.leading.json": "7d11d418a0492cccb238085e4229d2937aec2f57da318dd74fe31d8514c3fe1c",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.loadAcquire.json": "d410101268f77784c09ae2df2ffebd57b71d75e90c0a3f2101f1dbd419e3888e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.makePair.json": "bb74de1c3e91643e23b5669fe6325b4603e726cd08ce2f045587a005ed91cbfb",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.manyElem.json": "ce3f02dd8927af7a567e5ba9529e14b4aec9e395b759a983d81c0608101d0c4b",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.mulOverflow.json": "17c82695fe5a332e9d7a1b04b5760212713138fc48d59940543bbff1fef064a2",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.mulSat.json": "e801a4df73944a47039fcddc57b8911007c4f438a8d395cf51724dc170919c5a",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.narrow.json": "3ac69827a8212a4fbc5026d32c48122fd514a688ed0cfdc9ecaad1a416022507",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.neverInline.json": "69ae3bce953f3d24777884006f8cfbb7508f708490a01fa4dc2f2a1dccc5bace",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.neverTail.json": "303db41179b81318e09f3338d2ccd7500ce543d07a7c429e2a598eaa0dc5e798",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.nonErrPtr.json": "5e6b05e8fb2b958613679df09b05d20c578d540a1913bcae984d46e12acd3b8a",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.population.json": "0512d7d4713581ddf6f46f4de8646cf3c24754867941545566b41a9b2e492dc9",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.retreat.json": "2aa0c87299d9f6d9f2156450b2c4b6ac5e84ddd0763a6a1df554234441b4f147",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.reverseBits.json": "8c95c7eefd5b32e8f8f542320802e24a3ec5a036371c04fcfa2a1c4ae8681d4a",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.reverseLanes.json": "6feed975ed261e06909e82e94e4102cf3644ca2a6ae49f7171c7e642a792e1fe",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.sentinelConst.json": "bc2cea9fe8adbf07ff022cf66c3f99f70e5886cffaa0c9e2d222b69d4b87b6c6",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.setLen.json": "197f3d8af1c6f2fd97508a9adc8c73cfc725298bc7cb4995b3f279255f4925b8",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.setPayload.json": "c71db67f082209a4c969e44071456bbe715d1d4db26adf2e36143865b4acf903",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.setPtr.json": "33ee8640e1541869f04b0a064d06e8179a8050c9cbee0293619ece58eae30884",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlExact.json": "96c61af0215150e5d11af7376770e55633c7db16bdbd176c74abb91076684258",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlOverflow.json": "ed3ccd42ce8160defce7c9287808b92d17cb5f4492e579d46d5fe70915c740b7",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlPlain.json": "b960c814cca7152f5dc2a270c6ceec06549969ddf7ee0bfbda5a30bd7d009eb9",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shlSat.json": "7c48b6f9e48598d95826253ccd2e806e459fc26dc2993496bca8af3a30a3899d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.shrExact.json": "1096bebe7e8f4398cbdcc56bcc9c739ad66c888f052c301d9907ab5e5f0b72d0",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.splatLanes.json": "fe62b90cbada46b037a48c53f9ce5858c4f4d64f22e61ca28d4d20219e0c9fc1",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeMonotonic.json": "2a188fcd44afd468c33bdab12068ab24427beb0df9b67118463c209e2983d095",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeRelease.json": "6154932a6fd77ed7326464d3f7248084615be07f76eae123c095ada97b3c9102",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeSeqCst.json": "30b87ee786c7af26db417afb267a020e48944cc2f1b1feda507e56199058c325",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.storeUnordered.json": "dc82e6ea44a88c24c6a918cad7dfa7631d67707a7b9560f88ff8b372f4f18007",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subOverflow.json": "a3a785728dc51a4c48b1c5b8c3a13c56c708ee8a7ef8d12ac328099a7ee2c7cd",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subSat.json": "682ebb514b9a808aac53b4f77096baf5ec497d826edcc666ae44ecbb7c856a5e",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subSlice.json": "54acb8f0268c2a70d8389e831ca7cd5de0993751dc2ca375a7990190076c56e8",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.subWrap.json": "17d639ca96a4ac946a15f5c101de4d7dde8254b4c86dd8d58fe52a2895ff8d6b",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.swapBytes.json": "8e6c216b91bf7560fc181f0d5a8a76b6fddb08d77e09daa195e77446c700effe",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.switchErrRef.json": "2e6cadd4ba4e31517547b5f984c89c05d89e02b58d0428230edfcb41822b7a67",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.tailTarget.json": "e1d04b0274c4c65173a8ed030fb1acff9a0f05bd85cd109ef594e2313575667d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.threeWay.json": "608fff5d4cc90dea5bd6a733c1248bbfddfbc94eb8df3ea597d55015e4e1a5e9",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.toFloat.json": "c635cc5a63a4dde85b7d1c7f9f3a9078697a6f464370339f12099a465fee103f",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.trailing.json": "3a36f89718b7854ae030cc7be201ef0991905c1d9f232266874eb9f64279d752",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.trapZero.json": "5a3a2e25c41b297b78cbd1ccaaa448835376aa6ce78504ff8ade5ba4498af0f4",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.truncUnsafe.json": "e626a414b6a662667767b6617b0033b5d93ef673ef7cafdb47ebd77d867467c8",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.tryPtr.json": "b0a8726104f5a4ec591b40789ecf75d9c5b1108fed323d1fefcb2aee7c11631c",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.tryPtrCold.json": "7f3afcaacd8081ec00057bd0083fa6acbc25b67bb687bcf9df8284f6ca40c9c5",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.unsafeReturn.json": "52a44fc95ceafb78ec33ddec88e55724a5fcdc6247a2a6c540f6885e8f51f3c0",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.widen.json": "8f5ee32e06ecf21e0542547d0b9659dc48f37f46e3479fa12be7c46e0e07070d",
+      "tests/roadmap/runtime-tags/air/0.16.0/runtime_tags.xorBits.json": "8743c73924691f4d72c65f110008d99c50008e3b8f5bf3be4a0334e2e7c08bab",
+      "tests/roadmap/runtime-tags/export.sh": "342f21d9dbbf540dafefc1c1271bdf8e3c899f7b0b6f1a29ca1c4d990eadea8f",
+      "tests/roadmap/runtime-tags/provenance.json": "adeea853630fc3cc03a5b51c24f421ca0b4aebce23b5accf3a51a12a8156e0cb",
+      "tests/roadmap/runtime-tags/runtime_tags.zig": "3cd0561b276ecc5106f9c08195daed32f1d1ff98f8f8f5a879de0366d03192f5",
+      "tests/roadmap/runtime-tags/test_provenance.py": "c282b4d2ad01b462c8e841f5bef22378e0d93fbbf6eb7c5f5bddc80be01f4f41",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicShared.json": "a88f18af3f7910d445beba4efaee8cacbe42b889188d0bef65a46439a563be78",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.atomicWorker.json": "bc7043c06cde76816fe1b25e52ba2f06a26fca45b11a75ccecd73939d2a9d5e1",
       "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.copied.json": "64bdbfb6f46c24d07d00418e420fac61511398b818070db156772a4ddedcc4c6",
@@ -19110,14 +19813,30 @@
       "tests/roadmap/pointer-width/air/0.16.0/x86_64-linux/pointer_width.setFirst.json": "250bc6a22ac5e9352ed4667d2c0ea458823a938b43d47896fd5f1bd530ddea53",
       "tests/roadmap/pointer-width/air/0.16.0/x86_64-linux/pointer_width.succ.json": "3e344232e3402434e0cd9b9246ca9f4680ea9161aadf80f275c264e9e4909a82",
       "tests/roadmap/pointer-width/air/0.16.0/x86_64-linux/pointer_width.zeros.json": "7d0b423d758c14039bb13716600cd3f44e979516fe3bc5761e2eee9f82e560bf",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.maybeBytePtr.json": "fed23130bed000babcd9b9a357014e97dc421b6da2a423a82df0f8b8f60fe983",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.maybeElemPtr.json": "f5d07528188428339d5a725c04ded09879e97231ab6ba880f3f0cccd684a7c6e",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.maybeSlice.json": "e17e3cdb789bc5709878bb9bb63b314f1b12bc2802865c32a11d0e803bafa973",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.projectMaybe.json": "5dde8ce3de7b6b07f549617cee4d97b565f4c8ffed976ef94eee1cc6644b1f14",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.projectRes.json": "991b07f9b76708bc20971361fa3c65d306f1078d7304da8709abf7cb67def575",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.readResElem.json": "a0d404c3e1905ca60a9dea1911aea674b912aa3c7cffaf9065c529a73e3b2255",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resCodePtr.json": "828776a4a91acb73f19cf0f32410cbac4fa70e8fe0c9d5f707d7033bb7453a3b",
-      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resElemPtr.json": "5de6de1c2d53e6ae2b35ae41790a0916db899689db874ab5602e9aad56adaae8",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.maybeBytePtr.json": "cd5b6fe9fe1692200612e22cc32c444d1ed2094c374749e264f8f4173f425e9c",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.maybeElemPtr.json": "45bbb4380a7904e3b9e9794c8092eddf44fc96e15148acff33b8a8ead7873890",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.maybeSlice.json": "75fdeeb06aff7afeacef35db55255b53f350ac06b0b1e4a82715872d9da5a6b9",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.projectMaybe.json": "c22f9bd12b7f3edfac0bdc6760d89b91a0ace92248d8a4c49418618460883856",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.projectRes.json": "1b05b82b7c2662051377d4f9628ba5edc031392f30c5595c38405f7665ad9632",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.readResElem.json": "b077cf191a36cf5d943e15d0ca30e963a3b430e81004152df60d4fbc3ed3f4bc",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.resCodePtr.json": "88d04d68ddbb31284b33853244d4beefb93f0a3e4a4ef2cead1737d61859b085",
+      "tests/roadmap/const-bases/air-fresh/0.14.1/const_bases.resElemPtr.json": "70b0b2d7ef475d325625161876277adddd6d7f47817d3f38f4f647c339d53be6",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeBytePtr.json": "681fc43a029c249b02f3d8a00983602ac51df29884f8fdf8508c3d9b7529f2d4",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeElemPtr.json": "a3daa4d0c29a06a0e41de8bcbfa5bb20bbe205aed89225b190764ae22f9d5388",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.maybeSlice.json": "400f231b36a7b06a527fa1437e883d61f878d676d5e0d68df759c418e398016b",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectMaybe.json": "b14ebde360a501325ffade9e0048c57fcf909ad40749589931218a21e4c39e33",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.projectRes.json": "338ea69cbce39a7b444d02072f790d0cf065ac5d76f6ebf71563af843d9c3f64",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.readResElem.json": "9713e0b4f0d4082c3f7c31c20a54fbe186704e5a2e97ab00b03ca7e88b0889c8",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.resCodePtr.json": "89fb077675c399200fae1528a4c7a65fd8b53744760655fb89b90aec9be855ff",
+      "tests/roadmap/const-bases/air-fresh/0.15.2/const_bases.resElemPtr.json": "9a50a0dbe9820c61b26544bcf1b680cefe857cdf8c5413a6db542132d46975cf",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.maybeBytePtr.json": "2971ec4e16e6471632985f4f08742c8a7a2e65f37c4d172730be3845f9ce10d2",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.maybeElemPtr.json": "f5fb6d81a9c23d0bdaa5d2ac05855cf228c2de499f76f2850ec74a0552968f11",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.maybeSlice.json": "85d77305aa73d1b41d2dcc5370e1d0fcc4b2019e658c0e686f04521c2e73ec93",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.projectMaybe.json": "ada6ceebcb3aee9fbd77fb32bd1f0af82a423ff3bf8910e4167c0c116cbd64e8",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.projectRes.json": "730df2d4cdba555d541f4820c150a6fb5a98d5f46c418c802e7e7855d3725ae7",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.readResElem.json": "73fa24439135b8c5fe08c0e60edfb784c1a5dea855bd787f15ada4433c517284",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resCodePtr.json": "dbe15bab8618c5f177196161ac452da7fdd9e68374fdbc95cec0c0d8a778b6d8",
+      "tests/roadmap/const-bases/air-fresh/0.16.0/const_bases.resElemPtr.json": "e635ed118d11e061607cdfa25952d68b27c192ef8a754afd736d80d0c44b7e20",
       "tests/roadmap/loop-tactics/nested/air/nested.pairs.json": "2fd430d2270a536f4e4ef8d1868e78162f5f7e880f5ae03059419d3e9f828880",
       "tests/roadmap/vector-layouts/air/0.15.2/lanes.boolLane.json": "d3a3ee10b84c25cb33fb17d816c753373e0fee03e44e93b22a9fe0ff277c73f0",
       "tests/roadmap/vector-layouts/air/0.15.2/lanes.flipBool.json": "4a34ad15e83f1cb44ea6bab4258ba63682d09aabd006ff2fe13f8fed4d588eaf",
@@ -19297,7 +20016,75 @@
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.roundTrip.json": "89ea037b5782a6ad7e8c3168eb6b09dafbbf24238e4531c513eefb6b15c75ba3",
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.setMode.json": "2106dfe28378c9a9844811acc5841166025701c8ac354f160d65bfa29c281ba3",
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vTag.json": "0971568c12404189582c846708f7f5137952bd69b3095c92ecc70b0ff774e781",
-      "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vValue.json": "12e7eeeb692f676e301ccadd542d77e7903fcbae7f1879165b2dd8f933d8c5c2"
+      "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vValue.json": "12e7eeeb692f676e301ccadd542d77e7903fcbae7f1879165b2dd8f933d8c5c2",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.bytesToPadded.json": "f920119048f8111fa1a1ca4beff426d9307391666abca2565de4ebe841409c88",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.bytesToU32.json": "a0e8a84baf692416a365c367570bd71c27a7ed20607cffd40b1fe2aed4ee2830",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.optAddr.json": "50e9012f49652f6c83405bab3a08dbb2b15c89ba8e269dab02f302bf39f02405",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.optFromAddr.json": "8ab23174f2b5c202b47224db91d14713d98bd49bad1e70cf27cf729e9de9c846",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.optUnwrap.json": "73eb83a478f46d1d3cd8bdaf90a3265e38e20c9cadf1df95f3957e629a3f6752",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.paddedToBytes.json": "0c4671bcb91fb64bf323e6bb2ed4373a6161a5e658c4011a3ecc2fb08f25be47",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.pairToU64.json": "38d875c75da081f6ecc9373f26669855184faeeeadfe6f7f8a80335cc9e8d004",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.ptrWrap.json": "f7e45c0807f08e4eea078156e7674a6e3c0f07934fbfb4935abd761c180bf3cb",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.shortToU32.json": "919e662c8b0535eee01b48fbfbf1310d6220f2ee734084b4d9f54f215400fdb0",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.u24x2ToU56.json": "d08466e02853b9c757d7aad2dea6576322a3893693496a0ccee5aa8e97a68d92",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.u32ToBytes.json": "c7f57ebb7e6d6f28ca00072e5a6958feed97afe94463d0034e7457c3a9b29254",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.u32ToWord.json": "f91a23a1dcbf432de53fb72897a13ac8acd5bb511dcabda222a5cb8f770ba8cd",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.u56ToU24x2.json": "4dfcc9bef3eda107ad7e3f5f04851d4671d3b3eb90416d40ed7403cbd4aa3fba",
+      "tests/roadmap/aggregate-casts/air/0.14.1/aggregate_casts.u64ToPair.json": "75738138d266a72ea43b1175d931b8ddf7dc21b9760788eadbbe6a0726025089",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToPadded.json": "0b9285dc79dfadb1a65dc5f739c343146b19f68a26f0835c528c0a497f9b2d94",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.bytesToU32.json": "e873c5baf606802cd09f8f9ec297f429de1fd5c1c1eabb779123592258cfb35e",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optAddr.json": "48bbbe7cdc4520b96fe46680b01ed3e02a2e1189bd5f91bffefb0161a9cdb7e5",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optFromAddr.json": "d3ab1ebf02b0577c396815c8971f973a5befee0f1930bfe00aa1181ab38d6dd3",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.optUnwrap.json": "6b8c14429bbe5b112b3b1123844422354282d1c8f1d415f7771064a1068a7452",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.paddedToBytes.json": "58eb7d4f2f7fa5020beb4c48f1eb9cb0509899d6828ee5db93e9b2e4dbd0e910",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.pairToU64.json": "8cfc3ff07bef4c5b8ab17f5ee6adaa478c5bb66dd6b694a2c9c7405fabc82724",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.ptrWrap.json": "ca32741b8b66507e99143864c1ef216861cb5187ee39140463fd2135ac139d5e",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.shortToU32.json": "12b49b71bb1d9cc65db00c57d36aebe922b25d969503a01a47378e2eb4cadd98",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u24x2ToU56.json": "dce757db0e05370afd4e2e6f1b79cd702bbfa4919a39e5900dd0cd5a81524da1",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToBytes.json": "266eab425967f0a73a3e226b6e9f0da83b74ca93e0f27dfb5351e23c5e93f93c",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u32ToWord.json": "53733b454e275e2d659fcd5b926d6e5881e0d1e8e390aaff81b1a9d494e3fbcd",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u56ToU24x2.json": "614bc7ede1380c98dc979b5e42bf98c69f59fd1cbca9d69f207c71142f3c66fd",
+      "tests/roadmap/aggregate-casts/air/0.15.2/aggregate_casts.u64ToPair.json": "e672abdffcce5418284f3caaef0f385275b7d501babb17a5031f4e4548c1258d",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.bytesToPadded.json": "dce3d46e31082762d67b097b08e41153d949e516c7965324b8929791506108eb",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.bytesToU32.json": "82cd2c2ceb6265592d8f48502ca8e6ea6e2f0f95a3dfb62a19581073e4655ae6",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.optAddr.json": "cb0d75b7235e20a1e479ec61e320bb588e8740e2cf020f8fe35829dbb474134a",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.optFromAddr.json": "ffa18eec627c084793b36d4581926dd857acefd3117cd676de71e803bc9bc776",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.optUnwrap.json": "952fb35c69e18374aa00f7ba4b5f9582a68eec0db94556cc3f30b7b7c4097f78",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.paddedToBytes.json": "4bb8c905c886fc41c32f77e288d9ccaa1a0c950962f352a8814df1258bf9d8e3",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.pairToU64.json": "806340e708cb6a6af1e2d8d3cf1c536d458b7c1bb489932567c1b675cec2a118",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.ptrWrap.json": "982943dec96d5d5cb31014e1b20981c0e6cd0c1f2025a9ed925dad6c4c66da79",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.shortToU32.json": "fb7ff10b3349c988c2772937b14fc115a91e7e215b3ca8b150dd17ce0f5144d5",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.u24x2ToU56.json": "d64f0802d605e02295ad74424386e7a228a5a4456ff9583027b6faf4410787b3",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.u32ToBytes.json": "41649f40e9c8e1a1cf3b69613568880406bd724984bbabced2a3695182bd4971",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.u32ToWord.json": "e7828197664bd9ab61fe14bd7764a65831a86211d1449997374499aab3822b9f",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.u56ToU24x2.json": "7f5c421e98c10f4dd607b7118678e8ad32443733ab929909feed184a3e87bfd4",
+      "tests/roadmap/aggregate-casts/air/0.16.0/aggregate_casts.u64ToPair.json": "038929d9ca8dd3761381d8e95553d09860c018741dbf5ee860bee2079d0c52ba",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.cleanup.json": "ea629f431faba4813d937b624054a326e7b3b698bfff8e93a677f14acdd2a4a4",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.coldPayload.json": "db54c1ea3f8f7991ce5f306d3444455fabb7182b7fae416ded6475ec8dd2dcec",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.payload64.json": "359ac5b44ad469b2bbb7b770cd2573d2d2e6e5a241e4fe535d2041c8d6ba4741",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.payload8.json": "d002ff330957940c165ccef8379735e0dc2a47b77f5a9f47d2fd8cd4d620b6b5",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.writeAlias.json": "85e57c3427045e4cc5cdfd192244cbd50968bf828723a7ff1ddf0bbc35fae5c5",
+      "tests/roadmap/try-pointers/aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "56627940d4f87e0cd1368b940a54ed216f35375e2c6ccee1fd174daaf2a1de2e",
+      "tests/roadmap/try-pointers/aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "56d85bb84cf44d976c162b2f00772a88c1570f5200b9cadf59a470f62f040411",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.boolOn.json": "cb0772608e258580b15c5ea68cb643f5e30c7e55c0bd42177d1a74fbd2c16641",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.bytePtr.json": "fdc0ee9e730c2dfcbd8e5a9446f8022e26cc41227403941119344fe450f93b5f",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.hostAbi.json": "ad898f48a4398f61cb4f6664aefec19f6f4308b0fb1e3fe6bdfc06be2f10b931",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerC.json": "54ff9e390ffbd1769ca05b6f12fe0dd0d965087ffaa72b585c6b154c1c989fd6",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerCKeepsA.json": "692aa57324b356a2ae54907cadc74aeebeb91a04c9585e347e406e4ca8c6cb05",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerCKeepsAPtr.json": "26fe47682524e6928287224b8e5873d66cb9d9368da89f27d8aca2b05a0c0dee",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerCPtr.json": "1cb2f21494f6988f587d1d6eb5b9bd29f2216447dd2b215dc67a642908863866",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerPartial.json": "90ccefe2dfd55348177bd395a6429608d073051de53af0a8f3d774ff5200a089",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.localUndef.json": "0388ad586d54537a03de7e0d9e76585560469f7c3851ca46d4fd26f2b63f39d3",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.modeHigh.json": "34574f04cfbe66eb7ef6ec96a334d3b1c5cf7497a6bbe719fb6b64ad0a1429fb",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.setA.json": "5bf8db79ead6c8cf861d3a86d7abb855add212639abc7406de042383eb36a931",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.setInner.json": "97b111710701e59416c8189f822c6fa4f49f27f29e23266a583bcd7cec05debc",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.setInnerPtr.json": "ae9369d0895ebac50587e92d116feffa67a320b8a61a948889fb32627b73858e",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.signedS.json": "936e8a7d5c958378efc6d66a180aa59ce7ab89be915f722d593cf4fe84a6d617",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.undefField.json": "d663f2db36655d775e9fbd28a6316450e89fae195901173975607b84bb369607",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.undefKeepsA.json": "6888fdeaa4d3321db37f8ae90f9fa163f7773ba4d981d27e5f38b6c2911d18dc",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "8b172cfdb633b805a9a8b12b6137bc9d1b1642f7d7976d1afebe889ac5531555",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "a7c0a6276789cd7160a4496bf27ca3b5863c55de920431c00804615a02c96da0",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "b864495750cfa87c0c6627b46c34c9b1580a38f20878a97c63807e1d8560717f"
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "1a92b75c163504c326319b5ef22abf4990428727969f37f3f85ae37ca72697b3",
@@ -19306,12 +20093,12 @@
     }
   },
   "summary": {
-    "emitted-unqualified": 130,
+    "emitted-unqualified": 160,
     "rejected-fast-math": 19,
-    "emitted-unfixtured": 34,
     "rejected-compiler-state-or-effect": 8,
     "rejected-exporter-unsupported": 16,
-    "erased-at-emission": 5
+    "erased-at-emission": 5,
+    "emitted-unfixtured": 4
   },
   "category_summary": {
     "types": {

@@ -46,6 +46,10 @@
   1
  ],
  "ret": 1,
+ "export": {
+  "name": "fetchAdd",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
