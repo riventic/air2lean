@@ -1,0 +1,249 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "packed_fields.signedS",
+ "src": {
+  "file": "packed_fields.zig",
+  "module": "packed_fields",
+  "decl_line": 44
+ },
+ "params": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 8
+  },
+  {
+   "id": 1,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "ty": 2,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    },
+    {
+     "ty": 0,
+     "val": "-3"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 15
+  },
+  {
+   "id": 3,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "ty": 2,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 5,
+   "tag": "ret_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "packed_fields.reg",
+   "ty": 4,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 4,
+    "undef": true
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 5,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 3,
+   "bit_offset": 16,
+   "vector_index": null,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "packed_fields.Reg",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 5
+    },
+    {
+     "name": "inner",
+     "ty": 6
+    },
+    {
+     "name": "s",
+     "ty": 0
+    },
+    {
+     "name": "on",
+     "ty": 7
+    },
+    {
+     "name": "mode",
+     "ty": 8
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 4,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "struct",
+   "name": "packed_fields.Inner",
+   "layout": "packed",
+   "fields": [
+    {
+     "name": "b",
+     "ty": 5
+    },
+    {
+     "name": "c",
+     "ty": 9
+    }
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "enum",
+   "name": "packed_fields.Mode",
+   "tag": 10,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "off",
+     "value": "0"
+    },
+    {
+     "name": "low",
+     "value": "1"
+    },
+    {
+     "name": "high",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}

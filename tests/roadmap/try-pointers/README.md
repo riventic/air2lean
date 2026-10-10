@@ -51,8 +51,10 @@ may change because the tag read participates in the existing race model.
 The local Zig 0.14.1, 0.15.2 and 0.16.0 `Air.zig` and `Sema.zig` sources were inspected:
 all use `ty_pl` plus `TryPtr { ptr, body_len }`; result pointer flags preserve constness,
 volatility, allowzero and address space. Cold changes only the error-branch hint. This
-inspection is distinct from compiler qualification. `provenance.json` records actual
-export/native/kernel qualification separately; pending entries are not passing evidence.
+inspection is distinct from compiler qualification. `provenance.json` is the historical receipt
+(its `pending` entries are not passing evidence and stay unchanged because the integration
+manifests pin its hash); the compiler export and native run are recorded in
+`compiler-qualification.json` (see Compiler export below).
 Schema 11 does not encode the full target/CPU, so those facts are the recorded export
 command's provenance, rather than facts independently recovered from its AIR.
 
@@ -161,8 +163,9 @@ The result is read before cleanup runs. Counter increments are `add_safe`, so th
 room for each increment; the runtime test checks that overflow fails with `.overflow`.
 
 `aliases/` holds two further functions from `try_aliases.zig`. Their schema-11 AIR is
-**hand-written** in the 0.16.0 exporter shape; compiler export, native and kernel
-qualification are pending (`aliases/provenance.json`). `aliases/TryAliases/Proofs.lean` proves:
+**hand-written** in the 0.16.0 exporter shape (`aliases/provenance.json`); the compiler export and
+native run are in `compiler-qualification.json`, the proofs below still run on the retained
+hand-written-AIR translation. `aliases/TryAliases/Proofs.lean` proves:
 
 * `twoPaths p p y` (one union through both pointer-try operands): the same result as `writeAlias`.
 * `twoPaths a b y` (separately owned unions): only `a` is written and only `b` is read. An error
@@ -189,7 +192,25 @@ AIR2LEAN_ZIG_AIR=/qualified/patched/zig bash tests/roadmap/try-pointers/aliases/
 python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
 ```
 
-A fresh export is expected to differ from the hand-written AIR in instruction IDs or debug
-lines. Before claiming compiler correspondence, translate the fresh export and compare the
-generated body with `aliases/TryAliases/Gen.lean`. If they differ, replace the retained AIR with
-the export, regenerate Gen, run `check-artifacts.py --record` and re-run the proofs.
+A fresh export differs from the hand-written AIR in instruction IDs, debug lines and the schema-12
+profile; its translation is the retained `Gen.lean` up to the profile header (see below).
+
+## Compiler export
+
+`air-fresh/0.16.0` (`try_pointers.zig`: `payload8`, `payload64`, `writeAlias`, `cleanup`,
+`coldPayload`) and `aliases/air-fresh/0.16.0` (`try_aliases.zig`: `twoPaths`, `resetOnError`) are
+unmodified schema-12 exports from a patched 0.16.0 compiler (Linux x86_64, baseline CPU,
+ReleaseSafe, no error tracing; build tree and commands in `compiler-qualification.json`).
+`compiler-qualification.py` checks their hashes, exact inventory, profile and pointer-try tags, and
+with `--translator` that each translates to the retained `TryPointers/Gen.lean` and
+`aliases/TryAliases/Gen.lean` up to the profile header (`normalize-generated.py report`/`compare`).
+The translated bodies are identical, so the proofs about the retained modules, including the
+hand-written `twoPaths`/`resetOnError`, are proofs about the compiler's AIR for these sources.
+Native: stock 0.16.0 `zig test` of `try_pointers.zig` (4 of 4) and `try_aliases.zig` (8 of 8) on
+an aarch64-macos host; no x86_64 Linux run.
+
+```sh
+bash tests/roadmap/try-pointers/check.sh --check-qualification
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests/roadmap/try-pointers/test_compiler_qualification.py
+python3 tests/roadmap/try-pointers/compiler-qualification.py --fresh "$root"   # $root/try_pointers, $root/try_aliases from the --export commands
+```

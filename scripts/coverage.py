@@ -306,6 +306,11 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
     'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
+    # B10 L04/L08: patched-compiler exports with their qualification records.
+    'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
+    'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
+    'tests/roadmap/packed-fields/air-fresh/{version}/llvm': 'tests/roadmap/packed-fields/compiler-provenance.json',
+    'tests/roadmap/packed-fields/air-fresh/{version}/x86_64': 'tests/roadmap/packed-fields/compiler-provenance.json',
 }
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
@@ -313,7 +318,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/aggregate-casts/air-handwritten': 'earlier hand-written AIR in the exporter schema (README)',
     'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
-    'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; compiler export pending)',
+    'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; the compiler export is aliases/air-fresh)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/const-bases/air': 'hand-written AIR in the exporter schema (README)',
