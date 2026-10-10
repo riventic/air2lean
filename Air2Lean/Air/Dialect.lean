@@ -38,6 +38,10 @@ instance : ToString ZigVersion := ⟨ZigVersion.toString⟩
 /-- The supported version spelled `s`, if any. -/
 def ofString? (s : String) : Option ZigVersion := all.find? (·.toString == s)
 
+/-- The error for a `zig_version` outside `all`. -/
+def unsupported (s : String) : String :=
+  s!"unsupported zig_version '{s}' (supported: {", ".intercalate (all.map toString)})"
+
 /-- `@bitCast` semantics (`docs/bitcast-semantics.md`, `Air2Lean/BitCast.lean`). -/
 inductive BitCast where
   /-- Up to 0.16.0: a reinterpretation of the in-memory representation. -/

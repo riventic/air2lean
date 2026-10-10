@@ -538,8 +538,10 @@ structure CheckCtx where
   fnName : String
   types : Array Ty
   layouts : Array Layout
-  /-- The profile's `error_set_bits` (`Func.errorSetBits`). -/
-  errBits : Nat := 16
+  /-- The function's version and target facts (`Func.dialect`): the error width, the
+  `@bitCast` semantics and the asm allowlist's architecture read it. `none` in bare contexts,
+  which have 16-bit errors, no architecture and reject representation casts. -/
+  dialect : Option Dialect := none
   /-- The type of each instruction. -/
   instTys : Array (InstId × TyId)
   /-- The places of non-escaping `alloc`s (`Air2Lean/Memory.lean`). -/
@@ -550,17 +552,23 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
-  /-- The function's `@bitCast` semantics (`Dialect.bitCast`). Up to 0.16.0 it reinterprets
-  memory (`reprCastApplies`); from 0.17.0 it uses the logical bit order
-  (`Air2Lean/BitCast.lean`). `none` in bare contexts, which then reject representation casts. -/
-  bitCast : Option ZigVersion.BitCast := none
   /-- `--device-contract` (L13): integer volatile loads and stores, and the declared
   `asm volatile`, are device events. -/
   device : Option DeviceContract := none
-  /-- `Dialect.arch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
-  targetArch : String := ""
   /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
   sentinelChecked : Array InstId := #[]
+
+/-- The profile's `error_set_bits` (`Dialect.errorSetBits`); 16 in a bare context. -/
+def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
+
+/-- The function's `@bitCast` semantics (`Dialect.bitCast`). Up to 0.16.0 it reinterprets
+memory (`reprCastApplies`); from 0.17.0 it uses the logical bit order
+(`Air2Lean/BitCast.lean`). `none` in a bare context, which then rejects representation casts. -/
+def CheckCtx.bitCast (cx : CheckCtx) : Option ZigVersion.BitCast := cx.dialect.map (·.bitCast)
+
+/-- `Dialect.arch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`); empty in a bare
+context. -/
+def CheckCtx.targetArch (cx : CheckCtx) : String := (cx.dialect.map (·.arch)).getD ""
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -2597,11 +2605,10 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
       (controlFlowSummaries f.body).tryErrorExits
     else ({} : Std.HashMap InstId Bool)
   let cx : CheckCtx := { fnName := f.name, types := f.types, layouts := f.layouts,
-                         errBits := f.errorSetBits,
+                         dialect := some f.dialect,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
-                         bitCast := some f.dialect.bitCast, device, targetArch := f.dialect.arch,
-                         sentinelChecked := sentinelCheckedSlices insts }
+                         device, sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
@@ -3797,14 +3804,12 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     fnName := f.name
     types := f.types
     layouts := f.layouts
-    errBits := f.errorSetBits
+    dialect := some f.dialect
     instTys := insts.map fun i => (i.id, i.ty)
     places
     localRoots
     localPaths := localPlacePaths f.types f.layouts insts
-    bitCast := some f.dialect.bitCast
     device
-    targetArch := f.dialect.arch
     sentinelChecked := sentinelCheckedSlices insts }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 

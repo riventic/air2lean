@@ -45,7 +45,7 @@ private def layouts : Array Layout := #[
 
 private def cx (version : String) (src : TyId) : CheckCtx :=
   { fnName := "probe.f", types, layouts, instTys := #[(0, src)], places := #[],
-    bitCast := (ZigVersion.ofString? version).map (·.bitCast) }
+    dialect := (ZigVersion.ofString? version).map Dialect.ofVersion }
 
 private def result (version : String) (src dst : TyId) : Except String Nat :=
   checkOp (cx version src) 0 dst (.bitcast (.inst 0))

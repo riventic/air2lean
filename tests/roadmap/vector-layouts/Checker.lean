@@ -46,7 +46,7 @@ private def exported : Array Layout := #[
 
 private def raw (backend : String) (schema : Nat := 12)
     (targetTriple : String := "x86_64-linux.5.10...6.19-musl") : Raw.RawFunc :=
-  { schema, zigVersion := "0.16.0", name := "probe.f", params := #[], ret := 3, body := #[],
+  { schema, version? := some .v0_16_0, name := "probe.f", params := #[], ret := 3, body := #[],
     types, layouts := exported, globals := #[],
     profile := { name := "abi64-le-v1", schema, zigVersion := "0.16.0", backend, targetTriple } }
 

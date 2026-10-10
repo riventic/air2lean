@@ -81,15 +81,15 @@ def admitted : Op → Bool
 def preflight (funcs : Array Func) (profiles : Array BuildProfile) : Except String (Array String) := do
   require (!funcs.isEmpty && funcs.size == profiles.size) "function/profile count"
   let profile ← BuildProfile.checkProgram profiles (some BuildProfile.currentName)
-  let dialect? := (Dialect.ofProfile profile).toOption
-  require (profile.schema == 12 && dialect?.any (·.version == .v0_16_0) &&
+  let version? := ZigVersion.ofString? profile.zigVersion
+  require (profile.schema == 12 && version? == some .v0_16_0 &&
     profile.targetTriple == "x86_64-linux.5.10...6.19-musl" && profile.backend == "stage2_llvm" &&
     profile.buildMode == "ReleaseSafe" && profile.cpu == "x86_64" && profile.errorTracing == some false)
     "outside retained source profile"
   let names := funcs.map (·.name)
   let mut selectedNames := #[]
   for f in funcs do
-    require (dialect?.any (·.version == f.dialect.version)) "function/profile Zig version mismatch"
+    require (version? == some f.dialect.version) "function/profile Zig version mismatch"
     check f
     -- A byte local (`Zig.Bytes T`) is outside the timed subset.
     require (byteLocals f).isEmpty s!"{f.name}: a local with undefined parts"

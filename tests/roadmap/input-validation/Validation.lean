@@ -159,7 +159,7 @@ private def validationChecks : IO Unit := do
     "integer-form boolean constant accepted"
   -- `std.time.Timer` is reviewed for 0.14.1 and 0.15.2 only (removed in 0.16.0).
   let timer := { mkFunc "timer" #[.void, .int false 64, .struct "time.Timer" "auto" #[],
-    .ptr "one" false 2] #[] 0 with zigVersion := "0.15.2" }
+    .ptr "one" false 2] #[] 0 with dialect := .ofVersion .v0_15_2 }
   require (accepted (checkModelSignature timer "time.Timer.read" #[.undef 3] 1))
     "known Timer model signature rejected"
   require (rejected (checkModelSignature { timer with types := timer.types.set! 2 (.struct "Other" "auto" #[]) }

@@ -498,7 +498,9 @@ def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
 /-- Tag interpretation after successful canonicalization. Shared by the ordinary
 translator and diagnostic path so the rewrites are applied exactly once. -/
 def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
-  let dialect ← (Dialect.ofProfile raw.profile).mapError fun e => s!"{raw.name}: {e}"
+  let some version := raw.version?
+    | throw s!"{raw.name}: {ZigVersion.unsupported raw.profile.zigVersion}"
+  let dialect := Dialect.ofProfile version raw.profile
   let body ← raw.body.mapM (normalizeInst raw.name)
   -- A lane pointer into a bit-packed vector (`tests/roadmap/vector-layouts/lanes.zig`) becomes
   -- a bit-pointer into the vector's integer, as LLVM lays it out (`Dialect.lanePtrBitPtrs`).

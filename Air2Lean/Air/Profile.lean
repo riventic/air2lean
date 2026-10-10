@@ -270,20 +270,18 @@ def checkProgram (profiles : Array BuildProfile) (expected : Option String := no
 
 end BuildProfile
 
-/-- The dialect of a profile: the only reader of its Zig version, target triple and build mode.
-Fails closed for a version outside `ZigVersion.all`. The target facts are those that
-`BuildProfile.collect` validated against `Target.qualified`; the diagnostics path also inspects
-a body under the placeholder profile of an invalid one (its violations already reported), whose
-recorded facts are kept as they are. A legacy profile (`unverified` triple) has no target
-architecture: the unverified 64-bit little-endian reference model. -/
-def Dialect.ofProfile (p : BuildProfile) : Except String Dialect := do
-  let some version := ZigVersion.ofString? p.zigVersion
-    | throw s!"unsupported zig_version '{p.zigVersion}' (supported: \
-        {", ".intercalate (ZigVersion.all.map toString)})"
-  pure { version
-         arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
-         ptrBytes := p.pointerBits / 8
-         endian := (Endian.ofString? p.endian).getD .little
-         errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }
+/-- The dialect of a program of Zig `version` (the raw record's parsed `zig_version`,
+`Raw.RawFunc.version?`) under profile `p`: the only reader of its target triple and build mode.
+The target facts are those that `BuildProfile.collect` validated against `Target.qualified`; the
+diagnostics path also inspects a body under the placeholder profile of an invalid one (its
+violations already reported), whose recorded facts are kept as they are. A legacy profile
+(`unverified` triple) has no target architecture: the unverified 64-bit little-endian reference
+model. -/
+def Dialect.ofProfile (version : ZigVersion) (p : BuildProfile) : Dialect :=
+  { version
+    arch := if p.targetTriple == "unverified" then "" else (p.targetTriple.splitOn "-").headD ""
+    ptrBytes := p.pointerBits / 8
+    endian := (Endian.ofString? p.endian).getD .little
+    errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }
 
 end Air2Lean
