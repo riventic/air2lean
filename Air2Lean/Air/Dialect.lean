@@ -227,6 +227,11 @@ structure Dialect where
   /-- The build mode in its 0.16.0 spelling (`Debug`, `ReleaseSafe`, …); `unverified` for a
   legacy profile. -/
   buildMode : String := "unverified"
+  /-- `--assume-no-libc`: the program is linked without libc, so the `long double` libm routines
+  of a target whose `c_longdouble` is `f128` (`sqrtl`, `fmal`, `floorl`, …) are compiler_rt's.
+  The AIR profile records no `link_libc` fact; without this opt-in the checker rejects the `f128`
+  ops that call them (`docs/floats.md` §Targets). -/
+  noLibc : Bool := false
   deriving Repr, Inhabited, BEq
 
 namespace Dialect

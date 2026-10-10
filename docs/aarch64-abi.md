@@ -191,4 +191,5 @@ Not covered:
   files; without them `compare` reports `excluded`, and the translator rejects its
   aarch64-linux AIR;
 - programs linked with libc on aarch64-linux: `f128` `long double` libcalls then resolve to
-  glibc, not compiler_rt.
+  glibc, not compiler_rt. The translator rejects those `f128` ops unless `--assume-no-libc`
+  ([floats.md](floats.md#targets)); a `link_libc` profile fact is a follow-up.

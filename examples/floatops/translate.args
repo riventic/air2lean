@@ -1,1 +1,1 @@
---float-semantics compiler-rt
+--float-semantics compiler-rt --assume-no-libc

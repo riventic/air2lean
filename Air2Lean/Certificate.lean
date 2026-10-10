@@ -142,7 +142,7 @@ def printGlobal (g : Global) : String :=
 def printDialect (d : Dialect) : String :=
   s!"\{ version := {repr d.version}, arch := {str d.arch}, os := {str d.os}, ptrBytes := {d.ptrBytes}, " ++
   s!"endian := {repr d.endian}, errorSetBits := {d.errorSetBits}, backend := {str d.backend}, " ++
-  s!"buildMode := {str d.buildMode} }"
+  s!"buildMode := {str d.buildMode}, noLibc := {bool d.noLibc} }"
 
 /-- The whole decoded `Func` as a Lean term, or `none` outside the printable fragment. -/
 def printFunc (f : Func) : Option String := do

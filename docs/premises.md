@@ -623,8 +623,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   aarch64-linux `generic`, which rounds through `f32` like x86_64). The rules are those of the
   baseline CPU (`Target.floatRules`); they are read from the Zig 0.16.0 LLVM backend and
   compiler_rt sources and checked by each host's differential test. On aarch64-linux the
-  `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: a program linked with
-  libc is outside the premise.
+  `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: the checker rejects the
+  `f128` ops that call them unless `--assume-no-libc` (recorded in the header) states that the
+  program links no libc.
 - Derived from: tokens `softF80Chk`, `…Xf3`, `fmaFused`, `fmaRtFused`, `sqrtF80ViaF64`.
 - Sources: [floats.md](floats.md#targets).
 

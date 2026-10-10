@@ -740,6 +740,34 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
       ABI cell, padding included, which the model leaves undefined; use an integer whose width \
       is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
 
+/-- An `f128` op that LLVM lowers to a `long double` libm call where `c_longdouble` is `f128`
+(`Target.longDoubleBits`: aarch64-linux, s390x, wasm32): `@sqrt` (`sqrtl`), `@mulAdd` (`fmal`),
+`@floor`/`@ceil`/`@trunc`/`@round` (`floorl`, …), `@min`/`@max` (`fminl`/`fmaxl`) and the
+division family other than `/` (`truncl`, `floorl`, `fmodl`, …). Linked with libc, these are
+libc's routines, not the compiler_rt ones that the model ports (before 0.16.0 their `@sqrt`
+differs). The profile records no `link_libc` fact, so only `--assume-no-libc` admits them. The
+opaque transcendentals (`sinl`, …) state nothing about either routine and stay admitted. -/
+def CheckCtx.checkLongDoubleCall (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let some d := cx.dialect | return
+  let some t := d.target? | return
+  if t.longDoubleBits != 128 || d.noLibc then return
+  let (what, a) ← match op with
+    | .sqrt a => pure ("@sqrt", a)
+    | .mulAdd a _ _ => pure ("@mulAdd", a)
+    | .floatRound _ a => pure ("@floor/@ceil/@trunc/@round", a)
+    | .minMax _ a _ => pure ("@min/@max", a)
+    | .div _ a _ => pure ("@divTrunc/@divFloor/@divExact/@rem/@mod", a)
+    | _ => return
+  let some aty := cx.valTy? a | return
+  let elem := match cx.types[aty]? with
+    | some (.vector _ c) => cx.types[c]?
+    | other => other
+  if elem == some (.float 128) then
+    cx.fail line s!"{what} on f128 is outside the {t.arch}-{t.os} model: f128 is this target's \
+      c_longdouble, so the op calls a long double libm routine (sqrtl, fmal, floorl, …), which is \
+      compiler_rt's only in a program without libc, and the AIR profile records no link_libc \
+      fact; pass --assume-no-libc for a program linked without libc (docs/floats.md §Targets)"
+
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -1105,6 +1133,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkVolatile line ty op
   cx.checkPackedLayout line ty op
   cx.checkPaddedAtomic line op
+  cx.checkLongDoubleCall line op
   cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>

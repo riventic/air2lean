@@ -122,6 +122,9 @@ def fresh_linux_profile(doc, expected_version):
     return profile
 
 
+ADMISSIONS = {"unqualified-build-mode", "no-libc", "unqualified-build-mode,no-libc"}
+
+
 def split_generated(data, required=False):
     first, newline, body = data.partition(b"\n")
     if not first.startswith(PREFIX):
@@ -131,11 +134,12 @@ def split_generated(data, required=False):
     if not newline:
         raise ValueError("profile record must end with a newline")
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
-    # `admission` is present only when the translator was given an admission opt-in
-    # (`--allow-unqualified-build-mode`, docs/build-modes.md).
+    # `admission` is present only when the translator was given an admission opt-in, in this
+    # order: `--allow-unqualified-build-mode` (docs/build-modes.md), `--assume-no-libc`
+    # (docs/floats.md §Targets).
     if (not isinstance(metadata, dict) or
             set(metadata) - {"admission"} != {"profile", "float_semantics", "correspondence"} or
-            metadata.get("admission", "unqualified-build-mode") != "unqualified-build-mode" or
+            metadata.get("admission", "no-libc") not in ADMISSIONS or
             not isinstance(metadata["float_semantics"], str) or
             metadata["float_semantics"] not in {"ieee", "compiler-rt"} or metadata["correspondence"] != "model"):
         raise ValueError("unsupported generated profile record")
