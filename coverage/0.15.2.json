@@ -17482,7 +17482,7 @@
   ],
   "project_source_sha256": {
     "inventory-tool": {
-      "scripts/coverage.py": "8cf1ec65f928d1d1506bf7b0c57d12da912521d27ae2c52afa59130931ac35f0",
+      "scripts/coverage.py": "4fe06e3ba8aac4a2501074dccd6327c299f103e1c7e1be4e30276671d7bdee11",
       "zig-patch/versions.toml": "f38c344d100ebf1f0c5aad26471c9d2577d1d55c6b916109340d9c56251c6441"
     },
     "translation": {
@@ -18866,7 +18866,33 @@
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.roundTrip.json": "d0f5e3a2afd5634995491a5c1a3dd187b1a909d1eba5b66f04e13b341d86060f",
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.setMode.json": "b3c8fdd28b8eb7bbc45c87c921ce318f002e2b0b771db203ee0ebb5bf829b50f",
       "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vTag.json": "d2217f1b7716500cdf255bca24472244a7628e9ed90dfe9d4c5d51ceb55afb81",
-      "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vValue.json": "32964581848fe53b7e23f758919a5654dbc57ae678780df1248cc1323b3b2e04"
+      "tests/roadmap/noreturn-variants/air/0.16.0/noreturn_variants.vValue.json": "32964581848fe53b7e23f758919a5654dbc57ae678780df1248cc1323b3b2e04",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.cleanup.json": "7fd7848a46f85155fdf6cd5e5f3cf3bf2abbd6b2aaefd43e10a270c770bcbd9a",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.coldPayload.json": "2a1d0129cf14781cf1a1afde70a21f6a4bb32d0f35b043d7f32290adce036ebd",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.payload64.json": "40cb82357ff38cf29f22ceadbd09e71b6b936e2ac2fc31b874e50f52e32cbfc0",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.payload8.json": "cd9fb95ab33678122e95d81b962e5af9bb7440369c829e9ee11472f15c88e813",
+      "tests/roadmap/try-pointers/air-fresh/0.16.0/try_pointers.writeAlias.json": "0eddd926095a706b482600b8492f7e264b31b6b172e98df498d2968b8dcafd1a",
+      "tests/roadmap/try-pointers/aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "d34b80593663c0b43d6f27ad745fc68f969be5facc014dc7427471f7ffc712d8",
+      "tests/roadmap/try-pointers/aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "13233108fefb0183195f4835f0c7724075e2025a116b095f681f016fec96f687",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.boolOn.json": "6a3fc0400383950a2c0779a985e9d554bf5da80e9792fb956bd1dcceb90b06fd",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.bytePtr.json": "0a672fd50eb1341f287ee1a34cd7ed7d89777d4ab3a1884bc07db1932190a71d",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.hostAbi.json": "08a50f56f7baedf405912bb9499832c52ffea84f7cf3b6139052081620fd8ab9",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerC.json": "f2983ca4b6823336c79e5653cc832f5f9f7ce1c34f8204561fcb02cca4c99613",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerCKeepsA.json": "95f3f3b2ea36d4aa0653c430d7459966fe1abe7c3c30151fbe7a9b2730402cd4",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerCKeepsAPtr.json": "90cd963270269d0b5e792b34225e0df428658ba7a593a69387add351596f05ad",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerCPtr.json": "3373550cf28453d5510988c8154d6cfa4bce5b2899f2b683552b911f5fdc060f",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.innerPartial.json": "464de8f2ddab5f9ac699c9bb6941e8dee2f8a98c51a12b78cf3bc43873fecaec",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.localUndef.json": "952ba62fa3dfc1883605e25df48672f7a788c3765cf10441efb6b54e5adb8fe9",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.modeHigh.json": "650411019f5d3080456cb00142b06fe649f06c159f2c7f12f1345bd4c1bd2d31",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.setA.json": "2ff456d5574369e622400d3076e8e4122673642ccc079a85d7a30a7b3ffc3c37",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.setInner.json": "fa07a3edda782c5a7a8eaf30509aa5f448e248252b406cce59e7124372ddc5ec",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.setInnerPtr.json": "c271f6a3b2b1a560a5de3493e258b9429d4da9bbf07eb24bf918603fa67c87b0",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.signedS.json": "5c645257bb9643293ab1dac22144a17b1dee9ddbb697e613dac790c6c29bf643",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.undefField.json": "a6fac447da62a42f7516124bffe6753d6135b9aa29ad9f90c3bff923b0f144d6",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.undefKeepsA.json": "18374c42e72e1c9e1276bf5bded079cea0be8e509599cc0b5ede25b9c5377810",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "414eed663a45f23bd05d9e3471b191caef04af0372788fa7d447035079ebd479",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "7fd17db98314b10e49abc6e84e5f8ed9f80175fb7b2c0e6bd047da82ac2b9626",
+      "tests/roadmap/packed-fields/air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "30edec6947336d07d3e3fb252edce1edd1d43a404f0836cd7647f7460f49795c"
     },
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "0643758e19518dcfedb5e091372972376ec4309575e00e677758c11f8b813896",

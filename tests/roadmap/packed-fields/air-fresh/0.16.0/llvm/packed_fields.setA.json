@@ -35,6 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "packed_fields.setA",
+ "src": {
+  "file": "packed_fields.zig",
+  "module": "packed_fields",
+  "decl_line": 12
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -42,7 +47,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 8
   },
   {
    "id": 1,
@@ -66,7 +72,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 15
   },
   {
    "id": 3,
@@ -86,7 +93,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,

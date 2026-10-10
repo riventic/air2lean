@@ -35,6 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "try_pointers.cleanup",
+ "src": {
+  "file": "try_pointers.zig",
+  "module": "try_pointers",
+  "decl_line": 19
+ },
  "params": [
   0,
   1,
@@ -64,7 +69,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 17
   },
   {
    "id": 4,
@@ -100,7 +106,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 3
+     "line": 3,
+     "column": 14
     },
     {
      "id": 7,
@@ -116,7 +123,8 @@
      "id": 8,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 3
+     "line": 3,
+     "column": 25
     },
     {
      "id": 9,
@@ -149,7 +157,8 @@
      "id": 11,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 11
     },
     {
      "id": 12,
@@ -165,7 +174,8 @@
      "id": 13,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 22
     },
     {
      "id": 14,
@@ -198,7 +208,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 4
+     "line": 4,
+     "column": 17
     },
     {
      "id": 17,
@@ -237,7 +248,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 22,
@@ -253,7 +265,8 @@
    "id": 23,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 11
   },
   {
    "id": 24,
@@ -269,7 +282,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 22
   },
   {
    "id": 26,
@@ -302,7 +316,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 29,

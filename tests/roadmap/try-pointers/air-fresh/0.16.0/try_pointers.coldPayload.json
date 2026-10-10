@@ -35,6 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "try_pointers.coldPayload",
+ "src": {
+  "file": "try_pointers.zig",
+  "module": "try_pointers",
+  "decl_line": 26
+ },
  "params": [
   0,
   1
@@ -57,7 +62,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 8
+   "line": 8,
+   "column": 14
   },
   {
    "id": 3,
@@ -93,19 +99,22 @@
      "id": 5,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 2
+     "line": 2,
+     "column": 14
     },
     {
      "id": 7,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 3
+     "line": 3,
+     "column": 13
     },
     {
      "id": 9,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 5
+     "line": 5,
+     "column": 13
     },
     {
      "id": 10,
@@ -121,7 +130,8 @@
      "id": 11,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 5
+     "line": 5,
+     "column": 24
     },
     {
      "id": 12,
@@ -154,7 +164,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 8
+     "line": 8,
+     "column": 14
     },
     {
      "id": 17,
@@ -182,7 +193,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 21,

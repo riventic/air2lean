@@ -35,6 +35,11 @@
   "export_stage": "analyzed-air"
  },
  "name": "packed_fields.localUndef",
+ "src": {
+  "file": "packed_fields.zig",
+  "module": "packed_fields",
+  "decl_line": 91
+ },
  "params": [],
  "ret": 0,
  "body": [
@@ -42,7 +47,8 @@
    "id": 0,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 1,
@@ -78,7 +84,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 6
   },
   {
    "id": 5,
@@ -108,7 +115,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 6
   },
   {
    "id": 8,
@@ -124,7 +132,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 12
   },
   {
    "id": 10,
@@ -154,7 +163,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 13
   },
   {
    "id": 13,
@@ -180,7 +190,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 16,
