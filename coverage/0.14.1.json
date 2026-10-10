@@ -7599,7 +7599,7 @@
     },
     {
       "tag": "try_ptr",
-      "disposition": "emitted-unfixtured",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "explicit-arm",
         "reason": "Explicit writeInst arm for this version; operand correctness and nested helper conditions are unverified."
@@ -7636,19 +7636,28 @@
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry8.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
       "rejection": null,
-      "fixture_request": {
-        "source": "tests/roadmap/runtime-tags/runtime_tags.zig",
-        "function": "tryPtr",
-        "reason": "candidate source not yet exported by a patched compiler; see docs/coverage.md \u00a7L14"
-      },
-      "guidance": "Passes the same source stages as emitted-unqualified, but no selected golden or reviewed roadmap compiler export for this version contains the tag; FIXTURE_REQUESTS names unexported candidate source. Not a supported source feature. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
+      "fixture_request": null,
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -8417,7 +8426,13 @@
         "paths": [
           "tests/golden/options/air/options.findOr.json",
           "tests/golden/options/air/options.firstIndexPlusOne.json",
-          "tests/golden/pointers/air/pointers.maxPtr.json"
+          "tests/golden/pointers/air/pointers.maxPtr.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.storeOptional.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.storeOptional.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.storeOptional.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.storeOptional.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.storeOptional.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.storeOptional.json"
         ]
       },
       "proofs": {
@@ -8649,7 +8664,13 @@
         "paths": [
           "tests/golden/errors/air/errors.digitOrZero.json",
           "tests/golden/layout/air/layout.bump.json",
-          "tests/golden/layout/air/layout.bumpDigit.json"
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.setPayload.json"
         ]
       },
       "proofs": {
@@ -10493,7 +10514,13 @@
         "status": "compiler-fixture-presence-only",
         "paths": [
           "tests/golden/errors/air/errors.digitOrZero.json",
-          "tests/golden/layout/air/layout.bumpDigit.json"
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.setPayload.json"
         ]
       },
       "proofs": {
@@ -10549,7 +10576,13 @@
         "paths": [
           "tests/golden/errors/air/errors.digitOrZero.json",
           "tests/golden/errors/air/errors.sumDigits.json",
-          "tests/golden/layout/air/layout.bumpDigit.json"
+          "tests/golden/layout/air/layout.bumpDigit.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.setPayload.json"
         ]
       },
       "proofs": {
@@ -10666,7 +10699,19 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/layout/air/layout.bump.json"
+          "tests/golden/layout/air/layout.bump.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry8.json"
         ]
       },
       "proofs": {
@@ -10787,7 +10832,25 @@
         "paths": [
           "tests/golden/errors/air/errors.parseDigit.json",
           "tests/golden/errors/air/errors.sumDigits.json",
-          "tests/golden/layout/air/layout.digit.json"
+          "tests/golden/layout/air/layout.digit.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.setPayload.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry8.json"
         ]
       },
       "proofs": {
@@ -10841,7 +10904,19 @@
       "tests": {
         "status": "compiler-fixture-presence-only",
         "paths": [
-          "tests/golden/errors/air/errors.sumDigits.json"
+          "tests/golden/errors/air/errors.sumDigits.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits10/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits16/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits17/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits2/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits32/error_width.unionTry8.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry64.json",
+          "tests/roadmap/error-width/air-fresh/0.14.1/bits8/error_width.unionTry8.json"
         ]
       },
       "proofs": {

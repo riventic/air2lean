@@ -3678,7 +3678,7 @@ def tagNameEnums (funcs : Array Func) (structNames : Array (String × String)) :
 /-- The error names of the program (the names of its error sets), if a function reads one
 (`@errorName`). -/
 def errorNames (funcs : Array Func) : Array String :=
-  if !funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false) then #[]
+  if !funcs.any (·.allInsts.any (·.op.isErrorName)) then #[]
   else
     let names := funcs.flatMap fun f => f.types.flatMap fun t => match t with
       | .errorSet (some ns) => ns
@@ -4204,7 +4204,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   let memFuncs := memoryFunctions funcs (models.map (·.symbol))
   let concFuncs := concFunctions funcs
   let asmDefs := collectAsmOps funcs
-  let hasErrorName := funcs.any (·.allInsts.any fun i => match i.op with | .errorName _ => true | _ => false)
+  let hasErrorName := funcs.any (·.allInsts.any (·.op.isErrorName))
   let targets := spawnTargets funcs
   let futures := futureTargets funcs
   let extendedCapture := targets.any (fun (_, _, fields) => fields.size != 1) || !futures.isEmpty
