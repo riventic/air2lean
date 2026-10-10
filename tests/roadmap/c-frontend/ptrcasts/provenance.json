@@ -3,12 +3,12 @@
   "sources": [
     {
       "path": "tests/roadmap/c-frontend/ptrcasts/ptrcasts.zig",
-      "sha256": "717f7e6a0596b601787e075fc9b5c98eafbb272f647ef4a06407375dff2d34bd",
+      "sha256": "cab9027788bc689beda1cd905a68e8dd95f5ac5c5ddbcb49269c41a81fde0315",
       "air": "tests/roadmap/c-frontend/ptrcasts/air/0.16.0"
     },
     {
       "path": "tests/roadmap/c-frontend/ptrcasts/reject.zig",
-      "sha256": "b0113fb25937248af8bcb7e842f7bc0ef9a074c39e9706c05c75f1113df26801",
+      "sha256": "13cdad6e25801a60d5bc411fa73c54b595b156fe06e32134ae9aeefa5a230108",
       "air": "tests/roadmap/c-frontend/ptrcasts/air-reject/0.16.0"
     }
   ],

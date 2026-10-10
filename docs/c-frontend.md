@@ -351,12 +351,23 @@ change is a model change for every many-item pointer, not a C one.
 The proofs keep their statements. An index below `2 ^ 63` is the same either way
 (`Ptr.elem_eq_of_lt`), and every index the proofs use is bounded: an array assertion `arr p vs`
 (`ZigLean/Sep/Triple.lean`) now says that its items end below byte `2 ^ 63` of the block, as in
-every native object (an object has at most `isize` bytes), so an item index is below `2 ^ 63`
+every native object (Zig and LLVM cap an object at `isize` bytes: `@sizeOf` is at most
+`maxInt(isize)`, and `getelementptr` offsets are signed), so an item index is below `2 ^ 63`
 (`arr_index_lt`); `BytesAt`/`WritableAt` (`ZigLean/Env/Linux.lean`) are in a block smaller than
 `2 ^ 63` bytes; a constant pointer's offset (`ConstPtr.addrLimit`) is below `2 ^ 63`. Two helper
 lemmas gained the bound as a hypothesis: `pts_arr_singleton` (the element ends below `2 ^ 63`)
 and `Witness.mem1_arr1` (`Enc.size T < 2 ^ 63`); in the proofs, `Threads.Counter.ctxPtr_elem`
 and `Lists.addOneAssumeCapacity_run` (`4 * cap < 2 ^ 64`, which the list invariant carries).
+
+### Byte views of `u8` vectors
+
+A `@ptrCast` between a vector and another pointee is illegal behaviour (langref §Vectors), with
+one exception the translator admits: `@Vector(n, u8)` with `n` a power of two and a `u8` or
+`[n]u8` pointee, on a little-endian target. There the model's vector layout (L09 bit-packed
+lanes, little-endian) is the array's: `Vec.encode_u8` (`ZigLean/VecMem.lean`) proves
+`Enc.encode v = Enc.encode v.lanes`. Alignment goes through the usual pointer-cast checks. This
+is how compiler_rt's `memcpy` copies (`ptrcasts.byteVectorCopy`); every other vector pointer
+cast stays rejected (`reject.wordVectorView`).
 
 ### Escaped globals (G5)
 

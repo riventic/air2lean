@@ -129,22 +129,15 @@ inductive abi_abi_first_abi_calls_firstAtExit where
 
 def abi_abi_first_abi_calls_firstAt (p0 : Option (Zig.Ptr)) : Zig.MemM (BitVec 8) := do
   let e ← ((do
-    let i1 ← pure ((p0).isSome)
-    if i1 then (do
-      let i2 ← Zig.optPayload p0
-      let i6 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i2)))
-      let i7 ← pure (i6 &&& (15 : BitVec 64))
-      let i8 ← pure (i7 == (0 : BitVec 64))
-      if i8 then (do
-        let i3 ← pure (p0)
-        let i4 ← Zig.callM (abi_ref_first i3)
-        pure (.ret i4))
-      else (do
-        throw .illegal))
+    let i4 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.optPtrAddr p0)))
+    let i5 ← pure (i4 &&& (15 : BitVec 64))
+    let i6 ← pure (i5 == (0 : BitVec 64))
+    if i6 then (do
+      let i1 ← pure (p0)
+      let i2 ← Zig.callM (abi_ref_first i1)
+      pure (.ret i2))
     else (do
-      let i11 ← pure (p0)
-      let i12 ← Zig.callM (abi_ref_first i11)
-      pure (.ret i12))) : Zig.MM abi_abi_first_abi_calls_firstAtLocals abi_abi_first_abi_calls_firstAtExit).run' (default : abi_abi_first_abi_calls_firstAtLocals)
+      throw .illegal)) : Zig.MM abi_abi_first_abi_calls_firstAtLocals abi_abi_first_abi_calls_firstAtExit).run' (default : abi_abi_first_abi_calls_firstAtLocals)
   match e with
   | .ret v => pure v
 

@@ -70,7 +70,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 33 | `@intFromFloat` of a NaN (row 22) | `.illegal` (**fixed**) |
 | 34 | `@shlWithOverflow` count ≥ bit width (width not a power of two) | `Zig.shlWithOverflow`: `.illegal` |
 | 35 | `@rem`/`@mod` of `minInt` by `-1` | `Zig.rem`/`Zig.mod`: `.illegal` |
-| 36 | `@ptrCast` between a vector and another pointee (langref §Vectors: no defined byte layout) | *rejected* (**fixed**, was a value read with array layout) |
+| 36 | `@ptrCast` between a vector and another pointee (langref §Vectors: no defined byte layout) | *rejected* (**fixed**, was a value read with array layout), except a `@Vector(n, u8)` (`n` a power of two) and `u8`/`[n]u8` view on a little-endian target, whose layouts agree (`Vec.encode_u8`) |
 | 37 | Access to a freed or dead block (use after free, stack pointer after return), out of bounds or misaligned; double free; write to a `const` global | `Mem.access` and the allocator: `.illegal` |
 | 38 | Loading an invalid `bool`, enum tag or packed-struct field pattern | `Enc` decode and `Packed.ofBits?`: `.illegal` |
 | 39 | Data race | the race check of `ZigLean/Mem/Basic.lean`: `.illegal` |

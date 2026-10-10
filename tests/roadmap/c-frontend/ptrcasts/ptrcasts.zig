@@ -128,3 +128,17 @@ pub export fn misalignedUnchecked(a: u32, b: u32) u32 {
     const p: *u32 = @ptrCast(@alignCast(&buf[off]));
     return p.* +% b;
 }
+
+/// A 16-byte copy through `@Vector(16, u8)` views of byte buffers, as compiler_rt's `memcpy`
+/// copies: a `u8` vector has the bytes' layout (`Vec.encode_u8`). The sum of the copied bytes.
+pub export fn byteVectorCopy(a: u32, b: u32) u32 {
+    var src: [16]u8 align(16) = undefined;
+    for (&src, 0..) |*x, i| x.* = @truncate(a +% b *% @as(u32, @intCast(i)));
+    var dst: [16]u8 align(16) = undefined;
+    const s: *const @Vector(16, u8) = @ptrCast(&src);
+    const d: *@Vector(16, u8) = @ptrCast(&dst);
+    d.* = s.*;
+    var sum: u32 = 0;
+    for (dst) |x| sum +%= x;
+    return sum;
+}

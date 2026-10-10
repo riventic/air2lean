@@ -10,6 +10,7 @@ const fns = .{
     .{ "voidRoundTrip", p.voidRoundTrip },
     .{ "byteView", p.byteView },
     .{ "opaqueContext", p.opaqueContext },
+    .{ "byteVectorCopy", p.byteVectorCopy },
 };
 
 pub fn main() void {

@@ -639,4 +639,58 @@ theorem Vec.load_storeLane_vec {α : Type} {n w : Nat} [Packed α w]
   exact @load_run (Vec α n) (Vec.packedEnc n w Packed.toBits Packed.ofBits) _ _ _ _ _ _ _ ha
     (Vec.packedEnc_decode _ _ hround _ hpre) hr
 
+/-! ## `u8` lanes as bytes (L09)
+
+`@Vector(n, u8)` with `n` a power of two has the memory layout of `[n]u8`. `Check.lean` admits a
+`@ptrCast` between the two views on a little-endian target only on this ground. -/
+
+/-- Byte `i` of the `8 * n`-bit integer of `u8` lanes is lane `i`. -/
+private theorem u8_byte_eq {n : Nat} (l : List (BitVec 8)) (hl : l.length = n) (i : Nat) (hi : i < n) :
+    BitVec.ofNat 8 (((BitVec.ofNat (n * 8) (packLanes l)).toNat >>> (8 * i)) % 256) = l[i]'(by omega) := by
+  have hlt := packLanes_lt l
+  rw [hl] at hlt
+  have hx : (BitVec.ofNat (n * 8) (packLanes l)).toNat = packLanes l := by
+    simp only [BitVec.toNat_ofNat]; rw [Nat.mod_eq_of_lt (by rw [Nat.mul_comm]; exact hlt)]
+  rw [hx, ← laneOf_packLanes l i (by omega)]
+  simp only [laneOf]
+  apply BitVec.eq_of_toNat_eq
+  simp [Nat.mul_comm]
+
+private theorem encode_u8_one (b : BitVec 8) : Enc.encode b = #[Byte.int b] := by
+  have hs : (Enc.encode b).size = 1 := by simp [Enc.encode, padTo, intBytes, intSize]; decide
+  apply Array.ext (by simp [hs])
+  intro i h1 h2
+  have : i = 0 := by simp at h2; omega
+  subst this
+  simp [Enc.encode, padTo, intBytes, intSize]
+  apply BitVec.eq_of_toNat_eq; simp; exact b.isLt
+
+/-- The memory layout of `@Vector(n, u8)` is that of `[n]u8` when `n` is a power of two
+(`ceilPow2 n = n`): the lanes are the bytes, in order, and there is no padding (L09,
+`docs/vector-proofs.md` §Memory layout, little-endian `intBytes`). -/
+theorem Vec.encode_u8 {n : Nat} (v : Vec (BitVec 8) n) (hn : ceilPow2 n = n) :
+    Enc.encode v = Enc.encode v.lanes := by
+  have hr : Enc.encode v.lanes = v.lanes.toArray.map Byte.int := by
+    show (v.lanes.toArray.map Enc.encode).flatten = _
+    have hf : (Enc.encode : BitVec 8 → Array Byte) = fun b => #[Byte.int b] := funext encode_u8_one
+    rw [hf]
+    apply Array.toList_inj.mp
+    simp [Array.toList_flatten, Function.comp_def]
+    generalize v.lanes.toArray.toList = l
+    induction l with
+    | nil => rfl
+    | cons x xs ih => simp [ih]
+  rw [hr]
+  show padTo (packedVecLayout n 8) (intBytes (v.packBits 8 id)) = _
+  have hsz : (intBytes (v.packBits 8 id)).size = n := by simp [intBytes]; omega
+  have hl : packedVecLayout n 8 = n := by simp [packedVecLayout]; rw [show (n * 8 + 7) / 8 = n by omega, hn]
+  rw [hl, padTo, hsz, Nat.sub_self, Array.replicate_zero, Array.append_empty]
+  apply Array.ext (by simp [hsz])
+  intro i h1 h2
+  simp only [intBytes, Array.getElem_map, Array.getElem_range, Vec.packBits, Vector.getElem_toArray]
+  rw [ite_eq_right_of_eq_false _ _ (by simp; omega)]
+  congr 1
+  have := u8_byte_eq (n := n) (v.lanes.toList.map id) (by simp) i (by simpa using h2)
+  simpa using this
+
 end Zig

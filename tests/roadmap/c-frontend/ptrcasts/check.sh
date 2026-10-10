@@ -41,7 +41,8 @@ for line in open(native).read().split("\n"):
     name, a, b, v = line.split()
     seen.add(name)
     out.append(f"#guard isOk {v}#32 (run (PtrCasts.{name} {a}#32 {b}#32))")
-assert seen == {"listSum", "treeInsert", "voidRoundTrip", "byteView", "opaqueContext"}, seen
+assert seen == {"listSum", "treeInsert", "voidRoundTrip", "byteView", "opaqueContext",
+                "byteVectorCopy"}, seen
 for a, b in inputs:
     out.append(f"#guard match run (PtrCasts.pointerAsInt {a}#32 {b}#32) with | some (.ok _) => true | _ => false")
 for name, err in negatives.items():
@@ -64,7 +65,8 @@ for d in doc.get("diagnostics", []):
     fn = fn.get("name") if isinstance(fn, dict) else fn
     got[fn] = got.get(fn, "") + (d.get("message") or "")
 want = {"reject.errorThroughOpaque": "a pointer cast exposing symbolic error storage",
-        "reject.cyclicErrorView": "unresolved or cyclic symbolic storage provenance"}
+        "reject.cyclicErrorView": "unresolved or cyclic symbolic storage provenance",
+        "reject.wordVectorView": "a pointer cast between a vector and another pointee type"}
 for fn, msg in want.items():
     assert msg in got.get(fn, ""), f"{fn}: expected '{msg}', got {got.get(fn)!r}"
 print("ptrcasts rejections ok")

@@ -24,3 +24,11 @@ pub export fn cyclicErrorView(a: u32) u32 {
     const raw: *const ErrNode = @ptrCast(@alignCast(&t));
     return raw.code;
 }
+
+/// Bytes viewed as `@Vector(4, u32)`: only `u8` vectors have the bytes' layout.
+pub export fn wordVectorView(a: u32) u32 {
+    var bytes: [16]u8 align(16) = [_]u8{@truncate(a)} ** 16;
+    _ = &bytes;
+    const v: *const @Vector(4, u32) = @ptrCast(&bytes);
+    return v.*[0];
+}

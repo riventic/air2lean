@@ -18,3 +18,7 @@ opaqueContext 0 0 6
 opaqueContext 1 2 30
 opaqueContext 4294967295 7 16
 opaqueContext 305419896 2863311530 3665038770
+byteVectorCopy 0 0 0
+byteVectorCopy 1 2 256
+byteVectorCopy 4294967295 7 1080
+byteVectorCopy 305419896 2863311530 1840

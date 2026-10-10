@@ -72,6 +72,104 @@ def byteAsBool (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+structure byteVectorCopyLocals where
+  src : Zig.Ptr
+  local4 : BitVec 64
+  dst : Zig.Ptr
+  sum : BitVec 32
+  local32 : BitVec 64
+  deriving Inhabited
+
+inductive byteVectorCopyExit where
+  | ret (v : BitVec 32)
+  | br9
+  | br6
+  | br38
+  | br35
+  | rep7
+  | rep36
+
+def byteVectorCopy.again36 : byteVectorCopyExit → Bool
+  | .rep36 => true
+  | _ => false
+
+def byteVectorCopy.again7 : byteVectorCopyExit → Bool
+  | .rep7 => true
+  | _ => false
+
+def byteVectorCopy.loop36 (i34 : Vector (BitVec 8) 16) : Zig.MM byteVectorCopyLocals byteVectorCopyExit := do
+  let i37 ← pure ((← get).local32)
+  match ← ((do
+    let i39 ← pure (i37)
+    let i40 ← pure (Zig.lt false i39 (16 : BitVec 64))
+    if i40 then (do
+      let i42 ← Zig.callR (Zig.vindex i34 i37)
+      let i43 ← pure ((← get).sum)
+      let i44 ← Zig.intCast false false 32 i42
+      let i45 ← pure (Zig.addWrap i43 i44)
+      modify (fun s => { s with sum := i45 })
+      pure .br38)
+    else (do
+      pure .br35)) : Zig.MM byteVectorCopyLocals byteVectorCopyExit) with
+  | .br38 => (do
+    let i49 ← Zig.add false i37 (1 : BitVec 64)
+    modify (fun s => { s with local32 := i49 })
+    pure .rep36)
+  | e => pure e
+
+def byteVectorCopy.loop7 (p0 : BitVec 32) (p1 : BitVec 32) (i2 : Zig.Ptr) : Zig.MM byteVectorCopyLocals byteVectorCopyExit := do
+  let i8 ← pure ((← get).local4)
+  match ← ((do
+    let i10 ← pure (i8)
+    let i11 ← pure (Zig.lt false i10 (16 : BitVec 64))
+    if i11 then (do
+      let i13 ← Zig.callM (Zig.ptrProject i2 (·.elem 1 i8))
+      let i14 ← Zig.intCast false false 32 i8
+      let i15 ← pure (Zig.mulWrap p1 i14)
+      let i16 ← pure (Zig.addWrap p0 i15)
+      let i17 ← pure (Zig.trunc 8 i16)
+      Zig.store (α := BitVec 8) 1 i13 i17
+      pure .br9)
+    else (do
+      pure .br6)) : Zig.MM byteVectorCopyLocals byteVectorCopyExit) with
+  | .br9 => (do
+    let i21 ← Zig.add false i8 (1 : BitVec 64)
+    modify (fun s => { s with local4 := i21 })
+    pure .rep7)
+  | e => pure e
+
+def byteVectorCopy (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
+  let s2 ← Zig.allocStack 16 16
+  let s24 ← Zig.allocStack 16 16
+  let e ← ((do
+    let i2 ← pure (← get).src
+    Zig.storeUndef (Vector (BitVec 8) 16) 16 i2
+    modify (fun s => { s with local4 := (0 : BitVec 64) })
+    match ← ((do
+      Zig.loop (byteVectorCopy.loop7 p0 p1 i2) byteVectorCopy.again7) : Zig.MM byteVectorCopyLocals byteVectorCopyExit) with
+    | .br6 => (do
+      let i24 ← pure (← get).dst
+      Zig.storeUndef (Vector (BitVec 8) 16) 16 i24
+      let i26 ← pure (i2)
+      let i27 ← pure (i24)
+      let i28 ← Zig.load (Zig.Vec (BitVec 8) 16) 16 i26
+      Zig.store (α := Zig.Vec (BitVec 8) 16) 16 i27 i28
+      modify (fun s => { s with sum := (0 : BitVec 32) })
+      modify (fun s => { s with local32 := (0 : BitVec 64) })
+      let i34 ← Zig.load (Vector (BitVec 8) 16) 16 i24
+      match ← ((do
+        Zig.loop (byteVectorCopy.loop36 i34) byteVectorCopy.again36) : Zig.MM byteVectorCopyLocals byteVectorCopyExit) with
+      | .br35 => (do
+        let i52 ← pure ((← get).sum)
+        pure (.ret i52))
+      | e => pure e)
+    | e => pure e) : Zig.MM byteVectorCopyLocals byteVectorCopyExit).run' { (default : byteVectorCopyLocals) with src := s2, dst := s24 }
+  Zig.free s2
+  Zig.free s24
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
 structure byteViewLocals where
   w : Zig.Ptr
   s : BitVec 32

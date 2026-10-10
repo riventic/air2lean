@@ -607,6 +607,8 @@ structure CheckCtx where
   device : Option DeviceContract := none
   /-- `Func.targetArch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
   targetArch : String := ""
+  /-- `Func.bigEndian`: a byte view of a `u8` vector is admitted on a little-endian target only. -/
+  bigEndian : Bool := false
   /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
   sentinelChecked : Array InstId := #[]
 
@@ -1294,10 +1296,25 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       cx.fail line "a bitcast to, from, or between different vector types is outside the subset"
     -- A vector has no defined byte layout, so a `@ptrCast` between it and another pointee is
     -- illegal behaviour that no safety check catches (langref §Vectors); the model would read
-    -- its bytes as an array (`docs/illegal-behavior.md`).
+    -- its bytes as an array (`docs/illegal-behavior.md`). One exception: `@Vector(n, u8)` with
+    -- `n` a power of two and a `u8` or `[n]u8` pointee on a little-endian target, whose layouts
+    -- are the same (`Vec.encode_u8`, `ZigLean/VecMem.lean`; compiler_rt's `memcpy` copies
+    -- through such views). Alignment is checked as for any pointer cast.
     let pointee (t : Option TyId) : Option TyId := t.bind (ptrOrOptChild cx.types)
+    let isU8 (t : TyId) : Bool := match cx.types[t]? with | some (.int false 8) => true | _ => false
+    let byteVecLen (t : Option TyId) : Option Nat := match t.bind (cx.types[·]?) with
+      | some (.vector n c) => if isU8 c && 0 < n && n &&& (n - 1) == 0 then some n else none
+      | _ => none
+    let byteView (t : Option TyId) (n : Nat) : Bool := match t with
+      | some t => isU8 t || (match cx.types[t]? with | some (.array m c _) => m == n && isU8 c | _ => false)
+      | none => false
+    let byteVectorView := !cx.bigEndian &&
+      match byteVecLen (pointee sourceTy), byteVecLen (pointee (some ty)) with
+      | some n, none => byteView (pointee (some ty)) n
+      | none, some n => byteView (pointee sourceTy) n
+      | _, _ => false
     if (isVector (pointee (some ty)) || isVector (pointee sourceTy)) &&
-        pointee sourceTy != pointee (some ty) then
+        pointee sourceTy != pointee (some ty) && !byteVectorView then
       cx.fail line "a pointer cast between a vector and another pointee type is illegal behaviour \
         (a vector has no defined byte layout); copy the lanes with `@bitCast` or an array instead"
     -- `@intFromPtr`/`@ptrFromInt`/`@ptrCast`/`@alignCast`/`@constCast`/`@volatileCast` all
@@ -2656,7 +2673,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
                          zigVersion := f.zigVersion, device, targetArch := f.targetArch,
-                         sentinelChecked := sentinelCheckedSlices insts }
+                         bigEndian := f.bigEndian, sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
   checkBodiesEnd f
@@ -3624,9 +3641,8 @@ private def AbiClass.align? : AbiClass → Option Nat
 
 /-- Convert `v` from the type `src` (class `a`) to `dst` (class `b`, both thunk-table IDs),
 then continue with `k`. A check wraps the continuation in a `cond_br` whose other branch is
-`unreach`. A pointer reaching more alignment than it has is checked (`aligned`); for an
-optional source the check is on the payload, and `null` takes the other branch of a `cond_br`,
-which continues with its own copy of `k`. -/
+`unreach`. A pointer reaching more alignment than it has is checked (`aligned`) on its address
+(an optional's is 0 for `null`), so `k` is built once. -/
 private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiClass)
     (k : Val → ThunkM (Array Inst)) : ThunkM (Array Inst) := do
   let noret ← thunkTy .noreturn {}
@@ -3639,8 +3655,8 @@ private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiC
     let i ← freshInst ty (op x)
     return #[i] ++ (← more (.inst i.id))
   let usize : ThunkM TyId := thunkTy (.int false 64) { size := some 8, align := some 8 }
-  -- `rest` if the address of the (non-optional) pointer `p` is a multiple of the receiving
-  -- alignment; `null` (address 0) is.
+  -- `rest` if the address of the pointer or optional pointer `p` is a multiple of the receiving
+  -- alignment; `null` (address 0) is. The continuation is built once: no branch duplicates it.
   let need := match a.align?, b.align? with
     | some x, some y => if y > x then some y else none
     | _, _ => none
@@ -3665,14 +3681,8 @@ private def abiConvert (types : Array Ty) (v : Val) (src dst : TyId) (a b : AbiC
       let le ← freshInst boolTy (.cmp .le v (.int src (min hi shi)))
       let both ← freshInst boolTy (.boolAnd (.inst ge.id) (.inst le.id))
       guarded #[ge, le, both] (.inst both.id) (← cast v dst op k)
-  | .optPtr _, .optPtr _ | .optPtr _, .ptr true _ =>
-    if need.isNone then cast v dst .bitcast k else
-    let c ← freshInst boolTy (.isNonNull v)
-    let p ← freshInst (← payloadOf src) (.optPayload v)
-    let some_ := #[p] ++ (← aligned (.inst p.id) (← cast v dst .bitcast k))
-    let br ← freshInst noret (.condBr (.inst c.id) some_ (← cast v dst .bitcast k))
-    return #[c, br]
-  | .ptr true _, .ptr true _ | .ptr true _, .optPtr _ | .ptr false _, .ptr _ _ =>
+  | .optPtr _, .optPtr _ | .optPtr _, .ptr true _ | .ptr true _, .ptr true _
+  | .ptr true _, .optPtr _ | .ptr false _, .ptr _ _ =>
     aligned v (← cast v dst .bitcast k)
   | .ptr false _, .optPtr _ =>
     aligned v (← cast v (← payloadOf dst) .bitcast fun p => cast p dst .wrapOptional k)
