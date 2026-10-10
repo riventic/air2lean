@@ -2,10 +2,11 @@
 # `--allocator-model translated` (P1): std.heap.page_allocator and FixedBufferAllocator clients
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
 # P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean,
-# PageSpecMacos.lean), the alloc
-# obstructions (PageObstruction.lean), a mutant (mutant.sh). Needs a built translator and
+# PageSpecMacos.lean), the whole vtable with alloc for alignments up to a page (PageAlloc.lean),
+# the obstructions (PageObstruction.lean, PageAlloc.alloc_high), a mutant (mutant.sh). Needs a built translator and
 # `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops
-# ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame`; runs no compiler. With
+# ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc
+# ZigLean.Sep.Full.AtomicPtr`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
 # recorded on x86_64-linux): the output depends on the page size only, not on the OS.
@@ -49,12 +50,15 @@ done
 # P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
 # PageSpecMacos.lean for aarch64-macos), their axioms, and a mutant whose shrink leaks the cut
 # pages (mutant.sh).
-for spec in PageSpec PageSpecMacos; do
+for spec in PageSpec PageSpecMacos PageAlloc; do
   "${lean_cmd[@]}" -R "$here" -o "$work/$spec.olean" "$here/$spec.lean"
 done
 cat > "$work/Axioms.lean" <<'AX'
 import PageSpec
 import PageSpecMacos
+import PageAlloc
+#print axioms AllocTranslated.PageAlloc.fallocSpec
+#print axioms AllocTranslated.PageAlloc.alloc_run
 #print axioms AllocTranslated.PageSpec.free_spec
 #print axioms AllocTranslated.PageSpec.resize_spec
 #print axioms AllocTranslated.PageSpec.remap_spec

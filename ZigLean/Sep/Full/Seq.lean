@@ -186,6 +186,10 @@ theorem bind {γ : Type} {x : ConcM Tgt γ} {f : γ → ConcM Tgt β} (hx : Conc
     (hf : ∀ a, ConcM.ThreadFree (f a)) : ConcM.ThreadFree (x >>= f) :=
   fun n m => bind_tree (x n m) _ (hx n m) fun am k => hf am.1 k am.2
 
+theorem ite {c : Prop} [Decidable c] {x y : ConcM Tgt β} (hx : ConcM.ThreadFree x)
+    (hy : ConcM.ThreadFree y) : ConcM.ThreadFree (if c then x else y) := by
+  split <;> assumption
+
 end ThreadFreeC
 
 /-- The sequential reading of `main` as a `MemM` program (thread `0`, oracle `0`). -/
