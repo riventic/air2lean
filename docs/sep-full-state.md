@@ -61,7 +61,8 @@ A memory holds `r` with frame `rF` (`Holds`) when two things are true:
 The memory invariant is `Mem.FSeq := Mem.Seq ∧ ShapesWF (shapes m) ∧ Mem.LiveDisjoint m`: every
 atomic location has a byte, no two overlap, and no two live blocks share an address (stage 3,
 below). `locIdx` only creates a location where none overlaps, and every new block is placed clear
-of the live ones, so every reachable memory satisfies this.
+of the live ones (`Mem.ofGlobals_liveDisjoint` for the start), so every reachable memory satisfies
+this.
 
 `FTriple P c Q` (in `ZigLean/Sep/Full/Triple.lean`) is `Triple` with `Holds` in place of the heap
 split and `FSeq` in place of `Seq`.
@@ -263,11 +264,13 @@ ledger's updates:
 
 | update | from | to | why it is frame-preserving |
 |---|---|---|---|
-| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 0` | `GFin` gives a name no frame uses |
+| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 0` | `Ghost.Fin` gives a name no frame uses |
 | `Upd.issue` | `gauth γ e n` | `gauth γ e (n+1) ⋆ gfrag γ e` | the frame holds at most `n` tokens of epoch `e` |
 | `Upd.retire` | `gauth γ e n ⋆ gfrag γ e` | `gauth γ e (n-1)` | the frame holds at most `n - 1` |
 | `Upd.bump` | `gauth γ e n` | `gauth γ (e+1) 0` | the frame holds no token of a later epoch; its tokens of epoch `e` become stale |
-| `Upd.count` | `gauth γ e n ⋆ gfrag γ e` | `⟪1 ≤ n⟫ ⋆ gauth γ e n ⋆ gfrag γ e` | validity |
+
+A token of the current epoch also shows that one is outstanding (`gfrag_count`, as a triple rule
+`FTriple.count`: `gauth γ e n ⋆ gfrag γ e` gives `1 ≤ n`, by validity).
 
 ### Use by an allocator with reset
 
@@ -275,7 +278,7 @@ An allocator whose `own` holds a ledger `γ` uses the invariant family
 `I e := { own := own' e, tok := … ⋆ gfrag γ e }` indexed by the epoch:
 
 * `own' e` holds `gauth γ e n` and relates `n` to its state, e.g. "no node ⇒ `n = 0`". A fresh
-  allocator starts at `gauth γ 0 0` (`Upd.alloc`). With `Upd.count`, a token of epoch `e` gives
+  allocator starts at `gauth γ 0 0` (`Upd.alloc`). With `gfrag_count`, a token of epoch `e` gives
   `n ≥ 1`, so the allocator has a node: O-A is no longer a premise.
 * `alloc` issues (`Upd.issue`), and `free` or a shrink to nothing retires (`Upd.retire`).
 * `reset` is specified as `{own' e ⋆ (the bytes of every grant)} reset {own' (e+1)}`, by
@@ -284,8 +287,9 @@ An allocator whose `own` holds a ledger `γ` uses the invariant family
   exclusive and now at epoch `e + 1`), and `FAllocSpec … (I (e+1))` needs a token of epoch `e+1`.
   A use after a retaining reset is therefore a permission violation twice over: the client no
   longer owns the bytes, and its token belongs to a dead epoch.
-* A foreign free (a slice the allocator did not issue in this epoch) is a permission violation:
-  no token of the current epoch exists for it.
+* A `free` without a token of the current epoch is a permission violation. The token counts
+  grants; it does not name a region unless `tok` says so (the arena's does not, and its `free`
+  turns a foreign slice into junk).
 
 Nothing in the ledger is specific to arenas: any allocator with a reset (a `FixedBufferAllocator`
 `reset`, a pool, a stack allocator's `freeAll`) can take the same family, and a counted token is

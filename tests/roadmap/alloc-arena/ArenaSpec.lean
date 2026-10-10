@@ -20,7 +20,7 @@ the generated code only. No model of the arena is used.
   `free_list` as pointer-valued atomic words (`aptsE`);
 * the ghost authority `gauth γ e n`: `n` grants of epoch `e` outstanding
   (`docs/sep-full-state.md` §Ghost state);
-* the first node of `used_list`, if any (`FirstNode`): its header words (`size` and `end_index`
+* the first node of `used_list`, if any (`FirstPart`): its header words (`size` and `end_index`
   atomic, `next` plain), the unused tail of its buffer (from `end_index` on), and the child's
   token for the node; the other used nodes and the free list (`Chain`): headers and tokens, the
   free nodes with their whole buffers;
@@ -28,7 +28,7 @@ the generated code only. No model of the arena is used.
   leaked back (any bytes; the arena never touches them until `reset`).
 
 With no first node, `n = 0`. A token is `gfrag γ e`, so a token of the current epoch shows `n ≥ 1`
-(`FTriple.count`), hence a first node: **O-A is excluded by ghost state**, not by a premise. A
+(`count_of`), hence a first node: **O-A is excluded by ghost state**, not by a premise. A
 token of an older epoch (after `reset`) is stale: it belongs to `inv … e'` for `e' < e`, whose
 `own` needs the authority of epoch `e'`, which no longer exists.
 
@@ -40,7 +40,7 @@ decided by ownership alone (O-F): a slice of another block lies at disjoint addr
 the tail; otherwise they become junk. Either way the token is retired (`Upd.retire`).
 
 **O-E** (`ArenaObstruction.oob_free_illegal`): the invariant keeps `end_index` within the first
-node's buffer (`NodeFacts.ei_le`). A failed `alloc` leaves it past the buffer, so the reachable
+node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A failed `alloc` leaves it past the buffer, so the reachable
 states this specification covers end at the first failed `alloc`.
 -/
 
@@ -522,8 +522,7 @@ theorem free_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec
   conc_norm
   -- `@intFromPtr(ctx) & 7 == 0`
   refine CTriple.pureStep (v := BitVec.ofInt 64 ((v.w.Ac : Int) + ctx.off)) (fun m r rF hh hp hs => ?_) ?_
-  · obtain ⟨blkC, -, -, -, -, -, -, -, -, -, -, -, -, -⟩ := hmem m r rF hh hp hs
-    obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, hsl, -, -⟩ := hmem m r rF hh hp hs
+  · obtain ⟨blkC, blkN, blkP, e1, a1, s1, e2, a2, s2, e3, a3, s3, hsl, -, -⟩ := hmem m r rF hh hp hs
     simp only [StateT.run_bind, ptrAddr_run' hbc e1, a1]; rfl
   have h7 : BitVec.ofInt 64 ((v.w.Ac : Int) + ctx.off) &&& 7 = 0 :=
     Ops.and_mask_eq_zero (k := 3) (by decide) (by omega) (by omega)

@@ -73,7 +73,9 @@ authority `gauth γ e n` of an epoch ledger (`n` grants of epoch `e` outstanding
 first node), and the token is `gfrag γ e`. A token of the current epoch shows `n ≥ 1`
 (`gfrag_count`), so the arena has a node (`ArenaSpec.free_pre`). `reset` will bump the epoch
 (`Upd.bump`): tokens the client kept become stale, and a stale token belongs to the invariant of an
-older epoch, whose `own` no longer exists. A foreign slice has no token of the current epoch.
+older epoch, whose `own` no longer exists. The token does not name its region (`tok _ … _ :=
+gfrag γ e`), so a current token can come with any owned slice; such a slice never matches the
+first node's end (O-F) and its bytes become `Junk`.
 
 **O-E: after a failed `alloc`, `free` and `resize` form an out-of-bounds pointer**
 (kernel-checked: `ArenaObstruction.oob_free_illegal`; [upstream draft](upstream/arena-oob-gep.md)).
@@ -128,9 +130,11 @@ free list) is not attempted.
   `end_index` moves back (`FTriple.cmpxchgHit`); otherwise they become junk. Either way the token
   is retired (`Upd.retire`). Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 * **O-E is a stated limit, not a premise per triple**: the invariant keeps `end_index` within the
-  first node's buffer (`FirstNode`: `24 + ei ≤ sz`). A successful `alloc` returns to such a state;
+  first node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A successful `alloc` returns to such a state;
   a failed one leaves `end_index` past the buffer, so the reachable states covered end at the first
-  failed `alloc`.
+  failed `alloc`. In particular `FAllocSpec`'s `alloc` field (whose failure postcondition is
+  `I.own`) cannot hold for this invariant when the child can fail: a full `FAllocSpec` needs a
+  child that does not fail, or a weaker failure postcondition.
 * `ArenaObstruction.foreign_free_panics` (O-A) and `ArenaObstruction.oob_free_illegal` (O-E),
   from the generated code and `mem0 .fresh`, by kernel evaluation.
 * `mutant.sh`: an `alloc` whose fast path reserves nothing (the `end_index` bump adds `0`) hands
@@ -147,7 +151,8 @@ Not proved yet, in order:
   bit-level fact that clearing the `resizing` bit of an even size is the size.
 * `alloc`: `CTriple` rules for the generated loops (`Zig.loop`), an equation-based reading of the
   `partial_fixpoint` group (the child dispatch includes `ArenaAllocator.alloc`), the child's
-  `FAllocSpec` with the bounded-child premise of O-B/O-C, and `Upd.issue` for each grant.
+  `FAllocSpec` with the bounded-child premise of O-B/O-C, `Upd.issue` for each grant, and a way
+  around O-E for a failed child `alloc` (above).
 * `reset`: the precondition gives back every byte of every node (`Covers`); `Upd.bump` revokes the
   outstanding tokens.
 
@@ -157,5 +162,6 @@ The hand-written arena model (`.owned a` blocks, `ZigLean/Sep/ArenaClient.lean`,
 until the translated arena's specification replaces it ([allocator-model.md](allocator-model.md),
 removal plan step 2). In that specification a use after a retaining reset is a permission
 violation twice over: `reset` takes back every byte of every node (`Covers`, as for the
-`FixedBufferAllocator`'s `reset_spec`), and its epoch bump makes every kept token stale. A foreign
-free is a permission violation: there is no token of the current epoch for it.
+`FixedBufferAllocator`'s `reset_spec`), and its epoch bump makes every kept token stale. A `free`
+on an arena without a node is a permission violation: there is no token of the current epoch for
+it.

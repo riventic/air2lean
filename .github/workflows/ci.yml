@@ -777,7 +777,8 @@ jobs:
           lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.Mmap ZigLean.Sep.AllocSpec.Ops ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicPtr
           bash tests/roadmap/alloc-translated/check.sh
       # Allocator milestone 2: the lock-free ArenaAllocator translated with its child allocators,
-      # one-thread results equal to the native run, obstruction O-A kernel-checked.
+      # one-thread results equal to the native run, obstructions O-A/O-E kernel-checked, `free`
+      # proved against FAllocSpec (ArenaSpec.lean).
       - name: Translated ArenaAllocator
         if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
