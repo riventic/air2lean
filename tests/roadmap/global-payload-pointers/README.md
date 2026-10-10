@@ -38,7 +38,7 @@ python3 -m unittest discover -s tests/roadmap/global-payload-pointers -v
 work=$(mktemp -d)
 bash tests/roadmap/global-payload-pointers/check.sh --export "$work/air"
 bash tests/roadmap/global-payload-pointers/check.sh --export-reject "$work/reject-air"
-.lake/build/bin/air2lean "$work/air" -o "$work/Gen.lean" --namespace GlobalPayload --prefix global_payloads.
+.lake/build/bin/air2lean "$work/air" -o "$work/Gen.lean" --namespace GlobalPayload --prefix global_payloads. --allow-unqualified-build-mode
 python3 scripts/normalize-generated.py report "$work/Gen.lean" "$work/air" "$work/generated-report.json"
 AIR2LEAN_GLOBAL_ACTUAL_GEN="$work/Gen.lean" AIR2LEAN_GLOBAL_CLIENT_OUT="$work/clients" \
   bash tests/roadmap/global-payload-pointers/check-generated.sh
