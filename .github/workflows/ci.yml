@@ -1310,16 +1310,13 @@ jobs:
           failed=0
           for mode in Debug ReleaseFast ReleaseSmall; do
             summary="$RUNNER_TEMP/build-modes/$mode.json"
-            # ReleaseFast/ReleaseSmall have triaged mismatches (float @divExact), so diff.sh exits 1
-            # there; `record --verify` then requires exactly the committed counts and triage.
-            status=0
+            # `record --verify` requires exactly the committed counts (no mismatch in any mode: the
+            # model rejects an inexact float @divExact as illegal behaviour).
             AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
-              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
-            [ "$status" -eq 0 ] || [ "$mode" != Debug ]
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
               --mode "$mode" --backend llvm --explicit-backend \
-              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json) \
               || failed=1
           done
           [ "$failed" -eq 0 ]

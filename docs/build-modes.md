@@ -56,7 +56,10 @@ non-integral quotient). For a function that uses float `@divExact`, "the model d
 throw" does not imply "no illegal behaviour", so the transfer claim does not apply to it.
 The reproducer is
 [`float-divexact-inexact.zig`](../tests/roadmap/build-modes/reproducers/float-divexact-inexact.zig).
-The records state this as an exception of the premise.
+The records state this as an exception of the premise. The model now returns `.illegal` for
+an inexact float `@divExact` quotient, so the x86_64-linux and aarch64-linux runs (the latter
+without the float examples) record no mismatch; the aarch64-macos records predate that change
+and still triage the 85 cases.
 
 **Debug/llvm** keeps the safety checks. It is qualified only as agreement on the tested
 inputs, including safety panics. Debug AIR is never exported.
@@ -112,7 +115,7 @@ segment of release builds).
 
 Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 43584 per aarch64-linux run (floatops and floatconv left out, see below) and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
-run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
+run of batch 10 (87413 cases, no mismatch); CI uploads
 those summaries (`build-mode-summaries-*`) and verifies the records on every run.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
@@ -122,7 +125,7 @@ those summaries (`build-mode-summaries-*`) and verifies the records on every run
 | aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 0 (no float examples) | 4609 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4940 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
 | x86_64-linux | ReleaseFast | stage2_x86_64 | 606 | 4975 |
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
