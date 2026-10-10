@@ -901,6 +901,283 @@ theorem loop_comm {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (
 
 end LoopComm
 
+/-! ### Exits
+
+In well-formed AIR every `br` targets an enclosing block and every `repeat` an enclosing loop
+(`wfBody`, decided on the decoded function). Then a body exits only to those (`execBody_ok`):
+a loop's result never names one of its own inner blocks. A certificate needs this after a loop,
+where the generated exit type also has the inner blocks' constructors. -/
+
+mutual
+/-- Every `br`/`repeat` of the body targets a block of `bs` or a loop of `ls`, or one that
+encloses it inside the body. -/
+def wfBody (bs ls : List InstId) : List Inst → Bool
+  | [] => true
+  | i :: rest => wfInst bs ls i && wfBody bs ls rest
+termination_by l => (sizeOf l, 0)
+
+def wfInst (bs ls : List InstId) (i : Inst) : Bool :=
+  match _h : i.op with
+  | .block b => wfBody (i.id :: bs) ls b.toList
+  | .loop b => wfBody bs (i.id :: ls) b.toList
+  | .br t _ => bs.contains t
+  | .«repeat» t => ls.contains t
+  | .condBr _ t e => wfBody bs ls t.toList && wfBody bs ls e.toList
+  | .switchBr _ cs e => wfCases bs ls cs.toList && wfBody bs ls e.toList
+  | _ => true
+termination_by (sizeOf i, 1)
+decreasing_by
+  all_goals
+    obtain ⟨id, ty, op⟩ := i
+    simp only at _h
+    subst _h
+    simp_wf
+    try simp only [sizeOf_toList]
+    omega
+
+def wfCases (bs ls : List InstId) : List SwitchCase → Bool
+  | [] => true
+  | sc :: more => wfBody bs ls sc.body.toList && wfCases bs ls more
+termination_by l => (sizeOf l, 0)
+decreasing_by
+  all_goals simp_wf
+  all_goals try simp only [sizeOf_toList]
+  all_goals (try have := sizeOf_case_body sc); omega
+end
+
+/-- An exit to a block of `bs`, a repeat of a loop of `ls`, or a return. -/
+def exitOk (bs ls : List InstId) : Exit → Bool
+  | .br t _ => bs.contains t
+  | .rep t => ls.contains t
+  | .ret _ => true
+
+theorem Result.bind_ok {α β : Type} {x : Result α} {f : α → Result β} {r : β}
+    (h : (x >>= f).run = some (.ok r)) : ∃ a, x.run = some (.ok a) ∧ (f a).run = some (.ok r) := by
+  revert h
+  cases hx : x.run with
+  | none =>
+    intro h
+    have : (x >>= f).run = none := by
+      show (ExceptT.bind x f).run = none
+      simp only [ExceptT.bind, ExceptT.run_mk] at *
+      simp only [ExceptT.run] at hx
+      simp [hx]
+    rw [this] at h; cases h
+  | some e =>
+    cases e with
+    | error err =>
+      intro h
+      have : (x >>= f).run = some (.error err) := by
+        show (ExceptT.bind x f).run = _
+        simp only [ExceptT.bind, ExceptT.run_mk] at *
+        simp only [ExceptT.run] at hx
+        simp [hx, ExceptT.bindCont]
+      rw [this] at h; cases h
+    | ok a =>
+      intro h
+      refine ⟨a, rfl, ?_⟩
+      have : (x >>= f).run = (f a).run := by
+        show (ExceptT.bind x f).run = _
+        simp only [ExceptT.bind, ExceptT.run_mk] at *
+        simp only [ExceptT.run] at hx
+        simp [hx, ExceptT.bindCont]; rfl
+      rwa [this] at h
+
+/-- Every result of `x`, from any state and memory, satisfies `P`. -/
+def Ok {σ α : Type} (P : α → Prop) (x : Zig.MM σ α) : Prop :=
+  ∀ s m r, ((x.run s).run m).run = some (.ok r) → P r.1.1
+
+theorem ok_pure {σ α : Type} {P : α → Prop} {a : α} (h : P a) : Ok (σ := σ) P (pure a) := by
+  intro s m r hr
+  simp only [StateT.run_pure] at hr
+  cases hr
+  exact h
+
+theorem ok_bind {σ α β : Type} {P : β → Prop} {x : Zig.MM σ α} {f : α → Zig.MM σ β}
+    (h : ∀ a, Ok P (f a)) : Ok P (x >>= f) := by
+  intro s m r hr
+  rw [StateT.run_bind, StateT.run_bind] at hr
+  obtain ⟨_, _, hf⟩ := Result.bind_ok hr
+  exact h _ _ _ _ hf
+
+theorem ok_lift {α : Type} {P : α → Prop} {x : Zig.Result α} (h : ∀ a, x.run = some (.ok a) → P a) :
+    Ok P (liftR x) := by
+  intro s m r hr
+  simp only [liftR, StateT.run_lift, StateT.run_bind, StateT.run_pure] at hr
+  obtain ⟨_, hx, hp⟩ := Result.bind_ok hr
+  obtain ⟨a, hx', hp'⟩ := Result.bind_ok hx
+  cases hp'
+  cases hp
+  exact h _ hx'
+
+theorem ok_stuck {α : Type} {P : α → Prop} : Ok P (liftR (stuck : Result α)) :=
+  ok_lift fun _ h => by cases h
+
+theorem ok_throw {α : Type} {P : α → Prop} {e : Zig.Error} : Ok P (liftR (throw e : Result α)) :=
+  ok_lift fun _ h => by cases h
+
+section OkLoop
+open Lean.Order
+
+theorem ok_loop {σ ε : Type} {P : ε → Prop} {b : Zig.MM σ ε} {a : ε → Bool}
+    (h : Ok (fun e => a e = true ∨ P e) b) : Ok (fun e => a e = false ∧ P e) (Zig.loop b a) := by
+  intro s m r
+  revert s m r
+  apply Zig.loop.fixpoint_induct b a (motive := fun l => ∀ s m r,
+    ((l.run s).run m).run = some (.ok r) → a r.1.1 = false ∧ P r.1.1)
+  · apply admissible_pi; intro s
+    apply admissible_pi; intro m
+    apply admissible_apply (fun _ (v : MemM (ε × σ)) => ∀ r, (v m).run = some (.ok r) → a r.1.1 = false ∧ P r.1.1) s
+    apply admissible_apply (fun _ (v : Zig.Result ((ε × σ) × Zig.Mem)) => ∀ r, v.run = some (.ok r) →
+      a r.1.1 = false ∧ P r.1.1) m
+    apply admissible_flatOrder
+    intro r hr
+    cases hr
+  · intro l hl s m r hr
+    change ((StateT.run (StateT.run (b >>= fun e => if a e then l else pure e) s) m).run = _) at hr
+    rw [StateT.run_bind, StateT.run_bind] at hr
+    obtain ⟨p, hx, hp⟩ := Result.bind_ok hr
+    cases ha : a p.1.1
+    · simp only [ha, Bool.false_eq_true, ↓reduceIte, StateT.run_pure] at hp
+      cases hp
+      have := h s m p hx
+      simp only [ha, Bool.false_eq_true, false_or] at this
+      exact ⟨ha, this⟩
+    · simp only [ha, ↓reduceIte] at hp
+      exact hl _ _ _ hp
+
+end OkLoop
+
+theorem ok_bind' {σ α β : Type} {P : β → Prop} {Q : α → Prop} {x : Zig.MM σ α} {f : α → Zig.MM σ β}
+    (hx : Ok Q x) (h : ∀ a, Q a → Ok P (f a)) : Ok P (x >>= f) := by
+  intro s m r hr
+  rw [StateT.run_bind, StateT.run_bind] at hr
+  obtain ⟨p, hp, hf⟩ := Result.bind_ok hr
+  exact h _ (hx s m p hp) _ _ _ hf
+
+theorem ok_ite {σ α : Type} {P : α → Prop} {c : Prop} [Decidable c] {x y : Zig.MM σ α}
+    (hx : Ok P x) (hy : Ok P y) : Ok P (if c then x else y) := by
+  split <;> assumption
+
+theorem ok_mono {σ α : Type} {P Q : α → Prop} {x : Zig.MM σ α} (h : Ok P x) (hpq : ∀ a, P a → Q a) :
+    Ok Q x := fun s m r hr => hpq _ (h s m r hr)
+
+local macro "ok_step" : tactic => `(tactic| first
+  | exact ok_stuck
+  | exact ok_throw
+  | (apply ok_pure; simp_all [exitOk]; done)
+  | (apply_assumption <;> simp_all; done)
+  | (apply ok_bind; intro)
+  | (apply ok_ite)
+  | split)
+
+/-- A well-formed body exits only to the blocks and loops it names (`wfBody`). -/
+theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l = true →
+    Ok (fun e => exitOk bs ls e = true) (execBody c l env) := by
+  apply execBody.induct c
+    (motive2 := fun i rest env => ∀ bs ls, wfInst bs ls i = true → wfBody bs ls rest = true →
+      Ok (fun e => exitOk bs ls e = true) (execInst c i rest env))
+    (motive3 := fun s w x cs el env => ∀ bs ls, wfCases bs ls cs = true → wfBody bs ls el.toList = true →
+      Ok (fun e => exitOk bs ls e = true) (execSwitch c s x cs el env))
+    (motive4 := fun id body env => ∀ bs ls, wfBody bs (id :: ls) body.toList = true →
+      Ok (fun e => exitOk bs ls e = true) (execLoop c id body env))
+  case case1 => intros; simp only [execBody]; exact ok_stuck
+  case case2 =>
+    intro i rest env ih bs ls h
+    simp only [wfBody, Bool.and_eq_true] at h
+    simp only [execBody]
+    exact ih bs ls h.1 h.2
+  case case5 =>
+    intro i; obtain ⟨id, ty, op⟩ := i; intro rest env body hop ihb ihr bs ls hi hr
+    simp only at hop; subst hop
+    simp only [execInst]
+    simp only [wfInst] at hi
+    refine ok_bind' (ihb _ _ hi) ?_
+    intro e he
+    split
+    · rename_i t v
+      split
+      · subst_vars; exact ihr _ _ rfl bs ls hr
+      · apply ok_pure; simp_all [exitOk]
+    · apply ok_pure
+      rename_i hne
+      cases e with
+      | br t v => exact absurd rfl (hne t v)
+      | rep t => simpa [exitOk] using he
+      | ret v => simp [exitOk]
+  case case24 =>
+    intro s w x el env ih bs ls _ hel
+    simp only [execSwitch]
+    exact ih bs ls hel
+  case case25 =>
+    intro s w x sc more el env ihb ihm bs ls hc hel
+    simp only [wfCases, Bool.and_eq_true] at hc
+    unfold execSwitch
+    apply ok_bind; intro b
+    apply ok_ite
+    · exact ihb bs ls hc.1
+    · exact ihm bs ls hc.2 hel
+  case case26 =>
+    intro id body env ih bs ls h
+    simp only [execLoop]
+    refine ok_mono (ok_loop (ok_mono (ih bs (id :: ls) h) (Q := fun e => Exit.again id e = true ∨ exitOk bs ls e = true) ?_)) ?_
+    · intro e he
+      cases e <;> simp_all [exitOk, Exit.again]
+    · intro e he; exact he.2
+  all_goals first
+    | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
+       simp only at *
+       subst_vars
+       simp only [execInst, wfInst] at *
+       try simp only [*, ↓reduceIte, Bool.false_eq_true]
+       repeat' ok_step
+       done)
+    | fail "remaining"
+
+/-- A loop of a well-formed body leaves only to an enclosing block or loop, never by its own
+`repeat`. -/
+theorem execLoop_ok (c : Ctx) (id : InstId) (body : Array Inst) (env : Env) (bs ls : List InstId)
+    (h : wfBody bs (id :: ls) body.toList = true) :
+    Ok (fun e => Exit.again id e = false ∧ exitOk bs ls e = true) (execLoop c id body env) := by
+  simp only [execLoop]
+  refine ok_loop (ok_mono (execBody_ok c _ env bs (id :: ls) h) ?_)
+  intro e he
+  cases e <;> simp_all [exitOk, Exit.again]
+
+theorem Result.map_ok {α β : Type} {f : α → β} {x : Result α} {r : α} (h : x.run = some (.ok r)) :
+    (f <$> x).run = some (.ok (f r)) := by
+  show (ExceptT.map f x).run = _
+  simp only [ExceptT.map, ExceptT.run_mk] at *
+  simp only [ExceptT.run] at h
+  simp [h]
+
+/-- What every result of a loop of the semantics satisfies, the generated loop it commutes with
+satisfies for its encoded results. -/
+theorem ok_transfer {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop} {x₁ : Zig.MM σ₁ ε₁} {x₂ : Zig.MM σ₂ ε₂}
+    {enc : ε₂ → ε₁} {F : σ₂ → σ₁} {s : σ₂} (heq : x₁.run (F s) = mapRes enc F <$> x₂.run s)
+    (hok : Ok P x₁) (m : Zig.Mem) (r : (ε₂ × σ₂) × Zig.Mem) (hr : ((x₂.run s).run m).run = some (.ok r)) :
+    P (enc r.1.1) := by
+  have := hok (F s) m ((mapRes enc F r.1, r.2))
+  apply this
+  rw [heq, StateT.run_map]
+  exact Result.map_ok hr
+
+/-- After a generated loop, two continuations need to agree only on the results the loop has. -/
+theorem bind_congr_ok {α β : Type} (x : Result α) (Q : α → Prop) (hx : ∀ r, x.run = some (.ok r) → Q r)
+    {k₁ k₂ : α → Result β} (h : ∀ r, Q r → k₁ r = k₂ r) : x >>= k₁ = x >>= k₂ := by
+  show ExceptT.bind x k₁ = ExceptT.bind x k₂
+  simp only [ExceptT.bind]
+  congr 1
+  cases hxr : x.run with
+  | none => simp only [ExceptT.run] at hxr; simp [hxr]
+  | some e =>
+    cases e with
+    | error err => simp only [ExceptT.run] at hxr; simp [hxr]; rfl
+    | ok a =>
+      simp only [ExceptT.run] at hxr
+      simp only [hxr, Option.bind_eq_bind, Option.bind_some, ExceptT.bindCont]
+      exact congrArg ExceptT.run (h a (hx a (by simp [ExceptT.run, hxr])))
+
 /-- A program as a table of fully qualified names and functions (`progOf`). -/
 abbrev Table := List (String × Func)
 
@@ -952,6 +1229,9 @@ theorem map_throw {α β : Type} (e : Zig.Error) (f : α → β) :
 
 theorem free_nil : List.forM ([] : List Zig.Ptr) Zig.free = pure () := rfl
 
+theorem free_cons (p : Zig.Ptr) (ps : List Zig.Ptr) :
+    List.forM (p :: ps) Zig.free = Zig.free p >>= fun _ => List.forM ps Zig.free := rfl
+
 theorem bind_ite {m : Type → Type} [Monad m] {α β : Type} (c : Prop) [Decidable c]
     (a b : m α) (f : α → m β) : (if c then a else b) >>= f = if c then a >>= f else b >>= f := by
   split <;> rfl
@@ -995,7 +1275,7 @@ attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit e
   Value.toBV Value.toBool List.getD_cons_zero List.getD_cons_succ bind_pure_comp
   regAlloc regBody regInst regCases regUse clearOf cellRead cellVal Frame.setCell_cells
   Frame.setCell_blocks Frame.setCell_setCell
-  List.forM_cons List.forM_nil List.all_cons List.all_nil Bool.and_self
+  free_cons bind_pure_unit List.contains_cons List.contains_nil List.all_cons List.all_nil Bool.and_self
 
 end Cert
 
