@@ -1,4 +1,5 @@
 import ZigLean.Conc.Lock
+import ZigLean.Conc.WeakCasLemmas
 
 /-!
 # The rules of a lock's code
@@ -1924,6 +1925,88 @@ theorem Inv.casD_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} (hi : L.Inv G m
   obtain ⟨w, -, hw⟩ := hval _ hpl
   exact ⟨_, by rw [hl0, getElem!_pos l.msgs _ hpl]; exact hw⟩
 
+/-- `Thread.Mutex`'s `tryLock` off x86 (0.15.2 `FutexImpl` on aarch64): a weak acquire
+`cmpxchg` `0 → 1` with a relaxed failure, by thread `t` at `out`. On success `t` holds the lock;
+any failure (another value, or a spurious one at `0`) is a relaxed read, and `t` goes to `spin`. -/
+theorem Inv.casWeakLock {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {r : Option (BitVec 32)}
+    (hi : L.Inv G m) (hph : L.ph (G t) = .out) (hc : m.current = t)
+    (h : ((cmpxchgWeakAt c .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1).run m).run =
+      some (.ok (r, m'))) :
+    L.Step t m m' ∧ m'.current = t ∧
+      ((r = none ∧ ∃ hL, L.R G hL ∧ L.Inv (upd G t (L.set (G t) .holds hL)) m') ∨
+       ((∃ v, r = some v) ∧ L.Inv (upd G t (L.set (G t) .spin Heap.empty)) m')) := by
+  have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
+  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hnw : L.ph (G t) ≠ .wait := by rw [hph]; decide
+  have hna : L.ph (G t) ≠ .away := by rw [hph]; decide
+  obtain ⟨ht, -⟩ := hi.live t hng
+  obtain ⟨b, blk, off, li, m₁, pos, spurious, old, hacc, -, hl, hpos, hold, hcase⟩ :=
+    cmpxchgWeakAt_ok h
+  obtain ⟨rfl, rfl, l, hl', hi₁, hst₁, hcu₁, -, hb₁, hl0⟩ := hi.prepC hc ht hacc hl
+  obtain ⟨-, h0, hch, -, -⟩ := hi₁.loc.ok li l hl'
+  rw [hl0] at hold
+  rcases hcase with ⟨rfl, rfl, rfl, -, hm'⟩ | ⟨-, rfl, hm'⟩
+  · -- success: a strong choice whose message holds `0`, the newest one
+    obtain ⟨j, hj⟩ := weakCasOpts_strong hpos
+    have hpl := cas_chain_pos (m := m₁) (li := li) (by rw [hl0]; exact hch) hj
+      (by rw [hl0]; exact hold)
+    rw [hl0] at hpl hm'
+    rw [hpl] at hold hm'
+    obtain ⟨w, -, -, hU⟩ := hi₁.msgVal hl' (by omega) hold
+    have hU0 : L.U32 m₁ (BitVec.ofNat 32 0) := hU rfl
+    have hF : L.Free G := (hi₁.free_iff L.val0 hU0).mp rfl
+    have ht₁ : t < m₁.threads.size := by rw [hst₁.threads]; exact ht
+    have hi₂ := hi₁.record (k := .atomicWrite) rfl (hcu₁ ▸ ht₁)
+    have hstR := hi₁.recordStep hcu₁ ht₁ (k := .atomicWrite) rfl
+    obtain ⟨hst₂, hcM, hL, hR, hi'⟩ := hi₂.acquire (w' := 1) hl' hcu₁ (.inl ⟨hph, rfl⟩) hF hm'
+    exact ⟨hst₁.trans (hstR.trans hst₂ (.inl rfl)) (.inl hb₁), hcM,
+      .inl ⟨rfl, hL, hR, hi'⟩⟩
+  · -- failure: a relaxed read
+    have hmM : m' = observeM m₁ li ((m₁.atomics[li]!).msgs[pos]!).id := by
+      rw [hm']; unfold loadM; rfl
+    have hi' : L.Inv G m' := by
+      rw [hmM]
+      exact hi₁.mono rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) (fun e he => .inl he)
+        fun e he => .inl he
+    have hq := hi'.queue (c := m'.current) (ws := m'.waiters) (wk := m'.woken) (p := .spin) hnh hng
+      (by decide) (by decide) (fq_keep hi' hnw hna) (wit_keep hi' hnh (by decide) fun _ => rfl)
+    cases m'
+    exact ⟨hst₁.trans (by rw [hmM]; exact Step.same rfl rfl rfl rfl rfl rfl fun _ _ => Iff.rfl)
+      (.inl hb₁), by rw [hmM, ← hcu₁]; rfl, .inr ⟨⟨_, rfl⟩, hq⟩⟩
+
+/-- `tryLock`'s weak `cmpxchg` does not throw. -/
+theorem Inv.casWeakLock_noErr {G : ThreadId → γ} {m : Mem} {c : Nat} (hi : L.Inv G m)
+    (ht : m.current < m.threads.size) (hg : L.ph (G m.current) ≠ .gone)
+    (hcr : c < weakCasCount 32 .acquire 4 L.ptr (0 : BitVec 32) m ∨
+      weakCasCount 32 .acquire 4 L.ptr (0 : BitVec 32) m = 0 ∧ c = 0) (e : Error) :
+    ((cmpxchgWeakAt c .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1).run m).run ≠
+      some (.error e) := by
+  obtain ⟨blk, hacc, hnr, hloc⟩ := hi.prepC_ok ht hg
+  refine cmpxchgWeakAt_noErr (weakCasPrep_noErr (casPrep_noErr hacc hnr hloc))
+    (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e he => ?_) e
+  · obtain ⟨b, blk', o, ha, -, hl, rfl⟩ := weakCasPrep_ok hp
+    obtain ⟨rfl, rfl, l, hl', hi₁, -, -, -, -, hl0⟩ := hi.prepC rfl ht ha hl
+    obtain ⟨-, hsz, -, hval, -⟩ := hi₁.loc.ok li l hl'
+    have hne := casOpts_ne (e := (0 : BitVec 32)) (m := m₁) (li := li) (by rw [hl0]; exact hsz)
+    have hcnt := weakOptCount_eq (succ := .acquire) hp
+    have hsz' : 0 < (weakCasOpts m₁ li (0 : BitVec 32) (casOpts m₁ li (0 : BitVec 32))).size := by
+      simp only [weakCasOpts_eq, Array.size_append, Array.size_map]
+      omega
+    have hc : c < (weakCasOpts m₁ li (0 : BitVec 32) (casOpts m₁ li (0 : BitVec 32))).size := by
+      rw [hcnt] at hcr; omega
+    have hchoice := Array.getElem?_eq_getElem hc
+    obtain ⟨j, hread⟩ := weakCasOpts_read hchoice
+    have hpl := readOpts_lt hread
+    rw [hl0] at hpl
+    obtain ⟨w, -, hw⟩ := hval _ hpl
+    exact ⟨_, _, hchoice, _, by rw [hl0, getElem!_pos l.msgs _ hpl]; exact hw⟩
+  · obtain ⟨b, blk', o, ha, -, hl, -⟩ := weakCasPrep_ok hp
+    obtain ⟨rfl, rfl, _, _, hi₁, hs, hc, -⟩ := hi.prepC rfl ht ha hl
+    obtain ⟨blk₁, ha₁, hnr₁, -⟩ := hi₁.prep_ok
+      (by rw [hc, hs.threads]; exact ht) (by rw [hc]; exact hg)
+    rw [casMarkWrite_run ha₁ hnr₁] at he
+    simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at he
+
 /-- `os_unfair_lock_unlock`'s `xchg` of `0` with a release, by the holder `t`: `t` goes to the
 futex wake. -/
 theorem Inv.xchgRel {G : ThreadId → γ} {m m' : Mem} {t c : Nat} {b : BitVec 32}
@@ -2289,6 +2372,38 @@ theorem wp_loadLock (hP : L.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → 
   refine ⟨by rw [hst.threads], h k hk G₁ m' r hcu ?_⟩
   rw [← hg₁, upd_same]
   exact hP.stay hiP hgone hst hl
+
+/-- `tryLock`'s weak acquire `cmpxchg` `0 → 1` off x86 (`Inv.casWeakLock`), by thread `t` at
+`out` (`g`). -/
+theorem wp_casWeakLock (hP : L.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t →
+      ((r = none ∧ ∃ hL, P.inv (upd G₁ t (L.set g .holds hL)) m') ∨
+       ((∃ v, r = some v) ∧ P.inv (upd G₁ t (L.set g .spin Heap.empty)) m')) →
+      Q (r, s) G₁ m' k) :
+    P.WP t ((cmpxchgWeakC (n := 32) .acquire .relaxed 4 L.ptr (0 : BitVec 32) 1 :
+      CM Tgt σ _).run s) Q G m n := by
+  unfold cmpxchgWeakC
+  simp only [StateT.run_bind]
+  refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
+  have hgone : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
+  have hiP := hP.cur t hi₁ hgone
+  have hiL := hP.lock hiP
+  have ht := hP.alive hiP hg₁ (by rw [hg]; decide)
+  refine WP.callMC (fun e he => (hiL.casWeakLock_noErr ht hgone hcr e he).elim) fun r m' hr => ?_
+  obtain ⟨hst, hcu, hcase⟩ := hiL.casWeakLock (by rw [hg₁]; exact hg) rfl hr
+  refine ⟨by rw [hst.threads], h k hk G₁ m' r hcu ?_⟩
+  rw [hg₁] at hcase
+  rcases hcase with ⟨hr', hL, -, hl⟩ | ⟨hr', hl⟩
+  · refine .inl ⟨hr', hL, ?_⟩
+    have := hP.step (p := .holds) (h := hL) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
+    rwa [hg₁] at this
+  · refine .inr ⟨hr', ?_⟩
+    have := hP.step (p := .spin) (h := Heap.empty) hiP hgone hst
+      (fun h => absurd h (by rw [hg₁, hg]; decide)) (by rw [hg₁]; exact hl)
+    rwa [hg₁] at this
 
 /-- `os_unfair_lock_lock`'s `cmpxchg` `0 → 1`, by thread `t` at `out` or `spin` (`g`). -/
 theorem wp_casD (hP : L.Fits P U) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G : ThreadId → γ}

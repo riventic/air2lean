@@ -38,8 +38,9 @@ A theorem must hold for the translation of every Zig version its example support
 (`examples/<ex>/zig-versions`, else every version of `compatibility.json`) and every target
 with its own translation. As in `scripts/check.sh`, the translation file is
 `tests/golden/<version>/<ex>/Gen-<os>.lean`, else `tests/golden/<version>/<ex>/Gen.lean`, else
-the committed `Proofs/<Ex>/Gen.lean` (the Linux translation of every other version). Only
-`threadsync` (0.15.2, macOS `DarwinImpl`) has a `darwin` translation of its own.
+the committed `Proofs/<Ex>/Gen.lean` (the Linux translation of every other version). A target
+is `linux`, `darwin` or `linux-aarch64` (`tests/golden/<version>/<ex>/Gen-linux-aarch64.lean`:
+`floatops`'s `f16` `@mulAdd`, `floatconv`, and 0.15.2 `threadsync`'s weak-`cmpxchg` `tryLock`).
 
 A check result is a `lake build` of the module run under `scripts/build-guard.py`. Its run
 records the hash of each translation file and of every `Proofs` source in the build. A
