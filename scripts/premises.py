@@ -940,7 +940,6 @@ class KernelPremises:
             profile, reason = self.profile(module)
             for premise in [*config["generated_premises"], *profile]:
                 via.setdefault(premise, []).append(f"generated {module} ({reason})")
-        self.reached = {"names": names, "runtime": modules, "generated": generated}  # last derivation
         return close(config, via), errors
 
 

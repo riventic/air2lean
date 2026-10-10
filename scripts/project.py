@@ -963,8 +963,12 @@ def goal_premises(theorem, found, bundle):
     asm = claims.premises_of(theorem, found['claims'])
     module = _premises_module()
     try:
-        config = module.load_config(module.ROOT / module.CONFIG)
-        via, errors = module.KernelPremises(bundle['nodes'], Path(bundle['root']), config).derive(theorem)
+        # One derivation per receipt bundle: the premise tables and generated markers are read once.
+        kernel = bundle.get('kernel_premises')
+        if kernel is None:
+            config = module.load_config(module.ROOT / module.CONFIG)
+            kernel = bundle['kernel_premises'] = module.KernelPremises(bundle['nodes'], Path(bundle['root']), config)
+        via, errors = kernel.derive(theorem)
     except (KeyError, ValueError):
         return None
     if asm is None or errors:
