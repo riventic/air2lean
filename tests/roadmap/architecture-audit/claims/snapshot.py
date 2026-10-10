@@ -21,9 +21,10 @@ CLASH = "environment already contains 'Zig.TotalTriple"
 
 
 def graph(report_nodes, theorems):
-    """The part of the declaration graph the claim tooling reads: every node reachable from the
-    theorems through fixture (non-standard, non-runtime) declarations, with the dependencies of
-    those, plus every definition a hypothesis mentions (F4 classifies it by module)."""
+    """The part of the declaration graph the claim tooling reads, as scripts/premises.py walks it:
+    every node reachable from the theorems through fixture declarations and runtime definitions,
+    with the dependencies of those, plus every definition a hypothesis mentions (F4 classifies it
+    by module)."""
     kept, pending = {}, [t['name'] for t in theorems]
     pending += [d for t in theorems for b in t['statement']['binders'] for d in b['defs']] + list(GENERATED)
     while pending:
@@ -32,7 +33,8 @@ def graph(report_nodes, theorems):
         if name in kept or node is None:
             continue
         kept[name] = {'module': node['module'], 'kind': node['kind']}
-        if node['module'].split('.')[0] not in ('Lean', 'Init', 'Std', 'Lake', 'ZigLean'):
+        top = node['module'].split('.')[0]
+        if top not in ('Lean', 'Init', 'Std', 'Lake') and (top != 'ZigLean' or node['kind'] in ('definition', 'opaque')):
             kept[name]['dependencies'] = node['dependencies']
             pending += node['dependencies']
     return kept

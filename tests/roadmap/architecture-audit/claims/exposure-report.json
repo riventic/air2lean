@@ -3766,6 +3766,22 @@
    "module": "Init.Prelude",
    "kind": "definition"
   },
+  "Array": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Array.instGetElem?NatLtSize": {
+   "module": "Init.GetElem",
+   "kind": "definition"
+  },
+  "Array.instGetElemNatLtSize": {
+   "module": "Init.GetElem",
+   "kind": "definition"
+  },
+  "Array.size": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
   "Asm.airAsm_3653072158": {
    "module": "Proofs.Asm.Gen",
    "kind": "opaque",
@@ -4742,11 +4758,23 @@
    "module": "Init.Data.BitVec.BasicAux",
    "kind": "theorem"
   },
+  "BitVec.ofInt": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
   "BitVec.ofNat": {
    "module": "Init.Prelude",
    "kind": "definition"
   },
+  "BitVec.saddOverflow": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
   "BitVec.setWidth": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
+  "BitVec.toInt": {
    "module": "Init.Data.BitVec.Basic",
    "kind": "definition"
   },
@@ -4757,6 +4785,10 @@
   "BitVec.toNat_ofNat": {
    "module": "Init.Data.BitVec.Bootstrap",
    "kind": "theorem"
+  },
+  "BitVec.uaddOverflow": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
   },
   "Bool": {
    "module": "Init.Prelude",
@@ -4773,6 +4805,10 @@
   "Classical.byContradiction": {
    "module": "Init.Classical",
    "kind": "theorem"
+  },
+  "Decidable": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
   },
   "Decidable.decide": {
    "module": "Init.Prelude",
@@ -4802,6 +4838,10 @@
    "module": "Init.Prelude",
    "kind": "inductive"
   },
+  "Except.casesOn": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
   "Except.error": {
    "module": "Init.Prelude",
    "kind": "constructor"
@@ -4830,6 +4870,10 @@
    "module": "Init.Control.Except",
    "kind": "definition"
   },
+  "ExceptT.run": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
   "Exists": {
    "module": "Init.Core",
    "kind": "inductive"
@@ -4852,6 +4896,14 @@
   },
   "GT.gt": {
    "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "GetElem.getElem": {
+   "module": "Init.GetElem",
+   "kind": "definition"
+  },
+  "GetElem?.getElem?": {
+   "module": "Init.GetElem",
    "kind": "definition"
   },
   "HAdd.hAdd": {
@@ -4894,11 +4946,19 @@
    "module": "Init.Data.Int.Order",
    "kind": "theorem"
   },
+  "Int.decLe": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
   "Int.instAdd": {
    "module": "Init.Data.Int.Basic",
    "kind": "definition"
   },
   "Int.instLEInt": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "Int.instNatPow": {
    "module": "Init.Data.Int.Basic",
    "kind": "definition"
   },
@@ -5042,6 +5102,10 @@
    "module": "Init.Prelude",
    "kind": "definition"
   },
+  "Nat.decLt": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
   "Ne": {
    "module": "Init.Core",
    "kind": "definition"
@@ -5066,13 +5130,25 @@
    "module": "Init.Data.Option.Basic",
    "kind": "definition"
   },
+  "Option.casesOn": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
   "Option.none": {
    "module": "Init.Prelude",
    "kind": "constructor"
   },
+  "Option.or": {
+   "module": "Init.Data.Option.Basic",
+   "kind": "definition"
+  },
   "Option.some": {
    "module": "Init.Prelude",
    "kind": "constructor"
+  },
+  "Or": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
   },
   "PUnit": {
    "module": "Init.Prelude",
@@ -5085,6 +5161,10 @@
   "Prod": {
    "module": "Init.Prelude",
    "kind": "inductive"
+  },
+  "Prod.casesOn": {
+   "module": "Init.Prelude",
+   "kind": "definition"
   },
   "Prod.fst": {
    "module": "Init.Prelude",
@@ -5138,6 +5218,18 @@
    "module": "Init.Prelude",
    "kind": "constructor"
   },
+  "UInt8": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Union": {
+   "module": "Init.Core",
+   "kind": "inductive"
+  },
+  "Union.mk": {
+   "module": "Init.Core",
+   "kind": "constructor"
+  },
   "Union.union": {
    "module": "Init.Core",
    "kind": "definition"
@@ -5160,26 +5252,94 @@
   },
   "Zig.Assn": {
    "module": "ZigLean.Sep.Assert",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Zig.Heap"
+   ]
   },
   "Zig.Assn.emp": {
    "module": "ZigLean.Sep.Assert",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Eq",
+    "Zig.Assn",
+    "Zig.Heap",
+    "Zig.Heap.empty"
+   ]
   },
   "Zig.Assn.lift": {
    "module": "ZigLean.Sep.Assert",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "And",
+    "Eq",
+    "Zig.Assn",
+    "Zig.Heap",
+    "Zig.Heap.empty"
+   ]
   },
   "Zig.Block": {
    "module": "ZigLean.Mem.Basic",
    "kind": "inductive"
   },
+  "Zig.Block.addr": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "Nat",
+    "Zig.Block"
+   ]
+  },
+  "Zig.Block.bytes": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "Array",
+    "Zig.Block",
+    "Zig.Byte"
+   ]
+  },
+  "Zig.Block.kind": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "Zig.Block",
+    "Zig.BlockKind"
+   ]
+  },
+  "Zig.Block.live": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "Bool",
+    "Zig.Block"
+   ]
+  },
   "Zig.BlockId": {
    "module": "ZigLean.Mem.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Nat"
+   ]
+  },
+  "Zig.BlockKind": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.Byte": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
   },
   "Zig.ByteRemapMode.fail": {
    "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.Cell": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "inductive"
+  },
+  "Zig.Cell.mk": {
+   "module": "ZigLean.Sep.Heap",
    "kind": "constructor"
   },
   "Zig.DevEvent": {
@@ -5194,13 +5354,63 @@
    "module": "ZigLean.Env.Host",
    "kind": "inductive"
   },
+  "Zig.Env.Handle": {
+   "module": "ZigLean.Env.Host",
+   "kind": "definition",
+   "dependencies": [
+    "Nat"
+   ]
+  },
+  "Zig.Env.Hist": {
+   "module": "ZigLean.Env.Host",
+   "kind": "definition",
+   "dependencies": [
+    "List",
+    "Zig.Env.Req"
+   ]
+  },
   "Zig.Env.Host.mk": {
    "module": "ZigLean.Env.Host",
    "kind": "constructor"
   },
+  "Zig.Env.IoError": {
+   "module": "ZigLean.Env.Host",
+   "kind": "inductive"
+  },
+  "Zig.Env.IoError.inputOutput": {
+   "module": "ZigLean.Env.Host",
+   "kind": "constructor"
+  },
+  "Zig.Env.Ops": {
+   "module": "ZigLean.Env.Host",
+   "kind": "inductive"
+  },
   "Zig.Env.Ops.closedAll": {
    "module": "ZigLean.Env.Host",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Except",
+    "Int",
+    "List",
+    "Nat",
+    "UInt8",
+    "instOfNat",
+    "instOfNatNat",
+    "Bool.false",
+    "Except.error",
+    "OfNat.ofNat",
+    "Prod.mk",
+    "Zig.Env.Handle",
+    "Zig.Env.Hist",
+    "Zig.Env.IoError",
+    "Zig.Env.Ops",
+    "Zig.Env.IoError.inputOutput",
+    "Zig.Env.Ops.mk"
+   ]
+  },
+  "Zig.Env.Ops.mk": {
+   "module": "ZigLean.Env.Host",
+   "kind": "constructor"
   },
   "Zig.Env.Req": {
    "module": "ZigLean.Env.Host",
@@ -5209,6 +5419,10 @@
   "Zig.Error": {
    "module": "ZigLean.Basic",
    "kind": "inductive"
+  },
+  "Zig.Error.overflow": {
+   "module": "ZigLean.Basic",
+   "kind": "constructor"
   },
   "Zig.Error.trap": {
    "module": "ZigLean.Basic",
@@ -5220,11 +5434,25 @@
   },
   "Zig.Heap": {
    "module": "ZigLean.Sep.Heap",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Option",
+    "Zig.Cell",
+    "Zig.Loc"
+   ]
   },
   "Zig.Heap.Disjoint": {
    "module": "ZigLean.Sep.Heap",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Eq",
+    "Option",
+    "Or",
+    "Option.none",
+    "Zig.Cell",
+    "Zig.Heap",
+    "Zig.Loc"
+   ]
   },
   "Zig.Heap.disjoint_empty": {
    "module": "ZigLean.Sep.Heap",
@@ -5232,15 +5460,50 @@
   },
   "Zig.Heap.empty": {
    "module": "ZigLean.Sep.Heap",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Option.none",
+    "Zig.Cell",
+    "Zig.Heap",
+    "Zig.Loc"
+   ]
   },
   "Zig.Heap.instUnion": {
    "module": "ZigLean.Sep.Heap",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Union",
+    "Union.mk",
+    "Zig.Heap",
+    "Zig.Heap.union"
+   ]
+  },
+  "Zig.Heap.union": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition",
+   "dependencies": [
+    "Option.or",
+    "Zig.Cell",
+    "Zig.Heap",
+    "Zig.Loc"
+   ]
+  },
+  "Zig.Loc": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition",
+   "dependencies": [
+    "Nat",
+    "Prod",
+    "Zig.BlockId"
+   ]
   },
   "Zig.M": {
    "module": "ZigLean.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "StateT",
+    "Zig.Result"
+   ]
   },
   "Zig.Mem": {
    "module": "ZigLean.Mem.Basic",
@@ -5250,9 +5513,86 @@
    "module": "ZigLean.Sep.Heap",
    "kind": "inductive"
   },
+  "Zig.Mem.blocks": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "Array",
+    "Zig.Block",
+    "Zig.Mem"
+   ]
+  },
   "Zig.Mem.heap": {
    "module": "ZigLean.Sep.Heap",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "And",
+    "Array",
+    "Bool",
+    "Eq",
+    "Nat",
+    "Not",
+    "Option",
+    "Unit",
+    "dite",
+    "instDecidableAnd",
+    "instDecidableEqBool",
+    "instLTNat",
+    "Array.instGetElem?NatLtSize",
+    "Array.instGetElemNatLtSize",
+    "Array.size",
+    "Bool.true",
+    "GetElem.getElem",
+    "GetElem?.getElem?",
+    "LT.lt",
+    "Nat.decLt",
+    "Option.none",
+    "Option.some",
+    "Zig.Block",
+    "Zig.BlockId",
+    "Zig.Byte",
+    "Zig.Cell",
+    "Zig.Heap",
+    "Zig.Loc",
+    "Zig.Mem",
+    "Zig.Block.addr",
+    "Zig.Block.bytes",
+    "Zig.Block.kind",
+    "Zig.Block.live",
+    "Zig.Cell.mk",
+    "Zig.Mem.blocks",
+    "Zig.Mem.heap._proof_1",
+    "Zig.Mem.heap.match_1",
+    "Zig.Mem.heap.match_3"
+   ]
+  },
+  "Zig.Mem.heap._proof_1": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "theorem"
+  },
+  "Zig.Mem.heap.match_1": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition",
+   "dependencies": [
+    "Option",
+    "Unit",
+    "Option.casesOn",
+    "Option.none",
+    "Option.some",
+    "Unit.unit",
+    "Zig.Block"
+   ]
+  },
+  "Zig.Mem.heap.match_3": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition",
+   "dependencies": [
+    "Nat",
+    "Prod.casesOn",
+    "Prod.mk",
+    "Zig.BlockId",
+    "Zig.Loc"
+   ]
   },
   "Zig.Mem.heap_default_split": {
    "module": "ZigLean.Sep.Witness",
@@ -5268,15 +5608,35 @@
   },
   "Zig.MemM": {
    "module": "ZigLean.Mem.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "StateT",
+    "Zig.Mem",
+    "Zig.Result"
+   ]
   },
   "Zig.OwnedAlloc": {
    "module": "ZigLean.Mem.Basic",
    "kind": "inductive"
   },
+  "Zig.Placement": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
   "Zig.Placement.fresh": {
    "module": "ZigLean.Mem.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Nat",
+    "Option.none",
+    "Zig.BlockId",
+    "Zig.Placement",
+    "Zig.Placement.mk"
+   ]
+  },
+  "Zig.Placement.mk": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
   },
   "Zig.ProvenanceMode.strict": {
    "module": "ZigLean.Mem.Basic",
@@ -5288,11 +5648,19 @@
   },
   "Zig.Result": {
    "module": "ZigLean.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "ExceptT",
+    "Option",
+    "Zig.Error"
+   ]
   },
   "Zig.ThreadId": {
    "module": "ZigLean.Mem.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Nat"
+   ]
   },
   "Zig.ThreadRec": {
    "module": "ZigLean.Mem.Basic",
@@ -5304,7 +5672,32 @@
   },
   "Zig.TotalTriple": {
    "module": "ZigLean.Sep.Total",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "And",
+    "Eq",
+    "Exists",
+    "Option",
+    "Prod",
+    "instMonadOption",
+    "Applicative.toPure",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "Prod.mk",
+    "Pure.pure",
+    "StateT.run",
+    "Union.union",
+    "Zig.Assn",
+    "Zig.Error",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.MemM",
+    "Zig.Result",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.heap"
+   ]
   },
   "Zig.TotalTriple.conseq": {
    "module": "ZigLean.Sep.Total",
@@ -5316,23 +5709,157 @@
   },
   "Zig.Triple": {
    "module": "ZigLean.Sep.Triple",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "And",
+    "Eq",
+    "Except",
+    "Exists",
+    "False",
+    "Option",
+    "Prod",
+    "True",
+    "Unit",
+    "ExceptT.run",
+    "StateT.run",
+    "Union.union",
+    "Zig.Assn",
+    "Zig.Error",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.MemM",
+    "Zig.Result",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.heap",
+    "Zig.Triple.match_1"
+   ]
+  },
+  "Zig.Triple.match_1": {
+   "module": "ZigLean.Sep.Triple",
+   "kind": "definition",
+   "dependencies": [
+    "Except",
+    "Option",
+    "Prod",
+    "Unit",
+    "Except.casesOn",
+    "Except.error",
+    "Except.ok",
+    "Option.casesOn",
+    "Option.none",
+    "Option.some",
+    "Prod.casesOn",
+    "Prod.mk",
+    "Unit.unit",
+    "Zig.Error",
+    "Zig.Mem"
+   ]
   },
   "Zig.VClock": {
    "module": "ZigLean.Mem.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Array",
+    "Nat"
+   ]
   },
   "Zig.add": {
    "module": "ZigLean.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Bool",
+    "Eq",
+    "Nat",
+    "Option",
+    "instDecidableEqBool",
+    "instHAdd",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadOption",
+    "ite",
+    "Applicative.toPure",
+    "BitVec.instAdd",
+    "BitVec.saddOverflow",
+    "BitVec.uaddOverflow",
+    "Bool.true",
+    "ExceptT.instMonad",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "MonadExcept.throw",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result",
+    "Zig.Error.overflow"
+   ]
   },
   "Zig.asmTrap": {
    "module": "ZigLean.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Decidable",
+    "Option",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadOption",
+    "ite",
+    "Applicative.toPure",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "MonadExcept.throw",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result",
+    "Zig.Error.trap"
+   ]
   },
   "Zig.intCast": {
    "module": "ZigLean.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "And",
+    "BitVec",
+    "Bool",
+    "Eq",
+    "Int",
+    "Nat",
+    "Option",
+    "instDecidableAnd",
+    "instDecidableEqBool",
+    "instHPow",
+    "instHSub",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadOption",
+    "instOfNat",
+    "instOfNatNat",
+    "instPowNat",
+    "instSubNat",
+    "ite",
+    "Applicative.toPure",
+    "BitVec.ofInt",
+    "Bool.true",
+    "ExceptT.instMonad",
+    "HPow.hPow",
+    "HSub.hSub",
+    "Int.decLe",
+    "Int.instLEInt",
+    "Int.instNatPow",
+    "Int.instNegInt",
+    "Int.instSub",
+    "LE.le",
+    "Monad.toApplicative",
+    "MonadExcept.throw",
+    "Neg.neg",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result",
+    "Zig.val",
+    "Zig.Error.overflow"
+   ]
   },
   "Zig.intCast_unsigned_widen": {
    "module": "ZigLean.Lemmas",
@@ -5340,11 +5867,45 @@
   },
   "Zig.shl": {
    "module": "ZigLean.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "BitVec.instHShiftLeftNat",
+    "BitVec.toNat",
+    "HShiftLeft.hShiftLeft"
+   ]
   },
   "Zig.unboundedAllocBytes": {
    "module": "ZigLean.Mem.Basic",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "Nat",
+    "instHPow",
+    "instNatPowNat",
+    "instOfNatNat",
+    "instPowNat",
+    "HPow.hPow",
+    "OfNat.ofNat"
+   ]
+  },
+  "Zig.val": {
+   "module": "ZigLean.Basic",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Bool",
+    "Eq",
+    "Int",
+    "Nat",
+    "instDecidableEqBool",
+    "instNatCastInt",
+    "ite",
+    "BitVec.toInt",
+    "BitVec.toNat",
+    "Bool.true",
+    "Nat.cast"
+   ]
   },
   "_private.AuditClaims.AsmTotal.0.ExceptT.bindCont.match_1.eq_1": {
    "module": "AuditClaims.AsmTotal",
@@ -5382,6 +5943,10 @@
    "module": "Init.Prelude",
    "kind": "theorem"
   },
+  "dite": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
   "eq_false": {
    "module": "Init.SimpLemmas",
    "kind": "theorem"
@@ -5399,6 +5964,10 @@
    "kind": "theorem"
   },
   "id": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instDecidableAnd": {
    "module": "Init.Prelude",
    "kind": "definition"
   },
@@ -5487,6 +6056,10 @@
    "kind": "definition"
   },
   "instPowNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instSubNat": {
    "module": "Init.Prelude",
    "kind": "definition"
   },
