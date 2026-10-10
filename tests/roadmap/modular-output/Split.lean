@@ -1,6 +1,7 @@
 import Air2Lean
 import Air2Lean.Check
 import Air2Lean.ModuleSplit
+import Air2Lean.Air.Anon
 
 /-! `--split-modules` API regressions (I04). Run from the repository root:
 `lake env lean tests/roadmap/modular-output/Split.lean`. The author never invokes a compiler. -/
@@ -25,8 +26,9 @@ private def require (ok : Bool) (message : String) : IO Unit :=
 private def load (dir : System.FilePath) : IO (Array Func) := do
   let paths := ((← dir.readDir).filter (·.fileName.endsWith ".json")).qsort
     (fun a b => decide (a.fileName < b.fileName))
-  paths.mapM fun entry => do
-    let text ← IO.FS.readFile entry.path
+  -- As the CLI does: number the generic instances first, so a keyed reference names its instance.
+  let texts := Anon.renumberAll (← paths.mapM fun entry => IO.FS.readFile entry.path)
+  (paths.zip texts).mapM fun (entry, text) => do
     match (do let f ← normalize (← Raw.parseFile text); check f; pure f : Except String Func) with
     | .ok f => pure f
     | .error e => throw (IO.userError s!"{entry.path}: {e}")

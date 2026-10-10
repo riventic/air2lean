@@ -129,7 +129,8 @@ def analyze (f : Func) : Except String Marks := do
     let result : Taint := match i.op with
       | .arg idx => if f.noalias.contains idx then { params := #[idx] } else .otherPtr
       | .alloc | .runtimeNavPtr _ | .call .. | .asm .. | .tagName _ | .errorName _
-      | .ptrElemVal .. | .sliceElemVal .. | .atomicLoad .. | .atomicRmw .. | .cmpxchg .. => .otherPtr
+      | .ptrElemVal .. | .sliceElemVal .. | .atomicLoad .. | .atomicRmw .. | .cmpxchg ..
+      | .errCodePtr _ => .otherPtr
       | .load p => match localOf p with
         | some a => s.slots.getD a {}
         | none => .otherPtr
@@ -190,7 +191,11 @@ def analyze (f : Func) : Except String Marks := do
     -- `some r`: the root of the instruction's reads (writes); every one must have the same.
     let mut read : Option (Option Nat) := none
     let mut write : Option (Option Nat) := none
-    for (p, kind) in i.op.effects.access do
+    -- A sentinel slicing reads the item at its end through `p` (`Zig.checkSentinelByte`).
+    let sentinelRead : Array (Val × Access) := match i.op with
+      | .slice p _ => if ((f.layouts[i.ty]?).bind (·.sentinelByte)).isSome then #[(p, .load)] else #[]
+      | _ => #[]
+    for (p, kind) in i.op.effects.access ++ sentinelRead do
       if (localOf p).isSome then continue
       let r ← match (t p).root with
         | .ok r => pure r
@@ -201,8 +206,10 @@ def analyze (f : Func) : Except String Marks := do
       unless kind matches .load do
         if write.any (· != r) then fail i "accesses with two different noalias roots"
         write := some r
-    -- Only an instruction that can touch memory needs a mark.
-    if touchesMemory locals i then marks := marks.insert i.id (read.getD none, write.getD none)
+    -- A store may first read the bytes it writes through the same pointer (a bit-pointer or
+    -- vector-lane store reads its host, `Zig.storeBits`): those reads have the write's root. Only
+    -- an instruction that can touch memory needs a mark.
+    if touchesMemory locals i then marks := marks.insert i.id ((read <|> write).getD none, write.getD none)
   return marks
 
 end Air2Lean.Noalias

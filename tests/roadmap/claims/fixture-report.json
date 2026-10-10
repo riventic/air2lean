@@ -34,6 +34,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -201,6 +202,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -210,6 +214,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -362,6 +367,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -504,6 +510,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -513,6 +522,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -604,6 +614,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -749,6 +760,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -758,6 +772,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -857,6 +872,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -1010,6 +1026,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -1019,6 +1038,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -4259,6 +4279,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4374,6 +4395,7 @@
     "Zig.DevEvent",
     "Zig.FootprintEntry",
     "Zig.Mem",
+    "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.ThreadId",
@@ -4531,6 +4553,9 @@
        },
        {
         "closed": "OfNat.ofNat"
+       },
+       {
+        "closed": "List.toArray"
        }
       ],
       "atom": {
@@ -4540,6 +4565,7 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
+       "default",
        "default",
        "default",
        "default",
@@ -4695,9 +4721,49 @@
    "kind": "definition"
   },
   {
+   "name": "ClaimFixture.countdown_bounded",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_bounded.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_eventually",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.countdown_under",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.diverge",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "definition"
+  },
+  {
+   "name": "ClaimFixture.diverge_not_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.diverge_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.diverge_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
   },
   {
    "name": "ClaimFixture.exitBody",
@@ -4705,13 +4771,168 @@
    "kind": "definition"
   },
   {
+   "name": "ClaimFixture.exit_within",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.exit_within_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.panic_pure",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.panic_run",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.panic_some",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.partial_and_returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.premise_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.premise_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.ret",
    "module": "tests.roadmap.claims.Fixture",
    "kind": "definition"
   },
   {
+   "name": "ClaimFixture.ret_partial",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_partial.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_partial.returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_pure_ok",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_returns",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_returns.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_run",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_run_ground",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_some",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_thread",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.ret_total.nonvacuous",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
    "name": "ClaimFixture.spinBody",
    "module": "tests.roadmap.claims.Fixture",
+   "kind": "definition"
+  },
+  {
+   "name": "ClaimFixture.spin_no_run",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.spin_not_within",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.stuck_not_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.stuck_under_false",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "ClaimFixture.wrapped_total",
+   "module": "tests.roadmap.claims.Fixture",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.EventuallyReturns",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.EventuallyReturns.under",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.EventuallyReturnsUnder",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.ReturnsWithin",
+   "module": "ZigLean.Conc.Total",
    "kind": "definition"
   },
   {
@@ -4720,9 +4941,104 @@
    "kind": "definition"
   },
   {
+   "name": "Zig.Conc.Total.countdown._f",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown.match_1",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_run",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_run._proof_1_1",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_run._proof_1_3",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_total",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.countdown_within",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_1",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_10",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_7",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_8",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.go_countdown._proof_1_9",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
    "name": "Zig.Conc.Total.stuck",
    "module": "ZigLean.Conc.Total",
    "kind": "definition"
+  },
+  {
+   "name": "Zig.Conc.Total.stuck_not_eventuallyReturns",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.stuck_run",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "Zig.Conc.Total.under_false",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "_private.ZigLean.Conc.Total.0.Zig.Conc.Total.joined_empty",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
+  },
+  {
+   "name": "_private.ZigLean.Conc.Total.0.Zig.Conc.Total.pending",
+   "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "_private.ZigLean.Conc.Total.0.Zig.Conc.Total.singleton_choice",
+   "module": "ZigLean.Conc.Total",
+   "kind": "theorem"
   }
  ]
 }

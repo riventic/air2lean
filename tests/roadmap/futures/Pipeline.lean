@@ -1,6 +1,7 @@
 import Air2Lean
 import Air2Lean.Check
 import Air2Lean.Emit
+import Air2Lean.Air.Anon
 
 /-! C08 translator boundary for the committed futures AIR: the qualified future API is accepted
 for Zig 0.16.0 only, a cancelation point other than `Io.checkCancel` reachable from a task is
@@ -31,9 +32,12 @@ private def renameCalls (old new : String) (insts : Array Inst) : Array Inst :=
   mapCalls (fun name => if name == old then new else name) insts
 
 private def loadAir (dir : System.FilePath) : IO (Array Func) := do
+  let entries := (← dir.readDir).qsort (·.fileName < ·.fileName)
+  -- As the CLI does: number the generic instances first, so a keyed reference names its instance.
+  let texts := Anon.renumberAll (← entries.mapM fun entry => IO.FS.readFile entry.path)
   let mut funcs : Array Func := #[]
-  for entry in (← dir.readDir).qsort (·.fileName < ·.fileName) do
-    let raw ← get <| Raw.parseFile (← IO.FS.readFile entry.path)
+  for text in texts do
+    let raw ← get <| Raw.parseFile text
     funcs := funcs.push (← get <| normalize raw)
   return funcs
 

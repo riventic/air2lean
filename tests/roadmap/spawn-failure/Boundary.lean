@@ -1,5 +1,6 @@
 import Air2Lean
 import Air2Lean.Check
+import Air2Lean.Air.Anon
 
 open Air2Lean
 
@@ -27,7 +28,10 @@ private def configVariant (f : Func) (value : Int) (allocator : Bool := false)
     | _ => i }
 
 def main : IO Unit := do
-  let text ← IO.FS.readFile "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.empty.json"
+  -- Numbered as the CLI numbers it, so a keyed reference names its instance.
+  let some text := (Anon.renumberAll
+      #[← IO.FS.readFile "tests/roadmap/thread-tuples/air/0.16.0/thread_tuples.empty.json"])[0]?
+    | throw (IO.userError "no fixture text")
   let f ← match (do let f ← normalize (← Raw.parseFile text); check f; pure f : Except String Func) with
     | .ok f => pure f
     | .error e => throw (IO.userError e)

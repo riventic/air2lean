@@ -20,7 +20,7 @@ def bumpThenRead (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     Zig.naMark (some 0) none
     let i3 ← Zig.add false i2 (1 : BitVec 32)
     Zig.store (α := BitVec 32) 4 p0 i3
-    Zig.naMark none (some 0)
+    Zig.naMark (some 0) (some 0)
     let i5 ← Zig.load (BitVec 32) 4 p1
     Zig.naMark none none
     pure (.ret i5)) : Zig.MM bumpThenReadLocals bumpThenReadExit).run' (default : bumpThenReadLocals)
@@ -88,7 +88,7 @@ def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocal
       let i14 ← Zig.callM (Zig.load (BitVec 8) 1 (p1.elem 1 i7))
       Zig.naMark (some 1) none
       Zig.store (α := BitVec 8) 1 i13 i14
-      Zig.naMark none (some 0)
+      Zig.naMark (some 0) (some 0)
       pure .br8)
     else (do
       pure .br5)) : Zig.MM copyLocals copyExit) with
@@ -122,7 +122,7 @@ def readThenOverflow (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   Zig.naEnter
   let e ← ((do
     Zig.store (α := BitVec 8) 1 p0 (200 : BitVec 8)
-    Zig.naMark none (some 0)
+    Zig.naMark (some 0) (some 0)
     let i3 ← Zig.load (BitVec 8) 1 p1
     Zig.naMark none none
     let i4 ← Zig.add false i3 (100 : BitVec 8)
@@ -199,7 +199,7 @@ def writeThenCall (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   Zig.naEnter
   let e ← ((do
     Zig.store (α := BitVec 8) 1 p0 (200 : BitVec 8)
-    Zig.naMark none (some 0)
+    Zig.naMark (some 0) (some 0)
     let i3 ← Zig.callM (readChecked p1)
     Zig.naMark none none
     pure (.ret i3)) : Zig.MM writeThenCallLocals writeThenCallExit).run' (default : writeThenCallLocals)
@@ -353,9 +353,9 @@ def swap (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
     let i3 ← Zig.load (BitVec 32) 4 p1
     Zig.naMark (some 1) none
     Zig.store (α := BitVec 32) 4 p0 i3
-    Zig.naMark none (some 0)
+    Zig.naMark (some 0) (some 0)
     Zig.store (α := BitVec 32) 4 p1 i2
-    Zig.naMark none (some 1)
+    Zig.naMark (some 1) (some 1)
     pure .ret) : Zig.MM swapLocals swapExit).run' (default : swapLocals)
   Zig.naExit
   match e with
