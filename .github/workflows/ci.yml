@@ -2257,15 +2257,25 @@ jobs:
           cd "$tree"
           lake build Proofs
 
-      - name: aarch64-linux golden AIR, translate, differential test (0.14.1)
+      # 0.14.1's std cannot build the differential harness (as in the test job's 0.14.1 row):
+      # golden AIR, translation and Lean build here, native execution in the dispatch step.
+      - name: aarch64-linux golden AIR, translate (0.14.1)
         env:
           AIR2LEAN_CI: "1"
           AIR2LEAN_ZIG_VERSION: "0.14.1"
-          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_DIFF: "0"
           AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-0.14.1/zig
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/0.14.1
-          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/0.14.1/report.json
         run: scripts/check.sh
+
+      - name: aarch64-linux loop-switch dispatch native regressions (0.14.1)
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+          LEAN_NUM_THREADS: "1"
+          AIR2LEAN_DISPATCH_ZIG_VERSION: "0.14.1"
+          AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-0.14.1/bin/zig
+          AIR2LEAN_DISPATCH_ZIG_STOCK: ${{ runner.temp }}/host-zig-0.14.1/zig
+        run: tests/roadmap/dispatch/check.sh --native-only
 
       - name: aarch64-linux proofs (0.14.1)
         env:

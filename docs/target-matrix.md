@@ -48,7 +48,7 @@ must stay undeclared.
 | 0.15.2 | aarch64-macos | `macos` | Darwin AIR export, check.sh + diff test | ABI probe (`0.15.2/aarch64-macos-none`) | `lake build Proofs` (with `Gen-darwin.lean`) |
 | 0.16.0 | aarch64-linux | `aarch64-linux` | aarch64-linux AIR export, check.sh + diff test | T04 probe (`0.16.0/aarch64-linux-gnu`) | `lake build Proofs` |
 | 0.15.2 | aarch64-linux | `aarch64-linux` | aarch64-linux AIR export, check.sh + diff test | T04 probe (`0.15.2/aarch64-linux-gnu`) | `lake build Proofs` |
-| 0.14.1 | aarch64-linux | `aarch64-linux` | aarch64-linux AIR export, check.sh + diff test | T04 probe (`0.14.1/aarch64-linux-gnu`) | `lake build Proofs` |
+| 0.14.1 | aarch64-linux | `aarch64-linux` | dispatch `--native-only` (check.sh without the diff test: 0.14.1 std cannot build the harness) | T04 probe (`0.14.1/aarch64-linux-gnu`) | `lake build Proofs` |
 
 The `macos` job is one job without a matrix (macOS runner concurrency is limited). It
 installs the checksum-pinned stock aarch64-macos Zig releases, caches the patched
