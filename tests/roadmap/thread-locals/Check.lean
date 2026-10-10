@@ -25,20 +25,20 @@ example {inits : List (BlockId × Array Byte × Nat)} {m m' : Mem} {x : Unit}
 example : (ThreadLocals.mem0 .fresh).blocks[0]?.map (·.bytes) = some (ThreadLocals.tlsInit[0]!.2.1) := rfl
 
 -- (3) Two workers and `main` increment their own `counter` concurrently: every schedule.
-example {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run =
+example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run =
       some (.ok (v, m))) : v = .ok 90908 :=
-  ThreadLocals.Counters.twoCounters_spec h
-example {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run ≠
+  ThreadLocals.Counters.twoCounters_spec env henv h
+example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env ThreadLocals.dispatch fuel o ThreadLocals.twoCounters (ThreadLocals.mem0 .fresh)).run ≠
       some (.error e) :=
-  ThreadLocals.Counters.twoCounters_safe
+  ThreadLocals.Counters.twoCounters_safe env henv
 
 -- (4) A thread-local pointer used after its thread ended never gives a result.
-example {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem} :
-    (Sched.run ThreadLocals.dispatch fuel o ThreadLocals.leaked (ThreadLocals.mem0 .fresh)).run ≠
+example (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem} :
+    (Sched.run env ThreadLocals.dispatch fuel o ThreadLocals.leaked (ThreadLocals.mem0 .fresh)).run ≠
       some (.ok (v, m)) :=
-  ThreadLocals.Leak.leaked_never_ok
+  ThreadLocals.Leak.leaked_never_ok env henv
 example {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {b : BlockId} {a : Nat} {v : T}
     (hd : m.Dead b) (hp : p.block = some b) : ((load T a p).run m).run ≠ some (.ok (v, m')) :=
   load_dead hd hp
@@ -50,11 +50,11 @@ example {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {b : BlockId} {a : Nat} {v : T
 
 /-- info: 'ThreadLocals.Counters.twoCounters_safe' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
-#print axioms ThreadLocals.Counters.twoCounters_safe
+#print axioms ThreadLocals.Counters.twoCounters_safe env henv
 
 /-- info: 'ThreadLocals.Leak.leaked_never_ok' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
-#print axioms ThreadLocals.Leak.leaked_never_ok
+#print axioms ThreadLocals.Leak.leaked_never_ok env henv
 
 /-- info: 'Zig.TlsWF.no_alias' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in

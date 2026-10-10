@@ -59,7 +59,9 @@ assert native == ['aliasProbe(FixedBufferAllocator)=42', 'remapProbe(page_alloca
 assert all(not x.endswith('=42') for x in model if x.startswith('aliasProbe')), model
 assert all(not x.endswith('=1') for x in model if x.startswith('remapProbe')), model
 assert [x for x in model if x.startswith('cancelProbe')] == ['cancelProbe=error:Zig.Error.deadlock'], model
+# D-IO-INLINE fixed: `Group.async` may run the task in the caller, which then deadlocks as the
+# native single-threaded run hangs.
 handoff = {x for x in model if x.startswith('handoffProbe')}
-assert 'handoffProbe=5' in handoff and handoff <= {'handoffProbe=5', 'handoffProbe=no-result'}, model
-print('divergences present: model results differ from native std allocators and std.Io (see docs/architecture-audit/models.md)')
+assert 'handoffProbe=5' in handoff and 'handoffProbe=error:Zig.Error.deadlock' in handoff, model
+print('divergences present: model results differ from native std allocators and std.Io (see docs/architecture-audit/models.md); D-IO-INLINE agrees')
 PY

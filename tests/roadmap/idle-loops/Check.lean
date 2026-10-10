@@ -8,20 +8,20 @@ variable (σ : Placement)
 
 -- Safety: every placement, oracle and fuel; no error (no panic, race or deadlock). No result is allowed.
 example (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run dispatch fuel o main (mem0 σ)).run ≠ some (.error e) := idle_safe fuel o e
+    (Sched.run ⟨.any, .available⟩ dispatch fuel o main (mem0 σ)).run ≠ some (.error e) := idle_safe fuel o e
 
 -- Progress needs the explicit premise `Cooperative` (THR-09).
 example (o : Nat → Nat) (h : Cooperative o) : ∃ bound, ∀ fuel, bound ≤ fuel →
-    ∃ M, (Sched.run dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := idle_progress o h
+    ∃ M, (Sched.run ⟨.any, .available⟩ dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := idle_progress o h
 
 -- A legal oracle under which the worker spins and yields forever; it is not cooperative.
-example (fuel : Nat) : (Sched.run dispatch fuel favorWorker main (mem0 σ)).run = none :=
+example (fuel : Nat) : (Sched.run ⟨.any, .available⟩ dispatch fuel favorWorker main (mem0 σ)).run = none :=
   idle_starves fuel
 example : ¬ Cooperative favorWorker := favorWorker_not_cooperative
 example : Cooperative (fun _ => 0) := zero_cooperative
 example : ¬ ∀ o : Nat → Nat, ∃ bound, ∀ fuel, bound ≤ fuel →
-    ∃ M, (Sched.run dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := progress_needs_premise
-example : ¬ Zig.Conc.Total.EventuallyReturns dispatch main (mem0 σ) (fun _ _ => True) :=
+    ∃ M, (Sched.run ⟨.any, .available⟩ dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := progress_needs_premise
+example : ¬ Zig.Conc.Total.EventuallyReturns ⟨.any, .available⟩ dispatch main (mem0 σ) (fun _ _ => True) :=
   not_eventuallyReturns
 
 -- P05 conditional concurrent termination: the premise is an explicit argument of the interface.

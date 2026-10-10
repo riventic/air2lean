@@ -59,7 +59,7 @@ def classify {α : Type} : Option (Except Error (α × Mem)) → Out
   | none => .none
 
 def run {α : Type} (o : Nat → Nat) (main : ConcM Tgt α) : Out :=
-  classify (Sched.run dispatch 64 o main {}).run
+  classify (Sched.run ⟨.any, .available⟩ dispatch 64 o main {}).run
 
 /-- The oracle that picks option `cs[i]` at choice `i` (modulo the number of options) and the
 first option afterwards. Choice 0 is `main`'s first turn, the only option. -/

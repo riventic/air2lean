@@ -565,7 +565,7 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   refine ⟨fun _ => ⟨by show 0 < 1; decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
     have hr := r1₁₅
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r1₁₅ rfl rfl, fun m₁₆ hj => ?_⟩⟩
   obtain ⟨hk1, c', ac', x', ax', v', hf1⟩ := hfin
   obtain ⟨h', d', -, hk1'⟩ := k1₁₅
@@ -619,7 +619,7 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   refine ⟨fun _ => ⟨by show 0 < 2; decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
     have hr := r2₁₇
     unfold KidRec at hr
-    simp [Thread.joinValid, hr]⟩,
+    simp [Thread.joinValid, Mem.isGated, hr]⟩,
     fun hfin => ⟨fun _ => join_run r2₁₇ rfl rfl, fun m₁₈ hj₂ => ?_⟩⟩
   obtain ⟨hk2, c'', ac'', x'', ax'', v'', hf2⟩ := hfin
   obtain ⟨h'', d'', -, hk2'⟩ := k2₁₇
@@ -681,24 +681,24 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
 
 /-- **`disjoint a b` gives `a + b` (wrapping) under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem disjoint_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o (disjoint a b) (mem0 σ)).run = some (.ok (v, m))) :
+theorem disjoint_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok (a + b) := by
-  obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := (proto a b).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- One schedule completes: under the oracle that always picks option 0, `disjoint 1 2` returns
 3 within fuel 1000. The kernel computes the run. -/
 theorem disjoint_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (disjoint 1 2) (mem0 σ)) = some 3 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (disjoint 1 2) (mem0 σ)) = some 3 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- **No run of `disjoint a b` gives an error**, under any schedule: no data race (the two threads
 write disjoint bytes), no other illegal behaviour. -/
-theorem disjoint_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
-  (proto a b).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+theorem disjoint_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (disjoint a b) (mem0 σ)).run ≠ some (.error e) :=
+  (proto a b).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ)
 
 /-! ## Non-vacuity and liveness witnesses -/

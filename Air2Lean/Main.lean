@@ -45,8 +45,8 @@ def translatorJson : Lean.Json := Lean.Json.mkObj [("lean", .str translator.lean
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--model-registry <json>] [--model-registry-template] [--proof-api] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--device-contract <json>]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>]\n" ++
     "       air2lean --print-op-table"
 
 def help : String :=
@@ -66,6 +66,7 @@ def help : String :=
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
   "  --device-contract <json>     Model volatile integer accesses as device events; see docs/volatile-effects.md.\n" ++
+  "  --assume-no-lb               Accept relaxed load-then-store code (premise ORD-02); see docs/std-models.md.\n" ++
   "  --diagnostics-json           Check only and print JSON diagnostics; see docs/diagnostics.md.\n" ++
   "  --diagnostic-limit <n>       Diagnostics to report in that mode (1..4096).\n" ++
   "  --unit-diagnostic-limit <n>  Diagnostics to report per input file in that mode (1..4096).\n" ++
@@ -101,6 +102,8 @@ structure Args where
   /-- `--allow-unqualified-build-mode`: admit a profile outside `BuildProfile.qualifiedBuilds`
   (`docs/build-modes.md`); recorded in the generated header. -/
   allowUnqualified : Bool := false
+  /-- `--assume-no-lb`: accept the load-buffering shape (`checkLoadBuffering`, premise ORD-02). -/
+  assumeNoLb : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -146,6 +149,9 @@ private partial def parseArgsGo (args : List String)
   | "--allow-unqualified-build-mode" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with allowUnqualified := true })
+  | "--assume-no-lb" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeNoLb := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -331,6 +337,7 @@ private def run (args : List String) : IO UInt32 := do
         let resolved ← resolveExterns funcs models
         checkProgram resolved models profiles[0]?
         if a.spawnSemantics == .fallible then checkFallibleSpawnCalls resolved
+        unless a.assumeNoLb do checkLoadBuffering resolved
         return resolved
         : Except String (Array Func))
       times := { times with check := times.check + programNs }

@@ -57,11 +57,15 @@ These rules follow the audited `lib/std/Io.zig` and `lib/std/Io/Threaded.zig` of
 - **Must be consumed.** Only `await`/`cancel` release the record and join the task. A spawner
   that ends with an unconsumed future fails `checkJoinedByChild` (`.illegal`). The model
   reports this as a leak.
-- **Spawn policy.** `available` (the default) assigns every task. `fallible` (`--spawn-policy
-  fallible`) also covers the audited `Io.Threaded.async` fallbacks: record allocation failure,
-  the async limit, a failed worker spawn, and single-threaded builds. Each fallback runs the
-  task in the caller, so the future is born consumed. In that case there is no record, no thread
-  and no ownership transfer.
+- **Execution.** `Io.async` promises no thread. As for `Io.Group.async`, the run's environment
+  (`Zig.Env`, `docs/std-models.md`) picks the execution (`SyncOp.asyncChoice`,
+  `Zig.asyncWithPolicyC`): a task thread (`Zig.asyncC`), or the caller at once
+  (`Zig.asyncEagerC`), which `Io.Threaded` does once `async_limit` tasks may be busy, under
+  `single_threaded`, and when the record allocation or worker spawn fails (`Env.spawn`). A
+  caller run gives a future that is born consumed: no record, no thread and no ownership
+  transfer. A deferred task (`AsyncEnv.any`) is a task thread, which the scheduler may run as
+  late as the awaiter's join. The translation's `--spawn-policy` does not change this; every
+  proof covers both executions.
 - **Ownership.** The task gets its by-value argument tuple as a spawn target. `Tgt.captures`
   classifies every field for `Zig.Conc.Capture.grant`, as for `Thread.spawn`. The task owns the
   result cells of its record until the join returns them to the awaiter. The record is not a
@@ -72,8 +76,8 @@ These rules follow the audited `lib/std/Io.zig` and `lib/std/Io/Threaded.zig` of
 `ZigLean/Conc/FutureLemmas.lean` holds the semantic rules. It is proof-only and is not part of
 `ZigLean.lean`. It provides the result-cell rules (`Holds`, `complete_holds`, `take_eq`), the
 round trips of pending and consumed futures, idempotence, and a rely-guarantee protocol for one
-task (`futureProto`). The protocol has a task rule (`task_wp`), spawner rules (`wp_asyncC`,
-`await_wp`, `cancel_wp`) and a cancelation-point rule (`wp_checkCancelC`).
+task (`futureProto`). The protocol has a task rule (`task_wp`), spawner rules (`wp_asyncWithPolicyC`,
+`wp_asyncC`, `wp_asyncEagerC`, `await_wp`, `cancel_wp`, `await_consumed_wp`, `cancel_consumed_wp`) and a cancelation-point rule (`wp_checkCancelC`).
 
 `Futures/Proofs.lean` applies these rules to the **generated** code of `futures.zig`. The
 results are partial correctness over every oracle and every fuel (`Conc.run_sound`):

@@ -95,6 +95,43 @@ private def asmFile (output input : String) : Json :=
        ("inputs", .arr #[obj [("constraint", .str input), ("name", .str "in"), ("ref", ref 0)]])],
      inst 2 "ret" 1 #[ref 1]]
 
+
+/-- Audit #4: a relaxed load of `x` (in an inlined block), then a write of `y` with `store`. -/
+private def lbFile (loadOrder store : String) (samePtr : Bool := false) : Json :=
+  let aptr := obj [("k", .str "ptr"), ("size", .str "one"), ("const", .bool false),
+    ("child", num 0), ("ptr_align", num 4), ("abi_size", num 8), ("abi_align", num 8)]
+  file "lb" #[intTy 32, aptr, voidTy, nrTy] #[1, 1] 0
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 1 "arg" 1 #[] [("param", num 1)],
+      inst 2 "block" 0 #[] [("body", .arr #[inst 3 "atomic_load" 0 #[ref 0]
+        [("order", .str loadOrder)], inst 4 "br" 3 #[ref 3] [("target", num 2)]])],
+      inst 5 store 2 #[ref (if samePtr then 0 else 1), lit 0 "1"], inst 6 "ret" 3 #[ref 2]]
+
+
+/-- Audit #4: `s.n.load(.monotonic)` then a write to `s.n` (the same field, through two field
+pointers) or to `s.m`; `mid` is an atomic load of `s.m` (with its order) between them, and
+`first` is the first op's tag (`atomic_load` or `atomic_rmw`). -/
+private def lbFieldFile (first : String) (mid : Option String) (sameField : Bool) : Json :=
+  let st := obj [("k", .str "struct"), ("name", .str "S"), ("layout", .str "extern"),
+    ("fields", .arr #[obj [("name", .str "n"), ("ty", num 0), ("offset", num 0)],
+      obj [("name", .str "m"), ("ty", num 0), ("offset", num 4)]]),
+    ("abi_size", num 8), ("abi_align", num 4)]
+  let sp := obj [("k", .str "ptr"), ("size", .str "one"), ("const", .bool false),
+    ("child", num 1), ("ptr_align", num 4), ("abi_size", num 8), ("abi_align", num 8)]
+  let fp := obj [("k", .str "ptr"), ("size", .str "one"), ("const", .bool false),
+    ("child", num 0), ("ptr_align", num 4), ("abi_size", num 8), ("abi_align", num 8)]
+  let firstOp := if first == "atomic_rmw" then
+      inst 3 "atomic_rmw" 0 #[ref 2, lit 0 "1"] [("op", .str "Add"), ("order", .str "monotonic")]
+    else inst 3 "atomic_load" 0 #[ref 2] [("order", .str "monotonic")]
+  let midOps := match mid with
+    | some o => #[inst 4 "struct_field_ptr" 4 #[ref 0] [("index", num 1)],
+        inst 5 "atomic_load" 0 #[ref 4] [("order", .str o)]]
+    | none => #[]
+  file "lbField" #[intTy 32, st, sp, voidTy, fp, nrTy] #[2] 0
+    (#[inst 0 "arg" 2 #[] [("param", num 0)],
+      inst 2 "struct_field_ptr" 4 #[ref 0] [("index", num 0)], firstOp] ++ midOps ++
+     #[inst 6 "struct_field_ptr" 4 #[ref 0] [("index", num (if sameField then 0 else 1))],
+      inst 7 "atomic_store_monotonic" 3 #[ref 6, lit 0 "1"], inst 8 "ret" 5 #[ref 3]])
+
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Parser.lean OUTPUT_DIR")
   let directory : System.FilePath := output
@@ -327,4 +364,20 @@ def main (args : List String) : IO Unit := do
     | .error e =>
       require ((e.splitOn s!"{callee} argument 0 does not match worker 'missingWorker' parameter 0").length > 1)
         s!"wrong incompatible-worker diagnostic for {callee}: {e}"
+  -- Audit #4: the load-buffering shape is rejected without `--assume-no-lb`.
+  match checkLoadBuffering #[← accept (lbFile "monotonic" "atomic_store_monotonic")] with
+  | .ok _ => throw (IO.userError "accepted the load-buffering shape")
+  | .error e => require ((e.splitOn "load buffering").length > 1) s!"wrong load-buffering diagnostic: {e}"
+  for (lo, st, same) in [("acquire", "atomic_store_monotonic", false),
+      ("monotonic", "atomic_store_release", false), ("monotonic", "atomic_store_monotonic", true)] do
+    match checkLoadBuffering #[← accept (lbFile lo st same)] with
+    | .ok _ => pure ()
+    | .error e => throw (IO.userError s!"rejected a non-LB shape ({lo}, {st}, {same}): {e}")
+  -- the same field through two field pointers is one address; an RMW reads; an acquire load of
+  -- another location between does not order the read before the write
+  for (first, mid, same, bad) in [("atomic_load", (none : Option String), true, false),
+      ("atomic_load", none, false, true), ("atomic_rmw", none, false, true),
+      ("atomic_load", some "acquire", false, true), ("atomic_load", some "seq_cst", false, false)] do
+    let r := checkLoadBuffering #[← accept (lbFieldFile first mid same)]
+    require (r.toOption.isNone == bad) s!"load buffering ({first}, {mid}, same field {same}): {reprStr (r.toOption.isNone)}"
   IO.println "parser regressions passed"

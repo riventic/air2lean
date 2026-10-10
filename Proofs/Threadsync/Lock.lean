@@ -358,7 +358,7 @@ theorem lockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) 
 /-- `unlock` (macOS) by the holder `t` (`g`): it goes to `out`. -/
 theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   unfold Thread_Mutex_unlock
@@ -369,6 +369,13 @@ theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr
   unfold osUnfairUnlockC
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [hp]
+  -- the owner check: `t` holds the lock, so the newest message of the word is `t`'s
+  have hrun := ((hP.inv _ _).mp hi).1.ownerCheck hc1 (by rw [upd_self]; exact hg) hc
+  refine WP.bind (WP.callMC (fun e he => by rw [hrun] at he; cases he) fun _ m₀ hr => ?_)
+  rw [hrun] at hr
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hr
+  obtain ⟨-, rfl⟩ := hr
+  refine ⟨rfl, ?_⟩
   refine WP.bind (wp_xchgRel hP hc1 hg hi fun k₁ hk₁ G₁ m₁ r hc₁ hi₁ => ?_)
   simp only [StateT.run_pure, pure_bind]
   rw [threadFutexWakeC_eq]
@@ -397,11 +404,11 @@ theorem lock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.pt
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_spec (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr) (t : ThreadId)
     (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hi : P.inv (upd G t g) m) (hcur : m.current = t := by first | assumption | rfl) :
     P.WP t (Thread_Mutex_unlock p) (fun _ G' m' d' => d' ≤ d ∧
       m'.current = t ∧ P.inv (upd G' t (L.set g .out Heap.empty)) m') G m d := by
   first
   | (have hc3 : L.c = 3 := (by unfold mutexC at hc; exact hc); exact unlockL_spec hP hc3 hp t g hg G m d hi)
-  | exact unlockD_spec hP hc hp t g hg G m d hi
+  | exact unlockD_spec hP hc hp t g hg G m d hi hcur
 end ThreadMutexOps
 end Threadsync

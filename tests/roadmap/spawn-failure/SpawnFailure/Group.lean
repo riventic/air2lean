@@ -91,9 +91,9 @@ def MainA (B : Blks) (w : BitVec 32) : Ph → Assn
   | .async | .taken => grpA B
   | .joined => flagA B.x B.ax v ∗ grpA B
 
-/-- The thread record of child `u`. -/
+/-- The thread record of child `u` (an assigned or a deferred task, `gated`). -/
 def KidRec (m : Mem) (u : ThreadId) (joined : Bool) : Prop :=
-  m.threads[u]? = some { spawner := 0, joined }
+  ∃ gt, m.threads[u]? = some { spawner := 0, joined, gated := gt }
 
 /-- The threads and the group at each phase of `main`. -/
 def Shape (B : Blks) (G : ThreadId → Gh) (m : Mem) : Ph → Prop
@@ -122,7 +122,7 @@ def proto : Proto Tgt Gh where
     | .writeWorker (x, w) => ∃ h ax, g = .kid h x ax w false
   fin g := ∃ h x ax w, g = .kid h x ax w true
   strict := true
-  joins g := ∃ w h B, g = .main .taken w h B
+  joins g := (∃ w h B, g = .main .taken w h B) ∨ ∃ h x ax w, g = .kid h x ax w false
 
 /-- The declared result contract of `groupAsync`. -/
 def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Prop :=
@@ -152,7 +152,8 @@ theorem kid_live {G : ThreadId → Gh} {m : Mem} {u : ThreadId} {h x ax w}
       · unfold ThreadId at *; omega
     subst this
     refine ⟨?_, by rw [hsz]; decide, rfl⟩
-    unfold joinedB; unfold KidRec at r1; rw [r1]; rfl
+    obtain ⟨gt, r1⟩ := r1
+    unfold joinedB; rw [r1]; rfl
   | joined =>
     obtain ⟨hsz, r1, -, ⟨h', hk⟩, hn⟩ := hs
     by_cases h1 : u = 1
@@ -175,26 +176,27 @@ theorem spawner0 {G : ThreadId → Gh} {m : Mem} (hi : Inv v G m) :
   obtain ⟨ph, w, hm, B, -, -, -, hs⟩ := hi.main
   intro r hr
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
-  have hk : ∀ (j : Nat) (jn : Bool), m.threads[j]? = some { spawner := 0, joined := jn } →
+  have hk : ∀ (j : Nat) (jn : Bool) (gt : Bool),
+      m.threads[j]? = some { spawner := 0, joined := jn, gated := gt } →
       ∀ (hj : j < m.threads.size), m.threads[j].spawner = 0 := by
-    intro j jn he hj
+    intro j jn gt he hj
     rw [Array.getElem?_eq_getElem hj] at he
     simp only [Option.some.injEq] at he
     rw [he]
   cases ph with
   | solo =>
     have : i = 0 := by have := hs.1; omega
-    subst this; exact hk 0 true hi.t0 _
+    subst this; exact hk 0 true false hi.t0 _
   | async | taken =>
-    obtain ⟨hsz, r1, -⟩ := hs
+    obtain ⟨hsz, ⟨gt, r1⟩, -⟩ := hs
     rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
-    · exact hk 0 true hi.t0 _
-    · exact hk 1 false r1 _
+    · exact hk 0 true false hi.t0 _
+    · exact hk 1 false gt r1 _
   | joined =>
-    obtain ⟨hsz, r1, -⟩ := hs
+    obtain ⟨hsz, ⟨gt, r1⟩, -⟩ := hs
     rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
-    · exact hk 0 true hi.t0 _
-    · exact hk 1 true r1 _
+    · exact hk 0 true false hi.t0 _
+    · exact hk 1 true gt r1 _
 
 /-! ## The child -/
 
@@ -228,7 +230,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto v).init tgt g) (u : Thre
           intro k hk hn j hj
           rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact hn j hj
         have hrec : ∀ jn, KidRec m 1 jn → KidRec m' 1 jn := by
-          intro jn hr; unfold KidRec; rw [hs.threads]; exact hr
+          intro jn hr; unfold KidRec at hr ⊢; rw [hs.threads]; exact hr
         cases ph with
         | solo => exact absurd (hsh.2.2 1 (by decide)) (by rw [hgu]; exact fun h => by cases h)
         | async =>
@@ -262,77 +264,91 @@ def AfterAsync (B : Blks) (G : ThreadId → Gh) (m : Mem) : Prop :=
   m.current = 0 ∧ ∃ ph w h, (ph = .solo ∧ w = v ∨ ph = .async) ∧
     Inv v (upd G 0 (.main ph w h B)) m
 
+/-- An assigned or a deferred task (`gt`): thread 1, recorded in the group, gets `out`. -/
+theorem assign_after {B : Blks} (hB : B.Ok) {hX hGr : Heap} (hdX : Heap.Disjoint hX hGr)
+    (hx : flagA B.x B.ax 0 hX) (hg : grpA B hGr) {G₁ : ThreadId → Gh} {m₁ m' : Mem}
+    {child : ThreadId} {gt : Bool} (hi₁ : Inv v G₁ m₁)
+    (hg₁ : G₁ 0 = .main .solo 0 (hX ∪ hGr) B)
+    (hf : ((Thread.forkWith gt).run { m₁ with current := 0 }).run = some (.ok (child, m'))) :
+    AfterAsync (v := v) B (upd G₁ child (.kid hX B.x B.ax v false))
+      { m' with groups := m'.groups.push (B.g, child) } := by
+  obtain ⟨hx0, hg0, hax⟩ := hB
+  obtain ⟨ph, w, hm, B', h0, -, -, hsh⟩ := hi₁.main
+  rw [hg₁] at h0; cases h0
+  obtain ⟨hsz₁, hgr₁, hn₁⟩ := hsh
+  obtain ⟨rfl, hth'⟩ := fork_threads hf
+  have hown₁ : ownOf G₁ m₁ 0 = hGr ∪ hX := by
+    simp [ownOf, joinedB, hg₁, Gh.heap, Heap.union_comm hdX]
+  have ho' := Owned.fork (hi₁.own.current 0) (by rw [hsz₁]; decide) hown₁ hdX.symm hf
+  rw [hsz₁] at ho' ⊢
+  have hjb' : joinedB m' = joinedB m₁ := joinedB_fork hf
+  have hjb1 : joinedB m₁ 1 = false := by
+    simp [joinedB, Array.getElem?_eq_none (show m₁.threads.size ≤ 1 by omega)]
+  have hfe := hf
+  rw [Proto.forkWith_run] at hfe
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfe
+  obtain ⟨-, hm'⟩ := hfe
+  have hcur' : m'.current = 0 := by rw [← hm']
+  have hgr' : m'.groups = m₁.groups := by rw [← hm']
+  refine ⟨hcur', .async, 0, hGr, .inr rfl, ?_⟩
+  refine ⟨?_, fun u h x ax w d hu => ?_, ⟨.async, 0, hGr, B, upd_self _ _ _, ⟨hx0, hg0, hax⟩,
+    hg, ?_⟩, ?_⟩
+  · have e : ownOf (upd (upd G₁ 1 (.kid hX B.x B.ax v false)) 0 (.main .async 0 hGr B))
+        { m' with groups := m'.groups.push (B.g, 1) } =
+        upd (upd (ownOf G₁ m₁) 0 hGr) 1 hX := by
+      funext u
+      unfold ownOf
+      rw [show joinedB { m' with groups := m'.groups.push (B.g, 1) } = joinedB m' from rfl,
+        hjb']
+      by_cases h0 : u = 0
+      · subst h0; simp [joinedB, upd, Gh.heap]
+      · by_cases h1 : u = 1
+        · subst h1; simp [hjb1, upd, Gh.heap]
+        · simp [upd, h0, h1]
+    rw [e]; exact ⟨ho'.sub, ho'.disj, ho'.owns, ho'.outside, ho'.csize⟩
+  · by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu
+      by_cases h1 : u = 1
+      · subst h1; rw [upd_self] at hu; cases hu
+        exact sep_lift.mpr ⟨⟨hx0, hax⟩, hx⟩
+      · rw [upd_ne _ _ h1, hn₁ u (by unfold ThreadId at *; omega)] at hu; cases hu
+  · refine ⟨by show m'.threads.size = 2; rw [hth']; simp [hsz₁], ?_, ?_,
+      ⟨hX, false, by simp [upd]⟩, fun u hu => ?_⟩
+    · refine ⟨gt, ?_⟩; show m'.threads[1]? = _
+      rw [hth', Array.getElem?_push, if_pos hsz₁.symm]
+    · show m'.groups.push (B.g, 1) = _
+      rw [hgr', hgr₁]; rfl
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
+        hn₁ u (by unfold ThreadId at *; omega)]
+  · show m'.threads[0]? = _
+    rw [hth', Array.getElem?_push, if_neg (by omega)]; exact hi₁.t0
+
 /-- **Both outcomes of `Group.async` establish `AfterAsync`.** Outcome 0 assigns thread 1 and
 records it in the group; it gives `out` to the child. Outcome 1 runs `writeWorker(&out, v)` in
 `main`, which keeps `out`. -/
-theorem afterAsync_spec {σ : Type} {s : σ} (io : Io) (B : Blks) (hB : B.Ok) (c : Nat) (hc : c < 2)
+theorem afterAsync_spec {σ : Type} {s : σ} (io : Io) (B : Blks) (hB : B.Ok) (c : Nat)
+    (hc : c < groupAsyncOutcomes)
     (hX hGr : Heap) (hdX : Heap.Disjoint hX hGr) (hx : flagA B.x B.ax 0 hX) (hg : grpA B hGr)
     {G : ThreadId → Gh} {m : Mem} {n : Nat} (hcur : m.current = 0)
     (hi : Inv v (upd G 0 (.main .solo 0 (hX ∪ hGr) B)) m) :
     (proto v).WP 0 ((groupAsyncOutcomeC c B.g io (Tgt.writeWorker (B.x, v))
       (fallback (B.x, v)) : CM Tgt σ Unit).run s)
       (fun r G' m' _ => r.2 = s ∧ AfterAsync (v := v) B G' m') G m n := by
+  have hB' := hB
   obtain ⟨hx0, hg0, hax⟩ := hB
   obtain ⟨ph, w, hm, B', h0, -, -, hsh⟩ := hi.main
   rw [upd_self] at h0; cases h0
   obtain ⟨hsz, hgr, hn⟩ := hsh
-  rcases (by omega : c = 0 ∨ c = 1) with rfl | rfl
+  unfold groupAsyncOutcomes at hc
+  rcases (by omega : c = 0 ∨ c = 1 ∨ c = 2) with rfl | rfl | rfl
   · -- Assignment: thread 1 gets `out`.
     simp only [groupAsyncOutcomeC, if_pos rfl]
     refine WP.groupAsyncC (io := io) fun k _ => ⟨.main .solo 0 (hX ∪ hGr) B, hi, fun G₁ m₁ hg₁ hi₁ =>
       ⟨.kid hX B.x B.ax v false, ⟨_, _, rfl⟩, fun child m' hf => ?_⟩⟩
-    obtain ⟨ph, w, hm, B', h0, -, -, hsh⟩ := hi₁.main
-    rw [hg₁] at h0; cases h0
-    obtain ⟨hsz₁, hgr₁, hn₁⟩ := hsh
-    obtain ⟨rfl, hth'⟩ := fork_threads hf
-    have hown₁ : ownOf G₁ m₁ 0 = hGr ∪ hX := by
-      simp [ownOf, joinedB, hg₁, Gh.heap, Heap.union_comm hdX]
-    have ho' := Owned.fork (hi₁.own.current 0) (by rw [hsz₁]; decide) hown₁ hdX.symm hf
-    rw [hsz₁] at ho' ⊢
-    have hjb' : joinedB m' = joinedB m₁ := joinedB_fork hf
-    have hjb1 : joinedB m₁ 1 = false := by
-      simp [joinedB, Array.getElem?_eq_none (show m₁.threads.size ≤ 1 by omega)]
-    have hfe := hf
-    rw [Proto.fork_run] at hfe
-    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfe
-    obtain ⟨-, hm'⟩ := hfe
-    have hcur' : m'.current = 0 := by rw [← hm']
-    have hgr' : m'.groups = m₁.groups := by rw [← hm']
-    refine ⟨rfl, hcur', .async, 0, hGr, .inr rfl, ?_⟩
-    refine ⟨?_, fun u h x ax w d hu => ?_, ⟨.async, 0, hGr, B, upd_self _ _ _, ⟨hx0, hg0, hax⟩,
-      hg, ?_⟩, ?_⟩
-    · have e : ownOf (upd (upd G₁ 1 (.kid hX B.x B.ax v false)) 0 (.main .async 0 hGr B))
-          { m' with groups := m'.groups.push (B.g, 1) } =
-          upd (upd (ownOf G₁ m₁) 0 hGr) 1 hX := by
-        funext u
-        unfold ownOf
-        rw [show joinedB { m' with groups := m'.groups.push (B.g, 1) } = joinedB m' from rfl,
-          hjb']
-        by_cases h0 : u = 0
-        · subst h0; simp [joinedB, upd, Gh.heap]
-        · by_cases h1 : u = 1
-          · subst h1; simp [hjb1, upd, Gh.heap]
-          · simp [upd, h0, h1]
-      rw [e]; exact ⟨ho'.sub, ho'.disj, ho'.owns, ho'.outside, ho'.csize⟩
-    · by_cases h0 : u = 0
-      · subst h0; rw [upd_self] at hu; cases hu
-      · rw [upd_ne _ _ h0] at hu
-        by_cases h1 : u = 1
-        · subst h1; rw [upd_self] at hu; cases hu
-          exact sep_lift.mpr ⟨⟨hx0, hax⟩, hx⟩
-        · rw [upd_ne _ _ h1, hn₁ u (by unfold ThreadId at *; omega)] at hu; cases hu
-    · refine ⟨by show m'.threads.size = 2; rw [hth']; simp [hsz₁], ?_, ?_,
-        ⟨hX, false, by simp [upd]⟩, fun u hu => ?_⟩
-      · unfold KidRec; show m'.threads[1]? = _
-        rw [hth', Array.getElem?_push, if_pos hsz₁.symm]
-      · show m'.groups.push (B.g, 1) = _
-        rw [hgr', hgr₁]; rfl
-      · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
-          hn₁ u (by unfold ThreadId at *; omega)]
-    · show m'.threads[0]? = _
-      rw [hth', Array.getElem?_push, if_neg (by omega)]; exact hi₁.t0
+    exact ⟨rfl, assign_after hB' hdX hx hg hi₁ hg₁ hf⟩
   · -- Fallback: `main` runs the task with `out`, which it keeps.
-    simp only [groupAsyncOutcomeC, if_neg (show (1 : Nat) ≠ 0 by decide)]
+    simp only [groupAsyncOutcomeC, if_neg (show (1 : Nat) ≠ 0 by decide), if_pos rfl]
     refine WP.callC ?_
     show (proto v).WP 0 ((fun _ => ()) <$> ConcM.liftMem (writeWorker B.x v)) _ G m n
     have hown : ownOf (upd G 0 (.main .solo 0 (hX ∪ hGr) B)) m 0 = hX ∪ hGr := by
@@ -361,6 +377,13 @@ theorem afterAsync_spec {σ : Type} {s : σ} (io : Io) (B : Blks) (hB : B.Ok) (c
       have := hn u hu
       rw [upd_ne _ _ hu0] at this ⊢; exact this
     · rw [hs.threads]; exact hi.t0
+  · -- Deferred: thread 1 is recorded in the group and starts only at `Group.await`.
+    simp only [groupAsyncOutcomeC, if_neg (show (2 : Nat) ≠ 0 by decide),
+      if_neg (show (2 : Nat) ≠ 1 by decide)]
+    refine WP.groupDeferC (io := io) fun k _ => ⟨.main .solo 0 (hX ∪ hGr) B, hi, fun G₁ m₁ hg₁ hi₁ =>
+      ⟨.kid hX B.x B.ax v false, ⟨_, _, rfl⟩, fun _ => .inr ⟨_, _, _, _, rfl⟩,
+        fun child m' hf => ?_⟩⟩
+    exact ⟨rfl, assign_after hB' hdX hx hg hi₁ hg₁ hf⟩
 
 /-! ## `main`: `Group.await` -/
 
@@ -463,12 +486,11 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     refine WP.bind (WP.joinC fun k _ => ⟨.main .taken w h B, hiT, fun G₁ m₁ hg₁ hi₁ => ?_⟩)
     obtain ⟨ph, w₁, hm, B', h0, -, hma₁, hsh⟩ := hi₁.main
     rw [hg₁] at h0; cases h0
-    obtain ⟨hsz₁, r1₁, hgr₁, ⟨hk, dk, hk1₁⟩, hn₁⟩ := hsh
-    refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁]; decide, ⟨_, _, _, rfl⟩, by
+    obtain ⟨hsz₁, ⟨gt₁, r1₁⟩, hgr₁, ⟨hk, dk, hk1₁⟩, hn₁⟩ := hsh
+    refine ⟨fun _ => ⟨by exact Nat.zero_lt_succ _, by rw [hsz₁]; decide, .inl ⟨_, _, _, rfl⟩, by
       have hr := r1₁
-      unfold KidRec at hr
-      simp [Thread.joinValid, hr]⟩,
-      fun hfin => ⟨fun _ => join_run r1₁ rfl rfl, fun m₂ hj => ?_⟩⟩
+      simp [Thread.joinValid, Mem.isGated, hr, hgr₁]⟩,
+      fun hfin => ⟨fun _ => join_run r1₁ rfl rfl (.inr (by simp [hgr₁])), fun m₂ hj => ?_⟩⟩
     obtain ⟨hk', x', ax', w', hf1⟩ := hfin
     rw [hf1] at hk1₁; cases hk1₁
     obtain ⟨-, hka1⟩ := sep_lift.mp (hi₁.kids 1 _ _ _ _ _ hf1)
@@ -477,7 +499,7 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     have ho₂ := Owned.join (hi₁.own.current 0) (by rw [hsz₁]; decide) (by decide) hj
     have e0 : ownOf G₁ m₁ 0 = h := by simp [ownOf, joinedB, hg₁, Gh.heap]
     have e1 : ownOf G₁ m₁ 1 = hk := by
-      have r : m₁.threads[1]? = some { spawner := 0, joined := false } := r1₁
+      have r : m₁.threads[1]? = some { spawner := 0, joined := false, gated := gt₁ } := r1₁
       simp [ownOf, joinedB, r, hf1, Gh.heap]
     have hd01 : Heap.Disjoint h hk := by
       have := hi₁.own.disj 0 1 (by decide); rwa [e0, e1] at this
@@ -512,7 +534,7 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     · exact ⟨hk, h, hd01.symm, Heap.union_comm hd01, hka1, hma₁⟩
     · refine ⟨by rw [hth₂, Array.size_setIfInBounds, hsz₁], ?_, by rw [hgr₂, hgr₁],
         ⟨hk, by rw [upd_ne _ _ (by decide)]; exact hf1⟩, fun u hu => ?_⟩
-      · unfold KidRec; rw [hth₂, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁]; decide)]
+      · refine ⟨gt₁, ?_⟩; rw [hth₂, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁]; decide)]
       · rw [upd_ne _ _ (by unfold ThreadId at *; omega), hn₁ u hu]
     · rw [hth₂, Array.getElem?_setIfInBounds_ne (by decide)]; exact hi₁.t0
 
@@ -528,7 +550,7 @@ theorem final_joined {G : ThreadId → Gh} {m : Mem} {ph : Ph} {w : BitVec 32} {
   rcases hph with rfl | rfl
   · have : i = 0 := by have := hsh.1; omega
     subst this; rw [Option.some.inj (hget.symm.trans hi.t0)]
-  · obtain ⟨hsz, r1, -⟩ := hsh
+  · obtain ⟨hsz, ⟨gt, r1⟩, -⟩ := hsh
     rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
     · rw [Option.some.inj (hget.symm.trans hi.t0)]
     · rw [Option.some.inj (hget.symm.trans r1)]
@@ -627,8 +649,8 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
       · rw [upd_ne _ _ h0] at hu; cases hu
     · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]
   -- `Group.async`: every resource outcome, then `Group.await`.
-  refine WP.bind (WP.groupAsyncFallibleC fun k _ => ⟨.main .solo 0 (hX ∪ hGr) B, hi₀,
-    fun G₁ m₅ hg₁ hi₅ c hc _ => WP.mono ?_ (afterAsync_spec (v := v) io B hB c hc hX hGr hdX hxF
+  refine WP.bind (WP.groupAsyncWithPolicyC fun k _ => ⟨.main .solo 0 (hX ∪ hGr) B, hi₀,
+    fun G₁ m₅ hg₁ hi₅ c hc => WP.mono ?_ (afterAsync_spec (v := v) io B hB c hc hX hGr hdX hxF
       ⟨_, enc_group, hgF⟩ rfl (by rw [← hg₁, upd_same]; exact inv_current hi₅ 0))⟩)
   rintro ⟨⟨⟩, s'⟩ G₂ m₆ d₂ ⟨hs', hA₆⟩
   simp only at hs'
@@ -670,21 +692,21 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
 /-- **`groupAsync io v` returns `.ok v` under every schedule, every resource outcome and every
 initial budget**, and joins every thread it spawned. Assigned and fallback executions both
 reach this declared contract (`afterAsync_spec`). -/
-theorem groupAsync_spec {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
+theorem groupAsync_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat}
     {r : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run =
+    (h : (Sched.run env dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run =
       some (.ok (r, m))) :
     r = .ok v ∧ joinedAll 0 m := by
-  obtain ⟨_, _, hq⟩ := (proto v).run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hq⟩ := (proto v).run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io lim) h
   exact hq
 
 /-- **No run of `groupAsync io v` gives an error**, for every schedule, resource outcome and
 budget: no race on `out` between the child and `main`, no invalid join, no use after free. -/
-theorem groupAsync_safe {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run ≠
+theorem groupAsync_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {lim : Option Nat} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (groupAsync io v) { mem0 σ with spawnLimit := lim }).run ≠
       some (.error e) :=
-  (proto v).run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
+  (proto v).run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl
     (main_spec σ io lim)
 
 end SpawnFailure.Group

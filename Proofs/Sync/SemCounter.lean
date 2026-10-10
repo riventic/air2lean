@@ -1353,7 +1353,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have hsh₈ := hi₈.2.2.shape
   obtain ⟨h08, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, hn2⟩⟩ := hsh₈
   · exfalso; change (G₃ 0).2.2 = _ at h0; rw [hg₃] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₈ with current := 0 }) hr1 rfl rfl, fun m₉ hj => ?_⟩⟩
   -- `main` takes the kid's part, then the semaphore's resource
   let gEnd : Gh := (⟨.out, S.L.part (G₃ 0) ∪ S.L.own G₃ m₈ 1, Heap.empty⟩, .none, .joins)
@@ -1377,8 +1377,8 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
       obtain ⟨hu2, -⟩ := hi₈.1.live u (by rw [hu]; decide)
       have : u = 1 := by unfold ThreadId at *; omega
       subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree
-    (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) (fun u hu => by
+  have hall₉ : ∀ u < m₉.threads.size, VClock.le (m₉.clocks[u]!) (m₉.clocks[0]!) = true :=
+    fun u hu => by
     rw [hm₉]
     simp only
     rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
@@ -1388,7 +1388,9 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     · subst h0; simp [VClock.le_refl]
     · have : u = 1 := by omega
       subst this
-      exact VClock.le_merge_right _ _)
+      exact VClock.le_merge_right _ _
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree
+    (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall₉
   -- `n` holds 4
   have hR' : S.R (fun u => (G₃ u).2) hL := by
     have : S.L.R (upd G₃ 0 gEnd) hL := hR
@@ -1427,7 +1429,9 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the free of the `SemCounter`
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₈.2.2.blk
   have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
+        _ _ _ _).freeRaces _ _) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
@@ -1448,25 +1452,25 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
 /-! ## The results -/
 
 /-- **`semaphoreCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem semaphoreCounter_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+theorem semaphoreCounter_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
     {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (semaphoreCounter io) (mem0 σ)).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o (semaphoreCounter io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 4 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io) h
   exact hv
 
 /-- **No run of `semaphoreCounter` gives an error**: no data race on `n`, no deadlock, no panic,
 under every schedule. -/
-theorem semaphoreCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (semaphoreCounter io) (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
+theorem semaphoreCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (semaphoreCounter io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the semaphore counter returns 4 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem semaphoreCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (semaphoreCounter ⟨⟩) (mem0 σ)) = some 4 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (semaphoreCounter ⟨⟩) (mem0 σ)) = some 4 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 end Sync.SemCounter

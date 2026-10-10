@@ -6,7 +6,7 @@ open Zig
 private def hint : ConcM Unit Unit := spinLoopHint
 
 def main : IO UInt32 := do
-  let (_, trace) := Sched.runTrace (fun _ => pure ()) 10 (fun _ => 0) hint {}
+  let (_, trace) := Sched.runTrace ⟨.any, .available⟩ (fun _ => pure ()) 10 (fun _ => 0) hint {}
   if trace != #[1] then
     IO.eprintln "C03_ASSERTION: spin scheduler participation lost"
     return 85

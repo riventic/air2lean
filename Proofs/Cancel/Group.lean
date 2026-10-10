@@ -343,14 +343,61 @@ theorem wp_lateCancel {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh}
     · exact WP.pure' (hQ _ _ _ _ rfl (inv_keep hi₂' rfl rfl rfl rfl rfl))
   · exact WP.pure' (hQ _ _ _ _ hc hi)
 
-/-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value
-`gT`: whatever it returns, the invariant holds with `gT`. It may sleep, return spuriously, see
-the value differ, observe a pending request, or have one delivered. -/
-theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh} {p : Ptr}
-    (hc : m.current = 1) (hi : Inv (upd G 1 gT) m)
+/-- The kernel's read of the task's `status` word in a futex wait (a recorded atomic read by the
+task, the word's owner) keeps the invariant. -/
+theorem inv_read {G : ThreadId → Gh} {m m' : Mem} {h : Heap} {W : Words} {s d : BitVec 32}
+    {e : Bool} (hc : m.current = 1) (hi : Inv (upd G 1 (.task h W s d e)) m)
+    {bid : BlockId} {blk : Block} {o : Nat} (ha : m.access W.st 4 4 = pure (bid, blk, o))
+    (hr : ((recordAccess bid o 4 .atomicRead).run m).run = some (.ok ((), m'))) :
+    Inv (upd G 1 (.task h W s d e)) m' := by
+  obtain ⟨-, rfl⟩ := recordAccess_ok hr
+  have hg := upd_self G 1 (Gh.task h W s d e)
+  obtain ⟨⟨hs0, -, -, -⟩, hA, hok⟩ := hi.task 1 _ _ _ _ _ hg
+  obtain ⟨-, hj, hsz⟩ := task_live hi hg
+  have hown : ownOf (upd G 1 (.task h W s d e)) m 1 = h := by simp [ownOf, hj, Gh.heap]
+  have ho := hi.own
+  have hcv := hi.cover
+  rw [← upd_same (ownOf _ m) 1, hown] at ho hcv
+  obtain ⟨hpb, hblk, -, -, -, -, rfl⟩ := access_eq ha
+  have hin : ∀ x, W.st.off.toNat ≤ x → x < W.st.off.toNat + 4 → h (bid, x) ≠ none := by
+    obtain ⟨h₁, h₂, -, heq, ⟨b, hpb', -, hcell⟩, -⟩ := hA
+    cases hpb.symm.trans hpb'
+    intro x h1 h2
+    rw [heq, Heap.union_apply, hcell, if_pos ⟨rfl, h1, by rw [enc_u32]; exact h2⟩]
+    simp
+  have htl : (1 : ThreadId) < m.threads.size := by rw [hsz]; decide
+  have hcs : m.current < m.clocks.size := by rw [ho.csize, hc]; exact htl
+  have hsub := ho.sub 1
+  rw [upd_self] at hsub
+  obtain ⟨hsplit, hd⟩ := Heap.diff_split hsub
+  have hs : StepIn (m.heap.diff ((upd (ownOf (upd G 1 (.task h W s d e)) m) 1 h) 1)) m
+      (m.recordAt bid W.st.off.toNat 4 .atomicRead) := by
+    rw [upd_self]
+    exact StepIn.recordAt hcs hd (by decide) hin (Array.getElem?_eq_some_iff.mp hblk).1
+  have hm' : (m.recordAt bid W.st.off.toNat 4 .atomicRead).heap =
+      h ∪ m.heap.diff ((upd (ownOf (upd G 1 (.task h W s d e)) m) 1 h) 1) := by
+    rw [upd_self]; exact hsplit
+  have howt : (m.recordAt bid W.st.off.toNat 4 .atomicRead).Owns 1 h := by
+    have h1 := ho.owns 1 htl
+    rw [upd_self, ← hc] at h1
+    rw [← hc]
+    exact Mem.Owns.recordAt hcs h1
+  have ho' := ho.step hc htl hs hm' (by rw [upd_self]; exact hd) howt
+  rw [upd_upd] at ho'
+  have hcv' := cover_step hcv hm'
+  rw [upd_upd] at hcv'
+  have := inv_task_step hi hg ho' hcv' rfl rfl hA hok
+  rwa [upd_upd] at this
+
+/-- The task's cancelation point (`io.futexWait(u32, status, 7)`) with the task's ghost value:
+whatever it returns, the invariant holds with it. It may sleep, return spuriously, see the value
+differ, observe a pending request, or have one delivered. -/
+theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap} {W : Words}
+    {s d : BitVec 32} {e : Bool}
+    (hc : m.current = 1) (hi : Inv (upd G 1 (.task h W s d e)) m)
     {Q : Except ErrName Unit × Unit → (ThreadId → Gh) → Mem → Nat → Prop}
-    (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 gT) m' → Q (r, ()) G' m' k) :
-    proto.WP 1 ((futexWaitCancelableC ⟨⟩ p (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
+    (hQ : ∀ r G' m' k, m'.current = 1 → Inv (upd G' 1 (.task h W s d e)) m' → Q (r, ()) G' m' k) :
+    proto.WP 1 ((futexWaitCancelableC ⟨⟩ W.st (7 : BitVec 32) : CM Tgt Unit _).run ()) Q G m n := by
   unfold futexWaitCancelableC
   simp only [StateT.run_bind]
   refine WP.bind (WP.callMC_keep (cancelPending_run m) ?_ rfl)
@@ -360,21 +407,27 @@ theorem wp_cancelWait {G : ThreadId → Gh} {m : Mem} {n : Nat} {gT : Gh} {p : P
     refine WP.bind (WP.callMC_keep (takeCancel_run _) ?_ rfl)
     exact WP.pure' (hQ _ _ _ _ hc (inv_keep hi rfl rfl rfl rfl rfl))
   · simp only [StateT.run_bind]
-    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨gT, hi,
+    refine WP.bind (WP.futexWaitC (P := proto) fun k _ => ⟨.task h W s d e, hi,
       fun G₁ m₁ hg₁ hi₁ => ⟨fun h => absurd h not_strict, fun _ =>
         ⟨fun h => absurd h not_strict, fun b m' hr => ?_⟩⟩⟩)
-    have hi₁' : Inv (upd G₁ 1 gT) m₁ := by rw [← hg₁, upd_same]; exact hi₁
-    rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, -, -, -, -, -, -, ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+    have hi₁' : Inv (upd G₁ 1 (.task h W s d e)) m₁ := by rw [← hg₁, upd_same]; exact hi₁
+    have hi₀ : Inv (upd G₁ 1 (.task h W s d e)) { m₁ with current := 1 } :=
+      inv_keep hi₁' rfl rfl rfl rfl rfl
+    rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ |
+      ⟨-, bid, blk, o, v, m₂, ha, hrec, -, ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
     all_goals simp only [Bool.false_eq_true, ↓reduceIte]
     · refine wp_lateCancel ?_ ?_ hQ
       · rfl
       · exact inv_keep hi₁' rfl rfl rfl rfl rfl
-    · refine ⟨inv_keep hi₁ rfl rfl rfl rfl rfl, wp_lateCancel ?_ ?_ hQ⟩
+    · have hI : Inv G₁ m₂ := by
+        have := inv_read rfl hi₀ ha hrec
+        rwa [← hg₁, upd_same] at this
+      refine ⟨inv_keep hI rfl rfl rfl rfl rfl, wp_lateCancel ?_ ?_ hQ⟩
       · rfl
-      · exact inv_keep hi₁' rfl rfl rfl rfl rfl
+      · exact hi₀
     · refine wp_lateCancel ?_ ?_ hQ
-      · rfl
-      · exact inv_keep hi₁' rfl rfl rfl rfl rfl
+      · rw [(recordAccess_ok hrec).2]; rfl
+      · exact inv_read rfl hi₀ ha hrec
 
 /-! ## The task's steps -/
 
@@ -748,20 +801,20 @@ theorem main_spec (n : Nat) :
 `main` returns** (every oracle `o`, every `fuel`): the task completed all its work (`(1, 3)`) or
 was canceled with work left (`(2, d)`, `d < 3`), and its words came back to `main`, which freed
 them. -/
-theorem cancelClient_spec {fuel : Nat} {o : Nat → Nat} {v : BitVec 32 × BitVec 32} {m : Mem}
-    (h : (Sched.run dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
+theorem cancelClient_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32 × BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
     Outcome v ∧ m.heap = Heap.empty := by
-  obtain ⟨_, _, hq⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hq⟩ := proto.run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun h => absurd h not_strict) rfl main_spec h
   exact hq
 
 /-- A canceled task is never reported as a completed one, and a result always names an
 outcome (`status` is never the initial `0`). -/
-theorem cancelClient_canceled_not_completed {fuel : Nat} {o : Nat → Nat}
+theorem cancelClient_canceled_not_completed (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat}
     {v : BitVec 32 × BitVec 32} {m : Mem}
-    (h : (Sched.run dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o cancelClient {}).run = some (.ok (v, m))) :
     v.1 ≠ 0 ∧ (v.1 = 2 → v.2 ≠ 3) ∧ (v.2 = 3 ∨ v.1 = 2) := by
-  rcases (cancelClient_spec h).1 with ⟨h1, h2⟩ | ⟨h1, h2⟩
+  rcases (cancelClient_spec env henv h).1 with ⟨h1, h2⟩ | ⟨h1, h2⟩
   · exact ⟨by rw [h1]; decide, fun h' => absurd (h1 ▸ h' : (1 : BitVec 32) = 2) (by decide),
       .inl h2⟩
   · refine ⟨by rw [h1]; decide, fun _ h3 => ?_, .inr h1⟩

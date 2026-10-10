@@ -10,7 +10,7 @@ not compute. `loopN body again k` is the loop cut after `k` runs of its body: `�
 where the loop would go on. It is below the loop (`loopN_le_loop`), so a result of the cut loop
 is the loop's result.
 
-`unroll_sched k` closes a goal `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v`
+`unroll_sched k` closes a goal `Witness.okVal (Sched.run env dispatch fuel o main m₀) = some v`
 about a program with loops: it builds the program and every thread with each `Zig.loop` cut
 after `k` iterations (`Unroll.expand`), proves the cut program below the program
 (`monotonicity`), and lets the kernel compute the cut run (`decide +kernel`). A run of the cut
@@ -329,10 +329,85 @@ theorem choose_le {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) (o : Nat �
     (s₁.choose o n).1 = (s₂.choose o n).1 ∧ StateLe (s₁.choose o n).2 (s₂.choose o n).2 :=
   ⟨by simp [State.choose, hs.step], ⟨hs.main, hs.size, hs.kids, hs.mem, by simp [State.choose, hs.step]⟩⟩
 
-theorem turnTrace_le {β : Type} {D₁ D₂ : Tgt → ConcM Tgt Unit}
+theorem chooseMany_le {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) (o : Nat → Nat) :
+    ∀ cs, (s₁.chooseMany o cs).1 = (s₂.chooseMany o cs).1 ∧
+      StateLe (s₁.chooseMany o cs).2 (s₂.chooseMany o cs).2
+  | [] => ⟨rfl, hs⟩
+  | c :: cs => by
+    obtain ⟨h1, h2⟩ := choose_le hs o c
+    simp only [State.chooseMany]
+    revert h1 h2
+    generalize s₁.choose o c = p₁
+    generalize s₂.choose o c = p₂
+    rcases p₁ with ⟨x₁, t₁⟩
+    rcases p₂ with ⟨x₂, t₂⟩
+    intro h1 h2
+    simp only at h1 h2 ⊢
+    subst h1
+    obtain ⟨h3, h4⟩ := chooseMany_le h2 o cs
+    revert h3 h4
+    generalize t₁.chooseMany o cs = q₁
+    generalize t₂.chooseMany o cs = q₂
+    rcases q₁ with ⟨y₁, u₁⟩
+    rcases q₂ with ⟨y₂, u₂⟩
+    intro h3 h4
+    simp only at h3 h4 ⊢
+    exact ⟨by rw [h3], h4⟩
+
+theorem chooseWake_le {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) (o : Nat → Nat) (p : Ptr)
+    (n : Nat) : (s₁.chooseWake o p n).1 = (s₂.chooseWake o p n).1 ∧
+      StateLe (s₁.chooseWake o p n).2 (s₂.chooseWake o p n).2 := by
+  simp only [State.chooseWake, hs.mem]
+  exact chooseMany_le hs o _
+
+theorem spawnOutcome_le (env : Env) {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) (o : Nat → Nat) :
+    (s₁.spawnOutcome env o).1 = (s₂.spawnOutcome env o).1 ∧
+      StateLe (s₁.spawnOutcome env o).2 (s₂.spawnOutcome env o).2 := by
+  unfold State.spawnOutcome
+  split
+  · exact ⟨rfl, hs⟩
+  · obtain ⟨h1, h2⟩ := choose_le hs o (assignmentCount (spawnErrors.size + 1) s₂.mem)
+    rw [hs.mem]
+    revert h1 h2
+    generalize s₁.choose o _ = p₁
+    generalize s₂.choose o _ = p₂
+    rcases p₁ with ⟨x₁, t₁⟩
+    rcases p₂ with ⟨x₂, t₂⟩
+    intro h1 h2
+    simp only at h1 h2 ⊢
+    exact ⟨by rw [h1], h2⟩
+
+theorem asyncChoice_le (env : Env) {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) (o : Nat → Nat) :
+    (s₁.asyncChoice env o).1 = (s₂.asyncChoice env o).1 ∧
+      StateLe (s₁.asyncChoice env o).2 (s₂.asyncChoice env o).2 := by
+  unfold State.asyncChoice
+  rw [hs.mem]
+  dsimp only
+  obtain ⟨h1, h2⟩ := choose_le hs o (asyncOptions env.io s₂.mem).size
+  revert h1 h2
+  generalize s₁.choose o (asyncOptions env.io s₂.mem).size = p₁
+  generalize s₂.choose o (asyncOptions env.io s₂.mem).size = p₂
+  rcases p₁ with ⟨x₁, t₁⟩
+  rcases p₂ with ⟨x₂, t₂⟩
+  intro h1 h2
+  simp only at h1 h2 ⊢
+  exact ⟨by rw [h1], h2⟩
+
+theorem StateLe.push {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) {q₁ q₂ : Paused Tgt Unit}
+    (hq : PausedLe q₁ q₂) :
+    StateLe { s₁ with kids := s₁.kids.push (.paused q₁) } { s₂ with kids := s₂.kids.push (.paused q₂) } := by
+  refine ⟨hs.main, by simp [hs.size], fun i h₁ h₂ => ?_, hs.mem, hs.step⟩
+  simp only [Array.getElem_push]
+  by_cases hi : i < s₁.kids.size
+  · simp only [hi, hs.size ▸ hi, ↓reduceDIte]
+    exact hs.kids i _ _
+  · simp only [hi, hs.size ▸ hi, ↓reduceDIte]
+    exact .paused hq
+
+theorem turnTrace_le {β : Type} (env : Env) {D₁ D₂ : Tgt → ConcM Tgt Unit}
     (hD : ∀ t n m, CoN.le (D₁ t n m) (D₂ t n m)) (fuel : Nat) (o : Nat → Nat) (t : ThreadId)
     {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) {p₁ p₂ : Paused Tgt β} (hp : PausedLe p₁ p₂) :
-    ResLe (turnTrace D₁ fuel o t s₁ p₁).1 (turnTrace D₂ fuel o t s₂ p₂).1 := by
+    ResLe (turnTrace env D₁ fuel o t s₁ p₁).1 (turnTrace env D₂ fuel o t s₂ p₂).1 := by
   rcases s₁ with ⟨main₁, kids₁, mem, step, tr₁⟩
   rcases s₂ with ⟨main₂, kids₂, mem₂, step₂, tr₂⟩
   obtain ⟨hm, hsz, hk, hmem, hstep⟩ := hs
@@ -342,28 +417,58 @@ theorem turnTrace_le {β : Type} {D₁ D₂ : Tgt → ConcM Tgt Unit}
       { main := main₁, kids := kids₁, mem := m, step := st, trace := tr₁ }
       { main := main₂, kids := kids₂, mem := m, step := st, trace := tr₂ } :=
     fun _ _ _ _ => ⟨hm, hsz, hk, rfl, rfl⟩
+  have hq : ∀ (op : SyncOp Tgt) (tgt : Tgt), PausedLe (Tgt := Tgt) (β := Unit)
+      ⟨fuel, op, fun _ m => D₁ tgt fuel m⟩ ⟨fuel, op, fun _ m => D₂ tgt fuel m⟩ :=
+    fun op tgt => .mk _ op _ _ fun _ m => hD tgt fuel m
   cases hp with
   | mk d op k₁ k₂ h =>
   cases op with
   | yield => exact settle_le t (hs _ _ _ _) (h _ _)
   | choose n => exact settle_le t (hs _ _ _ _) (h _ _)
   | pick count => exact settle_le t (hs _ _ _ _) (h _ _)
+  | gate => exact settle_le t (hs _ _ _ _) (h _ _)
+  | asyncChoice =>
+    simp only [turnTrace]
+    obtain ⟨hc, hs'⟩ := asyncChoice_le env (hs { mem with current := t } step tr₁ tr₂) o
+    revert hc hs'
+    generalize State.asyncChoice env _ o = c₁
+    generalize State.asyncChoice env _ o = c₂
+    rcases c₁ with ⟨x₁, u₁⟩
+    rcases c₂ with ⟨x₂, u₂⟩
+    intro hc hs'
+    simp only at hc hs' ⊢
+    subst hc
+    rcases u₁ with ⟨a₁, b₁, c₁, d₁, e₁⟩
+    rcases u₂ with ⟨a₂, b₂, c₂, d₂, e₂⟩
+    have hmem' : c₁ = c₂ := hs'.mem
+    subst hmem'
+    exact settle_le t hs' (h _ _)
   | spawn tgt =>
-    have hpush : ∀ m st tr₁ tr₂, StateLe (Tgt := Tgt) (α := α)
-        { main := main₁, kids := kids₁.push (.paused ⟨fuel, .yield, fun _ m => D₁ tgt fuel m⟩),
-          mem := m, step := st, trace := tr₁ }
-        { main := main₂, kids := kids₂.push (.paused ⟨fuel, .yield, fun _ m => D₂ tgt fuel m⟩),
-          mem := m, step := st, trace := tr₂ } := by
-      refine fun _ _ _ _ => ⟨hm, by simp [hsz], fun i h₁ h₂ => ?_, rfl, rfl⟩
-      simp only [Array.getElem_push]
-      by_cases hi : i < kids₁.size
-      · simp only [hi, hsz ▸ hi, ↓reduceDIte]
-        exact hk i _ _
-      · simp only [hi, hsz ▸ hi, ↓reduceDIte]
-        exact .paused (.mk _ _ _ _ fun _ m => hD tgt fuel m)
+    simp only [turnTrace]
+    obtain ⟨hc, hs'⟩ := spawnOutcome_le env (hs { mem with current := t } step tr₁ tr₂) o
+    revert hc hs'
+    generalize State.spawnOutcome env _ o = c₁
+    generalize State.spawnOutcome env _ o = c₂
+    rcases c₁ with ⟨x₁, u₁⟩
+    rcases c₂ with ⟨x₂, u₂⟩
+    intro hc hs'
+    simp only at hc hs' ⊢
+    subst hc
+    rcases u₁ with ⟨a₁, b₁, c₁, d₁, e₁⟩
+    rcases u₂ with ⟨a₂, b₂, c₂, d₂, e₂⟩
+    have hmem' : c₁ = c₂ := hs'.mem
+    subst hmem'
+    split
+    · simp only [State.onMem]
+      split
+      · exact settle_le t ((hs'.withMem _).push (hq .yield tgt)) (h _ _)
+      · rfl
+      · trivial
+    · exact settle_le t hs' (h _ _)
+  | spawnGated tgt =>
     simp only [turnTrace, State.onMem]
     split
-    · exact settle_le t (hpush _ _ _ _) (h _ _)
+    · exact settle_le t ((hs _ _ _ _).push (hq .gate tgt)) (h _ _)
     · rfl
     · trivial
   | join tid =>
@@ -389,9 +494,23 @@ theorem turnTrace_le {β : Type} {D₁ D₂ : Tgt → ConcM Tgt Unit}
           · simp only [hc, ↓reduceIte]
             exact ⟨.paused (.mk _ _ _ _ h), rfl, hs _ _ _ _⟩
   | wake ptr n =>
-    simp only [turnTrace, State.onMem]
+    simp only [turnTrace]
+    obtain ⟨hc, hs'⟩ := chooseWake_le (hs { mem with current := t } step tr₁ tr₂) o ptr n
+    revert hc hs'
+    generalize State.chooseWake _ o ptr n = c₁
+    generalize State.chooseWake _ o ptr n = c₂
+    rcases c₁ with ⟨x₁, u₁⟩
+    rcases c₂ with ⟨x₂, u₂⟩
+    intro hc hs'
+    simp only at hc hs' ⊢
+    subst hc
+    rcases u₁ with ⟨a₁, b₁, c₁, d₁, e₁⟩
+    rcases u₂ with ⟨a₂, b₂, c₂, d₂, e₂⟩
+    have hmem' : c₁ = c₂ := hs'.mem
+    subst hmem'
+    simp only [State.onMem]
     split
-    · exact settle_le t (hs _ _ _ _) (h _ _)
+    · exact settle_le t (hs'.withMem _) (h _ _)
     · rfl
     · trivial
 
@@ -404,9 +523,9 @@ theorem StateLe.setKid {s₁ s₂ : State Tgt α} (hs : StateLe s₁ s₂) (j : 
   · exact ht
   · exact hs.kids i h₁ h₂
 
-theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁ t n m) (D₂ t n m))
+theorem go_le (env : Env) {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁ t n m) (D₂ t n m))
     (o : Nat → Nat) : ∀ (fuel : Nat) {s₁ s₂ : State Tgt α}, StateLe s₁ s₂ → ∀ {r},
-      (go D₁ o fuel s₁).1 = some r → (go D₂ o fuel s₂).1 = some r
+      (go env D₁ o fuel s₁).1 = some r → (go env D₂ o fuel s₂).1 = some r
   | 0, _, _, _, _, h => by simp [go] at h
   | fuel + 1, s₁, s₂, hs, r, h => by
     have hr : s₁.ready = s₂.ready := by rw [← ready_erase, hs.erase, ready_erase]
@@ -438,11 +557,11 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
       cases hm with
       | done => exact h
       | @paused p₁ p₂ hp =>
-        have ht := turnTrace_le hD fuel o 0 hs' hp
+        have ht := turnTrace_le env hD fuel o 0 hs' hp
         simp only at h ⊢
         revert h ht
-        generalize turnTrace D₁ fuel o 0 s₁' p₁ = x₁
-        generalize turnTrace D₂ fuel o 0 s₂' p₂ = x₂
+        generalize turnTrace env D₁ fuel o 0 s₁' p₁ = x₁
+        generalize turnTrace env D₂ fuel o 0 s₂' p₂ = x₂
         rcases x₁ with ⟨(⟨_ | e⟩ | ⟨ts₁, (_ | v₁), t₁⟩), tr₁⟩ <;> intro h ht <;> simp only at h
         · simp [outOf] at h
         · simp only [ResLe] at ht
@@ -452,7 +571,7 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
           · exact ht.elim
           · obtain ⟨hts, hv, hst⟩ := ht
             subst hv
-            exact go_le hD o fuel (s₁ := { t₁ with main := ts₁ }) (s₂ := { t₂ with main := ts₂ })
+            exact go_le env hD o fuel (s₁ := { t₁ with main := ts₁ }) (s₂ := { t₂ with main := ts₂ })
               ⟨hts, hst.size, hst.kids, hst.mem, hst.step⟩ h
         · rcases x₂ with ⟨(_ | ⟨ts₂, v₂, t₂⟩), tr₂⟩
           · exact ht.elim
@@ -483,11 +602,11 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
           simp at h
       rw [hk₁] at h
       rw [hk₂]
-      have ht := turnTrace_le hD fuel o (s₂.ready[i]!) hs' hp
+      have ht := turnTrace_le env hD fuel o (s₂.ready[i]!) hs' hp
       simp only at h ⊢
       revert h ht
-      generalize turnTrace D₁ fuel o _ s₁' p₁ = x₁
-      generalize turnTrace D₂ fuel o _ s₂' p₂ = x₂
+      generalize turnTrace env D₁ fuel o _ s₁' p₁ = x₁
+      generalize turnTrace env D₂ fuel o _ s₂' p₂ = x₂
       rcases x₁ with ⟨(⟨_ | e⟩ | ⟨ts₁, v₁, t₁⟩), tr₁⟩ <;> intro h ht <;> simp only at h
       · simp [outOf] at h
       · simp only [ResLe] at ht
@@ -496,11 +615,11 @@ theorem go_le {D₁ D₂ : Tgt → ConcM Tgt Unit} (hD : ∀ t n m, CoN.le (D₁
       · rcases x₂ with ⟨(_ | ⟨ts₂, v₂, t₂⟩), tr₂⟩
         · exact ht.elim
         · obtain ⟨hts, -, hst⟩ := ht
-          exact go_le hD o fuel (hst.setKid _ hts) h
+          exact go_le env hD o fuel (hst.setKid _ hts) h
 
-theorem runTrace_le {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt α} (hD : D₁ ⊑ D₂)
+theorem runTrace_le {env : Env} {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt α} (hD : D₁ ⊑ D₂)
     (hP : P₁ ⊑ P₂) {fuel : Nat} {o : Nat → Nat} {m₀ : Mem} {r : Except Error (α × Mem)}
-    (h : (runTrace D₁ fuel o P₁ m₀).1 = some r) : (runTrace D₂ fuel o P₂ m₀).1 = some r := by
+    (h : (runTrace env D₁ fuel o P₁ m₀).1 = some r) : (runTrace env D₂ fuel o P₂ m₀).1 = some r := by
   have hD' : ∀ t n m, CoN.le (D₁ t n m) (D₂ t n m) := fun t => hD t
   have hs := settle_le 0 (s₁ := (⟨.done, #[], { m₀ with current := 0 }, 0, #[]⟩ : State Tgt α))
     (s₂ := ⟨.done, #[], { m₀ with current := 0 }, 0, #[]⟩) ⟨.done, rfl, fun _ h => absurd h (by simp), rfl, rfl⟩
@@ -518,7 +637,7 @@ theorem runTrace_le {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt 
     · exact ht.elim
     · obtain ⟨hts, hv, hst⟩ := ht
       subst hv
-      exact go_le hD' o fuel (s₁ := { t₁ with main := ts₁ }) (s₂ := { t₂ with main := ts₂ })
+      exact go_le env hD' o fuel (s₁ := { t₁ with main := ts₁ }) (s₂ := { t₂ with main := ts₂ })
         ⟨hts, hst.size, hst.kids, hst.mem, hst.step⟩ h
   · rcases x₂ with (_ | ⟨ts₂, v₂, t₂⟩)
     · exact ht.elim
@@ -529,14 +648,14 @@ theorem runTrace_le {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt 
 
 /-- **A run of a program below another is a run of it**: where every thread of the first
 program has a result, the second has the same. -/
-theorem run_le {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt α} (hD : D₁ ⊑ D₂)
+theorem run_le {env : Env} {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt α} (hD : D₁ ⊑ D₂)
     (hP : P₁ ⊑ P₂) {fuel : Nat} {o : Nat → Nat} {m₀ : Mem} {r : Except Error (α × Mem)}
-    (h : (run D₁ fuel o P₁ m₀).run = some r) : (run D₂ fuel o P₂ m₀).run = some r :=
+    (h : (run env D₁ fuel o P₁ m₀).run = some r) : (run env D₂ fuel o P₂ m₀).run = some r :=
   runTrace_le hD hP h
 
-theorem okVal_le {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt (Except ErrName (BitVec 32))}
+theorem okVal_le {env : Env} {D₁ D₂ : Tgt → ConcM Tgt Unit} {P₁ P₂ : ConcM Tgt (Except ErrName (BitVec 32))}
     (hD : D₁ ⊑ D₂) (hP : P₁ ⊑ P₂) {fuel : Nat} {o : Nat → Nat} {m₀ : Mem} {v : Nat}
-    (h : Witness.okVal (run D₁ fuel o P₁ m₀) = some v) : Witness.okVal (run D₂ fuel o P₂ m₀) = some v := by
+    (h : Witness.okVal (run env D₁ fuel o P₁ m₀) = some v) : Witness.okVal (run env D₂ fuel o P₂ m₀) = some v := by
   unfold Witness.okVal at h ⊢
   split at h
   · rename_i hr
@@ -552,24 +671,24 @@ namespace Zig.Unroll
 
 open Lean Meta Elab Tactic
 
-/-- `unroll_sched k` proves `Witness.okVal (Sched.run dispatch fuel o main m₀) = some v`: it cuts
+/-- `unroll_sched k` proves `Witness.okVal (Sched.run env dispatch fuel o main m₀) = some v`: it cuts
 every loop of `dispatch` and `main` after `k` iterations (`expand`), reduces the goal to the run
 of the cut program (`Sched.okVal_le`) and lets the kernel decide it (`decide +kernel`). -/
 elab "unroll_sched " k:num : tactic => withMainContext do
   let goal ← getMainGoal
   let ty ← instantiateMVars (← goal.getType)
-  let some run := ty.find? (·.isAppOfArity ``Sched.run 7)
-    | throwError "unroll_sched: the goal has no `Sched.run dispatch fuel o main m₀`"
+  let some run := ty.find? (·.isAppOfArity ``Sched.run 8)
+    | throwError "unroll_sched: the goal has no `Sched.run env dispatch fuel o main m₀`"
   let args := run.getAppArgs
   let_expr Eq _ lhs _ := ty | throwError "unroll_sched: the goal is not an equation"
   unless lhs.isAppOfArity ``Witness.okVal 1 && lhs.appArg! == run do
     throwError "unroll_sched: expected `Witness.okVal (Sched.run …) = _`"
-  let runs ← loopRunners (args[2]!.getUsedConstants ++ args[5]!.getUsedConstants)
-  let (fD, hD) ← expand runs k.getNat args[2]!
-  let (fP, hP) ← expand runs k.getNat args[5]!
+  let runs ← loopRunners (args[3]!.getUsedConstants ++ args[6]!.getUsedConstants)
+  let (fD, hD) ← expand runs k.getNat args[3]!
+  let (fP, hP) ← expand runs k.getNat args[6]!
   let approx := mkConst ``Sel.approx
   let le (h : Expr) := mkApp3 h approx (mkConst ``Sel.exact) (mkConst ``approx_le)
-  let cut := mkAppN run.getAppFn (args.set! 2 (mkApp fD approx) |>.set! 5 (mkApp fP approx))
+  let cut := mkAppN run.getAppFn (args.set! 3 (mkApp fD approx) |>.set! 6 (mkApp fP approx))
   let sub ← mkFreshExprSyntheticOpaqueMVar (ty.replace fun e => if e == run then some cut else none)
   let pf ← mkAppM ``Sched.okVal_le #[le hD, le hP, sub]
   unless ← isDefEq (← inferType pf) ty do

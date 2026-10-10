@@ -755,7 +755,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hsh₈ := hi₈.2.shape
   obtain ⟨h08, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, hn2⟩⟩ := hsh₈
   · exfalso; change (G₃ 0).2 = _ at h0; rw [hg₃] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₈ with current := 0 }) hr1 rfl rfl, fun m₉ hj => ?_⟩⟩
   -- `main` takes the kid's part, then the lock's resource and word
   let gEnd : Gh := (⟨.out, L.part (G₃ 0) ∪ L.own G₃ m₈ 1, Heap.empty⟩, .joins)
@@ -780,7 +780,8 @@ theorem main_spec (σ : Placement) (d : Nat) :
       have : u = 1 := by unfold ThreadId at *; omega
       subst this; change (G₃ 1).1.ph = _ at hu; rw [hfin.1] at hu; cases hu
   obtain ⟨w₉, -, hU₉, -⟩ := hL₉.word
-  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) (fun u hu => by
+  have hall₉ : ∀ u < m₉.threads.size, VClock.le (m₉.clocks[u]!) (m₉.clocks[0]!) = true :=
+    fun u hu => by
     rw [hm₉]
     simp only
     rw [Proto.getElem!_set!_ite, Proto.getElem!_set!_ite]
@@ -790,7 +791,8 @@ theorem main_spec (σ : Placement) (d : Nat) :
     · subst h0; simp [VClock.le_refl]
     · have : u = 1 := by omega
       subst this
-      exact VClock.le_merge_right _ _)
+      exact VClock.le_merge_right _ _
+  obtain ⟨hL, hR, hdLW, hd, ho⟩ := hL₉.take (t := 0) (by rw [hs₉]; decide) hfree (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall₉
   -- the counter holds 4
   have hR4 : pts (cPtr.add 4) 4 (BitVec.ofNat 32 4) hL := by
     have : R (fun u => (upd G₃ 0 gEnd u).2) hL := hR
@@ -836,7 +838,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   refine WP.pure' ?_
   -- the free of the `Counter`
   have hb₁₀ : m₁₀.blocks = m₈.blocks := by rw [hm₁₀]; simp [Mem.recordAt, hm₉]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₀]; exact hblk₀) hl₀
+      (by rw [hm₁₀]; exact ((Mem.ClocksLe.of_threads hL₉.own.csize (by rw [hc₉]; exact hall₉)).recordAt
+        _ _ _ _).freeRaces _ _) e he).elim)
     fun _ m₁₁ hfr => ?_)
   obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨rfl, fun r hr hsp => ?_⟩⟩
@@ -857,24 +861,24 @@ theorem main_spec (σ : Placement) (d : Nat) :
 /-! ## The results -/
 
 /-- **`threadsync.mutexCounter` gives 4 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem mutexCounter_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o mutexCounter (mem0 σ)).run = some (.ok (v, m))) :
+theorem mutexCounter_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mutexCounter (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 4 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `threadsync.mutexCounter` gives an error**: no data race on the counter, no deadlock
 at the futex, no panic, under every schedule. -/
-theorem mutexCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o mutexCounter (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+theorem mutexCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o mutexCounter (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Mutex` counter returns 4 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem mutexCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) mutexCounter (mem0 σ)) = some 4 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) mutexCounter (mem0 σ)) = some 4 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 nonvacuity_witness cnt_decode :=

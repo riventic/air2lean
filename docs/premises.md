@@ -85,7 +85,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) [PRF-05](#prf-05) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) [ALC-10](#alc-10) |
 | Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) |
@@ -278,6 +278,20 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (`generated_markers`); implies ALC-01.
 - Sources: [std-models.md](std-models.md#caller-supplied-allocator-and-io), [architecture audit](architecture-audit/models.md), `Air2Lean/Emit.lean` (`interfacePremises`).
 
+<a id="alc-10"></a>
+### ALC-10 — Thread-safe allocator in concurrent code
+
+- Kind: environment.
+- Statement: In a concurrent run (`Zig.Sched.run`), the program's `std.mem.Allocator` is
+  thread-safe: allocations and frees by threads that are not ordered by happens-before give
+  disjoint blocks, as the model's allocator does. The model's allocator state (`nextAddr`,
+  `allocs`, the policy) has no race footprint, so a non-thread-safe allocator used from two
+  threads (`FixedBufferAllocator.allocator()`, a `DebugAllocator` with `thread_safe = false`)
+  is outside the model. Every concurrent theorem carries this premise; it holds vacuously for
+  a program that allocates from one thread only.
+- Derived from: `ZigLean.Conc.Sched`.
+- Sources: [std-models.md](std-models.md#allocator-model), `ZigLean/Mem/Alloc.lean`.
+
 ## Io interface
 
 <a id="iom-01"></a>
@@ -287,11 +301,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: a translated function with a parameter that contains a `std.Io` is proved for
   the single model `Zig.Io` (THR-02, THR-04, THR-05), not for the `Io` implementation a
   caller passes. A theorem about it holds for a caller only if that `Io` behaves as the model:
-  every `Group.async` and `Group.concurrent` task is a new thread under the selected spawn
-  policy, `Group.cancel` waits like `Group.await`, a futex wait returns only after a wake and
-  never with `error.Canceled`. `Io.Threaded.global_single_threaded` and other `Io`s that run
-  `async` inline (D-IO-INLINE), cancellation (D-IO-CANCEL), spurious futex wakeups, and
-  user-written `Io`s are not covered.
+  each `Group.async` and `Io.async` task gets a thread, runs in the caller or (`Group.async`)
+  is deferred until `await`, as the run's environment (`Zig.Env`) allows; a `Group.concurrent`
+  task is a new thread unless assignment fails; cancelation requests are delivered at the
+  modelled cancelation points. User-written `Io`s are not covered.
 - Derived from: the `-- air2lean-premises:` marker of a reached generated definition
   (`generated_markers`).
 - Sources: [std-models.md](std-models.md#caller-supplied-allocator-and-io), [architecture audit](architecture-audit/models.md), `Air2Lean/Emit.lean` (`interfacePremises`).
@@ -302,8 +315,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-01 — Interleaving scheduler and partial-correctness meaning
 
 - Kind: meaning.
-- Statement: `Zig.Sched.run dispatch fuel o main m0` interleaves threads only at sync ops.
-  The oracle `o` picks each turn. A data race between plain code is `.illegal`. A spec
+- Statement: `Zig.Sched.run env dispatch fuel o main m0` interleaves threads only at sync ops.
+  The environment `env : Zig.Env` is explicit in every statement: `env.io` (`Io.Threaded` on
+  a stated CPU count, or any `Io` implementation) and `env.spawn` (assignment `available` or
+  `fallible`); `Sched.run` has no default. The oracle `o` picks each turn. A data race between plain code is `.illegal`. A spec
   constrains every completed result for every oracle and fuel; out of fuel is `none`. No
   fairness or termination follows unless a theorem states it (see SEM-04, THR-07).
 - Derived from: `ZigLean.Conc.Basic`, `ZigLean.Conc.Call`, `ZigLean.Conc.Sched`; implied by every THR premise.
@@ -313,11 +328,13 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-02 — Thread spawn/join with the `available` policy
 
 - Kind: environment.
-- Statement: `Thread.spawn` is a sync op that always succeeds under the default `available`
-  policy. It copies the argument tuple and gives the child a copy of the parent clock. `join`
-  waits for the child and merges its clock. Only the handle's owner (the spawner, or the thread
-  an explicit transfer named, THR-10) may join, once. An owned handle neither joined nor
-  detached at thread end is `.illegal`. The child protocol obligation (`spawnInit`) is explicit.
+- Statement: `Thread.spawn` is a sync op that always succeeds in an `available` environment
+  (`env.spawn = .available`, a hypothesis of each theorem that needs it; in a `fallible`
+  environment it may return a declared error). It copies the argument tuple and gives the child
+  a copy of the parent clock. `join` waits for the child and merges its clock. Only the handle's
+  owner (the spawner, or the thread an explicit transfer named, THR-10) may join, once. An owned
+  handle neither joined nor detached at thread end is `.illegal`. The child protocol obligation
+  (`spawnInit`) is explicit.
 - Derived from: `ZigLean.Conc.Sched`; tokens `spawnC`, `joinC`, `spawnInit`.
 - Sources: [std-models.md](std-models.md#thread-model), [generated-code.md](generated-code.md#atomics-and-threads).
 
@@ -325,8 +342,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-03 — Fallible thread assignment policy
 
 - Kind: environment.
-- Statement: The opt-in `fallible` policy adds the declared spawn errors and the `Io.Group`
-  caller-execution fallback. The per-caller budget `Mem.spawnLimit` (default none) removes
+- Statement: The opt-in `fallible` translation policy adds explicit oracle wrappers with the
+  declared spawn errors; a `fallible` environment (`Env.spawn`) lets every assignment fail. The per-caller budget `Mem.spawnLimit` (default none) removes
   assignment from the oracle range while the caller's live children reach it. WP rules must
   cover every oracle outcome.
 - Derived from: `ZigLean.Conc.Spawn`, `ZigLean.Conc.SpawnLemmas`; tokens `SpawnPolicy`, `WithPolicyC`,
@@ -337,12 +354,14 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### THR-04 — `Io.Group` tasks are model threads
 
 - Kind: environment.
-- Statement: `Group.async`/`concurrent` spawn a recorded task; `Group.await` joins the tasks
-  in spawn order. `Group.cancel` gives each task a cancelation request (`Mem.cancels`) and
-  joins it; a task's cancelation point (a cancelable futex wait, its own `Group.await`)
-  delivers a pending request as `error.Canceled`. `main` is not an `Io` task and is never
-  canceled.
-- Derived from: tokens `groupAsyncC`, `groupAwaitC`, `groupConcurrentC`, `groupCancelC`, `cancelPending`, `requestCancel`.
+- Statement: `Group.async` is an oracle choice of the run's environment: a recorded task
+  thread, the caller at once, or a task deferred until the group's `await`/`cancel` (gated).
+  `concurrent` spawns a recorded task. `Group.await` joins the tasks in spawn order.
+  `Group.cancel` gives each task a cancelation request (`Mem.cancels`) and joins it; a task's
+  cancelation point (a cancelable futex wait, its own `Group.await`) delivers a pending request
+  as `error.Canceled`. `main` is not an `Io` task and is never canceled.
+- Derived from: tokens `groupAsyncC`, `groupDeferC`, `groupAsyncWithPolicyC`, `groupAwaitC`,
+  `groupConcurrentC`, `groupCancelC`, `cancelPending`, `requestCancel`.
 - Sources: [std-models.md](std-models.md#thread-model).
 
 <a id="thr-05"></a>
@@ -350,10 +369,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: environment.
 - Statement: A futex wait on a matching `u32` sleeps until a wake at that address, or returns
-  spuriously in place of the sleep (an oracle choice, `Sched.spuriousWake`). Waiters wake in
-  FIFO order; a sleeping waiter leaves the queue only through a wake or a cancelation request.
-  A wake adds no happens-before edge. No runnable thread with an unfinished thread is
-  `Zig.Error.deadlock`.
+  spuriously in place of the sleep (an oracle choice, `Sched.spuriousWake`). The kernel's
+  compare is an atomic read of the word (a plain write that races with it is `.illegal`). A
+  wake of up to `n` waiters wakes the ones the oracle picks (no order is assumed); a sleeping
+  waiter leaves the waiters only through a wake or a cancelation request. A wake adds no
+  happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
 - Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
@@ -363,7 +383,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: trusted.
 - Statement: On macOS, `Thread.Mutex.DarwinImpl` stops at `os_unfair_lock_*`. The model is the
   lock's contract: an acquire `cmpxchg` 0→1 with a futex sleep, and a release `xchg` of 0
-  with a wake. The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
+  with a wake, after an owner check (an unlock by a thread that does not hold the lock is
+  `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
   its DarwinImpl proofs only for a macOS translation (`if_decl`). The committed Linux
   translation selects `FutexImpl`, so no indexed theorem currently lists THR-06.
 - Derived from: tokens `osUnfairLock`, `DarwinImpl`.
@@ -458,7 +479,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: trusted.
 - Statement: The compiled code exhibits no load buffering (the model has no promises). LLVM
-  does not promise this for relaxed atomics.
+  does not promise this for relaxed atomics. The translator rejects the straight-line shape
+  (a relaxed read, then a relaxed write to another address, with no acquire-release or
+  sequentially consistent op, call or branch between) unless `--assume-no-lb`; the check is not
+  complete, so every theorem with atomics carries this premise.
 - Derived from: implied by ORD-01.
 - Sources: [std-models.md](std-models.md#thread-model) (**Trusted assumption**).
 

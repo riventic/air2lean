@@ -118,7 +118,7 @@ theorem inv_mem2 {blk : Block} (hb : (mem1 σ).blocks[0]? = some blk) (hs : blk.
     simp [hcs, VClock.le_refl]
 
 theorem ready_first {F : Nat} (s : Sched.State Tgt Unit)
-    (hm : s.main = .paused ⟨F, .spawn .worker, fun h m => publish h F m⟩) (hk : s.kids = #[]) :
+    (hm : s.main = .paused ⟨F, .spawn .worker, fun h m => publishE h F m⟩) (hk : s.kids = #[]) :
     s.ready = #[0] := by
   unfold Sched.State.ready
   rw [hm, hk]
@@ -126,21 +126,21 @@ theorem ready_first {F : Nat} (s : Sched.State Tgt Unit)
 
 /-- The scheduler state after the fork. -/
 def sFork (σ : Placement) (F : Nat) : Sched.State Tgt Unit :=
-  { main := .paused ⟨F, .spawn .worker, fun h m => publish h F m⟩,
+  { main := .paused ⟨F, .spawn .worker, fun h m => publishE h F m⟩,
     kids := #[workerTS .start F], mem := (mem1 σ), step := 1, trace := #[1] }
 
 /-- The run up to `main`'s pick of its store: the first turn spawns the worker and writes
 `data`. -/
 theorem run_eq (F : Nat) (o : Nat → Nat) :
-    (Sched.run dispatch (F + 1) o main (mem0 σ)).run =
+    (Sched.run ⟨.any, .available⟩ dispatch (F + 1) o main (mem0 σ)).run =
       (match Sched.settle 0 (sFork σ F) (publish 1 F (mem1 σ)) with
         | .error e => Sched.outOf e
         | .ok (_, some v, s') => some (.ok (v, s'.mem))
-        | .ok (ts, none, s') => (Sched.go dispatch o F { s' with main := ts }).1) := by
+        | .ok (ts, none, s') => (Sched.go ⟨.any, .available⟩ dispatch o F { s' with main := ts }).1) := by
   let s0 : Sched.State Tgt Unit :=
-    { main := .paused ⟨F, .spawn .worker, fun h m => publish h F m⟩, kids := #[],
+    { main := .paused ⟨F, .spawn .worker, fun h m => publishE h F m⟩, kids := #[],
       mem := { (mem0 σ) with current := 0 }, step := 0, trace := #[] }
-  have hr : (Sched.run dispatch (F + 1) o main (mem0 σ)).run = (Sched.go dispatch o (F + 1) s0).1 := rfl
+  have hr : (Sched.run ⟨.any, .available⟩ dispatch (F + 1) o main (mem0 σ)).run = (Sched.go ⟨.any, .available⟩ dispatch o (F + 1) s0).1 := rfl
   have hready : s0.ready = #[0] := ready_first s0 rfl rfl
   have hne : s0.ready.isEmpty = false := by rw [hready]; rfl
   rw [hr, go_main o hne (pick_one o s0 hready) rfl, choose_snd, hready]
@@ -149,7 +149,7 @@ theorem run_eq (F : Nat) (o : Nat → Nat) :
 /-- A run with at least two turns reaches `main`'s store pick and the worker's start. -/
 theorem run_init (F : Nat) (o : Nat → Nat) :
     ∃ s1, At (F + 1) .store .start s1 ∧ s1.step = 1 ∧
-      (Sched.run dispatch (F + 2) o main (mem0 σ)).run = (Sched.go dispatch o (F + 1) s1).1 := by
+      (Sched.run ⟨.any, .available⟩ dispatch (F + 2) o main (mem0 σ)).run = (Sched.go ⟨.any, .available⟩ dispatch o (F + 1) s1).1 := by
   obtain ⟨blk, hb, hs, hst⟩ := store_mem1
   rw [run_eq (F + 1) o]
   have hpub : publish 1 (F + 1) (mem1 σ) = .sync (.pick storeCnt)
@@ -163,7 +163,7 @@ theorem run_init (F : Nat) (o : Nat → Nat) :
     ⟨F, F + 1, rfl, rfl, inv_mem2 hb hs, by omega, by omega, fun h => by cases h⟩, rfl, rfl⟩
 
 /-- With one turn the run has no result. -/
-theorem run_one (o : Nat → Nat) : (Sched.run dispatch 1 o main (mem0 σ)).run = none := by
+theorem run_one (o : Nat → Nat) : (Sched.run ⟨.any, .available⟩ dispatch 1 o main (mem0 σ)).run = none := by
   obtain ⟨blk, hb, hs, hst⟩ := store_mem1
   rw [run_eq 0 o]
   have hpub : publish 1 0 (mem1 σ) = .leaf none := by
@@ -172,12 +172,12 @@ theorem run_one (o : Nat → Nat) : (Sched.run dispatch 1 o main (mem0 σ)).run 
   rw [hpub]
   rfl
 
-theorem run_zero (o : Nat → Nat) : (Sched.run dispatch 0 o main (mem0 σ)).run = none := rfl
+theorem run_zero (o : Nat → Nat) : (Sched.run ⟨.any, .available⟩ dispatch 0 o main (mem0 σ)).run = none := rfl
 
 /-! ## Safety under every schedule -/
 
 theorem go_safe (o : Nat → Nat) : ∀ f mp wp (s : Sched.State Tgt Unit), At f mp wp s →
-    ∀ e, (Sched.go dispatch o f s).1 ≠ some (.error e) := by
+    ∀ e, (Sched.go ⟨.any, .available⟩ dispatch o f s).1 ≠ some (.error e) := by
   intro f
   induction f with
   | zero => intro _ _ s _ e h; cases s; simp [Sched.go] at h
@@ -191,7 +191,7 @@ theorem go_safe (o : Nat → Nat) : ∀ f mp wp (s : Sched.State Tgt Unit), At f
 /-- **Safety.** No schedule and no fuel gives an error: no panic (so the worker reads 42 after
 the idle loop), no race and no deadlock. A run without a result is allowed. -/
 theorem idle_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run dispatch fuel o main (mem0 σ)).run ≠ some (.error e) := by
+    (Sched.run ⟨.any, .available⟩ dispatch fuel o main (mem0 σ)).run ≠ some (.error e) := by
   match fuel with
   | 0 => rw [run_zero]; simp
   | 1 => rw [run_one]; simp
@@ -206,7 +206,7 @@ theorem idle_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
 def favorWorker : Nat → Nat := fun _ => 1
 
 theorem go_starve : ∀ f wp (s : Sched.State Tgt Unit), At f .store wp s →
-    (Sched.go dispatch favorWorker f s).1 = none := by
+    (Sched.go ⟨.any, .available⟩ dispatch favorWorker f s).1 = none := by
   intro f
   induction f with
   | zero => intro _ s _; cases s; simp [Sched.go]
@@ -224,7 +224,7 @@ theorem go_starve : ∀ f wp (s : Sched.State Tgt Unit), At f .store wp s →
 
 /-- **Starvation.** Under `favorWorker` the run has no result for any fuel: the worker executes
 its spin hint and `Thread.yield` in every iteration, and neither hands the processor to `main`. -/
-theorem idle_starves (fuel : Nat) : (Sched.run dispatch fuel favorWorker main (mem0 σ)).run = none := by
+theorem idle_starves (fuel : Nat) : (Sched.run ⟨.any, .available⟩ dispatch fuel favorWorker main (mem0 σ)).run = none := by
   match fuel with
   | 0 => exact run_zero _
   | 1 => exact run_one _
@@ -257,7 +257,7 @@ theorem pot_le (mp : MainAt) (wp : WorkerAt) : pot mp wp ≤ 5 := by
 
 theorem go_tail (o : Nat → Nat) (N : Nat) (hN : ∀ j, N ≤ j → o j = 0) :
     ∀ f mp wp (s : Sched.State Tgt Unit), At f mp wp s → N ≤ s.step → pot mp wp < f →
-      ∃ M, (Sched.go dispatch o f s).1 = some (.ok ((), M)) := by
+      ∃ M, (Sched.go ⟨.any, .available⟩ dispatch o f s).1 = some (.ok ((), M)) := by
   intro f
   induction f with
   | zero => intro _ _ _ _ _ h; omega
@@ -286,7 +286,7 @@ theorem go_tail (o : Nat → Nat) (N : Nat) (hN : ∀ j, N ≤ j → o j = 0) :
 
 theorem go_eventually (o : Nat → Nat) (N : Nat) (hN : ∀ j, N ≤ j → o j = 0) :
     ∀ k f mp wp (s : Sched.State Tgt Unit), At f mp wp s → N ≤ s.step + k → k + 6 ≤ f →
-      ∃ M, (Sched.go dispatch o f s).1 = some (.ok ((), M)) := by
+      ∃ M, (Sched.go ⟨.any, .available⟩ dispatch o f s).1 = some (.ok ((), M)) := by
   intro k
   induction k with
   | zero =>
@@ -306,7 +306,7 @@ theorem go_eventually (o : Nat → Nat) (N : Nat) (hN : ∀ j, N ≤ j → o j =
 enough fuel gives a result: `main` joined the worker, so the translated idle loop exited. -/
 theorem idle_progress (o : Nat → Nat) (hfair : Cooperative o) :
     ∃ bound, ∀ fuel, bound ≤ fuel →
-      ∃ M, (Sched.run dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := by
+      ∃ M, (Sched.run ⟨.any, .available⟩ dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := by
   obtain ⟨N, hN⟩ := hfair
   refine ⟨N + 8, fun fuel hf => ?_⟩
   obtain ⟨F, rfl⟩ : ∃ F, fuel = F + 2 := ⟨fuel - 2, by omega⟩
@@ -327,7 +327,7 @@ for the legal oracle `favorWorker`. Equivalently, the client is not totally corr
 sense of `Zig.Conc.Total.EventuallyReturns`. -/
 theorem progress_needs_premise :
     ¬ ∀ o : Nat → Nat, ∃ bound, ∀ fuel, bound ≤ fuel →
-      ∃ M, (Sched.run dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := by
+      ∃ M, (Sched.run ⟨.any, .available⟩ dispatch fuel o main (mem0 σ)).run = some (.ok ((), M)) := by
   intro h
   obtain ⟨b, hb⟩ := h favorWorker
   obtain ⟨M, hM⟩ := hb b (Nat.le_refl _)
@@ -335,7 +335,7 @@ theorem progress_needs_premise :
   cases hM
 
 theorem not_eventuallyReturns :
-    ¬ Zig.Conc.Total.EventuallyReturns dispatch main (mem0 σ) (fun _ _ => True) := by
+    ¬ Zig.Conc.Total.EventuallyReturns ⟨.any, .available⟩ dispatch main (mem0 σ) (fun _ _ => True) := by
   intro h
   obtain ⟨b, hb⟩ := h favorWorker
   obtain ⟨v, m', hr, -⟩ := hb b (Nat.le_refl _)

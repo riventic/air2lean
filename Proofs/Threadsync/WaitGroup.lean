@@ -1461,9 +1461,9 @@ theorem task_rank {G : ThreadId → Gh} {m : Mem} (hi : proto.inv G m) {t : Thre
   · omega
 
 /-- The futex wake of the setter (`wk`) at the event: no thread waits at the event after it. -/
-theorem wake_q {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (hn : 1 ≤ n)
+theorem wake_q {cs : List Nat} {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (hn : 1 ≤ n)
     (hq : QOk G m)
-    (hw : ((Thread.futexWake EV.ptr n).run { m with current := t }).run = some (.ok ((), m'))) :
+    (hw : ((Thread.futexWake EV.ptr n cs).run { m with current := t }).run = some (.ok ((), m'))) :
     QOk G' m' ∧ m'.blocks = m.blocks ∧ m'.atomics = m.atomics ∧ m'.footprint = m.footprint ∧
       m'.threads = m.threads ∧ m'.clocks = m.clocks := by
   have hm' := Proto.modify_ok hw
@@ -1474,22 +1474,12 @@ theorem wake_q {G G' : ThreadId → Gh} {m m' : Mem} {t : ThreadId} {n : Nat} (h
   rcases hq w hwm with h | ⟨h1, h2, -⟩
   · exact h
   · exfalso
-    -- the first waiter at the event is `main`, so `main` is woken
-    have hne : (m.waiters.filter (·.2 == EV.ptr)).size ≠ 0 := by
-      intro h0
-      have : w ∈ m.waiters.filter (·.2 == EV.ptr) := Array.mem_filter.mpr ⟨hwm, by simp [h2]⟩
-      rw [Array.size_eq_zero_iff.mp h0] at this; simp at this
-    have hf0 := Array.getElem_mem (xs := m.waiters.filter (·.2 == EV.ptr)) (i := 0) (by omega)
-    obtain ⟨hf0m, hf0p⟩ := Array.mem_filter.mp hf0
-    have hf01 : ((m.waiters.filter (·.2 == EV.ptr))[0]'(by omega)).1 = 0 := by
-      rcases hq _ hf0m with h | ⟨a, b, -⟩
-      · exfalso; rw [beq_iff_eq.mp hf0p] at h; exact absurd h (by decide)
+    -- every waiter at the event is `main`, so `main` is woken
+    have hin : (0 : ThreadId) ∈ Thread.wakeSet m.waiters EV.ptr n cs := by
+      refine Thread.mem_wakeSet_of_all (by omega) ⟨w, hwm, h2⟩ fun v hv hvp => ?_
+      rcases hq v hv with h | ⟨a, -, -⟩
+      · exfalso; rw [hvp] at h; exact absurd h (by decide)
       · exact a
-    have hin : (0 : ThreadId) ∈ ((m.waiters.filter (·.2 == EV.ptr)).extract 0 n).map (·.1) := by
-      rw [Array.mem_map]
-      refine ⟨_, ?_, hf01⟩
-      rw [Array.mem_extract_iff_getElem]
-      exact ⟨0, by simp; omega, by simp⟩
     rw [h1] at hnot
     simp only [Bool.not_eq_eq_eq_not, Bool.not_true] at hnot
     rw [Array.contains_iff_mem.mpr hin] at hnot; cases hnot
@@ -1538,7 +1528,7 @@ theorem set_spec {t : ThreadId} (ht : t = 1 ∨ t = 2) (a b : VClock) (G : Threa
     simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind, bind_assoc,
       pure_bind]
     rw [threadFutexWakeC_eq]
-    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi'', fun G₃ m₃ hg₃ hi₃ m₄ hw => ?_⟩)
+    refine WP.bind (WP.futexWakeC fun k₃ hk₃ => ⟨_, hi'', fun G₃ m₃ hg₃ hi₃ cs m₄ hw => ?_⟩)
     simp only [if_pos rfl] at hg₃
     have hl := hi₃.1.wakeOff (by decide) hw
     obtain ⟨hq, hb, ha, hf, hth, hc⟩ := wake_q (G' := upd G₃ t (gS .dn a (m''.clocks[t]!) true))
@@ -2761,6 +2751,28 @@ theorem inv_away {G : ThreadId → Gh} {m : Mem} {h : Heap} {x : X}
   rw [upd_upd] at hl
   exact ⟨hl, U_l0 (a := (gM h x).1) hi.2 rfl hfd⟩
 
+/-- `U` after an op of `main` at the event that keeps its writes (the kernel's read of a futex
+wait), with the same ghost values. -/
+theorem U_evRd {G : ThreadId → Gh} {m₁ M : Mem} (hi : proto.inv G m₁) (hr : (G 0).2.ph.rank ≤ 7)
+    (hw' : EV.Ok M) (hop : EV.Op 0 m₁ M) (hh : EV.hist M = EV.hist m₁) (hq : QOk G M) :
+    U G M := by
+  have hp := hi.2.pre hr
+  have hkG := Word.keep_op hop (W' := WG) (.inr (.inr (by decide)))
+  have := U_main (g := G 0) hi
+    (by rw [upd_same]; have hs := hi.2.shape; unfold Shape at hs ⊢; rw [hop.threads]; exact hs)
+    (hop.cells _ (by rintro ⟨-, -, h⟩; simp only [EV] at h; omega)) hi.2.part0
+    (by rw [upd_same]; exact hq)
+    (fun _ => by
+      rw [upd_same]
+      exact Pre.keep hp (fun _ => XEq.refl _) (hp.wg.keep hkG) hw' (Word.hist_keep hp.wg hkG) hh
+        hop.clocks (t := 0) (by decide) (.inl (main_x hi).2.2.1) hop.fpt)
+    (fun h6 => by
+      rw [upd_same] at h6
+      obtain ⟨a, b, c, d⟩ := hi.2.done h6
+      exact ⟨a, b, VClock.le_trans c (hop.clocks 0), VClock.le_trans d (hop.clocks 0)⟩)
+    (main_x hi)
+  rwa [upd_same] at this
+
 /-- `main`'s futex wait at the event (value `1`) at `ev1`, with its part `h`: it sleeps only while
 the newest write is its own `1` (no set yet). It goes on at `ev1`. -/
 theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {h : Heap}
@@ -2781,16 +2793,20 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
       rw [hg₁]; rfl]; exact hl, ?_⟩
     rw [← upd_g hg₁] at hu
     exact U_l0 (a := (gA h { ph := .ev1, e1 := true }).1) hu rfl rfl
+  have hr0 : (G₁ 0).2.ph.rank ≤ 7 := by rw [hg₁]; show Ph.ev1.rank ≤ 7; decide
+  have ht0 : (0 : ThreadId) < m₁.threads.size := (hi₁.1.live 0 (by rw [hph]; decide)).1
+  have hi₀ := inv_cur hi₁ 0
+  have hp₀ := hi₀.2.pre hr0
   refine ⟨fun _ => live_all hi₁ 0, fun hq0 => ⟨fun _ => ?_, fun b m' hr => ?_⟩⟩
-  · by_cases hwk : ({ m₁ with current := 0 } : Mem).woken.contains
-      ({ m₁ with current := 0 } : Mem).current = true
-    · exact ⟨_, _, futexWait_run_woken hwk⟩
-    · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
-      obtain ⟨v, hv⟩ := hw.val
-      rw [Word.holds_bytes hb] at hv
-      exact ⟨_, _, futexWait_run_go (by simpa using hwk) ha hv⟩
-  have hl := hi₁.1.waitOff hph (by decide) hq0 hr
-  rcases futexWait_ok hr with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, hv, ⟨hve, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
+  · exact hp₀.ev.futexWait_run ht0
+  have hl := hi₁.1.waitOff hph (by decide)
+    (Word.offWord hw (fun u => off_own hi₁ shE.b shE.o u) (off_R shE.b shE.o G₁) apE) hq0 hr
+  -- the kernel's compare is an atomic read of the event: an op that keeps `U`
+  have hrd : ∀ M, EV.Ok M → EV.Op 0 { m₁ with current := 0 } M →
+      EV.hist M = EV.hist { m₁ with current := 0 } → U G₁ M := fun M hok hop hh =>
+    U_evRd hi₀ hr0 hok hop hh fun w hw => hi₁.2.q w (by rw [hop.waiters] at hw; exact hw)
+  rcases hp₀.ev.futexWait rfl ht0 (hcs_of hi₀) hr with
+    ⟨-, rfl, rfl⟩ | ⟨-, M, hok, hop, hh, ⟨hH, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     exact hQ k hk G₁ _ rfl (hgo _ rfl hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
@@ -2801,12 +2817,6 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     · have hl := hi₁.1.spuriousOff hph hq0
       obtain ⟨-, hl'⟩ := hl
       exact hQ k hk G₁ _ rfl (hgo _ rfl hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
-    obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hw.access
-    have : ({ m₁ with current := 0 } : Mem).access EV.ptr 4 4 = m₁.access EV.ptr 4 4 := rfl
-    rw [this, ha₀] at ha
-    cases ha
-    have hve' : v = 1 := by rw [hve]; rfl
-    have hH : EV.Holds m₁ 1 := by rw [Word.holds_bytes hb₀, ← hve']; exact hv
     have hlast := hw.holds_last.mp hH
     have hns : (!(G₁ 1).2.sx && !(G₁ 2).2.sx) = true := by
       cases e : ((G₁ 1).2.sx || (G₁ 2).2.sx)
@@ -2816,13 +2826,13 @@ theorem wp_mwait {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
           (by unfold evL; rw [e]; rfl)
         have := val_eq hlast h2
         revert this; decide
-    refine ⟨hl, U_mem hi₁.2 rfl rfl rfl rfl rfl fun w hw' => ?_⟩
+    refine ⟨hl, U_mem (hrd _ hok hop hh) rfl rfl rfl rfl rfl fun w hw' => ?_⟩
     rcases Array.mem_push.mp hw' with hw' | rfl
-    · exact hi₁.2.q w hw'
+    · exact hi₁.2.q w (by rw [hop.waiters] at hw'; exact hw')
     · exact .inr ⟨rfl, rfl, by rw [hg₁]; rfl, .inl hns⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
-    obtain ⟨-, hl'⟩ := hl
-    exact hQ k hk G₁ _ rfl (hgo _ rfl hl' (U_mem hi₁.2 rfl rfl rfl rfl rfl hi₁.2.q))
+    obtain ⟨hc, hl'⟩ := hl
+    exact hQ k hk G₁ _ hc (hgo _ hc hl' (hrd _ hok hop hh))
 
 /-! ## `waitUntilSet` -/
 
@@ -3478,7 +3488,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   rw [← upd_g hg₁₀] at hi₁₀
   obtain ⟨hs₁₀, -, ht1, -⟩ := shape3 hi₁₀ (by decide)
   rw [upd_g hg₁₀] at hi₁₀
-  refine ⟨fun _ => ⟨by decide, by rw [hs₁₀]; decide, ⟨rfl, .inl rfl⟩, by simp [Thread.joinValid, ht1]⟩, fun hfin => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs₁₀]; decide, ⟨rfl, .inl rfl⟩, by simp [Thread.joinValid, Mem.isGated, ht1]⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₁₀ with current := 0 }) ht1 rfl rfl, fun m₁₁ hj₁ => ?_⟩⟩
   obtain ⟨hc₁₁, hi₁₁⟩ := inv_j1 hi₁₀ hg₁₀ hj₁
   -- the join of task 2
@@ -3486,7 +3496,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   rw [← upd_g hg₁₂] at hi₁₂
   obtain ⟨hs₁₂, ht0, ht1', ht2⟩ := shape3 hi₁₂ (by decide)
   rw [upd_g hg₁₂] at hi₁₂
-  refine ⟨fun _ => ⟨by decide, by rw [hs₁₂]; decide, ⟨rfl, .inr rfl⟩, by simp [Thread.joinValid, ht2]⟩, fun hfin₂ => ⟨fun _ =>
+  refine ⟨fun _ => ⟨by decide, by rw [hs₁₂]; decide, ⟨rfl, .inr rfl⟩, by simp [Thread.joinValid, Mem.isGated, ht2]⟩, fun hfin₂ => ⟨fun _ =>
     join_run (m := { m₁₂ with current := 0 }) ht2 rfl rfl, fun m₁₃ hj₂ => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₃⟩ := join_eq hj₂
   change m₁₂.threads[2]? = some rec at hrec
@@ -3495,7 +3505,16 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- the free of the `Tally`
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₂.2.blk
   have hb₁₃ : m₁₃.blocks[0]? = some blk₀ := by rw [hm₁₃]; exact hblk₀
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₁₃ hl₀ e he).elim) fun _ m₁₄ hfr => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb₁₃ hl₀ (freeRaces_of_joined
+    (by rw [hm₁₃]; simp only [Array.size_set!]; exact hi₁₂.1.own.csize) fun u hu => by
+      rw [hm₁₃] at hu ⊢
+      simp only [Array.size_set!, hs₁₂] at hu
+      rcases (by omega : u = 0 ∨ u = 1 ∨ u = 2) with rfl | rfl | rfl
+      · exact .inl rfl
+      · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, ht1'],
+          rfl, rfl⟩
+      · exact .inr ⟨{ spawner := 0, joined := true }, by simp [Array.set!_eq_setIfInBounds, hs₁₂],
+          rfl, rfl⟩) e he).elim) fun _ m₁₄ hfr => ?_)
   obtain ⟨b', blk'', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hn], fun r hr hsp => ?_⟩⟩
   -- every thread is joined
@@ -3513,24 +3532,24 @@ theorem main_spec (σ : Placement) (d : Nat) :
 /-! ## The results -/
 
 /-- **`threadsync.waitGroup` gives 2 under every schedule** (every oracle `o`, every `fuel`). -/
-theorem waitGroup_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o waitGroup (mem0 σ)).run = some (.ok (v, m))) :
+theorem waitGroup_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 2 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ) h
   exact hv
 
 /-- **No run of `threadsync.waitGroup` gives an error**: no data race on the `Tally` (its whole
 read included), no deadlock at a futex, no panic, under every schedule. -/
-theorem waitGroup_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+theorem waitGroup_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.WaitGroup` client returns 2 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem waitGroup_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) waitGroup (mem0 σ)) = some 2 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) waitGroup (mem0 σ)) = some 2 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 nonvacuity_witness tally_decode :=

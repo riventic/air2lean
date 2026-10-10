@@ -763,18 +763,18 @@ theorem main_spec (d : Nat) :
 
 /-- **`twoCounters` returns 90908 under every schedule**: each worker read 9 from its own
 `counter` and `main` read 8 from its own. -/
-theorem twoCounters_spec {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (h : (Sched.run dispatch fuel o twoCounters (mem0 .fresh)).run = some (.ok (v, m))) :
+theorem twoCounters_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run = some (.ok (v, m))) :
     v = .ok 90908 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch (fun _ => .none) dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch (fun _ => .none) dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) mem0_size main_spec h
   exact hv
 
 /-- **No run of `twoCounters` gives an error**: the concurrent increments of the three
 instances do not race. -/
-theorem twoCounters_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
-  proto.run_safe dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
+theorem twoCounters_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o twoCounters (mem0 .fresh)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch (fun _ => .none) rfl dispatch_spec (fun _ _ _ _ hq => hq.2) mem0_size
     main_spec
 
 end ThreadLocals.Counters

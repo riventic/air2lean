@@ -13,7 +13,7 @@ out of the evidence.
 | Operation | Outcomes in the fallible policy |
 | --- | --- |
 | `Thread.spawn` | A successful child handle, or one of `ThreadQuotaExceeded`, `SystemResources`, `OutOfMemory`, `LockedMemoryLimitExceeded`, `Unexpected`. |
-| `Io.Group.async` | Assign a child and record it in the group, or execute the complete captured task in the caller before returning. |
+| `Io.Group.async` | Assign a child and record it in the group, execute the complete captured task in the caller before returning, or defer it until the group's `await` (every policy; at an exhausted budget only the caller execution). |
 | `Io.Group.concurrent` | Assign a child and record it in the group, or return `ConcurrencyUnavailable`. Failure does not execute the task. |
 
 The declared Thread error set is identical in pristine Zig 0.14.1, 0.15.2, and

@@ -13,7 +13,7 @@ private def inspect (m : Mem) (p : Ptr) : Option (BitVec 8) :=
 
 private def sourceCall {α : Type} (m : Mem) (oracle : Nat → Nat)
     (action : ConcM WeakCasSource.Tgt α) : Option (Except Error (α × Mem)) :=
-  (Sched.run WeakCasSource.dispatch 100 oracle action m).run
+  (Sched.run ⟨.any, .available⟩ WeakCasSource.dispatch 100 oracle action m).run
 
 def main : IO Unit := do
   let some (.ok (p, m)) := (initialCell.run {}).run | throw (IO.userError "initial cell")
@@ -39,7 +39,7 @@ def main : IO Unit := do
     store 1 p false
     pure p
   let some (.ok (bp, bm)) := (boolSetup.run {}).run | throw (IO.userError "initial bool")
-  sourceAssert (match (Sched.run WeakCasSource.dispatch 100 (fun _ => 1)
+  sourceAssert (match (Sched.run ⟨.any, .available⟩ WeakCasSource.dispatch 100 (fun _ => 1)
       (WeakCasSource.weakBool bp false true) bm).run with
     | some (.ok (some old, m')) => !old &&
       (match ((load Bool 1 bp).run m').run with | some (.ok (false, _)) => true | _ => false)

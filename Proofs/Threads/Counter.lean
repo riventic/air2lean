@@ -121,7 +121,7 @@ def HdOk (s : Nat) (m : Mem) : Prop := ∀ blk, m.blocks[2]? = some blk → ∀ 
 /-- The facts of strict mode that `Inv` does not have. -/
 def Ex (G : ThreadId → Gh) (m : Mem) : Prop :=
   BlkAt m 0 64 8 ∧ BlkAt m 1 4 4 ∧ BlkAt m 2 32 8 ∧ FpOk m ∧
-    (∀ r ∈ m.threads, r.spawner = 0) ∧ ∃ s J, G 0 = .main s J ∧ HdOk s m
+    (∀ r ∈ m.threads, r.spawner = 0 ∧ r.gated = false) ∧ ∃ s J, G 0 = .main s J ∧ HdOk s m
 
 /-- The protocol, in strict mode: `Ex` (below) has the facts for "no error". -/
 def proto : Proto Tgt Gh where
@@ -1036,7 +1036,7 @@ theorem fork_eq {m m' : Mem} {c : ThreadId}
       clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
         (VClock.bump (m.clocks[m.current]!) m.current),
       threads := m.threads.push { spawner := m.current, joined := false } } := by
-  simp [Thread.fork, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
+  simp [Thread.fork, Thread.forkWith, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
     StateT.get, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
     ExceptT.bind, ExceptT.bindCont, Option.bind] at h
   obtain ⟨rfl, rfl⟩ := h
@@ -1290,7 +1290,8 @@ clock is `≥` every message's clock, so only the newest message is a read optio
 theorem final_load {G : ThreadId → Gh} {m m' : Mem} {J : List Nat} {c : Nat} {v : BitVec 32}
     (hi : Inv n G m) (hG0 : G 0 = .main 4 J) (hJ4 : J.length = 4) (hcur : m.current = 0)
     (h : ((atomicLoadAt c .seqCst 4 counterPtr).run m).run = some (.ok (v, m'))) :
-    v = BitVec.ofNat 32 (4 * n.toNat) ∧ m'.threads = m.threads ∧ m'.blocks = m.blocks := by
+    v = BitVec.ofNat 32 (4 * n.toNat) ∧ m'.threads = m.threads ∧ m'.blocks = m.blocks ∧
+      m'.ClocksLe := by
   have hnd' : ∀ q, G m.current ≠ .bump q n.toNat true := by
     intro q hq; rw [hcur, hG0] at hq; cases hq
   have hiR := inv_recordAt (b := 1) (o := 0) (len := 4) (k := .atomicRead) (hn1 := by decide) n hi hnd' (by
@@ -1348,11 +1349,16 @@ theorem final_load {G : ThreadId → Gh} {m m' : Mem} {J : List Nat} {c : Nat} {
   obtain ⟨rfl, rfl⟩ := hcp
   rw [getElem!_pos (m₁.atomics[li]!).msgs _ (by omega), hcat.val _ (by omega)] at hd
   simp only [Option.some.injEq, Except.ok.injEq] at hd
-  refine ⟨hd.symm, ?_, ?_⟩
+  refine ⟨hd.symm, ?_, ?_, ?_⟩
   · rw [hm']; show m₁.threads = m.threads; rw [hth1]; rfl
   · rw [hm']
     simp only [Proto.loadM, Proto.acqM, Proto.observeM, AtomicOrder.isAcq, ↓reduceIte]
     rw [hbl1]; rfl
+  · -- every thread joined into `main`: each clock is below its
+    have hR : (m.recordAt 1 0 4 .atomicRead).ClocksLe :=
+      (Mem.ClocksLe.of_threads (hcs.trans hsz.symm) (by rw [hcur]; exact hclk)).recordAt _ _ _ _
+    have hcl₁ : m₁.ClocksLe := by unfold Mem.ClocksLe; rw [hcl1, hcu1]; exact hR
+    rw [hm']; exact hcl₁.loadM _ _ _
 
 /-- The preparation of `main`'s load after the 4 joins: the counter holds `4 * n`, and the load
 reads the newest message only. -/
@@ -1624,7 +1630,7 @@ theorem ex_start {m : Mem} (hpa : PreA m) (hpb : PreB m) : Ex G0 m := by
     · exact .inr (.inr (.inr ⟨hb, hf e he⟩))
   · rw [ht] at hr
     simp [mem0, Mem.ofGlobals] at hr
-    rw [hr]
+    rw [hr]; exact ⟨rfl, rfl⟩
 
 
 /-- The invariant of `main`'s first loop: slots `0 … local6 - 1` are filled. -/
@@ -1792,7 +1798,7 @@ theorem ex_fork {G G' : ThreadId → Gh} {m m₂ : Mem} {child : ThreadId} (he :
   · simp only [Array.mem_push] at hr
     rcases hr with hr | rfl
     · exact hsp r hr
-    · rfl
+    · exact ⟨rfl, rfl⟩
 
 /-- `main`'s store of handle `k` (thread `k + 1`) keeps `Ex`, with one more handle. -/
 theorem ex_handle {G G' : ThreadId → Gh} {m m₃ : Mem} {k : Nat} {q : Ptr} (he : Ex G m)
@@ -2036,7 +2042,8 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
           · omega
           · have := hJle _ h; omega
       exact Proto.join_run (rec := m₂.threads[s.local85.toNat + 1])
-        (Array.getElem?_eq_getElem hlt₂) (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)) hjf
+        (Array.getElem?_eq_getElem hlt₂) (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)).1 hjf
+        (.inl (he₂.2.2.2.2.1 _ (Array.getElem_mem hlt₂)).2)
     refine ⟨fun _ => ?_, fun hfin => ⟨fun _ => hjoin, fun m' hj => ?_⟩⟩
     · obtain ⟨s₂, J₂, hG₂, -, hsz₂, -⟩ := hie₂.1
       rw [hg₁] at hG₂; cases hG₂
@@ -2085,7 +2092,7 @@ theorem ex_congr {G G' : ThreadId → Gh} {m : Mem} (h0 : G' 0 = G 0) (he : Ex G
 theorem ex_joinedAll {G : ThreadId → Gh} {m : Mem} {u : ThreadId} (hu : u ≠ 0) (he : Ex G m) :
     joinedAll u m := by
   intro r hr hs
-  have := he.2.2.2.2.1 r hr
+  have := (he.2.2.2.2.1 r hr).1
   rw [this] at hs; exact absurd hs.symm hu
 
 /-- A `bump` thread keeps the protocol. -/
@@ -2270,7 +2277,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have he₁' : Ex G₁ { m₁ with current := 0 } := he₁
   refine WP.bind (WP.callMC (fun e h => (final_noErr n hi₁' he₁' hg₁ hJ4 rfl hcr e h).elim)
     fun v m₂ hl => ?_)
-  obtain ⟨hv, hth₂, hbl₂⟩ := final_load n hi₁' hg₁ hJ4 rfl hl
+  obtain ⟨hv, hth₂, hbl₂, hcl₂⟩ := final_load n hi₁' hg₁ hJ4 rfl hl
   refine ⟨by rw [hth₂], ?_⟩
   simp only [StateT.run_pure]
   refine WP.pure' ?_
@@ -2280,18 +2287,20 @@ theorem main_spec (σ : Placement) (d : Nat) :
     intro r hr; rw [hth₂] at hr; exact joined_final n hi₁' hg₁ hJ4 r hr
   obtain ⟨⟨f0, hf0, hl0, -⟩, ⟨f1, hf1, hl1, -⟩, ⟨f2, hf2, hl2, -⟩, -⟩ := he₁'
   rw [← hbl₂] at hf0 hf1 hf2
-  refine WP.bind (WP.liftMem (fun e h => (free_noErr hf0 hl0 e h).elim) fun x m₃ hf => ?_)
+  refine WP.bind (WP.liftMem (fun e h => (free_noErr hf0 hl0 (hcl₂.freeRaces _ _) e h).elim) fun x m₃ hf => ?_)
   obtain ⟨b, blk, hb, hblk, rfl⟩ := Proto.free_ok hf
   simp only [Option.some.injEq] at hb; subst hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e h => (free_noErr (blk := f1)
-    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf1]) hl1 e h).elim)
+    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf1]) hl1
+    (by exact hcl₂.freeRaces _ _) e h).elim)
     fun x m₄ hf => ?_)
   obtain ⟨b, blk', hb, hblk', rfl⟩ := Proto.free_ok hf
   simp only [Option.some.injEq] at hb; subst hb
   refine ⟨rfl, ?_⟩
   refine WP.bind (WP.liftMem (fun e h => (free_noErr (blk := f2)
-    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf2]) hl2 e h).elim)
+    (by simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne, hf2]) hl2
+    (by exact hcl₂.freeRaces _ _) e h).elim)
     fun x m₅ hf => ?_)
   obtain ⟨b, blk'', hb, hblk'', rfl⟩ := Proto.free_ok hf
   refine ⟨rfl, ?_⟩
@@ -2311,19 +2320,19 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto n).init tgt g) (u : Thre
 
 /-- **`parallelCounter n` gives `4 * n` under every schedule** (every oracle `o`, every
 `fuel`). -/
-theorem parallelCounter_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
-    {m : Mem} (h : (Sched.run dispatch fuel o (parallelCounter n) (mem0 σ)).run = some (.ok (v, m))) :
+theorem parallelCounter_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)}
+    {m : Mem} (h : (Sched.run env dispatch fuel o (parallelCounter n) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok (4 * n) := by
-  obtain ⟨_, _, hv, -⟩ := (proto n).run_sound dispatch (fun u => if u = 0 then .main 0 [] else .none)
+  obtain ⟨_, _, hv, -⟩ := (proto n).run_sound env (Proto.of_available henv) dispatch (fun u => if u = 0 then .main 0 [] else .none)
     (dispatch_spec n) (fun _ _ _ _ _ hq => hq.2) rfl
     (main_spec n σ) h
   exact hv
 
 /-- **No run of `parallelCounter n` gives an error**, under any schedule: no data race, no
 deadlock, no overflow, no other illegal behaviour. -/
-theorem parallelCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o (parallelCounter n) (mem0 σ)).run ≠ some (.error e) :=
-  (proto n).run_safe dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
+theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o (parallelCounter n) (mem0 σ)).run ≠ some (.error e) :=
+  (proto n).run_safe env (Proto.of_available henv) dispatch (fun u => if u = 0 then .main 0 [] else .none) rfl
     (dispatch_spec n) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec n σ)
 
@@ -2331,7 +2340,7 @@ theorem parallelCounter_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e 
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem parallelCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 /-! ## Non-vacuity witnesses -/

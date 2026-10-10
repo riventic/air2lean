@@ -742,14 +742,15 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   refine WP.bind (WP.joinC fun k₂ hk₂ => ⟨gJoin, hiJ, fun G₄ m₁₁ hg₄ hi₁₁ => ?_⟩)
   obtain ⟨h0₁₁, ⟨-, h0, -⟩ | ⟨hs2, hr1, -, -, -⟩⟩ := hi₁₁.2.shape
   · exfalso; change (G₄ 0).2 = _ at h0; rw [hg₄] at h0; cases h0
-  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, hr1]⟩,
+  refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩, by simp [Thread.joinValid, Mem.isGated, hr1]⟩,
     fun _ => ⟨fun _ => join_run (m := { m₁₁ with current := 0 }) hr1 rfl rfl, fun m₁₂ hj => ?_⟩⟩
   obtain ⟨rec, hrec, -, hm₁₂⟩ := join_eq hj
   refine WP.pure' ?_
   -- the free of the cache
   obtain ⟨blk₀, hblk₀, hl₀, -⟩ := hi₁₁.2.blk
   have hb₁₂ : m₁₂.blocks = m₁₁.blocks := by rw [hm₁₂]
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀ e he).elim)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr (by rw [hb₁₂]; exact hblk₀) hl₀
+      ((Mem.ClocksLe.join2 hj (by rw [hi₁₁.1.own.csize, hs2])).freeRaces _ _) e he).elim)
     fun _ m₁₃ hfr => ?_)
   obtain ⟨b', blk', -, -, rfl⟩ := free_ok hfr
   refine ⟨rfl, WP.pure' ⟨by rw [hsum], fun r hr hsp => ?_⟩⟩
@@ -779,24 +780,24 @@ abbrev stdDispatch := dispatch Io_Mutex_lockUncancelable Io_Mutex_unlock
 
 /-- **The reader sees a consistent snapshot under every schedule**: every completed run of the
 cache client returns `a + b = 10` (every oracle, every fuel). -/
-theorem cache_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
-    (io : Io) (h : (Sched.run stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
+theorem cache_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (io : Io) (h : (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 10 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound stdDispatch G0 (dispatch_spec mutex)
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) stdDispatch G0 (dispatch_spec mutex)
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec mutex σ io) h
   exact hv
 
 /-- One schedule completes: under the oracle that always picks option 0, the cache client
 returns 10 within fuel 1000. The kernel computes the run. -/
 theorem cache_completes :
-    ∃ σ, Witness.okVal (Sched.run stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) (mem0 σ)) = some 10 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩) (mem0 σ)) = some 10 :=
   ⟨.fresh, by decide +kernel⟩
 
 /-- **No run of the cache client gives an error**: no data race on `a` or `b`, no deadlock at
 the futex, no lifetime error at the free, under every schedule. -/
-theorem cache_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe stdDispatch G0 rfl (dispatch_spec mutex) (fun _ _ _ _ hq => hq.2) rfl
+theorem cache_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec mutex) (fun _ _ _ _ hq => hq.2) rfl
     (main_spec mutex σ io)
 
 end Sync.SnapshotCache

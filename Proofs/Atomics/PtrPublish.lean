@@ -164,7 +164,7 @@ def ThrOk (G : ThreadId → Gh) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧ m.clocks.size = m.threads.size ∧
   ((m.threads.size = 1 ∧ G 0 = .pre ∧ m.blocks.size = 1 ∧ ∀ u, 1 ≤ u → G u = .none) ∨
    (m.threads.size = 2 ∧
-    (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = decide (G 0 = .post)) ∧
+    (∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = decide (G 0 = .post) ∧ r.gated = false) ∧
     (G 0 = .run ∨ G 0 = .joins ∨ G 0 = .post) ∧ (G 1 = .start ∨ G 1 = .wrote ∨ G 1 = .fin) ∧
     (G 0 = .post → G 1 = .fin) ∧ ∀ u, 2 ≤ u → G u = .none))
 
@@ -321,10 +321,10 @@ theorem thr_upd1 {G : ThreadId → Gh} {m m' : Mem} {g : Gh} (h : ThrOk G m)
     (ht : m'.threads = m.threads) (hc : m'.clocks.size = m.clocks.size)
     (hg1 : G 1 = .start ∨ G 1 = .wrote) (hg : g = .start ∨ g = .wrote ∨ g = .fin) :
     ThrOk (upd G 1 g) m' := by
-  obtain ⟨h0, hcs, ⟨-, -, -, hn⟩ | ⟨hs2, ⟨r, hr, hsp, hj⟩, g0, -, gp, g2⟩⟩ := h
+  obtain ⟨h0, hcs, ⟨-, -, -, hn⟩ | ⟨hs2, ⟨r, hr, hsp, hj, hgt⟩, g0, -, gp, g2⟩⟩ := h
   · rw [hn 1 (by decide)] at hg1; simp at hg1
   have e0 : upd G 1 g 0 = G 0 := upd_ne _ _ (by decide)
-  refine ⟨ht ▸ h0, by rw [hc, ht]; exact hcs, .inr ⟨ht ▸ hs2, ⟨r, ht ▸ hr, hsp, by rw [e0]; exact hj⟩,
+  refine ⟨ht ▸ h0, by rw [hc, ht]; exact hcs, .inr ⟨ht ▸ hs2, ⟨r, ht ▸ hr, hsp, by rw [e0]; exact hj, hgt⟩,
     by rw [e0]; exact g0, by rw [upd_self]; exact hg, fun hp => ?_, fun v hv => ?_⟩⟩
   · rw [e0] at hp
     have := gp hp
@@ -910,7 +910,7 @@ theorem thr_fork {G : ThreadId → Gh} {m : Mem} (h : ThrOk G m) (hg : G 0 = .pr
   refine ⟨hs1, hb1, hnone, by rw [hcs, hs1], ⟨by
       rw [Array.getElem?_push_lt (by omega), ← Array.getElem?_eq_getElem (by omega)]; exact h0,
     by simp [hcs], .inr ⟨by simp [hs1], ⟨{ spawner := m.current, joined := false },
-      by simp [Array.getElem_push, hs1], hc, by rw [hG0]; rfl⟩, .inl hG0, .inl hG1,
+      by simp [Array.getElem_push, hs1], hc, by rw [hG0]; rfl, rfl⟩, .inl hG0, .inl hG1,
       fun hp => absurd (hG0.symm.trans hp) (by decide), fun u hu => ?_⟩⟩⟩
   rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
   exact hnone u (by unfold ThreadId at *; omega)
@@ -1113,10 +1113,10 @@ theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 0 = .r
     Inv (upd G 0 .joins) m := by
   have h1 : upd G 0 Gh.joins 1 = G 1 := upd_ne _ _ (by decide)
   have h0 : upd G 0 Gh.joins 0 = .joins := upd_self _ _ _
-  obtain ⟨t0, tc, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr, hsp, hj⟩, -, g1, gp, g2⟩⟩ := hi.thr
+  obtain ⟨t0, tc, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr, hsp, hj, hgt⟩, -, g1, gp, g2⟩⟩ := hi.thr
   · rw [hg] at hp; cases hp
   exact {
-    thr := ⟨t0, tc, .inr ⟨hs2, ⟨r, hr, hsp, by rw [hj, hg, h0]; decide⟩, .inr (.inl h0), by rw [h1]; exact g1,
+    thr := ⟨t0, tc, .inr ⟨hs2, ⟨r, hr, hsp, by rw [hj, hg, h0]; decide, hgt⟩, .inr (.inl h0), by rw [h1]; exact g1,
       fun hp => absurd (h0.symm.trans hp) (by decide),
       fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact g2 u hu⟩⟩
     b0 := hi.b0
@@ -1136,10 +1136,10 @@ theorem Inv.retag0 {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (hg : G 0 = .r
 /-- `main`'s join of A is possible: thread 1, spawned by `main`, not joined. -/
 theorem join_ok {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .joins) :
     ∃ m', ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m')) := by
-  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj⟩, -⟩⟩ := hi.thr
+  obtain ⟨-, -, ⟨-, hp, -⟩ | ⟨-, ⟨r, hr, hs, hj, hgt⟩, -⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
   · rw [h0] at hj
-    exact join_run (m := { m with current := 0 }) hr hs (by rw [hj]; rfl)
+    exact join_run (m := { m with current := 0 }) hr hs (by rw [hj]; rfl) (.inl hgt)
 
 /-- After the join: `main` is at `post`, and its clock is above A's. -/
 theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .joins)
@@ -1147,7 +1147,7 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .
     (hj : ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m'))) :
     m'.current = 0 ∧ Inv (upd G 0 .post) m' := by
   obtain ⟨jr, hr, hjf, rfl⟩ := join_eq hj
-  obtain ⟨h00, hcs, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr', hsp, hj'⟩, -, -, -, g2⟩⟩ := hi.thr
+  obtain ⟨h00, hcs, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr', hsp, hj', hgt⟩, -, -, -, g2⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
   have hrr : r = jr := Option.some.inj (hr'.symm.trans hr)
   have hsp' : jr.spawner = 0 := hrr ▸ hsp
@@ -1174,7 +1174,8 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .
     thr := ⟨by rw [hthr0]; exact h00, by simp [hcs], .inr ⟨by simp [hs2],
       ⟨{ jr with joined := true }, by
         simp only [Array.set!_eq_setIfInBounds]
-        exact Array.getElem?_setIfInBounds_self_of_lt (by omega), hsp', by rw [e0]; rfl⟩,
+        exact Array.getElem?_setIfInBounds_self_of_lt (by omega), hsp', by rw [e0]; rfl,
+        by rw [← hrr]; exact hgt⟩,
       .inr (.inr e0), by rw [e1, hfin]; exact .inr (.inr rfl), fun _ => by rw [e1]; exact hfin,
       fun u hu => by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact g2 u hu⟩⟩
     b0 := hi.b0
@@ -1205,7 +1206,7 @@ theorem inv_join {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (h0 : G 0 = .
 theorem joinedAll_post {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .post) :
     joinedAll 0 m := by
   intro r hr _
-  obtain ⟨t0, -, ⟨-, hp, -⟩ | ⟨hs2, ⟨r₁, hr₁, -, hj⟩, -⟩⟩ := hi.thr
+  obtain ⟨t0, -, ⟨-, hp, -⟩ | ⟨hs2, ⟨r₁, hr₁, -, hj, -⟩, -⟩⟩ := hi.thr
   · rw [h0] at hp; cases hp
   obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
   rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
@@ -1217,7 +1218,8 @@ theorem joinedAll_post {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 
 theorem step_last {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : Option Ptr} (hi : Inv G m)
     (hg : G 0 = .post) (hc : m.current = 0)
     (h : ((atomicLoadPtrAt (Option Ptr) c .relaxed 8 sPtr).run m).run = some (.ok (v, m'))) :
-    m'.threads = m.threads ∧ m'.blocks = m.blocks ∧ (v = none ∨ (v = some nPtr ∧ NodeAt m)) := by
+    m'.threads = m.threads ∧ m'.blocks = m.blocks ∧ m'.clocks.size = m.clocks.size ∧
+      m'.current = m.current ∧ (v = none ∨ (v = some nPtr ∧ NodeAt m)) := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, -, hl, hpos, hv, rfl⟩ := atomicLoadPtrAt_ok h
   obtain ⟨rfl, rfl, -⟩ := acc_slot hi.b0 hacc
   have hsz := (thr_of hi.thr (.inr (.inr (.inl hg)))).1
@@ -1229,12 +1231,16 @@ theorem step_last {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : Option Ptr} 
   have hcur : (m.recordAt 0 0 (intSize 64) .atomicRead).current = 0 := hc
   have hthr : (m.recordAt 0 0 (intSize 64) .atomicRead).threads = m.threads := rfl
   have hblk : (m.recordAt 0 0 (intSize 64) .atomicRead).blocks = m.blocks := rfl
-  generalize m.recordAt 0 0 (intSize 64) .atomicRead = mr at hir hl hcur hthr hblk hcl0
+  have hcsz : (m.recordAt 0 0 (intSize 64) .atomicRead).clocks.size = m.clocks.size := by
+    simp [Mem.recordAt]
+  generalize m.recordAt 0 0 (intSize 64) .atomicRead = mr at hir hl hcur hthr hblk hcl0 hcsz
   obtain ⟨rfl, l, k, hfl, rfl⟩ := loc_slot hir.slot hl
   have hl0 : ({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]! = l := rfl
   have hg' := grows_loadM { mr with atomics := #[l], nextMsg := k } 0 .relaxed
     ((({ mr with atomics := #[l], nextMsg := k } : Mem).atomics[0]!).msgs[pos]!)
-  refine ⟨hg'.threads.trans hthr, hg'.blocks.trans hblk, ?_⟩
+  refine ⟨hg'.threads.trans hthr, hg'.blocks.trans hblk,
+    by simp [Proto.loadM, Proto.observeM, AtomicOrder.isAcq, hcsz],
+    by simp [Proto.loadM, Proto.observeM, AtomicOrder.isAcq, hcur, hc], ?_⟩
   have hlt := readOpts_lt hpos
   obtain ⟨-, -, -, -, -, ⟨m0, hms, h0⟩ | ⟨m0, m1, hms, h0, h1, -, hn, -, -, -, hpost⟩⟩ := hfl
   · rw [hl0, hms] at hlt hv
@@ -1268,7 +1274,8 @@ theorem step_last {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : Option Ptr} 
 
 /-- `destroy(node)`: a free of the live heap block. -/
 theorem destroy_ok {m m' : Mem} (h : ((Allocator.destroy ⟨⟩ 4 nPtr).run m).run = some (.ok ((), m'))) :
-    m'.threads = m.threads ∧ ∀ b, b ≠ 1 → m'.blocks[b]? = m.blocks[b]? := by
+    m'.threads = m.threads ∧ (∀ b, b ≠ 1 → m'.blocks[b]? = m.blocks[b]?) ∧ m'.clocks = m.clocks ∧
+      m'.current = m.current ∧ m'.footprint = m.footprint := by
   simp only [Allocator.destroy, show ((4 : Nat) = 0) = False from by decide, if_false] at h
   unfold rawFree at h
   obtain ⟨a, m₁, hg, h₁⟩ := MemM.bind_ok h
@@ -1279,12 +1286,12 @@ theorem destroy_ok {m m' : Mem} (h : ((Allocator.destroy ⟨⟩ 4 nPtr).run m).r
   split at h₂
   · obtain ⟨b', blk', hb', -, rfl⟩ := free_ok h₂
     cases hb'
-    refine ⟨rfl, fun b hb => ?_⟩
+    refine ⟨rfl, fun b hb => ?_, rfl, rfl, rfl⟩
     simp only [Array.set!_eq_setIfInBounds]
     exact Array.getElem?_setIfInBounds_ne (Ne.symm hb)
   · exact (MemM.throw_ok h₂).elim
 
-theorem destroy_noErr {m : Mem} (hn : NodeAt m) (e : Error) :
+theorem destroy_noErr {m : Mem} (hn : NodeAt m) (hnr : ∀ b n, m.freeRaces b n = false) (e : Error) :
     ((Allocator.destroy ⟨⟩ 4 nPtr).run m).run ≠ some (.error e) := by
   obtain ⟨blk, hb, hk, hs, hacc⟩ := acc_node hn 4 1 (by decide) (by decide)
   have hl : blk.live = true := by
@@ -1305,7 +1312,25 @@ theorem destroy_noErr {m : Mem} (hn : NodeAt m) (e : Error) :
   subst ha
   dsimp only at h₂
   rw [if_pos ⟨hk, rfl, hs⟩] at h₂
-  exact free_noErr hb hl e h₂
+  exact free_noErr hb hl (hnr _ _) e h₂
+
+/-- After the join, `main` (0) and the joined A are the only threads. -/
+theorem post_thr {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) (h0 : G 0 = .post) :
+    m.clocks.size = m.threads.size ∧ m.threads.size = 2 ∧
+      ∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = true := by
+  obtain ⟨-, hcs, ⟨-, hp, -⟩ | ⟨hs2, ⟨r, hr, hs, hj, -⟩, -⟩⟩ := hi.thr
+  · rw [h0] at hp; cases hp
+  · exact ⟨hcs, hs2, r, hr, hs, by rw [hj, h0]; rfl⟩
+
+/-- With A joined by `main`, the end of a block races with no access (`Mem.freeRaces`). -/
+theorem freeRaces_post {m : Mem} (hcs : m.clocks.size = m.threads.size) (hc : m.current = 0)
+    (hs2 : m.threads.size = 2) (h1 : ∃ r, m.threads[1]? = some r ∧ r.spawner = 0 ∧ r.joined = true)
+    (b n : Nat) : m.freeRaces b n = false := by
+  obtain ⟨r, hr, hs, hj⟩ := h1
+  refine freeRaces_of_joined hcs fun u hu => ?_
+  rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
+  · exact .inl hc.symm
+  · exact .inr ⟨r, hr, by rw [hc]; exact hs, hj⟩
 
 /-- `main`: the slot, the store of `null`, the spawn, the acquire load (a stop), the read of the
 node, the join (a stop), the load after the join (a stop), the destroy, the free. -/
@@ -1382,7 +1407,11 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
     show 0 < _; rw [(thr_of hi₁₀'.thr (.inr (.inr (.inl hg₅)))).1]; decide
   refine WP.bind (WP.callMC (fun e he => (slotLoad_noErr hi₁₀' ht₁₀ hcr' e he).elim)
     fun w m₁₁ hl₂ => ?_)
-  obtain ⟨hth₁₁, hb₁₁, hw⟩ := step_last hi₁₀' hg₅ rfl hl₂
+  obtain ⟨hth₁₁, hb₁₁, hcs₁₁, hc₁₁, hw⟩ := step_last hi₁₀' hg₅ rfl hl₂
+  obtain ⟨hcs₀, hs2₀, h1₀⟩ := post_thr hi₁₀' hg₅
+  have hnr₁₁ : ∀ b n, m₁₁.freeRaces b n = false :=
+    freeRaces_post (by rw [hcs₁₁, hth₁₁]; exact hcs₀) (by rw [hc₁₁]) (by rw [hth₁₁]; exact hs2₀)
+      (by rw [hth₁₁]; exact h1₀)
   refine ⟨by rw [hth₁₁], ?_⟩
   have hja : joinedAll 0 m₁₁ := by
     have := joinedAll_post hi₁₀' hg₅; unfold joinedAll at this ⊢; rw [hth₁₁]; exact this
@@ -1392,20 +1421,25 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
   dsimp only
   -- the destroy of the node, if the slot held it
   refine WP.bind (WP.mono (Q := fun (p : Unit × Unit) G m _ =>
-      joinedAll 0 m ∧ ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true) ?_ ?_)
+      joinedAll 0 m ∧ (∀ b n, m.freeRaces b n = false) ∧
+        ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true) ?_ ?_)
   rotate_left
   · rcases hw with rfl | ⟨rfl, hn⟩
     · simp only [StateT.run_pure]
-      exact WP.pure' ⟨hja, hb0⟩
-    · refine WP.callMC (fun e he => (destroy_noErr (hn.congr hb₁₁) e he).elim) fun _ m₁₂ hd => ?_
-      obtain ⟨hth, hbk⟩ := destroy_ok hd
-      exact ⟨by rw [hth], by unfold joinedAll at hja ⊢; rw [hth]; exact hja,
+      exact WP.pure' ⟨hja, hnr₁₁, hb0⟩
+    · refine WP.callMC (fun e he => (destroy_noErr (hn.congr hb₁₁) hnr₁₁ e he).elim)
+        fun _ m₁₂ hd => ?_
+      obtain ⟨hth, hbk, hcl, hcu, hfp⟩ := destroy_ok hd
+      refine ⟨by rw [hth], by unfold joinedAll at hja ⊢; rw [hth]; exact hja, fun b n => ?_,
         by rw [hbk 0 (by decide)]; exact hb0⟩
-  rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', blk, hb, hl⟩
+      have := hnr₁₁ b n
+      unfold Mem.freeRaces at this ⊢
+      rw [hth, hcl, hcu, hfp]; exact this
+  rintro ⟨_, _⟩ G₆ m₁₂ d₆ ⟨hja', hnr₁₂, blk, hb, hl⟩
   simp only [StateT.run_pure]
   refine WP.pure' ?_
   -- the free of the slot
-  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl e he).elim) fun _ m₁₃ hf => ?_)
+  refine WP.bind (WP.liftMem (fun e he => (free_noErr hb hl (hnr₁₂ _ _) e he).elim) fun _ m₁₃ hf => ?_)
   obtain ⟨b, blk', hb', -, rfl⟩ := free_ok hf
   refine ⟨rfl, WP.pure' ⟨hr, ?_⟩⟩
   unfold joinedAll at hja' ⊢
@@ -1415,17 +1449,17 @@ theorem main_spec (d : Nat) : proto.WP 0 publishRead QM G0 { mem0 with current :
 
 /-- **Visibility.** `publishRead` gives 0 or 42 under every schedule (every oracle `o`, every
 `fuel`): when B reads A's pointer, it reads the 42 that A wrote before publishing it. -/
-theorem publishRead_spec {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
-    (h : (Sched.run dispatch fuel o publishRead mem0).run = some (.ok (v, m))) :
+theorem publishRead_spec (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o publishRead mem0).run = some (.ok (v, m))) :
     v = 0 ∨ v = 42 := by
-  obtain ⟨_, _, hv, -⟩ := proto.run_sound dispatch G0 dispatch_spec
+  obtain ⟨_, _, hv, -⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0 dispatch_spec
     (fun _ _ _ _ _ hq => hq.2) rfl main_spec h
   exact hv
 
 /-- **Lifetime.** No run of `publishRead` gives an error under any schedule: no data race, no
 access to a dead block, no invalid or double free, no undecodable pointer. -/
-theorem publishRead_safe {fuel : Nat} {o : Nat → Nat} {e : Error} :
-    (Sched.run dispatch fuel o publishRead mem0).run ≠ some (.error e) :=
-  proto.run_safe dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
+theorem publishRead_safe (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    (Sched.run env dispatch fuel o publishRead mem0).run ≠ some (.error e) :=
+  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl main_spec
 
 end Atomics.PtrPublish

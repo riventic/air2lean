@@ -324,9 +324,9 @@ def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (
     Zig.store (α := BitVec 32) 4 i5 (0 : BitVec 32)
     let i7 ← pure (← get).group
     Zig.store (α := Io_Group) 8 i7 ({ token := ({ raw := none } : atomic_Value___anyopaque), state := (0 : BitVec 64) } : Io_Group)
-    let _i9 ← Zig.groupAsyncC i7 p0 (Tgt.zeroWorker ())
+    let _i9 ← Zig.groupAsyncWithPolicyC .available i7 p0 (Tgt.zeroWorker ()) ((fun a => (do discard (Zig.ConcM.liftMem (StateT.lift (zeroWorker))) : Zig.ConcM Tgt Unit)) ())
     let i10 ← pure (p1, i3, p2, i5)
-    let _i11 ← Zig.groupAsyncC i7 p0 (Tgt.mixedWorker i10)
+    let _i11 ← Zig.groupAsyncWithPolicyC .available i7 p0 (Tgt.mixedWorker i10) ((fun a => (do let (capture0, capture1, capture2, capture3) := a; discard (Zig.ConcM.liftMem (mixedWorker capture0 capture1 capture2 capture3)) : Zig.ConcM Tgt Unit)) i10)
     let i12 ← Zig.groupConcurrentC i7 p0 (Tgt.zeroWorker ())
     match i12 with
     | .error _ => (do

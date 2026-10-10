@@ -441,6 +441,65 @@ theorem raceCheck_eq_raceAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     simp [VClock.concurrent, hle']
   unfold raceCheck; split <;> simp [hr]
 
+/-- The end of a block does not race if every thread's clock is below the current thread's
+(each thread joined into it, or no other thread). -/
+theorem freeRaces_of_le {m : Mem} {b n : Nat}
+    (h : ∀ u < m.clocks.size, VClock.le (m.clocks[u]!) (m.clocks[m.current]!) = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at he
+  have hle : VClock.le (m.clocks[m.footprint[i].tid]!)
+      (VClock.bump (m.clocks[m.current]!) m.current) = true := by
+    by_cases hu : m.footprint[i].tid < m.clocks.size
+    · exact VClock.le_trans (h _ hu) (VClock.le_bump _ _)
+    · rw [getElem!_neg m.clocks _ hu]; exact VClock.le_default _
+  rw [he.1.2] at hle; cases hle
+
+/-- The end of a block does not race if each access to its bytes happened before the current
+thread. -/
+theorem freeRaces_of_clock {m : Mem} {b n : Nat}
+    (h : ∀ e ∈ m.footprint, e.block = b → e.off < n →
+      VClock.le e.clock (m.clocks[m.current]!) = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq] at he
+  obtain ⟨⟨⟨⟨⟨⟨hb, -⟩, ho⟩, -⟩, hcl⟩, -⟩, -⟩ := he
+  have hle := VClock.le_trans (h _ (Array.getElem_mem hi) hb ho)
+    (VClock.le_bump (m.clocks[m.current]!) m.current)
+  rw [hcl] at hle; cases hle
+
+/-- The end of a block does not race if each other thread is a child of the current thread that
+it joined (and there are as many clocks as threads). -/
+theorem freeRaces_of_joined {m : Mem} {b n : Nat} (hcs : m.clocks.size = m.threads.size)
+    (h : ∀ u < m.threads.size, u = m.current ∨
+      ∃ r, m.threads[u]? = some r ∧ r.spawner = m.current ∧ r.joined = true) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, Bool.not_eq_true', bne_iff_ne, ne_eq] at he
+  obtain ⟨⟨⟨⟨-, htc⟩, -⟩, hcl⟩, hj⟩ := he
+  by_cases hu : m.footprint[i].tid < m.threads.size
+  · rcases h _ hu with h' | ⟨r, hr, hs, hjr⟩
+    · exact htc h'
+    · rw [hr] at hj; simp [hs, hjr] at hj
+  · rw [getElem!_neg m.clocks m.footprint[i].tid (by rw [hcs]; exact hu)] at hcl
+    rw [VClock.le_default] at hcl; cases hcl
+
+/-- In a single thread, the end of a block does not race. -/
+theorem freeRaces_of_singleThread {m : Mem} (h : m.SingleThread) (b n : Nat) :
+    m.freeRaces b n = false := by
+  apply Bool.eq_false_iff.mpr
+  intro hany
+  obtain ⟨i, hi, he⟩ := Array.any_eq_true.mp hany
+  simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at he
+  obtain ⟨⟨⟨⟨-, htc⟩, -⟩, -⟩, -⟩ := he
+  exact htc (h.2 _ (Array.getElem_mem hi)).1
+
 theorem singleThread_recordAt {m : Mem} (h : m.SingleThread) (block off len : Nat)
     (kind : AccessKind) : (m.recordAt block off len kind).SingleThread := by
   have hbump : (m.recordAt block off len kind).clocks[(m.recordAt block off len kind).current]! =

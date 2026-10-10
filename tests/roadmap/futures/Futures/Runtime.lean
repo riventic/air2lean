@@ -17,7 +17,7 @@ partial def allOutcomes {Tgt α : Type} (dispatch : Tgt → ConcM Tgt Unit) (fue
   while !todo.isEmpty && out.size < cap do
     let pre := todo.head!
     todo := todo.tail!
-    let (r, opts) := Sched.runTrace dispatch fuel (fun i => pre.getD i 0) main m0
+    let (r, opts) := Sched.runTrace ⟨.any, .available⟩ dispatch fuel (fun i => pre.getD i 0) main m0
     out := out.push (r.map (·.map (·.1)))
     -- Branch on every later choice that this run took as 0.
     for i in [pre.size:opts.size] do

@@ -259,17 +259,17 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
 
 /-- **No error.** Under every schedule and fuel, no run gives an error: the detached worker's
 accesses and its free do not race, and `main` may end without joining it. -/
-theorem worker_safe (fuel : Nat) (o : Nat → Nat) (e : Error) :
-    (Sched.run dispatch fuel o mainRun {}).run ≠ some (.error e) :=
-  run_safe (P := proto) dispatch G0 rfl
+theorem worker_safe (env : Env) (henv : env.spawn = .available) (fuel : Nat) (o : Nat → Nat) (e : Error) :
+    (Sched.run env dispatch fuel o mainRun {}).run ≠ some (.error e) :=
+  run_safe (P := proto) env (Proto.of_available henv) dispatch G0 rfl
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ h => h.2.1) rfl (fun n => main_spec n)
 
 /-- A run that ends returns `7`; the worker's handle was consumed by the detach. -/
-theorem worker_result {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
-    (h : (Sched.run dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
+theorem worker_result (env : Env) (henv : env.spawn = .available) {fuel : Nat} {o : Nat → Nat} {v : BitVec 32} {m : Mem}
+    (h : (Sched.run env dispatch fuel o mainRun {}).run = some (.ok (v, m))) :
     v = 7 ∧ joinedAll 0 m ∧ m.threads[1]? = some { spawner := 0, joined := true } := by
-  obtain ⟨G, d, hv, hj, h1⟩ := run_sound (P := proto) dispatch G0
+  obtain ⟨G, d, hv, hj, h1⟩ := run_sound (P := proto) env (Proto.of_available henv) dispatch G0
     (fun tgt g hg u G m n hu hgu hi => dispatch_spec tgt g hg u G m n hu hgu hi)
     (fun _ _ _ _ _ h => h.2.1) rfl (fun n => main_spec n) h
   exact ⟨hv, hj, h1⟩

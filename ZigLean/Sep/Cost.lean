@@ -173,11 +173,14 @@ theorem destroy_cost {a : Allocator} {size : Nat} {p : Ptr} {m m' : Mem} {u : Un
       obtain ⟨hpb, hblk, hl, h0, -, -, rfl⟩ := access_eq ha
       by_cases hc : blk.kind = .heap ∧ p.off.toNat = 0 ∧ blk.bytes.size = size
       · have hp0 : p.off = 0 := by omega
-        simp [rawFree, free, zig_unfold, ha, hc, hpb, hblk, hl, hp0, set, StateT.set,
-          MonadStateOf.set] at h
-        obtain ⟨-, rfl⟩ := h
-        exact ⟨rfl, Mem.liveHeap_kill m _ hblk (by simp [Block.retained, hl, hc.1])
-          (by simp [Block.retained])⟩
+        cases hfr : m.freeRaces b size
+        · simp [rawFree, free, zig_unfold, ha, hc, hpb, hblk, hl, hp0, hfr, set, StateT.set,
+            MonadStateOf.set] at h
+          obtain ⟨-, rfl⟩ := h
+          exact ⟨rfl, Mem.liveHeap_kill m _ hblk (by simp [Block.retained, hl, hc.1])
+            (by simp [Block.retained])⟩
+        · simp [rawFree, free, zig_unfold, ha, hc, hpb, hblk, hl, hp0, hfr, StateT.lift] at h
+          cases h
       · unfold rawFree at h
         simp only [zig_unfold, ha] at h
         rw [ite_eq_right_of_eq_false _ _ (eq_false hc)] at h

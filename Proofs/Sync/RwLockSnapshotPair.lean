@@ -178,7 +178,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     · exact h
     · change (G₃ 0).2.2.jd = true at hj; rw [hg₃] at hj; cases hj
   refine ⟨fun _ => ⟨by decide, by rw [hs2]; decide, ⟨rfl, rfl⟩,
-    by simp [Thread.joinValid, hr1']⟩, fun hfin => ⟨fun _ =>
+    by simp [Thread.joinValid, Mem.isGated, hr1']⟩, fun hfin => ⟨fun _ =>
     join_run (m := { m₈ with current := 0 }) hr1' rfl rfl, fun m₉ hj => ?_⟩⟩
   have hi₉ := inv_join hi₈ hg₃ hfin hj
   have hc₉ : m₉.current = 0 := by obtain ⟨_, _, _, rfl⟩ := Proto.join_eq hj; rfl
@@ -193,32 +193,32 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     (by rcases h3 with hk | hk | hk <;> simp only [upd0_1, hk] <;> rfl) ?_)
   simp only [StateT.run_pure]
   refine WP.pure' ?_
-  refine WP.bind (WP.mono ?_ (RwLockContract.reclaim_joined_wp hi₉ rfl))
+  refine WP.bind (WP.mono ?_ (RwLockContract.reclaim_joined_wp hi₉ rfl hc₉))
   rintro _ G₄ m₁₀ d₄ ⟨_, hj⟩
   refine WP.pure' ⟨?_, hj⟩
   rcases h3 with h0 | h1 | h2 <;> simp_all [QPair]
 
 /-- Successful results of the actual exported second client, for every fuel/oracle. -/
-theorem snapshotPair_spec {σ : Placement} {fuel : Nat} {o : Nat → Nat}
+theorem snapshotPair_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat}
     {v : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
-    (h : (Sched.run dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run = some (.ok (v, m))) :
+    (h : (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 0 ∨ v = .ok 11 ∨ v = .ok 22 := by
-  obtain ⟨_, _, hv, _⟩ := (proto E₀).run_sound dispatch G0 (dispatch_spec spec₀)
+  obtain ⟨_, _, hv, _⟩ := (proto E₀).run_sound env (Proto.of_available henv) dispatch G0 (dispatch_spec spec₀)
     (fun _ _ _ _ _ hq => hq.2) rfl (main_spec σ io) h
   exact hv
 
 /-- Strict scheduler safety of the actual exported second client, for every fuel/oracle.
 No fairness or termination is asserted. -/
-theorem snapshotPair_safe {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
-    (Sched.run dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run ≠ some (.error e) :=
-  (proto E₀).run_safe dispatch G0 rfl (dispatch_spec spec₀)
+theorem snapshotPair_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
+    (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run ≠ some (.error e) :=
+  (proto E₀).run_safe env (Proto.of_available henv) dispatch G0 rfl (dispatch_spec spec₀)
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the snapshot-pair reader returns 0 (both reads before the writer) within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
 each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
 theorem snapshotPair_completes :
-    ∃ σ, Witness.okVal (Sched.run dispatch 1000 (fun _ => 0) (rwLockSnapshotPair ⟨⟩) (mem0 σ)) = some 0 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (rwLockSnapshotPair ⟨⟩) (mem0 σ)) = some 0 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 end Sync.RwLockSnapshotPair

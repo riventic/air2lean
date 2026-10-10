@@ -59,7 +59,7 @@ theorem join_run_ok (h : ((Thread.join tid).run m).run = some (.ok ((), m'))) :
   obtain ⟨rec, hr, hj, rfl⟩ := join_eq h
   have hv := join_valid h
   simp only [Thread.joinValid, hr, Bool.and_eq_true, beq_iff_eq] at hv
-  exact ⟨rec, hr, hv.1, hj, rfl⟩
+  exact ⟨rec, hr, hv.1.1, hj, rfl⟩
 
 theorem detach_run_ok (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))) :
     ∃ rec, m.threads[tid]? = some rec ∧ rec.spawner = m.current ∧ rec.joined = false ∧
@@ -70,12 +70,12 @@ theorem detach_run_ok (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))
   | none => simp only [hr] at h; cases h
   | some rec =>
     simp only [hr] at h
-    by_cases hc : (rec.spawner != m.current || rec.joined) = true
+    by_cases hc : (rec.spawner != m.current || rec.joined || m.isGated tid) = true
     · simp only [hc, ↓reduceIte] at h; cases h
     · simp only [Bool.not_eq_true] at hc
       simp only [hc, Bool.false_eq_true, ↓reduceIte] at h
       simp only [Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hc
-      refine ⟨rec, rfl, hc.1, hc.2, ?_⟩
+      refine ⟨rec, rfl, hc.1.1, hc.1.2, ?_⟩
       simp only [StateT.run, set, StateT.set, pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
         Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
       exact h.2.symm
@@ -91,49 +91,54 @@ theorem transfer_run_ok {owner : ThreadId}
   | none => simp only [hr] at h; cases h
   | some rec =>
     simp only [hr] at h
-    by_cases hc : (rec.spawner != m.current || rec.joined || owner == tid ||
+    by_cases hc : (rec.spawner != m.current || rec.joined || m.isGated tid || owner == tid ||
         decide (m.threads.size ≤ owner)) = true
     · simp only [hc, ↓reduceIte] at h; cases h
     · simp only [Bool.not_eq_true] at hc
       simp only [hc, Bool.false_eq_true, ↓reduceIte] at h
       simp only [Bool.or_eq_false_iff, bne_eq_false_iff_eq, beq_eq_false_iff_ne,
         decide_eq_false_iff_not, Nat.not_le] at hc
-      refine ⟨rec, rfl, hc.1.1.1, hc.1.1.2, hc.1.2, hc.2, ?_⟩
+      refine ⟨rec, rfl, hc.1.1.1.1, hc.1.1.1.2, hc.1.2, hc.2, ?_⟩
       simp only [StateT.run, set, StateT.set, pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
         Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at h
       exact h.2.symm
 
 /-- The run of a valid detach. -/
 theorem detach_run {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
-    (hs : rec.spawner = m.current) (hj : rec.joined = false) :
+    (hs : rec.spawner = m.current) (hj : rec.joined = false)
+    (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     ((Thread.detach tid).run m).run =
       some (.ok ((), { m with threads := m.threads.set! tid { rec with joined := true } })) := by
+  have hng : m.isGated tid = false := by rcases hg with hg | hg <;> simp [Mem.isGated, hr, hg]
   unfold Thread.detach
   simp [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, ExceptT.run,
-    ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj]
+    ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj, hng]
 
 /-- The run of a valid transfer. -/
 theorem transfer_run {owner : ThreadId} {rec : ThreadRec} (hr : m.threads[tid]? = some rec)
     (hs : rec.spawner = m.current) (hj : rec.joined = false) (hne : owner ≠ tid)
-    (hlt : owner < m.threads.size) :
+    (hlt : owner < m.threads.size) (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     ((Thread.transferHandle tid owner).run m).run =
       some (.ok ((), { m with threads := m.threads.set! tid { rec with spawner := owner } })) := by
+  have hng : m.isGated tid = false := by rcases hg with hg | hg <;> simp [Mem.isGated, hr, hg]
   unfold Thread.transferHandle
   have hle : ¬ m.threads.size ≤ owner := Nat.not_le.mpr hlt
   simp [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, ExceptT.run,
     ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, set, StateT.set, hr, hs, hj,
-    hne, hle]
+    hne, hle, hng]
 
 /-! ## Invalid handles throw `.illegal` -/
 
-/-- The handle is valid exactly when the caller owns it and it is not consumed. -/
+/-- The handle is valid exactly when the caller owns it, it is not consumed and it is not a
+gated deferred task. -/
 theorem joinValid_iff {t : ThreadId} :
     Thread.joinValid m t tid = true ↔
-      ∃ rec, m.threads[tid]? = some rec ∧ rec.spawner = t ∧ rec.joined = false := by
+      ∃ rec, m.threads[tid]? = some rec ∧ rec.spawner = t ∧ rec.joined = false ∧
+        m.isGated tid = false := by
   unfold Thread.joinValid
   cases m.threads[tid]? with
   | none => simp
-  | some rec => simp
+  | some rec => simp [and_assoc]
 
 theorem join_invalid (hv : Thread.joinValid m m.current tid = false) :
     ((Thread.join tid).run m).run = some (.error .illegal) := by
@@ -144,8 +149,8 @@ theorem join_invalid (hv : Thread.joinValid m m.current tid = false) :
   | none => rfl
   | some rec =>
     simp only [hr, Bool.and_eq_false_iff, beq_eq_false_iff_ne, Bool.not_eq_false'] at hv ⊢
-    have hc : (rec.spawner != m.current || rec.joined) = true := by
-      rcases hv with hv | hv <;> simp [hv]
+    have hc : (rec.spawner != m.current || rec.joined || m.isGated tid) = true := by
+      rcases hv with (hv | hv) | hv <;> simp [hv]
     simp only [hc, ↓reduceIte]; rfl
 
 theorem detach_invalid (hv : Thread.joinValid m m.current tid = false) :
@@ -157,14 +162,41 @@ theorem detach_invalid (hv : Thread.joinValid m m.current tid = false) :
   | none => rfl
   | some rec =>
     simp only [hr, Bool.and_eq_false_iff, beq_eq_false_iff_ne, Bool.not_eq_false'] at hv ⊢
-    have hc : (rec.spawner != m.current || rec.joined) = true := by
-      rcases hv with hv | hv <;> simp [hv]
+    have hc : (rec.spawner != m.current || rec.joined || m.isGated tid) = true := by
+      rcases hv with (hv | hv) | hv <;> simp [hv]
     simp only [hc, ↓reduceIte]; rfl
+
+/-- A detach succeeds only on a handle that is not a gated deferred task. -/
+theorem detach_not_gated (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))) :
+    m.isGated tid = false := by
+  unfold Thread.detach at h
+  rw [run_get_bind] at h
+  cases hr : m.threads[tid]? with
+  | none => simp only [hr] at h; cases h
+  | some rec =>
+    simp only [hr] at h
+    cases hg : m.isGated tid
+    · rfl
+    · simp only [hg, Bool.or_true, Bool.true_or, ↓reduceIte] at h; cases h
+
+/-- A transfer succeeds only on a handle that is not a gated deferred task. -/
+theorem transfer_not_gated {owner : ThreadId}
+    (h : ((Thread.transferHandle tid owner).run m).run = some (.ok ((), m'))) :
+    m.isGated tid = false := by
+  unfold Thread.transferHandle at h
+  rw [run_get_bind] at h
+  cases hr : m.threads[tid]? with
+  | none => simp only [hr] at h; cases h
+  | some rec =>
+    simp only [hr] at h
+    cases hg : m.isGated tid
+    · rfl
+    · simp only [hg, Bool.or_true, Bool.true_or, ↓reduceIte] at h; cases h
 
 theorem joinValid_of_detach (h : ((Thread.detach tid).run m).run = some (.ok ((), m'))) :
     Thread.joinValid m m.current tid = true := by
   obtain ⟨rec, hr, hs, hj, -⟩ := detach_run_ok h
-  exact joinValid_iff.mpr ⟨rec, hr, hs, hj⟩
+  exact joinValid_iff.mpr ⟨rec, hr, hs, hj, detach_not_gated h⟩
 
 /-! ## One authorized join owner -/
 
@@ -238,8 +270,13 @@ throws `.illegal`. -/
 theorem transfer_joinValid {owner : ThreadId}
     (h : ((Thread.transferHandle tid owner).run m).run = some (.ok ((), m'))) :
     Thread.joinValid m' owner tid = true := by
+  have hg := transfer_not_gated h
   obtain ⟨rec, hr, -, hj, -, -, rfl⟩ := transfer_run_ok h
-  exact joinValid_iff.mpr ⟨_, get_set_self hr _, rfl, hj⟩
+  refine joinValid_iff.mpr ⟨_, get_set_self hr _, rfl, hj, ?_⟩
+  have e := get_set_self (m := { m with current := m.current }) hr { rec with spawner := owner }
+  simp only [Mem.isGated, hr] at hg ⊢
+  rw [e]
+  simpa using hg
 
 private theorem joinValid_foreign {owner t : ThreadId} {r : ThreadRec}
     (hr : m'.threads[tid]? = some r) (hs : r.spawner = owner) (ht : t ≠ owner) :
@@ -265,8 +302,12 @@ theorem detach_after_transfer {owner t : ThreadId}
 theorem join_after_transfer_owner {owner : ThreadId}
     (h : ((Thread.transferHandle tid owner).run m).run = some (.ok ((), m'))) :
     ∃ m'', ((Thread.join tid).run { m' with current := owner }).run = some (.ok ((), m'')) := by
+  have hg := transfer_not_gated h
   obtain ⟨rec, hr, -, hj, -, -, rfl⟩ := transfer_run_ok h
-  exact join_run (get_set_self hr _) rfl hj
+  exact join_run (get_set_self hr _) rfl hj (by
+    by_cases hgr : rec.gated = false
+    · exact .inl hgr
+    · exact .inr (by simpa [Mem.isGated, hr, hgr] using hg))
 
 /-! ## Detach: independent lifetime, no happens-before edge -/
 
@@ -375,9 +416,10 @@ theorem WP.callMC_ok {α : Type} {x : MemM α} {v : α} {m' : Mem} {s : σ}
 the record is consumed. -/
 theorem WP.detachC {rec : ThreadRec} {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
-    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with joined := true } } n) :
+    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with joined := true } } n)
+    (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     P.WP t ((detachC tid : CM Tgt σ Unit).run s) Q G m n :=
-  WP.callMC_ok (detach_run hr hs hj) (by simp [Array.set!_eq_setIfInBounds]) h
+  WP.callMC_ok (detach_run hr hs hj hg) (by simp [Array.set!_eq_setIfInBounds]) h
 
 /-- `transferHandleC` of a handle that the current thread owns and has not consumed, to another
 existing thread: no stop, no error; `owner` owns the handle. -/
@@ -385,9 +427,10 @@ theorem WP.transferHandleC {owner : ThreadId} {rec : ThreadRec} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (hr : m.threads[tid]? = some rec) (hs : rec.spawner = m.current) (hj : rec.joined = false)
     (hne : owner ≠ tid) (hlt : owner < m.threads.size)
-    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with spawner := owner } } n) :
+    (h : Q ((), s) G { m with threads := m.threads.set! tid { rec with spawner := owner } } n)
+    (hg : rec.gated = false ∨ m.groups.any (·.2 == tid) = false := by exact .inl rfl) :
     P.WP t ((transferHandleC tid owner : CM Tgt σ Unit).run s) Q G m n :=
-  WP.callMC_ok (transfer_run hr hs hj hne hlt) (by simp [Array.set!_eq_setIfInBounds]) h
+  WP.callMC_ok (transfer_run hr hs hj hne hlt hg) (by simp [Array.set!_eq_setIfInBounds]) h
 
 /-! ## Helpers for client proofs -/
 

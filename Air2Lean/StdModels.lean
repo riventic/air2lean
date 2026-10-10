@@ -41,7 +41,7 @@ inductive ThreadFn where
   `.unsupportedTimer` at run time (distinct from `.unspecified`), not a rejection. Each has its
   own runtime signature (`checkModelSignature`). -/
   | timerStart | timerRead | futexTimedWait
-  /-- `Io.Group.async`, `.concurrent`, `.await`, `.cancel` (0.16.0): a task is a thread. -/
+  /-- `Io.Group.async` (a thread, the caller or deferred), `.concurrent`, `.await`, `.cancel` (0.16.0). -/
   | groupAsync | groupConcurrent | groupAwait | groupCancel
   /-- `Io.async`, `Io.Future(T).await`, `Io.Future(T).cancel`, `Io.checkCancel` (0.16.0 only;
   `ZigLean/Conc/Future.lean`, `docs/futures.md`): a future's task is a thread with a result. -/
@@ -168,11 +168,11 @@ def stdModels : Array StdModel := #[
   threadModel "time.Timer.start" .timerStart #["callRC", "Error.unsupportedTimer"] timeZig,
   threadModel "time.Timer.read" .timerRead #["callRC", "Error.unsupportedTimer"] timeZig,
   threadModel "Thread.Futex.timedWait" .futexTimedWait #["callRC", "Error.unsupportedTimer"] futexZig,
-  threadModel "Io.Group.async" .groupAsync #["groupAsyncC", "groupAsyncWithPolicyC"] ioZig,
+  threadModel "Io.Group.async" .groupAsync #["groupAsyncWithPolicyC", "groupAsyncC", "groupDeferC"] ioZig,
   threadModel "Io.Group.concurrent" .groupConcurrent #["groupConcurrentC", "groupConcurrentWithPolicyC"] ioZig,
   threadModel "Io.Group.await" .groupAwait #["groupAwaitC"] ioZig,
   threadModel "Io.Group.cancel" .groupCancel #["groupCancelC"] ioZig,
-  threadModel "Io.async" .futureAsync #["asyncC", "asyncWithPolicyC", "Future.complete"] (only ["0.16.0"] ioZig),
+  threadModel "Io.async" .futureAsync #["asyncWithPolicyC", "asyncC", "Future.complete"] (only ["0.16.0"] ioZig),
   threadModel "Io.Future.await" .futureAwait #["awaitC"] (only ["0.16.0"] ioZig),
   threadModel "Io.Future.cancel" .futureCancel #["cancelC"] (only ["0.16.0"] ioZig),
   threadModel "Io.checkCancel" .checkCancel #["checkCancelC"] (only ["0.16.0"] ioZig),
