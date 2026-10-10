@@ -107,11 +107,23 @@ def check_no_escape_hatches():
             assert not re.search(rf'\b{word}\b', code), (path, word)
 
 
+def check_coverage():
+    """Every example with a committed certificate is checked here, and every certificate that
+    certifies a function is in the round trip (RoundTrip.lean)."""
+    committed = sorted(p.parent.name.lower() for p in (ROOT / 'Proofs').glob('*/AirCert.lean'))
+    assert committed == sorted(EXPECTED), (committed, sorted(EXPECTED))
+    round_trip = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text()
+    for ex, certified in EXPECTED.items():
+        listed = f'checkTable "tests/golden/{ex}/air" {ex.capitalize()}.AirCert.table' in round_trip
+        assert listed == bool(certified), (ex, 'RoundTrip.lean')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
     args = parser.parse_args()
     check_no_escape_hatches()
+    check_coverage()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         for ex in EXPECTED:

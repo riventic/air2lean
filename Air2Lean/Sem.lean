@@ -296,10 +296,13 @@ def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
 def ptrAlignOf (f : Func) (t : TyId) : Option Nat := (f.layouts[t]?).bind (·.ptrAlign)
 
 /-- A single or many pointer type through which an access is an ordinary memory access: not a
-slice, not `volatile` (a device access, L13) and not a bit-pointer into a packed field. -/
+slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and a
+field pointer of it is `Zig.ptrProjectNonnull` before 0.16) and not a bit-pointer into a packed
+field. -/
 def plainPtr (f : Func) (t : TyId) : Bool :=
   match tyOf f t, f.layouts[t]? with
-  | .ptr size _ _, some l => (size == "one" || size == "many") && !l.isVolatile && l.hostSize == 0
+  | .ptr size _ _, some l =>
+    (size == "one" || size == "many") && !l.isVolatile && !l.allowzero && l.hostSize == 0
   | _, _ => false
 
 /-- The pointee type of a pointer type. -/

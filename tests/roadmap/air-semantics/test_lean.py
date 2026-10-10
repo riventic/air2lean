@@ -62,7 +62,8 @@ def main():
     args = parser.parse_args()
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.count('certified AIR terms equal the decoded golden files') == 6, result.stdout
+    tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')
+    assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
         for index, (ex, old, new, theorem) in enumerate(MUTATIONS):

@@ -165,8 +165,8 @@ structure Scalar where
   inv : String
   decVar : Nat → String
 
-/-- A single or many pointer type whose accesses are ordinary (`Sem.plainPtr`), and that is not
-`allowzero` (a nullable base changes the emitted projection). -/
+/-- A single or many pointer type whose accesses are ordinary: `Sem.plainPtr` (not a slice,
+`volatile`, `allowzero` or a bit-pointer). -/
 def plainPtrTy (f : Func) (t : TyId) : Bool :=
   match f.types[t]?, f.layouts[t]? with
   | some (.ptr size _ _), some l =>
@@ -271,6 +271,12 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
   | .store p v => do
     let _ ← ptrVal p
     vals [v]
+    let stored := match v with
+      | .inst x => (tyOfInst x).any (memValTy f)
+      | .int t _ => isIntTy f t
+      | .bool _ => true
+      | _ => false
+    unless stored do throw s!"inst {i.id}: a store of a type outside the fragment"
   | .fieldPtr b idx => do
     let t ← ptrVal b
     unless plainPtrTy f i.ty && (fieldOffset? f t idx).isSome do
