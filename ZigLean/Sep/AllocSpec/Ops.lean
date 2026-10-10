@@ -129,6 +129,10 @@ theorem checkSliceEnd_ok {srcLen start len : BitVec 64} {extra : Nat}
     (h : start.toNat + len.toNat + extra ≤ srcLen.toNat) : checkSliceEnd srcLen start len extra = pure () := by
   simp [checkSliceEnd, h]
 
+theorem checkIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat < s.len.toNat) :
+    checkIndex s i = pure () := by
+  simp [checkIndex, h]
+
 theorem checkSentinelIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat ≤ s.len.toNat) :
     checkSentinelIndex s i = pure () := by
   simp [checkSentinelIndex, h]
@@ -359,5 +363,62 @@ theorem ptrProject_elem_region {p : Ptr} {A S : Nat} {K : BlockKind} {a size : N
       (by push_cast; omega) fun h hr => ?_
   obtain ⟨b', hb', -, ho⟩ := bytesAt_ownsAt hr.2.2 hpos
   rw [hb] at hb'; cases hb'; exact ho
+
+/-- `h` owns a cell of block `b`; cells record their block's byte count `S`. -/
+def OwnsSz (b : BlockId) (S : Nat) (h : Heap) : Prop :=
+  ∃ o c, h (b, o) = some c ∧ c.size = S
+
+theorem OwnsSz.union_left {b : BlockId} {S : Nat} {h₁ h₂ : Heap} (h : OwnsSz b S h₁) :
+    OwnsSz b S (h₁ ∪ h₂) := by
+  obtain ⟨o, c, hc, hS⟩ := h; exact ⟨o, c, by simp [hc], hS⟩
+
+theorem OwnsSz.union_right {b : BlockId} {S : Nat} {h₁ h₂ : Heap} (h : OwnsSz b S h₂)
+    (hd : Heap.Disjoint h₁ h₂) : OwnsSz b S (h₁ ∪ h₂) := by
+  rw [Heap.union_comm hd]; exact h.union_left
+
+/-- A nonempty `bytesAt` owns a cell that records its block's size. -/
+theorem bytesAt_ownsSz {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {h : Heap}
+    (hb : bytesAt p A S K bs h) (hpos : 0 < bs.size) : ∃ b, p.block = some b ∧ OwnsSz b S h := by
+  obtain ⟨b, hpb, -, hl⟩ := hb
+  refine ⟨b, hpb, p.off.toNat, ⟨bs[0]!, A, S, K⟩, ?_, rfl⟩
+  rw [hl]; simp [hpos]
+
+/-- Pointer formation (`ptrProject`, MM-3) of an offset of `q` that stays in `[0, S]` of a block
+whose size `S` an owned cell records: formed, no effect. -/
+theorem ptrProject_sized {P : Assn} {q : Ptr} {b : BlockId} {S : Nat} {k : Int}
+    (hqb : q.block = some b) (h0 : 0 ≤ q.off) (hq : q.off ≤ S) (hk0 : 0 ≤ q.off + k)
+    (hk : q.off + k ≤ S) (hown : ∀ h, P h → OwnsSz b S h) :
+    TotalTriple P (ptrProject q (·.add k)) (fun r => ⌜r = q.add k⌝ ∗ P) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨o, c, hc, hS⟩ := hown hP hp
+  have : m.heap (b, o) = some c := by rw [hm]; simp [hc]
+  obtain ⟨blk, hblk, -, ho, hcb⟩ := Mem.heap_some this
+  have hS' : blk.bytes.size = S := by rw [← hS, hcb]
+  refine ⟨_, m, hP, ptrProject_add_run (inBounds_of hqb hblk h0 (by omega))
+    (inBounds_of (p := q.add k) hqb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega)),
+    hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
+
+/-- `ptrProject_sized` for an item pointer `q.elem size i`. -/
+theorem ptrProject_elem_sized {P : Assn} {q : Ptr} {b : BlockId} {S size : Nat} {i : BitVec 64}
+    (hqb : q.block = some b) (h0 : 0 ≤ q.off) (hk : q.off + ((size * i.toNat : Nat) : Int) ≤ S)
+    (hown : ∀ h, P h → OwnsSz b S h) :
+    TotalTriple P (ptrProject q (·.elem size i)) (fun r => ⌜r = q.elem size i⌝ ∗ P) := by
+  have e : (fun x : Ptr => x.elem size i) = (·.add ((size * i.toNat : Nat) : Int)) := by
+    funext x; exact Ptr.elem_eq x size i
+  rw [e, Ptr.elem_eq]
+  exact ptrProject_sized hqb h0 (by omega) (by omega) hk hown
+
+/-- `==` of two pointers into one block of which the precondition owns a cell (MM-4): their
+offsets are equal. -/
+theorem ptrEqAddr_owned {P : Assn} {p q : Ptr} {b : BlockId} {A : Nat} (hp : p.block = some b)
+    (hq : q.block = some b) (hown : ∀ h, P h → OwnsIn b A h) :
+    TotalTriple P (ptrEqAddr p q) (fun r => ⌜r = decide (p.off = q.off)⌝ ∗ P) := by
+  unfold ptrEqAddr
+  refine TotalTriple.bind (ptrAddr_owned hp hown) fun x => TotalTriple.lift fun hx => ?_
+  refine TotalTriple.bind (ptrAddr_owned hq hown) fun y => TotalTriple.lift fun hy => ?_
+  subst hx hy
+  refine TotalTriple.conseq (TotalTriple.ret (Q := fun r => ⌜r = decide (p.off = q.off)⌝ ∗ P) _)
+    (fun h hh => sep_lift.mpr ⟨?_, hh⟩) (fun _ _ h => h)
+  simp
 
 end Zig

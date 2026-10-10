@@ -91,6 +91,9 @@ theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : Tame (Zig.ptrProject p f) := of
     obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _⟩
   · simp [MonadExcept.throw, throwThe, MonadExceptOf.throw, ExceptT.run, ExceptT.mk] at h
 
+theorem ptrEqAddr (a b : Ptr) : Tame (Zig.ptrEqAddr a b) := by
+  unfold Zig.ptrEqAddr; exact bind (ptrAddr _) fun _ => bind (ptrAddr _) fun _ => pure' _
+
 theorem ptrLe (a b : Ptr) : Tame (Zig.ptrLe a b) := by
   unfold Zig.ptrLe
   exact bind (ptrAddr a) fun _ => bind (ptrAddr b) fun _ => pure' _
@@ -273,6 +276,7 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.recordAccess _ _ _ _
   | with_reducible exact Tame.returnAddress
   | with_reducible exact Tame.ptrLe _ _
+  | with_reducible exact Tame.ptrEqAddr _ _
   | with_reducible exact Tame.checkAlign _ _
   | with_reducible exact Tame.checkSliceEnd _ _ _ _
   | with_reducible exact Tame.checkSentinelIndex _ _

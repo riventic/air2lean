@@ -304,6 +304,53 @@ theorem ptrAddr_ctx : TotalTriple (state ctx B e ∗ R) (ptrAddr ctx)
     have h0 := Region.bytesAt_pos_off hb
     exact Ops.and_mask_eq_zero (k := 3) (by decide) (by omega) hx
 
+/-- What the struct's two fields give about its block: the context pointer's block, offset and
+alignment, a cell with the block's address, and the cell of the slice field's last byte. -/
+theorem state_facts {h : Heap} (hp : (state ctx B e ∗ R) h) :
+    ∃ b, ctx.block = some b ∧ 0 ≤ ctx.off ∧ ((B.cA : Int) + ctx.off) % (8 : Nat) = 0 ∧
+      OwnsIn b B.cA h ∧ OwnsAt b (ctx.off.toNat + 23) h := by
+  obtain ⟨h₁, h₂, -, rfl, ⟨g₁, g₂, hdg, rfl, ⟨ha, -, bs, hs, -, hb⟩, ⟨-, -, bs', hs', -, hb'⟩⟩, -⟩ := id hp
+  obtain ⟨b, hpb, ho⟩ := bytesAt_ownsIn hb (by rw [hs]; decide)
+  obtain ⟨b', hpb', h0', ho'⟩ := bytesAt_ownsAt hb' (by rw [hs']; decide)
+  have hb0 : b' = b := by simp [Ptr.add, hpb] at hpb'; exact hpb'.symm
+  subst hb0
+  have h0 := Region.bytesAt_pos_off hb
+  refine ⟨b', hpb, h0, ?_, ho.union_left.union_left, ?_⟩
+  · have : ((B.cA + ctx.off.toNat : Nat) : Int) % ((8 : Nat) : Int) = 0 := by exact_mod_cast ha
+    rwa [Int.natCast_add, Int.toNat_of_nonneg h0] at this
+  · have e : (ctx.add 8).off.toNat + (bs'.size - 1) = ctx.off.toNat + 23 := by
+      rw [hs', show Enc.size Slice = 16 from rfl]; simp [Ptr.add]; omega
+    rw [e] at ho'
+    exact (ho'.union_right hdg).union_left
+
+/-- The model's `@alignCast` of the context pointer (`Zig.checkAlign`, alignment 8) passes. -/
+theorem checkAlign_ctx : TotalTriple (state ctx B e ∗ R) (checkAlign 8 ctx) (fun _ => state ctx B e ∗ R) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨b, hb, -, hal, -, -⟩ := state_facts hp
+  refine checkAlign_owned hb (fun h hp' => ?_) hal m hP hF hd hm hp hst
+  obtain ⟨b', hb', -, -, ho, -⟩ := state_facts hp'
+  rw [hb] at hb'; cases hb'; exact ho
+
+/-- The pointer to the struct's slice field (`ctx + 8`) is formed. -/
+theorem project_ctx8 : TotalTriple (state ctx B e ∗ R) (ptrProject ctx (·.add 8))
+    (fun q => ⌜q = ctx.add 8⌝ ∗ (state ctx B e ∗ R)) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨b, hb, h0, -, -, -⟩ := state_facts hp
+  refine ptrProject_ownsAt (j := ctx.off.toNat + 23) hb h0 (by decide) (by omega) (fun h hp' => ?_)
+    m hP hF hd hm hp hst
+  obtain ⟨b', hb', -, -, -, ho⟩ := state_facts hp'
+  rw [hb] at hb'; cases hb'; exact ho
+
+/-- The pointer to the slice's length field (`ctx + 8 + 8`) is formed. -/
+theorem project_ctx16 : TotalTriple (state ctx B e ∗ R) (ptrProject (ctx.add 8) (·.add 8))
+    (fun q => ⌜q = (ctx.add 8).add 8⌝ ∗ (state ctx B e ∗ R)) := by
+  intro m hP hF hd hm hp hst
+  obtain ⟨b, hb, h0, -, -, -⟩ := state_facts hp
+  refine ptrProject_ownsAt (b := b) (j := ctx.off.toNat + 23) (by simp [Ptr.add, hb])
+    (by simp [Ptr.add]; omega) (by decide) (by simp [Ptr.add]; omega) (fun h hp' => ?_) m hP hF hd hm hp hst
+  obtain ⟨b', hb', -, -, -, ho⟩ := state_facts hp'
+  rw [hb] at hb'; cases hb'; exact ho
+
 end State
 
 /-! ## Overflow-checked arithmetic -/
@@ -475,6 +522,16 @@ theorem pin_ownsIn {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {R : A
   rw [hok.2.2.2.2.2.1, hb] at hb'; cases hb'
   exact ((ho.union_left).union_right hd34 |>.union_right hdg).union_left
 
+/-- The pin owns a cell of the buffer's block that records the block's size `B.S` (under any
+assertions around it, as in the body). -/
+theorem pin_sized {B : Buf} {pb : Array Byte} {S₁ S₂ S₃ : Assn} {b : BlockId}
+    (hb : B.ptr.block = some b) (hpin : B.pin.block = B.ptr.block) (hpb : 0 < pb.size) :
+    ∀ h, (S₁ ∗ (S₂ ∗ (regionIn B.pin B.A B.S B.K 1 pb ∗ S₃))) h → OwnsSz b B.S h := by
+  rintro h ⟨h₁, h₂, hd, rfl, -, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hr, -⟩⟩⟩
+  obtain ⟨b', hb', ho⟩ := bytesAt_ownsSz hr.2.2 hpb
+  rw [hpin, hb] at hb'; cases hb'
+  exact ((ho.union_left).union_right hd34).union_right hd
+
 theorem pin_block {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array Byte} {R : Assn} {h : Heap}
     (hok : Ok B e tail pb) (hh : (body ctx B e tail pb ∗ R) h) : ∃ b, B.ptr.block = some b := by
   obtain ⟨h₁, h₂, hd, rfl, ⟨g₁, g₂, hdg, rfl, -, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩⟩, -⟩ := hh
@@ -504,10 +561,18 @@ theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 
   refine TotalTriple.bind (ptrAddr_ctx (ctx := ctx) (B := B) (e := e)) fun x =>
     TotalTriple.lift fun hx => ?_
   rw [if_pos hx, toByteUnits_eq hk, Norm.lift_pure, pure_bind]
+  have hsz := pin_sized (S₁ := state ctx B e) (S₂ := regionIn (B.ptr.add e) B.A B.S B.K 1 tail)
+    (S₃ := junk) hb hpin hpb
+  refine TotalTriple.bind checkAlign_ctx fun _ => ?_
+  refine TotalTriple.bind project_ctx8 fun q => TotalTriple.lift fun hq => ?_
+  subst hq
   refine TotalTriple.bind load_ptr fun p => TotalTriple.lift fun hp => ?_
   subst hp
   refine TotalTriple.bind load_end fun e₁ => TotalTriple.lift fun he₁ => ?_
   subst he₁
+  refine TotalTriple.bind (ptrProject_elem_sized (size := 1) (i := BitVec.ofNat 64 e) hb h0
+    (by rw [heN]; omega) hsz) fun q => TotalTriple.lift fun hq => ?_
+  subst hq
   refine TotalTriple.bind (alignPointerOffset_spec (A := B.A) hk (by simp [Ptr.elem, Ptr.add, hb])
     (fun h hp => hown h (sep_emp.mpr (by unfold body; exact hp))) (by simp [Ptr.elem, Ptr.add]; omega))
     fun r => TotalTriple.lift fun hr => ?_
@@ -527,6 +592,10 @@ theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 
     have hedn : (BitVec.ofNat 64 e + d).toNat + n.toNat < 2 ^ 64 := by
       rw [toNat_add_ok hed, heN]; unfold fits at hfit; omega
     rw [add_ok hedn, Norm.lift_pure, pure_bind]
+    refine TotalTriple.bind project_ctx8 fun q => TotalTriple.lift fun hq => ?_
+    subst hq
+    refine TotalTriple.bind project_ctx16 fun q => TotalTriple.lift fun hq => ?_
+    subst hq
     refine TotalTriple.bind load_len fun l => TotalTriple.lift fun hl => ?_
     subst hl
     have hv : (BitVec.ofNat 64 e + d + n).toNat = e + d.toNat + n.toNat := by
@@ -542,8 +611,16 @@ theorem alloc_spec (ctx : Ptr) (B : Buf) (n : BitVec 64) (k : Nat) (ra : BitVec 
       apply BitVec.eq_of_toNat_eq; rw [hv, toNat_ofNat_lt (by omega)]
     rw [hst]
     refine TotalTriple.bind (store_end (e + d.toNat + n.toNat)) fun _ => ?_
+    refine TotalTriple.bind project_ctx8 fun q => TotalTriple.lift fun hq => ?_
+    subst hq
     refine TotalTriple.bind load_ptr fun p => TotalTriple.lift fun hp => ?_
     subst hp
+    have hed' : (BitVec.ofNat 64 e + d).toNat = e + d.toNat := by rw [toNat_add_ok hed, heN]
+    refine TotalTriple.bind (ptrProject_elem_sized (size := 1) (i := BitVec.ofNat 64 e + d) hb h0
+      (by rw [hed']; omega) (pin_sized (S₁ := state ctx B (e + d.toNat + n.toNat))
+        (S₂ := regionIn (B.ptr.add e) B.A B.S B.K 1 tail) (S₃ := junk) hb hpin hpb))
+      fun q => TotalTriple.lift fun hq => ?_
+    subst hq
     have hptr : B.ptr.elem 1 (BitVec.ofNat 64 e + d) = B.ptr.add ((e + d.toNat : Nat) : Int) := by
       rw [Ptr.elem_eq, toNat_add_ok hed, heN, Nat.one_mul]
     rw [hptr]
@@ -574,6 +651,8 @@ theorem ownsSlice_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice} {b
   simp only [heap_FixedBufferAllocator_ownsSlice, heap_FixedBufferAllocator_sliceContainsSlice]
   gen_norm
   have hcap : B.cap < 2 ^ 64 := by omega
+  refine TotalTriple.bind project_ctx8 fun q => TotalTriple.lift fun hq => ?_
+  subst hq
   refine TotalTriple.bind load_slice fun x => TotalTriple.lift fun hx => ?_
   subst hx
   have hsb' : s.ptr.block = some b := by rw [hsb, hb]
@@ -601,29 +680,39 @@ theorem ownsSlice_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice} {b
     e1, e2, toNat_ofNat_lt hcap]
   simp only [decide_eq_true_eq]; omega
 
-/-- `isLastAllocation(s)`: does `s` end at `end_index`? -/
-theorem isLast_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice}
-    (hsb : s.ptr.block = B.ptr.block) (he : e < 2 ^ 64) :
+/-- `isLastAllocation(s)`: does `s` end at `end_index`? The end pointers of the slice and of the
+used part are formed (`ptrProject`, inside the buffer's block, whose size an owned cell records)
+and compared by address (MM-4): one block, so by offset. -/
+theorem isLast_spec {ctx : Ptr} {B : Buf} {e : Nat} {R : Assn} {s : Slice} {b : BlockId}
+    (hb : B.ptr.block = some b) (hsb : s.ptr.block = B.ptr.block)
+    (hown : ∀ h, (state ctx B e ∗ R) h → OwnsIn b B.A h)
+    (hsz : ∀ h, (state ctx B e ∗ R) h → OwnsSz b B.S h) (he : e < 2 ^ 64)
+    (h0 : 0 ≤ B.ptr.off) (hlo : B.ptr.off ≤ s.ptr.off) (hsS : s.ptr.off + s.len.toNat ≤ B.S)
+    (heS : B.ptr.off + e ≤ B.S) :
     TotalTriple (state ctx B e ∗ R) (heap_FixedBufferAllocator_isLastAllocation ctx s)
       (fun r => ⌜r = decide (s.ptr.off + s.len.toNat = B.ptr.off + e)⌝ ∗ (state ctx B e ∗ R)) := by
   simp only [heap_FixedBufferAllocator_isLastAllocation]
   gen_norm
+  have hsb' : s.ptr.block = some b := by rw [hsb, hb]
+  refine TotalTriple.bind (ptrProject_elem_sized (size := 1) (i := s.len) hsb' (by omega)
+    (by push_cast; omega) hsz) fun q => TotalTriple.lift fun hq => ?_
+  subst hq
+  refine TotalTriple.bind project_ctx8 fun q => TotalTriple.lift fun hq => ?_
+  subst hq
   refine TotalTriple.bind load_ptr fun x => TotalTriple.lift fun hx => ?_
   subst hx
   refine TotalTriple.bind load_end fun x => TotalTriple.lift fun hx => ?_
   subst hx
-  refine TotalTriple.conseq (TotalTriple.ret (Q := fun r =>
-      ⌜r = decide (s.ptr.off + s.len.toNat = B.ptr.off + e)⌝ ∗ (state ctx B e ∗ R)) _)
-    (fun h hp => sep_lift.mpr ⟨?_, hp⟩) (fun _ _ h => h)
-  simp only [Ptr.elem_eq, toNat_ofNat_lt he, Nat.one_mul]
-  by_cases hc : s.ptr.off + s.len.toNat = B.ptr.off + e
-  · simp only [hc, decide_true]
-    exact beq_iff_eq.mpr (ptr_ext (by simp [Ptr.add, hsb]) (by simp [Ptr.add]; omega))
-  · simp only [hc, decide_false]
-    apply beq_eq_false_iff_ne.mpr
-    intro heq
-    have := congrArg Ptr.off heq
-    simp [Ptr.add] at this; omega
+  refine TotalTriple.bind (ptrProject_elem_sized (size := 1) (i := BitVec.ofNat 64 e) hb h0
+    (by rw [toNat_ofNat_lt he]; push_cast; omega) hsz) fun q => TotalTriple.lift fun hq => ?_
+  subst hq
+  rw [bind_pure]
+  refine TotalTriple.conseq (ptrEqAddr_owned (p := s.ptr.elem 1 s.len)
+    (q := B.ptr.elem 1 (BitVec.ofNat 64 e)) hsb' hb hown) (fun h hp => hp) fun r h hp => ?_
+  obtain ⟨hr, hp⟩ := sep_lift.mp hp
+  refine sep_lift.mpr ⟨?_, hp⟩
+  rw [hr]
+  simp only [Ptr.elem_eq, Ptr.add, toNat_ofNat_lt he, Nat.one_mul]
 
 /-! ## `resize`, `remap`, `free` -/
 
@@ -664,6 +753,14 @@ theorem during_ownsIn {ctx : Ptr} {B : Buf} {e₀ e : Nat} {tail pb : Array Byte
     ∀ h, during ctx B e₀ e tail pb s k bs h → OwnsIn b B.A h := by
   rintro h ⟨h₁, h₂, hd, rfl, -, ⟨g₁, g₂, hdg, rfl, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩, -⟩⟩
   obtain ⟨b', hb', ho⟩ := regionIn_ownsIn hpin hok.2.2.1
+  rw [hok.2.2.2.2.2.1, hb] at hb'; cases hb'
+  exact (((ho.union_left).union_right hd34).union_left).union_right hd
+
+theorem during_sized {ctx : Ptr} {B : Buf} {e₀ e : Nat} {tail pb : Array Byte} {s : Ptr}
+    {k : Nat} {bs : Array Byte} {b : BlockId} (hb : B.ptr.block = some b) (hok : Ok B e tail pb) :
+    ∀ h, during ctx B e₀ e tail pb s k bs h → OwnsSz b B.S h := by
+  rintro h ⟨h₁, h₂, hd, rfl, -, ⟨g₁, g₂, hdg, rfl, ⟨g₃, g₄, hd34, rfl, -, ⟨g₅, g₆, hd56, rfl, hpin, -⟩⟩, -⟩⟩
+  obtain ⟨b', hb', ho⟩ := bytesAt_ownsSz hpin.2.2 hok.2.2.1
   rw [hok.2.2.2.2.2.1, hb] at hb'; cases hb'
   exact (((ho.union_left).union_right hd34).union_left).union_right hd
 
@@ -813,6 +910,7 @@ theorem prologue {α : Type} {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array By
       (c (decide (s.ptr.off + bs.size = B.ptr.off + e))) Q) :
     TotalTriple (during ctx B e e tail pb s.ptr k bs)
       (ptrAddr ctx >>= fun x => if (BitVec.ofInt 64 x &&& 7) = 0 then
+        checkAlign 8 ctx >>= fun _ =>
         heap_FixedBufferAllocator_ownsSlice ctx s >>= fun y =>
         (StateT.lift (debug_assert y) : MemM Unit) >>= fun _ =>
         heap_FixedBufferAllocator_isLastAllocation ctx s >>= c
@@ -825,11 +923,14 @@ theorem prologue {α : Type} {ctx : Ptr} {B : Buf} {e : Nat} {tail pb : Array By
   unfold during
   refine TotalTriple.bind ptrAddr_ctx fun x => TotalTriple.lift fun hx => ?_
   rw [if_pos hx]
+  refine TotalTriple.bind checkAlign_ctx fun _ => ?_
   refine TotalTriple.bind (ownsSlice_spec hb (fun h hp => during_ownsIn hb hok' h hp) hib h0 hlo
     (by rw [hlen]; exact hhi) hA) fun y => TotalTriple.lift fun hy => ?_
   subst hy
   rw [debug_assert_true, Norm.lift_pure, pure_bind]
-  refine TotalTriple.bind (isLast_spec hib (by omega)) fun z => TotalTriple.lift fun hz => ?_
+  refine TotalTriple.bind (isLast_spec hb hib (fun h hp => during_ownsIn hb hok' h hp)
+    (fun h hp => during_sized hb hok' h hp) (by omega) h0 hlo (by rw [hlen]; omega) (by omega))
+    fun z => TotalTriple.lift fun hz => ?_
   subst hz
   rw [hlen]
   exact ht
@@ -874,6 +975,10 @@ theorem resize_spec (ctx : Ptr) (B : Buf) (s : Slice) (k : Nat) (n ra : BitVec 6
       have hadd : (n - s.len).toNat + (BitVec.ofNat 64 e).toNat < 2 ^ 64 := by
         rw [hsub, heN]; omega
       rw [add_ok hadd, Norm.lift_pure, pure_bind]
+      refine TotalTriple.bind project_ctx8 fun q => TotalTriple.lift fun hq => ?_
+      subst hq
+      refine TotalTriple.bind project_ctx16 fun q => TotalTriple.lift fun hq => ?_
+      subst hq
       refine TotalTriple.bind load_len fun x => TotalTriple.lift fun hx => ?_
       subst hx
       rw [gt_eq, toNat_add_ok hadd, hsub, heN, toNat_ofNat_lt hcap]
