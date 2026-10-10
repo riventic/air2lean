@@ -751,6 +751,13 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/roadmap/illegal-behavior/check.sh
+      # noalias parameters (docs/illegal-behavior.md row 43): overlapping calls are `.illegal`,
+      # disjoint ones return values, an escaping noalias pointer is rejected.
+      - name: noalias parameters
+        if: ${{ matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          bash tests/roadmap/noalias/check.sh
       # L08: bit-pointer accesses with defined-bit masks, generated-client proofs and
       # PACKED_LAYOUT rejections. Hand-written AIR only.
       - name: Packed fields and bit-pointers
