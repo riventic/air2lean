@@ -43,8 +43,8 @@ theorem fromByteUnits_four : mem_Alignment_fromByteUnits 4 = pure ⟨2⟩ := by
   simp only [Zig.ctz, ctz4]
   rfl
 
-theorem mul_one (x : BitVec 64) : math_mul__anon_1 1 x = pure (.ok x) := by
-  unfold math_mul__anon_1
+theorem mul_one (x : BitVec 64) : math_mul__anon_44faaf286c79 1 x = pure (.ok x) := by
+  unfold math_mul__anon_44faaf286c79
   rw [Norm.mulWithOverflow_one]
   rfl
 
@@ -85,76 +85,76 @@ macro "bridge_close" : tactic => `(tactic| (
     | rfl)))
 
 theorem allocBytes4_eq (a : mem_Allocator) (n ra : BitVec 64) :
-    mem_Allocator_allocBytesWithAlignment__anon_1 a n ra = Wrap.allocBytes (vt a) a.ptr 2 n ra := by
-  simp only [mem_Allocator_allocBytesWithAlignment__anon_1]; bridge_norm; bridge_close
+    mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 a n ra = Wrap.allocBytes (vt a) a.ptr 2 n ra := by
+  simp only [mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279]; bridge_norm; bridge_close
 
 theorem allocBytes1_eq (a : mem_Allocator) (n ra : BitVec 64) :
-    mem_Allocator_allocBytesWithAlignment__anon_2 a n ra = Wrap.allocBytes (vt a) a.ptr 0 n ra := by
-  simp only [mem_Allocator_allocBytesWithAlignment__anon_2]; bridge_norm; bridge_close
+    mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b a n ra = Wrap.allocBytes (vt a) a.ptr 0 n ra := by
+  simp only [mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b]; bridge_norm; bridge_close
 
 theorem alloc_eq (a : mem_Allocator) (n : BitVec 64) :
-    mem_Allocator_alloc__anon_1 a n = Wrap.allocSlice (vt a) a.ptr 1 0 n := by
-  simp only [mem_Allocator_alloc__anon_1, mem_Allocator_allocWithSizeAndAlignment__anon_1,
+    mem_Allocator_alloc__anon_a8254a5f2b74 a n = Wrap.allocSlice (vt a) a.ptr 1 0 n := by
+  simp only [mem_Allocator_alloc__anon_a8254a5f2b74, mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43,
     allocBytes1_eq]
   bridge_norm
   bridge_close
 
 theorem alignedAlloc_eq (a : mem_Allocator) (n : BitVec 64) :
-    mem_Allocator_alignedAlloc__anon_1 a n = Wrap.allocSlice (vt a) a.ptr 1 2 n := by
-  simp only [mem_Allocator_alignedAlloc__anon_1, mem_Allocator_allocWithSizeAndAlignment__anon_2,
+    mem_Allocator_alignedAlloc__anon_48ad47c7aa48 a n = Wrap.allocSlice (vt a) a.ptr 1 2 n := by
+  simp only [mem_Allocator_alignedAlloc__anon_48ad47c7aa48, mem_Allocator_allocWithSizeAndAlignment__anon_5c898506c1d8,
     allocBytes4_eq]
   bridge_norm
   bridge_close
 
 theorem create_eq (a : mem_Allocator) :
-    mem_Allocator_create__anon_1 a = Wrap.create (vt a) a.ptr 4 2 := by
-  simp only [mem_Allocator_create__anon_1, allocBytes4_eq]
+    mem_Allocator_create__anon_8f6a81b88324 a = Wrap.create (vt a) a.ptr 4 2 := by
+  simp only [mem_Allocator_create__anon_8f6a81b88324, allocBytes4_eq]
   bridge_norm
   bridge_close
 
 theorem destroy_eq (a : mem_Allocator) (p : Ptr) :
-    mem_Allocator_destroy__anon_1 a p = Wrap.destroy (vt a) a.ptr 4 2 p := by
-  simp only [mem_Allocator_destroy__anon_1]
+    mem_Allocator_destroy__anon_7fa4accb9a56 a p = Wrap.destroy (vt a) a.ptr 4 2 p := by
+  simp only [mem_Allocator_destroy__anon_7fa4accb9a56]
   bridge_norm
   bridge_close
 
 theorem free_eq (a : mem_Allocator) (s : Slice) :
-    mem_Allocator_free__anon_2 a s = Wrap.free (vt a) a.ptr 1 0 s := by
-  simp only [mem_Allocator_free__anon_2, mem_absorbSentinel__anon_2]
+    mem_Allocator_free__anon_1e60e7ef40f5 a s = Wrap.free (vt a) a.ptr 1 0 s := by
+  simp only [mem_Allocator_free__anon_1e60e7ef40f5, mem_absorbSentinel__anon_7342b53a30ed]
   bridge_norm
   bridge_close
 
 theorem freeAligned_eq (a : mem_Allocator) (s : Slice) :
-    mem_Allocator_free__anon_1 a s = Wrap.free (vt a) a.ptr 1 2 s := by
-  simp only [mem_Allocator_free__anon_1, mem_absorbSentinel__anon_1]
+    mem_Allocator_free__anon_fde0a0a56281 a s = Wrap.free (vt a) a.ptr 1 2 s := by
+  simp only [mem_Allocator_free__anon_fde0a0a56281, mem_absorbSentinel__anon_7d261968039c]
   bridge_norm
   bridge_close
 
 theorem freeSentinel_eq (a : mem_Allocator) (s : Slice) :
-    mem_Allocator_free__anon_3 a s = Wrap.freeSentinel (vt a) a.ptr 1 0 s := by
-  simp only [mem_Allocator_free__anon_3, mem_absorbSentinel__anon_3]
+    mem_Allocator_free__anon_4cd0e3a7c1bf a s = Wrap.freeSentinel (vt a) a.ptr 1 0 s := by
+  simp only [mem_Allocator_free__anon_4cd0e3a7c1bf, mem_absorbSentinel__anon_5ea1d913f4dd]
   bridge_norm
   bridge_close
 
 theorem dupe_eq (a : mem_Allocator) (s : Slice) :
-    mem_Allocator_dupe__anon_1 a s = Wrap.dupe (vt a) a.ptr 1 0 1 s := by
-  simp only [mem_Allocator_dupe__anon_1, alloc_eq]
+    mem_Allocator_dupe__anon_63991a21d32c a s = Wrap.dupe (vt a) a.ptr 1 0 1 s := by
+  simp only [mem_Allocator_dupe__anon_63991a21d32c, alloc_eq]
   bridge_norm
   bridge_close
 
 set_option maxHeartbeats 4000000 in
 theorem realloc_eq (a : mem_Allocator) (s : Slice) (n : BitVec 64) :
-    mem_Allocator_realloc__anon_1 a s n = Wrap.realloc (vt a) a.ptr 1 0 s n := by
-  simp only [mem_Allocator_realloc__anon_1, mem_Allocator_reallocAdvanced__anon_1,
-    mem_Allocator_allocWithSizeAndAlignment__anon_1, mem_Allocator_allocBytesWithAlignment__anon_2,
-    mem_Allocator_free__anon_2, mem_absorbSentinel__anon_2]
+    mem_Allocator_realloc__anon_af0c43114565 a s n = Wrap.realloc (vt a) a.ptr 1 0 s n := by
+  simp only [mem_Allocator_realloc__anon_af0c43114565, mem_Allocator_reallocAdvanced__anon_0df1ef68623e,
+    mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43, mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b,
+    mem_Allocator_free__anon_1e60e7ef40f5, mem_absorbSentinel__anon_7342b53a30ed]
   bridge_norm
   bridge_close
 
 theorem allocSentinel_eq (a : mem_Allocator) (n : BitVec 64) :
-    mem_Allocator_allocSentinel__anon_1 a n = Wrap.allocSentinel (vt a) a.ptr 0 n (7 : BitVec 8) := by
-  simp only [mem_Allocator_allocSentinel__anon_1, mem_Allocator_allocWithOptionsRetAddr__anon_1,
-    mem_Allocator_allocWithSizeAndAlignment__anon_1, mem_Allocator_allocBytesWithAlignment__anon_2]
+    mem_Allocator_allocSentinel__anon_79cb42d26607 a n = Wrap.allocSentinel (vt a) a.ptr 0 n (7 : BitVec 8) := by
+  simp only [mem_Allocator_allocSentinel__anon_79cb42d26607, mem_Allocator_allocWithOptionsRetAddr__anon_f1027707f9a6,
+    mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43, mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b]
   bridge_norm
   bridge_close
 

@@ -86,6 +86,13 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.Allocator.alloc__anon_1287",
+ "module": "std",
+ "src": {
+  "file": "mem/Allocator.zig",
+  "module": "std",
+  "decl_line": 197
+ },
+ "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
  "params": [
   0,
   1
@@ -136,7 +143,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 41
   },
   {
    "id": 6,
@@ -158,12 +166,18 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 41
   },
   {
    "id": 9,
    "tag": "dbg_inline_block",
    "ty": 6,
+   "src": {
+    "file": "mem/Allocator.zig",
+    "module": "std",
+    "decl_line": 265
+   },
    "body": [
     {
      "id": 10,
@@ -242,7 +256,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 9
+     "line": 9,
+     "column": 5
     },
     {
      "id": 23,
@@ -260,7 +275,8 @@
      "id": 24,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 10
+     "line": 10,
+     "column": 89
     },
     {
      "id": 26,
@@ -276,7 +292,8 @@
      "id": 30,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 10
+     "line": 10,
+     "column": 89
     },
     {
      "id": 31,
@@ -285,6 +302,8 @@
      "callee": {
       "ty": 10,
       "func": "mem.Allocator.allocWithSizeAndAlignment__anon_1362",
+      "module": "std",
+      "instance_key": "0aadb2616c4397b4959dfd917c053409d8fde795af19b98f0482fa6122137459",
       "noreturn": false
      },
      "args": [
@@ -323,7 +342,8 @@
        "id": 33,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 10
+       "line": 10,
+       "column": 55
       },
       {
        "id": 34,
@@ -352,7 +372,8 @@
      "id": 37,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 10
+     "line": 10,
+     "column": 46
     },
     {
      "id": 38,
@@ -397,7 +418,8 @@
      "id": 42,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 11
+     "line": 11,
+     "column": 15
     },
     {
      "id": 43,
@@ -454,7 +476,8 @@
      "id": 47,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 11
+     "line": 11,
+     "column": 5
     },
     {
      "id": 48,
@@ -483,7 +506,8 @@
    "id": 50,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 51,
@@ -510,6 +534,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -548,6 +573,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -566,6 +592,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -587,6 +614,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 20,
    "exhaustive": false,
    "fields": [
@@ -641,6 +669,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -665,6 +694,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -678,6 +708,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -691,6 +722,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -704,6 +736,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -717,6 +750,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -730,6 +764,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -756,6 +791,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -789,6 +825,7 @@
    "child": 28,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -801,6 +838,7 @@
    "child": 29,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -813,6 +851,7 @@
    "child": 30,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -825,6 +864,7 @@
    "child": 31,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

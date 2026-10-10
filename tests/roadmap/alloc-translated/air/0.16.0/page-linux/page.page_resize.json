@@ -35,11 +35,21 @@
   "export_stage": "analyzed-air"
  },
  "name": "page.page_resize",
+ "module": "root",
+ "src": {
+  "file": "page.zig",
+  "module": "page",
+  "decl_line": 22
+ },
  "params": [
   0,
   0
  ],
  "ret": 1,
+ "export": {
+  "name": "page_resize",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -57,7 +67,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 23
   },
   {
    "id": 3,
@@ -87,7 +98,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,
@@ -98,7 +110,8 @@
      "id": 6,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 22
     },
     {
      "id": 9,
@@ -107,6 +120,8 @@
      "callee": {
       "ty": 8,
       "func": "mem.Allocator.alloc__anon_947",
+      "module": "std",
+      "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
      },
      "args": [
@@ -188,7 +203,8 @@
        "id": 14,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 3
+       "line": 3,
+       "column": 36
       },
       {
        "id": 15,
@@ -248,7 +264,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 24
   },
   {
    "id": 25,
@@ -257,6 +274,8 @@
    "callee": {
     "ty": 13,
     "func": "mem.Allocator.resize__anon_955",
+    "module": "std",
+    "instance_key": "ec6bca265858c0d92c8adc9b771d4dbd6b6c75eedea6376de74e48a0d5adca0b",
     "noreturn": false
    },
    "args": [
@@ -299,7 +318,8 @@
    "id": 27,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 9
   },
   {
    "id": 28,
@@ -320,7 +340,8 @@
        "id": 29,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 21
       },
       {
        "id": 31,
@@ -336,7 +357,8 @@
        "id": 32,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 25
       },
       {
        "id": 33,
@@ -393,7 +415,8 @@
        "id": 38,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 19
       },
       {
        "id": 39,
@@ -402,6 +425,8 @@
        "callee": {
         "ty": 16,
         "func": "mem.Allocator.free__anon_962",
+        "module": "std",
+        "instance_key": "1e60e7ef40f59acd6795fd81f42091e44c787acf2cbfbffc765022fefac09670",
         "noreturn": false
        },
        "args": [
@@ -444,7 +469,8 @@
        "id": 41,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 5
+       "line": 5,
+       "column": 44
       },
       {
        "id": 44,
@@ -453,6 +479,8 @@
        "callee": {
         "ty": 16,
         "func": "mem.Allocator.free__anon_962",
+        "module": "std",
+        "instance_key": "1e60e7ef40f59acd6795fd81f42091e44c787acf2cbfbffc765022fefac09670",
         "noreturn": false
        },
        "args": [
@@ -497,7 +525,8 @@
    "id": 47,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 48,
@@ -513,6 +542,7 @@
  "globals": [
   {
    "name": "heap.PageAllocator.vtable",
+   "module": "std",
    "ty": 17,
    "const": true,
    "threadlocal": false,
@@ -553,6 +583,7 @@
   },
   {
    "name": "heap.PageAllocator.alloc",
+   "module": "std",
    "ty": 22,
    "const": true,
    "threadlocal": false,
@@ -560,11 +591,13 @@
    "init": {
     "ty": 22,
     "func": "heap.PageAllocator.alloc",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.PageAllocator.resize",
+   "module": "std",
    "ty": 23,
    "const": true,
    "threadlocal": false,
@@ -572,11 +605,13 @@
    "init": {
     "ty": 23,
     "func": "heap.PageAllocator.resize",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.PageAllocator.remap",
+   "module": "std",
    "ty": 24,
    "const": true,
    "threadlocal": false,
@@ -584,11 +619,13 @@
    "init": {
     "ty": 24,
     "func": "heap.PageAllocator.remap",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.PageAllocator.free",
+   "module": "std",
    "ty": 25,
    "const": true,
    "threadlocal": false,
@@ -596,6 +633,7 @@
    "init": {
     "ty": 25,
     "func": "heap.PageAllocator.free",
+    "module": "std",
     "noreturn": false
    }
   }
@@ -621,6 +659,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -645,6 +684,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -658,6 +698,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -671,6 +712,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -706,6 +748,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -719,6 +762,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -736,6 +780,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -749,6 +794,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -761,6 +807,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -794,6 +841,7 @@
    "child": 22,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -806,6 +854,7 @@
    "child": 23,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -818,6 +867,7 @@
    "child": 24,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -830,6 +880,7 @@
    "child": 25,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

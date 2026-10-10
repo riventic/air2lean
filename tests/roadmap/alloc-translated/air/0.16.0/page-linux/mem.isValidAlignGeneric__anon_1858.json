@@ -35,6 +35,13 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.isValidAlignGeneric__anon_1858",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 4916
+ },
+ "instance_key": "32d5b5f10ec2950594e16a9551ab7eb5f61d172473d46f76cac4d5da2302a023",
  "params": [
   0
  ],
@@ -50,7 +57,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -95,7 +103,8 @@
        "id": 6,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 2
+       "line": 2,
+       "column": 51
       },
       {
        "id": 8,
@@ -103,7 +112,9 @@
        "ty": 1,
        "callee": {
         "ty": 5,
-        "func": "math.isPowerOfTwo__anon_8475",
+        "func": "math.isPowerOfTwo__anon_7373",
+        "module": "std",
+        "instance_key": "38853e1fe316d8affb63cf7a02e444f9d4bd5c6e6e394d850575cb8d963e47c5",
         "noreturn": false
        },
        "args": [
@@ -145,7 +156,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 12,

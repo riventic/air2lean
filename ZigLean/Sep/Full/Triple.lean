@@ -210,7 +210,8 @@ theorem ptrFromAddr_run (n : Nat) (m : Mem) :
   rcases l with _ | ⟨⟨b, blk⟩, _ | ⟨x, rest⟩⟩ <;> try exact ⟨_, rfl⟩
   cases m.allocPolicy.provenance
   · exact ⟨_, rfl⟩
-  · split <;> exact ⟨_, rfl⟩
+  · repeat' split
+    all_goals exact ⟨_, rfl⟩
 
 /-- `@ptrFromInt` frames everything. -/
 theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) :

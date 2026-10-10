@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.PageAllocator.free",
+ "module": "std",
+ "src": {
+  "file": "heap/PageAllocator.zig",
+  "module": "std",
+  "decl_line": 180
+ },
  "params": [
   0,
   1,
@@ -71,7 +77,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 18
   },
   {
    "id": 5,
@@ -194,6 +201,7 @@
        "callee": {
         "ty": 8,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -221,7 +229,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 17
   },
   {
    "id": 19,
@@ -230,6 +239,7 @@
    "callee": {
     "ty": 10,
     "func": "heap.PageAllocator.unmap",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -242,7 +252,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 21,
@@ -265,6 +276,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -278,6 +290,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -286,6 +299,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 13,
    "exhaustive": false,
    "fields": [
@@ -341,6 +355,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -366,6 +381,7 @@
    "ptr_align": 4096,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,

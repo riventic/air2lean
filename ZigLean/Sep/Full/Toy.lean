@@ -432,10 +432,7 @@ theorem start_inv : ∃ r, Holds start r ⟨FHeap.empty, Know.none⟩ ∧ inv hi
         LawfulEnc.decode_encode (α := BitVec 64) _, .inl rfl, glob_abytes enc0_size⟩
     · refine ⟨⟨4112, 8, .global, enc1, rfl, enc1_size, LawfulEnc.decode_encode (α := Ptr) _,
         abytesAt_bytesAt (glob_abytes enc1_size), by decide⟩, rfl⟩
-  · refine ⟨⟨singleThread_empty rfl (by decide), fun l c hc => ?_⟩, ⟨by simp [shapes, start],
-      by simp [shapes, start]⟩⟩
-    obtain ⟨blk, hb, -, -, rfl⟩ := Mem.heap_some hc
-    rcases l with ⟨_ | _ | b, o⟩ <;> simp [start] at hb <;> subst hb <;> simp [enc0_size, enc1_size, start]
+  · exact ⟨⟨singleThread_empty rfl (by decide)⟩, ⟨by simp [shapes, start], by simp [shapes, start]⟩⟩
 
 /-- So the specs are not vacuous: at program start the allocator invariant holds, and
 `cycle_spec` applies to the real run (alloc, free, alloc). -/

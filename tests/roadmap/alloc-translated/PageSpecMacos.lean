@@ -83,20 +83,20 @@ theorem toNat_and_not_16383 (z : BitVec 64) : (z &&& ~~~(16383 : BitVec 64)).toN
     exact Nat.and_two_pow_sub_one_eq_mod z.toNat 14
   omega
 
-theorem validAlign16384 : mem_isValidAlignGeneric__anon_1 16384 = pure true := rfl
+theorem validAlign16384 : mem_isValidAlignGeneric__anon_32d5b5f10ec2 16384 = pure true := rfl
 
 theorem debug_assert_true : debug_assert true = pure () := rfl
 
 theorem alignBackward_eq (x : BitVec 64) :
-    mem_alignBackward__anon_1 x 16384 = pure (x &&& ~~~16383) := by
-  unfold mem_alignBackward__anon_1
+    mem_alignBackward__anon_f056e98f6fd2 x 16384 = pure (x &&& ~~~16383) := by
+  unfold mem_alignBackward__anon_f056e98f6fd2
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, Zig.call, liftM,
     monadLift, MonadLift.monadLift, pure_bind, bind_assoc, map_pure, map_bind, validAlign16384]
   rfl
 
 theorem alignForward_eq {n : BitVec 64} (h : n.toNat + P ≤ 2 ^ 64) :
-    mem_alignForward__anon_1 n 16384 = pure (BitVec.ofNat 64 (alignUp n.toNat P)) := by
-  unfold mem_alignForward__anon_1
+    mem_alignForward__anon_589277751031 n 16384 = pure (BitVec.ofNat 64 (alignUp n.toNat P)) := by
+  unfold mem_alignForward__anon_589277751031
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, Zig.call, liftM,
     monadLift, MonadLift.monadLift, pure_bind, bind_assoc, map_pure, map_bind, validAlign16384]
   rw [show Zig.sub false 16384 1 = pure 16383 from rfl]

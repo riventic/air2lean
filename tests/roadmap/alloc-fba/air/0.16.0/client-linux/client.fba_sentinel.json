@@ -35,10 +35,20 @@
   "export_stage": "analyzed-air"
  },
  "name": "client.fba_sentinel",
+ "module": "root",
+ "src": {
+  "file": "client.zig",
+  "module": "client",
+  "decl_line": 61
+ },
  "params": [
   0
  ],
  "ret": 1,
+ "export": {
+  "name": "fba_sentinel",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -50,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -61,7 +72,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 49
   },
   {
    "id": 4,
@@ -70,6 +82,7 @@
    "callee": {
     "ty": 5,
     "func": "heap.FixedBufferAllocator.init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -117,7 +130,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 28
   },
   {
    "id": 9,
@@ -126,6 +140,7 @@
    "callee": {
     "ty": 9,
     "func": "heap.FixedBufferAllocator.allocator",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -177,7 +192,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 15,
@@ -188,7 +204,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 30
     },
     {
      "id": 17,
@@ -204,7 +221,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 30
     },
     {
      "id": 21,
@@ -212,7 +230,9 @@
      "ty": 13,
      "callee": {
       "ty": 14,
-      "func": "mem.Allocator.allocSentinel__anon_28212",
+      "func": "mem.Allocator.allocSentinel__anon_26394",
+      "module": "std",
+      "instance_key": "79cb42d2660707fdb8dca6dd04bb7561980a5db6ba84af7087b4b3b384ead271",
       "noreturn": false
      },
      "args": [
@@ -281,7 +301,8 @@
        "id": 26,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 4
+       "line": 4,
+       "column": 47
       },
       {
        "id": 27,
@@ -341,7 +362,8 @@
    "id": 33,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 16
   },
   {
    "id": 34,
@@ -412,6 +434,7 @@
        "callee": {
         "ty": 20,
         "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
         "noreturn": true
        },
        "args": [
@@ -470,7 +493,8 @@
    "id": 45,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 11
   },
   {
    "id": 46,
@@ -486,7 +510,8 @@
    "id": 49,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 11
   },
   {
    "id": 50,
@@ -494,7 +519,9 @@
    "ty": 2,
    "callee": {
     "ty": 22,
-    "func": "mem.Allocator.free__anon_28216",
+    "func": "mem.Allocator.free__anon_26398",
+    "module": "std",
+    "instance_key": "4cd0e3a7c1bf15cb5b2da528ea2561750cefcd96bbc4d8cef0ebd7302e1d89d9",
     "noreturn": false
    },
    "args": [
@@ -510,7 +537,8 @@
    "id": 51,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 52,
@@ -526,6 +554,7 @@
  "globals": [
   {
    "name": "client.buffer",
+   "module": "root",
    "ty": 23,
    "const": false,
    "threadlocal": false,
@@ -564,6 +593,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -572,6 +602,7 @@
   {
    "k": "struct",
    "name": "heap.FixedBufferAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -600,6 +631,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -613,6 +645,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -621,6 +654,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -649,6 +683,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -662,6 +697,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -675,6 +711,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": true,
    "sentinel_byte": "7",
    "host_size": 0,
@@ -716,6 +753,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -729,6 +767,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -746,6 +785,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -771,6 +811,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -784,6 +825,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -796,6 +838,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -829,6 +872,7 @@
    "child": 32,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -841,6 +885,7 @@
    "child": 33,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -853,6 +898,7 @@
    "child": 34,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -865,6 +911,7 @@
    "child": 35,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

@@ -70,8 +70,8 @@ instance : Zig.Enc heap_FixedBufferAllocator where
   encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.end_index), (8, Zig.Enc.encode v.buffer)]
   decode bs := do pure { end_index := ← Zig.Enc.decodeAt bs 0, buffer := ← Zig.Enc.decodeAt bs 8 }
 
-/-- The memory at program start: block `k` is global `k`. -/
-def mem0 : Zig.Mem := Zig.Mem.ofGlobals [
+/-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
+def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ [
   -- 0: fba.buffer
   (Array.replicate (Zig.Enc.size (Vector (BitVec 8) 256)) .undef, 1, .global),
   -- 1: heap.FixedBufferAllocator.alloc
@@ -152,13 +152,13 @@ def mem_Alignment_toByteUnits (p0 : mem_Alignment) : Zig.Result (BitVec 64) := d
   match e with
   | .ret v => pure v
 
-structure math_isPowerOfTwo__anon_1Locals where
+structure math_isPowerOfTwo__anon_38853e1fe316Locals where
   deriving Inhabited
 
-inductive math_isPowerOfTwo__anon_1Exit where
+inductive math_isPowerOfTwo__anon_38853e1fe316Exit where
   | ret (v : Bool)
 
-def math_isPowerOfTwo__anon_1 (p0 : BitVec 64) : Zig.Result (Bool) := do
+def math_isPowerOfTwo__anon_38853e1fe316 (p0 : BitVec 64) : Zig.Result (Bool) := do
   let e ← ((do
     let i1 ← pure (p0)
     let i2 ← pure (Zig.gt false i1 (0 : BitVec 64))
@@ -167,30 +167,30 @@ def math_isPowerOfTwo__anon_1 (p0 : BitVec 64) : Zig.Result (Bool) := do
     let i5 ← pure (p0 &&& i4)
     let i6 ← pure (i5)
     let i7 ← pure (i6 == (0 : BitVec 64))
-    pure (.ret i7)) : Zig.M math_isPowerOfTwo__anon_1Locals math_isPowerOfTwo__anon_1Exit).run' (default : math_isPowerOfTwo__anon_1Locals)
+    pure (.ret i7)) : Zig.M math_isPowerOfTwo__anon_38853e1fe316Locals math_isPowerOfTwo__anon_38853e1fe316Exit).run' (default : math_isPowerOfTwo__anon_38853e1fe316Locals)
   match e with
   | .ret v => pure v
 
-structure mem_isValidAlignGeneric__anon_1Locals where
+structure mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals where
   deriving Inhabited
 
-inductive mem_isValidAlignGeneric__anon_1Exit where
+inductive mem_isValidAlignGeneric__anon_32d5b5f10ec2Exit where
   | ret (v : Bool)
   | br3 (v : Bool)
 
-def mem_isValidAlignGeneric__anon_1 (p0 : BitVec 64) : Zig.Result (Bool) := do
+def mem_isValidAlignGeneric__anon_32d5b5f10ec2 (p0 : BitVec 64) : Zig.Result (Bool) := do
   let e ← ((do
     let i1 ← pure (p0)
     let i2 ← pure (Zig.gt false i1 (0 : BitVec 64))
     match ← ((do
       if i2 then (do
-        let i5 ← Zig.call (math_isPowerOfTwo__anon_1 p0)
+        let i5 ← Zig.call (math_isPowerOfTwo__anon_38853e1fe316 p0)
         pure (.br3 i5))
       else (do
-        pure (.br3 false))) : Zig.M mem_isValidAlignGeneric__anon_1Locals mem_isValidAlignGeneric__anon_1Exit) with
+        pure (.br3 false))) : Zig.M mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals mem_isValidAlignGeneric__anon_32d5b5f10ec2Exit) with
     | .br3 v3 => (do
       pure (.ret v3))
-    | e => pure e) : Zig.M mem_isValidAlignGeneric__anon_1Locals mem_isValidAlignGeneric__anon_1Exit).run' (default : mem_isValidAlignGeneric__anon_1Locals)
+    | e => pure e) : Zig.M mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals mem_isValidAlignGeneric__anon_32d5b5f10ec2Exit).run' (default : mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -203,22 +203,22 @@ inductive mem_isValidAlignExit where
 
 def mem_isValidAlign (p0 : BitVec 64) : Zig.Result (Bool) := do
   let e ← ((do
-    let i1 ← Zig.call (mem_isValidAlignGeneric__anon_1 p0)
+    let i1 ← Zig.call (mem_isValidAlignGeneric__anon_32d5b5f10ec2 p0)
     pure (.ret i1)) : Zig.M mem_isValidAlignLocals mem_isValidAlignExit).run' (default : mem_isValidAlignLocals)
   match e with
   | .ret v => pure v
 
-structure mem_alignPointerOffset__anon_1Locals where
+structure mem_alignPointerOffset__anon_1fdb4fd23aeeLocals where
   ov : BitVec 64 × BitVec 1
   deriving Inhabited
 
-inductive mem_alignPointerOffset__anon_1Exit where
+inductive mem_alignPointerOffset__anon_1fdb4fd23aeeExit where
   | ret (v : Option (BitVec 64))
   | br4
   | br15
   | br31
 
-def mem_alignPointerOffset__anon_1 (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Option (BitVec 64)) := do
+def mem_alignPointerOffset__anon_1fdb4fd23aee (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Option (BitVec 64)) := do
   let e ← ((do
     let i2 ← Zig.callR (mem_isValidAlign p1)
     let _i3 ← Zig.callR (debug_assert i2)
@@ -228,7 +228,7 @@ def mem_alignPointerOffset__anon_1 (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (O
       if i6 then (do
         pure (.ret (some (0 : BitVec 64))))
       else (do
-        pure .br4)) : Zig.MM mem_alignPointerOffset__anon_1Locals mem_alignPointerOffset__anon_1Exit) with
+        pure .br4)) : Zig.MM mem_alignPointerOffset__anon_1fdb4fd23aeeLocals mem_alignPointerOffset__anon_1fdb4fd23aeeExit) with
     | .br4 => (do
       let i10 ← Zig.callM (do pure (BitVec.ofInt 64 (← Zig.ptrAddr p0)))
       let i12 ← Zig.sub false p1 (1 : BitVec 64)
@@ -240,7 +240,7 @@ def mem_alignPointerOffset__anon_1 (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (O
         if i18 then (do
           pure (.ret none))
         else (do
-          pure .br15)) : Zig.MM mem_alignPointerOffset__anon_1Locals mem_alignPointerOffset__anon_1Exit) with
+          pure .br15)) : Zig.MM mem_alignPointerOffset__anon_1fdb4fd23aeeLocals mem_alignPointerOffset__anon_1fdb4fd23aeeExit) with
       | .br15 => (do
         let i23 ← pure (((← get).ov).fst)
         let i24 ← Zig.sub false p1 (1 : BitVec 64)
@@ -256,14 +256,14 @@ def mem_alignPointerOffset__anon_1 (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (O
           if i34 then (do
             pure (.ret none))
           else (do
-            pure .br31)) : Zig.MM mem_alignPointerOffset__anon_1Locals mem_alignPointerOffset__anon_1Exit) with
+            pure .br31)) : Zig.MM mem_alignPointerOffset__anon_1fdb4fd23aeeLocals mem_alignPointerOffset__anon_1fdb4fd23aeeExit) with
         | .br31 => (do
           let i38 ← Zig.divTrunc false i30 (1 : BitVec 64)
           let i39 ← pure (some i38)
           pure (.ret i39))
         | e => pure e)
       | e => pure e)
-    | e => pure e) : Zig.MM mem_alignPointerOffset__anon_1Locals mem_alignPointerOffset__anon_1Exit).run' (default : mem_alignPointerOffset__anon_1Locals)
+    | e => pure e) : Zig.MM mem_alignPointerOffset__anon_1fdb4fd23aeeLocals mem_alignPointerOffset__anon_1fdb4fd23aeeExit).run' (default : mem_alignPointerOffset__anon_1fdb4fd23aeeLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -288,16 +288,16 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
       else (do
         throw .panic)) : Zig.MM heap_FixedBufferAllocator_allocLocals heap_FixedBufferAllocator_allocExit) with
     | .br7 => (do
-      let i12 ← pure (p0)
+      let i12 ← Zig.callM (Zig.checkAlign 8 p0 >>= fun _ => pure p0)
       let i13 ← Zig.callR (mem_Alignment_toByteUnits p2)
       match ← ((do
-        let i15 ← pure (i12.add 8)
-        let i16 ← pure (i15.add 0)
+        let i15 ← Zig.callM (Zig.ptrProject i12 (·.add 8))
+        let i16 ← pure i15
         let i17 ← Zig.load (Zig.Ptr) 8 i16
-        let i18 ← pure (i12.add 0)
+        let i18 ← pure i12
         let i19 ← Zig.load (BitVec 64) 8 i18
-        let i20 ← pure (i17.elem 1 i19)
-        let i21 ← Zig.callM (mem_alignPointerOffset__anon_1 i20 i13)
+        let i20 ← Zig.callM (Zig.ptrProject i17 (·.elem 1 i19))
+        let i21 ← Zig.callM (mem_alignPointerOffset__anon_1fdb4fd23aee i20 i13)
         let i22 ← pure ((i21).isSome)
         if i22 then (do
           let i24 ← Zig.optPayload i21
@@ -305,13 +305,13 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
         else (do
           pure (.ret none))) : Zig.MM heap_FixedBufferAllocator_allocLocals heap_FixedBufferAllocator_allocExit) with
       | .br14 v14 => (do
-        let i27 ← pure (i12.add 0)
+        let i27 ← pure i12
         let i28 ← Zig.load (BitVec 64) 8 i27
         let i29 ← Zig.add false i28 v14
         let i30 ← Zig.add false i29 p1
         match ← ((do
-          let i32 ← pure (i12.add 8)
-          let i33 ← pure (i32.add 8)
+          let i32 ← Zig.callM (Zig.ptrProject i12 (·.add 8))
+          let i33 ← Zig.callM (Zig.ptrProject i32 (·.add 8))
           let i34 ← Zig.load (BitVec 64) 8 i33
           let i35 ← pure (i30)
           let i36 ← pure (i34)
@@ -321,12 +321,12 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
           else (do
             pure .br31)) : Zig.MM heap_FixedBufferAllocator_allocLocals heap_FixedBufferAllocator_allocExit) with
         | .br31 => (do
-          let i41 ← pure (i12.add 0)
+          let i41 ← pure i12
           Zig.store (α := BitVec 64) 8 i41 i30
-          let i43 ← pure (i12.add 8)
-          let i44 ← pure (i43.add 0)
+          let i43 ← Zig.callM (Zig.ptrProject i12 (·.add 8))
+          let i44 ← pure i43
           let i45 ← Zig.load (Zig.Ptr) 8 i44
-          let i46 ← pure (i45.elem 1 i29)
+          let i46 ← Zig.callM (Zig.ptrProject i45 (·.elem 1 i29))
           let i47 ← pure (i46)
           pure (.ret i47))
         | e => pure e)
@@ -336,17 +336,17 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_Allocator_allocBytesWithAlignment__anon_1Locals where
+structure mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals where
   deriving Inhabited
 
-inductive mem_Allocator_allocBytesWithAlignment__anon_1Exit where
+inductive mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
   | br3
   | br10 (v : Option (Zig.Ptr))
   | br9 (v : Zig.Ptr)
   | br30
 
-def mem_Allocator_allocBytesWithAlignment__anon_1 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     match ← ((do
       let i4 ← pure (p1)
@@ -354,16 +354,16 @@ def mem_Allocator_allocBytesWithAlignment__anon_1 (p0 : mem_Allocator) (p1 : Bit
       if i5 then (do
         pure (.ret (.ok (⟨none, 18446744073709551612⟩ : Zig.Ptr) : Except Zig.ErrName (Zig.Ptr))))
       else (do
-        pure .br3)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1Locals mem_Allocator_allocBytesWithAlignment__anon_1Exit) with
+        pure .br3)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
     | .br3 => (do
       match ← ((do
         match ← ((do
           let i11 ← pure ((p0).vtable)
-          let i12 ← pure (i11.add 0)
+          let i12 ← pure i11
           let i13 ← Zig.load (Zig.Ptr) 8 i12
           let i14 ← pure ((p0).ptr)
           let i15 ← (if i13 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_alloc i14 p1 mem_Alignment.«4» p2) else throw .illegal)
-          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1Locals mem_Allocator_allocBytesWithAlignment__anon_1Exit) with
+          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
         | .br10 v10 => (do
           let i17 ← pure ((v10).isSome)
           if i17 then (do
@@ -371,9 +371,9 @@ def mem_Allocator_allocBytesWithAlignment__anon_1 (p0 : mem_Allocator) (p1 : Bit
             pure (.br9 i19))
           else (do
             pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr)))))
-        | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1Locals mem_Allocator_allocBytesWithAlignment__anon_1Exit) with
+        | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
       | .br9 v9 => (do
-        let i22 ← pure (v9.elem 1 (0 : BitVec 64))
+        let i22 ← pure v9
         let i23 ← Zig.sub false p1 (0 : BitVec 64)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
@@ -385,28 +385,28 @@ def mem_Allocator_allocBytesWithAlignment__anon_1 (p0 : mem_Allocator) (p1 : Bit
           if i29 then (do
             pure .br30)
           else (do
-            throw .panic)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1Locals mem_Allocator_allocBytesWithAlignment__anon_1Exit) with
+            throw .panic)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
         | .br30 => (do
-          let i35 ← pure (v9)
+          let i35 ← Zig.callM (Zig.checkAlign 4 v9 >>= fun _ => pure v9)
           let i36 ← pure ((.ok i35) : Except Zig.ErrName (Zig.Ptr))
           pure (.ret i36))
         | e => pure e)
       | e => pure e)
-    | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1Locals mem_Allocator_allocBytesWithAlignment__anon_1Exit).run' (default : mem_Allocator_allocBytesWithAlignment__anon_1Locals)
+    | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit).run' (default : mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_Allocator_create__anon_1Locals where
+structure mem_Allocator_create__anon_8f6a81b88324Locals where
   deriving Inhabited
 
-inductive mem_Allocator_create__anon_1Exit where
+inductive mem_Allocator_create__anon_8f6a81b88324Exit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
 
-def mem_Allocator_create__anon_1 (p0 : mem_Allocator) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+def mem_Allocator_create__anon_8f6a81b88324 (p0 : mem_Allocator) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     let i1 ← Zig.callM Zig.returnAddress
-    let i2 ← Zig.callM (mem_Allocator_allocBytesWithAlignment__anon_1 p0 (4 : BitVec 64) i1)
+    let i2 ← Zig.callM (mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 p0 (4 : BitVec 64) i1)
     match i2 with
     | .error _ => (do
       let i4 ← Zig.callR (Zig.unwrapErr i2)
@@ -415,7 +415,7 @@ def mem_Allocator_create__anon_1 (p0 : mem_Allocator) : Zig.MemM (Except Zig.Err
     | .ok v3 => (do
       let i7 ← pure (v3)
       let i8 ← pure ((.ok i7) : Except Zig.ErrName (Zig.Ptr))
-      pure (.ret i8))) : Zig.MM mem_Allocator_create__anon_1Locals mem_Allocator_create__anon_1Exit).run' (default : mem_Allocator_create__anon_1Locals)
+      pure (.ret i8))) : Zig.MM mem_Allocator_create__anon_8f6a81b88324Locals mem_Allocator_create__anon_8f6a81b88324Exit).run' (default : mem_Allocator_create__anon_8f6a81b88324Locals)
   match e with
   | .ret v => pure v
 
@@ -427,7 +427,7 @@ inductive mem_Alignment_fromByteUnitsExit where
 
 def mem_Alignment_fromByteUnits (p0 : BitVec 64) : Zig.Result (mem_Alignment) := do
   let e ← ((do
-    let i1 ← Zig.call (math_isPowerOfTwo__anon_1 p0)
+    let i1 ← Zig.call (math_isPowerOfTwo__anon_38853e1fe316 p0)
     let _i2 ← Zig.call (debug_assert i1)
     let i3 ← pure (Zig.ctz 7 p0)
     let i4 ← Zig.enumOf (mem_Alignment.ofInt? (Zig.val false i3))
@@ -486,7 +486,7 @@ inductive heap_FixedBufferAllocator_ownsSliceExit where
 
 def heap_FixedBufferAllocator_ownsSlice (p0 : Zig.Ptr) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
   let e ← ((do
-    let i2 ← pure (p0.add 8)
+    let i2 ← Zig.callM (Zig.ptrProject p0 (·.add 8))
     let i3 ← Zig.load (Zig.Slice) 8 i2
     let i4 ← Zig.callM (heap_FixedBufferAllocator_sliceContainsSlice i3 p1)
     pure (.ret i4)) : Zig.MM heap_FixedBufferAllocator_ownsSliceLocals heap_FixedBufferAllocator_ownsSliceExit).run' (default : heap_FixedBufferAllocator_ownsSliceLocals)
@@ -505,14 +505,14 @@ def heap_FixedBufferAllocator_isLastAllocation (p0 : Zig.Ptr) (p1 : Zig.Slice) :
     modify (fun s => { s with local2 := p1 })
     let i6 ← pure (((← get).local2).ptr)
     let i8 ← pure (((← get).local2).len)
-    let i9 ← pure (i6.elem 1 i8)
-    let i10 ← pure (p0.add 8)
-    let i11 ← pure (i10.add 0)
+    let i9 ← Zig.callM (Zig.ptrProject i6 (·.elem 1 i8))
+    let i10 ← Zig.callM (Zig.ptrProject p0 (·.add 8))
+    let i11 ← pure i10
     let i12 ← Zig.load (Zig.Ptr) 8 i11
-    let i13 ← pure (p0.add 0)
+    let i13 ← pure p0
     let i14 ← Zig.load (BitVec 64) 8 i13
-    let i15 ← pure (i12.elem 1 i14)
-    let i16 ← pure (i9 == i15)
+    let i15 ← Zig.callM (Zig.ptrProject i12 (·.elem 1 i14))
+    let i16 ← Zig.callM (Zig.ptrEqAddr i9 i15)
     pure (.ret i16)) : Zig.MM heap_FixedBufferAllocator_isLastAllocationLocals heap_FixedBufferAllocator_isLastAllocationExit).run' (default : heap_FixedBufferAllocator_isLastAllocationLocals)
   match e with
   | .ret v => pure v
@@ -536,13 +536,13 @@ def heap_FixedBufferAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Ali
       else (do
         throw .panic)) : Zig.MM heap_FixedBufferAllocator_freeLocals heap_FixedBufferAllocator_freeExit) with
     | .br7 => (do
-      let i12 ← pure (p0)
+      let i12 ← Zig.callM (Zig.checkAlign 8 p0 >>= fun _ => pure p0)
       let i13 ← Zig.callM (heap_FixedBufferAllocator_ownsSlice i12 p1)
       let _i14 ← Zig.callR (debug_assert i13)
       match ← ((do
         let i16 ← Zig.callM (heap_FixedBufferAllocator_isLastAllocation i12 p1)
         if i16 then (do
-          let i18 ← pure (i12.add 0)
+          let i18 ← pure i12
           let i19 ← Zig.load (BitVec 64) 8 i18
           let i20 ← pure p1.len
           let i21 ← Zig.sub false i19 i20
@@ -558,31 +558,31 @@ def heap_FixedBufferAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Ali
   | .ret => pure ()
   | _ => throw .panic
 
-structure mem_Allocator_destroy__anon_1Locals where
+structure mem_Allocator_destroy__anon_7fa4accb9a56Locals where
   deriving Inhabited
 
-inductive mem_Allocator_destroy__anon_1Exit where
+inductive mem_Allocator_destroy__anon_7fa4accb9a56Exit where
   | ret
   | br8
 
-def mem_Allocator_destroy__anon_1 (p0 : mem_Allocator) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
+def mem_Allocator_destroy__anon_7fa4accb9a56 (p0 : mem_Allocator) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
   let e ← ((do
     let i2 ← pure (p1)
-    let i3 ← pure (i2.elem 1 (0 : BitVec 64))
+    let i3 ← pure i2
     let i4 ← pure (i3)
     let i5 ← pure (⟨i4, (4 : BitVec 64)⟩ : Zig.Slice)
     let i6 ← Zig.callR (mem_Alignment_fromByteUnits (4 : BitVec 64))
     let i7 ← Zig.callM Zig.returnAddress
     match ← ((do
       let i9 ← pure ((p0).vtable)
-      let i10 ← pure (i9.add 24)
+      let i10 ← Zig.callM (Zig.ptrProject i9 (·.add 24))
       let i11 ← Zig.load (Zig.Ptr) 8 i10
       let i12 ← pure ((p0).ptr)
       let _i13 ← (if i11 == (⟨some 4, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_free i12 i5 i6 i7) else throw .illegal)
-      pure .br8) : Zig.MM mem_Allocator_destroy__anon_1Locals mem_Allocator_destroy__anon_1Exit) with
+      pure .br8) : Zig.MM mem_Allocator_destroy__anon_7fa4accb9a56Locals mem_Allocator_destroy__anon_7fa4accb9a56Exit) with
     | .br8 => (do
       pure .ret)
-    | e => pure e) : Zig.MM mem_Allocator_destroy__anon_1Locals mem_Allocator_destroy__anon_1Exit).run' (default : mem_Allocator_destroy__anon_1Locals)
+    | e => pure e) : Zig.MM mem_Allocator_destroy__anon_7fa4accb9a56Locals mem_Allocator_destroy__anon_7fa4accb9a56Exit).run' (default : mem_Allocator_destroy__anon_7fa4accb9a56Locals)
   match e with
   | .ret => pure ()
   | _ => throw .panic
@@ -603,7 +603,7 @@ def fba_create (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
     Zig.store (α := heap_FixedBufferAllocator) 8 i1 i2
     let i4 ← Zig.callM (heap_FixedBufferAllocator_allocator i1)
     match ← ((do
-      let i6 ← Zig.callM (mem_Allocator_create__anon_1 i4)
+      let i6 ← Zig.callM (mem_Allocator_create__anon_8f6a81b88324 i4)
       let i7 ← pure (Zig.isNonErr i6)
       if i7 then (do
         let i9 ← Zig.callR (Zig.unwrapPayload i6)
@@ -614,7 +614,7 @@ def fba_create (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
     | .br5 v5 => (do
       Zig.store (α := BitVec 32) 4 v5 p0
       let i14 ← Zig.load (BitVec 32) 4 v5
-      let _i15 ← Zig.callM (mem_Allocator_destroy__anon_1 i4 v5)
+      let _i15 ← Zig.callM (mem_Allocator_destroy__anon_7fa4accb9a56 i4 v5)
       pure (.ret i14))
     | e => pure e) : Zig.MM fba_createLocals fba_createExit).run' { (default : fba_createLocals) with fba := s1 }
   Zig.free s1
@@ -622,14 +622,14 @@ def fba_create (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
-structure math_mul__anon_1Locals where
+structure math_mul__anon_44faaf286c79Locals where
   deriving Inhabited
 
-inductive math_mul__anon_1Exit where
+inductive math_mul__anon_44faaf286c79Exit where
   | ret (v : Except Zig.ErrName (BitVec 64))
   | br3
 
-def math_mul__anon_1 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
+def math_mul__anon_44faaf286c79 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrName (BitVec 64)) := do
   let e ← ((do
     let i2 ← pure (Zig.mulWithOverflow false p0 p1)
     match ← ((do
@@ -638,26 +638,26 @@ def math_mul__anon_1 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.
       if i5 then (do
         pure (.ret (.error "Overflow" : Except Zig.ErrName (BitVec 64))))
       else (do
-        pure .br3)) : Zig.M math_mul__anon_1Locals math_mul__anon_1Exit) with
+        pure .br3)) : Zig.M math_mul__anon_44faaf286c79Locals math_mul__anon_44faaf286c79Exit) with
     | .br3 => (do
       let i9 ← pure ((i2).1)
       let i10 ← pure ((.ok i9) : Except Zig.ErrName (BitVec 64))
       pure (.ret i10))
-    | e => pure e) : Zig.M math_mul__anon_1Locals math_mul__anon_1Exit).run' (default : math_mul__anon_1Locals)
+    | e => pure e) : Zig.M math_mul__anon_44faaf286c79Locals math_mul__anon_44faaf286c79Exit).run' (default : math_mul__anon_44faaf286c79Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_Allocator_allocBytesWithAlignment__anon_2Locals where
+structure mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals where
   deriving Inhabited
 
-inductive mem_Allocator_allocBytesWithAlignment__anon_2Exit where
+inductive mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
   | br3
   | br10 (v : Option (Zig.Ptr))
   | br9 (v : Zig.Ptr)
 
-def mem_Allocator_allocBytesWithAlignment__anon_2 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     match ← ((do
       let i4 ← pure (p1)
@@ -665,16 +665,16 @@ def mem_Allocator_allocBytesWithAlignment__anon_2 (p0 : mem_Allocator) (p1 : Bit
       if i5 then (do
         pure (.ret (.ok (⟨none, 18446744073709551615⟩ : Zig.Ptr) : Except Zig.ErrName (Zig.Ptr))))
       else (do
-        pure .br3)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_2Locals mem_Allocator_allocBytesWithAlignment__anon_2Exit) with
+        pure .br3)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
     | .br3 => (do
       match ← ((do
         match ← ((do
           let i11 ← pure ((p0).vtable)
-          let i12 ← pure (i11.add 0)
+          let i12 ← pure i11
           let i13 ← Zig.load (Zig.Ptr) 8 i12
           let i14 ← pure ((p0).ptr)
           let i15 ← (if i13 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_alloc i14 p1 mem_Alignment.«1» p2) else throw .illegal)
-          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_2Locals mem_Allocator_allocBytesWithAlignment__anon_2Exit) with
+          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
         | .br10 v10 => (do
           let i17 ← pure ((v10).isSome)
           if i17 then (do
@@ -682,9 +682,9 @@ def mem_Allocator_allocBytesWithAlignment__anon_2 (p0 : mem_Allocator) (p1 : Bit
             pure (.br9 i19))
           else (do
             pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr)))))
-        | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_2Locals mem_Allocator_allocBytesWithAlignment__anon_2Exit) with
+        | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
       | .br9 v9 => (do
-        let i22 ← pure (v9.elem 1 (0 : BitVec 64))
+        let i22 ← pure v9
         let i23 ← Zig.sub false p1 (0 : BitVec 64)
         let i24 ← pure (⟨i22, i23⟩ : Zig.Slice)
         let _i25 ← pure i24.len
@@ -693,64 +693,64 @@ def mem_Allocator_allocBytesWithAlignment__anon_2 (p0 : mem_Allocator) (p1 : Bit
         let i28 ← pure ((.ok i27) : Except Zig.ErrName (Zig.Ptr))
         pure (.ret i28))
       | e => pure e)
-    | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_2Locals mem_Allocator_allocBytesWithAlignment__anon_2Exit).run' (default : mem_Allocator_allocBytesWithAlignment__anon_2Locals)
+    | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit).run' (default : mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_Allocator_allocWithSizeAndAlignment__anon_1Locals where
+structure mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals where
   deriving Inhabited
 
-inductive mem_Allocator_allocWithSizeAndAlignment__anon_1Exit where
+inductive mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Exit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
   | br3 (v : BitVec 64)
 
-def mem_Allocator_allocWithSizeAndAlignment__anon_1 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+def mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     match ← ((do
-      let i4 ← Zig.callR (math_mul__anon_1 (1 : BitVec 64) p1)
+      let i4 ← Zig.callR (math_mul__anon_44faaf286c79 (1 : BitVec 64) p1)
       let i5 ← pure (Zig.isNonErr i4)
       if i5 then (do
         let i7 ← Zig.callR (Zig.unwrapPayload i4)
         pure (.br3 i7))
       else (do
         let _i9 ← Zig.callR (Zig.unwrapErr i4)
-        pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr))))) : Zig.MM mem_Allocator_allocWithSizeAndAlignment__anon_1Locals mem_Allocator_allocWithSizeAndAlignment__anon_1Exit) with
+        pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr))))) : Zig.MM mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Exit) with
     | .br3 v3 => (do
-      let i11 ← Zig.callM (mem_Allocator_allocBytesWithAlignment__anon_2 p0 v3 p2)
+      let i11 ← Zig.callM (mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b p0 v3 p2)
       pure (.ret i11))
-    | e => pure e) : Zig.MM mem_Allocator_allocWithSizeAndAlignment__anon_1Locals mem_Allocator_allocWithSizeAndAlignment__anon_1Exit).run' (default : mem_Allocator_allocWithSizeAndAlignment__anon_1Locals)
+    | e => pure e) : Zig.MM mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Exit).run' (default : mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_Allocator_alloc__anon_1Locals where
+structure mem_Allocator_alloc__anon_a8254a5f2b74Locals where
   deriving Inhabited
 
-inductive mem_Allocator_alloc__anon_1Exit where
+inductive mem_Allocator_alloc__anon_a8254a5f2b74Exit where
   | ret (v : Except Zig.ErrName (Zig.Slice))
   | br3 (v : Except Zig.ErrName (Zig.Slice))
 
-def mem_Allocator_alloc__anon_1 (p0 : mem_Allocator) (p1 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
+def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
   let e ← ((do
     let i2 ← Zig.callM Zig.returnAddress
     match ← ((do
-      let i4 ← Zig.callM (mem_Allocator_allocWithSizeAndAlignment__anon_1 p0 p1 i2)
+      let i4 ← Zig.callM (mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 p0 p1 i2)
       match i4 with
       | .error _ => (do
         let i6 ← Zig.callR (Zig.unwrapErr i4)
         let i7 ← pure ((.error i6) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i7))
       | .ok v5 => (do
-        let i9 ← pure (v5.elem 1 (0 : BitVec 64))
+        let i9 ← pure v5
         let i10 ← Zig.sub false p1 (0 : BitVec 64)
         let i11 ← pure (⟨i9, i10⟩ : Zig.Slice)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
-        pure (.br3 i12))) : Zig.MM mem_Allocator_alloc__anon_1Locals mem_Allocator_alloc__anon_1Exit) with
+        pure (.br3 i12))) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit) with
     | .br3 v3 => (do
       let i14 ← pure (v3)
       pure (.ret i14))
-    | e => pure e) : Zig.MM mem_Allocator_alloc__anon_1Locals mem_Allocator_alloc__anon_1Exit).run' (default : mem_Allocator_alloc__anon_1Locals)
+    | e => pure e) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit).run' (default : mem_Allocator_alloc__anon_a8254a5f2b74Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -763,7 +763,7 @@ inductive heap_FixedBufferAllocator_resetExit where
 
 def heap_FixedBufferAllocator_reset (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i1 ← pure (p0.add 0)
+    let i1 ← pure p0
     Zig.store (α := BitVec 64) 8 i1 (0 : BitVec 64)
     pure .ret) : Zig.MM heap_FixedBufferAllocator_resetLocals heap_FixedBufferAllocator_resetExit).run' (default : heap_FixedBufferAllocator_resetLocals)
   match e with
@@ -786,7 +786,7 @@ def fba_reset (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
     Zig.store (α := heap_FixedBufferAllocator) 8 i1 i2
     let i4 ← Zig.callM (heap_FixedBufferAllocator_allocator i1)
     match ← ((do
-      let i6 ← Zig.callM (mem_Allocator_alloc__anon_1 i4 p0)
+      let i6 ← Zig.callM (mem_Allocator_alloc__anon_a8254a5f2b74 i4 p0)
       let i7 ← pure (Zig.isNonErr i6)
       if i7 then (do
         let _i9 ← Zig.callR (Zig.unwrapPayload i6)
@@ -797,7 +797,7 @@ def fba_reset (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
     | .br5 => (do
       let _i13 ← Zig.callM (heap_FixedBufferAllocator_reset i1)
       match ← ((do
-        let i15 ← Zig.callM (mem_Allocator_alloc__anon_1 i4 p0)
+        let i15 ← Zig.callM (mem_Allocator_alloc__anon_a8254a5f2b74 i4 p0)
         let i16 ← pure (Zig.isNonErr i15)
         if i16 then (do
           let i18 ← Zig.callR (Zig.unwrapPayload i15)
@@ -806,7 +806,7 @@ def fba_reset (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
           let _i20 ← Zig.callR (Zig.unwrapErr i15)
           pure (.ret (1 : BitVec 64)))) : Zig.MM fba_resetLocals fba_resetExit) with
       | .br14 v14 => (do
-        let i22 ← pure (i1.add 0)
+        let i22 ← pure i1
         let i23 ← Zig.load (BitVec 64) 8 i22
         let i24 ← pure v14.len
         let i25 ← Zig.add false i23 i24
@@ -818,29 +818,29 @@ def fba_reset (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_absorbSentinel__anon_1Locals where
+structure mem_absorbSentinel__anon_7342b53a30edLocals where
   deriving Inhabited
 
-inductive mem_absorbSentinel__anon_1Exit where
+inductive mem_absorbSentinel__anon_7342b53a30edExit where
   | ret (v : Zig.Slice)
 
-def mem_absorbSentinel__anon_1 (p0 : Zig.Slice) : Zig.MemM (Zig.Slice) := do
+def mem_absorbSentinel__anon_7342b53a30ed (p0 : Zig.Slice) : Zig.MemM (Zig.Slice) := do
   let e ← ((do
-    pure (.ret p0)) : Zig.MM mem_absorbSentinel__anon_1Locals mem_absorbSentinel__anon_1Exit).run' (default : mem_absorbSentinel__anon_1Locals)
+    pure (.ret p0)) : Zig.MM mem_absorbSentinel__anon_7342b53a30edLocals mem_absorbSentinel__anon_7342b53a30edExit).run' (default : mem_absorbSentinel__anon_7342b53a30edLocals)
   match e with
   | .ret v => pure v
 
-structure mem_Allocator_free__anon_1Locals where
+structure mem_Allocator_free__anon_1e60e7ef40f5Locals where
   deriving Inhabited
 
-inductive mem_Allocator_free__anon_1Exit where
+inductive mem_Allocator_free__anon_1e60e7ef40f5Exit where
   | ret
   | br4
   | br15
 
-def mem_Allocator_free__anon_1 (p0 : mem_Allocator) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
+def mem_Allocator_free__anon_1e60e7ef40f5 (p0 : mem_Allocator) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
   let e ← ((do
-    let i2 ← Zig.callM (mem_absorbSentinel__anon_1 p1)
+    let i2 ← Zig.callM (mem_absorbSentinel__anon_7342b53a30ed p1)
     let i3 ← pure (i2)
     match ← ((do
       let i5 ← pure i3.len
@@ -849,7 +849,7 @@ def mem_Allocator_free__anon_1 (p0 : mem_Allocator) (p1 : Zig.Slice) : Zig.MemM 
       if i7 then (do
         pure .ret)
       else (do
-        pure .br4)) : Zig.MM mem_Allocator_free__anon_1Locals mem_Allocator_free__anon_1Exit) with
+        pure .br4)) : Zig.MM mem_Allocator_free__anon_1e60e7ef40f5Locals mem_Allocator_free__anon_1e60e7ef40f5Exit) with
     | .br4 => (do
       let _i11 ← pure i3.len
       Zig.callM (Zig.memset (α := BitVec 8) 1 i3.ptr i3.len none)
@@ -857,15 +857,15 @@ def mem_Allocator_free__anon_1 (p0 : mem_Allocator) (p1 : Zig.Slice) : Zig.MemM 
       let i14 ← Zig.callM Zig.returnAddress
       match ← ((do
         let i16 ← pure ((p0).vtable)
-        let i17 ← pure (i16.add 24)
+        let i17 ← Zig.callM (Zig.ptrProject i16 (·.add 24))
         let i18 ← Zig.load (Zig.Ptr) 8 i17
         let i19 ← pure ((p0).ptr)
         let _i20 ← (if i18 == (⟨some 4, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_free i19 i3 i13 i14) else throw .illegal)
-        pure .br15) : Zig.MM mem_Allocator_free__anon_1Locals mem_Allocator_free__anon_1Exit) with
+        pure .br15) : Zig.MM mem_Allocator_free__anon_1e60e7ef40f5Locals mem_Allocator_free__anon_1e60e7ef40f5Exit) with
       | .br15 => (do
         pure .ret)
       | e => pure e)
-    | e => pure e) : Zig.MM mem_Allocator_free__anon_1Locals mem_Allocator_free__anon_1Exit).run' (default : mem_Allocator_free__anon_1Locals)
+    | e => pure e) : Zig.MM mem_Allocator_free__anon_1e60e7ef40f5Locals mem_Allocator_free__anon_1e60e7ef40f5Exit).run' (default : mem_Allocator_free__anon_1e60e7ef40f5Locals)
   match e with
   | .ret => pure ()
   | _ => throw .panic
@@ -892,7 +892,7 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
       else (do
         throw .panic)) : Zig.MM heap_FixedBufferAllocator_resizeLocals heap_FixedBufferAllocator_resizeExit) with
     | .br8 => (do
-      let i13 ← pure (p0)
+      let i13 ← Zig.callM (Zig.checkAlign 8 p0 >>= fun _ => pure p0)
       let i14 ← Zig.callM (heap_FixedBufferAllocator_ownsSlice i13 p1)
       let _i15 ← Zig.callR (debug_assert i14)
       match ← ((do
@@ -922,7 +922,7 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
           if i34 then (do
             let i36 ← pure p1.len
             let i37 ← Zig.sub false i36 p3
-            let i38 ← pure (i13.add 0)
+            let i38 ← pure i13
             let i39 ← Zig.load (BitVec 64) 8 i38
             let i40 ← Zig.sub false i39 i37
             Zig.store (α := BitVec 64) 8 i38 i40
@@ -933,11 +933,11 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
           let i44 ← pure p1.len
           let i45 ← Zig.sub false p3 i44
           match ← ((do
-            let i47 ← pure (i13.add 0)
+            let i47 ← pure i13
             let i48 ← Zig.load (BitVec 64) 8 i47
             let i49 ← Zig.add false i45 i48
-            let i50 ← pure (i13.add 8)
-            let i51 ← pure (i50.add 8)
+            let i50 ← Zig.callM (Zig.ptrProject i13 (·.add 8))
+            let i51 ← Zig.callM (Zig.ptrProject i50 (·.add 8))
             let i52 ← Zig.load (BitVec 64) 8 i51
             let i53 ← pure (i49)
             let i54 ← pure (i52)
@@ -947,7 +947,7 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
             else (do
               pure .br46)) : Zig.MM heap_FixedBufferAllocator_resizeLocals heap_FixedBufferAllocator_resizeExit) with
           | .br46 => (do
-            let i59 ← pure (i13.add 0)
+            let i59 ← pure i13
             let i60 ← Zig.load (BitVec 64) 8 i59
             let i61 ← Zig.add false i60 i45
             Zig.store (α := BitVec 64) 8 i59 i61
@@ -960,26 +960,26 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
   | .ret v => pure v
   | _ => throw .panic
 
-structure mem_Allocator_resize__anon_1Locals where
+structure mem_Allocator_resize__anon_ec6bca265858Locals where
   deriving Inhabited
 
-inductive mem_Allocator_resize__anon_1Exit where
+inductive mem_Allocator_resize__anon_ec6bca265858Exit where
   | ret (v : Bool)
   | br3
   | br10
   | br19 (v : BitVec 64)
   | br29 (v : Bool)
 
-def mem_Allocator_resize__anon_1 (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) : Zig.MemM (Bool) := do
+def mem_Allocator_resize__anon_ec6bca265858 (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) : Zig.MemM (Bool) := do
   let e ← ((do
     match ← ((do
       let i4 ← pure (p2)
       let i5 ← pure (i4 == (0 : BitVec 64))
       if i5 then (do
-        let _i7 ← Zig.callM (mem_Allocator_free__anon_1 p0 p1)
+        let _i7 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 p0 p1)
         pure (.ret true))
       else (do
-        pure .br3)) : Zig.MM mem_Allocator_resize__anon_1Locals mem_Allocator_resize__anon_1Exit) with
+        pure .br3)) : Zig.MM mem_Allocator_resize__anon_ec6bca265858Locals mem_Allocator_resize__anon_ec6bca265858Exit) with
     | .br3 => (do
       match ← ((do
         let i11 ← pure p1.len
@@ -988,35 +988,35 @@ def mem_Allocator_resize__anon_1 (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : Bit
         if i13 then (do
           pure (.ret false))
         else (do
-          pure .br10)) : Zig.MM mem_Allocator_resize__anon_1Locals mem_Allocator_resize__anon_1Exit) with
+          pure .br10)) : Zig.MM mem_Allocator_resize__anon_ec6bca265858Locals mem_Allocator_resize__anon_ec6bca265858Exit) with
       | .br10 => (do
-        let i17 ← Zig.callM (mem_absorbSentinel__anon_1 p1)
+        let i17 ← Zig.callM (mem_absorbSentinel__anon_7342b53a30ed p1)
         let i18 ← pure (i17)
         match ← ((do
-          let i20 ← Zig.callR (math_mul__anon_1 (1 : BitVec 64) p2)
+          let i20 ← Zig.callR (math_mul__anon_44faaf286c79 (1 : BitVec 64) p2)
           let i21 ← pure (Zig.isNonErr i20)
           if i21 then (do
             let i23 ← Zig.callR (Zig.unwrapPayload i20)
             pure (.br19 i23))
           else (do
             let _i25 ← Zig.callR (Zig.unwrapErr i20)
-            pure (.ret false))) : Zig.MM mem_Allocator_resize__anon_1Locals mem_Allocator_resize__anon_1Exit) with
+            pure (.ret false))) : Zig.MM mem_Allocator_resize__anon_ec6bca265858Locals mem_Allocator_resize__anon_ec6bca265858Exit) with
         | .br19 v19 => (do
           let i27 ← Zig.callR (mem_Alignment_fromByteUnits (1 : BitVec 64))
           let i28 ← Zig.callM Zig.returnAddress
           match ← ((do
             let i30 ← pure ((p0).vtable)
-            let i31 ← pure (i30.add 8)
+            let i31 ← Zig.callM (Zig.ptrProject i30 (·.add 8))
             let i32 ← Zig.load (Zig.Ptr) 8 i31
             let i33 ← pure ((p0).ptr)
             let i34 ← (if i32 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_resize i33 i18 i27 v19 i28) else throw .illegal)
-            pure (.br29 i34)) : Zig.MM mem_Allocator_resize__anon_1Locals mem_Allocator_resize__anon_1Exit) with
+            pure (.br29 i34)) : Zig.MM mem_Allocator_resize__anon_ec6bca265858Locals mem_Allocator_resize__anon_ec6bca265858Exit) with
           | .br29 v29 => (do
             pure (.ret v29))
           | e => pure e)
         | e => pure e)
       | e => pure e)
-    | e => pure e) : Zig.MM mem_Allocator_resize__anon_1Locals mem_Allocator_resize__anon_1Exit).run' (default : mem_Allocator_resize__anon_1Locals)
+    | e => pure e) : Zig.MM mem_Allocator_resize__anon_ec6bca265858Locals mem_Allocator_resize__anon_ec6bca265858Exit).run' (default : mem_Allocator_resize__anon_ec6bca265858Locals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -1037,7 +1037,7 @@ def fba_resize (p0 : BitVec 64) (p1 : BitVec 64) : Zig.MemM (Bool) := do
     Zig.store (α := heap_FixedBufferAllocator) 8 i2 i3
     let i5 ← Zig.callM (heap_FixedBufferAllocator_allocator i2)
     match ← ((do
-      let i7 ← Zig.callM (mem_Allocator_alloc__anon_1 i5 p0)
+      let i7 ← Zig.callM (mem_Allocator_alloc__anon_a8254a5f2b74 i5 p0)
       let i8 ← pure (Zig.isNonErr i7)
       if i8 then (do
         let i10 ← Zig.callR (Zig.unwrapPayload i7)
@@ -1046,7 +1046,7 @@ def fba_resize (p0 : BitVec 64) (p1 : BitVec 64) : Zig.MemM (Bool) := do
         let _i12 ← Zig.callR (Zig.unwrapErr i7)
         pure (.ret false))) : Zig.MM fba_resizeLocals fba_resizeExit) with
     | .br6 v6 => (do
-      let i14 ← Zig.callM (mem_Allocator_resize__anon_1 i5 v6 p1)
+      let i14 ← Zig.callM (mem_Allocator_resize__anon_ec6bca265858 i5 v6 p1)
       pure (.ret i14))
     | e => pure e) : Zig.MM fba_resizeLocals fba_resizeExit).run' { (default : fba_resizeLocals) with fba := s2 }
   Zig.free s2
@@ -1078,7 +1078,7 @@ def fba_sum.loop21 (i5 : Zig.Slice) (i19 : BitVec 64) : Zig.MM fba_sumLocals fba
     let i25 ← pure (i19)
     let i26 ← pure (Zig.lt false i24 i25)
     if i26 then (do
-      let i28 ← Zig.callM (Zig.load (BitVec 8) 1 (i5.ptr.elem 1 i22))
+      let i28 ← Zig.callM (Zig.checkIndex i5 i22 >>= fun _ => Zig.load (BitVec 8) 1 (i5.ptr.elem 1 i22))
       let i29 ← pure ((← get).sum)
       let i30 ← Zig.intCast false false 64 i28
       let i31 ← Zig.add false i29 i30
@@ -1100,7 +1100,7 @@ def fba_sum (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
     Zig.store (α := heap_FixedBufferAllocator) 8 i1 i2
     let i4 ← Zig.callM (heap_FixedBufferAllocator_allocator i1)
     match ← ((do
-      let i6 ← Zig.callM (mem_Allocator_alloc__anon_1 i4 p0)
+      let i6 ← Zig.callM (mem_Allocator_alloc__anon_a8254a5f2b74 i4 p0)
       let i7 ← pure (Zig.isNonErr i6)
       if i7 then (do
         let i9 ← Zig.callR (Zig.unwrapPayload i6)
@@ -1117,7 +1117,7 @@ def fba_sum (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
       match ← ((do
         Zig.loop (fba_sum.loop21 v5 i19) fba_sum.again21) : Zig.MM fba_sumLocals fba_sumExit) with
       | .br20 => (do
-        let _i38 ← Zig.callM (mem_Allocator_free__anon_1 i4 v5)
+        let _i38 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 i4 v5)
         let i39 ← pure ((← get).sum)
         pure (.ret i39))
       | e => pure e)

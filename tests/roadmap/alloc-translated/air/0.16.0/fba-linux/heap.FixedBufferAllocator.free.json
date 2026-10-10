@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.FixedBufferAllocator.free",
+ "module": "std",
+ "src": {
+  "file": "heap/FixedBufferAllocator.zig",
+  "module": "std",
+  "decl_line": 114
+ },
  "params": [
   0,
   1,
@@ -99,7 +105,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 7
+   "line": 7,
+   "column": 41
   },
   {
    "id": 8,
@@ -175,6 +182,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -241,7 +249,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 10
+   "line": 10,
+   "column": 43
   },
   {
    "id": 22,
@@ -257,7 +266,8 @@
    "id": 23,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 10
+   "line": 10,
+   "column": 43
   },
   {
    "id": 24,
@@ -266,6 +276,7 @@
    "callee": {
     "ty": 13,
     "func": "heap.FixedBufferAllocator.ownsSlice",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -281,7 +292,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 10
+   "line": 10,
+   "column": 11
   },
   {
    "id": 26,
@@ -290,6 +302,7 @@
    "callee": {
     "ty": 14,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -302,7 +315,8 @@
    "id": 27,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 12
+   "line": 12,
+   "column": 9
   },
   {
    "id": 28,
@@ -313,7 +327,8 @@
      "id": 29,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 12
+     "line": 12,
+     "column": 30
     },
     {
      "id": 30,
@@ -329,7 +344,8 @@
      "id": 31,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 12
+     "line": 12,
+     "column": 30
     },
     {
      "id": 32,
@@ -338,6 +354,7 @@
      "callee": {
       "ty": 13,
       "func": "heap.FixedBufferAllocator.isLastAllocation",
+      "module": "std",
       "noreturn": false
      },
      "args": [
@@ -363,7 +380,8 @@
        "id": 33,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 13
+       "line": 13,
+       "column": 13
       },
       {
        "id": 34,
@@ -399,7 +417,8 @@
        "id": 37,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 13
+       "line": 13,
+       "column": 30
       },
       {
        "id": 38,
@@ -425,7 +444,8 @@
        "id": 40,
        "tag": "dbg_stmt",
        "ty": 4,
-       "line": 13
+       "line": 13,
+       "column": 24
       },
       {
        "id": 41,
@@ -504,6 +524,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -517,6 +538,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -525,6 +547,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 19,
    "exhaustive": false,
    "fields": [
@@ -580,6 +603,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -593,6 +617,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -618,6 +643,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -631,6 +657,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -644,6 +671,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -665,6 +693,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -678,6 +707,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -704,6 +734,7 @@
   {
    "k": "struct",
    "name": "heap.FixedBufferAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {

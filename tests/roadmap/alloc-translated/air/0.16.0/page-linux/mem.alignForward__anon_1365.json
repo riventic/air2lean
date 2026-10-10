@@ -35,6 +35,13 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.alignForward__anon_1365",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 4772
+ },
+ "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
  "params": [
   0,
   0
@@ -57,7 +64,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 31
   },
   {
    "id": 4,
@@ -66,6 +74,8 @@
    "callee": {
     "ty": 3,
     "func": "mem.isValidAlignGeneric__anon_1858",
+    "module": "std",
+    "instance_key": "32d5b5f10ec2950594e16a9551ab7eb5f61d172473d46f76cac4d5da2302a023",
     "noreturn": false
    },
    "args": [
@@ -78,7 +88,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 11
   },
   {
    "id": 6,
@@ -87,6 +98,7 @@
    "callee": {
     "ty": 4,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -99,7 +111,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 47
   },
   {
    "id": 8,
@@ -119,7 +132,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 34
   },
   {
    "id": 10,
@@ -138,7 +152,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 25
   },
   {
    "id": 14,
@@ -147,6 +162,8 @@
    "callee": {
     "ty": 5,
     "func": "mem.alignBackward__anon_1861",
+    "module": "std",
+    "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
     "noreturn": false
    },
    "args": [
@@ -162,7 +179,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 16,

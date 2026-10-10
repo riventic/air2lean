@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.Alignment.toByteUnits",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 32
+ },
  "params": [
   0
  ],
@@ -50,7 +56,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 2,
@@ -66,7 +73,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 30
   },
   {
    "id": 4,
@@ -86,7 +94,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 9
   },
   {
    "id": 6,
@@ -103,6 +112,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 3,
    "exhaustive": false,
    "fields": [

@@ -19,8 +19,8 @@ open Zig Zig.Full Gen
 namespace FBA
 
 theorem tame_alignPointerOffset (p : Ptr) (a : BitVec 64) :
-    Tame (mem_alignPointerOffset__anon_1 p a) := by
-  unfold mem_alignPointerOffset__anon_1; gen_norm; tame
+    Tame (mem_alignPointerOffset__anon_1fdb4fd23aee p a) := by
+  unfold mem_alignPointerOffset__anon_1fdb4fd23aee; gen_norm; tame
 
 theorem tame_sliceContainsSlice (a b : Slice) :
     Tame (heap_FixedBufferAllocator_sliceContainsSlice a b) := by

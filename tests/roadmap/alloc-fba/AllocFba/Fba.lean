@@ -124,7 +124,7 @@ theorem toByteUnits_eq {k : Nat} (hk : k < 64) :
   simp only [mem_Alignment.toBits, e]
 
 theorem isPowerOfTwo_eq {k : Nat} (hk : k < 64) :
-    math_isPowerOfTwo__anon_1 (BitVec.ofNat 64 (2 ^ k)) = pure true := by
+    math_isPowerOfTwo__anon_38853e1fe316 (BitVec.ofNat 64 (2 ^ k)) = pure true := by
   have hpos := Nat.two_pow_pos k
   have h1 : Zig.gt false (BitVec.ofNat 64 (2 ^ k)) 0 = true := by
     simp only [Zig.gt, Zig.lt, Bool.false_eq_true, ↓reduceIte, BitVec.ult, toNat_two_pow hk]
@@ -142,7 +142,7 @@ theorem isPowerOfTwo_eq {k : Nat} (hk : k < 64) :
     rw [BitVec.toNat_and, toNat_mask hk, toNat_two_pow hk, Nat.and_two_pow_sub_one_eq_mod,
       Nat.mod_self]
     rfl
-  unfold math_isPowerOfTwo__anon_1
+  unfold math_isPowerOfTwo__anon_38853e1fe316
   pure_norm
   simp only [h1, h2, h3, debug_assert_true, pure_bind]
   rfl
@@ -152,7 +152,7 @@ theorem isValidAlign_eq {k : Nat} (hk : k < 64) :
   have h1 : Zig.gt false (BitVec.ofNat 64 (2 ^ k)) 0 = true := by
     simp only [Zig.gt, Zig.lt, Bool.false_eq_true, ↓reduceIte, BitVec.ult, toNat_two_pow hk]
     simp; exact Nat.two_pow_pos k
-  unfold mem_isValidAlign mem_isValidAlignGeneric__anon_1
+  unfold mem_isValidAlign mem_isValidAlignGeneric__anon_32d5b5f10ec2
   pure_norm
   simp only [h1, isPowerOfTwo_eq hk, pure_bind, ↓reduceIte]
   rfl
@@ -348,9 +348,9 @@ def AlignRes (k : Nat) (x : Int) : Option (BitVec 64) → Prop
 
 theorem alignPointerOffset_spec {P : Assn} {q : Ptr} {b : BlockId} {A k : Nat} (hk : k < 64)
     (hqb : q.block = some b) (hown : ∀ h, P h → OwnsIn b A h) (h0 : 0 ≤ q.off) :
-    TotalTriple P (mem_alignPointerOffset__anon_1 q (BitVec.ofNat 64 (2 ^ k)))
+    TotalTriple P (mem_alignPointerOffset__anon_1fdb4fd23aee q (BitVec.ofNat 64 (2 ^ k)))
       (fun r => ⌜AlignRes k ((A : Int) + q.off) r⌝ ∗ P) := by
-  simp only [mem_alignPointerOffset__anon_1]
+  simp only [mem_alignPointerOffset__anon_1fdb4fd23aee]
   gen_norm
   simp only [isValidAlign_eq hk, debug_assert_true, Norm.lift_pure, pure_bind, le_eq,
     toNat_two_pow hk]

@@ -67,16 +67,10 @@ theorem run_of_errOf {α : Type} {r : Result (α × Mem)} {e : Error} (h : errOf
   · rename_i heq; cases h; exact heq
   · cases h
 
-/-- A memory whose live blocks end below `nextAddr`, and with an empty footprint, is sequential. -/
-theorem seq_of_blocks {m : Mem} (hf : m.footprint = #[]) (hc : m.current < m.clocks.size)
-    (hb : m.blocks.all (fun blk => !blk.live || decide (blk.addr + blk.bytes.size < m.nextAddr)) =
-      true) : m.Seq := by
-  refine ⟨singleThread_empty hf hc, fun l c hl => ?_⟩
-  obtain ⟨blk, hblk, hlive, ho, rfl⟩ := Mem.heap_some hl
-  obtain ⟨hi, he⟩ := Array.getElem?_eq_some_iff.mp hblk
-  have := (Array.all_eq_true.mp hb) l.1 hi
-  rw [he, hlive] at this
-  simpa using this
+/-- A memory with an empty footprint is sequential. -/
+theorem seq_of_blocks {m : Mem} (hf : m.footprint = #[]) (hc : m.current < m.clocks.size) :
+    m.Seq :=
+  ⟨singleThread_empty hf hc⟩
 
 /-- A triple's precondition, split off a memory, rules out an error from every memory with the same
 heap. -/
@@ -90,11 +84,11 @@ theorem no_error_of_triple {α : Type} {P : Assn} {c : MemM α} {Q : α → Assn
 /-! ## O3: an atomic location of another size at `addr_hint` -/
 
 /-- `mem0` with a 4-byte atomic location at `addr_hint`: the same heap. -/
-def odd : Mem := { mem0 with atomics := #[{ block := 0, off := 0, len := 4, msgs := #[] }] }
+def odd : Mem := { (mem0 .fresh) with atomics := #[{ block := 0, off := 0, len := 4, msgs := #[] }] }
 
-theorem odd_heap : odd.heap = mem0.heap := rfl
+theorem odd_heap : odd.heap = (mem0 .fresh).heap := rfl
 
-theorem odd_seq : odd.Seq := seq_of_blocks rfl (by decide) (by decide +kernel)
+theorem odd_seq : odd.Seq := seq_of_blocks rfl (by decide)
 
 set_option maxHeartbeats 0 in
 theorem alloc_odd : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run odd) = some .unspecified := by
@@ -114,7 +108,7 @@ set_option maxHeartbeats 0 in
 `alloc(1 byte, alignment 1)` a triple of any sound logic. -/
 theorem alloc_no_triple_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitVec 64) (P : Assn)
     (Q : Option Ptr → Assn) {hP hF : Heap} (hd : Heap.Disjoint hP hF)
-    (hm : mem0.heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
+    (hm : (mem0 .fresh).heap = hP ∪ hF) (hp : P hP) : ¬ L.T P (vt.alloc c 1 0 ra) Q := by
   intro ht
   rw [alloc_args] at ht
   exact no_error_of_triple (hL ht) hd (by rw [odd_heap]; exact hm) hp odd_seq alloc_odd
@@ -122,7 +116,7 @@ theorem alloc_no_triple_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (ra : BitV
 /-- So no allocator invariant that holds at program start and admits a 1-byte request satisfies
 `AllocSpec`, in any sound logic. -/
 theorem not_allocSpec_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (I : AllocInv)
-    (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ mem0.heap = hP ∪ hF ∧ I.own hP) (hfit : I.fits 1 0) :
+    (hI : ∃ hP hF, Heap.Disjoint hP hF ∧ (mem0 .fresh).heap = hP ∪ hF ∧ I.own hP) (hfit : I.fits 1 0) :
     ¬ AllocSpec L vt c I := by
   intro hs
   obtain ⟨hP, hF, hd, hm, hp⟩ := hI
@@ -133,15 +127,14 @@ theorem not_allocSpec_at_start (L : Logic) (hL : L.Sound) (c : Ptr) (I : AllocIn
 
 /-- `addr_hint` holds a pointer to block 6. -/
 def hintBlocks : Array Block :=
-  mem0.blocks.modify 0 fun b => { b with bytes := Enc.encode (some (⟨some 6, 0⟩ : Ptr)) }
+  (mem0 .fresh).blocks.modify 0 fun b => { b with bytes := Enc.encode (some (⟨some 6, 0⟩ : Ptr)) }
 
 /-- After a `free` of the last allocation: block 6 is an unmapped mapping at a page address, and
 the hint points to it (the shape that `alloc` then `free` from `mem0` reaches). -/
 def hinted : Mem :=
-  { mem0 with
+  { (mem0 .fresh) with
     blocks := hintBlocks.push
-      ({ bytes := #[], align := 4096, kind := .mapped 0, live := false, addr := 8192 } : Block)
-    nextAddr := 8192 + 4096 + 1 }
+      ({ bytes := #[], align := 4096, kind := .mapped 0, live := false, addr := 8192 } : Block) }
 
 /-- The same heap; the dead block's metadata is not there. -/
 def hintedLost : Mem := { hinted with blocks := hintBlocks }
@@ -153,7 +146,7 @@ theorem hinted_heap : hintedLost.heap = hinted.heap := by
   · simp [Mem.heap, hinted, hintedLost, Array.getElem?_push, hx]
 
 set_option maxHeartbeats 0 in
-theorem hintedLost_seq : hintedLost.Seq := seq_of_blocks rfl (by decide) (by decide +kernel)
+theorem hintedLost_seq : hintedLost.Seq := seq_of_blocks rfl (by decide)
 
 set_option maxHeartbeats 0 in
 theorem alloc_hintedLost : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run hintedLost) = some .illegal := by
@@ -161,7 +154,7 @@ theorem alloc_hintedLost : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run hintedLost)
 
 /-- `alloc` of one byte then `free` from `mem0`: the shape `hinted` describes. -/
 def cycle : Option Mem :=
-  match ((vt.alloc ⟨none, 0⟩ 1 0 0).run mem0).run with
+  match ((vt.alloc ⟨none, 0⟩ 1 0 0).run (mem0 .fresh)).run with
   | some (.ok (some p, m)) =>
     match ((vt.free ⟨none, 0⟩ ⟨p, 1⟩ 0 0).run m).run with
     | some (.ok (_, m')) => some m'

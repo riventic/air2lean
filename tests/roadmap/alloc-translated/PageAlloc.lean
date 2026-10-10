@@ -26,12 +26,13 @@ and the OS mapping model only (premise OSM-01). No model of the allocator is use
   or an unjoined child fails, whatever the allocator does.
 * **Alignments up to a page** (`ainv.fits`: `k ≤ 12`, obstruction O5). For a larger alignment,
   `map` asks for extra pages and `std.mem.alignPointer` adds `alignment - 1` to the mapping's
-  address with an overflow check. The model's addresses are unbounded (`Mem.nextAddr` is a
-  `Nat`; `mmap` places a mapping at any page address), so the check can fail and `map` panics:
-  `alloc_high` (kernel-checked) is such a run from `mem0` with a high `nextAddr`. Natively the
-  kernel never maps that high. The fix is in the OS model (an `mmap` that ends above the address
-  space fails with `ENOMEM`); with it, larger alignments need the prefix and tail `munmap`s,
-  which `TotalTriple.munmapPrefix`/`munmapTail` already cover.
+  address with an overflow check. A placement proposal keeps the mapping below `2 ^ 64`
+  (`Mem.placeOk`), but the fallback address after every block (`Mem.top`) is unbounded, so the
+  check can fail and `map` panics: `alloc_high` (kernel-checked) is such a run from a memory
+  whose last block ends high. Natively the kernel never maps that high. The fix is a bound on
+  the fallback (a request whose block would end above the address space fails); with it, larger
+  alignments need the prefix and tail `munmap`s, which `TotalTriple.munmapPrefix`/`munmapTail`
+  already cover.
 * **Partial correctness.** The atomic rules are partial (`FTriple`); `free`, `resize` and
   `remap` are total (`PageSpec.lean`).
 -/
@@ -57,11 +58,11 @@ theorem subSat_small {k : Nat} (hk : k ≤ 12) :
   rw [e]; rfl
 
 theorem alignPointerOffset_small {k : Nat} (hk : k ≤ 12) (p : Ptr) :
-    mem_alignPointerOffset__anon_1 p (BitVec.ofNat 64 (2 ^ k)) = pure (some 0) := by
+    mem_alignPointerOffset__anon_7004c05f4892 p (BitVec.ofNat 64 (2 ^ k)) = pure (some 0) := by
   have : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 ∨ k = 4 ∨ k = 5 ∨ k = 6 ∨ k = 7 ∨ k = 8 ∨ k = 9 ∨
     k = 10 ∨ k = 11 ∨ k = 12 := by omega
   rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-  · unfold mem_alignPointerOffset__anon_1
+  · unfold mem_alignPointerOffset__anon_7004c05f4892
     gen_norm
     rfl
 
@@ -69,9 +70,9 @@ theorem alignPointerOffset_small {k : Nat} (hk : k ≤ 12) (p : Ptr) :
 /-- `std.mem.alignPointer` of a page-aligned owned pointer, to at most a page: the pointer. -/
 theorem alignPointer_total {p : Ptr} {A : Nat} {bs : Array Byte} {k : Nat} (hk : k ≤ 12)
     (h0 : p.off = 0) :
-    TotalTriple (mapping P p A 0 bs) (mem_alignPointer__anon_1 p (BitVec.ofNat 64 (2 ^ k)))
+    TotalTriple (mapping P p A 0 bs) (mem_alignPointer__anon_53311c568cf7 p (BitVec.ofNat 64 (2 ^ k)))
       (fun r => ⌜r = some p⌝ ∗ mapping P p A 0 bs) := by
-  unfold mem_alignPointer__anon_1
+  unfold mem_alignPointer__anon_53311c568cf7
   gen_norm
   rw [alignPointerOffset_small hk]
   have e0 : p.elem 1 0 = p := by simp [Ptr.elem, Ptr.add]
@@ -146,8 +147,8 @@ theorem tame_addr64 (q : Ptr) : Full.Tame (do let d ← ptrAddr q; pure (BitVec.
   Full.Tame.bind (Full.Tame.ptrAddr q) fun _ => Full.Tame.pure' _
 
 theorem tame_alignPointer {k : Nat} (hk : k ≤ 12) (p : Ptr) :
-    Full.Tame (mem_alignPointer__anon_1 p (BitVec.ofNat 64 (2 ^ k))) := by
-  unfold mem_alignPointer__anon_1
+    Full.Tame (mem_alignPointer__anon_53311c568cf7 p (BitVec.ofNat 64 (2 ^ k))) := by
+  unfold mem_alignPointer__anon_53311c568cf7
   gen_norm
   rw [alignPointerOffset_small hk]
   simp only [pure_bind, Option.elim_some]
@@ -389,9 +390,13 @@ theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
 
 /-! ## O5: alignments above a page -/
 
-/-- `mem0`, with the next mapping at the last page below `2 ^ 64`. The model's addresses are
-unbounded, and `mmap` places a mapping at any page address. -/
-def high : Mem := { mem0 with nextAddr := 2 ^ 64 - 4096 }
+/-- `mem0` with one more (dead, empty) block that ends just below the last page under `2 ^ 64`:
+the fallback address of the next mapping (`Mem.top`, the placement proposes nothing) is that
+page. -/
+def high : Mem :=
+  { (mem0 .fresh) with
+    blocks := (mem0 .fresh).blocks.push
+      { bytes := #[], align := 1, kind := .heap, live := false, addr := 2 ^ 64 - 4097 } }
 
 /-- **O5.** `alloc(1, align 8192)` from `high` maps two pages at `2 ^ 64 - 4096`; the alignment
 `@intFromPtr(p) + 8191` of `std.mem.alignPointer` overflows, `alignPointer` returns `null`, and

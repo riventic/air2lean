@@ -86,11 +86,21 @@
   "export_stage": "analyzed-air"
  },
  "name": "fba.fba_resize",
+ "module": "root",
+ "src": {
+  "file": "fba.zig",
+  "module": "fba",
+  "decl_line": 26
+ },
  "params": [
   0,
   0
  ],
  "ret": 1,
+ "export": {
+  "name": "fba_resize",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -108,7 +118,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -119,7 +130,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 49
   },
   {
    "id": 5,
@@ -128,6 +140,7 @@
    "callee": {
     "ty": 5,
     "func": "heap.FixedBufferAllocator.init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -175,7 +188,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 28
   },
   {
    "id": 10,
@@ -184,6 +198,7 @@
    "callee": {
     "ty": 9,
     "func": "heap.FixedBufferAllocator.allocator",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -235,7 +250,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 16,
@@ -246,7 +262,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 22
     },
     {
      "id": 18,
@@ -262,7 +279,8 @@
      "id": 21,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 22
     },
     {
      "id": 22,
@@ -271,6 +289,8 @@
      "callee": {
       "ty": 13,
       "func": "mem.Allocator.alloc__anon_221",
+      "module": "std",
+      "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
      },
      "args": [
@@ -339,7 +359,8 @@
        "id": 27,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 4
+       "line": 4,
+       "column": 36
       },
       {
        "id": 28,
@@ -371,7 +392,8 @@
    "id": 31,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 20
   },
   {
    "id": 32,
@@ -387,7 +409,8 @@
    "id": 36,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 20
   },
   {
    "id": 37,
@@ -395,7 +418,9 @@
    "ty": 1,
    "callee": {
     "ty": 16,
-    "func": "mem.Allocator.resize__anon_21054",
+    "func": "mem.Allocator.resize__anon_20525",
+    "module": "std",
+    "instance_key": "ec6bca265858c0d92c8adc9b771d4dbd6b6c75eedea6376de74e48a0d5adca0b",
     "noreturn": false
    },
    "args": [
@@ -414,7 +439,8 @@
    "id": 38,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 39,
@@ -430,6 +456,7 @@
  "globals": [
   {
    "name": "fba.buffer",
+   "module": "root",
    "ty": 17,
    "const": false,
    "threadlocal": false,
@@ -466,6 +493,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -474,6 +502,7 @@
   {
    "k": "struct",
    "name": "heap.FixedBufferAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -502,6 +531,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -515,6 +545,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -523,6 +554,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -551,6 +583,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -564,6 +597,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -618,6 +652,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -631,6 +666,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -643,6 +679,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -676,6 +713,7 @@
    "child": 27,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -688,6 +726,7 @@
    "child": 28,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -700,6 +739,7 @@
    "child": 29,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -712,6 +752,7 @@
    "child": 30,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

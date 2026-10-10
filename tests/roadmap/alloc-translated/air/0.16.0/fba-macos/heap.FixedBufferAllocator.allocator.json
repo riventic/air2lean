@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.FixedBufferAllocator.allocator",
+ "module": "std",
+ "src": {
+  "file": "heap/FixedBufferAllocator.zig",
+  "module": "std",
+  "decl_line": 19
+ },
  "params": [
   0
  ],
@@ -101,7 +107,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -172,7 +179,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 9,
@@ -225,6 +233,7 @@
   },
   {
    "name": "heap.FixedBufferAllocator.alloc",
+   "module": "std",
    "ty": 14,
    "const": true,
    "threadlocal": false,
@@ -232,11 +241,13 @@
    "init": {
     "ty": 14,
     "func": "heap.FixedBufferAllocator.alloc",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.FixedBufferAllocator.resize",
+   "module": "std",
    "ty": 15,
    "const": true,
    "threadlocal": false,
@@ -244,11 +255,13 @@
    "init": {
     "ty": 15,
     "func": "heap.FixedBufferAllocator.resize",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.FixedBufferAllocator.remap",
+   "module": "std",
    "ty": 16,
    "const": true,
    "threadlocal": false,
@@ -256,11 +269,13 @@
    "init": {
     "ty": 16,
     "func": "heap.FixedBufferAllocator.remap",
+    "module": "std",
     "noreturn": false
    }
   },
   {
    "name": "heap.FixedBufferAllocator.free",
+   "module": "std",
    "ty": 17,
    "const": true,
    "threadlocal": false,
@@ -268,6 +283,7 @@
    "init": {
     "ty": 17,
     "func": "heap.FixedBufferAllocator.free",
+    "module": "std",
     "noreturn": false
    }
   }
@@ -281,6 +297,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -289,6 +306,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -318,6 +336,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -331,6 +350,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -344,6 +364,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -357,6 +378,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -370,6 +392,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -381,6 +404,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -414,6 +438,7 @@
    "child": 14,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -426,6 +451,7 @@
    "child": 15,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -438,6 +464,7 @@
    "child": 16,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -450,6 +477,7 @@
    "child": 17,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -474,6 +502,7 @@
   {
    "k": "struct",
    "name": "heap.FixedBufferAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -509,6 +538,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,

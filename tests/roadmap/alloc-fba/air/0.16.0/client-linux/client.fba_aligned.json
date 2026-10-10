@@ -35,10 +35,20 @@
   "export_stage": "analyzed-air"
  },
  "name": "client.fba_aligned",
+ "module": "root",
+ "src": {
+  "file": "client.zig",
+  "module": "client",
+  "decl_line": 41
+ },
  "params": [
   0
  ],
  "ret": 0,
+ "export": {
+  "name": "fba_aligned",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -50,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -61,7 +72,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 49
   },
   {
    "id": 4,
@@ -70,6 +82,7 @@
    "callee": {
     "ty": 4,
     "func": "heap.FixedBufferAllocator.init",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -117,7 +130,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 28
   },
   {
    "id": 9,
@@ -126,6 +140,7 @@
    "callee": {
     "ty": 8,
     "func": "heap.FixedBufferAllocator.allocator",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -177,7 +192,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 15,
@@ -188,7 +204,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 4
+     "line": 4,
+     "column": 16
     },
     {
      "id": 17,
@@ -204,7 +221,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 4
+     "line": 4,
+     "column": 16
     },
     {
      "id": 21,
@@ -213,6 +231,8 @@
      "callee": {
       "ty": 12,
       "func": "mem.Allocator.alloc__anon_229",
+      "module": "std",
+      "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false
      },
      "args": [
@@ -283,7 +303,8 @@
        "id": 26,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 4
+       "line": 4,
+       "column": 30
       },
       {
        "id": 27,
@@ -304,7 +325,8 @@
    "id": 29,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 30,
@@ -315,7 +337,8 @@
      "id": 31,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 5
+     "line": 5,
+     "column": 29
     },
     {
      "id": 32,
@@ -331,7 +354,8 @@
      "id": 35,
      "tag": "dbg_stmt",
      "ty": 1,
-     "line": 5
+     "line": 5,
+     "column": 29
     },
     {
      "id": 36,
@@ -339,7 +363,9 @@
      "ty": 17,
      "callee": {
       "ty": 18,
-      "func": "mem.Allocator.alignedAlloc__anon_11632",
+      "func": "mem.Allocator.alignedAlloc__anon_10825",
+      "module": "std",
+      "instance_key": "48ad47c7aa487ac8b930deb35bfac9aece0d8434568307bf8fff4e4984bdeb9a",
       "noreturn": false
      },
      "args": [
@@ -408,7 +434,8 @@
        "id": 41,
        "tag": "dbg_stmt",
        "ty": 1,
-       "line": 5
+       "line": 5,
+       "column": 50
       },
       {
        "id": 42,
@@ -468,7 +495,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 28
   },
   {
    "id": 49,
@@ -494,7 +522,8 @@
    "id": 51,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 15
   },
   {
    "id": 52,
@@ -510,7 +539,8 @@
    "id": 53,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 6
+   "line": 6,
+   "column": 34
   },
   {
    "id": 54,
@@ -541,7 +571,8 @@
    "id": 56,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 11
   },
   {
    "id": 57,
@@ -557,7 +588,8 @@
    "id": 60,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 7
+   "line": 7,
+   "column": 11
   },
   {
    "id": 61,
@@ -565,7 +597,9 @@
    "ty": 1,
    "callee": {
     "ty": 23,
-    "func": "mem.Allocator.free__anon_11627",
+    "func": "mem.Allocator.free__anon_10820",
+    "module": "std",
+    "instance_key": "fde0a0a562810486a104290bdb8c0ebff36357ba78287d3fa76bfdfc14a50130",
     "noreturn": false
    },
    "args": [
@@ -581,7 +615,8 @@
    "id": 62,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 17
   },
   {
    "id": 63,
@@ -607,7 +642,8 @@
    "id": 65,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 14
   },
   {
    "id": 66,
@@ -626,7 +662,8 @@
    "id": 67,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 68,
@@ -642,6 +679,7 @@
  "globals": [
   {
    "name": "client.buffer",
+   "module": "root",
    "ty": 25,
    "const": false,
    "threadlocal": false,
@@ -673,6 +711,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -681,6 +720,7 @@
   {
    "k": "struct",
    "name": "heap.FixedBufferAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -709,6 +749,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -722,6 +763,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -730,6 +772,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -758,6 +801,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -771,6 +815,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -811,6 +856,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -835,6 +881,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -848,6 +895,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -861,6 +909,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -874,6 +923,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -891,6 +941,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -919,6 +970,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -932,6 +984,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -944,6 +997,7 @@
   {
    "k": "struct",
    "name": "mem.Allocator.VTable",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -977,6 +1031,7 @@
    "child": 35,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -989,6 +1044,7 @@
    "child": 36,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1001,6 +1057,7 @@
    "child": 37,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1013,6 +1070,7 @@
    "child": 38,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

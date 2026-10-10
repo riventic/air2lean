@@ -86,6 +86,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.Alignment.fromByteUnits",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 36
+ },
  "params": [
   0
  ],
@@ -101,7 +107,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 37
   },
   {
    "id": 3,
@@ -109,7 +116,9 @@
    "ty": 3,
    "callee": {
     "ty": 4,
-    "func": "math.isPowerOfTwo__anon_6928",
+    "func": "math.isPowerOfTwo__anon_6447",
+    "module": "std",
+    "instance_key": "38853e1fe316d8affb63cf7a02e444f9d4bd5c6e6e394d850575cb8d963e47c5",
     "noreturn": false
    },
    "args": [
@@ -122,7 +131,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 15
   },
   {
    "id": 5,
@@ -131,6 +141,7 @@
    "callee": {
     "ty": 5,
     "func": "debug.assert",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -143,7 +154,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 9
   },
   {
    "id": 7,
@@ -159,7 +171,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 16
   },
   {
    "id": 9,
@@ -175,7 +188,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 9
   },
   {
    "id": 11,
@@ -199,6 +213,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 8,
    "exhaustive": false,
    "fields": [

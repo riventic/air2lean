@@ -35,6 +35,12 @@
   "export_stage": "analyzed-air"
  },
  "name": "heap.FixedBufferAllocator.alloc",
+ "module": "std",
+ "src": {
+  "file": "heap/FixedBufferAllocator.zig",
+  "module": "std",
+  "decl_line": 62
+ },
  "params": [
   0,
   1,
@@ -99,7 +105,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 2
+   "line": 2,
+   "column": 41
   },
   {
    "id": 8,
@@ -175,6 +182,7 @@
        "callee": {
         "ty": 9,
         "func": "debug.FullPanic((function 'defaultPanic')).incorrectAlignment",
+        "module": "std",
         "noreturn": true
        },
        "args": []
@@ -241,7 +249,8 @@
    "id": 21,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 4
+   "line": 4,
+   "column": 44
   },
   {
    "id": 22,
@@ -257,7 +266,8 @@
    "id": 23,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 4
+   "line": 4,
+   "column": 44
   },
   {
    "id": 24,
@@ -266,6 +276,7 @@
    "callee": {
     "ty": 13,
     "func": "mem.Alignment.toByteUnits",
+    "module": "std",
     "noreturn": false
    },
    "args": [
@@ -289,7 +300,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 27,
@@ -300,7 +312,8 @@
      "id": 28,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 5
+     "line": 5,
+     "column": 51
     },
     {
      "id": 29,
@@ -326,7 +339,8 @@
      "id": 31,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 5
+     "line": 5,
+     "column": 58
     },
     {
      "id": 32,
@@ -352,7 +366,8 @@
      "id": 34,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 5
+     "line": 5,
+     "column": 69
     },
     {
      "id": 35,
@@ -388,7 +403,8 @@
      "id": 38,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 5
+     "line": 5,
+     "column": 63
     },
     {
      "id": 39,
@@ -407,7 +423,8 @@
      "id": 42,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 5
+     "line": 5,
+     "column": 46
     },
     {
      "id": 43,
@@ -415,7 +432,9 @@
      "ty": 18,
      "callee": {
       "ty": 19,
-      "func": "mem.alignPointerOffset__anon_19737",
+      "func": "mem.alignPointerOffset__anon_18008",
+      "module": "std",
+      "instance_key": "1fdb4fd23aee9308e7cb1ad2763d14019b6c1b3924b8523e8dfca891858cacaa",
       "noreturn": false
      },
      "args": [
@@ -474,7 +493,8 @@
        "id": 47,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 5
+       "line": 5,
+       "column": 99
       },
       {
        "id": 48,
@@ -506,7 +526,8 @@
    "id": 51,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 6
+   "line": 6,
+   "column": 32
   },
   {
    "id": 52,
@@ -542,7 +563,8 @@
    "id": 55,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 6
+   "line": 6,
+   "column": 43
   },
   {
    "id": 56,
@@ -572,7 +594,8 @@
    "id": 58,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 7
+   "line": 7,
+   "column": 42
   },
   {
    "id": 59,
@@ -602,7 +625,8 @@
    "id": 61,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 8
+   "line": 8,
+   "column": 9
   },
   {
    "id": 62,
@@ -613,7 +637,8 @@
      "id": 63,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 8
+     "line": 8,
+     "column": 29
     },
     {
      "id": 64,
@@ -639,7 +664,8 @@
      "id": 66,
      "tag": "dbg_stmt",
      "ty": 5,
-     "line": 8
+     "line": 8,
+     "column": 36
     },
     {
      "id": 67,
@@ -708,7 +734,8 @@
        "id": 72,
        "tag": "dbg_stmt",
        "ty": 5,
-       "line": 8
+       "line": 8,
+       "column": 42
       },
       {
        "id": 73,
@@ -743,7 +770,8 @@
    "id": 76,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 9
+   "line": 9,
+   "column": 9
   },
   {
    "id": 77,
@@ -782,7 +810,8 @@
    "id": 80,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 10
+   "line": 10,
+   "column": 16
   },
   {
    "id": 81,
@@ -808,7 +837,8 @@
    "id": 83,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 10
+   "line": 10,
+   "column": 23
   },
   {
    "id": 84,
@@ -834,7 +864,8 @@
    "id": 86,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 10
+   "line": 10,
+   "column": 28
   },
   {
    "id": 87,
@@ -853,7 +884,8 @@
    "id": 88,
    "tag": "dbg_stmt",
    "ty": 5,
-   "line": 10
+   "line": 10,
+   "column": 5
   },
   {
    "id": 89,
@@ -885,6 +917,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -900,6 +933,7 @@
   {
    "k": "enum",
    "name": "mem.Alignment",
+   "module": "std",
    "tag": 22,
    "exhaustive": false,
    "fields": [
@@ -949,6 +983,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -967,6 +1002,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -992,6 +1028,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1005,6 +1042,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1018,6 +1056,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1035,6 +1074,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1048,6 +1088,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1061,6 +1102,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1074,6 +1116,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -1110,6 +1153,7 @@
   {
    "k": "struct",
    "name": "heap.FixedBufferAllocator",
+   "module": "std",
    "layout": "auto",
    "fields": [
     {
@@ -1134,6 +1178,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,

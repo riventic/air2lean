@@ -35,6 +35,13 @@
   "export_stage": "analyzed-air"
  },
  "name": "mem.absorbSentinel__anon_843",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 4727
+ },
+ "instance_key": "7342b53a30ed5047ec91039edea814cdc01d94e10127775cd607a33832861686",
  "params": [
   0
  ],
@@ -78,13 +85,15 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 9
   },
   {
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 9
   },
   {
    "id": 7,
@@ -106,6 +115,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -119,6 +129,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -137,6 +148,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

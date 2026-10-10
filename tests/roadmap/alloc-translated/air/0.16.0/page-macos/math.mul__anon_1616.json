@@ -86,6 +86,13 @@
   "export_stage": "analyzed-air"
  },
  "name": "math.mul__anon_1616",
+ "module": "std",
+ "src": {
+  "file": "math.zig",
+  "module": "std",
+  "decl_line": 554
+ },
+ "instance_key": "44faaf286c79cc3d92955867affd656f14fe69f5be85c3de3b0331d3f52141e6",
  "params": [
   0,
   0
@@ -108,7 +115,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 5,
@@ -166,7 +174,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 9
   },
   {
    "id": 11,
@@ -177,7 +186,8 @@
      "id": 12,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 11
     },
     {
      "id": 13,
@@ -227,7 +237,8 @@
        "id": 16,
        "tag": "dbg_stmt",
        "ty": 2,
-       "line": 4
+       "line": 4,
+       "column": 21
       },
       {
        "id": 17,
@@ -262,7 +273,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 14
   },
   {
    "id": 21,
@@ -288,7 +300,8 @@
    "id": 23,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 24,
@@ -354,6 +367,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -367,6 +381,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -380,6 +395,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -408,6 +424,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

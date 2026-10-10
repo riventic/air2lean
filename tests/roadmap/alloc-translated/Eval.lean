@@ -29,23 +29,23 @@ def flag (r : Zig.MemM Bool) (m : Zig.Mem) : String :=
 
 section Linux
 open AllocTranslated.FbaLinux
-#guard [word (fba_sum 0) mem0, word (fba_sum 10) mem0, word (fba_sum 256) mem0,
-  word (fba_sum 257) mem0] = ["ok 0", "ok 10", "ok 256", "ok 0"]
-#guard word ((BitVec.zeroExtend 64 ·) <$> fba_create 7) mem0 = "ok 7"
-#guard [flag (fba_resize 10 20) mem0, flag (fba_resize 10 300) mem0, flag (fba_resize 0 5) mem0,
-  flag (fba_resize 10 0) mem0] = ["ok 1", "ok 0", "ok 0", "ok 1"]
-#guard [word (fba_reset 100) mem0, word (fba_reset 200) mem0, word (fba_reset 0) mem0] =
+#guard [word (fba_sum 0) (mem0 .fresh), word (fba_sum 10) (mem0 .fresh), word (fba_sum 256) (mem0 .fresh),
+  word (fba_sum 257) (mem0 .fresh)] = ["ok 0", "ok 10", "ok 256", "ok 0"]
+#guard word ((BitVec.zeroExtend 64 ·) <$> fba_create 7) (mem0 .fresh) = "ok 7"
+#guard [flag (fba_resize 10 20) (mem0 .fresh), flag (fba_resize 10 300) (mem0 .fresh), flag (fba_resize 0 5) (mem0 .fresh),
+  flag (fba_resize 10 0) (mem0 .fresh)] = ["ok 1", "ok 0", "ok 0", "ok 1"]
+#guard [word (fba_reset 100) (mem0 .fresh), word (fba_reset 200) (mem0 .fresh), word (fba_reset 0) (mem0 .fresh)] =
   ["ok 200", "ok 400", "ok 0"]
 -- `@returnAddress` reads the explicit oracle; any values give the same results.
-#guard word (fba_sum 10) { mem0 with arbitrary := #[7, 9, 11] } = "ok 10"
+#guard word (fba_sum 10) { (mem0 .fresh) with arbitrary := #[7, 9, 11] } = "ok 10"
 end Linux
 
 section Macos
 open AllocTranslated.FbaMacos
-#guard [word (fba_sum 0) mem0, word (fba_sum 10) mem0, word (fba_sum 256) mem0,
-  word (fba_sum 257) mem0] = ["ok 0", "ok 10", "ok 256", "ok 0"]
-#guard [flag (fba_resize 10 20) mem0, flag (fba_resize 10 300) mem0] = ["ok 1", "ok 0"]
-#guard [word (fba_reset 100) mem0, word (fba_reset 200) mem0] = ["ok 200", "ok 400"]
+#guard [word (fba_sum 0) (mem0 .fresh), word (fba_sum 10) (mem0 .fresh), word (fba_sum 256) (mem0 .fresh),
+  word (fba_sum 257) (mem0 .fresh)] = ["ok 0", "ok 10", "ok 256", "ok 0"]
+#guard [flag (fba_resize 10 20) (mem0 .fresh), flag (fba_resize 10 300) (mem0 .fresh)] = ["ok 1", "ok 0"]
+#guard [word (fba_reset 100) (mem0 .fresh), word (fba_reset 200) (mem0 .fresh)] = ["ok 200", "ok 400"]
 end Macos
 
 /-- The first schedule's result of a concurrent page-allocator client. -/
@@ -61,29 +61,29 @@ instance : ToString (BitVec 32) := ⟨fun v => toString v.toNat⟩
 
 section PageLinux
 open AllocTranslated.PageLinux
-#guard [first (page_sum 0) dispatch mem0, first (page_sum 10) dispatch mem0,
-  first (page_sum 10000) dispatch mem0] = ["ok 0", "ok 10", "ok 10000"]
-#guard first (page_create 7) dispatch mem0 = "ok 7"
+#guard [first (page_sum 0) dispatch (mem0 .fresh), first (page_sum 10) dispatch (mem0 .fresh),
+  first (page_sum 10000) dispatch (mem0 .fresh)] = ["ok 0", "ok 10", "ok 10000"]
+#guard first (page_create 7) dispatch (mem0 .fresh) = "ok 7"
 -- `resize` within a page; across pages it fails (x86_64 stacks grow down, so a `resize`, which
 -- may not move, does not call `mremap`); a shrink unmaps the tail page. The native x86_64-linux run
 -- agrees (`expected-linux.txt`).
-#guard [first (page_resize 10 20) dispatch mem0, first (page_resize 10 5000) dispatch mem0,
-  first (page_resize 8192 10) dispatch mem0] = ["ok true", "ok false", "ok true"]
+#guard [first (page_resize 10 20) dispatch (mem0 .fresh), first (page_resize 10 5000) dispatch (mem0 .fresh),
+  first (page_resize 8192 10) dispatch (mem0 .fresh)] = ["ok true", "ok false", "ok true"]
 -- Every mapping fails: the allocator's `OutOfMemory` path, no illegal behaviour.
-#guard first (page_sum 10) dispatch { mem0 with allocPolicy := { fails := fun _ _ => true } } =
+#guard first (page_sum 10) dispatch { (mem0 .fresh) with allocPolicy := { fails := fun _ _ => true } } =
   "ok 0"
 end PageLinux
 
 section PageMacos
 open AllocTranslated.PageMacos
-#guard [first (page_sum 10) dispatch mem0, first (page_create 7) dispatch mem0] =
+#guard [first (page_sum 10) dispatch (mem0 .fresh), first (page_create 7) dispatch (mem0 .fresh)] =
   ["ok 10", "ok 7"]
 -- 16 KiB pages: the native results of `expected.txt` (recorded on aarch64-macos); no `mremap`,
 -- so a growth past the page fails.
-#guard [first (page_resize 10 20) dispatch mem0, first (page_resize 10 5000) dispatch mem0,
-  first (page_resize 8192 10) dispatch mem0, first (page_resize 10 20000) dispatch mem0] =
+#guard [first (page_resize 10 20) dispatch (mem0 .fresh), first (page_resize 10 5000) dispatch (mem0 .fresh),
+  first (page_resize 8192 10) dispatch (mem0 .fresh), first (page_resize 10 20000) dispatch (mem0 .fresh)] =
   ["ok true", "ok true", "ok true", "ok false"]
-#guard [first (page_sum 0) dispatch mem0, first (page_sum 10000) dispatch mem0] = ["ok 0", "ok 10000"]
+#guard [first (page_sum 0) dispatch (mem0 .fresh), first (page_sum 10000) dispatch (mem0 .fresh)] = ["ok 0", "ok 10000"]
 end PageMacos
 
 end AllocTranslated.Eval
