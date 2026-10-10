@@ -1,211 +1,275 @@
-# Formal AIR semantics and translation certificates (V01 slice)
+# Formal AIR semantics and translation certificates (V01, V02)
 
-Status: research, first verified slice. This page states what is defined, what is proved and
-checked, and what is not. Roadmap rows V01 (formal AIR semantics) and V02 (normalization and
-emission preservation) remain open; [§Gap](#gap-to-v01-and-v02) lists what is missing.
+Status: research. This page has two parts: the design of the semantics and of the
+preservation proofs, which stays the plan until V01 and V02 close, and the state of the
+implementation. Roadmap rows V01 (formal AIR semantics) and V02 (normalization and emission
+preservation) remain open; [§Next fragments](#next-fragments) orders what is missing.
 
-## Acceptance evidence for this slice
+## Why
 
-Stated before the implementation, checked by CI:
+Today the translator (`Air2Lean/Air/Canon.lean`, `Normalize.lean`, `Check.lean`, `Emit.lean`,
+about 10,000 lines) is trusted: a theorem about `Proofs/<Ex>/Gen.lean` is a theorem about the
+Zig program only if the translator emitted the right Lean. The plan replaces that trust with a
+small definition and kernel-checked evidence:
 
-1. A Lean semantics of *canonical* AIR, over the translator's own decoded datatypes
-   (`Air2Lean.Func`, `Air2Lean.Inst`, `Air2Lean.Op`, `Air2Lean.Val`), for a named fragment, with
-   locals in ZigLean's one memory model (`Zig.Mem`, `Zig.MemM`).
-2. A translator flag that writes, beside the generated `Gen.lean`, a certificate file. The
-   ordinary translation output stays byte-identical with and without the flag.
-3. For the committed examples `basic` and `recursion`: every function in the fragment has a
-   kernel-checked theorem relating its generated definition to the semantics of its decoded
-   AIR; every other function is listed with a reason. The certificate file is committed and
-   compared with the translator's output in CI.
-4. The certificates are not vacuous: changing one operator in a certificate's embedded AIR
-   makes that function's theorem fail (mutation check), and the embedded AIR is the decoded
-   golden AIR (round-trip check).
-5. No `sorry`, `admit` or `native_decide`.
+```
+Zig ─ exporter ─▶ AIR JSON ─ parse ─▶ RawFunc ─ Canon ─▶ RawFunc ─ Normalize ─▶ Func ─ Check/Emit ─▶ Gen.lean
+                                                                                │                    │
+                                                                    Sem (V01) ──┘   certificate (V02)┘
+```
 
-## The semantics (`Air2Lean/Sem.lean`)
+* **V01** defines what a decoded AIR function means: `Air2Lean.Sem`, one interpreter over the
+  translator's own `Func` and ZigLean's memory model.
+* **V02** proves, per translated function, that the generated definition equals that meaning.
+  For a certified function, `Check.lean` and `Emit.lean` (and later `Canon.lean`) leave the
+  trusted base; the meaning itself is premise [SEM-06](premises.md#sem-06).
 
-`Air2Lean.Sem` is a definitional interpreter over `Air2Lean.Func`, the output of
-`Air2Lean.normalize` (that is, *after* canonicalization, [§Gap](#gap-to-v01-and-v02)).
+## Design
+
+### The semantics (V01)
+
+`Air2Lean/Sem.lean` is a **definitional interpreter** (a function, not a relation) over the
+decoded AIR:
 
 | Piece | Definition |
 |---|---|
-| Values | `Value.int (signed) (w) (BitVec w)`, `Value.bool`, `Value.void`, `Value.ptr (Zig.Ptr) (align)` |
-| Memory | `Zig.MemM` (= `StateT Zig.Mem Zig.Result`); a body runs in `Zig.MM Frame` (the stack blocks it allocated) |
-| Body | `execBody`/`execInst`/`execSwitch`: well-founded recursion over the nested instruction arrays |
-| Function | `execFunc call f args`: arguments must match `f.params` (`argsOk`); empty SSA environment; frees the frame at `ret` |
-| Program | `run (p : Prog)`: the least fixpoint (`partial_fixpoint`) of `execFunc` over the call oracle |
-| Bottom | `stuck` = `Option.none`: non-termination and every out-of-fragment or ill-typed step |
+| Values | `Value.int (signed) (w) (BitVec w)`, `.bool`, `.void`, `.ptr (Zig.Ptr)` |
+| SSA environment | `Env : InstId → Option (TyId × Value)`: each value with its AIR type, so a memory access takes its alignment and pointee from the pointer operand's type, as AIR does |
+| Straight-line ops | `evalPure : Func → Env → Inst → Result Value` (arithmetic, comparisons, casts) and `evalMem : … → MemM Value` (loads, stores, field pointers, pointer casts and comparisons) |
+| Control flow | `execBody`/`execInst`/`execSwitch : … → Zig.MM Frame Exit`, well-founded recursion over the nested bodies; `Exit` is `br target value`, `repeat target` or `ret value`; `loop` is `Zig.loop` |
+| Memory | ZigLean's `Zig.Mem` (`Zig.MemM`); the state of a body is its stack frame (`Frame`, the blocks it allocated), freed at `ret` |
+| Function | `execFunc call f args`: arguments checked against the parameter types (`argsOk`) |
+| Program | `run p`: the least fixpoint (`partial_fixpoint`) of `execFunc` over a call oracle |
+| Bottom | `stuck` (`Option.none`): non-termination and every out-of-fragment or ill-typed step |
 
-The fragment:
+Why a function: a decoded AIR function is deterministic given the memory, and ZigLean already
+places every nondeterministic choice in `Zig.Mem` (block placement `Mem.place`, SEM-07) or in
+the scheduler (`ZigLean/Conc`). The generated code runs over the same `Zig.MemM`, so the
+semantics and the code share one memory model and their primitive operations (`Zig.add`,
+`Zig.load`, `Zig.ptrProject`, …); the semantics fixes the meaning of the *program structure*
+(SSA dataflow, operand typing, signedness, control flow, frames, calls) over them. A
+concurrent function needs a step relation over ZigLean's scheduler instead (`Zig.ConcM`,
+[§Next fragments](#next-fragments)); it stays outside until then.
 
-* integers of any width: `add`/`sub`/`mul` checked (`*_safe` and plain: overflow panics),
-  wrapping and saturating; `div_trunc`/`div_floor`/`div_exact`/`rem`/`mod`; `min`/`max`;
-  bitwise `and`/`or`/`xor`/`not` (and their `bool` forms); comparisons; `bool_and`/`bool_or`;
-  `intcast` and `trunc`;
-* control flow: `block`/`br` (with or without a value), `cond_br`, `switch_br` on an integer
-  (items and ranges, first match, else), `loop`/`repeat` (as `Zig.loop`: the least fixpoint of
-  iteration), `ret`, `unreach`, `trap`, and a call to a safety-panic handler (`Sem.panicOf?`,
-  the literal table of `docs/generated-code.md` §Panics);
-* locals: `alloc` is `Zig.allocStack` with the export's size and alignment, `load`/`store` of
-  an integer or `bool` are `Zig.load`/`Zig.store` at the pointer type's `align(N)`, a store of
-  `undefined` is `Zig.storeUndef`; the function's stack blocks are freed at its `ret`;
-* direct calls by fully qualified name through an oracle; `run` ties the oracle to the
-  program;
-* `dbg_*` and `dbg_stmt` have no effect.
+Fail closed: an operation, type or shape outside the fragment is `stuck`, never a guess. A
+certificate never holds for a stuck function, because the generated definition is defined.
 
-The arithmetic primitives are ZigLean's (`Zig.add`, `Zig.intCast`, `Zig.rem`, …): the semantics
-fixes the meaning of the AIR *program structure* (SSA dataflow, operand typing, signedness
-from the AIR types, control flow, locals, calls, panics) over them.
+### Emission preservation (V02): a certificate per function
 
-Proved once, in `Air2Lean/Sem.lean`:
+Two ways to prove emission correct: a **verified emitter** (prove `Emit.lean` once, for a fixed
+fragment) or **translation validation** (check each translation). `Emit.lean` is a 4,000-line
+string generator with many strategies per construct; proving it would mean re-implementing it
+in a provable form. Translation validation keeps the emitter as it is and makes it untrusted:
+`--air-certificate` writes, beside `Gen.lean`, a Lean file that the kernel checks.
 
-* `execBody_mono`, `execFunc_mono`: a body is monotone in its call oracle;
-* `run_le_of_fixpoint`, `run_le_of_table`: any oracle that satisfies every function's equation
-  on well-typed arguments is above `run` — every terminating AIR behaviour (a value or a panic)
-  is that oracle's behaviour (`Result.eq_of_le`);
-* `run_of_lookup`: one unfolding of `run`;
-* `adm_app0`…`adm_app4`, `execFunc_le`: the admissibility and monotonicity facts that a
-  completeness proof by fixpoint induction over a generated clique needs.
+For each function `f` in the certificate fragment the file contains the decoded AIR `air_f`
+(printed term, checked to be the decoded golden AIR) and:
 
-## Certificates (`--air-certificate`)
+* `f_step`: `(execFunc call air_f [args]).run m` equals the generated definition's result:
+  `(fun v => (enc v, m)) <$> Gen.f args` for a function in `Zig.Result`, or
+  `(fun r => (enc r.1, r.2)) <$> (Gen.f args).run m` for a function in `Zig.MemM` (same memory
+  before and after). With certified callees, the generated program (`gen`) answers the calls.
+* `f_fix`, `gen_fixpoint`, `run_le_gen`: the generated program satisfies every certified
+  function's equation, so the program semantics is below it.
+* `f_run` (no certified calls) or `f_sound` + `f_complete` + `f_eq` (calls, recursion):
+  **equality** of `run` (the least fixpoint of the AIR program) and the generated definition.
+
+The proofs are generic: one `simp only` with the `air_sem` simp set (`Air2Lean/SemAttr.lean`)
+after one unfolding of the generated definition, and fixpoint induction over a generated
+`partial_fixpoint` clique for completeness. Nothing in a certificate is chosen per function
+by hand: the generator emits the same proof script for every function in the fragment, and a
+function the script cannot normalize fails `lake build`, it is not silently skipped.
+
+Per instruction family, the emission strategy and its proof obligation:
+
+| Family | AIR | Emission (`Emit.lean`) | Certificate | Status |
+|---|---|---|---|---|
+| Integer arithmetic and safety | `add`/`sub`/`mul` (checked, wrapping, saturating), division, `rem`/`mod`, `min`/`max`, bitwise, `not`, comparisons, `bool_and`/`bool_or`, `intcast`, `trunc`; panic-handler calls | `let i ← Zig.<op> s a b` / `pure (…)`; `throw .<error>` | normalization: both sides reduce to the same ZigLean primitive | **done** |
+| Blocks and branches | `block`/`br`, `cond_br`, `switch_br` on an integer, `ret`, `unreach`, `trap` | `match ← … with \| .br<n> …`, `if`, `if`-chain | normalization (the exits are literal constructors) | **done** |
+| Memory through pointers | `load`/`store` of integers, `bool`, pointers; `struct_field_ptr` of a non-`packed` struct; pointer `bitcast`; pointer `==`/`!=`/order | `Zig.load`/`Zig.store`, `Zig.ptrProject p (·.add off)` (`pure p` at offset 0), `Zig.ptrEqAddr` | normalization over the same `Zig.MemM` (equal memory) | **done** (plain single/many pointers; not `allowzero`, `volatile`, bit-pointers) |
+| Direct calls | `call` of a function in the program | `Zig.call`/`Zig.callM`/`Zig.callR`; a recursion clique is `mutual … partial_fixpoint` | fixpoint: `gen_fixpoint`; completeness by `fixpoint_induct` | **done** for pure functions; memory callers get `_sound` only; a recursive memory clique is excluded (its frame charge `Zig.enterFrame`, STK-01, is not AIR) |
+| Loops | `loop`/`repeat` | a separate `f.loop<n>` definition under `Zig.loop` with an `f.again<n>` predicate | loop commutation ([§Loops](#loops)) | design |
+| Escaping locals | `alloc` whose address escapes | `Zig.allocStack` at function entry, `Zig.free` at return, the pointer in a `Locals` field | frame simulation: entry allocation equals allocation at the `alloc` when nothing before it allocates ([§Locals](#locals)) | design |
+| Promoted locals | `alloc` whose address does not escape | a field of the function's `Locals` structure | memory extension ([§Locals](#locals)) | design |
+| Byte locals, aggregates, slices, optionals, error unions, unions, enums, floats, vectors, globals, atomics, threads, external models, indirect calls, asm | — | — | each needs its values in `Sem.Value` first | outside |
+
+### Loops
+
+The semantics runs a loop as `Zig.loop (execBody c body env) (Exit.again id)` over the frame
+state and `Exit`; the generated code runs `Zig.loop (f.loop<n> captured…) f.again<n>` over its
+`Locals` state and its own exit type `fExit`. The certificate needs:
+
+1. an **exit encoding** `enc : fExit → Exit` (`.br<n> v ↦ .br n (enc v)`, `.rep<n> ↦ .rep n`,
+   `.ret v ↦ .ret (enc v)`), printed by the generator from the same exit table the emitter uses;
+2. a **loop commutation lemma**, proved once in `Sem.lean` by fixpoint induction in both
+   directions: if `b₁ = encM b₂` (the body's run, its exit encoded, its state mapped) and
+   `again₁ ∘ enc = again₂`, then `Zig.loop b₁ again₁ = encM (Zig.loop b₂ again₂)`;
+3. per loop, a lemma `f_loop<n>` stated for every environment that binds the loop's free SSA
+   values (hypotheses `env k = some (t, enc v)`, discharged by `simp` at the use), proved by the
+   same normalization as `f_step` with the inner loops' lemmas in the simp set, used as a
+   pre-rewrite (`simp only [↓f_loop<n>]`) before the body would be unfolded;
+4. after a loop, the continuation reads an opaque exit: the step proof splits on the generated
+   exit (`bind_congr`, `cases e`) and normalizes each case.
+
+No committed example has a loop whose state lives outside promoted locals, so this lands with
+the locals below.
+
+### Locals
+
+The semantics gives every `alloc` a `Zig.Mem` stack block; the emitter keeps a non-escaping
+local as a structure field and allocates an escaping one at function entry. Both differ from
+the semantics in memory: the semantics' memory has more blocks (shifting the ids of later
+blocks), more footprint entries and bumped clocks. An equality certificate cannot hold; the
+relation is a **memory extension**:
+
+* `Mem.Ext ι m m'`: `m'` is `m` with extra blocks, related by a block-id injection `ι` (as in
+  CompCert's `Mem.inject`), equal contents on the image of `ι`, extra footprint entries only on
+  the extra blocks, and the current thread's clock only advanced;
+* proved once: every ZigLean primitive in the fragment preserves `Mem.Ext` (loads, stores and
+  projections through injected pointers give injected results; `alloc` extends `ι`), and
+  `execBody` preserves it for a body whose extra blocks never reach an operand outside
+  load/store (the emitter's own escape analysis, `Memory.escapingAllocs`, re-checked on the
+  decoded `Func` by a decidable predicate);
+* per function, the certificate relates the generated `Locals` fields to the extra blocks'
+  contents (a definedness set computed by the generator: a field read before its first store
+  is `.unspecified` in the semantics) and closes by `Mem.Ext` instead of equality.
+
+The placement oracle is a function of block ids (SEM-07): the extension maps `σ` through `ι`,
+so a theorem for every `σ` transfers.
+
+### Canonicalization (V02)
+
+`Canon.lean`'s rewrites run before decoding, so the semantics today starts at canonical AIR
+(Canon is trusted). The statement to prove, per rewrite `R` of the raw function `r`:
 
 ```
-air2lean tests/golden/basic/air -o Proofs/Basic/Gen.lean --namespace Basic --prefix basic. \
-  --air-certificate Proofs/Basic/AirCert.lean --air-certificate-import Proofs.Basic.Gen
+decode (R r) = c  →  decode r = d  →  (execFunc o d args).run m  ≈  (execFunc o c args).run m
 ```
 
-`Air2Lean/Certificate.lean` writes `<Ns>.AirCert`, containing for each fragment function `f`:
+where `decode` is `normalizeCanonical ∘ argRanks ∘ versionTags` (tag vocabulary and parameter
+ranking are decoding, not rewriting) and `≈` is:
 
-* `air_f : Func` — the decoded canonical AIR, printed as a Lean term (`printFunc`, every
-  field);
-* `f_step` — the per-translation certificate:
-
-  ```lean
-  theorem scale_step (call : Oracle) (p0 : BitVec 32) (p1 : BitVec 8) (m : Zig.Mem) :
-      (execFunc call air_scale [(Value.int false 32 p0), (Value.int false 8 p1)]).run m =
-        (fun v => ((Value.int false 32 v), m)) <$> Basic.scale p0 p1
-  ```
-
-  for any call oracle when `f` makes no certified call, otherwise with `gen` (the generated
-  definitions as an oracle) answering its calls;
-* `f_fix` — the same equation for every well-typed argument list; `gen_fixpoint`, `run_le_gen`:
-  the generated program is a fixpoint of the AIR program's equations, so `run ⊑ gen`;
-* `f_run` (no certified calls): **equality** of the program semantics and the generated
-  definition, `(run (progOf table) "basic.scale" [...]).run m = ... <$> Basic.scale p0 p1`;
-* with certified calls: `f_sound` (`run ⊑ gen`: every terminating AIR behaviour, value or
-  panic, is the generated definition's), `f_complete` (`gen ⊑ run`: the generated definition
-  is defined only where the AIR program is) and `f_eq`, **equality**, by antisymmetry:
-
-  ```lean
-  theorem gcd_eq (p0 : BitVec 32) (p1 : BitVec 32) (m : Zig.Mem) :
-      (run (progOf table) "recursion.gcd" [(Value.int false 32 p0), (Value.int false 32 p1)]).run m =
-        (fun v => ((Value.int false 32 v), m)) <$> Recursion.gcd p0 p1
-  ```
-
-  `f_complete` is fixpoint induction over the generated `partial_fixpoint` clique
-  (`Recursion.gcd.fixpoint_induct`; for `isEven`/`isOdd` the two-motive mutual principle):
-  each step relates the clique body, with its recursive calls abstracted as `g`, to
-  `execFunc (calls_f g)` (the AIR semantics with `f`'s callees answered by `g`) by the same
-  normalization, and `calls_f g ⊑ run` by the induction hypothesis. A non-recursive caller uses
-  its callees' `_complete` theorems the same way, without induction.
-
-The `_step` proofs are one `simp only` with the `air_sem` simp set (`Air2Lean/SemAttr.lean`)
-after one unfolding of the generated definition. A panic handler's name is evaluated by `rfl`
-(`callee_<k>`).
-
-### Results on the committed examples
-
-| Example | Certified (equality with `run`) | Outside the fragment |
+| Rewrite | Relation | Proof |
 |---|---|---|
-| `basic` | `scale`, `clampAdd`, `absDiff`, `tardiness`, `classify` (`_run`) | `weightedTardiness` (struct parameter), `sum`, `totalWeightedTardiness` (slice parameters) |
-| `recursion` | `gcd`, `fact` (self-recursive), `isEven`, `isOdd` (mutually recursive) (`_eq`) | — |
+| 0 `versionTags`, 4 `argRanks` | part of `decode` | — |
+| 6 `renumber` | equality | per function: both sides normalize to the same term |
+| 3 `dropTrueChecks` | equality | needs the dropped condition's truth (`x ≤ x + y` after a checked add): a lemma per pattern, used by the normalization |
+| 2 `itemReads` | equality | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` (needs pointer arithmetic in the semantics) |
+| 1 `forwardReadOnlyCopies`, 5 `dropDeadAllocPlaceholders` | memory extension | the same `Mem.Ext` theory as promoted locals: the raw function's copy is an extra block |
 
-The generator was also run on every other example's shared golden AIR (not committed): the
-functions it admits in `layout` (`double`, `square`, `succ`) and `vectors` (`sMod`, `sRem`)
-check as well; it admits `debug.assert` in `iogroup`, `sync` and `threadsync` (not checked
-locally). Every other function of those examples is listed as outside the fragment.
+The certificate then embeds the decoded **raw** AIR, and the round-trip check compares it with
+`decode` of the golden JSON; `Canon.lean` leaves the trusted base for that function.
 
-### Emission strategies and fail-closed coverage
+### How SEM-06 shrinks
 
-The generator admits a function only if every construct maps to an emission strategy whose
-certificate the `air_sem` normalization covers:
+[SEM-06](premises.md#sem-06) states that `Air2Lean.Sem` is the meaning of a decoded AIR
+function. It is a premise because the meaning of AIR is Zig's compiler, not a document. It
+shrinks in three steps:
 
-| AIR construct | Emission strategy (`Air2Lean/Emit.lean`) | Certificate |
+1. **Now**: for a certified function, the trusted part is `Sem` (about 800 lines, most of it a
+   table of AIR operations to ZigLean primitives), `Canon`, `Normalize` and `printFunc` (checked
+   by the round trip) — not `Check.lean`/`Emit.lean`.
+2. **Raw-AIR certificates** ([§Canonicalization](#canonicalization-v02)) remove `Canon.lean`:
+   SEM-06 then speaks of the decoded raw AIR.
+3. **Conformance of `Sem` itself**: `execFunc` with a concrete oracle is executable. Running it
+   on the differential corpus (`tests/diff`) against native results gives the semantics the same
+   evidence the generated code has today (V03), so SEM-06 rests on a small executable definition
+   that is tested directly, instead of on the translator.
+
+Each step is per function: a function outside the certificate fragment keeps the old trust
+(the whole translator, TRU-02).
+
+## Implementation state
+
+### Certified functions
+
+`--air-certificate` runs on every example whose committed `Proofs/<Ex>/Gen.lean` is the
+translation of its golden AIR (`tests/golden/<ex>/air`); the certificate is committed as
+`Proofs/<Ex>/AirCert.lean` and CI checks that it is current and kernel-checks it. `layout`,
+`threadsync` and `floatops` are not covered: their committed `Gen.lean` comes from other AIR.
+
+| Example | Certified | Theorem |
 |---|---|---|
-| function | `(do … : Zig.M L E).run' default`, then `match e with \| .ret v => pure v \| _ => throw .panic` | covered |
-| `arg` | parameter `p<i>` | covered |
-| integer/bool op | `let i<n> ← Zig.<op> s a b` or `pure (…)` (`emitScalar`) | covered |
-| integer constant | `(n : BitVec w)` / `(-(n : BitVec w))` (`tagLit`) = `Sem.litBV` | covered |
-| `block` | `match ← … with \| .br<n> [v] => rest \| e => pure e`, or continuation dropped | covered |
-| `cond_br` | `if c then … else …` | covered |
-| `switch_br` on an integer | `if x == a \|\| (Zig.le s lo x && Zig.le s x hi) then … else …` chain | covered |
-| `switch_br` on an exhaustive enum | `match x with \| .A => …` | excluded (enum) |
-| `ret`, `unreach`, `trap`, panic-handler call | `pure (.ret v)`, `throw .unreachable`, `throw .panic`, `throw .<ctor>` | covered |
-| direct call | `Zig.call (f args)`; a recursion clique is `mutual … partial_fixpoint` | covered: unfolded once by its equation lemma; completeness by `fixpoint_induct` for parameters up to 4 (otherwise only `_sound`, noted in the file) |
-| `loop`/`repeat` | extracted `f.loop<n>` definitions and `Zig.loop` | **excluded**: semantics only |
-| `alloc`/`load`/`store` | struct-field locals, escaping `Zig.Mem` stack blocks, byte locals | **excluded**: semantics only |
-| everything else (aggregates, slices, optionals, errors, floats, vectors, pointers, atomics, threads, models, indirect calls, asm) | — | excluded |
+| `basic` | `scale`, `clampAdd`, `absDiff`, `tardiness`, `classify` | `_run` |
+| `recursion` | `gcd`, `fact` (self-recursive), `isEven`, `isOdd` (mutually recursive) | `_eq` |
+| `pointers` | `addTo`, `swap`, `delay`, `dueOf`, `same` (memory) | `_run` |
+| `threads` | `writeFlag` (memory) | `_run` |
+| `vectors` | `sMod`, `sRem` | `_run` |
+| `iogroup` | `debug.assert` | `_run` |
+| `asm`, `atomics`, `errors`, `floatconv`, `floats`, `options`, `variants` | — | — |
 
-Excluded functions are listed in the certificate with the first reason found; a function that
-calls an excluded function is excluded. If a covered construct were emitted in a way the
-simp set does not normalize, that function's theorem would fail to check: `lake build Proofs`
-fails, so the failure mode is closed, not silent.
+18 of the 124 functions of these 13 examples certify. Every other function is listed in its
+certificate with the first reason found:
+
+| Reason | Functions |
+|---|---|
+| a parameter that is not an integer, `bool` or plain pointer (slices, structs, optionals, enums, floats, vectors, …) | 63 |
+| a concurrent function (`Zig.ConcM`) | 25 |
+| a return type outside the fragment | 8 |
+| an instruction outside the fragment | 6 |
+| a local (`alloc`) | 2 |
+| a load of a type outside the fragment (a struct) | 1 |
+| a recursive function that uses memory (`Zig.enterFrame`) | 1 |
+
+### Checks (CI step "AIR semantics certificates")
+
+* `tests/roadmap/air-semantics/test_cli.py`: the certificate flag leaves `Gen.lean`
+  byte-identical; each committed certificate equals a fresh one; the certified set is the
+  expected one and every other function is listed; flag misuse is rejected; no `sorry`,
+  `admit` or `native_decide`.
+* `lake build Proofs/<Ex>/AirCert` for every committed certificate.
+* `tests/roadmap/air-semantics/test_lean.py`: the round trip (`RoundTrip.lean`: every
+  embedded `Func` is the decoded golden AIR); nine one-operator mutations (arithmetic, a
+  comparison, a returned constant, a field offset, a store's value, a pointer comparison) each
+  break exactly their function's `_step`; a hand-written caller fixture gets `_eq`.
 
 ### Cost
 
-Measured on the committed certificates (Apple M-series laptop; median of three
-`lake env lean` runs, with the import-only time of `Air2Lean.Sem` + the `Gen` module subtracted):
+Measured by `lake build` (elaboration of the certificate only; Apple M-series):
 
-| Certificate | Functions | AIR instructions | Lines | Bytes (of which `Func` terms) | Theorems | Check time (imports) |
-|---|---|---|---|---|---|---|
-| `Proofs/Basic/AirCert.lean` | 5 | 53 | 310 | 19,806 (9,304) | 22 | 0.6 s (0.7 s) |
-| `Proofs/Recursion/AirCert.lean` | 4 | 65 | 486 | 30,541 (10,063) | 27 | 4.4 s (0.6 s) |
+| Certificate | Functions | Lines | Bytes | Theorems | Check time |
+|---|---|---|---|---|---|
+| `Proofs/Basic/AirCert.lean` | 5 | 310 | 19,851 | 22 | 1.7 s |
+| `Proofs/Pointers/AirCert.lean` | 5 | 311 | 23,144 | 22 | 1.7 s |
+| `Proofs/Recursion/AirCert.lean` | 4 | 486 | 30,541 | 27 | 6.0 s |
+| `Proofs/Vectors/AirCert.lean` | 2 | 174 | 11,613 | 11 | 1.8 s |
+| `Proofs/Threads/AirCert.lean` | 1 | 95 | 6,639 | 6 | 1.4 s |
 
-A call-free function costs one normalization (`_step`); a function with calls costs a second,
-oracle-abstracted normalization plus the argument inversions of its callees in `_complete`,
-which is why the recursive example is slower per instruction. Both grow with the AIR body
-(instructions and branches), not with the program: each theorem unfolds only its own function.
+A function without calls costs one normalization; a function with calls adds an oracle-abstracted
+normalization and its callees' argument inversions (completeness), so recursion costs more per
+instruction. Each theorem unfolds only its own function.
 
-## Trusted base
+### Trusted base of a certificate
 
-A certificate is a statement about the decoded `Func`, so the following are trusted and not
-checked by the certificates:
-
-* the AIR exporter and the compiler (V03);
-* JSON parsing and canonicalization (`Air2Lean/Air/Json.lean`, `Canon.lean`, `Normalize.lean`):
-  the semantics starts at the canonical `Func` — [§Gap](#gap-to-v01-and-v02);
-* `printFunc`: the printed term must be the decoded `Func`. `tests/roadmap/air-semantics/RoundTrip.lean`
-  checks that the printed terms of the committed certificates print back to the decoded
-  golden files (`printFunc` writes every field, so equal prints mean equal values);
-* ZigLean's primitive operations (`Zig.add`, `Zig.intCast`, `Zig.load`, …) and memory model,
-  shared by the semantics and the generated code; their fidelity to Zig is the subject of
-  `docs/premises.md`, the differential tests and V03;
+* the exporter and the compiler (V03); JSON parsing, `Canon.lean` and `Normalize.lean`;
+* `printFunc`, checked by the round trip (it prints every field, so equal prints are equal
+  values);
+* `Sem` itself and ZigLean's primitives and memory model, shared with the generated code
+  (SEM-06, and the premises of `docs/premises.md` for the primitives);
 * `Sem.panicOf?`, the literal panic-handler table (the translator's `panicErrorFor?` for the
   same names).
 
-## Gap to V01 and V02
+`Check.lean` and `Emit.lean` are not trusted for a certified function.
 
-What this slice does **not** establish:
+## Next fragments
 
-* **V01 coverage.** The semantics covers the fragment above, not every operation the checker
-  admits: aggregates, slices, optionals, error unions, floats, vectors, unions, enums,
-  pointers beyond stack locals, globals, atomics, threads, external models and indirect calls
-  are stuck (`⊥`). Target/profile parameters enter only through the export's layout table and
-  the integer widths.
-* **Canonicalization (V02).** The semantics is of canonical AIR. The rewrites in
-  `Air2Lean/Air/Canon.lean` (read-only-copy forwarding, item reads, dropped true checks,
-  argument ranks, renumbering) are not proved to preserve a raw-AIR semantics.
-* **Loops and locals are not certified.** Their semantics is defined (`Zig.loop`,
-  `Zig.allocStack`/`load`/`store`), but the generated code represents a non-escaping local as
-  a field of the function's locals structure and a loop body as a separate definition; relating
-  them needs a simulation lemma per strategy (`Zig.loop` under a state/exit encoding; the
-  `Zig.Mem` store/load round trip against struct fields). Functions with loops or locals are
-  excluded, so `basic.sum` would need both plus slices.
-* **Completeness needs the scheme's shape.** `f_complete` assumes the generated clique's
-  `fixpoint_induct` binds exactly the clique members a body calls, in the mutual block's
-  order, and has an admissibility lemma only up to 4 parameters. A clique outside that shape
-  gets only `_sound` (with a comment); a mismatch fails the check, it is not silently weakened.
-* **Ill-formed AIR** is `⊥`, not a distinguished error; a certificate never relies on it
-  (the certified functions are checked, well-typed AIR).
+Ordered by the functions they unlock in the committed examples:
+
+1. **Promoted and escaping locals, then loops** ([§Locals](#locals), [§Loops](#loops)):
+   `Mem.Ext`, the frame simulation, exit encodings. Unlocks `pointers.sumTo` and, with
+   slices, `basic.sum`.
+2. **Slices and pointer arithmetic**: `Value.slice`, `slice_len`, `slice_elem_val`,
+   `ptr_elem_val`, `ptr_add`; with (1) this covers the loops over slices in `basic`, `floats`,
+   `slices`, `variants`.
+3. **Optionals and error unions** (`is_non_null`, `optional_payload`, `wrap_optional`, `try`,
+   `wrap_errunion_*`): `options`, `errors`, and the error paths of most std code.
+4. **Aggregates and enums** (`struct_field_val`, `aggregate_init`, struct parameters, enum
+   tags and `switch_br` on enums): `basic.weightedTardiness`, `variants`.
+5. **Raw-AIR certificates** ([§Canonicalization](#canonicalization-v02)).
+6. **Completeness for memory callers** and the stack budget for recursive memory cliques
+   (`pointers.addDown`).
+7. **Floats and vectors** (`Zig.Float` primitives, lane-wise operations).
+8. **Concurrency**: a step relation over `Zig.ConcM` (atomics, threads, futex); then the
+   `Thread.*` and `Io.*` functions that the 25 concurrent exclusions are.
 
 Proposed classification: V01 and V02 stay **research**; this page is partial evidence for both.

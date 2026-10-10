@@ -742,11 +742,15 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 
 - Kind: meaning.
 - Statement: `Air2Lean.Sem` (`Air2Lean/Sem.lean`) is the meaning of a canonical AIR function in
-  its fragment: an interpreter over the decoded `Air2Lean.Func`, over ZigLean's primitive
-  operations and `Zig.MemM`, with `run` the least fixpoint over direct calls. Out-of-fragment
-  and ill-typed steps are `⊥`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`) relates the
-  generated definition to this meaning; it does not relate the meaning to Zig, the exporter
-  or canonicalization (TRU-02).
+  its fragment (integer arithmetic and safety checks, blocks, branches, switches, loops, stack
+  locals, loads, stores, field pointers and comparisons through plain pointers, direct calls):
+  an interpreter over the decoded `Air2Lean.Func`, with a typed SSA environment, over ZigLean's
+  primitive operations and `Zig.MemM`, with `run` the least fixpoint over direct calls.
+  Out-of-fragment and ill-typed steps are `⊥`. An AIR certificate (`Proofs/<Ex>/AirCert.lean`)
+  relates the generated definition to this meaning, so `Check.lean` and `Emit.lean` are not
+  trusted for a certified function; it does not relate the meaning to Zig, the exporter or
+  canonicalization (TRU-02). The plan to shrink this premise (raw-AIR certificates, executable
+  conformance tests of `Sem`) is in air-semantics.md §How SEM-06 shrinks.
 - Derived from: `Air2Lean.Sem`.
 - Sources: [air-semantics.md](air-semantics.md).
 

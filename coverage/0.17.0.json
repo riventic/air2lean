@@ -633,7 +633,11 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Iogroup/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Threads/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -714,6 +718,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -812,6 +817,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -933,6 +939,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -992,6 +999,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1062,6 +1070,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1131,6 +1140,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1238,6 +1248,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1297,6 +1308,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1367,6 +1379,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1432,6 +1445,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1544,6 +1558,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1599,6 +1614,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Recursion/AirCert.lean"
         ]
       },
@@ -1785,7 +1801,8 @@
         "paths": [
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -1906,7 +1923,8 @@
         "paths": [
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2029,7 +2047,8 @@
         "paths": [
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2144,7 +2163,8 @@
         "paths": [
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2273,7 +2293,8 @@
         "paths": [
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -2396,7 +2417,8 @@
         "paths": [
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -3394,6 +3416,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/AirCert.lean",
           "Proofs/Asm/Effects.lean",
           "Proofs/Asm/Proofs.lean"
         ]
@@ -4171,7 +4194,9 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/AirCert.lean",
           "Proofs/Asm/Proofs.lean",
+          "Proofs/Atomics/AirCert.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/Proofs.lean",
           "Proofs/Atomics/PtrPublish.lean",
@@ -4183,15 +4208,21 @@
           "Proofs/Cancel/Spurious.lean",
           "Proofs/Detach/Transfer.lean",
           "Proofs/Detach/Worker.lean",
+          "Proofs/Errors/AirCert.lean",
+          "Proofs/Floatconv/AirCert.lean",
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
+          "Proofs/Floats/AirCert.lean",
           "Proofs/Floats/Proofs.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Layout/Mem.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Lists/Append.lean",
           "Proofs/Lists/Bounded.lean",
           "Proofs/Lists/Container.lean",
+          "Proofs/Options/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Pointers/Sep.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -4207,6 +4238,7 @@
           "Proofs/Sync/RwLockSnapshotPair.lean",
           "Proofs/Sync/Semaphore.lean",
           "Proofs/Sync/SnapshotCache.lean",
+          "Proofs/Threads/AirCert.lean",
           "Proofs/Threads/Counter.lean",
           "Proofs/Threads/Disjoint.lean",
           "Proofs/Threads/Proofs.lean",
@@ -4215,7 +4247,9 @@
           "Proofs/Threadsync/Lock.lean",
           "Proofs/Threadsync/Mutex.lean",
           "Proofs/Threadsync/WaitGroup.lean",
+          "Proofs/Variants/AirCert.lean",
           "Proofs/Variants/Proofs.lean",
+          "Proofs/Vectors/AirCert.lean",
           "Proofs/Vectors/Proofs.lean"
         ]
       },
@@ -5157,6 +5191,7 @@
           "Proofs/Basic/AirCert.lean",
           "Proofs/Cancel/Client.lean",
           "Proofs/Cancel/Group.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Layout/Gen.lean",
@@ -5193,6 +5228,7 @@
           "Proofs/Threadsync/Handoff.lean",
           "Proofs/Threadsync/Mutex.lean",
           "Proofs/Threadsync/WaitGroup.lean",
+          "Proofs/Vectors/AirCert.lean",
           "Proofs/Vectors/Gen.lean"
         ]
       },
@@ -5660,7 +5696,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Iogroup/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -6088,16 +6126,20 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Gen.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Options/Gen.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
           "Proofs/Slices/Gen.lean",
-          "Proofs/Variants/Gen.lean"
+          "Proofs/Threads/AirCert.lean",
+          "Proofs/Variants/Gen.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -6185,16 +6227,20 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Gen.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Options/Gen.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
           "Proofs/Slices/Gen.lean",
-          "Proofs/Variants/Gen.lean"
+          "Proofs/Threads/AirCert.lean",
+          "Proofs/Variants/Gen.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -6286,16 +6332,20 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Gen.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Options/Gen.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
           "Proofs/Slices/Gen.lean",
-          "Proofs/Variants/Gen.lean"
+          "Proofs/Threads/AirCert.lean",
+          "Proofs/Variants/Gen.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -6387,16 +6437,20 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Gen.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Layout/Proofs.lean",
           "Proofs/Options/Gen.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Provenance/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
           "Proofs/Recursion/Gen.lean",
           "Proofs/Recursion/Proofs.lean",
           "Proofs/Slices/Gen.lean",
-          "Proofs/Variants/Gen.lean"
+          "Proofs/Threads/AirCert.lean",
+          "Proofs/Variants/Gen.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -7777,7 +7831,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -7894,7 +7950,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -8044,7 +8102,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -8159,7 +8219,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -8276,7 +8338,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -8408,7 +8472,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -8520,7 +8586,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -8736,7 +8804,9 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Iogroup/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -9568,7 +9638,11 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Basic/AirCert.lean",
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Iogroup/AirCert.lean",
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Threads/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -9659,7 +9733,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -9805,6 +9881,7 @@
           "Proofs/Basic/AirCert.lean",
           "Proofs/Cancel/Client.lean",
           "Proofs/Cancel/Group.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Layout/Gen.lean",
@@ -9841,6 +9918,7 @@
           "Proofs/Threadsync/Handoff.lean",
           "Proofs/Threadsync/Mutex.lean",
           "Proofs/Threadsync/WaitGroup.lean",
+          "Proofs/Vectors/AirCert.lean",
           "Proofs/Vectors/Gen.lean"
         ]
       },
@@ -9946,7 +10024,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -10070,7 +10150,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -10153,7 +10235,9 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -10892,6 +10976,7 @@
           "Proofs/Lists/Append.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Slices/Gen.lean",
@@ -10907,6 +10992,7 @@
           "Proofs/Sync/SemCounter.lean",
           "Proofs/Sync/Semaphore.lean",
           "Proofs/Sync/SnapshotCache.lean",
+          "Proofs/Threads/AirCert.lean",
           "Proofs/Threads/Counter.lean",
           "Proofs/Threads/Disjoint.lean",
           "Proofs/Threads/Gen.lean",
@@ -10992,6 +11078,7 @@
           "Proofs/Floatconv/Gen.lean",
           "Proofs/Floatops/Gen.lean",
           "Proofs/Floats/Gen.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Layout/Gen.lean",
@@ -11000,6 +11087,7 @@
           "Proofs/Lists/Gen.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -11011,12 +11099,14 @@
           "Proofs/Sync/RwLock.lean",
           "Proofs/Sync/RwLockContract.lean",
           "Proofs/Sync/Semaphore.lean",
+          "Proofs/Threads/AirCert.lean",
           "Proofs/Threads/Gen.lean",
           "Proofs/Threadsync/Gen.lean",
           "Proofs/Threadsync/Handoff.lean",
           "Proofs/Threadsync/Lock.lean",
           "Proofs/Threadsync/WaitGroup.lean",
           "Proofs/Variants/Gen.lean",
+          "Proofs/Vectors/AirCert.lean",
           "Proofs/Vectors/Gen.lean"
         ]
       },
@@ -11366,6 +11456,7 @@
           "Proofs/Floatconv/Gen.lean",
           "Proofs/Floatops/Gen.lean",
           "Proofs/Floats/Gen.lean",
+          "Proofs/Iogroup/AirCert.lean",
           "Proofs/Iogroup/Counter.lean",
           "Proofs/Iogroup/Gen.lean",
           "Proofs/Layout/Gen.lean",
@@ -11374,6 +11465,7 @@
           "Proofs/Lists/Gen.lean",
           "Proofs/Options/Gen.lean",
           "Proofs/Options/Proofs.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Provenance/Gen.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -11385,12 +11477,14 @@
           "Proofs/Sync/RwLock.lean",
           "Proofs/Sync/RwLockContract.lean",
           "Proofs/Sync/Semaphore.lean",
+          "Proofs/Threads/AirCert.lean",
           "Proofs/Threads/Gen.lean",
           "Proofs/Threadsync/Gen.lean",
           "Proofs/Threadsync/Handoff.lean",
           "Proofs/Threadsync/Lock.lean",
           "Proofs/Threadsync/WaitGroup.lean",
           "Proofs/Variants/Gen.lean",
+          "Proofs/Vectors/AirCert.lean",
           "Proofs/Vectors/Gen.lean"
         ]
       },
@@ -11591,6 +11685,7 @@
           "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Slices/Gen.lean",
@@ -11603,6 +11698,7 @@
           "Proofs/Sync/SemCounter.lean",
           "Proofs/Sync/Semaphore.lean",
           "Proofs/Sync/SnapshotCache.lean",
+          "Proofs/Threads/AirCert.lean",
           "Proofs/Threads/Counter.lean",
           "Proofs/Threads/Disjoint.lean",
           "Proofs/Threads/Gen.lean",
@@ -11872,6 +11968,7 @@
           "Proofs/Lists/Cost.lean",
           "Proofs/Lists/Gen.lean",
           "Proofs/Lists/Sep.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Pointers/Proofs.lean",
           "Proofs/Slices/Gen.lean",
@@ -11884,6 +11981,7 @@
           "Proofs/Sync/SemCounter.lean",
           "Proofs/Sync/Semaphore.lean",
           "Proofs/Sync/SnapshotCache.lean",
+          "Proofs/Threads/AirCert.lean",
           "Proofs/Threads/Counter.lean",
           "Proofs/Threads/Disjoint.lean",
           "Proofs/Threads/Gen.lean",
@@ -12004,7 +12102,9 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Recursion/AirCert.lean"
+          "Proofs/Iogroup/AirCert.lean",
+          "Proofs/Recursion/AirCert.lean",
+          "Proofs/Vectors/AirCert.lean"
         ]
       },
       "rejection": null,
@@ -12207,6 +12307,7 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Lists/Gen.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Slices/Gen.lean",
           "Proofs/Variants/Gen.lean",
@@ -12288,6 +12389,7 @@
           "Proofs/Errors/Gen.lean",
           "Proofs/Layout/Gen.lean",
           "Proofs/Lists/Gen.lean",
+          "Proofs/Pointers/AirCert.lean",
           "Proofs/Pointers/Gen.lean",
           "Proofs/Slices/Gen.lean",
           "Proofs/Variants/Gen.lean",
@@ -13165,7 +13267,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Threads/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -13303,7 +13408,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Threads/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -13423,7 +13531,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Threads/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -13507,7 +13618,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Threads/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -13563,7 +13677,10 @@
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
-        "paths": []
+        "paths": [
+          "Proofs/Pointers/AirCert.lean",
+          "Proofs/Threads/AirCert.lean"
+        ]
       },
       "rejection": null,
       "fixture_request": null,
@@ -18355,20 +18472,20 @@
       "Air2Lean/AsmAllowlist.lean": "0e027624cd692428b9fa4bd92ad5a36e102f1cdc36f44519fe8f5ebb1eebae6b",
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
       "Air2Lean/BitCast.lean": "c4ee2ca5d0b60a0a7d1251d71499e0bcd53a865fb15bb7a78ceb49c0802aadc0",
-      "Air2Lean/Certificate.lean": "68b341b96966bee817670a1073550316f0f329d6d07a5947a7c5f969a9223f99",
+      "Air2Lean/Certificate.lean": "b7dc561fa909725f322991fc30e43ab071f8f61554823aa73aeca4d8bd1d7aaf",
       "Air2Lean/Check.lean": "864a6f12df0ebc733569e70f139efbe1ac8682b38a15b764c079108554396436",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "832691c5dd220f54523e2dc2fd99fcac46e8509bb0935aef9a1046804c69446e",
       "Air2Lean/Diagnostic.lean": "b4eb8936309c08e347eb46efda85024aff252bca7814fbc06c1bad1a95d974c1",
       "Air2Lean/Emit.lean": "f11e2ca788704a8b8d92ed20456fe06c6b6f639559a629388ac5e04fd45583d8",
-      "Air2Lean/Main.lean": "4f7db8d69879f9c57a871fe0648a61c975441a7e5b0668eee02687980469c036",
+      "Air2Lean/Main.lean": "604ab04422b3080f0bf0f383e0fe8f57aa6e72b9593e4d95fa2bf0dc0c8cf7b3",
       "Air2Lean/Memory.lean": "8fd64356be84649cf4eb93022b8da273e93b7e67318c7acacf64251e3692b59a",
       "Air2Lean/ModelRegistry.lean": "5704d1b0c87eaddf05cfdc0839fb78873e4b2f04ce957c2b92c8339b1b7f8a27",
       "Air2Lean/ModuleSplit.lean": "ae835155cd6f68cf33705d6ebd58df9d623402b97a31df67b83a43aafa4106a8",
       "Air2Lean/OpTable.lean": "ddb36e34f02140c0df584ab2fa27222414ee732b616670fedeeb6a86dff2ebb9",
       "Air2Lean/ProofApi.lean": "bbc36a55e40aa7d50a43d53d55b887b06fcccc675b2feaf0ddc9812b7eae2920",
       "Air2Lean/Revision.lean": "2b7a548c65171ce00fed45526a07f6e6be4fd6cde5b0008e4ae416b90e4dba10",
-      "Air2Lean/Sem.lean": "e8d412050e8f1d86aa42c5eb5b1193ea71fa2c9e1ede5f823b03e84be71a85b5",
+      "Air2Lean/Sem.lean": "030aba1b89272359c36468f838cfa6cc709e90bfb993b00662bf8c856f788283",
       "Air2Lean/SemAttr.lean": "5f1d6deca7e3e4c90ac401e729ac88f53a46408bc8d1f61cadba213492b372d8",
       "Air2Lean/SourceMap.lean": "742adb978e7d73a154728eb30467323d07308c6d76953ddf32c0447df73cd000",
       "Air2Lean/StdModels.lean": "1a92b75c163504c326319b5ef22abf4990428727969f37f3f85ae37ca72697b3",
@@ -18513,16 +18630,18 @@
       "ZigLean/Witnesses/VC.lean": "f52afcb10029e1c815bf72ac9cf22e6bee7b4ab6a5c0c0106db7f8a94a569872"
     },
     "proof-sources": {
+      "Proofs/Asm/AirCert.lean": "b36bec7221d017c940a136f9aa8a2dfc9888dc003670ddda746caa1f370ae68e",
       "Proofs/Asm/Effects.lean": "c50095fddefdc30a34747bb04c6ffc7cc5dffc3996f53dfe2211cb3811c74ef8",
       "Proofs/Asm/Gen.lean": "146caa2012069879d10f161ea65924d36abb7caa69aba07e885535299c2e949d",
       "Proofs/Asm/Proofs.lean": "9748c58faab2000b0e826ddd734d004052df370ab66ead8b6e5c7683f9b524f7",
+      "Proofs/Atomics/AirCert.lean": "4ffb67d6710a1fc0587e4f3bb59927d86119d7f01527997ceddbbb0e583f8052",
       "Proofs/Atomics/Gen.lean": "0270d96453078d2557ec87d3c16bbedbe8e99775343fbf97d6e35bbeffd16f6d",
       "Proofs/Atomics/MessagePassing.lean": "ba3fb9b2efd60a7d3dc0a59020f5131252bd34d388f4573abcaac8107fa6b42d",
       "Proofs/Atomics/Proofs.lean": "05ec0dda43d5a78ded73cffaf0f5a731fc77c2b6d8278e5822cea771206655ad",
       "Proofs/Atomics/PtrPublish.lean": "0bbc72d4a1e9a7133be29949156e4e0fd97f77ebd7d6711d00cfac83155ab1e3",
       "Proofs/Atomics/Relaxed.lean": "e3604d670bf745a544619c55f9ae257a20ae4fd96947fe1f65b77124204feef0",
       "Proofs/Atomics/Stack.lean": "b832ac8d7cefbdae1630ef9b06df7f7ddabb10bc06e5cc4afd75559ce2f24ed7",
-      "Proofs/Basic/AirCert.lean": "5ab370aa6f798b54d5c9f600c18041fd0d00be0882c9b602441d34623ec8d4ee",
+      "Proofs/Basic/AirCert.lean": "35764165961a4c8a3b479a771f3240c8d89a67de6eb47fffcf5854dfdc93ef9d",
       "Proofs/Basic/Arith.lean": "f00e1973c38a12cfc5f5a6a2e900ab301a694479d9aa0df3889d0b881c97005e",
       "Proofs/Basic/Common.lean": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
       "Proofs/Basic/Gen.lean": "7f200ec957dd89d74dcc33e3e2a2a6e2cf3b8118591aa35085bfabde76acab99",
@@ -18533,16 +18652,20 @@
       "Proofs/Cancel/Spurious.lean": "bf66dcc3d26e36a9a4ac8341d48764752806905642a42b915149f2925ee4e568",
       "Proofs/Detach/Transfer.lean": "e589e2ea3232dd80cbd4e027961a61e2ddccac23c3020cf3576c28f4d120ee37",
       "Proofs/Detach/Worker.lean": "19339edcc9ab83b07b93176a672c021cfcc83b1554969fb728e7922113b3d61f",
+      "Proofs/Errors/AirCert.lean": "4a4000c0cfc1decb6e99c2d450ef3e29725526c518ee56da21f59d39f4a8ff67",
       "Proofs/Errors/Gen.lean": "42d0f84321e09fac61aca670c66edfdde0ee4fa9b30a84e7387032fd71460c2d",
       "Proofs/Errors/Proofs.lean": "4f0167b71938299b74bb99a36dcb976749aaaed0855645fce59878cd76966dca",
+      "Proofs/Floatconv/AirCert.lean": "1220897b52dfde520667ff55a2649d07356f4d9e9c78e274d2e13f250d4a8477",
       "Proofs/Floatconv/Gen.lean": "72161485bb3d2e08a0dfda8131c9aa782e403f48f539035688f5aed7bb337559",
       "Proofs/Floatconv/Proofs.lean": "2b29d446af3ced3269487565d35a68aaa1db83d74591077cfcd37cbc55d03525",
       "Proofs/Floatops/Gen.lean": "e62bd7cf8e64da6d32df75cb4da87f6464eff6b5e47e00668d2860741c9b7f7a",
       "Proofs/Floatops/Proofs.lean": "95f4278866d3f3f23fd6a56a47b8e4fecc8c6804b38eddbb737a8e224acfeed9",
+      "Proofs/Floats/AirCert.lean": "eeab6b530e85a1d52bfe23528181d3c68bb87adbef6731be1822441d662057fb",
       "Proofs/Floats/Dot.lean": "fbe5daf8119c0b33b8d33eeaf589bc191c5e7e7d7ca11631ad8638710cd1bca8",
       "Proofs/Floats/Fitness.lean": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
       "Proofs/Floats/Gen.lean": "be83b54570c3fb247faa573a78aa1ced93367af8b882f65b4967239030e6c6d8",
       "Proofs/Floats/Proofs.lean": "37acbc5c06dc0f00bcfaf422e17c73b78245c860d8b109b9aade2ec33fd473e0",
+      "Proofs/Iogroup/AirCert.lean": "b208e7a1b75e1580de83f57b72cddb3f9cc8481c3cf091b38ffb71609d83c0e0",
       "Proofs/Iogroup/Counter.lean": "d1be454a972fe07dfbb260f7320bdb04d61699cd90e7ea5404aa8ea200eb222e",
       "Proofs/Iogroup/Gen.lean": "ca37ee48e35789a090afb6306aad2891848fbb4cef55b705ad4c55c6aa2a9c49",
       "Proofs/Layout/Gen.lean": "5e54d38e922ce3896fedd5a02df1dc6996757d6227612c461457310515fc40af",
@@ -18555,8 +18678,10 @@
       "Proofs/Lists/Gen.lean": "db130a258a91a59d84af84cc4fa39e263e909fb93b9a75e563ae28add9f9be73",
       "Proofs/Lists/Policy.lean": "a61bc319cdc4846cfadebeabd62eb7269a443d00699fa99afbd632857aa80206",
       "Proofs/Lists/Sep.lean": "40884c0efecfa049d5f5b71254c421e95e17b06ea2540d564dfa2ccabe5dbc7f",
+      "Proofs/Options/AirCert.lean": "bcfd6ba492419739eb9cb70410615bbdee7099236a1bf90a44b28b8bac48d9b2",
       "Proofs/Options/Gen.lean": "940204ca1774971d5051abfdafd5fd2356f65b818e306ad452370dddb199c34e",
       "Proofs/Options/Proofs.lean": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
+      "Proofs/Pointers/AirCert.lean": "b9568cfe4d127d6a59aa7dd7d36cc04ceae0f0b5d133828270a8b0bf0869352b",
       "Proofs/Pointers/Gen.lean": "4c91d4286551c5a6478691afb2aab1c629870854cb437bee95dc9a19ac195555",
       "Proofs/Pointers/Proofs.lean": "a77bd2cb94a4e12c77fc689bf5d887c36eba14092b2e1e614829d7644b5e11c3",
       "Proofs/Pointers/Sep.lean": "a9c09fcc515d936766c4152774d4e10b912bb10dff47d6ed7b879e0a1b578576",
@@ -18581,6 +18706,7 @@
       "Proofs/Sync/SemCounter.lean": "8656d1db876b23fa6ff165d448c74c828f1de91aa2483ea49c80dfad20c04387",
       "Proofs/Sync/Semaphore.lean": "25e3f69e424d130ad1966e186cbefcc03001167aeab165e433630877c4fd0e31",
       "Proofs/Sync/SnapshotCache.lean": "3ad7f98eec5003fbaefcde6e343e9a27524bb5c702663a02ef809e2f7e5c1ee7",
+      "Proofs/Threads/AirCert.lean": "cf8d8b3f38d1d5c5d0d034248ffff794ba71bfbf6b466d11cea24e51a8198047",
       "Proofs/Threads/Counter.lean": "d034c46224643545d214e0cadf88bc8f4256c32606efefe76183dca4dffb3c1c",
       "Proofs/Threads/Disjoint.lean": "a6409feee4a88520899faf19ef14c3c1fe6d3a2c179ed8152e730051db067c67",
       "Proofs/Threads/Gen.lean": "5df665ba68497dc7047e01283bdc22bf86c496dc01721c55126059acd9d4aee2",
@@ -18591,8 +18717,10 @@
       "Proofs/Threadsync/Lock.lean": "d717525c1fda803d6b3a30138c13997b754e9e0455ba000bb35a5012b35496a7",
       "Proofs/Threadsync/Mutex.lean": "59d47b252fcc303dbb02131d443dd9a5af35b79e8647f25360c036f092bdc5d6",
       "Proofs/Threadsync/WaitGroup.lean": "2d0a0f92fbac92427150339d4567b7b32172045e84b9a939ee760556bf19d764",
+      "Proofs/Variants/AirCert.lean": "f5d564257e5b2f9b9e0137818a132726a637f68132251e95a560930b5e519846",
       "Proofs/Variants/Gen.lean": "cd5a2b589c26b1ff94215c5d1cb7993f1edc79b72b9b994421ddca2249cef8f9",
       "Proofs/Variants/Proofs.lean": "d28d84359f4f156c48a6fc24eef89177e34d52065f56954b2b0df975d074d6fb",
+      "Proofs/Vectors/AirCert.lean": "26771fa40ffc7ef7bde8c53a1bda2a8f09100e96715ebb731ba10b22a7d33aa3",
       "Proofs/Vectors/CheckedAdd.lean": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
       "Proofs/Vectors/Gen.lean": "0dd46e40be71ffe1624b9102626ac7d6b381bcf73b71d4543fa536b6230f2dde",
       "Proofs/Vectors/Proofs.lean": "36534835f81002d8e748074aeba2b6fb4d2ecb3a1366a761ef7dc87344861b7b"
