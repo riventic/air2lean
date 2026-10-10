@@ -3,7 +3,7 @@
     "arena.zig": "271ad5f447cac329d1c00a110bc31981b65a8b14539847a89d8f9325ae62f126",
     "native.zig": "f6e3c5e88a8440fb19b9e428ca0af1f2037d65738abc634ed9ed361435ff4203",
     "upstream/oob_gep.zig": "1a6bbe005218809fe4723cfe707d9d229506744eb86f97144909c88f559bf733",
-    "upstream/arena-fix.patch": "c37e43f5e31d830551d499dcfda4a8957da336650ff7eb559d46407d5b157d9d"
+    "upstream/arena-fix.patch": "d3a2878bc9bafbbef503011b8f0290406fac86766f29e23993b77aba44df0f23"
   },
   "air": {
     "zig_version": "0.16.0",
@@ -44,15 +44,15 @@
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.allocator.json": "0d213daa5b3bf7ca63dd2329d916631af380dc18f9688db126568ae77e6f0964",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.countListCapacity.json": "f33b033b1472a17e3a1e3b0351dbca9cf4e80579896705cede28967906aa1c0c",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.deinit.json": "adeb1db56cfbe81def1e5d76f0fbc432345bbda6c9ec0956cf3e46c934e7913e",
-    "0.16.0/arena-fixed-linux/heap.ArenaAllocator.free.json": "32cf128bbc76969c580353c51857a3e309c9fc9e0eea9b8b645658aee929200d",
+    "0.16.0/arena-fixed-linux/heap.ArenaAllocator.free.json": "71866e8d304d31a9d1185fcc372f5717e4237db5366015fbc13d1be252fbca41",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.init.json": "e812425d6198e7795068e1eac4e65f59e8866227c53df39eb62602663fbe5ecb",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.loadFirstNode.json": "10bc68d8b4d06ec13510f3dde021ca5b795bf1377847362f54e510f402d6dcc8",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.nodeSizeFor.json": "4851427b5f2e6b77a326e9b55adaa562675ec1846654ed2ee8c080f57d1c810d",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.pushFreeList.json": "0b753234a343465c0ef9e5581163f11a8e1a22f17942bc6c239015c5c9322aab",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.queryCapacity.json": "1c33652f719a0dd8d0a8e80c6fc871d75d82f840037ec3ecefc4bc536b4711f9",
-    "0.16.0/arena-fixed-linux/heap.ArenaAllocator.remap.json": "ce22143bb7431af39e12f9b1b92a721b06276e62f1ce62b7d740f72dedf95ccc",
+    "0.16.0/arena-fixed-linux/heap.ArenaAllocator.remap.json": "65f87b5af22bca75330f84d2cc348ca5f21f45e77215c150b11b42b41bbc92bf",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.reset.json": "216c375ab88ff617c75275bbc4bcb91f2cdcca50359dcf06e985aa7dd594c9cd",
-    "0.16.0/arena-fixed-linux/heap.ArenaAllocator.resize.json": "037141d792ebc7ac763f584cf2a2f0a0123ca16a22793b2b18bb9ade5859c4d9",
+    "0.16.0/arena-fixed-linux/heap.ArenaAllocator.resize.json": "f226ba7a08a4051559e9d4e0ae718ef5ec1a71cea9ff6c067b247dbe357728a8",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.stealFreeList.json": "2055ecf375a2c7c70c4502a8df99e3c8c038cc0302879e044ea4025da8f9a3ea",
     "0.16.0/arena-fixed-linux/heap.ArenaAllocator.tryPushNode.json": "086b83c7001099030ecd3e061e7d1c47b3ff6871a4e00fcd738fd166dc9bebd1",
     "0.16.0/arena-fixed-linux/heap.FixedBufferAllocator.alloc.json": "9f51e47319675c83360485af0b58b2a2205a68cb45ae6b37a4795c0978a2c829",

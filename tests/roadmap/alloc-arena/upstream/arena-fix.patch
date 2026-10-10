@@ -107,3 +107,25 @@
                  break :size .fromInt(size);
              };
              const ptr = arena.child_allocator.rawAlloc(size.toInt(), .of(Node), @returnAddress()) orelse
+@@ -561,6 +579,10 @@
+ 
+     const cur_end_index = @atomicLoad(usize, &node.end_index, .monotonic);
+ 
++    // A concurrent `alloc` may have reserved past the buffer; `buf_ptr + cur_end_index` would
++    // then be out of bounds, and `memory` is not the most recent allocation anyway.
++    if (cur_end_index > node.loadBuf().len) return new_len <= memory.len;
++
+     if (buf_ptr + cur_end_index != memory.ptr + memory.len) {
+         // It's not the most recent allocation, so it cannot be expanded,
+         // but it's fine if they want to make it smaller.
+@@ -616,6 +638,10 @@
+     const buf_ptr = @as([*]u8, @ptrCast(node)) + @sizeOf(Node);
+ 
+     const cur_end_index = @atomicLoad(usize, &node.end_index, .monotonic);
++
++    // A concurrent `alloc` may have reserved past the buffer; `buf_ptr + cur_end_index` would
++    // then be out of bounds, and `memory` is not the most recent allocation anyway.
++    if (cur_end_index > node.loadBuf().len) return;
+ 
+     if (buf_ptr + cur_end_index != memory.ptr + memory.len) {
+         // Not the most recent allocation; we cannot free it.

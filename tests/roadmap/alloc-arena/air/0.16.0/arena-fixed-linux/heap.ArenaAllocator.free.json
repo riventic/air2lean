@@ -39,7 +39,7 @@
  "src": {
   "file": "heap/ArenaAllocator.zig",
   "module": "std",
-  "decl_line": 626
+  "decl_line": 630
  },
  "params": [
   0,
@@ -587,7 +587,7 @@
    "id": 55,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 13,
+   "line": 15,
    "column": 9
   },
   {
@@ -599,19 +599,16 @@
      "id": 57,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 13,
-     "column": 17
+     "line": 15,
+     "column": 37
     },
     {
      "id": 58,
-     "tag": "ptr_add",
-     "ty": 21,
+     "tag": "load",
+     "ty": 18,
      "args": [
       {
-       "inst": 47
-      },
-      {
-       "inst": 53
+       "inst": 42
       }
      ]
     },
@@ -619,50 +616,64 @@
      "id": 59,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 13,
-     "column": 42
+     "line": 15,
+     "column": 37
     },
     {
      "id": 60,
-     "tag": "ptr_slice_ptr_ptr",
-     "ty": 23,
+     "tag": "call",
+     "ty": 1,
+     "callee": {
+      "ty": 23,
+      "func": "heap.ArenaAllocator.Node.loadBuf",
+      "module": "std",
+      "noreturn": false
+     },
      "args": [
       {
-       "inst": 6
+       "inst": 58
       }
      ]
     },
     {
      "id": 61,
-     "tag": "load",
-     "ty": 21,
+     "tag": "alloc",
+     "ty": 5
+    },
+    {
+     "id": 62,
+     "tag": "store_safe",
+     "ty": 4,
      "args": [
+      {
+       "inst": 61
+      },
       {
        "inst": 60
       }
      ]
     },
     {
-     "id": 62,
-     "tag": "dbg_stmt",
-     "ty": 4,
-     "line": 13,
-     "column": 55
-    },
-    {
      "id": 63,
-     "tag": "ptr_slice_len_ptr",
-     "ty": 13,
+     "tag": "bitcast",
+     "ty": 6,
      "args": [
       {
-       "inst": 6
+       "inst": 61
       }
      ]
     },
     {
      "id": 64,
-     "tag": "load",
-     "ty": 3,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 15,
+     "column": 39
+    },
+    {
+     "id": 65,
+     "tag": "ptr_slice_len_ptr",
+     "ty": 13,
      "args": [
       {
        "inst": 63
@@ -670,57 +681,67 @@
      ]
     },
     {
-     "id": 65,
-     "tag": "dbg_stmt",
-     "ty": 4,
-     "line": 13,
-     "column": 47
-    },
-    {
      "id": 66,
-     "tag": "ptr_add",
-     "ty": 21,
+     "tag": "load",
+     "ty": 3,
      "args": [
       {
-       "inst": 61
-      },
-      {
-       "inst": 64
+       "inst": 65
       }
      ]
     },
     {
      "id": 67,
-     "tag": "cmp_neq",
-     "ty": 7,
+     "tag": "bitcast",
+     "ty": 14,
      "args": [
       {
-       "inst": 58
-      },
+       "inst": 53
+      }
+     ]
+    },
+    {
+     "id": 68,
+     "tag": "bitcast",
+     "ty": 14,
+     "args": [
       {
        "inst": 66
       }
      ]
     },
     {
-     "id": 71,
+     "id": 69,
+     "tag": "cmp_gt",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 67
+      },
+      {
+       "inst": 68
+      }
+     ]
+    },
+    {
+     "id": 73,
      "tag": "cond_br",
      "ty": 8,
      "args": [
       {
-       "inst": 67
+       "inst": 69
       }
      ],
      "then": [
       {
-       "id": 68,
+       "id": 70,
        "tag": "dbg_stmt",
        "ty": 4,
        "line": 15,
-       "column": 9
+       "column": 45
       },
       {
-       "id": 69,
+       "id": 71,
        "tag": "ret_safe",
        "ty": 8,
        "args": [
@@ -733,7 +754,7 @@
      ],
      "else": [
       {
-       "id": 70,
+       "id": 72,
        "tag": "br",
        "ty": 8,
        "target": 56,
@@ -749,14 +770,179 @@
    ]
   },
   {
-   "id": 72,
+   "id": 74,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 18,
+   "line": 17,
+   "column": 9
+  },
+  {
+   "id": 75,
+   "tag": "block",
+   "ty": 4,
+   "body": [
+    {
+     "id": 76,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 17,
+     "column": 17
+    },
+    {
+     "id": 77,
+     "tag": "ptr_add",
+     "ty": 21,
+     "args": [
+      {
+       "inst": 47
+      },
+      {
+       "inst": 53
+      }
+     ]
+    },
+    {
+     "id": 78,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 17,
+     "column": 42
+    },
+    {
+     "id": 79,
+     "tag": "ptr_slice_ptr_ptr",
+     "ty": 24,
+     "args": [
+      {
+       "inst": 6
+      }
+     ]
+    },
+    {
+     "id": 80,
+     "tag": "load",
+     "ty": 21,
+     "args": [
+      {
+       "inst": 79
+      }
+     ]
+    },
+    {
+     "id": 81,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 17,
+     "column": 55
+    },
+    {
+     "id": 82,
+     "tag": "ptr_slice_len_ptr",
+     "ty": 13,
+     "args": [
+      {
+       "inst": 6
+      }
+     ]
+    },
+    {
+     "id": 83,
+     "tag": "load",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 82
+      }
+     ]
+    },
+    {
+     "id": 84,
+     "tag": "dbg_stmt",
+     "ty": 4,
+     "line": 17,
+     "column": 47
+    },
+    {
+     "id": 85,
+     "tag": "ptr_add",
+     "ty": 21,
+     "args": [
+      {
+       "inst": 80
+      },
+      {
+       "inst": 83
+      }
+     ]
+    },
+    {
+     "id": 86,
+     "tag": "cmp_neq",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 77
+      },
+      {
+       "inst": 85
+      }
+     ]
+    },
+    {
+     "id": 90,
+     "tag": "cond_br",
+     "ty": 8,
+     "args": [
+      {
+       "inst": 86
+      }
+     ],
+     "then": [
+      {
+       "id": 87,
+       "tag": "dbg_stmt",
+       "ty": 4,
+       "line": 19,
+       "column": 9
+      },
+      {
+       "id": 88,
+       "tag": "ret_safe",
+       "ty": 8,
+       "args": [
+        {
+         "ty": 4,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 89,
+       "tag": "br",
+       "ty": 8,
+       "target": 75,
+       "args": [
+        {
+         "ty": 4,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 91,
+   "tag": "dbg_stmt",
+   "ty": 4,
+   "line": 22,
    "column": 49
   },
   {
-   "id": 73,
+   "id": 92,
    "tag": "ptr_slice_len_ptr",
    "ty": 13,
    "args": [
@@ -766,24 +952,24 @@
    ]
   },
   {
-   "id": 74,
+   "id": 93,
    "tag": "load",
    "ty": 3,
    "args": [
     {
-     "inst": 73
+     "inst": 92
     }
    ]
   },
   {
-   "id": 75,
+   "id": 94,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 18,
+   "line": 22,
    "column": 41
   },
   {
-   "id": 76,
+   "id": 95,
    "tag": "sub_safe",
    "ty": 3,
    "args": [
@@ -791,30 +977,30 @@
      "inst": 53
     },
     {
-     "inst": 74
+     "inst": 93
     }
    ]
   },
   {
-   "id": 77,
+   "id": 96,
    "tag": "dbg_var_val",
    "ty": 4,
    "args": [
     {
-     "inst": 76
+     "inst": 95
     }
    ],
    "name": "new_end_index"
   },
   {
-   "id": 78,
+   "id": 97,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 19,
+   "line": 23,
    "column": 20
   },
   {
-   "id": 79,
+   "id": 98,
    "tag": "ptr_add",
    "ty": 21,
    "args": [
@@ -822,21 +1008,21 @@
      "inst": 47
     },
     {
-     "inst": 76
+     "inst": 95
     }
    ]
   },
   {
-   "id": 80,
+   "id": 99,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 19,
+   "line": 23,
    "column": 45
   },
   {
-   "id": 81,
+   "id": 100,
    "tag": "ptr_slice_ptr_ptr",
-   "ty": 23,
+   "ty": 24,
    "args": [
     {
      "inst": 6
@@ -844,37 +1030,37 @@
    ]
   },
   {
-   "id": 82,
+   "id": 101,
    "tag": "load",
    "ty": 21,
    "args": [
     {
-     "inst": 81
+     "inst": 100
     }
    ]
   },
   {
-   "id": 83,
+   "id": 102,
    "tag": "cmp_eq",
    "ty": 7,
    "args": [
     {
-     "inst": 79
+     "inst": 98
     },
     {
-     "inst": 82
+     "inst": 101
     }
    ]
   },
   {
-   "id": 84,
+   "id": 103,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 19,
+   "line": 23,
    "column": 11
   },
   {
-   "id": 85,
+   "id": 104,
    "tag": "call",
    "ty": 4,
    "callee": {
@@ -885,19 +1071,19 @@
    },
    "args": [
     {
-     "inst": 83
+     "inst": 102
     }
    ]
   },
   {
-   "id": 86,
+   "id": 105,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 23,
+   "line": 27,
    "column": 14
   },
   {
-   "id": 87,
+   "id": 106,
    "tag": "load",
    "ty": 18,
    "args": [
@@ -907,35 +1093,35 @@
    ]
   },
   {
-   "id": 88,
+   "id": 107,
    "tag": "struct_field_ptr_index_1",
    "ty": 22,
    "args": [
     {
-     "inst": 87
+     "inst": 106
     }
    ]
   },
   {
-   "id": 89,
+   "id": 108,
    "tag": "cmpxchg_strong",
-   "ty": 24,
+   "ty": 25,
    "args": [
     {
-     "inst": 88
+     "inst": 107
     },
     {
      "inst": 53
     },
     {
-     "inst": 76
+     "inst": 95
     }
    ],
    "success_order": "release",
    "failure_order": "monotonic"
   },
   {
-   "id": 90,
+   "id": 109,
    "tag": "ret_safe",
    "ty": 8,
    "args": [
@@ -951,7 +1137,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 25,
+   "child": 26,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -965,7 +1151,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 26,
+   "child": 27,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -979,7 +1165,7 @@
    "k": "enum",
    "name": "mem.Alignment",
    "module": "std",
-   "tag": 27,
+   "tag": 28,
    "exhaustive": false,
    "fields": [
     {
@@ -1070,7 +1256,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 28,
+   "child": 29,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -1147,7 +1333,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 29,
+   "child": 30,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -1189,7 +1375,7 @@
    "k": "ptr",
    "size": "many",
    "const": false,
-   "child": 26,
+   "child": 27,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -1212,6 +1398,10 @@
    "host_size": 0,
    "abi_size": 8,
    "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*heap.ArenaAllocator.Node) []u8"
   },
   {
    "k": "ptr",
@@ -1259,12 +1449,12 @@
    "fields": [
     {
      "name": "child_allocator",
-     "ty": 30,
+     "ty": 31,
      "offset": 0
     },
     {
      "name": "state",
-     "ty": 31,
+     "ty": 32,
      "offset": 16
     }
    ],
@@ -1279,7 +1469,7 @@
    "fields": [
     {
      "name": "size",
-     "ty": 32,
+     "ty": 33,
      "offset": 0
     },
     {
@@ -1309,7 +1499,7 @@
     },
     {
      "name": "vtable",
-     "ty": 33,
+     "ty": 34,
      "offset": 8
     }
    ],
@@ -1348,7 +1538,7 @@
     },
     {
      "name": "_",
-     "ty": 34
+     "ty": 35
     }
    ],
    "abi_size": 8,
@@ -1358,7 +1548,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 35,
+   "child": 36,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -1383,39 +1573,26 @@
    "fields": [
     {
      "name": "alloc",
-     "ty": 36,
+     "ty": 37,
      "offset": 0
     },
     {
      "name": "resize",
-     "ty": 37,
+     "ty": 38,
      "offset": 8
     },
     {
      "name": "remap",
-     "ty": 38,
+     "ty": 39,
      "offset": 16
     },
     {
      "name": "free",
-     "ty": 39,
+     "ty": 40,
      "offset": 24
     }
    ],
    "abi_size": 32,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 40,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
    "abi_align": 8
   },
   {
@@ -1449,6 +1626,19 @@
    "size": "one",
    "const": true,
    "child": 43,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 44,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
