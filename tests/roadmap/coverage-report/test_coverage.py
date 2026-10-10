@@ -193,6 +193,11 @@ class CoverageTests(unittest.TestCase):
             self.statements[theorem['name']] = (theorem['statement_dependencies'], theorem['conclusion_dependencies'])
             self.conclusions[theorem['name']] = theorem['conclusion']
             self.structures[theorem['name']] = theorem['statement']
+        # The rest of the closure: core Lean declarations (premise derivation needs a complete graph).
+        named = {n['name'] for n in self.nodes}
+        self.nodes += [{'name': d, 'module': 'Init.Prelude', 'kind': 'definition', 'dependencies': []}
+                       for d in sorted({d for t in STATEMENT_FIXTURE['theorems'] for d in t['dependencies']} - named)
+                       if not d.startswith('StatementFixture.')]
         self.write_receipt()
         self.manifest['roots'][0]['namespace'] = 'StatementFixture'
         self.manifest['roots'][0]['goals'] = [{'theorem': g, 'strength': 'total_correctness', 'domain': 'all'} for g in goals]

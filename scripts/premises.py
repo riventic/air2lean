@@ -669,7 +669,43 @@ def theorem_files(repo: Repository) -> list[LeanFile]:
             and any(d.kind in THEOREM_KINDS for d in repo.files[rel].decls)]
 
 
-def build_index(repo: Repository) -> tuple[list[dict], list[str]]:
+class CompiledAudits:
+    """Indexed theorems resolved to elaborated constants: scripts/assumptions.py reports (the
+    shipped audit) and a scripts/theorem_universe.py audit directory (every other indexed file,
+    whose module may be a staged name: `universe.json` maps files to modules)."""
+
+    def __init__(self, root: Path, config: dict, reports: list[Path], universe: Path | None):
+        self.modules: dict[str, str] = {}   # indexed file -> module it was compiled as
+        self.theorems: dict[tuple[str, str], tuple[KernelPremises, dict]] = {}
+        paths = list(reports)
+        if universe is not None:
+            record = json.loads((universe / "universe.json").read_text())
+            if record.get("status") != "pass":
+                raise ValueError(f"{universe}: theorem universe audit did not pass")
+            self.modules.update({u["file"]: u["module"] for u in record["units"]})
+            paths += [Path(a["report"]) for a in record["audits"] if a["status"] == "pass"]
+        for path in paths:
+            report = json.loads(path.read_text())
+            if report.get("schema_version") != 1 or report.get("status") != "pass":
+                raise ValueError(f"{path}: not a passing schema-1 assumption report")
+            # Bundled universe audits never share a declaration name, so each report keeps its graph.
+            kernel = KernelPremises({n["name"]: n for n in report["nodes"]}, root, config)
+            for theorem in report["theorems"]:
+                self.theorems[(theorem["module"], kernel.user(theorem["name"]))] = (kernel, theorem)
+
+    def derive(self, lean: LeanFile, theorem: Decl) -> tuple[dict[str, list[str]], list[str]] | None:
+        """The kernel derivation of an indexed theorem, or None if no audit holds its constant."""
+        found = self.theorems.get((self.modules.get(lean.rel, lean.module), theorem.name))
+        if found is None:
+            return None
+        kernel, entry = found
+        return kernel.derive(entry)
+
+
+def build_index(repo: Repository, audits: CompiledAudits | None = None) -> tuple[list[dict], list[str]]:
+    """Per-theorem premises. With `audits`, a theorem's dependencies are its elaborated constant's
+    kernel graph; only a theorem without a constant (an `example`, or a file audited at gate time
+    against a generated module) keeps the source resolver, and its entry says so (`source`)."""
     errors: list[str] = []
     entries = []
     for lean in theorem_files(repo):
@@ -769,32 +805,36 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
 
 # ----------------------------------------------------------------------------- compiled graph
 
-def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
-    """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
-    if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
-        raise ValueError("assumption report is not a completed schema-1 audit")
-    nodes = {n["name"]: n for n in report["nodes"]}
-    errors, theorems, skipped = [], [], 0
-    profiles: dict[str, tuple[list[str], str]] = {}
-    markers = GeneratedMarkers(root)
-    # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
-    # source comparison use the user-facing name so module paths cannot trigger token rules.
-    def user(name: str) -> str:
-        return nodes[name].get("user_name", name) if name in nodes else name
+class KernelPremises:
+    """Premise derivation over the kernel dependency graph of scripts/assumptions.py reports:
+    the same tables as the source index, applied to elaborated constants instead of tokens."""
 
-    by_name: dict[tuple[str, str], set] = {}
-    for entry in source or ():
-        key = (module_name(Path(entry["file"])), entry["theorem"])
-        by_name.setdefault(key, set()).update(entry["premises"])
+    def __init__(self, nodes: dict, root: Path, config: dict):
+        self.nodes, self.root, self.config = nodes, root, config
+        self.markers = GeneratedMarkers(root)
+        self.profiles: dict[str, tuple[list[str], str]] = {}
 
-    def external(module: str) -> bool:
-        return module.split(".")[0] in EXTERNAL_IMPORTS
+    def user(self, name: str) -> str:
+        """Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and
+        index keys use the user-facing name so module paths cannot trigger token rules."""
+        node = self.nodes.get(name)
+        return node.get("user_name", name) if node else name
 
-    for theorem in report["theorems"]:
-        if is_runtime(theorem["module"]):
-            skipped += 1
-            continue
+    def profile(self, module: str) -> tuple[list[str], str]:
+        if module not in self.profiles:
+            path = generated_path(self.root, module)
+            if path.is_file():
+                header = profile_header(path.read_text())
+                self.profiles[module] = profile_premises(self.config, LeanFile(path, module, module, [], header))
+            else:
+                self.profiles[module] = ([self.config["profiles"]["gate-time"]], "generated module not in repository")
+        return self.profiles[module]
+
+    def derive(self, theorem: dict) -> tuple[dict[str, list[str]], list[str]]:
+        """(premise -> reasons, errors) of one audited theorem entry."""
+        config, nodes = self.config, self.nodes
         via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
+        errors: list[str] = []
         seen, pending, names, modules, generated = set(), [theorem["name"]], set(), set(), set()
         while pending:
             name = pending.pop()
@@ -809,17 +849,17 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
             module = node["module"]
             if is_runtime(module):
                 modules.add(module)
-                names.add(user(name))
+                names.add(self.user(name))
                 continue
-            if external(module):
+            if module.split(".")[0] in EXTERNAL_IMPORTS:
                 continue
-            names.add(user(name))
+            names.add(self.user(name))
             if node["kind"] == "axiom" and name not in STANDARD_AXIOMS:
                 for premise in config["source_axiom"]:
                     via.setdefault(premise, []).append(f"axiom {name}")
             if module.split(".")[-1] == "Gen":
                 generated.add(module)
-                apply_markers(via, user(name), markers.of(module, user(name)))
+                apply_markers(via, self.user(name), self.markers.of(module, self.user(name)))
             pending.extend(node["dependencies"])
         for axiom in theorem.get("axioms", ()):
             if axiom not in STANDARD_AXIOMS:
@@ -835,29 +875,40 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         # index sees the theorem's own statement); a report without them falls back to every
         # direct edge, type and proof.
         statement = theorem.get("statement_dependencies", nodes[theorem["name"]]["dependencies"])
-        apply_rules(config, via, {user(n) for n in statement}, "statement")
+        apply_rules(config, via, {self.user(n) for n in statement}, "statement")
         for module in sorted(generated):
-            if module not in profiles:
-                path = generated_path(root, module)
-                if path.is_file():
-                    header = profile_header(path.read_text())
-                    profiles[module] = profile_premises(config, LeanFile(path, module, module, [], header))
-                else:
-                    profiles[module] = ([config["profiles"]["gate-time"]], "generated module not in repository")
-            profile, reason = profiles[module]
+            profile, reason = self.profile(module)
             for premise in [*config["generated_premises"], *profile]:
                 via.setdefault(premise, []).append(f"generated {module} ({reason})")
-        via = close(config, via)
+        return close(config, via), errors
+
+
+def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
+    """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
+    if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
+        raise ValueError("assumption report is not a completed schema-1 audit")
+    kernel = KernelPremises({n["name"]: n for n in report["nodes"]}, root, config)
+    errors, theorems, skipped = [], [], 0
+    by_name: dict[tuple[str, str], set] = {}
+    for entry in source or ():
+        key = (module_name(Path(entry["file"])), entry["theorem"])
+        by_name.setdefault(key, set()).update(entry["premises"])
+    for theorem in report["theorems"]:
+        if is_runtime(theorem["module"]):
+            skipped += 1
+            continue
+        via, theorem_errors = kernel.derive(theorem)
+        errors += theorem_errors
         entry = {"name": theorem["name"], "module": theorem["module"],
                  "premises": sorted(via, key=premise_key)}
         if source is not None:
-            known = by_name.get((theorem["module"], user(theorem["name"])))
+            known = by_name.get((theorem["module"], kernel.user(theorem["name"])))
             if known is not None:
                 entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)
                 if entry["source_gaps"]:
                     entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
         theorems.append(entry)
-    errors += markers.errors
+    errors += kernel.markers.errors
     gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,

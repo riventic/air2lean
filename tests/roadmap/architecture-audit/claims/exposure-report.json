@@ -970,6 +970,187 @@
    }
   },
   {
+   "name": "AuditClaims.oracle_hyp",
+   "module": "AuditClaims.Vacuous",
+   "axioms": [],
+   "conclusion": {
+    "args": [
+     {
+      "args": [
+       {
+        "head": "Zig.Result"
+       },
+       {
+        "head": "OfNat.ofNat"
+       }
+      ],
+      "head": "Pure.pure"
+     }
+    ],
+    "head": "Eq",
+    "lhs": {
+     "head": "AuditClaims.root"
+    },
+    "reflexive": false
+   },
+   "statement_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.clockModel",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "conclusion_dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ],
+   "opaque_dependencies": [],
+   "extern_dependencies": [
+    "Int.add",
+    "Int.decLe",
+    "Int.decLt",
+    "Int.decNonneg",
+    "Int.natAbs",
+    "Int.neg",
+    "Int.negSucc",
+    "Int.ofNat",
+    "Int.sub",
+    "Nat.add",
+    "Nat.beq",
+    "Nat.ble",
+    "Nat.decEq",
+    "Nat.decLe",
+    "Nat.decLt",
+    "Nat.mod",
+    "Nat.modCore",
+    "Nat.mul",
+    "Nat.pow",
+    "Nat.pred",
+    "Nat.sub"
+   ],
+   "compiler_redirections": [],
+   "violations": [],
+   "allowed": true,
+   "statement": {
+    "args": [
+     {
+      "args": [
+       {
+        "closed": "BitVec"
+       }
+      ],
+      "atom": {
+       "closed": "Zig.Result"
+      },
+      "extra": [],
+      "fn": "Zig.Result",
+      "fn_module": "ZigLean.Basic",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "closed": "AuditClaims.root"
+      },
+      "extra": [],
+      "fn": "AuditClaims.root",
+      "fn_module": "AuditClaims.Gen",
+      "params": [
+       "default"
+      ],
+      "peeled": []
+     },
+     {
+      "args": [
+       {
+        "closed": "Zig.Result"
+       },
+       {
+        "closed": "Applicative.toPure"
+       },
+       {
+        "closed": "BitVec"
+       },
+       {
+        "closed": "OfNat.ofNat"
+       }
+      ],
+      "atom": {
+       "closed": "Pure.pure"
+      },
+      "extra": [],
+      "fn": "Pure.pure",
+      "fn_module": "Init.Prelude",
+      "params": [
+       "implicit",
+       "inst_implicit",
+       "implicit",
+       "default"
+      ],
+      "peeled": []
+     }
+    ],
+    "binders": [
+     {
+      "binder": "default",
+      "defs": [
+       "AuditClaims.clockModel"
+      ],
+      "name": "_h",
+      "prop": true,
+      "uses": []
+     }
+    ],
+    "head": {
+     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "kind": "inductive",
+     "module": "Init.Prelude",
+     "name": "Eq"
+    },
+    "witnesses": {
+     "liveness": {
+      "status": "not_required",
+      "theorem": null
+     },
+     "nonvacuity": {
+      "status": "absent",
+      "theorem": null
+     }
+    }
+   }
+  },
+  {
    "name": "AuditClaims.partial_hyp",
    "module": "AuditClaims.Escapes",
    "axioms": [],
@@ -3568,18 +3749,1786 @@
    }
   }
  ],
- "generated_nodes": {
+ "nodes": {
+  "And": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "And.intro": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Applicative.toFunctor": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Applicative.toPure": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Asm.airAsm_3653072158": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "opaque",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "Prod",
+    "instInhabitedProd",
+    "instOfNatNat",
+    "BitVec.instInhabited",
+    "Inhabited.default",
+    "OfNat.ofNat"
+   ]
+  },
   "Asm.divmod": {
    "module": "Proofs.Asm.Gen",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "ExceptT",
+    "Nat",
+    "Option",
+    "Prod",
+    "StateT",
+    "Unit",
+    "instDecidableEqBitVec",
+    "instHOrOfOrOp",
+    "instMonadLiftT",
+    "instMonadLiftTOfMonadLift",
+    "instMonadOption",
+    "instMonadStateOfMonadStateOf",
+    "instMonadStateOfStateTOfMonad",
+    "instOfNatNat",
+    "liftM",
+    "modify",
+    "Applicative.toFunctor",
+    "Applicative.toPure",
+    "Asm.airAsm_3653072158",
+    "Asm.divmodExit",
+    "Asm.divmodLocals",
+    "Asm.instInhabitedDivmodLocals",
+    "Bind.bind",
+    "BitVec.instOfNat",
+    "BitVec.instOrOp",
+    "BitVec.ofNat",
+    "Bool.false",
+    "ExceptT.instMonad",
+    "HOr.hOr",
+    "Inhabited.default",
+    "Monad.toApplicative",
+    "Monad.toBind",
+    "MonadState.get",
+    "OfNat.ofNat",
+    "Prod.fst",
+    "Prod.snd",
+    "Pure.pure",
+    "StateT.instMonad",
+    "StateT.instMonadLift",
+    "StateT.run'",
+    "Zig.Error",
+    "Zig.M",
+    "Zig.Result",
+    "Zig.asmTrap",
+    "Zig.intCast",
+    "Zig.shl",
+    "Asm.divmod.match_1",
+    "Asm.divmodExit.ret",
+    "Asm.divmodLocals.mk",
+    "Asm.divmodLocals.rem"
+   ]
+  },
+  "Asm.divmod.match_1": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodExit",
+    "OfNat.ofNat",
+    "Asm.divmodExit.casesOn",
+    "Asm.divmodExit.ret"
+   ]
+  },
+  "Asm.divmodExit": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "inductive",
+   "dependencies": [
+    "Asm.divmodExit.ret"
+   ]
+  },
+  "Asm.divmodExit.casesOn": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodExit",
+    "OfNat.ofNat",
+    "Asm.divmodExit.rec",
+    "Asm.divmodExit.ret"
+   ]
+  },
+  "Asm.divmodExit.rec": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "recursor",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodExit",
+    "OfNat.ofNat",
+    "Asm.divmodExit.ret"
+   ]
+  },
+  "Asm.divmodExit.ret": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "constructor",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodExit",
+    "OfNat.ofNat",
+    "Asm.divmodExit.ret"
+   ]
+  },
+  "Asm.divmodLocals": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "inductive",
+   "dependencies": [
+    "Asm.divmodLocals.mk"
+   ]
+  },
+  "Asm.divmodLocals.mk": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "constructor",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodLocals",
+    "OfNat.ofNat",
+    "Asm.divmodLocals.mk"
+   ]
+  },
+  "Asm.divmodLocals.rem": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodLocals",
+    "OfNat.ofNat"
+   ]
+  },
+  "Asm.instInhabitedDivmodLocals": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "definition",
+   "dependencies": [
+    "Inhabited",
+    "Asm.divmodLocals",
+    "Inhabited.mk",
+    "Asm.instInhabitedDivmodLocals.default"
+   ]
+  },
+  "Asm.instInhabitedDivmodLocals.default": {
+   "module": "Proofs.Asm.Gen",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "Asm.divmodLocals",
+    "BitVec.instInhabited",
+    "Inhabited.default",
+    "OfNat.ofNat",
+    "Asm.divmodLocals.mk"
+   ]
+  },
+  "AuditClaims.asm_divmod_nonzero": {
+   "module": "AuditClaims.AsmTotal",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Bool",
+    "Eq",
+    "Except",
+    "ExceptT",
+    "Nat",
+    "Ne",
+    "Option",
+    "PUnit",
+    "Prod",
+    "StateT",
+    "True",
+    "Unit",
+    "congr",
+    "congrArg",
+    "congrFun'",
+    "eq_false",
+    "eq_self",
+    "eq_true_of_decide",
+    "funext",
+    "id",
+    "instDecidableEqBitVec",
+    "instHOrOfOrOp",
+    "instLENat",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadLiftT",
+    "instMonadLiftTOfMonadLift",
+    "instMonadOption",
+    "instMonadStateOfMonadStateOf",
+    "instMonadStateOfStateTOfMonad",
+    "instOfNatNat",
+    "ite_eq_right_of_eq_false",
+    "liftM",
+    "modify",
+    "of_eq_true",
+    "Applicative.toFunctor",
+    "Applicative.toPure",
+    "Asm.airAsm_3653072158",
+    "Asm.divmod",
+    "Asm.divmodExit",
+    "Asm.divmodLocals",
+    "Asm.instInhabitedDivmodLocals",
+    "Bind.bind",
+    "BitVec.instHShiftLeftNat",
+    "BitVec.instOfNat",
+    "BitVec.instOrOp",
+    "BitVec.ofNat",
+    "BitVec.setWidth",
+    "BitVec.toNat",
+    "BitVec.toNat_ofNat",
+    "Bool.false",
+    "Bool.true",
+    "Eq.mpr",
+    "Eq.refl",
+    "Eq.trans",
+    "Except.error",
+    "Except.ok",
+    "ExceptT.bindCont",
+    "ExceptT.instMonad",
+    "HOr.hOr",
+    "HShiftLeft.hShiftLeft",
+    "Inhabited.default",
+    "LE.le",
+    "Monad.toApplicative",
+    "Monad.toBind",
+    "MonadExcept.throw",
+    "MonadState.get",
+    "Nat.decLe",
+    "OfNat.ofNat",
+    "Option.none",
+    "Option.some",
+    "PUnit.unit",
+    "Prod.fst",
+    "Prod.mk",
+    "Prod.snd",
+    "Pure.pure",
+    "StateT.instMonad",
+    "StateT.instMonadLift",
+    "StateT.run'",
+    "Zig.Error",
+    "Zig.M",
+    "Zig.Result",
+    "Zig.asmTrap",
+    "Zig.intCast",
+    "Zig.intCast_unsigned_widen",
+    "Zig.shl",
+    "Asm.divmod.match_1",
+    "Asm.divmodExit.ret",
+    "Asm.divmodLocals.mk",
+    "Asm.divmodLocals.rem",
+    "ExceptT.bindCont.match_1",
+    "Option.bind.match_1",
+    "StateT.bind.match_1",
+    "Zig.Error.trap"
+   ]
+  },
+  "AuditClaims.asm_divmod_nonzero.nonvacuous": {
+   "module": "AuditClaims.AsmTotal",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Bool",
+    "Eq",
+    "Exists",
+    "Nat",
+    "Ne",
+    "True",
+    "id",
+    "instDecidableEqBitVec",
+    "instDecidableNot",
+    "instOfNatNat",
+    "of_decide_eq_true",
+    "trivial",
+    "BitVec.instOfNat",
+    "Bool.true",
+    "Decidable.decide",
+    "Eq.refl",
+    "Exists.intro",
+    "OfNat.ofNat"
+   ]
+  },
+  "AuditClaims.asm_divmod_total": {
+   "module": "AuditClaims.AsmTotal",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Bool",
+    "Eq",
+    "Except",
+    "ExceptT",
+    "Nat",
+    "Option",
+    "PUnit",
+    "Prod",
+    "StateT",
+    "True",
+    "Unit",
+    "congr",
+    "congrArg",
+    "congrFun'",
+    "eq_self",
+    "eq_true_of_decide",
+    "funext",
+    "id",
+    "instDecidableEqBitVec",
+    "instHOrOfOrOp",
+    "instLENat",
+    "instMonadExceptOfExceptTOfMonad",
+    "instMonadExceptOfMonadExceptOf",
+    "instMonadLiftT",
+    "instMonadLiftTOfMonadLift",
+    "instMonadOption",
+    "instMonadStateOfMonadStateOf",
+    "instMonadStateOfStateTOfMonad",
+    "instOfNatNat",
+    "ite",
+    "ite_eq_left_of_eq_true",
+    "liftM",
+    "modify",
+    "of_eq_true",
+    "Applicative.toFunctor",
+    "Applicative.toPure",
+    "Asm.airAsm_3653072158",
+    "Asm.divmod",
+    "Asm.divmodExit",
+    "Asm.divmodLocals",
+    "Asm.instInhabitedDivmodLocals",
+    "Bind.bind",
+    "BitVec.instOfNat",
+    "BitVec.instOrOp",
+    "BitVec.ofNat",
+    "BitVec.setWidth",
+    "Bool.false",
+    "Bool.true",
+    "Eq.refl",
+    "Eq.trans",
+    "Except.error",
+    "Except.ok",
+    "ExceptT.bindCont",
+    "ExceptT.instMonad",
+    "HOr.hOr",
+    "Inhabited.default",
+    "LE.le",
+    "Monad.toApplicative",
+    "Monad.toBind",
+    "MonadExcept.throw",
+    "MonadState.get",
+    "Nat.decLe",
+    "OfNat.ofNat",
+    "Option.none",
+    "Option.some",
+    "PUnit.unit",
+    "Prod.fst",
+    "Prod.mk",
+    "Prod.snd",
+    "Pure.pure",
+    "StateT.instMonad",
+    "StateT.instMonadLift",
+    "StateT.run'",
+    "Zig.Error",
+    "Zig.M",
+    "Zig.Result",
+    "Zig.asmTrap",
+    "Zig.intCast",
+    "Zig.intCast_unsigned_widen",
+    "Zig.shl",
+    "Asm.divmod.match_1",
+    "Asm.divmodExit.ret",
+    "Asm.divmodLocals.mk",
+    "Asm.divmodLocals.rem",
+    "ExceptT.bindCont.match_1",
+    "Option.bind.match_1",
+    "StateT.bind.match_1",
+    "Zig.Error.trap"
+   ]
+  },
+  "AuditClaims.clockModel": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "definition",
+   "dependencies": [
+    "Nat",
+    "instOfNatNat",
+    "OfNat.ofNat"
+   ]
+  },
+  "AuditClaims.ground_instance": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "rfl",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.hyp_is_claim": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHAdd",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.modelInc": {
+   "module": "AuditClaims.Escapes",
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instHAdd",
+    "instOfNatNat",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "HAdd.hAdd",
+    "OfNat.ofNat"
+   ]
+  },
+  "AuditClaims.oracle_hyp": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "rfl",
+    "Applicative.toPure",
+    "AuditClaims.clockModel",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.partial_hyp": {
+   "module": "AuditClaims.Escapes",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "rfl",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "AuditClaims.specLoop",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.redirected_spec": {
+   "module": "AuditClaims.Escapes",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "rfl",
+    "Applicative.toPure",
+    "AuditClaims.modelInc",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ]
   },
   "AuditClaims.root": {
    "module": "AuditClaims.Gen",
-   "kind": "definition"
+   "kind": "definition",
+   "dependencies": [
+    "BitVec",
+    "Nat",
+    "instOfNatNat",
+    "BitVec.instOfNat",
+    "Bool.false",
+    "OfNat.ofNat",
+    "Zig.Result",
+    "Zig.add"
+   ]
+  },
+  "AuditClaims.root_ignored": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "rfl",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Function.const",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.root_in_post": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "Unit",
+    "instMonadOption",
+    "instOfNatNat",
+    "rfl",
+    "And.intro",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "StateT.instMonad",
+    "Unit.unit",
+    "Zig.Error",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.MemM",
+    "Zig.Result",
+    "Zig.TotalTriple",
+    "Zig.Assn.emp",
+    "Zig.Assn.lift",
+    "Zig.Heap.empty",
+    "Zig.TotalTriple.conseq",
+    "Zig.TotalTriple.ret"
+   ]
+  },
+  "AuditClaims.root_refl": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "instOfNatNat",
+    "rfl",
+    "AuditClaims.root",
+    "OfNat.ofNat",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.root_rel": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "True",
+    "congrArg",
+    "congrFun'",
+    "eq_self",
+    "instHAdd",
+    "instOfNatNat",
+    "of_eq_true",
+    "AuditClaims.root",
+    "BitVec.add_zero",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "Eq.trans",
+    "HAdd.hAdd",
+    "OfNat.ofNat",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.specLoop": {
+   "module": "AuditClaims.Escapes",
+   "kind": "opaque",
+   "dependencies": [
+    "Inhabited",
+    "Nat",
+    "Inhabited.default",
+    "Inhabited.mk"
+   ]
   },
   "AuditClaims.spin": {
    "module": "AuditClaims.Gen",
+   "kind": "definition",
+   "dependencies": [
+    "Except",
+    "Option",
+    "Prod",
+    "Unit",
+    "ExceptT.mk",
+    "Option.none",
+    "Zig.Error",
+    "Zig.Mem",
+    "Zig.MemM"
+   ]
+  },
+  "AuditClaims.spin_partial": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "Eq",
+    "False",
+    "Unit",
+    "AuditClaims.spin",
+    "True.intro",
+    "Union.union",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.Triple",
+    "Zig.Assn.emp",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.heap"
+   ]
+  },
+  "AuditClaims.spin_partial.nonvacuous": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Exists",
+    "List",
+    "Nat",
+    "Prod",
+    "String",
+    "True",
+    "instOfNatNat",
+    "rfl",
+    "trivial",
+    "Bool.false",
+    "Bool.true",
+    "Exists.intro",
+    "List.cons",
+    "List.nil",
+    "List.toArray",
+    "OfNat.ofNat",
+    "Option.none",
+    "Union.union",
+    "Zig.ALoc",
+    "Zig.Block",
+    "Zig.BlockId",
+    "Zig.DevEvent",
+    "Zig.FootprintEntry",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.OwnedAlloc",
+    "Zig.Ptr",
+    "Zig.ThreadId",
+    "Zig.ThreadRec",
+    "Zig.VClock",
+    "Zig.unboundedAllocBytes",
+    "Zig.AllocPolicy.mk",
+    "Zig.Assn.emp",
+    "Zig.ByteRemapMode.fail",
+    "Zig.DevState.mk",
+    "Zig.Env.Event",
+    "Zig.Env.Req",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.disjoint_empty",
+    "Zig.Heap.empty",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.heap",
+    "Zig.Mem.heap_default_split",
+    "Zig.Mem.mk",
+    "Zig.Mem.seq_default",
+    "Zig.Placement.fresh",
+    "Zig.ProvenanceMode.strict",
+    "Zig.ThreadRec.mk",
+    "Zig.Env.Host.mk",
+    "Zig.Env.Ops.closedAll"
+   ]
+  },
+  "AuditClaims.total_false_pre": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "And",
+    "Eq",
+    "Exists",
+    "False",
+    "Option",
+    "Prod",
+    "Unit",
+    "instMonadOption",
+    "Applicative.toPure",
+    "AuditClaims.spin",
+    "ExceptT.instMonad",
+    "False.elim",
+    "Monad.toApplicative",
+    "Prod.mk",
+    "Pure.pure",
+    "StateT.run",
+    "Union.union",
+    "Zig.Assn",
+    "Zig.Error",
+    "Zig.Heap",
+    "Zig.Mem",
+    "Zig.Result",
+    "Zig.TotalTriple",
+    "Zig.Heap.Disjoint",
+    "Zig.Heap.instUnion",
+    "Zig.Mem.Seq",
+    "Zig.Mem.heap"
+   ]
+  },
+  "AuditClaims.unchecked_total": {
+   "module": "AuditClaims.Unchecked",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "True.intro",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.unchecked_universal": {
+   "module": "AuditClaims.Universal",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Option",
+    "instHAdd",
+    "instMonadOption",
+    "instOfNatNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "ExceptT.instMonad",
+    "HAdd.hAdd",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "True.intro",
+    "Zig.Error",
+    "Zig.Result"
+   ]
+  },
+  "AuditClaims.unsat_pre": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Eq",
+    "Nat",
+    "Not",
+    "Option",
+    "instHAdd",
+    "instHPow",
+    "instLTNat",
+    "instMonadOption",
+    "instNatPowNat",
+    "instOfNatNat",
+    "instPowNat",
+    "Applicative.toPure",
+    "AuditClaims.root",
+    "BitVec.instAdd",
+    "BitVec.instOfNat",
+    "BitVec.isLt",
+    "BitVec.toNat",
+    "Classical.byContradiction",
+    "ExceptT.instMonad",
+    "GT.gt",
+    "HAdd.hAdd",
+    "HPow.hPow",
+    "LT.lt",
+    "Monad.toApplicative",
+    "OfNat.ofNat",
+    "Pure.pure",
+    "Zig.Error",
+    "Zig.Result",
+    "AuditClaims.unsat_pre._proof_1_1"
+   ]
+  },
+  "AuditClaims.unsat_pre._proof_1_1": {
+   "module": "AuditClaims.Vacuous",
+   "kind": "theorem",
+   "dependencies": [
+    "BitVec",
+    "Bool",
+    "Eq",
+    "False",
+    "Int",
+    "Nat",
+    "id",
+    "instDecidableEqBool",
+    "instHAdd",
+    "instHPow",
+    "instHSub",
+    "instLTNat",
+    "instNatCastInt",
+    "instNatPowNat",
+    "instOfNat",
+    "instOfNatNat",
+    "instPowNat",
+    "le_of_le_of_eq",
+    "of_decide_eq_true",
+    "BitVec.isLt",
+    "BitVec.toNat",
+    "Bool.true",
+    "Decidable.decide",
+    "Eq.refl",
+    "Eq.symm",
+    "Eq.trans",
+    "GT.gt",
+    "HAdd.hAdd",
+    "HPow.hPow",
+    "HSub.hSub",
+    "Int.add_one_le_of_lt",
+    "Int.instAdd",
+    "Int.instLEInt",
+    "Int.instNegInt",
+    "Int.instSub",
+    "Int.sub_nonneg_of_le",
+    "List.cons",
+    "List.nil",
+    "Nat.cast",
+    "Neg.neg",
+    "OfNat.ofNat",
+    "Option.none",
+    "Option.some",
+    "Lean.Omega.LinearCombo",
+    "Lean.Omega.tidy_sat",
+    "Lean.Omega.Coeffs.ofList",
+    "Lean.Omega.Constraint.addInequality_sat",
+    "Lean.Omega.Constraint.combine_sat'",
+    "Lean.Omega.Constraint.isImpossible",
+    "Lean.Omega.Constraint.mk",
+    "Lean.Omega.Constraint.not_sat'_of_isImpossible",
+    "Lean.Omega.Int.add_congr",
+    "Lean.Omega.Int.ofNat_lt_of_lt",
+    "Lean.Omega.Int.sub_congr",
+    "Lean.Omega.LinearCombo.add_eval",
+    "Lean.Omega.LinearCombo.coordinate",
+    "Lean.Omega.LinearCombo.coordinate_eval_0",
+    "Lean.Omega.LinearCombo.eval",
+    "Lean.Omega.LinearCombo.instAdd",
+    "Lean.Omega.LinearCombo.instSub",
+    "Lean.Omega.LinearCombo.mk",
+    "Lean.Omega.LinearCombo.sub_eval"
+   ]
+  },
+  "Bind.bind": {
+   "module": "Init.Prelude",
    "kind": "definition"
+  },
+  "BitVec": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "BitVec.add_zero": {
+   "module": "Init.Data.BitVec.Lemmas",
+   "kind": "theorem"
+  },
+  "BitVec.instAdd": {
+   "module": "Init.Data.BitVec.BasicAux",
+   "kind": "definition"
+  },
+  "BitVec.instHShiftLeftNat": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
+  "BitVec.instInhabited": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
+  "BitVec.instOfNat": {
+   "module": "Init.Data.BitVec.BasicAux",
+   "kind": "definition"
+  },
+  "BitVec.instOrOp": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
+  "BitVec.isLt": {
+   "module": "Init.Data.BitVec.BasicAux",
+   "kind": "theorem"
+  },
+  "BitVec.ofNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "BitVec.setWidth": {
+   "module": "Init.Data.BitVec.Basic",
+   "kind": "definition"
+  },
+  "BitVec.toNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "BitVec.toNat_ofNat": {
+   "module": "Init.Data.BitVec.Bootstrap",
+   "kind": "theorem"
+  },
+  "Bool": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Bool.false": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Bool.true": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Classical.byContradiction": {
+   "module": "Init.Classical",
+   "kind": "theorem"
+  },
+  "Decidable.decide": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Eq": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Eq.mpr": {
+   "module": "Init.Core",
+   "kind": "definition"
+  },
+  "Eq.refl": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Eq.symm": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "Eq.trans": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "Except": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Except.error": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Except.ok": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "ExceptT": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
+  "ExceptT.bindCont": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
+  "ExceptT.bindCont.match_1": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
+  "ExceptT.instMonad": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
+  "ExceptT.mk": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
+  "Exists": {
+   "module": "Init.Core",
+   "kind": "inductive"
+  },
+  "Exists.intro": {
+   "module": "Init.Core",
+   "kind": "constructor"
+  },
+  "False": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "False.elim": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Function.const": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "GT.gt": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "HAdd.hAdd": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "HOr.hOr": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "HPow.hPow": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "HShiftLeft.hShiftLeft": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "HSub.hSub": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Inhabited": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Inhabited.default": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Inhabited.mk": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Int": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "inductive"
+  },
+  "Int.add_one_le_of_lt": {
+   "module": "Init.Data.Int.Order",
+   "kind": "theorem"
+  },
+  "Int.instAdd": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "Int.instLEInt": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "Int.instNegInt": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "Int.instSub": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "Int.sub_nonneg_of_le": {
+   "module": "Init.Data.Int.Order",
+   "kind": "theorem"
+  },
+  "LE.le": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "LT.lt": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Lean.Omega.Coeffs.ofList": {
+   "module": "Init.Omega.Coeffs",
+   "kind": "definition"
+  },
+  "Lean.Omega.Constraint.addInequality_sat": {
+   "module": "Init.Omega.Constraint",
+   "kind": "theorem"
+  },
+  "Lean.Omega.Constraint.combine_sat'": {
+   "module": "Init.Omega.Constraint",
+   "kind": "theorem"
+  },
+  "Lean.Omega.Constraint.isImpossible": {
+   "module": "Init.Omega.Constraint",
+   "kind": "definition"
+  },
+  "Lean.Omega.Constraint.mk": {
+   "module": "Init.Omega.Constraint",
+   "kind": "constructor"
+  },
+  "Lean.Omega.Constraint.not_sat'_of_isImpossible": {
+   "module": "Init.Omega.Constraint",
+   "kind": "theorem"
+  },
+  "Lean.Omega.Int.add_congr": {
+   "module": "Init.Omega.Int",
+   "kind": "theorem"
+  },
+  "Lean.Omega.Int.ofNat_lt_of_lt": {
+   "module": "Init.Omega.Int",
+   "kind": "theorem"
+  },
+  "Lean.Omega.Int.sub_congr": {
+   "module": "Init.Omega.Int",
+   "kind": "theorem"
+  },
+  "Lean.Omega.LinearCombo": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "inductive"
+  },
+  "Lean.Omega.LinearCombo.add_eval": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "theorem"
+  },
+  "Lean.Omega.LinearCombo.coordinate": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "definition"
+  },
+  "Lean.Omega.LinearCombo.coordinate_eval_0": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "theorem"
+  },
+  "Lean.Omega.LinearCombo.eval": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "definition"
+  },
+  "Lean.Omega.LinearCombo.instAdd": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "definition"
+  },
+  "Lean.Omega.LinearCombo.instSub": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "definition"
+  },
+  "Lean.Omega.LinearCombo.mk": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "constructor"
+  },
+  "Lean.Omega.LinearCombo.sub_eval": {
+   "module": "Init.Omega.LinearCombo",
+   "kind": "theorem"
+  },
+  "Lean.Omega.tidy_sat": {
+   "module": "Init.Omega.Constraint",
+   "kind": "theorem"
+  },
+  "List": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "List.cons": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "List.nil": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "List.toArray": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Monad.toApplicative": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Monad.toBind": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "MonadExcept.throw": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "MonadState.get": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Nat": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Nat.cast": {
+   "module": "Init.Data.Cast",
+   "kind": "definition"
+  },
+  "Nat.decLe": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Ne": {
+   "module": "Init.Core",
+   "kind": "definition"
+  },
+  "Neg.neg": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Not": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "OfNat.ofNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Option": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Option.bind.match_1": {
+   "module": "Init.Data.Option.Basic",
+   "kind": "definition"
+  },
+  "Option.none": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Option.some": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "PUnit": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "PUnit.unit": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Prod": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "Prod.fst": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Prod.mk": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Prod.snd": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Pure.pure": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "StateT": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "StateT.bind.match_1": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "StateT.instMonad": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "StateT.instMonadLift": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "StateT.run": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "StateT.run'": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "String": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "True": {
+   "module": "Init.Prelude",
+   "kind": "inductive"
+  },
+  "True.intro": {
+   "module": "Init.Prelude",
+   "kind": "constructor"
+  },
+  "Union.union": {
+   "module": "Init.Core",
+   "kind": "definition"
+  },
+  "Unit": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Unit.unit": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "Zig.ALoc": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.AllocPolicy.mk": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.Assn": {
+   "module": "ZigLean.Sep.Assert",
+   "kind": "definition"
+  },
+  "Zig.Assn.emp": {
+   "module": "ZigLean.Sep.Assert",
+   "kind": "definition"
+  },
+  "Zig.Assn.lift": {
+   "module": "ZigLean.Sep.Assert",
+   "kind": "definition"
+  },
+  "Zig.Block": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.BlockId": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition"
+  },
+  "Zig.ByteRemapMode.fail": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.DevEvent": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.DevState.mk": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.Env.Event": {
+   "module": "ZigLean.Env.Host",
+   "kind": "inductive"
+  },
+  "Zig.Env.Host.mk": {
+   "module": "ZigLean.Env.Host",
+   "kind": "constructor"
+  },
+  "Zig.Env.Ops.closedAll": {
+   "module": "ZigLean.Env.Host",
+   "kind": "definition"
+  },
+  "Zig.Env.Req": {
+   "module": "ZigLean.Env.Host",
+   "kind": "inductive"
+  },
+  "Zig.Error": {
+   "module": "ZigLean.Basic",
+   "kind": "inductive"
+  },
+  "Zig.Error.trap": {
+   "module": "ZigLean.Basic",
+   "kind": "constructor"
+  },
+  "Zig.FootprintEntry": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.Heap": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  "Zig.Heap.Disjoint": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  "Zig.Heap.disjoint_empty": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "theorem"
+  },
+  "Zig.Heap.empty": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  "Zig.Heap.instUnion": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  "Zig.M": {
+   "module": "ZigLean.Basic",
+   "kind": "definition"
+  },
+  "Zig.Mem": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.Mem.Seq": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "inductive"
+  },
+  "Zig.Mem.heap": {
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  "Zig.Mem.heap_default_split": {
+   "module": "ZigLean.Sep.Witness",
+   "kind": "theorem"
+  },
+  "Zig.Mem.mk": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.Mem.seq_default": {
+   "module": "ZigLean.Sep.Witness",
+   "kind": "theorem"
+  },
+  "Zig.MemM": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition"
+  },
+  "Zig.OwnedAlloc": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.Placement.fresh": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition"
+  },
+  "Zig.ProvenanceMode.strict": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.Ptr": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.Result": {
+   "module": "ZigLean.Basic",
+   "kind": "definition"
+  },
+  "Zig.ThreadId": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition"
+  },
+  "Zig.ThreadRec": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "inductive"
+  },
+  "Zig.ThreadRec.mk": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "constructor"
+  },
+  "Zig.TotalTriple": {
+   "module": "ZigLean.Sep.Total",
+   "kind": "definition"
+  },
+  "Zig.TotalTriple.conseq": {
+   "module": "ZigLean.Sep.Total",
+   "kind": "theorem"
+  },
+  "Zig.TotalTriple.ret": {
+   "module": "ZigLean.Sep.Total",
+   "kind": "theorem"
+  },
+  "Zig.Triple": {
+   "module": "ZigLean.Sep.Triple",
+   "kind": "definition"
+  },
+  "Zig.VClock": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition"
+  },
+  "Zig.add": {
+   "module": "ZigLean.Basic",
+   "kind": "definition"
+  },
+  "Zig.asmTrap": {
+   "module": "ZigLean.Basic",
+   "kind": "definition"
+  },
+  "Zig.intCast": {
+   "module": "ZigLean.Basic",
+   "kind": "definition"
+  },
+  "Zig.intCast_unsigned_widen": {
+   "module": "ZigLean.Lemmas",
+   "kind": "theorem"
+  },
+  "Zig.shl": {
+   "module": "ZigLean.Basic",
+   "kind": "definition"
+  },
+  "Zig.unboundedAllocBytes": {
+   "module": "ZigLean.Mem.Basic",
+   "kind": "definition"
+  },
+  "_private.AuditClaims.AsmTotal.0.ExceptT.bindCont.match_1.eq_1": {
+   "module": "AuditClaims.AsmTotal",
+   "kind": "theorem",
+   "dependencies": [
+    "Eq",
+    "Except",
+    "Eq.refl",
+    "Except.error",
+    "Except.ok",
+    "ExceptT.bindCont.match_1"
+   ]
+  },
+  "_private.AuditClaims.AsmTotal.0.ExceptT.bindCont.match_1.eq_2": {
+   "module": "AuditClaims.AsmTotal",
+   "kind": "theorem",
+   "dependencies": [
+    "Eq",
+    "Except",
+    "Eq.refl",
+    "Except.error",
+    "Except.ok",
+    "ExceptT.bindCont.match_1"
+   ]
+  },
+  "congr": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "congrArg": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "congrFun'": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "eq_false": {
+   "module": "Init.SimpLemmas",
+   "kind": "theorem"
+  },
+  "eq_self": {
+   "module": "Init.SimpLemmas",
+   "kind": "theorem"
+  },
+  "eq_true_of_decide": {
+   "module": "Init.SimpLemmas",
+   "kind": "theorem"
+  },
+  "funext": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "id": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instDecidableEqBitVec": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instDecidableEqBool": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instDecidableNot": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instHAdd": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instHOrOfOrOp": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instHPow": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instHSub": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instInhabitedProd": {
+   "module": "Init.Core",
+   "kind": "definition"
+  },
+  "instLENat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instLTNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instMonadExceptOfExceptTOfMonad": {
+   "module": "Init.Control.Except",
+   "kind": "definition"
+  },
+  "instMonadExceptOfMonadExceptOf": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instMonadLiftT": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instMonadLiftTOfMonadLift": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instMonadOption": {
+   "module": "Init.Data.Option.Basic",
+   "kind": "definition"
+  },
+  "instMonadStateOfMonadStateOf": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instMonadStateOfStateTOfMonad": {
+   "module": "Init.Control.State",
+   "kind": "definition"
+  },
+  "instNatCastInt": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "instNatPowNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instOfNat": {
+   "module": "Init.Data.Int.Basic",
+   "kind": "definition"
+  },
+  "instOfNatNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "instPowNat": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "ite": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "ite_eq_left_of_eq_true": {
+   "module": "Init.SimpLemmas",
+   "kind": "theorem"
+  },
+  "ite_eq_right_of_eq_false": {
+   "module": "Init.SimpLemmas",
+   "kind": "theorem"
+  },
+  "le_of_le_of_eq": {
+   "module": "Init.Core",
+   "kind": "theorem"
+  },
+  "liftM": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "modify": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "of_decide_eq_true": {
+   "module": "Init.Prelude",
+   "kind": "theorem"
+  },
+  "of_eq_true": {
+   "module": "Init.SimpLemmas",
+   "kind": "theorem"
+  },
+  "rfl": {
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  "trivial": {
+   "module": "Init.Core",
+   "kind": "theorem"
   }
  },
  "shadow_audit": {

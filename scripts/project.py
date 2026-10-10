@@ -933,15 +933,43 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
             found = assess_goal(theorem, root, definition, bundle['nodes'], gen_modules, bundle['theorems'])
             binding, reason = goal_binding(found, definition, bundle['nodes'], gen_modules)
             row.update(binding=binding, reason=reason)
+            premises = goal_premises(theorem, found, bundle) if binding == 'direct' else None
+            if binding == 'direct' and premises is None:
+                binding, reason = 'unbound', 'receipt audit lacks the dependency graph of the theorem; regenerate it'
+                row.update(binding=binding, reason=reason)
             if binding == 'direct':
                 row.update(audited_assumptions={k: sorted(theorem.get(k) or []) for k in
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
                            derived_strength=found['strength'], claim_class=found['claim_class'],
                            derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
-                           witnesses=found['witnesses'],
-                           premises=claims.premises_of(theorem, found['claims']))
+                           witnesses=found['witnesses'], premises=premises)
         goals.append(row)
     return compiled, goals
+
+
+@functools.cache
+def _premises_module():
+    spec = importlib.util.spec_from_file_location('project_premises', Path(__file__).resolve().with_name('premises.py'))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve annotations through sys.modules
+    spec.loader.exec_module(module)
+    return module
+
+
+def goal_premises(theorem, found, bundle):
+    """F4: every premise ID a direct goal rests on, from the receipt audit's kernel graph (the
+    tables of scripts/premises.py) plus the asm premises its claims carry; None if the audit
+    lacks the theorem's dependency graph."""
+    asm = claims.premises_of(theorem, found['claims'])
+    module = _premises_module()
+    try:
+        config = module.load_config(module.ROOT / module.CONFIG)
+        via, errors = module.KernelPremises(bundle['nodes'], Path(bundle['root']), config).derive(theorem)
+    except (KeyError, ValueError):
+        return None
+    if asm is None or errors:
+        return None
+    return sorted(set(via) | set(asm), key=module.premise_key)
 
 
 def assess_goal(theorem, root, definition, nodes, gen_modules, theorems):
@@ -965,6 +993,8 @@ def goal_binding(found, definition, nodes, gen_modules):
                                         f'({found["binding"]}), not generated root definition {definition} in {gen_modules}')
     if found['rejected_hypotheses']:
         return 'rejected_hypothesis', next(c for c in found['caps'] if c.startswith('a hypothesis'))
+    if found['unaccounted']:
+        return 'unaccounted_premise', claims.unaccounted_reason(found['unaccounted'])
     return 'direct', 'audited theorem states its conclusion about the hash-bound generated root definition'
 
 

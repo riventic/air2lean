@@ -41,7 +41,7 @@ diff_report = load('diff_report', 'diff-report.py')
 
 SNAPSHOT = json.loads((HERE / 'exposure-report.json').read_text())
 THEOREMS = {t['name']: t for t in SNAPSHOT['theorems']}
-NODES = SNAPSHOT['generated_nodes']
+NODES = SNAPSHOT['nodes']
 HEADS = claims.load_heads()
 
 # Lean counterexamples: theorem -> (root definition, declared strength, finding id).
@@ -63,7 +63,8 @@ FINDINGS = {name: finding for name, (_, _, finding) in LEAN_CASES.items()}
 FINDINGS.update({'spoofed-total-head': 'S2', 'spoofed-registered-head': 'S2', 'receipt-schema-skew': 'F1',
                  'host-allowlist-masks-panic': 'F3', 'model-illegal-masks-native-value': 'F3',
                  'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1',
-                 'escape-hatches-allowed': 'H4', 'mutation-kill-unbound': 'H3'})
+                 'escape-hatches-allowed': 'H4', 'mutation-kill-unbound': 'H3',
+                 'unaccounted-model-hypothesis': 'F4', 'premises-in-goal-rows': 'F4'})
 # Fixed: S1 (kernel replay rejects AuditClaims.Unchecked), F2, H1 (codex/fix-evidence-integrity),
 # S2-S6 (codex/fix-claim-binding), S7 and F3 (codex/fix-asm-faults-hostdiff), F1 (batch 8's I06
 # coverage binding, kept in step with the schema-3 receipt of codex/fix-model-premises).
@@ -252,6 +253,35 @@ def escape_hatches_allowed():
     return exposed, '; '.join(details)
 
 
+def unaccounted_model_hypothesis():
+    """F4: a goal resting on a hypothesis about a contract's own model definition (a clock oracle)
+    must not be accepted unless the root declares that definition as an assumption, and an
+    accepted goal row lists its premise IDs from the kernel graph."""
+    name, model = 'AuditClaims.oracle_hyp', 'AuditClaims.clockModel'
+    if name not in THEOREMS:
+        return True, f'{name} is missing from the exposure snapshot'
+    generated = claims.generated_definitions(NODES, {NODES['AuditClaims.root']['module']})
+
+    def check(allowed):
+        return claims.check_goal({'theorem': name, 'strength': 'safety', 'domain': 'scoped: x = 3'}, THEOREMS,
+                                 definition='AuditClaims.root', heads=HEADS, allowed=allowed,
+                                 generated=generated, nodes=NODES)
+    silent, declared = check([]), check([model])
+    _, row = coverage_level(name, 'AuditClaims.root', 'safety')
+    exposed = (silent['status'] == 'accepted' or declared['status'] != 'accepted'
+               or row['binding'] != 'unaccounted_premise')
+    return exposed, (f'undeclared: claims={silent["status"]} binding={row["binding"]} ({silent["reason"]}); '
+                     f'declared as a root assumption: claims={declared["status"]}')
+
+
+def premises_in_goal_rows():
+    """F4: a coverage goal row bound to a theorem lists the premise IDs its kernel closure rests
+    on (generated module, profile, runtime modules), not only the asm ones."""
+    _, row = coverage_level('AuditClaims.root_refl', 'AuditClaims.root', 'safety')
+    listed = set(row.get('premises') or ()) - {'ASM-01', 'ASM-04'}
+    return row['binding'] != 'direct' or not listed, f'binding={row["binding"]} premises={row.get("premises")}'
+
+
 def mutation_kill_unbound():
     """H3: a recorded mutation kill counts only while the regression that killed it is unchanged.
     The committed ledger must be current, and a kill must go stale when its example's inputs
@@ -291,7 +321,8 @@ PY_CASES = {'spoofed-total-head': spoofed_total_head, 'spoofed-registered-head':
             'receipt-schema-skew': receipt_schema_skew, 'host-allowlist-masks-panic': host_allowlist_masks_panic,
             'model-illegal-masks-native-value': model_illegal_masks_native_value,
             'indexed-theorems-unaudited': indexed_theorems_unaudited, 'stale-report-accepted': stale_report_accepted,
-            'escape-hatches-allowed': escape_hatches_allowed, 'mutation-kill-unbound': mutation_kill_unbound}
+            'escape-hatches-allowed': escape_hatches_allowed, 'mutation-kill-unbound': mutation_kill_unbound,
+            'unaccounted-model-hypothesis': unaccounted_model_hypothesis, 'premises-in-goal-rows': premises_in_goal_rows}
 
 
 def main(argv):

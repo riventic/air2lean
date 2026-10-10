@@ -64,6 +64,36 @@ def premises_of(theorem: dict, claims) -> list[str] | None:
     return ['ASM-01', 'ASM-04'] if ABSENCE_CLAIMS & set(claims) else ['ASM-01']
 
 
+def premise_rules(path: Path = ROOT / 'assurance/premises.json') -> list:
+    """The name rules of the premise catalogue (docs/premises.md) that map a definition to a premise."""
+    return [re.compile(rule['pattern']) for rule in json.loads(Path(path).read_text())['rules']]
+
+
+PREMISE_RULES = premise_rules()
+
+
+def unaccounted(names, nodes, allowed=()) -> list[str]:
+    """F4 (docs/architecture-audit/claims.md), deny by default: hypothesis definitions that no
+    premise accounts for. Standard Lean is trusted and a runtime (ZigLean) definition carries its
+    module's premises; any other definition, such as a hand-written model or oracle in a contract,
+    or one the audit graph does not resolve, must be a declared root assumption or match a
+    premise rule."""
+    out = []
+    for name in sorted(names):
+        module = (nodes.get(name) or {}).get('module')
+        top = module.split('.')[0] if isinstance(module, str) else None
+        if top in ('Lean', 'Init', 'Std', 'Lake', 'ZigLean') or name in allowed:
+            continue
+        if not any(rule.search(name) for rule in PREMISE_RULES):
+            out.append(name)
+    return out
+
+
+def unaccounted_reason(names) -> str:
+    return (f'a hypothesis rests on definitions no premise accounts for: {", ".join(names)} '
+            "(declare each in the root's assumptions, docs/premises.md)")
+
+
 def load_heads(path: Path = HEADS_PATH) -> dict:
     """The registered claim heads (assurance/claim-heads.json)."""
     data = json.loads(Path(path).read_text())
@@ -239,7 +269,7 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     result = {'head': name, 'head_problem': problem, 'claims': [c for c in REGISTRY_CLAIMS if c in found],
               'claim_class': claim_class(found), 'type_strength': derived_strength(found),
               'bound': bound_of(entry),
-              'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [],
+              'subject': None, 'binding': None, 'domain': None, 'rejected_hypotheses': [], 'unaccounted': [],
               'witnesses': None, 'caps': [], 'strength': None, 'scope': 'scoped'}
     statement = statement_of(theorem)
     if statement is None:
@@ -260,11 +290,15 @@ def assess(theorem, heads, definition=None, *, generated=(), allowed=(), audited
     # Every binder other than the root's own arguments is a premise, whether a Prop or a
     # proposition wrapped in a type (`PLift`, a structure of proofs).
     blocked = set(generated) | set(heads) | ({definition} if definition else set())
+    hypothesis_defs = set()
     for index, binder in enumerate(_list(statement.get('binders'))):
         if isinstance(binder, dict) and index not in variables:
+            hypothesis_defs |= set(_list(binder.get('defs')))
             bad = sorted(set(_list(binder.get('defs'))) & blocked - set(allowed))
             if bad:
                 result['rejected_hypotheses'].append({'hypothesis': binder.get('name'), 'mentions': bad})
+    if nodes is not None:
+        result['unaccounted'] = unaccounted(hypothesis_defs - blocked, nodes, allowed)
     witnesses = {kind: _witness(statement, kind, audited) for kind in ('nonvacuity', 'liveness')}
     result['witnesses'] = witnesses
     strength, caps = result['type_strength'], result['caps']
@@ -363,7 +397,7 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
               'derived_strength': None, 'claim_class': None, 'bound': None, 'domain': goal['domain'],
               'derived_domain': None, 'binding': None, 'caps': [],
-              'caller_obligations': (obligations or {}).get(goal['theorem'], []), 'premises': None}
+              'caller_obligations': (obligations or {}).get(goal['theorem'], []), 'premises': None, 'unaccounted': []}
     theorem = theorems.get(goal['theorem'])
     if theorem is None:
         return {**result, 'status': 'rejected',
@@ -372,7 +406,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                    allowed=allowed, audited=theorems, nodes=nodes)
     premises = premises_of(theorem, found['claims'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
-                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises)
+                  derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises,
+                  unaccounted=found['unaccounted'])
     if theorem.get('allowed') is not True:
         return {**result, 'status': 'rejected', 'reason': 'theorem has assurance policy violations'}
     if premises is None:
@@ -389,6 +424,8 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                           f'root definition {definition} applied to its parameters ({found["binding"]})'}
     if found['rejected_hypotheses']:
         return {**result, 'status': 'rejected', 'reason': found['caps'][-1]}
+    if found['unaccounted']:
+        return {**result, 'status': 'rejected', 'reason': unaccounted_reason(found['unaccounted'])}
     derived = found['strength']
     if derived is None and found['claim_class'] == GUARANTEED_RETURN_UNDER_PREMISE:
         return {**result, 'status': 'rejected',

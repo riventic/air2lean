@@ -4715,6 +4715,16 @@
    "kind": "definition"
   },
   {
+   "name": "Unit",
+   "module": "Init.Prelude",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Assn",
+   "module": "ZigLean.Sep.Assert",
+   "kind": "definition"
+  },
+  {
    "name": "Zig.Conc.Total.countdown",
    "module": "ZigLean.Conc.Total",
    "kind": "definition"
@@ -4722,6 +4732,21 @@
   {
    "name": "Zig.Conc.Total.stuck",
    "module": "ZigLean.Conc.Total",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Heap",
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Heap.Disjoint",
+   "module": "ZigLean.Sep.Heap",
+   "kind": "definition"
+  },
+  {
+   "name": "Zig.Mem.heap",
+   "module": "ZigLean.Sep.Heap",
    "kind": "definition"
   }
  ]

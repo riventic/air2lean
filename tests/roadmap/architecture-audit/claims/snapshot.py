@@ -20,6 +20,24 @@ FIELDS = ('name', 'module', 'axioms', 'conclusion', 'statement_dependencies', 'c
 CLASH = "environment already contains 'Zig.TotalTriple"
 
 
+def graph(report_nodes, theorems):
+    """The part of the declaration graph the claim tooling reads: every node reachable from the
+    theorems through fixture (non-standard, non-runtime) declarations, with the dependencies of
+    those, plus every definition a hypothesis mentions (F4 classifies it by module)."""
+    kept, pending = {}, [t['name'] for t in theorems]
+    pending += [d for t in theorems for b in t['statement']['binders'] for d in b['defs']] + list(GENERATED)
+    while pending:
+        name = pending.pop()
+        node = report_nodes.get(name)
+        if name in kept or node is None:
+            continue
+        kept[name] = {'module': node['module'], 'kind': node['kind']}
+        if node['module'].split('.')[0] not in ('Lean', 'Init', 'Std', 'Lake', 'ZigLean'):
+            kept[name]['dependencies'] = node['dependencies']
+            pending += node['dependencies']
+    return kept
+
+
 def extract():
     theorems, nodes = [], {}
     # A report may fail only for its expected reason: kernel replay rejects AuditClaims.Unchecked
@@ -33,16 +51,16 @@ def extract():
         explained = bool(violations) and all(v['trust_class'] in expected for v in violations)
         if report.get('status') != 'pass' and not (report.get('status') == 'fail' and explained):
             raise SystemExit(f'{path}: assurance audit did not pass: {report.get("violations") or report.get("error")}')
-        theorems += [{k: t[k] for k in FIELDS} for t in report['theorems'] if '._proof' not in t['name']]
-        nodes.update({n['name']: {'module': n['module'], 'kind': n['kind']} for n in report['nodes']
-                      if n['name'] in GENERATED})
+        extracted = [{k: t[k] for k in FIELDS} for t in report['theorems'] if '._proof' not in t['name']]
+        theorems += extracted
+        nodes.update(graph({n['name']: n for n in report['nodes']}, extracted))
     def shadow(name):
         report = json.loads((OUT / f'assurance-{name}.json').read_text())
         return {'status': report.get('status'), 'name_clash': CLASH in (OUT / f'assurance-{name}.stderr').read_text()}
     shadow_audit = shadow('Shadow')
     shadow_within_audit = shadow('ShadowWithin')
     return {'schema_version': 2, 'source': 'tests/roadmap/architecture-audit/claims/build.sh',
-            'theorems': sorted(theorems, key=lambda t: t['name']), 'generated_nodes': dict(sorted(nodes.items())),
+            'theorems': sorted(theorems, key=lambda t: t['name']), 'nodes': dict(sorted(nodes.items())),
             'shadow_audit': shadow_audit, 'shadow_within_audit': shadow_within_audit}
 
 
