@@ -2417,8 +2417,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
       else if srcPtr && dstPtr && fc.isMemPtr a && fc.ptrAlignOf inst.ty > fc.ptrAlign a then
-        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`).
-        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {rv a} >>= fun _ => pure {rv a})"
+        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`); a
+        -- slice checks its item pointer.
+        let p := if fc.isSlice a then s!"{rv a}.ptr" else rv a
+        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {p} >>= fun _ => pure {rv a})"
       else s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>

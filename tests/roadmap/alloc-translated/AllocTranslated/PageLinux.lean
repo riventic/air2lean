@@ -528,7 +528,7 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
                         else (do
                           throw .panic)) : Zig.CM Tgt heap_PageAllocator_mapLocals heap_PageAllocator_mapExit) with
                       | .br114 => (do
-                        let i119 ← Zig.callMC (Zig.checkAlign 4096 i106 >>= fun _ => pure i106)
+                        let i119 ← Zig.callMC (Zig.checkAlign 4096 i106.ptr >>= fun _ => pure i106)
                         let _i120 ← Zig.callMC (Zig.Os.munmap Zig.Os.Target.linux i119)
                         pure .br93)
                       | e => pure e)
@@ -628,7 +628,7 @@ def heap_PageAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignment)
       else (do
         throw .panic)) : Zig.MM heap_PageAllocator_freeLocals heap_PageAllocator_freeExit) with
     | .br11 => (do
-      let i16 ← Zig.callM (Zig.checkAlign 4096 p1 >>= fun _ => pure p1)
+      let i16 ← Zig.callM (Zig.checkAlign 4096 p1.ptr >>= fun _ => pure p1)
       let _i17 ← Zig.callM (heap_PageAllocator_unmap i16)
       pure .ret)
     | e => pure e) : Zig.MM heap_PageAllocator_freeLocals heap_PageAllocator_freeExit).run' (default : heap_PageAllocator_freeLocals)
@@ -667,7 +667,7 @@ def heap_PageAllocator_realloc (p0 : Zig.Slice) (p1 : mem_Alignment) (p2 : BitVe
       else (do
         throw .panic)) : Zig.MM heap_PageAllocator_reallocLocals heap_PageAllocator_reallocExit) with
     | .br11 => (do
-      let i16 ← Zig.callM (Zig.checkAlign 4096 p0 >>= fun _ => pure p0)
+      let i16 ← Zig.callM (Zig.checkAlign 4096 p0.ptr >>= fun _ => pure p0)
       modify (fun s => { s with local17 := i16 })
       match ← ((do
         pure .br20) : Zig.MM heap_PageAllocator_reallocLocals heap_PageAllocator_reallocExit) with
@@ -742,7 +742,7 @@ def heap_PageAllocator_realloc (p0 : Zig.Slice) (p1 : mem_Alignment) (p2 : BitVe
                     else (do
                       throw .panic)) : Zig.MM heap_PageAllocator_reallocLocals heap_PageAllocator_reallocExit) with
                   | .br84 => (do
-                    let i89 ← Zig.callM (Zig.checkAlign 4096 i76 >>= fun _ => pure i76)
+                    let i89 ← Zig.callM (Zig.checkAlign 4096 i76.ptr >>= fun _ => pure i76)
                     let _i90 ← Zig.callM (Zig.Os.munmap Zig.Os.Target.linux i89)
                     let i92 ← pure (((← get).local17).ptr)
                     let i93 ← pure (i92)
