@@ -63,7 +63,7 @@ FINDINGS = {name: finding for name, (_, _, finding) in LEAN_CASES.items()}
 FINDINGS.update({'spoofed-total-head': 'S2', 'spoofed-registered-head': 'S2', 'receipt-schema-skew': 'F1',
                  'host-allowlist-masks-panic': 'F3', 'model-illegal-masks-native-value': 'F3',
                  'indexed-theorems-unaudited': 'F2', 'stale-report-accepted': 'H1',
-                 'escape-hatches-allowed': 'H4'})
+                 'escape-hatches-allowed': 'H4', 'mutation-kill-unbound': 'H3'})
 # Fixed: S1 (kernel replay rejects AuditClaims.Unchecked), F2, H1 (codex/fix-evidence-integrity),
 # S2-S6 (codex/fix-claim-binding), S7 and F3 (codex/fix-asm-faults-hostdiff), F1 (batch 8's I06
 # coverage binding, kept in step with the schema-3 receipt of codex/fix-model-premises).
@@ -252,6 +252,28 @@ def escape_hatches_allowed():
     return exposed, '; '.join(details)
 
 
+def mutation_kill_unbound():
+    """H3: a recorded mutation kill counts only while the regression that killed it is unchanged.
+    The committed ledger must be current, and a kill must go stale when its example's inputs
+    change after recording."""
+    mutation_map = load('mutation_map', 'mutation-map.py')
+    report = mutation_map.analyze(ROOT)
+    if not hasattr(mutation_map, 'target_sha256'):
+        return True, 'kills are bound to the mutation text only, not to the killing regression'
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        (root / 'examples/ex').mkdir(parents=True)
+        (root / 'examples/ex/ex.zig').write_text('pub fn f() void {}\n')
+        entry = {'killed_by': {'kind': 'diff', 'target': 'ex'}, 'block_sha256': 'b',
+                 'target_sha256': mutation_map.target_sha256(root, 'diff', 'ex')}
+        (root / 'examples/ex/ex.zig').write_text('pub fn f() void { unreachable; }\n')
+        problems = []
+        mutation_map.check_kills(root, {'schema': mutation_map.KILLS_SCHEMA, 'mutants': {'a': entry}},
+                                 {'a'}, {'a': 'b'}, problems, [])
+    exposed = bool(report['problems']) or not problems
+    return exposed, f'committed ledger problems: {len(report["problems"])}; changed example -> {problems}'
+
+
 def equation_sides():
     """tools/Assurance.lean records an equation's left side and whether both sides are one term,
     so `f x = f x` (states nothing) is told apart from `f (x + 0) = f x` (relates two
@@ -269,7 +291,7 @@ PY_CASES = {'spoofed-total-head': spoofed_total_head, 'spoofed-registered-head':
             'receipt-schema-skew': receipt_schema_skew, 'host-allowlist-masks-panic': host_allowlist_masks_panic,
             'model-illegal-masks-native-value': model_illegal_masks_native_value,
             'indexed-theorems-unaudited': indexed_theorems_unaudited, 'stale-report-accepted': stale_report_accepted,
-            'escape-hatches-allowed': escape_hatches_allowed}
+            'escape-hatches-allowed': escape_hatches_allowed, 'mutation-kill-unbound': mutation_kill_unbound}
 
 
 def main(argv):

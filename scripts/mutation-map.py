@@ -12,7 +12,10 @@ mutants, each mutant with one category. `check` fails when
   * a designated scripts/mutate.sh mutant has no recorded kill in assurance/mutation-kills.json
     (which regression killed it: a differential example or a proof module), the record names a
     regression that does not exist, was recorded for another version of the mutation's block in
-    scripts/mutate.sh (stale), or the ledger names a mutation that is gone. A mutation that cannot
+    scripts/mutate.sh (stale), was recorded against other committed inputs of its regression
+    (`target_sha256`: the proof module and the `Proofs` modules it imports, or the example's
+    program and its tests/diff/<ex>/ harness, inputs and allow-lists; stale), or the ledger names
+    a mutation that is gone. A mutation that cannot
     run on the recording host (asm is x86_64 only) may carry `{"unrecorded": reason, block_sha256}`:
     `check` lists it as a kill gap, and only `kills record` from a host that runs it clears it.
 Gaps of incomplete rows (declared category without a mutant, no negative test, no mutant) are
@@ -79,6 +82,33 @@ def kill_target_exists(root, kind, target):
     return bool(re.fullmatch(r'\w+(\.\w+)+', target)) and (root / (target.replace('.', '/') + '.lean')).is_file()
 
 
+def target_files(root, kind, target):
+    """The committed inputs of a killing regression, repository-relative and sorted: a proof
+    module and the hand-written `Proofs` modules it imports (transitively; mutate.sh regenerates
+    each `Gen` module with the mutated translator, so the committed one is not an input), or an
+    example's program and its tests/diff/<ex>/ harness, inputs and allow-lists."""
+    if kind == 'diff':
+        files = {p for d in (root / 'examples' / target, root / 'tests/diff' / target) if d.is_dir()
+                 for p in d.rglob('*') if p.is_file()}
+    else:
+        files, pending = set(), [target]
+        while pending:
+            module = pending.pop()
+            path = root / (module.replace('.', '/') + '.lean')
+            if module.rsplit('.', 1)[-1] != 'Gen' and path not in files and path.is_file():
+                files.add(path)
+                pending += re.findall(r'^import\s+(Proofs\.\S+)', path.read_text(), re.M)
+    return sorted(p.relative_to(root).as_posix() for p in files)
+
+
+def target_sha256(root, kind, target):
+    """One digest over the paths and contents of `target_files`."""
+    digest = hashlib.sha256()
+    for rel in target_files(root, kind, target):
+        digest.update(f'{rel}\0{hashlib.sha256((root / rel).read_bytes()).hexdigest()}\n'.encode())
+    return digest.hexdigest()
+
+
 def check_kills(root, kills, designated, blocks, problems, gaps):
     """Every designated mutate.sh mutant needs a current recorded kill by an existing regression."""
     if not isinstance(kills, dict) or kills.get('schema') != KILLS_SCHEMA or not isinstance(kills.get('mutants'), dict):
@@ -97,13 +127,17 @@ def check_kills(root, kills, designated, blocks, problems, gaps):
             if entry['block_sha256'] != blocks.get(name):
                 problems.append(f'{where}: unrecorded entry is for a different version of the mutation')
             gaps.append(f'{name}: {entry["unrecorded"]}')
-        elif (not isinstance(entry, dict) or set(entry) != {'killed_by', 'block_sha256'} or not isinstance(by, dict) or set(by) != {'kind', 'target'}
+        elif (not isinstance(entry, dict) or set(entry) != {'killed_by', 'block_sha256', 'target_sha256'}
+                or not isinstance(by, dict) or set(by) != {'kind', 'target'}
                 or by['kind'] not in KILL_KINDS or not isinstance(by['target'], str)):
-            problems.append(f'{where}: needs killed_by {{kind: diff|proof, target}} and block_sha256')
+            problems.append(f'{where}: needs killed_by {{kind: diff|proof, target}}, block_sha256 and target_sha256')
         elif not kill_target_exists(root, by['kind'], by['target']):
             problems.append(f'{where}: killing {by["kind"]} regression {by["target"]!r} does not exist')
         elif entry['block_sha256'] != blocks.get(name):
             problems.append(f'{where}: kill recorded for a different version of the mutation; rerun it and `kills record`')
+        elif entry['target_sha256'] != target_sha256(root, by['kind'], by['target']):
+            problems.append(f'{where}: kill recorded against other inputs of {by["kind"]} regression {by["target"]}; '
+                            'rerun the mutation and `kills record`')
 
 
 def shard_labels(root):
@@ -265,12 +299,16 @@ def kills_command(args):
     if args.kills_command == 'verify':
         for name, (status, kind, target) in sorted(log.items()):
             entry = ledger['mutants'].get(name)
-            if (status == 'killed' and name in blocks and 'unrecorded' not in (entry or {})
-                    and (entry is None or entry['killed_by'] != {'kind': kind, 'target': target})):
+            if status != 'killed' or name not in blocks or 'unrecorded' in (entry or {}):
+                continue
+            if entry is None or entry['killed_by'] != {'kind': kind, 'target': target}:
                 problems.append(f'{name}: killed by {kind} {target}, ledger records {entry and entry["killed_by"]}')
+            elif entry.get('target_sha256') != target_sha256(args.root, kind, target):
+                problems.append(f'{name}: the ledger kill was recorded against other inputs of {kind} {target}')
     elif not problems:
         for name, (_, kind, target) in log.items():
-            ledger['mutants'][name] = {'killed_by': {'kind': kind, 'target': target}, 'block_sha256': blocks[name]}
+            ledger['mutants'][name] = {'killed_by': {'kind': kind, 'target': target}, 'block_sha256': blocks[name],
+                                       'target_sha256': target_sha256(args.root, kind, target)}
         ledger['mutants'] = dict(sorted(ledger['mutants'].items()))
         path.write_text(json.dumps(ledger, indent=2) + '\n')
     for problem in problems:

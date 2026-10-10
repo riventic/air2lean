@@ -86,7 +86,9 @@ class Scratch(unittest.TestCase):
         """Write the kill ledger for the scratch mutate.sh: a is killed by a diff, b by a proof build."""
         blocks = mm.mutation_blocks(self.root)
         by = {'a': {'kind': 'diff', 'target': 'ex'}, 'b': {'kind': 'proof', 'target': 'Proofs.Mod.Thm'}}
-        mutants = {n: {'killed_by': by[n], 'block_sha256': blocks[n]} for n in blocks if n in by}
+        mutants = {n: {'killed_by': by[n], 'block_sha256': blocks[n],
+                       'target_sha256': mm.target_sha256(self.root, by[n]['kind'], by[n]['target'])}
+                   for n in blocks if n in by}
         mutants.update(changes)
         write(self.root / mm.KILLS, json.dumps({'schema': mm.KILLS_SCHEMA, 'mutants': mutants}))
 
@@ -136,8 +138,27 @@ class Kills(Scratch):
                            ({'kind': 'diff', 'target': '../ex'}, 'does not exist'),
                            ({'kind': 'survived', 'target': 'ex'}, 'needs killed_by'),
                            ({'kind': 'diff'}, 'needs killed_by')):
-            self.record(a={'killed_by': by, 'block_sha256': blocks['a']})
+            self.record(a={'killed_by': by, 'block_sha256': blocks['a'], 'target_sha256': ''})
             self.assertProblem(needle)
+        self.record(a={'killed_by': {'kind': 'diff', 'target': 'ex'}, 'block_sha256': blocks['a']})
+        self.assertProblem('a: needs killed_by {kind: diff|proof, target}, block_sha256 and target_sha256')
+
+    def test_kill_is_bound_to_the_inputs_of_its_regression(self):
+        """H3 (docs/architecture-audit/claims.md): a kill recorded before its regression changed
+        (an example's inputs, a proof module or a `Proofs` module it imports) is stale."""
+        write(self.root / 'Proofs/Mod/Lemma.lean', '')
+        write(self.root / 'Proofs/Mod/Thm.lean', 'import ZigLean\nimport Proofs.Mod.Lemma\n')
+        self.record()
+        self.assertEqual(mm.target_files(self.root, 'proof', 'Proofs.Mod.Thm'),
+                         ['Proofs/Mod/Lemma.lean', 'Proofs/Mod/Thm.lean'])
+        stale = 'kill recorded against other inputs of {} regression {}; rerun the mutation and `kills record`'
+        for path, name, kind, target in (('tests/diff/ex/inputs/f.jsonl', 'a', 'diff', 'ex'),
+                                         ('Proofs/Mod/Lemma.lean', 'b', 'proof', 'Proofs.Mod.Thm')):
+            write(self.root / path, 'changed\n')
+            self.assertEqual(self.problems(), [f'{mm.KILLS}: {name}: ' + stale.format(kind, target)])
+            self.assertEqual(self.run_kills('verify', f'{name} killed {kind} {target}\n')[0], 1)
+            self.assertEqual(self.run_kills('record', f'{name} killed {kind} {target}\n'), (0, ''))
+            self.assertEqual(self.problems(), [])
 
     def test_kill_of_a_changed_mutation_is_stale(self):
         write(self.root / mm.MUTATE_SH, MUTATE.replace('one', 'one, edited'))
