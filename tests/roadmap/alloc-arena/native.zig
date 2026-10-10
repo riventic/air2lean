@@ -12,4 +12,5 @@ pub fn main() void {
     std.debug.print("reset ok {d} ok {d} ok {d} ok {d}\n", .{ arena.arena_reset(10, true), arena.arena_reset(10, false), arena.arena_reset(500, true), arena.arena_reset(1500, true) });
     std.debug.print("page ok {d} ok {d}\n", .{ arena.arena_page(10), arena.arena_page(20000) });
     std.debug.print("two ok {d} ok {d}\n", .{ arena.arena_two(1), arena.arena_two(100) });
+    std.debug.print("oom ok {d}\n", .{b(arena.arena_oom_free(8))});
 }

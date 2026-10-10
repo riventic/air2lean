@@ -232,7 +232,7 @@
      "ty": 13,
      "callee": {
       "ty": 14,
-      "func": "mem.Allocator.create__anon_27963",
+      "func": "mem.Allocator.create__anon_27977",
       "module": "std",
       "instance_key": "496c6df2f4ba0de8dc9e37b5092e9a06e025ddd8398cfa519835af7040d35738",
       "noreturn": false
@@ -441,7 +441,7 @@
      "ty": 20,
      "callee": {
       "ty": 21,
-      "func": "mem.Allocator.alloc__anon_8908",
+      "func": "mem.Allocator.alloc__anon_241",
       "module": "std",
       "instance_key": "a8254a5f2b749e22bbc44ca8daa206651a3f086e055d9230d91eb7654d2a8876",
       "noreturn": false

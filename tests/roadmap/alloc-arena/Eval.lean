@@ -1,5 +1,6 @@
 import AllocArena.ArenaLinux
 import AllocArena.ArenaMacos
+import AllocArena.ArenaFixedLinux
 
 /-!
 # Translated `ArenaAllocator`: executable regressions (`check.sh`)
@@ -7,7 +8,13 @@ import AllocArena.ArenaMacos
 `std.heap.ArenaAllocator` (Zig 0.16.0, lock-free) is translated from its AIR with its child
 allocator (`FixedBufferAllocator`, `page_allocator`) reached through ordinary indirect calls. On
 the schedule that the oracle `fun _ => 0` picks (one thread), the results equal the native run of
-the same functions (`expected.txt`, `native.zig`).
+the same functions (`expected.txt`, `native.zig`), with one exception: `arena_oom_free`, where the
+stock arena's `free` forms an out-of-bounds pointer after a failed `alloc` (O-E). Natively that is
+undefined behaviour without a visible effect (`true`); the translated `free` is illegal.
+
+The patched arena (`ArenaFixedLinux`, `docs/upstream/arena-oob-gep.md`) equals its native run
+(`expected-fixed.txt`, `native.zig` built with the patched standard library), `arena_oom_free`
+included.
 -/
 
 namespace AllocArena.Eval
@@ -41,7 +48,28 @@ open AllocArena.ArenaLinux
   ["ok 21", "ok 21"]
 -- `@returnAddress` reads the explicit oracle; any values give the same results.
 #guard first (arena_reset 10 true) dispatch { (mem0 .fresh) with arbitrary := #[7, 9, 11] } = "ok 229"
+-- O-E from real runs: natively `true` (undefined behaviour without a visible effect).
+#guard first (arena_oom_free 8) dispatch (mem0 .fresh) = "fail Zig.Error.illegal"
 end Linux
+
+section Fixed
+open AllocArena.ArenaFixedLinux
+#guard [first (arena_sum 1) dispatch (mem0 .fresh), first (arena_sum 10) dispatch (mem0 .fresh),
+  first (arena_sum 3000) dispatch (mem0 .fresh), first (arena_sum 5000) dispatch (mem0 .fresh)] =
+  ["ok 1", "ok 10", "ok 0", "ok 0"]
+#guard [first (arena_resize 10 20) dispatch (mem0 .fresh), first (arena_resize 10 5) dispatch (mem0 .fresh),
+  first (arena_resize 10 100) dispatch (mem0 .fresh), first (arena_resize 10 4000) dispatch (mem0 .fresh)] =
+  ["ok 1", "ok 1", "ok 0", "ok 0"]
+-- The in-place growth no longer includes the failed reservation, so the node grows less.
+#guard [first (arena_reset 10 true) dispatch (mem0 .fresh), first (arena_reset 10 false) dispatch (mem0 .fresh),
+  first (arena_reset 500 true) dispatch (mem0 .fresh), first (arena_reset 1500 true) dispatch (mem0 .fresh)] =
+  ["ok 229", "ok 229", "ok 5001", "ok 15001"]
+#guard [first (arena_page 10) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh)] =
+  ["ok 12", "ok 20002"]
+#guard [first (arena_two 1) dispatch (mem0 .fresh), first (arena_two 100) dispatch (mem0 .fresh)] =
+  ["ok 21", "ok 21"]
+#guard first (arena_oom_free 8) dispatch (mem0 .fresh) = "ok 1"
+end Fixed
 
 section Macos
 open AllocArena.ArenaMacos

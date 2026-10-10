@@ -1,0 +1,99 @@
+--- a/std/heap/ArenaAllocator.zig
++++ b/std/heap/ArenaAllocator.zig
+@@ -322,6 +322,13 @@
+     }
+ }
+ 
++/// `alignForward(base + n, 2)`, the size of a node whose buffer ends `n` bytes after `base`, or
++/// `null` if that does not fit in `usize`.
++fn nodeSizeFor(base: usize, n: usize) ?usize {
++    const size = std.math.add(usize, base, n) catch return null;
++    return mem.alignBackward(usize, std.math.add(usize, size, 1) catch return null, 2);
++}
++
+ fn alignedIndex(buf_ptr: [*]u8, end_index: usize, alignment: Alignment) usize {
+     // Wrapping arithmetic to avoid overflows since `end_index` isn't bounded by
+     // `size`. This is always ok since the max alignment in byte units is also
+@@ -334,6 +341,8 @@
+     _ = ret_addr;
+ 
+     assert(n > 0);
++    // A request whose reservation overflows `usize` cannot be served: fail, do not panic.
++    if (n > std.math.maxInt(usize) - (alignment.toByteUnits() - 1)) return null;
+ 
+     var cur_first_node = arena.loadFirstNode();
+ 
+@@ -357,6 +366,13 @@
+             const alignable = n + alignment.toByteUnits() - 1;
+             const end_index = @atomicRmw(usize, &node.end_index, .Add, alignable, .acquire); // acquire any memory that may have been freed
+             const aligned_index = alignedIndex(buf.ptr, end_index, alignment);
++            if (aligned_index > buf.len or n > buf.len - aligned_index) {
++                // Give the reservation back before looking for more memory: `free` and
++                // `resize` form `buf.ptr + end_index`, which must stay within the buffer
++                // also when no new node can be found and this returns `null`.
++                _ = @cmpxchgStrong(usize, &node.end_index, end_index +% alignable, end_index, .monotonic, .monotonic);
++                break :first_node .{ node, buf.len };
++            }
+             assert(end_index + alignable >= aligned_index + n);
+             if (end_index + alignable != aligned_index + n) {
+                 _ = @cmpxchgStrong(
+@@ -369,7 +385,6 @@
+                 );
+             }
+ 
+-            if (aligned_index + n > buf.len) break :first_node .{ node, buf.len };
+             return buf[aligned_index..][0..n].ptr;
+         };
+ 
+@@ -386,7 +401,7 @@
+             const buf = allocated_slice[@sizeOf(Node)..];
+             const end_index = @atomicLoad(usize, &node.end_index, .monotonic);
+             const aligned_index = alignedIndex(buf.ptr, end_index, alignment);
+-            const new_size = mem.alignForward(usize, @sizeOf(Node) + aligned_index + n, 2);
++            const new_size = nodeSizeFor(@sizeOf(Node) + aligned_index, n) orelse break :resize;
+ 
+             if (new_size <= allocated_slice.len) {
+                 // A `resize` or `free` call managed to sneak in and we need to
+@@ -442,7 +457,7 @@
+                     const buf = node.allocatedSliceUnsafe()[@sizeOf(Node)..];
+                     const aligned_index = alignedIndex(buf.ptr, 0, alignment);
+ 
+-                    const diff = aligned_index + n -| buf.len;
++                    const diff = (aligned_index +| n) -| buf.len;
+                     if (diff < best_fit_diff) {
+                         best_fit_prev = it_prev;
+                         best_fit = node;
+@@ -456,16 +471,16 @@
+             const aligned_index, const need_resize = aligned_index: {
+                 const buf = node.allocatedSliceUnsafe()[@sizeOf(Node)..];
+                 const aligned_index = alignedIndex(buf.ptr, 0, alignment);
+-                break :aligned_index .{ aligned_index, aligned_index + n > buf.len };
++                break :aligned_index .{ aligned_index, aligned_index > buf.len or n > buf.len - aligned_index };
+             };
+ 
+             if (need_resize) {
+                 // Ideally we want to use all nodes in `free_list` eventually,
+                 // so even if none fit we'll try to resize the one that was the
+                 // closest to being large enough.
+-                const new_size = mem.alignForward(usize, @sizeOf(Node) + aligned_index + n, 2);
+-                if (arena.child_allocator.rawResize(node.allocatedSliceUnsafe(), .of(Node), new_size, @returnAddress())) {
+-                    node.size = .fromInt(new_size);
++                const new_size = nodeSizeFor(@sizeOf(Node) + aligned_index, n);
++                if (new_size != null and arena.child_allocator.rawResize(node.allocatedSliceUnsafe(), .of(Node), new_size.?, @returnAddress())) {
++                    node.size = .fromInt(new_size.?);
+                 } else {
+                     arena.pushFreeList(first_free, last_free);
+                     break :from_free_list; // we couldn't find a fitting free node
+@@ -512,9 +527,9 @@
+             }
+ 
+             const size: Node.Size = size: {
+-                const min_size = @sizeOf(Node) + alignment.toByteUnits() + n;
+-                const big_enough_size = prev_size + min_size + 16;
+-                const size = mem.alignForward(usize, big_enough_size + big_enough_size / 2, 2);
++                const min_size = std.math.add(usize, @sizeOf(Node) + alignment.toByteUnits(), n) catch return null;
++                const big_enough_size = std.math.add(usize, prev_size + 16, min_size) catch return null;
++                const size = nodeSizeFor(big_enough_size, big_enough_size / 2) orelse return null;
+                 break :size .fromInt(size);
+             };
+             const ptr = arena.child_allocator.rawAlloc(size.toInt(), .of(Node), @returnAddress()) orelse

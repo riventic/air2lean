@@ -83,3 +83,20 @@ pub export fn arena_oob_free() void {
     const foreign: []u8 = buffer[0..8];
     arena.allocator().free(foreign);
 }
+
+var small: [256]u8 = undefined;
+
+/// An allocation that the child cannot serve after one that it could, then the `free` of the
+/// first slice (obstruction O-E from real runs, as `upstream/oob_gep.zig`). The stock arena keeps
+/// the first node's `end_index` past its buffer and the translated `free` is illegal
+/// (natively: undefined behaviour without a visible effect, so `true`); the patched arena
+/// (`docs/upstream/arena-oob-gep.md`) gives the reservation back and frees the slice.
+pub export fn arena_oom_free(n: usize) bool {
+    var fba = std.heap.FixedBufferAllocator.init(&small);
+    var arena = std.heap.ArenaAllocator.init(fba.allocator());
+    const a = arena.allocator();
+    const s = a.alloc(u8, n) catch return false;
+    _ = a.alloc(u8, 4096) catch {};
+    a.free(s);
+    return true;
+}

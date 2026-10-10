@@ -1,0 +1,409 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "heap.ArenaAllocator.nodeSizeFor",
+ "module": "std",
+ "src": {
+  "file": "heap/ArenaAllocator.zig",
+  "module": "std",
+  "decl_line": 327
+ },
+ "params": [
+  0,
+  0
+ ],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 4,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 2,
+     "column": 30
+    },
+    {
+     "id": 7,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 4,
+      "func": "math.add__anon_18163",
+      "module": "std",
+      "instance_key": "23f0cc3a812cdbe32c1d5361264c5d7dc904b019aeb101aac8a37d3982c4b945",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 0
+      },
+      {
+       "inst": 1
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "tag": "is_non_err",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 7
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "tag": "cond_br",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 8
+      }
+     ],
+     "then": [
+      {
+       "id": 9,
+       "tag": "unwrap_errunion_payload",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 10,
+       "tag": "br",
+       "ty": 6,
+       "target": 3,
+       "args": [
+        {
+         "inst": 9
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 11,
+       "tag": "unwrap_errunion_err",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 12,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 2,
+       "column": 53
+      },
+      {
+       "id": 13,
+       "tag": "ret_safe",
+       "ty": 6,
+       "args": [
+        {
+         "ty": 1,
+         "null": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "size"
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 29
+  },
+  {
+   "id": 17,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 18,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 3,
+     "column": 49
+    },
+    {
+     "id": 21,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 4,
+      "func": "math.add__anon_18163",
+      "module": "std",
+      "instance_key": "23f0cc3a812cdbe32c1d5361264c5d7dc904b019aeb101aac8a37d3982c4b945",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 3
+      },
+      {
+       "ty": 0,
+       "val": "1"
+      }
+     ]
+    },
+    {
+     "id": 22,
+     "tag": "is_non_err",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 21
+      }
+     ]
+    },
+    {
+     "id": 28,
+     "tag": "cond_br",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 22
+      }
+     ],
+     "then": [
+      {
+       "id": 23,
+       "tag": "unwrap_errunion_payload",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 21
+        }
+       ]
+      },
+      {
+       "id": 24,
+       "tag": "br",
+       "ty": 6,
+       "target": 17,
+       "args": [
+        {
+         "inst": 23
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 25,
+       "tag": "unwrap_errunion_err",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 21
+        }
+       ]
+      },
+      {
+       "id": 26,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 3,
+       "column": 72
+      },
+      {
+       "id": 27,
+       "tag": "ret_safe",
+       "ty": 6,
+       "args": [
+        {
+         "ty": 1,
+         "null": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 29
+  },
+  {
+   "id": 32,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 8,
+    "func": "mem.alignBackward__anon_7294",
+    "module": "std",
+    "instance_key": "f056e98f6fd291e78d96da896c39ceca3160a401221ce5e72e29b26765e42e58",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 17
+    },
+    {
+     "ty": 0,
+     "val": "2"
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 34,
+   "tag": "wrap_optional",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 32
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 34
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "error_union",
+   "error": 7,
+   "payload": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) error{Overflow}!usize"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Overflow"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) usize"
+  }
+ ]
+}

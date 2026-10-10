@@ -535,7 +535,7 @@
    "ty": 2,
    "callee": {
     "ty": 16,
-    "func": "mem.alignForward__anon_1626",
+    "func": "mem.alignForward__anon_20495",
     "module": "std",
     "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
     "noreturn": false
@@ -601,7 +601,7 @@
    "ty": 2,
    "callee": {
     "ty": 16,
-    "func": "mem.alignForward__anon_1626",
+    "func": "mem.alignForward__anon_20495",
     "module": "std",
     "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
     "noreturn": false

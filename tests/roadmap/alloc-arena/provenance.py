@@ -16,7 +16,8 @@ def sha(path):
 
 
 record = {
-    'source_sha256': {n: sha(here / n) for n in ('arena.zig', 'native.zig', 'upstream/oob_gep.zig')},
+    'source_sha256': {n: sha(here / n) for n in ('arena.zig', 'native.zig', 'upstream/oob_gep.zig',
+                                                  'upstream/arena-fix.patch')},
     'air': {
         'zig_version': '0.16.0', 'schema': 12,
         'targets': {'linux': 'x86_64-linux', 'macos': 'aarch64-macos'},
@@ -26,6 +27,8 @@ record = {
                    '-fno-error-tracing -target <triple> -mcpu=baseline arena.zig',
         'selection': 'call/function-value closure of the exported arena.* functions, stopping '
                      'at debug.FullPanic and posix.mmap/munmap/mremap (the trusted OS boundary)',
+        'patched': 'arena-fixed-linux: the same command with --zig-lib-dir <the compiler lib/zig '
+                   'with upstream/arena-fix.patch applied (patch -p1)>',
     },
     'patched_compiler': 'zig-patch/air-json/json.zig of codex/alloc-milestone1 (the P0 exporter: '
                         'global initializers and container layouts resolved before writing; schema 12 '

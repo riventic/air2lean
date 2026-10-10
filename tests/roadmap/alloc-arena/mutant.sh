@@ -25,8 +25,10 @@ m = hits[0]
 open(dst, "w").write(text[:m.start()] + m.group(1) + " 0\n" + text[m.end():])
 EOF
 # Only the Linux module is mutated: the guard that sees the overlap is a Linux one.
-cp "$here/AllocArena/ArenaMacos.lean" "$work/AllocArena/ArenaMacos.lean"
-for module in ArenaLinux ArenaMacos; do
+for module in ArenaMacos ArenaFixedLinux; do
+  cp "$here/AllocArena/$module.lean" "$work/AllocArena/$module.lean"
+done
+for module in ArenaLinux ArenaMacos ArenaFixedLinux; do
   "${lean_cmd[@]}" -R "$work" -o "$work/AllocArena/$module.olean" "$work/AllocArena/$module.lean" > /dev/null
 done
 if "${lean_cmd[@]}" "$here/Eval.lean" > "$work/eval.log" 2>&1; then
