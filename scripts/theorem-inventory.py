@@ -120,8 +120,11 @@ def declarations(text: str) -> dict[str, dict]:
 def all_schedules_statement(statement: str) -> bool:
     """`Sched.run env dispatch fuel o …` with `fuel` and `o` bound by the statement itself (the
     environment `env` is explicit: a bound variable or a literal)."""
-    for m in re.finditer(r'Sched\.run\s+(?:⟨[^⟩]*⟩|\([^()]*\)|\w+)\s+\S+\s+(\w+)\s+(\w+)', statement):
-        fuel, oracle = m.groups()
+    for m in re.finditer(r'Sched\.run\b', statement):
+        args = _sched_args(statement, m.end(), 4)
+        if len(args) < 4 or not re.fullmatch(r'\w+', args[2]) or not re.fullmatch(r'\w+', args[3]):
+            continue
+        fuel, oracle = args[2], args[3]
         if (re.search(r'[({]\s*' + fuel + r'\b[^:]*:\s*Nat\s*[)}]', statement) and
                 re.search(r'[({][^:]*\b' + oracle + r'\b[^:]*:\s*Nat\s*→\s*Nat\s*[)}]', statement)):
             return True

@@ -426,6 +426,23 @@ theorem wp_asyncEagerC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {eager : Co
   simp only [StateT.run_bind]
   exact Proto.WP.bind (Proto.WP.callC (Proto.WP.mono (fun _ _ _ _ hq => Proto.WP.pure' hq) h))
 
+/-- The settled result of a consumed future (`Future.settled`): its stored result, or an error
+when it has none. -/
+private theorem settled_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {f : Future α} {r : α}
+    {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop} (hns : P.strict = false)
+    (hf : f = { task := none, result := some r } ∨ f = { task := none, result := none })
+    (hQ : Q (r, s) G m n) :
+    P.WP t ((callRC f.settled : CM Tgt σ α).run s) Q G m n := by
+  rcases hf with rfl | rfl
+  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
+      simp only [Future.settled, pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
+        Except.ok.injEq] at ha
+      subst ha
+      exact hQ
+  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
+      simp [Future.settled, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at ha
+
 /-- `await` of a consumed future (`Io.async` ran the task in the caller): it reads the future and
 returns the stored result, with no stop. -/
 theorem await_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {p : Ptr}
@@ -438,14 +455,11 @@ theorem await_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io
   unfold awaitC
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
-  rcases hp f m₁ hl with rfl | rfl
-  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
-      simp only [Future.settled, pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
-        Except.ok.injEq] at ha
-      subst ha
-      exact hQ m₁ (load_threads hl)
-  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
-      simp [Future.settled, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at ha
+  have hf := hp f m₁ hl
+  have ht : f.task = none := by rcases hf with rfl | rfl <;> rfl
+  dsimp only
+  rw [ht]
+  exact settled_wp hns hf (hQ m₁ (load_threads hl))
 
 /-- `cancel` of a consumed future: as `await_consumed_wp`. -/
 theorem cancel_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {p : Ptr}
@@ -458,14 +472,11 @@ theorem cancel_consumed_wp {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : I
   unfold cancelC
   simp only [StateT.run_bind]
   refine Proto.WP.bind (Proto.WP.callMC (fun _ _ => hns) fun f m₁ hl => ⟨by rw [load_threads hl], ?_⟩)
-  rcases hp f m₁ hl with rfl | rfl
-  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
-      simp only [Future.settled, pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq,
-        Except.ok.injEq] at ha
-      subst ha
-      exact hQ m₁ (load_threads hl)
-  · exact Proto.WP.callRC (fun _ _ => hns) fun a ha => by
-      simp [Future.settled, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at ha
+  have hf := hp f m₁ hl
+  have ht : f.task = none := by rcases hf with rfl | rfl <;> rfl
+  dsimp only
+  rw [ht]
+  exact settled_wp hns hf (hQ m₁ (load_threads hl))
 
 /-- The bytes of a consumed future have the future's size. -/
 theorem consumed_size {r : α} (hs : (Enc.encode r).size = Enc.size α) :

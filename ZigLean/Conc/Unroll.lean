@@ -438,8 +438,8 @@ theorem turnTrace_le {β : Type} (env : Env) {D₁ D₂ : Tgt → ConcM Tgt Unit
     intro hc hs'
     simp only at hc hs' ⊢
     subst hc
-    rcases u₁ with ⟨a₁, b₁, c₁, d₁, e₁⟩
-    rcases u₂ with ⟨a₂, b₂, c₂, d₂, e₂⟩
+    rcases u₁ with ⟨_, _, c₁, _, _⟩
+    rcases u₂ with ⟨_, _, c₂, _, _⟩
     have hmem' : c₁ = c₂ := hs'.mem
     subst hmem'
     exact settle_le t hs' (h _ _)
@@ -454,8 +454,8 @@ theorem turnTrace_le {β : Type} (env : Env) {D₁ D₂ : Tgt → ConcM Tgt Unit
     intro hc hs'
     simp only at hc hs' ⊢
     subst hc
-    rcases u₁ with ⟨a₁, b₁, c₁, d₁, e₁⟩
-    rcases u₂ with ⟨a₂, b₂, c₂, d₂, e₂⟩
+    rcases u₁ with ⟨_, _, c₁, _, _⟩
+    rcases u₂ with ⟨_, _, c₂, _, _⟩
     have hmem' : c₁ = c₂ := hs'.mem
     subst hmem'
     split
@@ -504,8 +504,8 @@ theorem turnTrace_le {β : Type} (env : Env) {D₁ D₂ : Tgt → ConcM Tgt Unit
     intro hc hs'
     simp only at hc hs' ⊢
     subst hc
-    rcases u₁ with ⟨a₁, b₁, c₁, d₁, e₁⟩
-    rcases u₂ with ⟨a₂, b₂, c₂, d₂, e₂⟩
+    rcases u₁ with ⟨_, _, c₁, _, _⟩
+    rcases u₂ with ⟨_, _, c₂, _, _⟩
     have hmem' : c₁ = c₂ := hs'.mem
     subst hmem'
     simp only [State.onMem]
