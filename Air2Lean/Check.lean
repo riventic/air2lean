@@ -1801,6 +1801,17 @@ private def immutableOrdinaryGlobal (f : Func) (g : Global) : Bool :=
     let remaining ← pointerFreeInitializerType f g.ty 1024
     ordinaryInitializer f g.ty value remaining : Option Nat)).isSome
 
+/-- Every member of the union `ty` that can be active, with its byte offset: a tagged (or bare,
+safety-tagged) union's at its payload offset (`unionOffsets`), an `extern` union's at 0. `none`
+for a `packed` union, another type or an unknown layout. -/
+private def unionMemberBases (f : Func) (ty : Ty) : Option (Array (TyId × Nat)) :=
+  match ty with
+  | .union _ "extern" none fields => some (fields.map fun (_, child) => (child, 0))
+  | .union _ _ (some tag) fields => do
+    let (_, po) ← unionOffsets f.types f.layouts tag (fields.map (·.2)) f.errorSetBits
+    pure ((inhabitedFields f.types fields).map fun (_, child) => (child, po))
+  | _ => none
+
 /-- Clipped overlap queries use a shared work budget. `none` means that the
 layout or budget cannot establish absence of symbolic bytes, so callers fail closed. -/
 private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) :
@@ -1849,12 +1860,8 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
     if offsets.size != fields.size then none
     within (fields.zipIdx.map fun ((_, child), k) => (child, offsets[k]!))
   -- Any member of a union can be active: every member that the range overlaps must be
-  -- error-free (at the payload offset of a tagged or bare union, at 0 of an `extern` one).
-  -- The tag is an enum integer.
-  | .union _ "extern" none fields => within (fields.map fun (_, child) => (child, 0))
-  | .union _ _ (some tag) fields =>
-    let (_, po) ← unionOffsets f.types f.layouts tag (fields.map (·.2)) f.errorSetBits
-    within ((inhabitedFields f.types fields).map fun (_, child) => (child, po))
+  -- error-free (`unionMemberBases`). The tag is an enum integer.
+  | ty@(.union ..) => within (← unionMemberBases f ty)
   -- Other opaque aggregate projections are not reconstructed from a folded address. An
   -- identical typed root still works below.
   | _ => return (remaining, false)
@@ -1949,9 +1956,8 @@ private partial def llvmPayloadTypeScan (f : Func) (id fuel : Nat) : Option (Nat
 /-- Whether byte `off` of a value of type `id` (a one-past-the-end address included) can lie in
 an affected payload (`llvmPayloadTypeScan`). Every struct/tuple field or array item whose range
 contains `off` is visited, so a folded offset is never attributed to only one candidate. Every
-member of a union can be the active one: a tagged (or bare, safety-tagged) union's members at its
-payload offset (`unionOffsets`), an `extern` union's at 0; a `packed` union holds no error union
-payload. -/
+member of a union can be the active one (`unionMemberBases`); a `packed` union counts by its
+type scan. -/
 private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
@@ -1996,12 +2002,9 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
     let offsets := (f.layouts[id]?.getD {}).offsets
     if offsets.size != fields.size then none
     within (fields.zipIdx.map fun (child, k) => (child, offsets[k]!))
-  | .union _ "packed" none _ => return (remaining, false)
-  | .union _ "extern" none fields => within (fields.map fun (_, child) => (child, 0))
-  | .union _ _ (some tag) fields =>
-    let (_, po) ← unionOffsets f.types f.layouts tag (fields.map (·.2)) f.errorSetBits
-    within ((inhabitedFields f.types fields).map fun (_, child) => (child, po))
-  | .union .. => none
+  -- A `packed` union has no member bases; its type scan (no error union) decides.
+  | .union _ "packed" none _ => llvmPayloadTypeScan f id remaining
+  | ty@(.union ..) => within (← unionMemberBases f ty)
   | _ => return (remaining, false)
 
 /-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type

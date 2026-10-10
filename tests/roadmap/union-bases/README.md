@@ -11,7 +11,7 @@ A pointer constant into a member of a global union is resolved like the nested b
   `codegen.lowerPtr` and `codegen/llvm.zig` also use) to equal the model's. The model puts the
   more aligned of tag and payload first, the tag if they are equal, and uses the exported tag
   or safety tag and every non-`noreturn` member at its natural alignment. When the two
-  offsets differ, for example for an explicitly aligned member or an untagged `auto` union,
+  offsets differ (an explicitly aligned member that moves the payload) or an `auto` union has no tag,
   the exporter writes `{"unsupported": "union_field"}`.
 * A union member of a `var` global is not a constant. Sema projects it at run time, with the
   ReleaseSafe tag check (`struct_field_ptr`, `get_union_tag`), which the translator already
