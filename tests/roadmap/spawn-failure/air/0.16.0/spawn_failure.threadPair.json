@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "spawn_failure.threadPair",
  "module": "root",
+ "src": {
+  "file": "spawn_failure.zig",
+  "module": "spawn_failure",
+  "decl_line": 10
+ },
  "params": [
   0
  ],
@@ -52,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -88,7 +97,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 6,
@@ -124,7 +134,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 39
   },
   {
    "id": 11,
@@ -143,7 +154,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 39
   },
   {
    "id": 14,
@@ -153,6 +165,7 @@
     "ty": 6,
     "func": "Thread.spawn__anon_394",
     "module": "std",
+    "instance_key": "7cf4ce852c7731cb8abac606ff67726140a932a74ce529e736435cd8ae90e0c5",
     "noreturn": false,
     "comptime_fn": "spawn_failure.writeWorker",
     "comptime_fn_module": "root"
@@ -200,7 +213,8 @@
      "id": 16,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 19
     },
     {
      "id": 17,
@@ -277,7 +291,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 40
   },
   {
    "id": 27,
@@ -310,7 +325,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 40
   },
   {
    "id": 31,
@@ -320,6 +336,7 @@
     "ty": 6,
     "func": "Thread.spawn__anon_394",
     "module": "std",
+    "instance_key": "7cf4ce852c7731cb8abac606ff67726140a932a74ce529e736435cd8ae90e0c5",
     "noreturn": false,
     "comptime_fn": "spawn_failure.writeWorker",
     "comptime_fn_module": "root"
@@ -367,7 +384,8 @@
      "id": 33,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 5
+     "line": 5,
+     "column": 24
     },
     {
      "id": 34,
@@ -383,7 +401,8 @@
      "id": 35,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 5
+     "line": 5,
+     "column": 24
     },
     {
      "id": 36,
@@ -405,7 +424,8 @@
      "id": 37,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 6
+     "line": 6,
+     "column": 20
     },
     {
      "id": 38,
@@ -482,7 +502,8 @@
    "id": 46,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 15
   },
   {
    "id": 47,
@@ -498,7 +519,8 @@
    "id": 48,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 15
   },
   {
    "id": 49,
@@ -520,7 +542,8 @@
    "id": 50,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 16
   },
   {
    "id": 51,
@@ -536,7 +559,8 @@
    "id": 52,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 16
   },
   {
    "id": 53,
@@ -558,7 +582,8 @@
    "id": 54,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 55,
@@ -597,7 +622,8 @@
    "id": 58,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 59,

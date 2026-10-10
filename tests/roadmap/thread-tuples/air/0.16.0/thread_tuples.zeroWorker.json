@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "thread_tuples.zeroWorker",
  "module": "root",
+ "src": {
+  "file": "thread_tuples.zig",
+  "module": "thread_tuples",
+  "decl_line": 5
+ },
  "params": [],
  "noalias": [],
  "ret": 0,

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "const_locals.stack",
  "module": "root",
+ "src": {
+  "file": "const_locals.zig",
+  "module": "const_locals",
+  "decl_line": 38
+ },
  "params": [
   0
  ],
@@ -52,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -87,7 +96,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 9
   },
   {
    "id": 6,
@@ -109,7 +119,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 8,
@@ -125,7 +136,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 10,

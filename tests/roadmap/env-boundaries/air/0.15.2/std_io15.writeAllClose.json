@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,6 +39,11 @@
  },
  "name": "std_io15.writeAllClose",
  "module": "root",
+ "src": {
+  "file": "std_io15.zig",
+  "module": "std_io15",
+  "decl_line": 4
+ },
  "params": [
   0,
   1
@@ -87,7 +95,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 22
   },
   {
    "id": 6,
@@ -103,7 +112,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 22
   },
   {
    "id": 8,
@@ -148,7 +158,8 @@
      "id": 10,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 21
     },
     {
      "id": 11,
@@ -164,7 +175,8 @@
      "id": 12,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 2
+     "line": 2,
+     "column": 21
     },
     {
      "id": 13,
@@ -186,7 +198,8 @@
      "id": 14,
      "tag": "dbg_stmt",
      "ty": 4,
-     "line": 3
+     "line": 3,
+     "column": 5
     },
     {
      "id": 15,
@@ -214,7 +227,8 @@
    "id": 18,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 21
   },
   {
    "id": 19,
@@ -230,7 +244,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 21
   },
   {
    "id": 21,

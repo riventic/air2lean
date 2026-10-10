@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "big",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "s390x-linux.5.10...6.19-musl",
@@ -21,6 +24,11 @@
  },
  "name": "reject.create",
  "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 55
+ },
  "params": [
   0
  ],
@@ -65,7 +73,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 20
   },
   {
    "id": 5,
@@ -81,7 +90,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 20
   },
   {
    "id": 8,
@@ -89,8 +99,9 @@
    "ty": 5,
    "callee": {
     "ty": 6,
-    "func": "mem.Allocator.create__anon_537",
+    "func": "mem.Allocator.create__anon_548",
     "module": "std",
+    "instance_key": "8f6a81b88324595b9175c2eda47a7af7a96c10036863e6040c862f2bf0e33e87",
     "noreturn": false
    },
    "args": [
@@ -103,7 +114,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 10,

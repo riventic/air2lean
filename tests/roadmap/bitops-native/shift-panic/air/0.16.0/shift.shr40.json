@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,12 +39,21 @@
  },
  "name": "shift.shr40",
  "module": "root",
+ "src": {
+  "file": "shift.zig",
+  "module": "shift",
+  "decl_line": 9
+ },
  "params": [
   0,
   1
  ],
  "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "shr40",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -59,7 +71,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 38
   },
   {
    "id": 3,
@@ -96,7 +109,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 43
   },
   {
    "id": 7,
@@ -112,7 +126,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 32
   },
   {
    "id": 9,
@@ -205,7 +220,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 18,

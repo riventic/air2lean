@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "spawn_failure.groupAsync",
  "module": "root",
+ "src": {
+  "file": "spawn_failure.zig",
+  "module": "spawn_failure",
+  "decl_line": 32
+ },
  "params": [
   0,
   1
@@ -59,7 +67,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -95,7 +104,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 7,
@@ -145,7 +155,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 16
   },
   {
    "id": 13,
@@ -164,7 +175,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 16
   },
   {
    "id": 16,
@@ -174,6 +186,7 @@
     "ty": 11,
     "func": "Io.Group.async__anon_26201",
     "module": "std",
+    "instance_key": "e25c1d280ac22eac0e4a855886f174a04128c68e4f9e726124dbb134940e15cb",
     "noreturn": false,
     "comptime_fn": "spawn_failure.writeWorker",
     "comptime_fn_module": "root"
@@ -194,7 +207,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 5
+   "line": 5,
+   "column": 20
   },
   {
    "id": 18,
@@ -239,7 +253,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 3,
-     "line": 5
+     "line": 5,
+     "column": 5
     },
     {
      "id": 21,
@@ -277,7 +292,8 @@
    "id": 25,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 26,
@@ -293,7 +309,8 @@
    "id": 27,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 28,

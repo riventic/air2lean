@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -87,11 +90,20 @@
  },
  "name": "ct.go",
  "module": "root",
+ "src": {
+  "file": "ct.zig",
+  "module": "ct",
+  "decl_line": 11
+ },
  "params": [
   0
  ],
  "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "go",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -103,7 +115,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -114,7 +127,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 2
+   "line": 2,
+   "column": 15
   },
   {
    "id": 4,
@@ -160,7 +174,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 3
+   "line": 3,
+   "column": 6
   },
   {
    "id": 9,
@@ -213,7 +228,8 @@
    "id": 13,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 15
   },
   {
    "id": 14,
@@ -229,7 +245,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 15
   },
   {
    "id": 16,
@@ -251,7 +268,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 1,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 18,

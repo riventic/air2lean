@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -39,6 +39,11 @@
  },
  "name": "progress.idle",
  "module": "root",
+ "src": {
+  "file": "progress.zig",
+  "module": "progress",
+  "decl_line": 13
+ },
  "params": [
   0
  ],
@@ -70,7 +75,8 @@
          "id": 4,
          "tag": "dbg_stmt",
          "ty": 1,
-         "line": 2
+         "line": 2,
+         "column": 12
         },
         {
          "id": 5,
@@ -111,18 +117,25 @@
            "id": 8,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 3
+           "line": 3,
+           "column": 32
           },
           {
            "id": 9,
            "tag": "dbg_inline_block",
            "ty": 1,
+           "src": {
+            "file": "atomic.zig",
+            "module": "std",
+            "decl_line": 355
+           },
            "body": [
             {
              "id": 10,
              "tag": "dbg_stmt",
              "ty": 1,
-             "line": 2
+             "line": 2,
+             "column": 13
             },
             {
              "id": 12,
@@ -152,7 +165,8 @@
            "id": 15,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 4
+           "line": 4,
+           "column": 9
           },
           {
            "id": 16,
@@ -163,7 +177,8 @@
              "id": 17,
              "tag": "dbg_stmt",
              "ty": 1,
-             "line": 4
+             "line": 4,
+             "column": 25
             },
             {
              "id": 18,
@@ -241,7 +256,8 @@
            "id": 24,
            "tag": "dbg_stmt",
            "ty": 1,
-           "line": 5
+           "line": 5,
+           "column": 5
           },
           {
            "id": 25,

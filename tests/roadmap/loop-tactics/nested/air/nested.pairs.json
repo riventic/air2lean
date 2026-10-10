@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -39,12 +39,21 @@
  },
  "name": "nested.pairs",
  "module": "root",
+ "src": {
+  "file": "nested.zig",
+  "module": "nested",
+  "decl_line": 5
+ },
  "params": [
   0,
   1
  ],
  "noalias": [],
  "ret": 2,
+ "export": {
+  "name": "pairs",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -62,7 +71,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -113,7 +123,8 @@
          "id": 9,
          "tag": "dbg_stmt",
          "ty": 2,
-         "line": 3
+         "line": 3,
+         "column": 12
         },
         {
          "id": 10,
@@ -157,7 +168,8 @@
              "id": 13,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 4
+             "line": 4,
+             "column": 9
             },
             {
              "id": 14,
@@ -208,7 +220,8 @@
                    "id": 20,
                    "tag": "dbg_stmt",
                    "ty": 2,
-                   "line": 5
+                   "line": 5,
+                   "column": 16
                   },
                   {
                    "id": 21,
@@ -257,7 +270,8 @@
                      "id": 25,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 5
+                     "line": 5,
+                     "column": 34
                     },
                     {
                      "id": 26,
@@ -273,7 +287,8 @@
                      "id": 27,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 5
+                     "line": 5,
+                     "column": 40
                     },
                     {
                      "id": 28,
@@ -306,7 +321,8 @@
                      "id": 30,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 5
+                     "line": 5,
+                     "column": 43
                     },
                     {
                      "id": 31,
@@ -317,7 +333,8 @@
                      "id": 33,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 5
+                     "line": 5,
+                     "column": 26
                     },
                     {
                      "id": 34,
@@ -333,7 +350,8 @@
                      "id": 35,
                      "tag": "dbg_stmt",
                      "ty": 2,
-                     "line": 5
+                     "line": 5,
+                     "column": 28
                     },
                     {
                      "id": 36,
@@ -406,7 +424,8 @@
              "id": 42,
              "tag": "dbg_stmt",
              "ty": 2,
-             "line": 6
+             "line": 6,
+             "column": 5
             },
             {
              "id": 43,
@@ -431,7 +450,8 @@
            "id": 45,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 3
+           "line": 3,
+           "column": 22
           },
           {
            "id": 46,
@@ -447,7 +467,8 @@
            "id": 47,
            "tag": "dbg_stmt",
            "ty": 2,
-           "line": 3
+           "line": 3,
+           "column": 24
           },
           {
            "id": 48,

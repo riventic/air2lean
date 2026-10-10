@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -36,12 +39,21 @@
  },
  "name": "lanes.u3Lane",
  "module": "root",
+ "src": {
+  "file": "lanes.zig",
+  "module": "lanes",
+  "decl_line": 48
+ },
  "params": [
   0,
   1
  ],
  "noalias": [],
  "ret": 0,
+ "export": {
+  "name": "u3Lane",
+  "cc": "x86_64_sysv"
+ },
  "body": [
   {
    "id": 0,
@@ -59,7 +71,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -95,7 +108,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 17
   },
   {
    "id": 15,
@@ -118,7 +132,8 @@
      "id": 8,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 9,
@@ -138,7 +153,8 @@
      "id": 10,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 11,
@@ -167,7 +183,8 @@
      "id": 13,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 14,
@@ -209,7 +226,8 @@
      "id": 18,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 19,
@@ -229,7 +247,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 21,
@@ -249,7 +268,8 @@
      "id": 22,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 23,
@@ -278,7 +298,8 @@
      "id": 25,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 26,
@@ -320,7 +341,8 @@
      "id": 30,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 31,
@@ -340,7 +362,8 @@
      "id": 32,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 33,
@@ -360,7 +383,8 @@
      "id": 34,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 35,
@@ -389,7 +413,8 @@
      "id": 37,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 38,
@@ -431,7 +456,8 @@
      "id": 42,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 43,
@@ -451,7 +477,8 @@
      "id": 44,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 45,
@@ -471,7 +498,8 @@
      "id": 46,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 47,
@@ -500,7 +528,8 @@
      "id": 49,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 50,
@@ -542,7 +571,8 @@
      "id": 54,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 55,
@@ -562,7 +592,8 @@
      "id": 56,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 57,
@@ -582,7 +613,8 @@
      "id": 58,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 59,
@@ -611,7 +643,8 @@
      "id": 61,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 62,
@@ -653,7 +686,8 @@
      "id": 66,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 67,
@@ -673,7 +707,8 @@
      "id": 68,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 69,
@@ -693,7 +728,8 @@
      "id": 70,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 71,
@@ -722,7 +758,8 @@
      "id": 73,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 74,
@@ -764,7 +801,8 @@
      "id": 78,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 79,
@@ -784,7 +822,8 @@
      "id": 80,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 81,
@@ -804,7 +843,8 @@
      "id": 82,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 83,
@@ -833,7 +873,8 @@
      "id": 85,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 86,
@@ -875,7 +916,8 @@
      "id": 90,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 28
     },
     {
      "id": 91,
@@ -895,7 +937,8 @@
      "id": 92,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 49
     },
     {
      "id": 93,
@@ -915,7 +958,8 @@
      "id": 94,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 34
     },
     {
      "id": 95,
@@ -944,7 +988,8 @@
      "id": 97,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 59
     },
     {
      "id": 98,
@@ -969,7 +1014,8 @@
    "id": 101,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 13
   },
   {
    "id": 102,
@@ -989,7 +1035,8 @@
    "id": 103,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 18
   },
   {
    "id": 104,
@@ -1005,7 +1052,8 @@
    "id": 105,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 10
   },
   {
    "id": 106,
@@ -1030,7 +1078,8 @@
    "id": 107,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 28
   },
   {
    "id": 108,
@@ -1050,7 +1099,8 @@
    "id": 109,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 25
   },
   {
    "id": 110,
@@ -1093,7 +1143,8 @@
    "id": 113,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 114,
@@ -1263,7 +1314,8 @@
    "id": 125,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 126,
@@ -1299,7 +1351,8 @@
    "id": 129,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 8
+   "line": 8,
+   "column": 17
   },
   {
    "id": 141,
@@ -1322,7 +1375,8 @@
      "id": 131,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 132,
@@ -1338,7 +1392,8 @@
      "id": 133,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 134,
@@ -1368,7 +1423,8 @@
      "id": 136,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 137,
@@ -1400,7 +1456,8 @@
      "id": 139,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 140,
@@ -1442,7 +1499,8 @@
      "id": 144,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 145,
@@ -1458,7 +1516,8 @@
      "id": 146,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 147,
@@ -1488,7 +1547,8 @@
      "id": 149,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 150,
@@ -1534,7 +1594,8 @@
      "id": 153,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 154,
@@ -1576,7 +1637,8 @@
      "id": 158,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 159,
@@ -1592,7 +1654,8 @@
      "id": 160,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 161,
@@ -1622,7 +1685,8 @@
      "id": 163,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 164,
@@ -1668,7 +1732,8 @@
      "id": 167,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 168,
@@ -1710,7 +1775,8 @@
      "id": 172,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 173,
@@ -1726,7 +1792,8 @@
      "id": 174,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 175,
@@ -1756,7 +1823,8 @@
      "id": 177,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 178,
@@ -1802,7 +1870,8 @@
      "id": 181,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 182,
@@ -1844,7 +1913,8 @@
      "id": 186,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 187,
@@ -1860,7 +1930,8 @@
      "id": 188,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 189,
@@ -1890,7 +1961,8 @@
      "id": 191,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 192,
@@ -1936,7 +2008,8 @@
      "id": 195,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 196,
@@ -1978,7 +2051,8 @@
      "id": 200,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 201,
@@ -1994,7 +2068,8 @@
      "id": 202,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 203,
@@ -2024,7 +2099,8 @@
      "id": 205,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 206,
@@ -2070,7 +2146,8 @@
      "id": 209,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 210,
@@ -2112,7 +2189,8 @@
      "id": 214,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 215,
@@ -2128,7 +2206,8 @@
      "id": 216,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 217,
@@ -2158,7 +2237,8 @@
      "id": 219,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 220,
@@ -2204,7 +2284,8 @@
      "id": 223,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 224,
@@ -2246,7 +2327,8 @@
      "id": 228,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 27
     },
     {
      "id": 229,
@@ -2262,7 +2344,8 @@
      "id": 230,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 42
     },
     {
      "id": 231,
@@ -2292,7 +2375,8 @@
      "id": 233,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 47
     },
     {
      "id": 234,
@@ -2338,7 +2422,8 @@
      "id": 237,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 8
+     "line": 8,
+     "column": 56
     },
     {
      "id": 238,
@@ -2363,7 +2448,8 @@
    "id": 241,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 242,
@@ -2379,7 +2465,8 @@
    "id": 243,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 18
   },
   {
    "id": 244,
@@ -2412,7 +2499,8 @@
    "id": 246,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 247,

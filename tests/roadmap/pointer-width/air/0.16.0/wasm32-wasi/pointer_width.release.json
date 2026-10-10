@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "wasm32-wasi.0.1...0.3-musl",
@@ -29,6 +32,11 @@
  },
  "name": "pointer_width.release",
  "module": "root",
+ "src": {
+  "file": "pointer_width.zig",
+  "module": "pointer_width",
+  "decl_line": 29
+ },
  "params": [
   0,
   1
@@ -80,7 +88,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 11
   },
   {
    "id": 6,
@@ -96,7 +105,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 11
   },
   {
    "id": 10,
@@ -106,6 +116,7 @@
     "ty": 5,
     "func": "mem.Allocator.free__anon_7249",
     "module": "std",
+    "instance_key": "10fd68fdc68d8b81a413f20dbd1cba275510ac1696ca4428ce2b7b597a7103aa",
     "noreturn": false
    },
    "args": [

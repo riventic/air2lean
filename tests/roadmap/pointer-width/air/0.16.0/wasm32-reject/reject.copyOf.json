@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "wasm32-freestanding-none",
@@ -29,6 +32,11 @@
  },
  "name": "reject.copyOf",
  "module": "root",
+ "src": {
+  "file": "reject.zig",
+  "module": "reject",
+  "decl_line": 14
+ },
  "params": [
   0,
   1
@@ -80,7 +88,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 6,
@@ -96,7 +105,8 @@
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 10,
@@ -106,6 +116,7 @@
     "ty": 7,
     "func": "mem.Allocator.dupe__anon_514",
     "module": "std",
+    "instance_key": "63991a21d32c0135418c73f2e98cc49731746f9da7ff31bd72c70fbd5af218bc",
     "noreturn": false
    },
    "args": [
@@ -121,7 +132,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 12,

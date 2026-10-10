@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "thread_tuples.mixed",
  "module": "root",
+ "src": {
+  "file": "thread_tuples.zig",
+  "module": "thread_tuples",
+  "decl_line": 40
+ },
  "params": [
   0,
   0
@@ -59,7 +67,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -95,7 +104,8 @@
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 7,
@@ -131,7 +141,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 40
   },
   {
    "id": 12,
@@ -156,7 +167,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 40
   },
   {
    "id": 15,
@@ -166,6 +178,7 @@
     "ty": 6,
     "func": "Thread.spawn__anon_26321",
     "module": "std",
+    "instance_key": "c5783dc39add822bcd35c5e4dfad68960ceb3ee5c19c2871897f8a1269adf6d0",
     "noreturn": false,
     "comptime_fn": "thread_tuples.mixedWorker",
     "comptime_fn_module": "root"
@@ -213,7 +226,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 20
     },
     {
      "id": 18,
@@ -290,7 +304,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 16
   },
   {
    "id": 27,
@@ -306,7 +321,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 16
   },
   {
    "id": 29,
@@ -328,7 +344,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 31,
@@ -381,7 +398,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 36,

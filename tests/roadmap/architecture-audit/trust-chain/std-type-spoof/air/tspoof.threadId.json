@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "aarch64-macos.27.0.1...27.0.1-none",
@@ -87,11 +90,20 @@
  },
  "name": "tspoof.threadId",
  "module": "root",
+ "src": {
+  "file": "tspoof.zig",
+  "module": "tspoof",
+  "decl_line": 4
+ },
  "params": [
   0
  ],
  "noalias": [],
  "ret": 1,
+ "export": {
+  "name": "threadId",
+  "cc": "aarch64_aapcs_darwin"
+ },
  "body": [
   {
    "id": 0,
@@ -131,7 +143,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 5,
@@ -167,7 +180,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 9,

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "futures.cancelValue",
  "module": "root",
+ "src": {
+  "file": "futures.zig",
+  "module": "futures",
+  "decl_line": 41
+ },
  "params": [
   0,
   1
@@ -87,7 +95,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 6,
@@ -98,7 +107,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 21
   },
   {
    "id": 8,
@@ -127,7 +137,8 @@
    "id": 15,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 21
   },
   {
    "id": 16,
@@ -137,6 +148,7 @@
     "ty": 9,
     "func": "Io.async__anon_1820",
     "module": "std",
+    "instance_key": "e83500e9100e79f2fca12361506031c9eb587302b753dca834c72b5771f0e20d",
     "noreturn": false,
     "comptime_fn": "futures.cancellable",
     "comptime_fn_module": "root"
@@ -178,7 +190,8 @@
    "id": 20,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 20
   },
   {
    "id": 21,
@@ -203,7 +216,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 23,

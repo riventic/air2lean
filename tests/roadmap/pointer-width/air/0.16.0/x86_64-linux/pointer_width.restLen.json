@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "pointer_width.restLen",
  "module": "root",
+ "src": {
+  "file": "pointer_width.zig",
+  "module": "pointer_width",
+  "decl_line": 38
+ },
  "params": [
   0
  ],
@@ -80,7 +88,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 13
   },
   {
    "id": 5,
@@ -106,7 +115,8 @@
    "id": 7,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 18
   },
   {
    "id": 8,
@@ -132,7 +142,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 11,

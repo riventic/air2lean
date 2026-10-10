@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.15.2",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -35,6 +38,7 @@
   "export_stage": "analyzed-air"
  },
  "name": "error_width.setPayload",
+ "module": "root",
  "src": {
   "file": "error_width.zig",
   "module": "error_width",
@@ -44,6 +48,7 @@
   0,
   1
  ],
+ "noalias": [],
  "ret": 2,
  "body": [
   {
@@ -217,6 +222,7 @@
    "ptr_align": 2,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,

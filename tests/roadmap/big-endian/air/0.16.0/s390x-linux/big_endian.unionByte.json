@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "big",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "s390x-linux.5.10...6.19-musl",
@@ -21,6 +24,11 @@
  },
  "name": "big_endian.unionByte",
  "module": "root",
+ "src": {
+  "file": "big_endian.zig",
+  "module": "big_endian",
+  "decl_line": 103
+ },
  "params": [
   0,
   1
@@ -44,7 +52,8 @@
    "id": 2,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 3,
@@ -99,7 +108,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 13
   },
   {
    "id": 9,
@@ -115,7 +125,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 15
   },
   {
    "id": 11,
@@ -216,7 +227,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 20,

@@ -2,6 +2,9 @@
  "schema": 12,
  "zig_version": "0.16.0",
  "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.19-musl",
@@ -36,6 +39,11 @@
  },
  "name": "thread_tuples.copied",
  "module": "root",
+ "src": {
+  "file": "thread_tuples.zig",
+  "module": "thread_tuples",
+  "decl_line": 48
+ },
  "params": [
   0,
   0,
@@ -66,7 +74,8 @@
    "id": 3,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 4,
@@ -101,7 +110,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 9,
@@ -137,7 +147,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 40
   },
   {
    "id": 14,
@@ -172,7 +183,8 @@
    "id": 17,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 40
   },
   {
    "id": 18,
@@ -182,6 +194,7 @@
     "ty": 6,
     "func": "Thread.spawn__anon_26279",
     "module": "std",
+    "instance_key": "f751bcca02f6280a19e91db446effc55dda60db4cdaddcf6c51abcdcf587f34a",
     "noreturn": false,
     "comptime_fn": "thread_tuples.copyWorker",
     "comptime_fn_module": "root"
@@ -229,7 +242,8 @@
      "id": 20,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 4
+     "line": 4,
+     "column": 20
     },
     {
      "id": 21,
@@ -306,7 +320,8 @@
    "id": 29,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 5
   },
   {
    "id": 30,
@@ -326,7 +341,8 @@
    "id": 31,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 16
   },
   {
    "id": 32,
@@ -342,7 +358,8 @@
    "id": 33,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 16
   },
   {
    "id": 34,
@@ -364,7 +381,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 36,
@@ -403,7 +421,8 @@
    "id": 39,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 7
+   "line": 7,
+   "column": 5
   },
   {
    "id": 40,

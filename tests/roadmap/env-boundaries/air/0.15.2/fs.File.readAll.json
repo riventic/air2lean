@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.15.2",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...6.16-musl",
@@ -39,6 +39,11 @@
  },
  "name": "fs.File.readAll",
  "module": "std",
+ "src": {
+  "file": "fs/File.zig",
+  "module": "std",
+  "decl_line": 856
+ },
  "params": [
   0,
   1
@@ -118,7 +123,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 9,
@@ -169,7 +175,8 @@
          "id": 15,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 3
+         "line": 3,
+         "column": 12
         },
         {
          "id": 16,
@@ -185,7 +192,8 @@
          "id": 17,
          "tag": "dbg_stmt",
          "ty": 4,
-         "line": 3
+         "line": 3,
+         "column": 27
         },
         {
          "id": 18,
@@ -249,7 +257,8 @@
              "id": 23,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 4
+             "line": 4,
+             "column": 34
             },
             {
              "id": 24,
@@ -275,7 +284,8 @@
              "id": 26,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 4
+             "line": 4,
+             "column": 41
             },
             {
              "id": 27,
@@ -570,7 +580,8 @@
              "id": 52,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 4
+             "line": 4,
+             "column": 34
             },
             {
              "id": 53,
@@ -615,7 +626,8 @@
                "id": 55,
                "tag": "dbg_stmt",
                "ty": 4,
-               "line": 4
+               "line": 4,
+               "column": 21
               },
               {
                "id": 56,
@@ -654,7 +666,8 @@
              "id": 60,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 5
+             "line": 5,
+             "column": 13
             },
             {
              "id": 61,
@@ -729,7 +742,8 @@
              "id": 67,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 6
+             "line": 6,
+             "column": 9
             },
             {
              "id": 68,
@@ -745,7 +759,8 @@
              "id": 69,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 6
+             "line": 6,
+             "column": 15
             },
             {
              "id": 70,
@@ -777,7 +792,8 @@
              "id": 72,
              "tag": "dbg_stmt",
              "ty": 4,
-             "line": 7
+             "line": 7,
+             "column": 5
             },
             {
              "id": 73,
@@ -842,7 +858,8 @@
    "id": 79,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 80,
@@ -858,7 +875,8 @@
    "id": 81,
    "tag": "dbg_stmt",
    "ty": 4,
-   "line": 8
+   "line": 8,
+   "column": 5
   },
   {
    "id": 82,
