@@ -47,7 +47,7 @@ abbrev alc (s1 : Ptr) : mem_Allocator := ⟨s1, vtp⟩
 abbrev I (s1 : Ptr) (A₀ Ac : Nat) : AllocInv := (inv s1 (buf A₀ Ac)).withVTable vtp fns
 
 theorem spec (s1 : Ptr) (A₀ Ac : Nat) : AllocSpec Logic.total (vt (alc s1)) s1 (I s1 A₀ Ac) :=
-  dispatch_allocSpec (allocSpec s1 (buf A₀ Ac))
+  dispatch_allocSpec (allocSpec s1 (buf A₀ Ac)) (by simp [vtp])
 
 theorem grantSep' (s1 : Ptr) (A₀ Ac : Nat) (k : Nat) : GrantSep (I s1 A₀ Ac) k :=
   grantSep s1 (buf A₀ Ac) k
@@ -271,6 +271,17 @@ theorem granted_memset (v : BitVec 8) {n : BitVec 64} (hn : n.toNat = bs.size) :
   refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K)
     (Region.memsetIn (some v) hn))
     (fun _ x => x) (fun _ h x => ⟨A, S, K, by rw [hs]; exact x⟩)
+
+/-- The pointer to an item at most one past a nonempty granted region is formed (MM-3). -/
+theorem granted_project (i : BitVec 64) (hpos : 0 < bs.size) (hi : i.toNat ≤ bs.size) :
+    TotalTriple (granted J p k bs) (ptrProject p (·.elem 1 i))
+      (fun q => ⌜q = p.elem 1 i⌝ ∗ granted J p k bs) := by
+  refine TotalTriple.ex fun A => TotalTriple.ex fun S => TotalTriple.ex fun K => ?_
+  refine TotalTriple.conseq (TotalTriple.frame (R := J.tok p bs.size k A S K)
+    (ptrProject_elem_region (p := p) (A := A) (S := S) (K := K) (a := 2 ^ k) (size := 1) (i := i)
+      hpos (by omega))) (fun _ x => x) (fun _ h x => ?_)
+  obtain ⟨hr, x⟩ := sep_lift.mp (sep_assoc x)
+  exact sep_lift.mpr ⟨hr, A, S, K, x⟩
 
 /-- A store of an item into a granted region. -/
 theorem granted_store {T : Type} [Enc T] [LawfulEnc T] {al : Nat} (w : T) (i : BitVec 64)
@@ -515,8 +526,13 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
   rw [ht8, if_pos (by decide)]
   -- `t[7] = v +% 1`
   refine tc_bind (P := granted J t.ptr 0 bs') (F := J.own) hg
+    (granted_project 7 (by rw [hb8]; decide) (by rw [hb8]; decide))
+    (fun h hp => sep_comm hp) fun q => tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hq => ?_
+  subst hq
+  refine tc_bind (P := granted J t.ptr 0 bs') (F := J.own) hg
     (granted_store (Zig.addWrap v 1) 7 (by decide) (by rw [hb8]; decide) (Nat.one_dvd _)
-      (Nat.one_dvd _)) (fun h hp => sep_comm hp) fun _ => ?_
+      (Nat.one_dvd _)) (fun h hp => by obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp); exact hp)
+    fun _ => ?_
   rw [show (7 : BitVec 64).toNat = 7 from rfl]
   have hw : (Enc.encode (Zig.addWrap v 1)).size = 1 := LawfulEnc.size_encode (Zig.addWrap v 1)
   have hb2 : (writeBytes bs' 7 (Enc.encode (Zig.addWrap v 1))).size = 8 := by
@@ -558,14 +574,15 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
     simp only [Wrap.sliceResult] at hp
     obtain ⟨-, hp⟩ := sep_lift.mp (sep_assoc hp)
     exact hp) ?_
-  rw [if_pos (by decide)]
+  rw [if_pos (by decide), checkIndex_ok (by rw [ht8]; decide), pure_bind]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load0 (w := v) (al := 1) (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
       (by rw [show Enc.size (BitVec 8) = 1 from rfl, hv0]; exact decode_byte v))
     (fun h hp => sep_comm hp) fun x₀ => tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1)
       fun hx₀ => ?_
   subst x₀
-  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide)]
+  rw [intCast_byte, Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_ok (by rw [ht8]; decide),
+    pure_bind]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load (w := v) (al := 1) 3 (by decide) (by rw [hb2]; decide) (Nat.one_dvd _)
       (Nat.one_dvd _) (by rw [show Enc.size (BitVec 8) = 1 from rfl]; exact hv3 ▸ decode_byte v))
@@ -573,7 +590,7 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
       tc_pure (fun h hp => (sep_lift.mp (sep_assoc hp)).1) fun hx₃ => ?_
   subst x₃
   rw [intCast_byte, Norm.lift_pure, pure_bind, add32 (by have := v.isLt; omega) v.isLt,
-    Norm.lift_pure, pure_bind, if_pos (by decide)]
+    Norm.lift_pure, pure_bind, if_pos (by decide), checkIndex_ok (by rw [ht8]; decide), pure_bind]
   refine tc_bind (P := granted J t.ptr 0 b2) (F := J.own) hg
     (granted_load (w := Zig.addWrap v 1) (al := 1) 7 (by decide) (by rw [hb2]; decide)
       (Nat.one_dvd _) (Nat.one_dvd _)
@@ -623,9 +640,16 @@ theorem client_spec (v : BitVec 8) (A₀ : Nat) (bs : Array Byte) (hs : bs.size 
       have hp₂ : ((J.own ∗ granted J u.ptr 0 (Array.replicate 12 .undef)) ∗ guard A₀ (g3 bs))
           (h₁ ∪ h₂) := ⟨h₁, h₂, hd, rfl, (sep_lift.mp hp₁).2, hg'⟩
       sep_from hp₂) (fun _ _ x => x)
+  refine TotalTriple.bind (TotalTriple.frame (granted_project (J := J) (p := u.ptr) (k := 0) 11
+    (by simp) (by simp))) fun q => ?_
+  refine TotalTriple.conseq (P := ⌜q = u.ptr.elem 1 11⌝ ∗ (granted J u.ptr 0 (Array.replicate 12 .undef) ∗
+    (J.own ∗ guard A₀ (g3 bs)))) ?_ (fun h hp => sep_assoc hp) (fun _ _ x => x)
+  refine TotalTriple.lift fun hq => ?_
+  subst hq
   refine TotalTriple.bind (TotalTriple.frame (granted_store (J := J) v 11 (by decide)
     (by rw [Array.size_replicate]; decide) (Nat.one_dvd _) (Nat.one_dvd _))) fun _ => ?_
-  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl]
+  rw [if_pos (by decide), show (11 : BitVec 64).toNat = 11 from rfl, checkIndex_ok (by rw [hu]; decide),
+    pure_bind]
   have hw : (Enc.encode v).size = 1 := LawfulEnc.size_encode v
   have hv11 : (writeBytes (Array.replicate 12 .undef) 11 (Enc.encode v)).extract 11 12 =
       Enc.encode v := by

@@ -1,6 +1,7 @@
 import ZigLean.Os.Mmap
 import ZigLean.Sep.Alloc
 import ZigLean.Sep.Total
+import ZigLean.Sep.AllocSpec.Ops
 
 /-!
 # Separation-logic rules of the OS page-mapping model (premise OSM-01)
@@ -731,6 +732,40 @@ theorem TotalTriple.mremapGrow (os : Os.Target) (hhas : os.hasMremap = true)
       rw [show lo + (bs ++ mremapFill os.pageSize bs.size n).size = nb.bytes.size by
         rw [hnbs]; simp [mremapFill_size]; omega]
       exact hc
+
+/-! ## The model's checks of a mapping's pointers (MM-3, `@alignCast`) -/
+
+/-- The model's `@alignCast` of a mapping's start to an alignment that divides the page size
+(`Zig.checkAlign`): the mapping's address is page-aligned, so it passes. -/
+theorem TotalTriple.checkAlign_mapping {P al : Nat} {p : Ptr} {A lo : Nat} {bs : Array Byte}
+    (hal : al ∣ P) :
+    TotalTriple (mapping P p A lo bs) (checkAlign al p) (fun _ => mapping P p A lo bs) := by
+  intro m h hF hd hm hp hst
+  obtain ⟨hoff, hpos, hA, hlo, hb⟩ := id hp
+  obtain ⟨b, hpb, -⟩ := bytesAt_ownsIn hb hpos
+  have hdiv : (al : Int) ∣ (A : Int) + p.off := by
+    rw [hoff]
+    exact_mod_cast Nat.dvd_add (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero hA))
+      (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero hlo))
+  refine checkAlign_owned hpb (fun h' hp' => ?_) (Int.emod_eq_zero_of_dvd hdiv) m h hF hd hm hp hst
+  obtain ⟨-, hpos', -, -, hb'⟩ := hp'
+  obtain ⟨b', hpb', ho⟩ := bytesAt_ownsIn hb' hpos'
+  rw [hpb] at hpb'; cases hpb'; exact ho
+
+/-- The pointer to byte `k` (at most one past the end) of a mapping is formed (MM-3): the
+mapping's cells record its block's size. -/
+theorem TotalTriple.project_mapping {P : Nat} {p : Ptr} {A lo : Nat} {bs : Array Byte}
+    {k : BitVec 64} (hk : k.toNat ≤ bs.size) :
+    TotalTriple (mapping P p A lo bs) (ptrProject p (·.elem 1 k))
+      (fun q => ⌜q = p.elem 1 k⌝ ∗ mapping P p A lo bs) := by
+  intro m h hF hd hm hp hst
+  obtain ⟨hoff, hpos, -, -, hb⟩ := id hp
+  obtain ⟨b, hpb, -⟩ := bytesAt_ownsSz hb hpos
+  refine ptrProject_elem_sized (S := lo + bs.size) hpb (by omega) (by push_cast; omega)
+    (fun h' hp' => ?_) m h hF hd hm hp hst
+  obtain ⟨-, hpos', -, -, hb'⟩ := hp'
+  obtain ⟨b', hpb', ho⟩ := bytesAt_ownsSz hb' hpos'
+  rw [hpb] at hpb'; cases hpb'; exact ho
 
 /-! ## Kernel-checked examples (`x86_64-linux` profile) -/
 

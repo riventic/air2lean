@@ -71,6 +71,13 @@ theorem arbitraryWord : Tame Zig.arbitraryWord := of_eq fun m v m' h => by
 
 theorem returnAddress : Tame Zig.returnAddress := arbitraryWord
 
+theorem checkSliceEnd (srcLen start len : BitVec 64) (extra : Nat) :
+    Tame (Zig.checkSliceEnd srcLen start len extra) := by
+  unfold Zig.checkSliceEnd; exact ite (pure' _) (throw _)
+
+theorem checkSentinelIndex (s : Slice) (i : BitVec 64) : Tame (Zig.checkSentinelIndex s i) := by
+  unfold Zig.checkSentinelIndex; exact ite (pure' _) (throw _)
+
 theorem checkAlign (al : Nat) (p : Ptr) : Tame (Zig.checkAlign al p) := by
   unfold Zig.checkAlign
   exact bind (ptrAddr p) fun _ => ite (throw _) (pure' _)
@@ -83,6 +90,9 @@ theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : Tame (Zig.ptrProject p f) := of
       Prod.mk.injEq] at h
     obtain ⟨-, rfl⟩ := h; exact ⟨rfl, KMono.refl _⟩
   · simp [MonadExcept.throw, throwThe, MonadExceptOf.throw, ExceptT.run, ExceptT.mk] at h
+
+theorem ptrEqAddr (a b : Ptr) : Tame (Zig.ptrEqAddr a b) := by
+  unfold Zig.ptrEqAddr; exact bind (ptrAddr _) fun _ => bind (ptrAddr _) fun _ => pure' _
 
 theorem ptrLe (a b : Ptr) : Tame (Zig.ptrLe a b) := by
   unfold Zig.ptrLe
@@ -98,6 +108,10 @@ theorem memmove (size da sa : Nat) (d s : Ptr) (n : BitVec 64) :
   unfold Zig.memmove
   exact ite (pure' _) (bind get fun m => bind (liftM _) fun _ =>
     bind (loadBytes _ _ _ _) fun _ => storeBytes _ _ _ _)
+
+theorem memcpy (size da sa : Nat) (d s : Ptr) (n m : BitVec 64) :
+    Tame (Zig.memcpy size da sa d s n m) := by
+  unfold Zig.memcpy; exact ite (throw _) (memmove _ _ _ _ _ _)
 
 /-! ## OS page mappings (premise OSM-01) -/
 
@@ -262,7 +276,11 @@ macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
   | with_reducible exact Tame.recordAccess _ _ _ _
   | with_reducible exact Tame.returnAddress
   | with_reducible exact Tame.ptrLe _ _
+  | with_reducible exact Tame.ptrEqAddr _ _
   | with_reducible exact Tame.checkAlign _ _
+  | with_reducible exact Tame.checkSliceEnd _ _ _ _
+  | with_reducible exact Tame.checkSentinelIndex _ _
+  | with_reducible exact Tame.memcpy _ _ _ _ _ _ _
   | with_reducible exact Tame.ptrProject _ _
   | with_reducible exact Tame.memset _ _ _ _
   | with_reducible exact Tame.memmove _ _ _ _ _ _

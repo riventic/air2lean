@@ -79,11 +79,12 @@ theorem tame_alignCast (k : Nat) (p : Ptr) : Full.Tame (alignCast k p) := by
     Full.Tame.ite (Full.Tame.bind (Full.Tame.checkAlign _ _) fun _ => Full.Tame.pure' _)
       (Full.Tame.throw _))
 
-theorem tame_copyChecked (size da sa : Nat) (d s : Ptr) (n : BitVec 64) :
-    Full.Tame (copyChecked size da sa d s n) := by
+theorem tame_copyChecked (size da sa : Nat) (d s : Ptr) (n m : BitVec 64) :
+    Full.Tame (copyChecked size da sa d s n m) := by
   unfold copyChecked
-  exact Full.Tame.bind (Full.Tame.ptrLe _ _) fun _ => Full.Tame.bind (Full.Tame.ptrLe _ _) fun _ =>
-    Full.Tame.ite (Full.Tame.memmove _ _ _ _ _ _) (Full.Tame.throw _)
+  exact Full.Tame.bind (Full.Tame.ptrProject _ _) fun _ => Full.Tame.bind (Full.Tame.ptrProject _ _)
+    fun _ => Full.Tame.bind (Full.Tame.ptrLe _ _) fun _ => Full.Tame.bind (Full.Tame.ptrLe _ _) fun _ =>
+      Full.Tame.ite (Full.Tame.memcpy _ _ _ _ _ _ _) (Full.Tame.throw _)
 
 /-- The `Tame` side condition of `Logic.ofTotal` for the primitives the wrappers run. -/
 macro "tame_prim" : tactic => `(tactic| first
@@ -92,7 +93,10 @@ macro "tame_prim" : tactic => `(tactic| first
   | exact Full.Tame.store _ _ _
   | exact Full.Tame.load _ _ _
   | exact Wrap.tame_alignCast _ _
-  | exact Wrap.tame_copyChecked _ _ _ _ _ _)
+  | exact Wrap.tame_copyChecked _ _ _ _ _ _ _
+  | exact Full.Tame.checkSliceEnd _ _ _ _
+  | exact Full.Tame.checkSentinelIndex _ _
+  | exact Full.Tame.ptrProject _ _)
 
 /-- The owned bytes of an allocated slice (module doc). -/
 def owned (I : AllocInv) (k : Nat) (p : Ptr) (bs : Array Byte) : Assn :=
@@ -346,13 +350,15 @@ theorem freeSentinel_spec (h : AllocSpec L vt ctx I) (size k : Nat) (s : Slice) 
 /-! ## Copies -/
 
 /-- The checked `@memcpy` of `n` items of `size` bytes between two nonempty regions whose address
-ranges are disjoint. -/
+ranges are disjoint: the end pointers are in bounds (`ptrProject`), Sema's overlap check passes, and
+so does the model's (`memcpy`: two regions of one block have the block's address). -/
 theorem copyChecked_spec {d s : Ptr} {A S A' S' : Nat} {K K' : BlockKind} {a a' da sa size : Nat}
     {bd bsrc : Array Byte} {n : BitVec 64} (hpos : 0 < n.toNat * size)
     (hnd : n.toNat * size ≤ bd.size) (hns : n.toNat * size ≤ bsrc.size) (hda : da ∣ a)
     (hsa : sa ∣ a') (hsep : RangeSep ((A : Int) + d.off) (n.toNat * size) ((A' : Int) + s.off)
       (n.toNat * size)) :
-    TotalTriple (regionIn d A S K a bd ∗ regionIn s A' S' K' a' bsrc) (copyChecked size da sa d s n)
+    TotalTriple (regionIn d A S K a bd ∗ regionIn s A' S' K' a' bsrc)
+      (copyChecked size da sa d s n n)
       (fun _ => regionIn d A S K a (writeBytes bd 0 (bsrc.extract 0 (n.toNat * size))) ∗
         regionIn s A' S' K' a' bsrc) := by
   unfold copyChecked
@@ -369,6 +375,22 @@ theorem copyChecked_spec {d s : Ptr} {A S A' S' : Nat} {K K' : BlockKind} {a a' 
     rintro h ⟨h₁, h₂, hdj, rfl, -, hr₂⟩
     obtain ⟨b, hb, ho⟩ := regionIn_ownsIn hr₂ (by omega)
     rw [hbs] at hb; cases hb; exact ho.union_right hdj
+  have at₁ : ∀ h, (regionIn d A S K a bd ∗ regionIn s A' S' K' a' bsrc) h →
+      OwnsAt bd' (d.off.toNat + (bd.size - 1)) h := by
+    rintro h ⟨h₁, h₂, hdj, rfl, hr₁, -⟩
+    obtain ⟨b, hb, -, ho⟩ := bytesAt_ownsAt hr₁.2.2 (by omega)
+    rw [hbd] at hb; cases hb; exact ho.union_left
+  have at₂ : ∀ h, (regionIn d A S K a bd ∗ regionIn s A' S' K' a' bsrc) h →
+      OwnsAt bs' (s.off.toNat + (bsrc.size - 1)) h := by
+    rintro h ⟨h₁, h₂, hdj, rfl, -, hr₂⟩
+    obtain ⟨b, hb, -, ho⟩ := bytesAt_ownsAt hr₂.2.2 (by omega)
+    rw [hbs] at hb; cases hb; exact ho.union_right hdj
+  have hc : size * n.toNat = n.toNat * size := Nat.mul_comm _ _
+  refine TotalTriple.bind (ptrProject_elem_ownsAt (size := size) (i := n) hbs h0s
+    (by push_cast; omega) at₂) fun se => TotalTriple.lift fun hse => ?_
+  refine TotalTriple.bind (ptrProject_elem_ownsAt (size := size) (i := n) hbd h0d
+    (by push_cast; omega) at₁) fun de => TotalTriple.lift fun hde => ?_
+  subst hse hde
   refine TotalTriple.bind (ptrLe_owned (x := s.elem size n) (y := d) hbs hbd own₂ own₁)
     fun b₁ => TotalTriple.lift fun hb₁ => ?_
   refine TotalTriple.bind (ptrLe_owned (x := d.elem size n) (y := s) hbd hbs own₁ own₂)
@@ -378,7 +400,21 @@ theorem copyChecked_spec {d s : Ptr} {A S A' S' : Nat} {K K' : BlockKind} {a a' 
     simp [Ptr.elem, Ptr.add, Nat.mul_comm]
   unfold RangeSep at hsep
   rw [if_pos (by simp only [Bool.or_eq_true, decide_eq_true_eq, he]; omega)]
-  exact Region.memcpyIn hnd hns hda hsa
+  refine TotalTriple.memcpy_of (fun m h hF hm hp => ?_) (Region.memcpyIn hnd hns hda hsa)
+  obtain ⟨o₁, c₁, hc₁, hA₁⟩ := own₁ h hp
+  obtain ⟨o₂, c₂, hc₂, hA₂⟩ := own₂ h hp
+  unfold Ptr.overlaps
+  by_cases hbb : bd' = bs'
+  · subst hbb
+    have hAA := cell_addr_eq hm hc₁ hc₂
+    rw [hA₁, hA₂] at hAA
+    rw [Bool.eq_false_iff]
+    simp only [ne_eq, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq]
+    intro hx
+    simp only [and_assoc] at hx
+    obtain ⟨-, -, h1, h2⟩ := hx
+    omega
+  · simp [Bool.eq_false_iff, hbd, hbs, hbb]
 
 /-- The result of `dupe`: a copy of the source bytes. -/
 def dupeResult (I : AllocInv) (k : Nat) (src : Slice) (A' S' : Nat) (K' : BlockKind) (a' : Nat)
@@ -402,7 +438,9 @@ theorem dupe_spec (h : AllocSpec L vt ctx I) (size k sa a' : Nat) (src : Slice) 
     dsimp only [Option.elim]
     refine L.pre ?_ fun hh hp => sep_assoc hp
     refine L.lift fun hlen => ?_
-    rw [if_pos hlen, owned_pos (by rw [Array.size_replicate, hsize]; omega)]
+    rw [if_pos hlen, owned_pos (by rw [Array.size_replicate, hsize]; omega),
+      show copyChecked size (2 ^ k) sa d.ptr src.ptr d.len src.len =
+        copyChecked size (2 ^ k) sa d.ptr src.ptr d.len d.len by rw [hlen]]
     refine L.pre (granted_open (p := d.ptr) (k := k)
       (bs := Array.replicate (size * src.len.toNat) Byte.undef)
       (R := I.own ∗ regionIn src.ptr A' S' K' a' bsrc) fun A S K => ?_)
@@ -533,7 +571,8 @@ theorem reallocAdvanced_spec (h : AllocSpec L vt ctx I) (size k : Nat) (old : Sl
             dsimp only [Option.elim]
             refine granted_ex fun bn hbn => ?_
             rw [ec] at hbn
-            rw [if_pos (le_min_right _ _)]
+            rw [if_pos (le_min_right _ _), checkSliceEnd_ok (by
+              rw [min_toNat, show (0 : BitVec 64).toNat = 0 from rfl]; omega), pure_bind]
             -- open both grants
             refine L.pre (granted_open (R := I.own ∗ granted I p k bn) fun A S K => ?_)
               fun hh hp => by sep_normalize at hp ⊢; exact hp
@@ -646,7 +685,18 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
       simp only [Zig.lt, Bool.false_eq_true, ↓reduceIte, BitVec.ult_iff_lt, BitVec.lt_def, e1]; omega
     have hle : Zig.le false (n + 1) (n + 1) = true := by
       simp only [Zig.le, Bool.false_eq_true, ↓reduceIte, BitVec.ule_iff_le, BitVec.le_def]; omega
-    rw [if_pos hlt, Ptr.elem_eq]
+    rw [if_pos hlt]
+    have hsn : Enc.size T * n.toNat ≤ (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size := by
+      simp [Nat.mul_succ]
+    refine L.bind (L.pre (L.frame (R := I.own ∗ I.tok s.ptr
+          (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size k A S K)
+        (L.ofTotal (ptrProject_elem_region (p := s.ptr) (A := A) (S := S) (K := K) (a := 2 ^ k)
+          (size := Enc.size T) (i := n) (by rw [Array.size_replicate]; exact Nat.pos_of_ne_zero hpos) hsn)
+          (Full.Tame.ptrProject _ _)))
+        fun hh hp => by sep_normalize at hp ⊢; exact hp) fun q => ?_
+    refine L.pre (L.lift fun hq => ?_) fun hh hp => sep_assoc hp
+    subst hq
+    rw [Ptr.elem_eq]
     have ho : Enc.size T * n.toNat + Enc.size T ≤
         (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef).size := by
       simp [Nat.mul_succ]
@@ -657,7 +707,8 @@ theorem allocSentinel_spec {T : Type} [Enc T] [LawfulEnc T] [DecidableEq T]
           (bs := Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef)
           (o := Enc.size T * n.toNat) (al := Enc.align T) sentinel hT ho hal halo) (by tame_prim)))
         fun hh hp => by sep_normalize at hp ⊢; exact hp) fun _ => ?_
-    rw [if_pos hle]
+    rw [if_pos hle, checkSliceEnd_ok (by rw [e1]; simp), pure_bind,
+      checkSentinelIndex_ok (Nat.le_refl _), pure_bind]
     have hw : (Enc.encode sentinel).size = Enc.size T := LawfulEnc.size_encode sentinel
     have ho' : Enc.size T * n.toNat + Enc.size T ≤ (writeBytes
         (Array.replicate (Enc.size T * (n.toNat + 1)) Byte.undef) (Enc.size T * n.toNat)

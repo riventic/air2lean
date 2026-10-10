@@ -183,6 +183,7 @@ theorem free_total (c : Ptr) (s : Slice) (k : Nat) (ra : BitVec 64) (bs : Array 
   have hsz : (bs ++ tail).size = alignUp bs.size P := by
     have := alignUp_ge bs.size; simp; omega
   rw [hs]
+  try refine TotalTriple.bind (TotalTriple.checkAlign_mapping (P := P) (by decide)) fun _ => ?_
   exact TotalTriple.munmapWhole Os.Target.macos (by rw [hn]; exact alignUp_pos hpos)
     (by rw [hn, hsz, P_eq, alignUp_of_mod (by decide) (alignUp_mod_self (by decide))])
 
@@ -282,6 +283,7 @@ theorem realloc_total (s : Slice) (k : Nat) (n : BitVec 64) (mm : Bool) (bs : Ar
     rwa [show (bs ++ tail).extract 0 bs.size = bs by simp] at this
   by_cases hbig : 16384 < 2 ^ k
   · rw [if_pos (by simpa using hbig)]
+    try refine TotalTriple.bind (TotalTriple.checkAlign_mapping (P := P) (by decide)) fun _ => ?_
     exact TotalTriple.conseq (TotalTriple.ret (Q := reallocPost s.ptr k bs n.toNat mm) none)
       hclose (fun _ _ x => x)
   rw [if_neg (by simpa using hbig)]
@@ -301,6 +303,7 @@ theorem realloc_total (s : Slice) (k : Nat) (n : BitVec 64) (mm : Bool) (bs : Ar
   have hpre₀ : (bs ++ tail).extract 0 bs.size = bs := by simp
   by_cases heq : alignUp n.toNat P = alignUp bs.size P
   · rw [if_pos (by rw [heq])]
+    try refine TotalTriple.bind (TotalTriple.checkAlign_mapping (P := P) (by decide)) fun _ => ?_
     exact TotalTriple.conseq (TotalTriple.ret (Q := reallocPost s.ptr k bs n.toNat mm) _)
       (fun h hm => post_some hm (by rw [hsz, heq]) hfitn hal (extract_min hpre₀) fun _ => rfl)
       (fun _ _ x => x)
@@ -314,6 +317,10 @@ theorem realloc_total (s : Slice) (k : Nat) (n : BitVec 64) (mm : Bool) (bs : Ar
   rw [lt_eq, hN, hM]
   by_cases hlt : alignUp n.toNat P < alignUp bs.size P
   · rw [if_pos (by simpa using hlt)]
+    try refine TotalTriple.bind (TotalTriple.checkAlign_mapping (P := P) (by decide)) fun _ => ?_
+    refine TotalTriple.bind (TotalTriple.project_mapping (k := BitVec.ofNat 64 (alignUp n.toNat P))
+      (by rw [hN, hsz]; omega)) fun q => TotalTriple.lift fun hq => ?_
+    subst hq
     have hsub : Zig.sub false (BitVec.ofNat 64 (alignUp bs.size P))
         (BitVec.ofNat 64 (alignUp n.toNat P)) =
         pure (BitVec.ofNat 64 (alignUp bs.size P - alignUp n.toNat P)) := by
@@ -345,6 +352,12 @@ theorem realloc_total (s : Slice) (k : Nat) (n : BitVec 64) (mm : Bool) (bs : Ar
       exact Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hlo)
         (Nat.dvd_of_mod_eq_zero hNmod)))]
     simp only [beq_self_eq_true, Bool.or_true, ↓reduceIte]
+    have hal4 : (A + (s.ptr.off.toNat + alignUp n.toNat P)) % 16384 = 0 :=
+      Nat.mod_eq_zero_of_dvd (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hA)
+        (Nat.dvd_add (Nat.dvd_of_mod_eq_zero hlo) (Nat.dvd_of_mod_eq_zero hNmod)))
+    refine TotalTriple.bind (checkAlign_owned (A := A) hb' (fun h hp => by
+      obtain ⟨b', hb'', ho⟩ := mapping_block hp
+      rw [hb] at hb''; cases hb''; exact ho) (by rw [hoff]; exact_mod_cast hal4)) fun _ => ?_
     have hdiff : (BitVec.ofNat 64 (alignUp bs.size P - alignUp n.toNat P)).toNat =
         alignUp bs.size P - alignUp n.toNat P := by
       rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
@@ -366,6 +379,7 @@ theorem realloc_total (s : Slice) (k : Nat) (n : BitVec 64) (mm : Bool) (bs : Ar
       omega]
     exact extract_min hpre₀
   · rw [if_neg (by simpa using hlt)]
+    try refine TotalTriple.bind (TotalTriple.checkAlign_mapping (P := P) (by decide)) fun _ => ?_
     exact TotalTriple.conseq (TotalTriple.ret (Q := reallocPost s.ptr k bs n.toNat mm) none)
       hclose (fun _ _ x => x)
 

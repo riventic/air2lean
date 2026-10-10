@@ -97,11 +97,13 @@ def free (size k : Nat) (s : Slice) : MemM Unit :=
 def freeSentinel (size k : Nat) (s : Slice) : MemM Unit :=
   liftR (Zig.add false s.len 1) >>= fun n => free vt ctx size k ⟨s.ptr, n⟩
 
-/-- `@memcpy(dst[0..n], src[0..n])` of `n` items of `size` bytes, after its checks: the lengths
-agree and the two address ranges do not overlap. -/
-def copyChecked (size da sa : Nat) (dst src : Ptr) (n : BitVec 64) : MemM Unit :=
-  ptrLe (src.elem size n) dst >>= fun b₁ => ptrLe (dst.elem size n) src >>= fun b₂ =>
-    if (b₁ || b₂) = true then memmove size da sa dst src n else throw .panic
+/-- `@memcpy(dst[0..n], src[0..m])` of items of `size` bytes, after Sema's overlap check: the end
+pointers are formed (`ptrProject`, MM-3), the two address ranges must not overlap (`.panic`), then
+the model's `memcpy` checks the counts and the overlap again (`.illegal`). -/
+def copyChecked (size da sa : Nat) (dst src : Ptr) (n m : BitVec 64) : MemM Unit :=
+  ptrProject src (·.elem size n) >>= fun se => ptrProject dst (·.elem size n) >>= fun de =>
+  ptrLe se dst >>= fun b₁ => ptrLe de src >>= fun b₂ =>
+    if (b₁ || b₂) = true then memcpy size da sa dst src n m else throw .panic
 
 /-- `dupe(T, m)`: `alloc` and `@memcpy` (source alignment `sa`). -/
 def dupe (size k sa : Nat) (src : Slice) : MemM (Except ErrName Slice) :=
@@ -109,11 +111,12 @@ def dupe (size k sa : Nat) (src : Slice) : MemM (Except ErrName Slice) :=
     | .error e => pure (.error e)
     | .ok d =>
       if d.len = src.len then
-        copyChecked size (2 ^ k) sa d.ptr src.ptr d.len >>= fun _ => pure (.ok d)
+        copyChecked size (2 ^ k) sa d.ptr src.ptr d.len src.len >>= fun _ => pure (.ok d)
       else throw .panic
 
 /-- `allocSentinel(T, n, sentinel)` (`allocWithOptionsRetAddr`): `n + 1` items, the last the
-sentinel, which the slicing `ptr[0..n :sentinel]` reads back. -/
+sentinel (its pointer formed with `ptrProject`), which the slicing `ptr[0..n :sentinel]` reads
+back after the model's bounds checks. -/
 def allocSentinel {T : Type} [Enc T] [DecidableEq T] (k : Nat) (n : BitVec 64) (sentinel : T) :
     MemM (Except ErrName Slice) :=
   returnAddress >>= fun ra => liftR (Zig.add false n 1) >>= fun n₁ =>
@@ -121,9 +124,12 @@ def allocSentinel {T : Type} [Enc T] [DecidableEq T] (k : Nat) (n : BitVec 64) (
     | .error e => pure (.error e)
     | .ok s =>
       if Zig.lt false n s.len = true then
-        store (Enc.align T) (s.ptr.elem (Enc.size T) n) sentinel >>= fun _ =>
+        ptrProject s.ptr (·.elem (Enc.size T) n) >>= fun q =>
+        store (Enc.align T) q sentinel >>= fun _ =>
         liftR (Zig.add false n 1) >>= fun n₂ =>
         if Zig.le false n₂ s.len = true then
+          checkSliceEnd s.len 0 n 1 >>= fun _ =>
+          checkSentinelIndex ⟨s.ptr, n⟩ n >>= fun _ =>
           load T (Enc.align T) (s.ptr.elem (Enc.size T) n) >>= fun x =>
           if sentinel = x then pure (.ok ⟨s.ptr, n⟩) else throw .panic
         else throw .outOfBounds
@@ -142,7 +148,8 @@ def reallocAdvanced (size k : Nat) (old : Slice) (newN ra : BitVec 64) :
     (vt.alloc ctx nb k ra >>= fun r' => r'.elim (pure (.error outOfMemory)) fun q =>
       let c := Zig.min false nb ob.len
       if Zig.le false c ob.len = true then
-        copyChecked 1 1 1 q ob.ptr c >>= fun _ =>
+        checkSliceEnd ob.len 0 c 0 >>= fun _ =>
+        copyChecked 1 1 1 q ob.ptr c c >>= fun _ =>
         memset (α := BitVec 8) 1 ob.ptr ob.len none >>= fun _ =>
         vt.free ctx ob k ra >>= fun _ => pure (.ok ⟨q, newN⟩)
       else throw .outOfBounds)
