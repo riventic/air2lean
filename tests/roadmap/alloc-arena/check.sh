@@ -56,8 +56,20 @@ assert text.count('depends on axioms') == 2 and used <= {'propext', 'Classical.c
 EOF
 # ArenaSpec.lean: `free`, `resize` and `remap` against FAllocSpec over the ghost-epoch invariant; it
 # prints the axioms of `free_spec`, `resize_spec` and `remap_spec`. The patch does not change these
-# entries (the generated code is the same), so the same proofs, instantiated for the patched
-# module, must check too.
+# entries (checked: the generated definitions are the same text), so the same proofs, instantiated
+# for the patched module, must check too.
+python3 - "$here/AllocArena/ArenaLinux.lean" "$here/AllocArena/ArenaFixedLinux.lean" <<'EOF'
+import re, sys
+def defs(path):
+    parts = re.split(r'\n(?=def |structure |inductive |instance |mutual|partial_fixpoint|end )', open(path).read())
+    return {m.group(1): p for p in parts if (m := re.match(r'(?:def|structure|inductive) (\S+)', p))}
+stock, fixed = defs(sys.argv[1]), defs(sys.argv[2])
+# What ArenaSpec unfolds: the three entries, their callees and the types of their locals.
+names = ['heap_ArenaAllocator_' + n for n in ('free', 'resize', 'remap', 'loadFirstNode', 'Node_loadBuf',
+         'Node_Size_toInt', 'Node_Size', 'freeLocals', 'resizeLocals', 'remapLocals')] + ['debug_assert']
+diff = [n for n in names if n not in stock or stock[n] != fixed.get(n)]
+assert not diff, f'the patch changes {diff}: instantiating ArenaSpec for it is not justified'
+EOF
 sed -e 's/AllocArena\.ArenaLinux/AllocArena.ArenaFixedLinux/g' \
   -e 's/AllocArena\.ArenaSpec/AllocArena.ArenaSpecFixed/g' "$here/ArenaSpec.lean" > "$work/ArenaSpecFixed.lean"
 for spec in "$here/ArenaSpec.lean" "$work/ArenaSpecFixed.lean"; do
@@ -90,7 +102,7 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   chmod -R u+w "$work/lib/std"
   patch -s -d "$work/lib" -p1 < "$here/upstream/arena-fix.patch"
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe --zig-lib-dir "$work/lib" "$work/native.zig" \
-    --cache-dir "$work/cache-fixed" --global-cache-dir "$work/cache-fixed" -femit-bin="$work/native-fixed"
+    --cache-dir "$work/cache" --global-cache-dir "$work/cache" -femit-bin="$work/native-fixed"
   "$work/native-fixed" 2> "$work/native-fixed.txt"
   diff "$here/expected-fixed.txt" "$work/native-fixed.txt"
 fi

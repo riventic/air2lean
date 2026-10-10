@@ -1047,9 +1047,7 @@ theorem remap_ct (CI : FAllocInv) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : Bit
   unfold heap_ArenaAllocator_remap
   conc_norm
   refine CTriple.bind (resize_ct CI γ e ctx s k n ra bs hlen hpos hn) fun b => ?_
-  cases b
-  · exact CTriple.ret' _ fun _ h => h
-  · exact CTriple.ret' _ fun _ h => h
+  cases b <;> exact CTriple.ret' _ fun _ h => h
 
 end ResizeProof
 

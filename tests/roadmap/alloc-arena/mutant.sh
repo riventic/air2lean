@@ -37,7 +37,7 @@ if "${lean_cmd[@]}" "$here/Eval.lean" > "$work/eval.log" 2>&1; then
 fi
 # A #guard fails; a missing import (an unbuilt prerequisite) is not a rejection of the mutant.
 if grep -Eq "unknown module prefix|object file .* does not exist|unknown package" "$work/eval.log" ||
-    ! grep -q "arena_three" "$work/eval.log"; then
+    ! grep -q "did not evaluate to" "$work/eval.log" || ! grep -q "arena_three" "$work/eval.log"; then
   cat "$work/eval.log" >&2; echo "alloc-arena mutant: Eval.lean failed for another reason" >&2; exit 1
 fi
 echo "alloc-arena mutant: rejected (arena_three: two allocations overlap)"
