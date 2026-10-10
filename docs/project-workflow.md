@@ -193,7 +193,7 @@ manifest-relative `source_closure` names against the runner's repository-relativ
 Each goal is bound to an audited theorem named `theorem` or `namespace.theorem`, with
 one of these bindings: `direct`, `missing`, `outside_contracts` (module is not a declared
 contract file), `policy_violation` (audit `allowed` false or violations), `spoofed_head`,
-`wrapper_or_unrelated`, `rejected_hypothesis`, `source_hash_mismatch`, `stale_receipt`,
+`wrapper_or_unrelated`, `trivial_conclusion`, `rejected_hypothesis`, `source_hash_mismatch`, `stale_receipt`,
 `unbound` or `no_receipt`. Binding reads the statement structure that `tools/Assurance.lean`
 extracts from the kernel type ([claim strength](claim-strength.md)), never names or proof
 terms:
@@ -206,6 +206,12 @@ terms:
   `namespace.(function without prefix)` from the hash-bound generated module. A root that occurs
   only in a postcondition, a hypothesis or an ignored argument, or a theorem about a wrapper or
   `True`, is `wrapper_or_unrelated`;
+* a conclusion that names the root but only equates it with itself (`root x = root x`: the
+  audited equation's right-hand side is the generated root) is `trivial_conclusion`: it fixes no
+  result, so it is not direct, does not reach `proved_scoped` and blocks the root (the real audited
+  `double_refl` of `assurance/provenance` is the committed example). The audit records no
+  left-hand side, so a genuine relational property such as `root a b = root b a` is refused the
+  same way (fail closed); state the result against a specification to have it counted;
 * no hypothesis may mention a generated definition or a claim head (`rejected_hypothesis`),
   unless that definition is listed in the root's `assumptions`.
 
@@ -222,7 +228,10 @@ An audit without statement structures (an older extractor) leaves goals `unbound
 `tests/roadmap/assurance/StatementBinding.lean` holds a wrapper-statement, a `True`, a
 hypothesis-only and a genuine theorem; only the last binds
 (`tests/roadmap/coverage-report/test_coverage.py`), and its plain `Nat` equation derives no
-strength.
+strength. `tests/roadmap/coverage-report/real_run.py` covers the I07 provenance fixture's root
+(`provenance-project.json`) with a schema-12 export manifest chained to the same real receipt:
+`analyzed`, `exported`, `translated`, `compiled` and `proved` pass and `double_eq` reaches total
+correctness, while editing the AIR fails `analyzed`/`exported`.
 
 Levels, lowest first: `none`, `translated`, `compiled`, `tested_sampled`, `proved_scoped`,
 `correct_if_returns` (formerly `functionally_verified_partial`), `functionally_verified_total`.

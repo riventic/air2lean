@@ -862,6 +862,25 @@ def module_of(relative):
     return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
 
 
+def trivial_conclusion(theorem, definition):
+    """The reason an audited conclusion that names the root still states no result about it, else None.
+
+    The audit records an equation's right-hand side and no other argument. An `Eq` whose right-hand
+    side is the generated root itself (`root x = root x`, or `root x = root y`) relates the root to
+    itself and fixes no value; the audit omits the left-hand side, so a genuine relational property
+    (commutativity, idempotence) cannot be told apart and is not credited either (fail closed). A `True` conclusion never gets here (it does not reference the root).
+    Other conclusions are left to the derived strength: they are not called trivial without evidence."""
+    shape = theorem.get('conclusion')
+    if not isinstance(shape, dict):
+        return None
+    args = shape.get('args')
+    if shape.get('head') == 'Eq' and isinstance(args, list) and len(args) == 1 and isinstance(args[0], dict) \
+            and args[0].get('head') == definition:
+        return (f'trivial conclusion: the equation only relates the generated root {definition} to itself and fixes no result '
+                '(a relational property such as commutativity is not credited either; state the result against a specification)')
+    return None
+
+
 def compiled_olean(bundle, module):
     suffix = '/.lake/build/lib/lean/' + module.replace('.', '/') + '.olean'
     return any(path.endswith(suffix) for path in bundle['compiled'])
@@ -932,8 +951,12 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
         else:
             found = assess_goal(theorem, root, definition, bundle['nodes'], gen_modules, bundle['theorems'])
             binding, reason = goal_binding(found, definition, bundle['nodes'], gen_modules)
+            if binding == 'direct' and (trivial := trivial_conclusion(theorem, definition)) is not None:
+                binding, reason = 'trivial_conclusion', trivial
             row.update(binding=binding, reason=reason)
-            if binding == 'direct':
+            if binding == 'trivial_conclusion':
+                row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
+            elif binding == 'direct':
                 row.update(audited_assumptions={k: sorted(theorem.get(k) or []) for k in
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
                            derived_strength=found['strength'], claim_class=found['claim_class'],
@@ -1215,7 +1238,9 @@ def coverage(path, artifact=None, receipt=None, verifier=None, diffs=(), export_
                       'A declared safety/partial/total strength counts only up to the strength scripts/claims.py derives '
                       'from the audited conclusion head (Zig triples, Returns, exact-success equations), capped at safety '
                       'without a non-vacuity witness and, for partial correctness, without a liveness witness '
-                      '(ZigLean/Witness.lean); an unclassified conclusion such as `root x = root x` derives none.',
+                      '(ZigLean/Witness.lean); an unclassified conclusion derives none. An equation whose right-hand side is the generated root itself '
+                      '(`root x = root x`) is a trivial_conclusion: it names the root but fixes no result, so it is not '
+                      'a direct goal and cannot reach proved_scoped.',
                       'The domain is derived from the kernel type: a fixed or derived root argument or initial state, a '
                       'repeated variable or a hypothesis over a quantified argument makes it scoped, which caps the root at '
                       'proved_scoped; a scoped goal must declare its domain as `scoped: ...`.',
