@@ -19526,7 +19526,7 @@
       "tests/golden/vectors/air/vectors.vShift.json": "19aa90a260d72f7f341801c5241d280d763732a90b31644567fa08a289ae6b8f",
       "tests/golden/vectors/air/vectors.vToFloat.json": "ece67140f1de58de475c8d8e32b1da260e87175653b626efef1e104500b3c8aa",
       "tests/golden/vectors/air/vectors.xorLanes.json": "95c5d7ad52ddb8b6f916d5050e0fdb095edba48a37a0ead6a5d9818a7d66dd45",
-      "tests/roadmap/diagnostics/Collector.lean": "0b44b0e6641d01e1c08b8dc882eb9f3fb8de29444de5f11ac706670a984233d1",
+      "tests/roadmap/diagnostics/Collector.lean": "9d9a739aa7683d132612ab54bfa0f4a707d819a3ef02ec7ae3598c8b288c5986",
       "tests/roadmap/diagnostics/RuntimeTags.lean": "7653c5e231b47c061e232607123c3d87d5403deb8e3a7323c31383a162cec68f",
       "tests/roadmap/diagnostics/test_cli.py": "249fac47d3249fd8358d86a465374c4e606faa722cac175b3feba975f56b335b",
       "tests/roadmap/runtime-tags/runtime_tags.zig": "23422983282b3a6475593ed50e00cbc39cd39ee22aa15d56acaa9ea8365dd3df",
