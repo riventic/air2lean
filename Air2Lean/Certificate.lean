@@ -164,14 +164,11 @@ structure Scalar where
   /-- `valOk` inversion lemma, and the decoded argument of `v<i>`. -/
   inv : String
   decVar : Nat → String
+  /-- `enc` ignores its argument (`void`): a lambda over the value binds `_`. -/
+  ignoresValue : Bool := false
 
-/-- A single or many pointer type whose accesses are ordinary: `Sem.plainPtr` (not a slice,
-`volatile`, `allowzero` or a bit-pointer). -/
-def plainPtrTy (f : Func) (t : TyId) : Bool :=
-  match f.types[t]?, f.layouts[t]? with
-  | some (.ptr size _ _), some l =>
-    (size == "one" || size == "many") && !l.isVolatile && !l.allowzero && l.hostSize == 0
-  | _, _ => false
+/-- The binder of a lambda over a value of this type. -/
+def Scalar.binder (sc : Scalar) : String := if sc.ignoresValue then "_" else "v"
 
 def scalar? (f : Func) (t : TyId) : Option Scalar :=
   match f.types[t]? with
@@ -184,21 +181,18 @@ def scalar? (f : Func) (t : TyId) : Option Scalar :=
       dec := fun i => s!"((args.getD {i} .void).toBool)",
       inv := "valOk_bool", decVar := fun i => s!"v{i}.toBool" }
   | some (.ptr ..) =>
-    if plainPtrTy f t then some {
+    if f.plainPtr t then some {
       lean := "Zig.Ptr", enc := fun v => s!"(Value.ptr {v})",
       dec := fun i => s!"((args.getD {i} .void).toPtr)",
       inv := "valOk_ptr", decVar := fun i => s!"v{i}.toPtr" }
     else none
   | _ => none
 
-/-- The binder of a lambda over a value of this type: `_` if its encoding ignores the value. -/
-def Scalar.binder (sc : Scalar) : String := if sc.enc "v" == sc.enc "w" then "_" else "v"
-
 def retScalar? (f : Func) (t : TyId) : Option Scalar :=
   match f.types[t]? with
   | some .void => some {
       lean := "Unit", enc := fun _ => "Value.void", dec := fun _ => "()",
-      inv := "valOk_void", decVar := fun _ => "()" }
+      inv := "valOk_void", decVar := fun _ => "()", ignoresValue := true }
   | _ => scalar? f t
 
 /-- A safety-panic handler of `Sem.panicOf?`'s literal table (not a generic instance). -/
@@ -216,16 +210,7 @@ def isIntTy (f : Func) (t : TyId) : Bool :=
   match f.types[t]? with | some (.int ..) => true | _ => false
 
 /-- A value type that memory holds in the fragment: an integer, `bool` or plain pointer. -/
-def memValTy (f : Func) (t : TyId) : Bool :=
-  isIntTy f t || plainPtrTy f t || match f.types[t]? with | some .bool => true | _ => false
-
-/-- The offset of field `idx` of the non-`packed` struct a pointer of type `t` points to
-(`Sem.fieldOffset?`). -/
-def fieldOffset? (f : Func) (t : TyId) (idx : Nat) : Option Nat := do
-  let .ptr _ _ s ← f.types[t]? | none
-  let .struct _ layout _ ← f.types[s]? | none
-  if layout == "packed" then none
-  (← f.layouts[s]?).offsets[idx]?
+def memValTy (f : Func) (t : TyId) : Bool := (scalar? f t).isSome
 
 /-- An operand the certificate fragment reads: an instruction, an integer, `bool` or `void`. -/
 def simpleVal (f : Func) : Val → Bool
@@ -247,9 +232,15 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
     unless vs.all (simpleVal f) do throw s!"inst {i.id}: an operand outside the fragment"
   let intRes : Except String Unit :=
     unless isIntTy f i.ty do throw s!"inst {i.id}: a non-integer result"
+  -- An operand whose type satisfies `ok`: an instruction, an integer or a `bool` constant.
+  let typed (ok : TyId → Bool) : Val → Bool
+    | .inst x => (tyOfInst x).any ok
+    | .int t _ => ok t
+    | .bool _ => true
+    | _ => false
   -- A pointer operand: an instruction of a plain pointer type.
   let ptrOf (v : Val) : Option TyId := match v with
-    | .inst x => (tyOfInst x).filter (plainPtrTy f)
+    | .inst x => (tyOfInst x).filter f.plainPtr
     | _ => none
   let ptrVal (v : Val) : Except String TyId := do
     let some t := ptrOf v | throw s!"inst {i.id}: an access through a pointer outside the fragment"
@@ -258,11 +249,7 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
   | .arg _ | .line _ | .dbg .. | .unreach | .trap | .block _ => pure ()
   | .arith _ _ a b | .div _ a b | .minMax _ a b | .bit _ a b => do intRes; vals [a, b]
   | .cmp _ a b => do
-    let intOperand : Val → Bool
-      | .inst x => (tyOfInst x).any (isIntTy f)
-      | .int t _ => isIntTy f t
-      | _ => false
-    unless intOperand a || ((ptrOf a).isSome && (ptrOf b).isSome) do
+    unless (!(a matches .bool _) && typed (isIntTy f) a) || ((ptrOf a).isSome && (ptrOf b).isSome) do
       throw s!"inst {i.id}: a comparison of non-integers"
     vals [a, b]
   | .load p => do
@@ -271,19 +258,14 @@ def instReason (f : Func) (tyOfInst : InstId → Option TyId) (i : Inst) : Excep
   | .store p v => do
     let _ ← ptrVal p
     vals [v]
-    let stored := match v with
-      | .inst x => (tyOfInst x).any (memValTy f)
-      | .int t _ => isIntTy f t
-      | .bool _ => true
-      | _ => false
-    unless stored do throw s!"inst {i.id}: a store of a type outside the fragment"
+    unless typed (memValTy f) v do throw s!"inst {i.id}: a store of a type outside the fragment"
   | .fieldPtr b idx => do
     let t ← ptrVal b
-    unless plainPtrTy f i.ty && (fieldOffset? f t idx).isSome do
+    unless f.plainPtr i.ty && (f.fieldOffset? t idx).isSome do
       throw s!"inst {i.id}: a field pointer outside the fragment"
   | .bitcast a => do
     let _ ← ptrVal a
-    unless plainPtrTy f i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
+    unless f.plainPtr i.ty do throw s!"inst {i.id}: a bitcast outside the fragment"
   | .boolAnd a b | .boolOr a b => vals [a, b]
   | .not a => vals [a]
   | .intCast a | .trunc a => do intRes; vals [a]
@@ -315,7 +297,8 @@ def localReason (f : Func) : Except String (Array String) := do
   unless (retScalar? f f.ret).isSome do
     throw "a return type that is not an integer, bool, plain pointer or void"
   let insts := allInsts f.body
-  let tyOfInst (x : InstId) := (insts.find? (·.id == x)).map (·.ty)
+  let tys : Std.HashMap InstId TyId := insts.foldl (fun m i => m.insert i.id i.ty) {}
+  let tyOfInst (x : InstId) := tys[x]?
   for i in insts do instReason f tyOfInst i
   unless (printFunc f).isSome do throw "an instruction the certificate printer does not print"
   pure ((callsIn f).filter fun n => (panicCallee? n).isNone)
@@ -328,7 +311,7 @@ def fragment (funcs : Array Func) (memFuncs concFuncs : Array String) :
   let mut cands : Array (Func × Array String) := #[]
   -- A recursive function in `Zig.MemM` charges its frame to the model's stack budget
   -- (`Zig.enterFrame`, STK-01), which the semantics does not have.
-  let budgeted := (callGroups funcs).flatMap fun (members, recursive) =>
+  let budgeted := if memFuncs.isEmpty then #[] else (callGroups funcs).flatMap fun (members, recursive) =>
     if recursive then (members.map (·.name)).filter memFuncs.contains else #[]
   for f in funcs do
     let reason := if concFuncs.contains f.name then .error "a concurrent function (`Zig.ConcM`)"
@@ -403,10 +386,11 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   let isMem (f : Func) := memFuncs.contains f.name
   -- The generated definition applied to `args`, as the semantics' (value, memory) at `m`: a
   -- function in `Zig.MemM` runs on `m`; a pure one leaves `m`.
-  let genRes (f : Func) (args : String) : String :=
+  -- `head`: the function term (default: the generated definition).
+  let genRes (f : Func) (args : String) (head := genName f) : String :=
     let s := sig f
-    if isMem f then s!"(fun r => ({s.ret.enc "r.1"}, r.2)) <$> ({genName f} {args}).run m"
-    else s!"(fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {genName f} {args}"
+    if isMem f then s!"(fun r => ({s.ret.enc "r.1"}, r.2)) <$> ({head} {args}).run m"
+    else s!"(fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {head} {args}"
   let mut lines : Array String := #[
     "-- air2lean AIR semantics certificate (docs/air-semantics.md). Generated; do not edit.",
     "import Air2Lean.Sem", s!"import {genModule}", "",
@@ -499,7 +483,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
   -- the generated clique (or one unfolding, outside a clique), then equality.
   let motive (f : Func) : String :=
     let s := sig f
-    s!"fun g => ∀ {s.argNames} m, Lean.Order.PartialOrder.rel ((fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> g {s.argNames}) " ++
+    s!"fun g => ∀ {s.argNames} m, Lean.Order.PartialOrder.rel ({genRes f s.argNames "g"}) " ++
       s!"((run (progOf table) {str f.name} [{s.encArgs}]).run m)"
   let mut complete : Array String := frag.filterMap fun f => if calling f then none else some f.name
   for (members, recursive) in callGroups frag do
@@ -549,7 +533,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
       let pre := #[
         s!"/-- `{f.name}`: the generated definition terminates only as the AIR does: it is below `run`. -/",
         s!"theorem {d}_complete {s.binders} (m : Zig.Mem) :",
-        s!"    Lean.Order.PartialOrder.rel ((fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames})",
+        s!"    Lean.Order.PartialOrder.rel ({genRes f s.argNames})",
         s!"      ((run (progOf table) {str f.name} [{s.encArgs}]).run m) := by"]
       -- The step for member `g`, given the bound clique functions and hypotheses.
       let step (g : Func) (bound : Bool) (indent : String) : Array String := Id.run do
@@ -614,7 +598,7 @@ def emit (funcs : Array Func) (ns : String) (declNames : Array (String × String
         s!"/-- `{f.name}`: its AIR semantics equals the generated definition. -/",
         s!"theorem {d}_eq {s.binders} (m : Zig.Mem) :",
         s!"    (run (progOf table) {str f.name} [{s.encArgs}]).run m =",
-        s!"      (fun {s.ret.binder} => ({s.ret.enc "v"}, m)) <$> {genName f} {s.argNames} :=",
+        s!"      {genRes f s.argNames} :=",
         s!"  Lean.Order.PartialOrder.rel_antisymm ({d}_sound {s.argNames} m) ({d}_complete {s.argNames} m)", ""]
   lines := lines.push s!"end {ns}.AirCert"
   pure ("\n".intercalate lines.toList ++ "\n")

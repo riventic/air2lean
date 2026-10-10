@@ -295,16 +295,6 @@ def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
 /-- The `align(N)` of a pointer type. -/
 def ptrAlignOf (f : Func) (t : TyId) : Option Nat := (f.layouts[t]?).bind (·.ptrAlign)
 
-/-- A single or many pointer type through which an access is an ordinary memory access: not a
-slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and a
-field pointer of it is `Zig.ptrProjectNonnull` before 0.16) and not a bit-pointer into a packed
-field. -/
-def plainPtr (f : Func) (t : TyId) : Bool :=
-  match tyOf f t, f.layouts[t]? with
-  | .ptr size _ _, some l =>
-    (size == "one" || size == "many") && !l.isVolatile && !l.allowzero && l.hostSize == 0
-  | _, _ => false
-
 /-- The pointee type of a pointer type. -/
 def pointee? (f : Func) (t : TyId) : Option TyId :=
   match tyOf f t with
@@ -315,7 +305,7 @@ def pointee? (f : Func) (t : TyId) : Option TyId :=
 def ptrOperand (f : Func) (env : Env) (v : Val) : Result (Zig.Ptr × Nat) := do
   match operandTy env v with
   | some t =>
-    match plainPtr f t, ptrAlignOf f t, ← operand f env v with
+    match f.plainPtr t, ptrAlignOf f t, ← operand f env v with
     | true, some a, .ptr p => pure (p, a)
     | _, _, _ => stuck
   | none => stuck
@@ -325,7 +315,7 @@ def loadAs (f : Func) (t : TyId) (p : Zig.Ptr) (align : Nat) : MemM Value :=
   match tyOf f t with
   | .int s w => do pure (.int s w (← Zig.load (BitVec w) align p))
   | .bool => do pure (.bool (← Zig.load Bool align p))
-  | .ptr .. => if plainPtr f t then do pure (.ptr (← Zig.load Zig.Ptr align p)) else StateT.lift stuck
+  | .ptr .. => if f.plainPtr t then do pure (.ptr (← Zig.load Zig.Ptr align p)) else StateT.lift stuck
   | _ => StateT.lift stuck
 
 /-- Store the operand `v` (an integer, `bool` or pointer); `undefined` makes the bytes of its
@@ -335,7 +325,7 @@ def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM 
   | .undef t => match tyOf f t with
     | .int _ w => Zig.storeUndef (BitVec w) align p
     | .bool => Zig.storeUndef Bool align p
-    | .ptr .. => if plainPtr f t then Zig.storeUndef Zig.Ptr align p else StateT.lift stuck
+    | .ptr .. => if f.plainPtr t then Zig.storeUndef Zig.Ptr align p else StateT.lift stuck
     | _ => StateT.lift stuck
   | v => do
     match ← StateT.lift (operand f env v) with
@@ -343,14 +333,6 @@ def storeAs (f : Func) (env : Env) (p : Zig.Ptr) (align : Nat) (v : Val) : MemM 
     | .bool b => Zig.store align p b
     | .ptr q => Zig.store align p q
     | _ => StateT.lift stuck
-
-/-- The byte offset of field `idx` of the non-`packed` struct that a pointer of type `t` points
-to. -/
-def fieldOffset? (f : Func) (t : TyId) (idx : Nat) : Option Nat := do
-  let s ← pointee? f t
-  match tyOf f s with
-  | .struct _ layout _ => if layout == "packed" then none else (← f.layouts[s]?).offsets[idx]?
-  | _ => none
 
 /-- The value of an instruction that may access memory but has no control flow and makes no
 call: the straight-line operations (`evalPure`), `load`, `store`, `struct_field_ptr`, a pointer
@@ -366,11 +348,11 @@ def evalMem (f : Func) (env : Env) (i : Inst) : MemM Value :=
     pure .void
   | .fieldPtr base idx => do
     let (q, _) ← StateT.lift (ptrOperand f env base)
-    match (operandTy env base).bind (fieldOffset? f · idx), plainPtr f i.ty with
+    match (operandTy env base).bind (f.fieldOffset? · idx), f.plainPtr i.ty with
     | some off, true => do pure (.ptr (← Zig.ptrProject q (·.add off)))
     | _, _ => StateT.lift stuck
   | .bitcast a =>
-    if plainPtr f i.ty then do
+    if f.plainPtr i.ty then do
       let (q, _) ← StateT.lift (ptrOperand f env a)
       pure (.ptr q)
     else StateT.lift stuck
@@ -789,7 +771,7 @@ theorem ptrProject_add_zero (p : Zig.Ptr) : Zig.ptrProject p (·.add 0) = pure p
 theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
 
 attribute [air_sem] execFunc argsOk valOk execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
-  evalMem ptrOperand operandTy plainPtr loadAs storeAs fieldOffset? pointee? ptrAlignOf layoutOf
+  evalMem ptrOperand operandTy Func.plainPtr loadAs storeAs Func.fieldOffset? pointee? ptrAlignOf layoutOf
   Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR
   Bool.true_or Bool.or_true Bool.not_false Bool.not_true Bool.false_and Bool.and_false
   Option.map_some Option.map_none Option.bind_some Option.bind_none Option.pure_def

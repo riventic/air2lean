@@ -4189,6 +4189,10 @@ structure EmitParts where
   dispatchTargets : Array String
   /-- Each function's declaration name. -/
   declNames : Array (String × String)
+  /-- The functions emitted in `Zig.MemM` (`memoryFunctions`) and in `Zig.ConcM`
+  (`concFunctions`). -/
+  memFuncs : Array String := #[]
+  concFuncs : Array String := #[]
 
 /-- The pieces of `funcs → one Lean source file` importing `ZigLean` (`EmitParts.render`).
 `prefix_` is stripped from every Zig name (function or struct) before mangling.
@@ -4314,7 +4318,7 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
     dispatchTargets := if dispatchStr.isEmpty then #[] else
       targets.map (·.1) ++ futures.map (·.1)
-    declNames := ownFuncNames }
+    declNames := ownFuncNames, memFuncs, concFuncs }
 
 /-- The single-file output: every part in order under one `namespace`. -/
 def EmitParts.render (p : EmitParts) (ns : String) : String :=

@@ -21,22 +21,18 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
 
-# The certified functions of each example; every other function must be listed as excluded.
-# layout, threadsync and floatops are not here: their committed Gen.lean is not the translation
-# of tests/golden/<ex>/air.
-EXPECTED = {
-    'asm': [],
-    'atomics': [],
+# The examples with a committed certificate: those whose committed Gen.lean is the translation of
+# tests/golden/<ex>/air (not layout, threadsync, floatops).
+EXAMPLES = ['asm', 'atomics', 'basic', 'errors', 'floatconv', 'floats', 'iogroup', 'options', 'pointers',
+            'recursion', 'threads', 'variants', 'vectors']
+# The certified functions (none for an example not listed); every other function must be listed
+# as excluded.
+CERTIFIED = {
     'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.tardiness'],
-    'errors': [],
-    'floatconv': [],
-    'floats': [],
     'iogroup': ['debug.assert'],
-    'options': [],
     'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.swap'],
     'recursion': ['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'],
     'threads': ['threads.writeFlag'],
-    'variants': [],
     'vectors': ['vectors.sMod', 'vectors.sRem'],
 }
 
@@ -72,7 +68,7 @@ def check_example(binary, ex, work):
         f'{ex}: stale {committed.relative_to(ROOT)}; regenerate with --air-certificate'
     text = cert.read_text()
     certified, excluded = certificate_sets(text)
-    assert certified == EXPECTED[ex], (ex, certified)
+    assert certified == CERTIFIED.get(ex, []), (ex, certified)
     golden = (ROOT / 'tests/golden' / ex / 'air').glob('*.json')
     names = sorted(json.loads(path.read_text())['name'] for path in golden)
     assert sorted(certified + excluded) == names, (ex, certified, excluded, names)
@@ -100,7 +96,7 @@ def check_flags(binary, work):
 
 def check_no_escape_hatches():
     paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemAttr.lean', ROOT / 'Air2Lean/Certificate.lean',
-             *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXPECTED)]
+             *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXAMPLES)]
     for path in paths:
         code = re.sub(r'/-.*?-/|--[^\n]*', '', path.read_text(), flags=re.S)
         for word in ('sorry', 'admit', 'native_decide'):
@@ -111,11 +107,10 @@ def check_coverage():
     """Every example with a committed certificate is checked here, and every certificate that
     certifies a function is in the round trip (RoundTrip.lean)."""
     committed = sorted(p.parent.name.lower() for p in (ROOT / 'Proofs').glob('*/AirCert.lean'))
-    assert committed == sorted(EXPECTED), (committed, sorted(EXPECTED))
+    assert committed == EXAMPLES, (committed, EXAMPLES)
     round_trip = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text()
-    for ex, certified in EXPECTED.items():
-        listed = f'checkTable "tests/golden/{ex}/air" {ex.capitalize()}.AirCert.table' in round_trip
-        assert listed == bool(certified), (ex, 'RoundTrip.lean')
+    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" ', round_trip, re.M)
+    assert listed == sorted(CERTIFIED), (listed, 'RoundTrip.lean')
 
 
 def main():
@@ -126,7 +121,7 @@ def main():
     check_coverage()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        for ex in EXPECTED:
+        for ex in EXAMPLES:
             check_example(args.binary, ex, work)
         check_flags(args.binary, work)
     print('AIR semantics certificate checks passed')

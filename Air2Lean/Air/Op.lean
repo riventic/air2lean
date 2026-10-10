@@ -721,4 +721,24 @@ structure Func where
   /-- `some`: an `export fn`, the definition of this linker symbol. -/
   exportDecl : Option ExportDecl := none
 
+/-- A single or many pointer type through which an access is an ordinary memory access: not a
+slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and
+a field pointer of it is `Zig.ptrProjectNonnull` before 0.16) and not a bit-pointer into a packed
+field. The AIR semantics (`Air2Lean.Sem`) and its certificate fragment share this definition. -/
+def Func.plainPtr (f : Func) (t : TyId) : Bool :=
+  match f.types[t]?, f.layouts[t]? with
+  | some (.ptr size _ _), some l =>
+    (size == "one" || size == "many") && !l.isVolatile && !l.allowzero && l.hostSize == 0
+  | _, _ => false
+
+/-- The byte offset of field `idx` of the non-`packed` struct that a pointer of type `t` points
+to (shared by `Air2Lean.Sem` and its certificate fragment). -/
+def Func.fieldOffset? (f : Func) (t : TyId) (idx : Nat) : Option Nat :=
+  match f.types[t]? with
+  | some (.ptr _ _ s) =>
+    match f.types[s]?, f.layouts[s]? with
+    | some (.struct _ layout _), some l => if layout == "packed" then none else l.offsets[idx]?
+    | _, _ => none
+  | _ => none
+
 end Air2Lean
