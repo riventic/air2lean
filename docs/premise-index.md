@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3055 theorems in 179 files.
+3056 theorems in 179 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -42,7 +42,7 @@ premise was derived. This index covers the committed generated modules.
 | [ORD-05](premises.md#ord-05) | 9 | Pointer atomics keep provenance and compare identities |
 | [TMR-01](premises.md#tmr-01) | 35 | No clock in the default model |
 | [TMR-02](premises.md#tmr-02) | 29 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 134 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 135 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 70 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 19 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 14 | aarch64 float lowering |
@@ -50,18 +50,18 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-02](premises.md#asm-02) | 10 | Instruction behavior as an explicit hypothesis |
 | [ASM-03](premises.md#asm-03) | 12 | Assembly effects follow the declared contract |
 | [ASM-04](premises.md#asm-04) | 17 | Allowlisted assembly faults exactly on its entry's condition |
-| [SEM-01](premises.md#sem-01) | 2920 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 2474 | Byte-level block memory model |
+| [SEM-01](premises.md#sem-01) | 2921 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 2475 | Byte-level block memory model |
 | [SEM-03](premises.md#sem-03) | 1262 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 142 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 33 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 2474 | Block addresses are the environment's placement |
+| [SEM-07](premises.md#sem-07) | 2475 | Block addresses are the environment's placement |
 | [STK-01](premises.md#stk-01) | 57 | The native stack holds every call chain |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 0 | Extern functions at their linker identity |
-| [TRU-01](premises.md#tru-01) | 3055 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 3056 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1504 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1504 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 87 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2379,6 +2379,7 @@ File premises: MTH-01, SEM-01, SEM-02, SEM-07, TRU-01
 | `example@L85` | SEM-01, SEM-02, SEM-07, TRU-01 |
 | `example@L87` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
 | `example@L88` | MTH-01, TRU-01 |
+| `example@L113` | MTH-01, SEM-01, SEM-02, SEM-07, TRU-01 |
 
 ## `tests/roadmap/address-reuse/Kernel.lean`
 
