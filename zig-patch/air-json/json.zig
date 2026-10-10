@@ -1506,11 +1506,12 @@ const W = struct {
     /// `Air2Lean/Check.lean`): the exported tag or safety tag and the natural size and alignment
     /// of every field that is not `noreturn`, the one with the larger alignment first, the tag if
     /// equal. Otherwise (explicit field alignment, an untagged `auto` union) `null`.
-    fn unionPayloadOffset(w: *W, agg: Type, index: u32) ?u64 {
+    fn unionPayloadOffset(w: *W, agg: Type, field_index: u64) ?u64 {
         const zcu = w.pt.zcu;
         if (agg.containerLayout(zcu) != .auto or !sizedLayout(zcu, agg)) return null;
         const names_ty = agg.unionTagTypeHypothetical(zcu);
-        if (index >= names_ty.enumFieldCount(zcu)) return null;
+        if (field_index >= names_ty.enumFieldCount(zcu)) return null;
+        const index: usize = @intCast(field_index);
         if (agg.unionFieldTypeByIndex(index, zcu).isNoReturn(zcu)) return null;
         const tag = agg.unionTagType(zcu) orelse Compat.unionSafetyTag(zcu, agg) orelse return null;
         var payload_align: u64 = 1;

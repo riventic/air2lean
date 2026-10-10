@@ -6,7 +6,8 @@ import ZigLean.Mem.Lemmas
 A Zig pointer constant is an InternPool `{ base_addr, byte_offset }` whose base is either a
 root (`nav`/`uav` global, `int` address, comptime-only object) or a projection of another
 pointer constant (`field`, `opt_payload`, `eu_payload`; an array element is the parent's
-`byte_offset`). The exporter (`zig-patch/air-json/json.zig`, `resolvePtr`) walks such a
+`byte_offset`). A `field` of an `auto` union (tagged or bare) is its payload; a member of an
+`extern` or `packed` union is its parent pointer. The exporter (`zig-patch/air-json/json.zig`, `resolvePtr`) walks such a
 chain of arbitrary nesting to one existing global identity and a checked byte offset, or to
 an explicit `unsupported` reason. The translator emits the result as `⟨some block, off⟩`.
 
@@ -23,7 +24,8 @@ Proved: a resolved constant equals the runtime projection chain from its global 
 (`resolve_eq_runtime`), keeps that root's block (`resolve_block`), composes under nesting
 (`resolve_append`, `resolve_snoc`), and two constants alias exactly when they have the same
 root and total offset (`resolve_eq_iff`). Sibling fields, distinct array elements, a payload
-and its error code, and distinct globals are disjoint (`*_disjoint`). Unbacked and
+and its error code, a union's payload and its tag, and distinct globals are disjoint
+(`*_disjoint`); all members of one union alias (`unionMembers_alias`). Unbacked and
 comptime-only roots never resolve (`resolve_int`, `resolve_comptimeOnly`), and the model
 memory rejects any access through a block-less pointer (`access_unbacked`).
 
@@ -50,7 +52,22 @@ inductive Proj where
   /-- An element of an array or many-item pointer. Sema folds `&a[i]` of a runtime array
   into the parent's `byte_offset`, `stride * index`. -/
   | elem (stride index : Nat)
+  /-- `field` of an `auto` union (tagged, or bare with its ReleaseSafe safety tag): member
+  `index` is the payload, at `unionPayloadOffset tagSize tagAlign payloadAlign` whatever
+  `index` is. An `extern` or `packed` union member is no projection: Sema's `Value.ptrField`
+  keeps the parent pointer (`externMember_step`). -/
+  | unionPayload (index tagSize tagAlign payloadAlign : Nat)
   deriving DecidableEq, Repr
+
+/-- The payload offset of an `auto` union whose tag has size `ts` and alignment `ta`, and
+whose most aligned field has alignment `pa`: the more aligned of tag and payload first, the
+tag if equal. This is Zig 0.14.1–0.17.0's `Type.structFieldOffset` of a union with a runtime
+tag (also `codegen.lowerPtr` and `codegen/llvm.zig`), and the payload offset of
+`Air2Lean/Check.lean`'s `unionLayout`, which the generated `Zig.Enc` of a tagged union uses. -/
+def unionPayloadOffset (ts ta pa : Nat) : Nat := if pa ≤ ta then alignUp ts pa else 0
+
+/-- The tag offset of that union, whose largest field has size `ps` (`unionLayout`). -/
+def unionTagOffset (ta ps pa : Nat) : Nat := if pa ≤ ta then 0 else alignUp ps ta
 
 /-- The byte offset one projection adds. -/
 def Proj.delta : Proj → Nat
@@ -58,15 +75,18 @@ def Proj.delta : Proj → Nat
   | .optPayload => 0
   | .errPayload size align => (errUnionOffsets size align).2
   | .elem stride index => stride * index
+  | .unionPayload _ ts ta pa => unionPayloadOffset ts ta pa
 
 /-- The runtime instruction for one projection, as `Air2Lean/Emit.lean` emits it:
 `struct_field_ptr`/`ptr_slice_*_ptr` (`Ptr.add`), `optional_payload_ptr` (the same pointer),
-`unwrap_errunion_payload_ptr` (`errPayloadPtr`) and `ptr_elem_ptr` (`Ptr.elem`). -/
+`unwrap_errunion_payload_ptr` (`errPayloadPtr`), `ptr_elem_ptr` (`Ptr.elem`) and a union's
+`struct_field_ptr` (`Ptr.add` of `FCtx.fieldOffsetIn`'s payload offset). -/
 def Proj.step : Proj → Ptr → Ptr
   | .field off, p => p.add off
   | .optPayload, p => p
   | .errPayload size align, p => p.add (errUnionOffsets size align).2
   | .elem stride index, p => p.elem stride (BitVec.ofNat 64 index)
+  | .unionPayload _ ts ta pa, p => p.add (unionPayloadOffset ts ta pa)
 
 /-- Where a constant pointer chain ends. -/
 inductive Root where
@@ -137,6 +157,7 @@ theorem Proj.step_eq_add (s : Proj) (p : Ptr) (h : s.delta < addrLimit) :
   | field off => rfl
   | optPayload => simp [Proj.step, Proj.delta, Ptr.add]
   | errPayload size align => rfl
+  | unionPayload _ _ _ _ => rfl
   | elem stride index =>
     have hmod : stride * (index % 2 ^ 64) = stride * index := by
       rcases Nat.eq_zero_or_pos stride with hs | hs
@@ -339,6 +360,42 @@ theorem payload_code_disjoint {blocks : Nat → Option BlockId} {r : Root} {ps :
   simp only [Proj.step, Ptr.add]
   omega
 
+/-! ## Union members -/
+
+/-- A member of an `extern` or `packed` union is at byte 0: the runtime `struct_field_ptr`
+(`p.add 0`) is the union's pointer, as Sema's constant (the parent pointer) is. -/
+theorem externMember_step (p : Ptr) : (Proj.field 0).step p = p := by
+  simp [Proj.step, Ptr.add]
+
+/-- A member of an `auto` union is the emitted `struct_field_ptr` at the payload offset. -/
+theorem unionPayload_step (i ts ta pa : Nat) (p : Ptr) :
+    (Proj.unionPayload i ts ta pa).step p = p.add (unionPayloadOffset ts ta pa) := rfl
+
+/-- All members of one union alias: their constants are the same pointer. -/
+theorem unionMembers_alias {blocks : Nat → Option BlockId} {r : Root} {ps qs : List Proj}
+    {i j ts ta pa : Nat} :
+    resolve blocks ⟨r, ps ++ Proj.unionPayload i ts ta pa :: qs⟩ =
+      resolve blocks ⟨r, ps ++ Proj.unionPayload j ts ta pa :: qs⟩ := by
+  simp [resolve, total_append, Proj.delta]
+
+/-- The tag and the payload of an `auto` union do not overlap: a member of at most `ps`
+bytes (the largest field) is disjoint from the tag's `ts` bytes. -/
+theorem unionPayload_tag_disjoint {blocks : Nat → Option BlockId} {r : Root} {ps : List Proj}
+    {i ts ta n psz pa : Nat} {p q : Ptr} (hn : n ≤ psz)
+    (hp : resolve blocks ⟨r, ps ++ [.unionPayload i ts ta pa]⟩ = .ok p)
+    (hq : resolve blocks ⟨r, ps ++ [.field (unionTagOffset ta psz pa)]⟩ = .ok q) :
+    Disjoint p n q ts := by
+  obtain ⟨p₀, hp₀, rfl⟩ := resolve_snoc hp
+  obtain ⟨q₀, hq₀, rfl⟩ := resolve_snoc hq
+  rw [hp₀] at hq₀; cases hq₀
+  right
+  simp only [Proj.step, Ptr.add, unionPayloadOffset, unionTagOffset]
+  by_cases h : pa ≤ ta
+  · have := le_alignUp ts pa
+    simp only [h, ite_true]; right; push_cast; omega
+  · have := le_alignUp psz ta
+    simp only [h, ite_false]; left; push_cast; omega
+
 /-! ## Invalid provenance -/
 
 /-- A fixed (`@ptrFromInt`) address never resolves, however it is projected. -/
@@ -448,6 +505,7 @@ theorem llvm_total_eq {ps : List Proj} (h : ∀ s ∈ ps, s.llvmMisplaced = fals
     | field off => rfl
     | optPayload => rfl
     | elem stride index => rfl
+    | unionPayload _ _ _ _ => rfl
 
 /-- With one, the LLVM offset of that step is wrong (by `llvmPayloadOffset_ne_iff`). -/
 theorem llvm_step_ne {size align : Nat} (h : (Proj.errPayload size align).llvmMisplaced = true) :

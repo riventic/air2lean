@@ -1804,20 +1804,27 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
   let (size, _) ← (modelLayout f.types f.layouts root f.errorSetBits).toOption
   if off > size || width > size - off then return (remaining, false)
   if width == 0 || !hasErrorStorage f.types root then return (remaining, true)
-  let recur (child base : Nat) : Option (Nat × Bool) := do
-    let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
-    let lo := Nat.max off base
-    let hi := Nat.min (off + width) (base + childSize)
-    if hi ≤ lo then return (remaining, true)
-    errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
+  -- The range is error-free in each of `members` (type, offset) that it overlaps.
+  let within (members : Array (TyId × Nat)) : Option (Nat × Bool) := do
+    let mut remaining := remaining
+    if members.size > remaining then none
+    for (child, base) in members do
+      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
+      let lo := Nat.max off base
+      let hi := Nat.min (off + width) (base + childSize)
+      if lo < hi then
+        let (next, safe) ← errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
+        remaining := next
+        if !safe then return (remaining, false)
+    return (remaining, true)
   match ← f.types[root]? with
   | .errorSet _ => return (remaining, false)
-  | .optional child => recur child 0
+  | .optional child => within #[(child, 0)]
   | .errorUnion _ payload =>
     let (size, align) ← (modelLayout f.types f.layouts payload f.errorSetBits).toOption
     let (code, base) := Zig.errUnionOffsetsW f.errorSetBits size align
     if off < code + Zig.errCodeSize f.errorSetBits && code < off + width then return (remaining, false)
-    recur payload base
+    within #[(payload, base)]
   | .array len child sentinel =>
     let (stride, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
     if stride == 0 then return (remaining, true)
@@ -1833,19 +1840,17 @@ private partial def errorFreeGlobalRange (f : Func) (root off width fuel : Nat) 
     return (remaining, true)
   | .struct _ _ fields =>
     let offsets := (f.layouts[root]?.getD {}).offsets
-    if offsets.size != fields.size || fields.size > remaining then none
-    for ((_, child), k) in fields.zipIdx do
-      let (childSize, _) ← (modelLayout f.types f.layouts child f.errorSetBits).toOption
-      let base := offsets[k]!
-      let lo := Nat.max off base
-      let hi := Nat.min (off + width) (base + childSize)
-      if lo < hi then
-        let (next, safe) ← errorFreeGlobalRange f child (lo - base) (hi - lo) remaining
-        remaining := next
-        if !safe then return (remaining, false)
-    return (remaining, true)
-  -- A union's active-member proof and other opaque aggregate projections are not
-  -- reconstructed from a folded address. An identical typed root still works below.
+    if offsets.size != fields.size then none
+    within (fields.zipIdx.map fun ((_, child), k) => (child, offsets[k]!))
+  -- Any member of a union can be active: every member that the range overlaps must be
+  -- error-free (at the payload offset of a tagged or bare union, at 0 of an `extern` one).
+  -- The tag is an enum integer.
+  | .union _ "extern" none fields => within (fields.map fun (_, child) => (child, 0))
+  | .union _ _ (some tag) fields =>
+    let (_, po) ← unionOffsets f.types f.layouts tag (fields.map (·.2)) f.errorSetBits
+    within ((inhabitedFields f.types fields).map fun (_, child) => (child, po))
+  -- Other opaque aggregate projections are not reconstructed from a folded address. An
+  -- identical typed root still works below.
   | _ => return (remaining, false)
 
 /-- A symbolic alias must name a complete, structurally matching subobject. This
@@ -1937,8 +1942,10 @@ private partial def llvmPayloadTypeScan (f : Func) (id fuel : Nat) : Option (Nat
 
 /-- Whether byte `off` of a value of type `id` (a one-past-the-end address included) can lie in
 an affected payload (`llvmPayloadTypeScan`). Every struct/tuple field or array item whose range
-contains `off` is visited, so a folded offset is never attributed to only one candidate. Union
-members are not reconstructed from an address: a union with an affected member counts. -/
+contains `off` is visited, so a folded offset is never attributed to only one candidate. Every
+member of a union can be the active one: a tagged (or bare, safety-tagged) union's members at its
+payload offset (`unionOffsets`), an `extern` union's at 0; a `packed` union holds no error union
+payload. -/
 private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Option (Nat × Bool) := do
   if fuel == 0 then none
   let mut remaining := fuel - 1
@@ -1983,7 +1990,12 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
     let offsets := (f.layouts[id]?.getD {}).offsets
     if offsets.size != fields.size then none
     within (fields.zipIdx.map fun (child, k) => (child, offsets[k]!))
-  | .union .. => llvmPayloadTypeScan f id remaining
+  | .union _ "packed" none _ => return (remaining, false)
+  | .union _ "extern" none fields => within (fields.map fun (_, child) => (child, 0))
+  | .union _ _ (some tag) fields =>
+    let (_, po) ← unionOffsets f.types f.layouts tag (fields.map (·.2)) f.errorSetBits
+    within ((inhabitedFields f.types fields).map fun (_, child) => (child, po))
+  | .union .. => none
   | _ => return (remaining, false)
 
 /-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
