@@ -90,20 +90,27 @@ can also be the address of a live block. With fresh addresses at most one block 
 address, and `ptrFromAddr` gives its block (dead or alive), as before. When more than one block
 covers it, `AllocPolicy.provenance` decides:
 
-* `.strict` (the default): `.unspecified`. The stale integer does not silently gain the new
-  block's provenance. The model does not know whether the integer came from the old block or
-  the new one. So it does not pick, and a proof must show that the case does not arise.
+* `.strict` (the default): the provenance-free pointer `⟨none, n⟩`. The stale integer does not
+  silently gain the new block's provenance: the model does not know whether the integer came
+  from the old block or the new one, so it picks neither. The pointer keeps its address
+  (`@intFromPtr` gives `n` back, `==` compares it by address), but every access through it, and
+  every offset other than zero, is `.illegal`. The conversion itself never fails, so a proof
+  need not exclude the case: the covering blocks may belong to the frame or be dead, and no
+  precondition can rule them out (`docs/alloc-page.md`, O4).
 * `.liveBlock`: the **address-sensitive contract**. The program declares that an address
   recovers the provenance of the live block that covers it. Live blocks never share an address
   (`Mem.addrFree`), so the block is unique. A program that declares it asserts that each integer
-  it converts belongs to that block, also a stale one. This is the PNVI-style choice of C.
+  it converts belongs to that block, also a stale one. This is the PNVI-style choice of C. If
+  none of the covering blocks is live, the pointer has no provenance, as under `.strict`.
 
 Kernel checks (`ZigLean/Sep/AddrReuse.lean`) run the program "allocate `p`, keep `n = @intFromPtr(p)`,
 free `p`, allocate `q` (reusing the address), store 7 in `q`, load through `@ptrFromInt(n)`":
 
 | Memory | Result | Theorem |
 | --- | --- | --- |
-| reuse, `.strict` | `.unspecified`; the naive argument "`n` is `q`'s address, so the load reads 7" is not a theorem | `stale_int_strict` |
+| reuse, `.strict` | `.illegal` (no provenance); the naive argument "`n` is `q`'s address, so the load reads 7" is not a theorem | `stale_int_strict` |
+| reuse, `.strict`, `@intFromPtr(@ptrFromInt(n)) == n` | true | `stale_int_roundTrip` |
+| reuse, `.strict`, `@ptrFromInt(n) == q` | true (address comparison) | `stale_int_eq` |
 | reuse, `.liveBlock` | 7 | `stale_int_liveBlock` |
 | fresh addresses | `.illegal` (`n` recovers dead `p`) | `stale_int_fresh` |
 
@@ -111,7 +118,8 @@ free `p`, allocate `q` (reusing the address), store 7 in `q`, load through `@ptr
 over a live block, over the one-past byte of a live block, when misaligned, when 0 and when above
 `nextAddr`. Stack blocks stay fresh. An arena reuses a reset block's address. `std.mem.Allocator`
 use after free and double free stay `.illegal` under reuse. The one-past address of a dead block
-that a live block starts at is ambiguous. A dead block alone still recovers its own dangling
+that a live block starts at is ambiguous (no provenance under `.strict`). An address with one
+covering block keeps that block's provenance; a dead block alone still recovers its own dangling
 provenance.
 
 ## Separate contracts for address-sensitive programs
@@ -119,8 +127,8 @@ provenance.
 A program whose result depends on addresses needs its own contract. The lifetime theorems above
 do not give it one:
 
-* `@ptrFromInt` of an address that two blocks cover: `.unspecified` unless the program declares
-  `ProvenanceMode.liveBlock`. A proof under `.liveBlock` holds only for programs that make that
+* `@ptrFromInt` of an address that two blocks cover: a pointer without provenance (accesses
+  `.illegal`) unless the program declares `ProvenanceMode.liveBlock`. A proof under `.liveBlock` holds only for programs that make that
   declaration.
 * Address equality and order (`ptrEqAddr`, `ptrLt`, `ptrLe`, hashing `@intFromPtr`): a stale
   pointer can compare equal to a live one. A proof that uses the result of such a comparison

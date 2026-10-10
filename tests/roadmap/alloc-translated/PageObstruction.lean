@@ -27,22 +27,17 @@ bytes) splits into the precondition's part and a frame. Two parts of `Mem` that 
 Natively both are fine: the hint is a plain integer and the location has one size. The fix is a
 logic whose assertions can constrain these parts of the memory (`docs/alloc-page.md`).
 
-The full-state logic (`ZigLean/Sep/Full`, `FAllocSpec`) resolves O1 and O3 (`known`, `apts`), but
-one obstruction remains in every logic over the current memory model:
+The full-state logic (`ZigLean/Sep/Full`, `FAllocSpec`) resolves O1 and O3 (`known`, `apts`).
 
-* **O4, ambiguous `@ptrFromInt`.** `alloc` turns the derived hint address back into a pointer
-  (`@ptrFromInt`, `Zig.ptrFromAddr`) before it passes it to `mmap`. Under the default `.strict`
-  provenance mode, an address that two blocks' ranges `[addr, addr + size]` cover (dead blocks
-  included) throws `.unspecified`. `hintedAmb` is `hinted` plus one dead block that ends exactly
-  at the derived hint address 4096, where the global block 0 starts. It has the same live bytes,
-  the same atomic layout and more block knowledge than `hinted`, so every full-state precondition
-  that `hinted` holds, it holds too (`alloc_no_ftriple_O4`); and `alloc` throws `.unspecified`
-  from it. So no allocator invariant that the real post-`free` state satisfies gives `alloc` a
-  full-state triple (`not_fallocSpec_O4`). The covering blocks belong to the frame or are dead,
-  so no precondition can exclude them, and knowledge that "only one block covers `n`" is not
-  stable under later allocations. Natively nothing happens: the hint goes only to `mmap`, which
-  may ignore it. The fix is in the memory model: an ambiguous recovery without a provenance
-  (the pointer `⟨none, n⟩`, every access `.illegal`) instead of `.unspecified`.
+* **O4, ambiguous `@ptrFromInt` (fixed, regression).** `alloc` turns the derived hint address
+  back into a pointer (`@ptrFromInt`, `Zig.ptrFromAddr`) before it passes it to `mmap`. An address
+  that two blocks' ranges `[addr, addr + size]` cover (dead blocks included) used to throw
+  `.unspecified` under the default `.strict` provenance mode; the covering blocks may belong to
+  the frame or be dead, so no precondition could exclude them. The model now gives the
+  provenance-free pointer `⟨none, n⟩` (every access `.illegal`, `docs/address-reuse.md`).
+  `hintedAmb` is `hinted` plus one dead block that ends exactly at the derived hint address 4096,
+  where the global block 0 starts: same live bytes, same atomic layout, more block knowledge.
+  `alloc` from it succeeds (`alloc_hintedAmb`).
 -/
 
 namespace AllocTranslated.PageObstruction
@@ -209,48 +204,11 @@ theorem hintedAmb_heap : hintedAmb.heap = hinted.heap := by
   · simp [Mem.heap, hintedAmb, Array.getElem?_push, hx]
 
 set_option maxHeartbeats 0 in
-theorem alloc_hintedAmb : errOf ((vt.alloc ⟨none, 0⟩ 1 0 0).run hintedAmb) = some .unspecified := by
+/-- O4 regression: the ambiguous recovery of the hint no longer fails, and `alloc` returns a
+fresh mapping. -/
+theorem alloc_hintedAmb :
+    (((vt.alloc ⟨none, 0⟩ 1 0 0).run hintedAmb).run.map fun r =>
+      match r with | .ok (some _, _) => true | _ => false) = some true := by
   decide +kernel
-
-section O4
-
-open Zig.Full
-
-set_option maxHeartbeats 0 in
-theorem hintedAmb_fseq : hintedAmb.FSeq :=
-  ⟨seq_of_blocks rfl (by decide) (by decide +kernel),
-    by rw [show shapes hintedAmb = [] from rfl]; unfold ShapesWF
-       exact ⟨fun _ h => (nomatch h), List.Pairwise.nil⟩⟩
-
-/-- Every full-state resource that `hinted` holds, `hintedAmb` holds with the same frame. -/
-theorem holds_hintedAmb {r rF : Res} (hh : Holds hinted r rF) : Holds hintedAmb r rF := by
-  have hk : KMono hinted hintedAmb := KMono.push rfl
-  refine ⟨hh.disj, ?_, hh.know.trans hk, hh.knowF.trans hk⟩
-  rw [← hh.heap]
-  exact fheap_congr hintedAmb_heap rfl
-
-set_option maxHeartbeats 0 in
-/-- **O4.** No full-state precondition that holds after the hinted block was unmapped makes
-`alloc` a full-state triple: the same precondition holds in `hintedAmb`, where `alloc`'s
-`@ptrFromInt` of the derived hint is ambiguous. -/
-theorem alloc_no_ftriple_O4 (c : Ptr) (ra : BitVec 64) (P : FAssn) (Q : Option Ptr → FAssn)
-    {r rF : Res} (hh : Holds hinted r rF) (hp : P r) : ¬ FTriple P (vt.alloc c 1 0 ra) Q := by
-  intro ht
-  rw [alloc_args] at ht
-  have := ht hintedAmb r rF (holds_hintedAmb hh) hp hintedAmb_fseq
-  rw [run_of_errOf alloc_hintedAmb] at this
-  exact this
-
-set_option maxHeartbeats 0 in
-/-- So no full-state allocator invariant that the real post-`free` state holds, and that admits
-a 1-byte request, satisfies `FAllocSpec`, in any full-state logic. -/
-theorem not_fallocSpec_O4 (L : FLogic) (c : Ptr) (I : FAllocInv)
-    (hI : ∃ r rF, Holds hinted r rF ∧ I.own r) (hfit : I.fits 1 0) : ¬ FAllocSpec L vt c I := by
-  intro hs
-  obtain ⟨r, rF, hh, hp⟩ := hI
-  exact alloc_no_ftriple_O4 c 0 I.own _ hh hp
-    (L.toPartial (hs.alloc 1 0 0 (by decide) (by decide) hfit))
-
-end O4
 
 end AllocTranslated.PageObstruction

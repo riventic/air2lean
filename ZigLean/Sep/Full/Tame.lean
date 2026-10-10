@@ -44,10 +44,10 @@ theorem get : Tame (get : MemM Mem) := fun _ _ _ h => by
   obtain ⟨-, rfl⟩ := Proto.MemM.get_ok h; exact ⟨rfl, KMono.refl _⟩
 
 theorem ptrFromAddr (n : Nat) : Tame (Zig.ptrFromAddr n) := fun m v m' h => by
-  rcases ptrFromAddr_run n m with ⟨w, hw⟩ | hw <;> rw [hw] at h
-  · obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok (m := m) (x := w) (a := v) (by exact h)
-    exact ⟨rfl, KMono.refl _⟩
-  · exact (Proto.MemM.throw_ok (m := m) (e := Error.unspecified) (a := v) (by exact h)).elim
+  obtain ⟨w, hw⟩ := ptrFromAddr_run n m
+  rw [hw] at h
+  obtain ⟨-, rfl⟩ := Proto.MemM.pure_ok (m := m) (x := w) (a := v) (by exact h)
+  exact ⟨rfl, KMono.refl _⟩
 
 theorem recordAccess (b o n : Nat) (k : AccessKind) : Tame (Zig.recordAccess b o n k) :=
   of_eq fun m v m' h => by

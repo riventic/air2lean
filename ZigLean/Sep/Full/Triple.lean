@@ -198,27 +198,32 @@ theorem FTriple.ptrAddr_none {P : FAssn} (off : Int) :
   FTriple.of_run fun m r _ hh hp hs =>
     ⟨off, m, r, ptrAddr_none_run m off, hh, sep_lift.mpr ⟨rfl, hp⟩, hs⟩
 
-/-- `@ptrFromInt` changes nothing. Its result may point into a dead block (or a frame block),
-which a later access checks. It throws `.unspecified` when more than one block covers the address
-(`Zig.ptrFromAddr`), which no full-state assertion can rule out: the covering blocks may be the
-frame's or dead (`docs/alloc-page.md`, obstruction O4). -/
+/-- `@ptrFromInt` changes nothing and never fails. Its result may point into a dead block (or a
+frame block), which a later access checks; with more than one covering block it carries no
+provenance (`Zig.ptrFromAddr`, `docs/address-reuse.md`). -/
 theorem ptrFromAddr_run (n : Nat) (m : Mem) :
-    (∃ v, (Zig.ptrFromAddr n).run m = pure (v, m)) ∨
-      (Zig.ptrFromAddr n).run m = throw .unspecified := by
+    ∃ v, (Zig.ptrFromAddr n).run m = pure (v, m) := by
   unfold Zig.ptrFromAddr
   simp only [StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
     ExceptT.bind, ExceptT.mk, ExceptT.bindCont, pure, ExceptT.pure, Option.bind_some]
   generalize (Array.filterMap _ m.blocks.zipIdx).toList = l
   rcases l with _ | ⟨⟨b, blk⟩, _ | ⟨x, rest⟩⟩
-  · exact .inl ⟨_, rfl⟩
-  · exact .inl ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
   · cases m.allocPolicy.provenance with
-    | strict => exact .inr rfl
+    | strict => exact ⟨_, rfl⟩
     | liveBlock =>
       generalize Array.find? _ _ = r
       rcases r with _ | ⟨b', blk'⟩
-      · exact .inr rfl
-      · exact .inl ⟨_, rfl⟩
+      · exact ⟨_, rfl⟩
+      · exact ⟨_, rfl⟩
+
+/-- `@ptrFromInt` frames everything. -/
+theorem FTriple.ptrFromAddr {P : FAssn} (n : Nat) :
+    FTriple P (Zig.ptrFromAddr n) (fun _ => P) :=
+  FTriple.of_run fun m r _ hh hp hs => by
+    obtain ⟨v, e⟩ := ptrFromAddr_run n m
+    exact ⟨v, m, r, e, hh, hp, hs⟩
 
 /-! ## Lifting legacy triples -/
 

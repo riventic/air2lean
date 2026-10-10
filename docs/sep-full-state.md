@@ -115,7 +115,7 @@ This also removes FBA's pin byte: the allocator invariant keeps `known buf A`.
 | `Triple` | `FTriple.frame`, `conseq`, `bind`, `ret`, `ex`, `lift`, `drop`, `of_pure_run` | structural rules |
 | `Triple` | `FTriple.ofTriple` | **lifting**: `Triple P c Q → Tame c → FTriple (up P) c (up ∘ Q)` |
 | `Triple` | `Tame.load`, `store`, `loadBytes`, `storeBytes`, `alloc`, `free`, `ptrAddr`, `pure'`, `bind` | the plain primitives keep the layout and every block's address |
-| `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing, but throws `.unspecified` on an ambiguous address (O4, `docs/alloc-page.md`) |
+| `Triple` | `FTriple.know_intro`, `FTriple.ptrAddr`, `ptrAddr_none`, `ptrFromAddr_run`, `FTriple.ptrFromAddr` | knowledge from ownership; `@intFromPtr` of live or freed pointers; `@ptrFromInt` changes nothing and never fails (an ambiguous address gives a pointer without provenance: O4 fix, `docs/address-reuse.md`) |
 | `Triple` | `Mem.LiveDisjoint`, `Holds.apart` | owned bytes of two different blocks lie in disjoint address ranges (given the placement invariant) |
 | `Atomic` | `locIdx_post`, `locIdx_noErr_tag` | `locIdx` at bytes with a uniform tag: no error, new location only over those bytes, newest message = the bytes |
 | `Atomic` | `FTriple.atomicLoad` | `{apts p v} atomicLoadAt 0 ord 8 p {w. ⟪w = v⟫ ⋆ apts p v}`, any order |
@@ -316,6 +316,7 @@ needs stage 3.
   with the oracle `0` as a `MemM` program (`Sched.run_eq_seqRun`, for a `ThreadFree` function).
 * `LiveDisjoint` is stated and used (`Holds.apart`) but not part of `FSeq`, because main has no
   placement invariant that maintains it.
-* `@ptrFromInt` has no full-state rule: on `main` an ambiguous address throws `.unspecified`, and
-  no assertion can rule that out (O4).
+* `FTriple.ptrFromAddr` frames everything but says nothing about the result's provenance: an
+  ambiguous address gives `⟨none, n⟩` (O4 fix), so a proof that dereferences the result needs
+  its own argument that one block covers the address.
 * `Tame` for loops and calls (`loop`, `callM`) is not proved. The lifting theorem is per program.

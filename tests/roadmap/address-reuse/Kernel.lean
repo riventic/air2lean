@@ -53,5 +53,7 @@ example : runValue staleIntRun (({} : Mem).withReuse reuseFirst) ≠ some (.ok 7
 #print axioms Zig.fresh_witness
 #print axioms Zig.reuse_stale_load
 #print axioms Zig.stale_int_strict
+#print axioms Zig.stale_int_roundTrip
+#print axioms Zig.stale_int_eq
 #print axioms Zig.stale_int_liveBlock
 #print axioms Zig.stale_int_fresh

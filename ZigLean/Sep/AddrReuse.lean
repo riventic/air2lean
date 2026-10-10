@@ -1,5 +1,6 @@
 import ZigLean.Sep.Alloc
 import ZigLean.Sep.Total
+import ZigLean.Mem.Null
 
 /-!
 # Address reuse (M05)

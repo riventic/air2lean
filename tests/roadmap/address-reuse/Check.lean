@@ -1,4 +1,5 @@
 import ZigLean.Mem.Owned
+import ZigLean.Mem.Null
 
 /-! Executable regressions of the address-reuse policy and provenance recovery (M05,
 `docs/address-reuse.md`). Run: `lake env lean --run tests/roadmap/address-reuse/Check.lean`. -/
@@ -110,14 +111,14 @@ def main : IO Unit := do
   expect "one-past shared liveBlock" (outcome onePast (reuseMem (fun b =>
     if b = 1 then some 4096 else none) .liveBlock)) "ok (some 1)"
   -- The ambiguous recovery keeps its address: round trip and `==` by address.
-  let roundTrip (useOld : Bool) : MemM Bool := do
+  let roundTrip : MemM Bool := do
     let p ← alloc .heap 8 8
     let n ← addr p
     free p
     let q ← alloc .heap 8 8
-    let r ← ptrFromAddr (if useOld then n else (← addr q)).toNat
+    let r ← ptrFromAddr n.toNat
     pure (decide ((← addr r) = n) && (← ptrEqAddr r q))
-  expect "ambiguous round trip and ==" (outcome (roundTrip true) (reuseMem at4096)) "ok true"
+  expect "ambiguous round trip and ==" (outcome roundTrip (reuseMem at4096)) "ok true"
   -- With one cover (no reuse), the recovery keeps the block's provenance (unchanged).
   let single : MemM (Option BlockId) := do
     let p ← alloc .heap 8 8
