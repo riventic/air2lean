@@ -358,6 +358,14 @@ class Outcomes(unittest.TestCase):
         (self.root/'tests/diff/basic/unspecified.txt').write_text(PIN)
         self.assertEqual(self.compare()[1]['mutation_eligible'],1)
 
+    def test_pinned_illegal_excludes_unrenderable_native_only_without_safety(self):
+        # MM-3: an out-of-bounds slice pointer is a pinned model .illegal; a ReleaseFast/ReleaseSmall
+        # build may then return garbage the harness cannot render. With safety it stays fatal.
+        args=({'fail':'unrenderable'},{'fail':'Zig.Error.illegal'},K.NATIVE_HARNESS_FAILURE,K.ILLEGAL,None)
+        self.assertEqual(REPORT.classify(*args,exclude_ub=True,pinned=True),S.ILLEGAL)
+        self.assertEqual(REPORT.classify(*args,exclude_ub=True,pinned=False),S.NATIVE_HARNESS_FAILURE)
+        self.assertEqual(REPORT.classify(*args,exclude_ub=False,pinned=True),S.NATIVE_HARNESS_FAILURE)
+
     def test_deadlock_not_panic_or_divergence(self):
         self.seed({'ok':1},{'fail':'Zig.Error.deadlock'},K.VALUE,K.DEADLOCK)
         code,data=self.compare()

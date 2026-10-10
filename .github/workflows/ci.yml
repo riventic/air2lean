@@ -1182,7 +1182,9 @@ jobs:
           trap 'rm -rf "$fresh"' EXIT
           bash tests/roadmap/global-payload-pointers/check.sh --export "$fresh/air"
           bash tests/roadmap/global-payload-pointers/check.sh --export-reject "$fresh/reject-air"
-          .lake/build/bin/air2lean "$fresh/air" -o "$fresh/Gen.lean" --namespace GlobalPayload --prefix global_payloads.
+          # The payload fixture is a stage2_x86_64 export: an unqualified build mode, opted in.
+          .lake/build/bin/air2lean "$fresh/air" -o "$fresh/Gen.lean" --namespace GlobalPayload --prefix global_payloads. \
+            --allow-unqualified-build-mode
           python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
           AIR2LEAN_GLOBAL_ACTUAL_GEN="$fresh/Gen.lean" AIR2LEAN_GLOBAL_CLIENT_OUT="$fresh/clients" \
             bash tests/roadmap/global-payload-pointers/check-generated.sh
@@ -1297,16 +1299,13 @@ jobs:
           failed=0
           for mode in Debug ReleaseFast ReleaseSmall; do
             summary="$RUNNER_TEMP/build-modes/$mode.json"
-            # ReleaseFast/ReleaseSmall have triaged mismatches (float @divExact), so diff.sh exits 1
-            # there; `record --verify` then requires exactly the committed counts and triage.
-            status=0
+            # Inexact float @divExact is a pinned model .illegal (no mismatch to triage since the
+            # soundness batch); `record --verify` requires exactly the committed counts.
             AIR2LEAN_DIFF_OPTIMIZE=$mode AIR2LEAN_DIFF_BACKEND=llvm \
-              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || status=$?
-            [ "$status" -eq 0 ] || [ "$mode" != Debug ]
+              AIR2LEAN_DIFF_REPORT="$summary" scripts/diff.sh || failed=1
             python3 scripts/build-modes.py record --verify --summary "$summary" \
               --zig "$(command -v zig)" --zig-version "${{ matrix.zig }}" --target x86_64-linux \
               --mode "$mode" --backend llvm --explicit-backend \
-              $([ "$mode" = Debug ] || echo --triage tests/roadmap/build-modes/reproducers/triage-float-divexact.json) \
               || failed=1
           done
           [ "$failed" -eq 0 ]

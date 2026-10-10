@@ -69,8 +69,8 @@ behaviour without a model throw, so "the ReleaseSafe model does not throw" does 
 
 - **Use a float `@divExact` with an inexact quotient.** The ReleaseSafe check only catches a NaN
   quotient; the model makes every other inexact quotient `.illegal`
-  ([illegal-behavior.md](illegal-behavior.md)), and the T06 records still list this exception
-  until the build-mode runs are re-recorded.
+  ([illegal-behavior.md](illegal-behavior.md)). The re-recorded x86_64-linux runs have no
+  such mismatch; the aarch64-macos records still list this exception until they are re-recorded.
 
 The premise holds only for programs that do not. The item is lifted when its records are.
 
@@ -101,7 +101,8 @@ native harness in another mode or backend (`-fllvm`, `-fno-llvm`). The model sid
 unchanged, so every run compares native behaviour with the ReleaseSafe model. In
 ReleaseFast and ReleaseSmall the safety checks are gone: an input on which the model
 throws is illegal behaviour, so it is counted as `ub_excluded` and not compared. Rows for
-which the harness cannot render the result of such a call count the same way.
+which the harness cannot render the result of such a call count the same way, and so do those
+of an input pinned illegal (`illegal_exclusion`, e.g. a slice formed outside its allocation).
 `python3 scripts/build-modes.py record` writes one record per
 (version, target, mode, backend) to [`assurance/build-mode-runs/`](../assurance/build-mode-runs/).
 A record has the case count, the count of every outcome, each exclusion by function, the
@@ -112,15 +113,18 @@ segment of release builds).
 
 Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
-run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
-those summaries (`build-mode-summaries-*`) and verifies the records on every run.
+run after batches 7-8 added examples (87409 cases), and again after the soundness batch (87413
+cases: four asm fault inputs; inexact float `@divExact`, MM-3 out-of-bounds pointers and the
+`@fieldParentPtr` cases are pinned illegal, so the 85 float `@divExact` mismatches are now
+`illegal_exclusion`); CI uploads those summaries (`build-mode-summaries-*`) and verifies the
+records on every run.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
-| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 0 | 4922 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
 | x86_64-linux | ReleaseFast | stage2_x86_64 | 606 | 4975 |
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
