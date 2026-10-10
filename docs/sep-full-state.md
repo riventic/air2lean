@@ -209,6 +209,102 @@ sequential run that compares the value it just read needs no address.
   * a moving `mremap` ends the old block and pushes the new one at `Mem.newAddr`
     (`LDMono.set_dead_push`).
 
+## Ghost state: epoch ledgers (revocable allocator tokens)
+
+### The problem
+
+`FAllocSpec` quantifies over every token `I.tok` that `I.own` can coexist with. Two allocator
+behaviours need the token to say something about the allocator's *current* state, which `own`
+holds and the token does not see:
+
+* **A token must imply that the allocator has issued something.** The arena's `free` and
+  `resize` start with `loadFirstNode().?`, which panics on an arena without a node: a fresh one,
+  or one after `reset(.free_all)` (`docs/alloc-arena.md`, O-A). So `own ⋆ granted p k bs` must be
+  unsatisfiable when the arena has no node.
+* **A reset revokes every outstanding token.** After `reset`, the bytes of every grant are the
+  allocator's again. A client that kept a token must not be able to use it with the new state.
+
+Owned bytes and persistent knowledge cannot express either. Bytes are exclusive, so a token can
+own some, but it cannot constrain bytes it does not own. Knowledge is monotone, so it cannot be
+revoked. This is what ghost state is for: logical resources that live only in the proof.
+
+### The design
+
+`Res` gets a third component, `gh : Ghost`, with `Ghost := GName → GCell` (`GName := Nat`). A cell
+is an **epoch ledger**:
+
+```
+structure GCell where
+  auth : Option (Nat × Nat)   -- ●(e, n): the current epoch e, and n tokens outstanding in it
+  frag : Nat → Nat            -- ◯e, counted: how many tokens of epoch e this resource holds
+```
+
+* **Composition** is pointwise: `auth` by `Option.or` (two resources may not both hold an
+  authority for the same name: `GDisjoint`), `frag` by addition. It is associative and
+  commutative, with the empty ledger as unit.
+* **Validity** of a memory's whole ghost state (`GValid`, part of `Holds`): where an authority
+  `●(e, n)` exists, at most `n` tokens of epoch `e` exist, and none of a later epoch. Tokens of
+  an earlier epoch are valid: they are *stale*.
+* **Finiteness** (`GFin`, part of `Holds`): only finitely many names are in use. This gives a
+  fresh name for a new ledger.
+* **Assertions.** `gauth γ e n` owns `●(e, n)` at `γ`; `gfrag γ e` owns one `◯e` at `γ`. Neither
+  owns bytes or knowledge. `up`, `emp`, `known` and the byte assertions own no ghost state.
+
+`Holds m r rF` additionally requires `GOk r.gh rF.gh`: the two ghost states are disjoint, and
+their sum is valid and finite. No primitive changes the ghost state: every primitive rule keeps
+`r.gh`, so the existing proofs only pass the field along.
+
+**Ghost updates** change only ghost state. `Upd P P'` says that every resource of `P` can be
+replaced, without touching its bytes and knowledge, by one of `P'` that is compatible with every
+frame the old one was compatible with (Iris's frame-preserving update). `FTriple.upd` applies
+one to a precondition, `FTriple.upd_post` to a postcondition, and `Upd.frame` frames one. The
+ledger's updates:
+
+| update | from | to | why it is frame-preserving |
+|---|---|---|---|
+| `Upd.alloc` | `emp` | `∃ γ, gauth γ 0 0` | `GFin` gives a name no frame uses |
+| `Upd.issue` | `gauth γ e n` | `gauth γ e (n+1) ⋆ gfrag γ e` | the frame holds at most `n` tokens of epoch `e` |
+| `Upd.retire` | `gauth γ e n ⋆ gfrag γ e` | `gauth γ e (n-1)` | the frame holds at most `n - 1` |
+| `Upd.bump` | `gauth γ e n` | `gauth γ (e+1) 0` | the frame holds no token of a later epoch; its tokens of epoch `e` become stale |
+| `Upd.count` | `gauth γ e n ⋆ gfrag γ e` | `⟪1 ≤ n⟫ ⋆ gauth γ e n ⋆ gfrag γ e` | validity |
+
+### Use by an allocator with reset
+
+An allocator whose `own` holds a ledger `γ` uses the invariant family
+`I e := { own := own' e, tok := … ⋆ gfrag γ e }` indexed by the epoch:
+
+* `own' e` holds `gauth γ e n` and relates `n` to its state, e.g. "no node ⇒ `n = 0`". A fresh
+  allocator starts at `gauth γ 0 0` (`Upd.alloc`). With `Upd.count`, a token of epoch `e` gives
+  `n ≥ 1`, so the allocator has a node: O-A is no longer a premise.
+* `alloc` issues (`Upd.issue`), and `free` or a shrink to nothing retires (`Upd.retire`).
+* `reset` is specified as `{own' e ⋆ (the bytes of every grant)} reset {own' (e+1)}`, by
+  `Upd.bump`. Every token of epoch `e` that the client still holds is stale afterwards. A stale
+  token is useless: `FAllocSpec … (I e)` needs `own' e`, which no longer exists (the authority is
+  exclusive and now at epoch `e + 1`), and `FAllocSpec … (I (e+1))` needs a token of epoch `e+1`.
+  A use after a retaining reset is therefore a permission violation twice over: the client no
+  longer owns the bytes, and its token belongs to a dead epoch.
+* A foreign free (a slice the allocator did not issue in this epoch) is a permission violation:
+  no token of the current epoch exists for it.
+
+Nothing in the ledger is specific to arenas: any allocator with a reset (a `FixedBufferAllocator`
+`reset`, a pool, a stack allocator's `freeAll`) can take the same family, and a counted token is
+also what a `deinit` that requires every grant back needs.
+
+### Why counted tokens with epochs
+
+* **Revocation needs epochs.** In a frame-preserving logic, an update cannot invalidate a
+  resource held by the frame. With a plain authoritative count (`●n`, tokens `◯1`) a reset must
+  collect every token. With epochs, the bump leaves the frame's tokens valid but stale, so a reset
+  needs only the bytes back (which it needs anyway), not the tokens.
+* **Counts, not sets.** The specification's `free` only needs "some token of this epoch exists",
+  and `reset` needs no list of grants. A set of regions (`●S`, `◯{x}`) would also work but makes
+  the client track which grants are outstanding.
+* **Alternatives.** A per-allocator `Prop`-valued "issued" knowledge is monotone and cannot be
+  revoked. Putting the ledger into `Mem` (a model of the allocator) is ruled out by the
+  principle that only the OS primitives are trusted. Iris's general cameras would subsume the
+  ledger; one fixed camera keeps the algebra small (no step-indexing, no higher-order ghost
+  state), at the cost of adding a camera when another proof needs a different one.
+
 ## Concurrency (RC11 approximation, `ZigLean/Conc`)
 
 * **Ownership by threads** (`Mem.Owns`, `Owned` in `Conc/Csl.lean`) is about legacy heaps. It
