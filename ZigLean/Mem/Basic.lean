@@ -336,12 +336,11 @@ structure NaEntry where
   deriving Repr, Inhabited
 
 /-- One running call of a function with `noalias` parameters, on thread `tid`. `seen`: the
-footprint entries before it are in `log` (or before the call); the ones after it are made
-under the roots `cur`, the last `Zig.naMark`. -/
+footprint entries before it are in `log` (or before the call); the ones after it are the
+accesses of the instruction that the next `Zig.naMark` follows. -/
 structure NaScope where
   tid : ThreadId
   seen : Nat
-  cur : Option Nat × Option Nat := (none, none)
   log : Array NaEntry := #[]
   deriving Repr, Inhabited
 
