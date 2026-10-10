@@ -338,7 +338,7 @@ def main (args : List String) : IO Unit := do
   writeCase directory "blockLoopExits" #[blockLoopVoid, blockLoopValue, blockLoopOuter, blockLoopResume]
     "example : successful Review.blockLoopVoid = some () := by native_decide\nexample : successful (Review.blockLoopValue.map BitVec.toNat) = some 17 := by native_decide\nexample : successful (Review.blockLoopOuter.map BitVec.toNat) = some 38 := by native_decide\nexample : successful (Review.blockLoopResume.map BitVec.toNat) = some 23 := by native_decide"
   writeCase directory "unionTagCapture" #[tagLoop]
-    "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .a _ => 0 | .b n => n.toNat) = some 17 := by native_decide"
+    "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .a _ => 0 | .b n => n.toNat | _ => 0) = some 17 := by native_decide"
   writeCase directory "spawnedSlice" #[spawnSlice, sliceWorker]
     "example : successful ((Zig.Sched.run Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) (Review.mem0 .fresh)).map fun (v, _) => v) = some () := by native_decide"
   for (mode, name) in #[(FloatSemantics.ieee, "floatIeee"), (.compilerRt, "floatCompilerRt")] do
