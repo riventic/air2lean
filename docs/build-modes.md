@@ -77,7 +77,7 @@ runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated o
 host; the harness is linked with `-z norelro` because Rosetta rejects the empty RELRO
 segment of release builds).
 
-Zig 0.16.0 (stock), 85884 cases per aarch64-macos run and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 85884 cases per aarch64-macos run, 86209 per aarch64-linux run and 87084 per x86_64-linux run (emulated). The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
 run after batches 7-8 added examples (87409 cases, the same mismatches and exclusions); CI uploads
 those summaries (`build-mode-summaries-*`) and verifies the records on every run.
@@ -86,6 +86,8 @@ those summaries (`build-mode-summaries-*`) and verifies the records on every run
 | --- | --- | --- | --- | --- |
 | aarch64-macos | ReleaseSafe, Debug | llvm | 0 | 0 |
 | aarch64-macos | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
+| aarch64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
+| aarch64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | x86_64-linux | ReleaseSafe, Debug | llvm | 0 | 0 |
 | x86_64-linux | ReleaseFast, ReleaseSmall | llvm | 85 (float `@divExact`) | 4975 |
 | x86_64-linux | ReleaseSafe, Debug | stage2_x86_64 | 521 | 0 |
@@ -93,8 +95,21 @@ those summaries (`build-mode-summaries-*`) and verifies the records on every run
 | x86_64-linux | ReleaseSmall | stage2_x86_64 | no run | |
 
 The aarch64-macos runs count 760 float results as `host_difference` (the float model
-follows x86_64-linux, `host.txt`); the x86_64-linux runs have none. No aarch64-linux run
-exists yet.
+follows x86_64-linux, `host.txt`) and the aarch64-linux runs 755; the x86_64-linux runs have none.
+`examples/asm` is `host_excluded` on both aarch64 hosts.
+
+**aarch64-linux runs.** They were recorded from `scripts/diff.sh` in a native `linux/arm64`
+container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain from
+`lean-toolchain`) on an Apple-silicon Docker VM: an aarch64 Linux kernel and aarch64 code, no
+instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
+(`ubuntu-24.04-arm`, hosted hardware) re-runs ReleaseSafe and Debug against the records and
+checks the case count, examples and mismatches; its first run gave the container's counts
+(86209 cases, 0 mismatches). It does not run ReleaseFast or ReleaseSmall: the harness run of
+those modes (4975 inputs that are illegal behaviour without safety checks) took the hosted
+runner down in two attempts (the runner was lost and the step log never uploaded; disabling
+core dumps and apport did not help), while the container finished each mode in about two
+minutes. So the aarch64-linux ReleaseFast and ReleaseSmall records rest on the container run
+alone, and the cause on the hosted runner is open.
 
 **stage2_x86_64 findings.** The self-hosted backend disagrees with the LLVM backend and the
 model on legal inputs, in every optimize mode
