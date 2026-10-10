@@ -12,11 +12,11 @@ permissions:
 jobs:
   build-modes-linux:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        mode: [ReleaseFast, ReleaseSmall]
+        mode: [ReleaseFast]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -69,7 +69,9 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p "$RUNNER_TEMP/build-modes"
-          free -m; nproc
+          free -m; nproc; df -h . | tail -1; cat /proc/sys/kernel/core_pattern
+          sudo systemctl stop apport.service 2>&1 | tail -1 || true
+          ulimit -c 0 -u 2000
           status=0
           AIR2LEAN_DIFF_OPTIMIZE=$MODE AIR2LEAN_DIFF_BACKEND=llvm \
             AIR2LEAN_DIFF_REPORT="$RUNNER_TEMP/build-modes/$MODE.json" timeout 1500 scripts/diff.sh 2>&1 | tee "$RUNNER_TEMP/build-modes/$MODE.log"
