@@ -1,9 +1,14 @@
 import Air2Lean.Main
 import Air2Lean.Certificate
 import Proofs.Basic.AirCert
+import Proofs.Iogroup.AirCert
+import Proofs.Pointers.AirCert
 import Proofs.Recursion.AirCert
+import Proofs.Threads.AirCert
+import Proofs.Vectors.AirCert
 
-/-! The printed `Func` terms of the committed certificates are the decoded AIR.
+/-! The printed `Func` terms of the committed certificates (every one that certifies a function) are
+the decoded AIR.
 
 `Certificate.printFunc` prints every field of a `Func` with its constructor, so it is
 injective; a term whose print equals the print of the freshly decoded golden file is that
@@ -25,4 +30,8 @@ def checkTable (dir : System.FilePath) (table : Sem.Table) : IO Unit := do
   IO.println s!"{dir}: {table.length} certified AIR terms equal the decoded golden files"
 
 #eval checkTable "tests/golden/basic/air" Basic.AirCert.table
+#eval checkTable "tests/golden/iogroup/air" Iogroup.AirCert.table
+#eval checkTable "tests/golden/pointers/air" Pointers.AirCert.table
 #eval checkTable "tests/golden/recursion/air" Recursion.AirCert.table
+#eval checkTable "tests/golden/threads/air" Threads.AirCert.table
+#eval checkTable "tests/golden/vectors/air" Vectors.AirCert.table

@@ -1,6 +1,6 @@
 """AIR semantics certificates (V01 slice): Lean-side checks.
 
-Needs `lake build Proofs.Basic.AirCert Proofs.Recursion.AirCert Air2Lean.Main` first.
+Needs `lake build Proofs.<Ex>.AirCert Air2Lean.Main` (every committed certificate) first.
 (a) RoundTrip.lean: each certificate's embedded `Func` is the decoded golden AIR.
 (b) Mutations: a certificate whose embedded AIR differs from what the generated code does
     (one operator changed) no longer checks, at that function's theorem. The committed
@@ -22,6 +22,11 @@ MUTATIONS = [
     ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step'),
     ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step'),
     ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step'),
+    # Memory: a field offset, a store's value, a pointer comparison, a load's address.
+    ('Pointers', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 2)', 'dueOf_step'),
+    ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step'),
+    ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step'),
+    ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step'),
 ]
 
 
@@ -57,7 +62,7 @@ def main():
     args = parser.parse_args()
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.count('certified AIR terms equal the decoded golden files') == 2, result.stdout
+    assert result.stdout.count('certified AIR terms equal the decoded golden files') == 6, result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
         for index, (ex, old, new, theorem) in enumerate(MUTATIONS):

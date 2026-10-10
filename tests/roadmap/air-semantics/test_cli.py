@@ -1,16 +1,19 @@
 """AIR semantics certificates (V01 slice): translator-side checks, no Lean or Zig.
 
-Runs the built translator on committed golden AIR and checks that
+Runs the built translator on the committed golden AIR of every example whose Proofs/<Ex>/Gen.lean
+is that AIR's translation, and checks that
 (a) `--air-certificate` leaves the generated Lean byte-identical (and equal to the committed
     Proofs/<Ex>/Gen.lean body);
 (b) the certificate equals the committed Proofs/<Ex>/AirCert.lean;
-(c) the certified set and the listed exclusions are the expected ones (fail closed);
+(c) the certified set is the expected one, and every other function of the example is listed
+    with a reason (fail closed);
 (d) the flag's argument checks reject incomplete or clashing outputs;
 (e) the semantics, the generator and the certificates contain no sorry/admit/native_decide.
 `lake build Proofs` kernel-checks the committed certificates; test_lean.py runs the round
 trip and mutation checks.
 """
 import argparse
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -18,10 +21,23 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
 
+# The certified functions of each example; every other function must be listed as excluded.
+# layout, threadsync and floatops are not here: their committed Gen.lean is not the translation
+# of tests/golden/<ex>/air.
 EXPECTED = {
-    'basic': (['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.tardiness'],
-              ['basic.sum', 'basic.totalWeightedTardiness', 'basic.weightedTardiness']),
-    'recursion': (['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'], []),
+    'asm': [],
+    'atomics': [],
+    'basic': ['basic.absDiff', 'basic.clampAdd', 'basic.classify', 'basic.scale', 'basic.tardiness'],
+    'errors': [],
+    'floatconv': [],
+    'floats': [],
+    'iogroup': ['debug.assert'],
+    'options': [],
+    'pointers': ['pointers.addTo', 'pointers.delay', 'pointers.dueOf', 'pointers.same', 'pointers.swap'],
+    'recursion': ['recursion.fact', 'recursion.gcd', 'recursion.isEven', 'recursion.isOdd'],
+    'threads': ['threads.writeFlag'],
+    'variants': [],
+    'vectors': ['vectors.sMod', 'vectors.sRem'],
 }
 
 
@@ -56,12 +72,17 @@ def check_example(binary, ex, work):
         f'{ex}: stale {committed.relative_to(ROOT)}; regenerate with --air-certificate'
     text = cert.read_text()
     certified, excluded = certificate_sets(text)
-    assert (certified, excluded) == EXPECTED[ex], (ex, certified, excluded)
+    assert certified == EXPECTED[ex], (ex, certified)
+    golden = (ROOT / 'tests/golden' / ex / 'air').glob('*.json')
+    names = sorted(json.loads(path.read_text())['name'] for path in golden)
+    assert sorted(certified + excluded) == names, (ex, certified, excluded, names)
     for name in certified:
-        decl = name.split('.', 1)[1]
+        # The certificate's stem: the generated name (prefix stripped), other characters as `_`.
+        decl = re.sub(r'\W', '_', name.removeprefix(ex + '.'))
         assert re.search(rf'^theorem {decl}_step ', text, re.M), (ex, name)
         assert re.search(rf'^theorem {decl}_(run|eq) ', text, re.M), (ex, name)
-    assert re.search(r'^theorem run_le_gen ', text, re.M)
+    if certified:
+        assert re.search(r'^theorem run_le_gen ', text, re.M)
 
 
 def check_flags(binary, work):
