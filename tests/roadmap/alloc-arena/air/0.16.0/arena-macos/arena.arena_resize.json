@@ -347,7 +347,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alloc__anon_239",
+      "func": "mem.Allocator.alloc__anon_8378",
       "noreturn": false
      },
      "args": [
@@ -509,7 +509,7 @@
    "ty": 1,
    "callee": {
     "ty": 21,
-    "func": "mem.Allocator.resize__anon_21339",
+    "func": "mem.Allocator.resize__anon_21341",
     "noreturn": false
    },
    "args": [

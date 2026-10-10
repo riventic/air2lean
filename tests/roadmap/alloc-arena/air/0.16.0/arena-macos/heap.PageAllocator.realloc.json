@@ -513,7 +513,7 @@
    "ty": 2,
    "callee": {
     "ty": 16,
-    "func": "mem.alignForward__anon_15480",
+    "func": "mem.alignForward__anon_1605",
     "noreturn": false
    },
    "args": [
@@ -575,7 +575,7 @@
    "ty": 2,
    "callee": {
     "ty": 16,
-    "func": "mem.alignForward__anon_15480",
+    "func": "mem.alignForward__anon_1605",
     "noreturn": false
    },
    "args": [

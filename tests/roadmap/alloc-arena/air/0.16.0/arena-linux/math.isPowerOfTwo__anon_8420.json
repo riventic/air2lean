@@ -34,7 +34,7 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.Alignment.fromByteUnits",
+ "name": "math.isPowerOfTwo__anon_8420",
  "params": [
   0
  ],
@@ -53,17 +53,26 @@
    "line": 2
   },
   {
-   "id": 3,
-   "tag": "call",
+   "id": 2,
+   "tag": "bitcast",
    "ty": 3,
-   "callee": {
-    "ty": 4,
-    "func": "math.isPowerOfTwo__anon_8420",
-    "noreturn": false
-   },
    "args": [
     {
      "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "cmp_gt",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 2
+    },
+    {
+     "ty": 3,
+     "val": "0"
     }
    ]
   },
@@ -78,7 +87,7 @@
    "tag": "call",
    "ty": 2,
    "callee": {
-    "ty": 5,
+    "ty": 4,
     "func": "debug.assert",
     "noreturn": false
    },
@@ -96,43 +105,68 @@
   },
   {
    "id": 7,
-   "tag": "ctz",
-   "ty": 6,
+   "tag": "sub_safe",
+   "ty": 0,
    "args": [
     {
      "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "1"
     }
    ]
   },
   {
    "id": 8,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 3
-  },
-  {
-   "id": 9,
-   "tag": "intcast_safe",
-   "ty": 1,
+   "tag": "bit_and",
+   "ty": 0,
    "args": [
+    {
+     "inst": 0
+    },
     {
      "inst": 7
     }
    ]
   },
   {
+   "id": 9,
+   "tag": "bitcast",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
    "id": 10,
+   "tag": "cmp_eq",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "ty": 3,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 11,
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 3
   },
   {
-   "id": 11,
+   "id": 12,
    "tag": "ret_safe",
-   "ty": 7,
+   "ty": 5,
    "args": [
     {
-     "inst": 9
+     "inst": 10
     }
    ]
   }
@@ -146,40 +180,7 @@
    "abi_align": 8
   },
   {
-   "k": "enum",
-   "name": "mem.Alignment",
-   "tag": 8,
-   "exhaustive": false,
-   "fields": [
-    {
-     "name": "1",
-     "value": "0"
-    },
-    {
-     "name": "2",
-     "value": "1"
-    },
-    {
-     "name": "4",
-     "value": "2"
-    },
-    {
-     "name": "8",
-     "value": "3"
-    },
-    {
-     "name": "16",
-     "value": "4"
-    },
-    {
-     "name": "32",
-     "value": "5"
-    },
-    {
-     "name": "64",
-     "value": "6"
-    }
-   ],
+   "k": "bool",
    "abi_size": 1,
    "abi_align": 1
   },
@@ -189,34 +190,18 @@
    "abi_align": 1
   },
   {
-   "k": "bool",
-   "abi_size": 1,
-   "abi_align": 1
-  },
-  {
-   "k": "other",
-   "name": "fn (usize) bool"
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "other",
    "name": "fn (bool) void"
   },
   {
-   "k": "int",
-   "signed": false,
-   "bits": 7,
-   "abi_size": 1,
-   "abi_align": 1
-  },
-  {
    "k": "noreturn"
-  },
-  {
-   "k": "int",
-   "signed": false,
-   "bits": 6,
-   "abi_size": 1,
-   "abi_align": 1
   }
  ]
 }

@@ -109,7 +109,7 @@
    "ty": 1,
    "callee": {
     "ty": 3,
-    "func": "mem.isValidAlignGeneric__anon_6627",
+    "func": "mem.isValidAlignGeneric__anon_6879",
     "noreturn": false
    },
    "args": [

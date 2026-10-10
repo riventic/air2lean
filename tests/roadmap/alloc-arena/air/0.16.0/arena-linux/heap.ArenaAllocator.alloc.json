@@ -2593,7 +2593,7 @@
          "ty": 1,
          "callee": {
           "ty": 37,
-          "func": "mem.alignForward__anon_12343",
+          "func": "mem.alignForward__anon_1329",
           "noreturn": false
          },
          "args": [
@@ -6602,7 +6602,7 @@
              "ty": 1,
              "callee": {
               "ty": 37,
-              "func": "mem.alignForward__anon_12343",
+              "func": "mem.alignForward__anon_1329",
               "noreturn": false
              },
              "args": [
@@ -9350,7 +9350,7 @@
            "ty": 1,
            "callee": {
             "ty": 37,
-            "func": "mem.alignForward__anon_12343",
+            "func": "mem.alignForward__anon_1329",
             "noreturn": false
            },
            "args": [

@@ -265,7 +265,7 @@
      "ty": 13,
      "callee": {
       "ty": 14,
-      "func": "mem.Allocator.create__anon_21050",
+      "func": "mem.Allocator.create__anon_21044",
       "noreturn": false
      },
      "args": [
@@ -464,7 +464,7 @@
      "ty": 20,
      "callee": {
       "ty": 21,
-      "func": "mem.Allocator.alloc__anon_239",
+      "func": "mem.Allocator.alloc__anon_8378",
       "noreturn": false
      },
      "args": [

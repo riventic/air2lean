@@ -61,23 +61,25 @@
    "ty": 2,
    "callee": {
     "ty": 3,
-    "func": "heap.FixedBufferAllocator.init",
+    "func": "heap.ArenaAllocator.init",
     "noreturn": false
    },
    "args": [
     {
      "ty": 4,
-     "slice_ptr": {
-      "ty": 5,
-      "ptr": {
-       "global": 0,
-       "off": 0
+     "elems": [
+      {
+       "ty": 5,
+       "undef": true
+      },
+      {
+       "ty": 6,
+       "ptr": {
+        "global": 0,
+        "off": 0
+       }
       }
-     },
-     "slice_len": {
-      "ty": 6,
-      "val": "4096"
-     }
+     ]
     }
    ]
   },
@@ -103,7 +105,7 @@
      "inst": 1
     }
    ],
-   "name": "fba"
+   "name": "arena"
   },
   {
    "id": 7,
@@ -113,22 +115,39 @@
   },
   {
    "id": 8,
-   "tag": "alloc",
-   "ty": 7
+   "tag": "dbg_var_val",
+   "ty": 0,
+   "args": [
+    {
+     "ty": 7,
+     "slice_ptr": {
+      "ty": 8,
+      "ptr": {
+       "global": 1,
+       "off": 0
+      }
+     },
+     "slice_len": {
+      "ty": 9,
+      "val": "8"
+     }
+    }
+   ],
+   "name": "foreign"
   },
   {
    "id": 9,
    "tag": "dbg_stmt",
    "ty": 0,
-   "line": 3
+   "line": 4
   },
   {
    "id": 10,
    "tag": "call",
-   "ty": 8,
+   "ty": 4,
    "callee": {
-    "ty": 9,
-    "func": "heap.FixedBufferAllocator.allocator",
+    "ty": 10,
+    "func": "heap.ArenaAllocator.allocator",
     "noreturn": false
    },
    "args": [
@@ -139,20 +158,17 @@
   },
   {
    "id": 11,
-   "tag": "dbg_stmt",
-   "ty": 0,
-   "line": 3
+   "tag": "alloc",
+   "ty": 11
   },
   {
    "id": 12,
-   "tag": "call",
-   "ty": 10,
-   "callee": {
-    "ty": 11,
-    "func": "heap.ArenaAllocator.init",
-    "noreturn": false
-   },
+   "tag": "store_safe",
+   "ty": 0,
    "args": [
+    {
+     "inst": 11
+    },
     {
      "inst": 10
     }
@@ -160,307 +176,69 @@
   },
   {
    "id": 13,
-   "tag": "store",
-   "ty": 0,
+   "tag": "bitcast",
+   "ty": 12,
    "args": [
     {
-     "inst": 8
-    },
-    {
-     "inst": 12
+     "inst": 11
     }
    ]
   },
   {
-   "id": 15,
-   "tag": "dbg_var_ptr",
-   "ty": 0,
-   "args": [
-    {
-     "inst": 8
-    }
-   ],
-   "name": "arena"
-  },
-  {
-   "id": 16,
+   "id": 14,
    "tag": "dbg_stmt",
    "ty": 0,
    "line": 4
   },
   {
-   "id": 17,
-   "tag": "block",
-   "ty": 4,
-   "body": [
-    {
-     "id": 18,
-     "tag": "dbg_stmt",
-     "ty": 0,
-     "line": 4
-    },
-    {
-     "id": 19,
-     "tag": "call",
-     "ty": 8,
-     "callee": {
-      "ty": 9,
-      "func": "heap.FixedBufferAllocator.allocator",
-      "noreturn": false
-     },
-     "args": [
-      {
-       "inst": 1
-      }
-     ]
-    },
-    {
-     "id": 20,
-     "tag": "alloc",
-     "ty": 12
-    },
-    {
-     "id": 21,
-     "tag": "store_safe",
-     "ty": 0,
-     "args": [
-      {
-       "inst": 20
-      },
-      {
-       "inst": 19
-      }
-     ]
-    },
-    {
-     "id": 22,
-     "tag": "bitcast",
-     "ty": 13,
-     "args": [
-      {
-       "inst": 20
-      }
-     ]
-    },
-    {
-     "id": 23,
-     "tag": "dbg_stmt",
-     "ty": 0,
-     "line": 4
-    },
-    {
-     "id": 24,
-     "tag": "load",
-     "ty": 8,
-     "args": [
-      {
-       "inst": 22
-      }
-     ]
-    },
-    {
-     "id": 27,
-     "tag": "dbg_stmt",
-     "ty": 0,
-     "line": 4
-    },
-    {
-     "id": 28,
-     "tag": "call",
-     "ty": 14,
-     "callee": {
-      "ty": 15,
-      "func": "mem.Allocator.alloc__anon_239",
-      "noreturn": false
-     },
-     "args": [
-      {
-       "inst": 24
-      },
-      {
-       "ty": 6,
-       "val": "8"
-      }
-     ]
-    },
-    {
-     "id": 29,
-     "tag": "is_non_err",
-     "ty": 16,
-     "args": [
-      {
-       "inst": 28
-      }
-     ]
-    },
-    {
-     "id": 35,
-     "tag": "cond_br",
-     "ty": 17,
-     "args": [
-      {
-       "inst": 29
-      }
-     ],
-     "then": [
-      {
-       "id": 30,
-       "tag": "unwrap_errunion_payload",
-       "ty": 4,
-       "args": [
-        {
-         "inst": 28
-        }
-       ]
-      },
-      {
-       "id": 31,
-       "tag": "br",
-       "ty": 17,
-       "target": 17,
-       "args": [
-        {
-         "inst": 30
-        }
-       ]
-      }
-     ],
-     "else": [
-      {
-       "id": 32,
-       "tag": "unwrap_errunion_err",
-       "ty": 18,
-       "args": [
-        {
-         "inst": 28
-        }
-       ]
-      },
-      {
-       "id": 33,
-       "tag": "dbg_stmt",
-       "ty": 0,
-       "line": 4
-      },
-      {
-       "id": 34,
-       "tag": "ret_safe",
-       "ty": 17,
-       "args": [
-        {
-         "ty": 0,
-         "val": "{}"
-        }
-       ]
-      }
-     ]
-    }
-   ]
-  },
-  {
-   "id": 36,
-   "tag": "dbg_var_val",
-   "ty": 0,
-   "args": [
-    {
-     "inst": 17
-    }
-   ],
-   "name": "foreign"
-  },
-  {
-   "id": 37,
-   "tag": "dbg_stmt",
-   "ty": 0,
-   "line": 5
-  },
-  {
-   "id": 38,
-   "tag": "call",
-   "ty": 8,
-   "callee": {
-    "ty": 19,
-    "func": "heap.ArenaAllocator.allocator",
-    "noreturn": false
-   },
-   "args": [
-    {
-     "inst": 8
-    }
-   ]
-  },
-  {
-   "id": 39,
-   "tag": "alloc",
-   "ty": 12
-  },
-  {
-   "id": 40,
-   "tag": "store_safe",
-   "ty": 0,
-   "args": [
-    {
-     "inst": 39
-    },
-    {
-     "inst": 38
-    }
-   ]
-  },
-  {
-   "id": 41,
-   "tag": "bitcast",
-   "ty": 13,
-   "args": [
-    {
-     "inst": 39
-    }
-   ]
-  },
-  {
-   "id": 42,
-   "tag": "dbg_stmt",
-   "ty": 0,
-   "line": 5
-  },
-  {
-   "id": 43,
+   "id": 15,
    "tag": "load",
-   "ty": 8,
+   "ty": 4,
    "args": [
     {
-     "inst": 41
+     "inst": 13
     }
    ]
   },
   {
-   "id": 46,
+   "id": 18,
    "tag": "dbg_stmt",
    "ty": 0,
-   "line": 5
+   "line": 4
   },
   {
-   "id": 47,
+   "id": 19,
    "tag": "call",
    "ty": 0,
    "callee": {
-    "ty": 20,
-    "func": "mem.Allocator.free__anon_249",
+    "ty": 13,
+    "func": "mem.Allocator.free__anon_974",
     "noreturn": false
    },
    "args": [
     {
-     "inst": 43
+     "inst": 15
     },
     {
-     "inst": 17
+     "ty": 7,
+     "slice_ptr": {
+      "ty": 8,
+      "ptr": {
+       "global": 1,
+       "off": 0
+      }
+     },
+     "slice_len": {
+      "ty": 9,
+      "val": "8"
+     }
     }
    ]
   },
   {
-   "id": 48,
+   "id": 20,
    "tag": "ret_safe",
-   "ty": 17,
+   "ty": 14,
    "args": [
     {
      "ty": 0,
@@ -471,14 +249,102 @@
  ],
  "globals": [
   {
+   "name": "heap.PageAllocator.vtable",
+   "ty": 15,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 15,
+    "elems": [
+     {
+      "ty": 16,
+      "ptr": {
+       "global": 2,
+       "off": 0
+      }
+     },
+     {
+      "ty": 17,
+      "ptr": {
+       "global": 3,
+       "off": 0
+      }
+     },
+     {
+      "ty": 18,
+      "ptr": {
+       "global": 4,
+       "off": 0
+      }
+     },
+     {
+      "ty": 19,
+      "ptr": {
+       "global": 5,
+       "off": 0
+      }
+     }
+    ]
+   }
+  },
+  {
    "name": "arena.buffer",
-   "ty": 21,
+   "ty": 20,
    "const": false,
    "threadlocal": false,
    "extern": false,
    "init": {
-    "ty": 21,
+    "ty": 20,
     "undef": true
+   }
+  },
+  {
+   "name": "heap.PageAllocator.alloc",
+   "ty": 21,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 21,
+    "func": "heap.PageAllocator.alloc",
+    "noreturn": false
+   }
+  },
+  {
+   "name": "heap.PageAllocator.resize",
+   "ty": 22,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 22,
+    "func": "heap.PageAllocator.resize",
+    "noreturn": false
+   }
+  },
+  {
+   "name": "heap.PageAllocator.remap",
+   "ty": 23,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 23,
+    "func": "heap.PageAllocator.remap",
+    "noreturn": false
+   }
+  },
+  {
+   "name": "heap.PageAllocator.free",
+   "ty": 24,
+   "const": true,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 24,
+    "func": "heap.PageAllocator.free",
+    "noreturn": false
    }
   }
  ],
@@ -503,104 +369,12 @@
   },
   {
    "k": "struct",
-   "name": "heap.FixedBufferAllocator",
-   "layout": "auto",
-   "fields": [
-    {
-     "name": "end_index",
-     "ty": 6,
-     "offset": 0
-    },
-    {
-     "name": "buffer",
-     "ty": 4,
-     "offset": 8
-    }
-   ],
-   "abi_size": 24,
-   "abi_align": 8
-  },
-  {
-   "k": "other",
-   "name": "fn ([]u8) heap.FixedBufferAllocator"
-  },
-  {
-   "k": "ptr",
-   "size": "slice",
-   "const": false,
-   "child": 22,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 16,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "many",
-   "const": false,
-   "child": 22,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "int",
-   "signed": false,
-   "bits": 64,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 10,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "struct",
-   "name": "mem.Allocator",
-   "layout": "auto",
-   "fields": [
-    {
-     "name": "ptr",
-     "ty": 23,
-     "offset": 0
-    },
-    {
-     "name": "vtable",
-     "ty": 24,
-     "offset": 8
-    }
-   ],
-   "abi_size": 16,
-   "abi_align": 8
-  },
-  {
-   "k": "other",
-   "name": "fn (*heap.FixedBufferAllocator) mem.Allocator"
-  },
-  {
-   "k": "struct",
    "name": "heap.ArenaAllocator",
    "layout": "auto",
    "fields": [
     {
      "name": "child_allocator",
-     "ty": 8,
+     "ty": 4,
      "offset": 0
     },
     {
@@ -617,80 +391,23 @@
    "name": "fn (mem.Allocator) heap.ArenaAllocator"
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 8,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 8,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "error_union",
-   "error": 18,
-   "payload": 4,
-   "abi_size": 24,
-   "abi_align": 8
-  },
-  {
-   "k": "other",
-   "name": "fn (mem.Allocator, usize) error{OutOfMemory}![]u8"
-  },
-  {
-   "k": "bool",
-   "abi_size": 1,
-   "abi_align": 1
-  },
-  {
-   "k": "noreturn"
-  },
-  {
-   "k": "error_set",
-   "errors": [
-    "OutOfMemory"
+   "k": "struct",
+   "name": "mem.Allocator",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "ptr",
+     "ty": 5,
+     "offset": 0
+    },
+    {
+     "name": "vtable",
+     "ty": 6,
+     "offset": 8
+    }
    ],
-   "abi_size": 2,
-   "abi_align": 2
-  },
-  {
-   "k": "other",
-   "name": "fn (*heap.ArenaAllocator) mem.Allocator"
-  },
-  {
-   "k": "other",
-   "name": "fn (mem.Allocator, []u8) void"
-  },
-  {
-   "k": "array",
-   "len": 4096,
-   "child": 22,
-   "sentinel": false,
-   "abi_size": 4096,
-   "abi_align": 1
-  },
-  {
-   "k": "int",
-   "signed": false,
-   "bits": 8,
-   "abi_size": 1,
-   "abi_align": 1
+   "abi_size": 16,
+   "abi_align": 8
   },
   {
    "k": "ptr",
@@ -709,7 +426,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 27,
+   "child": 15,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -717,6 +434,177 @@
    "host_size": 0,
    "abi_size": 8,
    "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 27,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": false,
+   "child": 27,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (*heap.ArenaAllocator) mem.Allocator"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 4,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 4,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (mem.Allocator, []u8) void"
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "mem.Allocator.VTable",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "alloc",
+     "ty": 16,
+     "offset": 0
+    },
+    {
+     "name": "resize",
+     "ty": 17,
+     "offset": 8
+    },
+    {
+     "name": "remap",
+     "ty": 18,
+     "offset": 16
+    },
+    {
+     "name": "free",
+     "ty": 19,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 21,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 22,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 23,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 24,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "array",
+   "len": 4096,
+   "child": 27,
+   "sentinel": false,
+   "abi_size": 4096,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
+  },
+  {
+   "k": "other",
+   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
   },
   {
    "k": "struct",
@@ -742,85 +630,15 @@
    "name": "anyopaque"
   },
   {
-   "k": "struct",
-   "name": "mem.Allocator.VTable",
-   "layout": "auto",
-   "fields": [
-    {
-     "name": "alloc",
-     "ty": 29,
-     "offset": 0
-    },
-    {
-     "name": "resize",
-     "ty": 30,
-     "offset": 8
-    },
-    {
-     "name": "remap",
-     "ty": 31,
-     "offset": 16
-    },
-    {
-     "name": "free",
-     "ty": 32,
-     "offset": 24
-    }
-   ],
-   "abi_size": 32,
-   "abi_align": 8
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "optional",
-   "child": 33,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 34,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 35,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 36,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 37,
-   "volatile": false,
-   "allowzero": false,
-   "sentinel": false,
-   "host_size": 0,
+   "child": 29,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -828,7 +646,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 38,
+   "child": 30,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -838,34 +656,18 @@
    "abi_align": 8
   },
   {
-   "k": "other",
-   "name": "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
-  },
-  {
-   "k": "other",
-   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) bool"
-  },
-  {
-   "k": "other",
-   "name": "fn (*anyopaque, []u8, mem.Alignment, usize, usize) ?[*]u8"
-  },
-  {
-   "k": "other",
-   "name": "fn (*anyopaque, []u8, mem.Alignment, usize) void"
-  },
-  {
    "k": "struct",
    "name": "heap.ArenaAllocator.Node",
    "layout": "auto",
    "fields": [
     {
      "name": "size",
-     "ty": 39,
+     "ty": 31,
      "offset": 0
     },
     {
      "name": "end_index",
-     "ty": 6,
+     "ty": 9,
      "offset": 8
     },
     {
@@ -884,15 +686,20 @@
    "fields": [
     {
      "name": "resizing",
-     "ty": 16
+     "ty": 32
     },
     {
      "name": "_",
-     "ty": 40
+     "ty": 33
     }
    ],
    "abi_size": 8,
    "abi_align": 8
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
   },
   {
    "k": "int",

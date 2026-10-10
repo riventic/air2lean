@@ -85,11 +85,11 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.Alignment.fromByteUnits",
+ "name": "mem.absorbSentinel__anon_20964",
  "params": [
   0
  ],
- "ret": 1,
+ "ret": 0,
  "body": [
   {
    "id": 0,
@@ -99,22 +99,29 @@
   },
   {
    "id": 1,
-   "tag": "dbg_stmt",
+   "tag": "alloc",
+   "ty": 1
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
    "ty": 2,
-   "line": 2
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 0
+    }
+   ]
   },
   {
    "id": 3,
-   "tag": "call",
+   "tag": "bitcast",
    "ty": 3,
-   "callee": {
-    "ty": 4,
-    "func": "math.isPowerOfTwo__anon_6874",
-    "noreturn": false
-   },
    "args": [
     {
-     "inst": 0
+     "inst": 1
     }
    ]
   },
@@ -122,117 +129,51 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
-  },
-  {
-   "id": 5,
-   "tag": "call",
-   "ty": 2,
-   "callee": {
-    "ty": 5,
-    "func": "debug.assert",
-    "noreturn": false
-   },
-   "args": [
-    {
-     "inst": 3
-    }
-   ]
+   "line": 4
   },
   {
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 5
   },
   {
    "id": 7,
-   "tag": "ctz",
-   "ty": 6,
+   "tag": "ret_safe",
+   "ty": 4,
    "args": [
     {
      "inst": 0
-    }
-   ]
-  },
-  {
-   "id": 8,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 3
-  },
-  {
-   "id": 9,
-   "tag": "intcast_safe",
-   "ty": 1,
-   "args": [
-    {
-     "inst": 7
-    }
-   ]
-  },
-  {
-   "id": 10,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 3
-  },
-  {
-   "id": 11,
-   "tag": "ret_safe",
-   "ty": 7,
-   "args": [
-    {
-     "inst": 9
     }
    ]
   }
  ],
  "types": [
   {
-   "k": "int",
-   "signed": false,
-   "bits": 64,
-   "abi_size": 8,
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 5,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
    "abi_align": 8
   },
   {
-   "k": "enum",
-   "name": "mem.Alignment",
-   "tag": 8,
-   "exhaustive": false,
-   "fields": [
-    {
-     "name": "1",
-     "value": "0"
-    },
-    {
-     "name": "2",
-     "value": "1"
-    },
-    {
-     "name": "4",
-     "value": "2"
-    },
-    {
-     "name": "8",
-     "value": "3"
-    },
-    {
-     "name": "16",
-     "value": "4"
-    },
-    {
-     "name": "32",
-     "value": "5"
-    },
-    {
-     "name": "64",
-     "value": "6"
-    }
-   ],
-   "abi_size": 1,
-   "abi_align": 1
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "void",
@@ -240,24 +181,17 @@
    "abi_align": 1
   },
   {
-   "k": "bool",
-   "abi_size": 1,
-   "abi_align": 1
-  },
-  {
-   "k": "other",
-   "name": "fn (usize) bool"
-  },
-  {
-   "k": "other",
-   "name": "fn (bool) void"
-  },
-  {
-   "k": "int",
-   "signed": false,
-   "bits": 7,
-   "abi_size": 1,
-   "abi_align": 1
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "noreturn"
@@ -265,7 +199,7 @@
   {
    "k": "int",
    "signed": false,
-   "bits": 6,
+   "bits": 8,
    "abi_size": 1,
    "abi_align": 1
   }

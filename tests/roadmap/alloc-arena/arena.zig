@@ -50,8 +50,7 @@ pub export fn arena_page(n: usize) u64 {
 /// Frees a slice that the arena did not issue while the arena has no node: `free` unwraps the
 /// empty `used_list` (`loadFirstNode().?`) and panics (obstruction O-A, `ArenaObstruction.lean`).
 pub export fn arena_foreign_free() void {
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    var arena = std.heap.ArenaAllocator.init(fba.allocator());
-    const foreign = fba.allocator().alloc(u8, 8) catch return;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const foreign: []u8 = buffer[0..8];
     arena.allocator().free(foreign);
 }

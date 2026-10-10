@@ -160,7 +160,7 @@
      "ty": 5,
      "callee": {
       "ty": 7,
-      "func": "mem.alignForward__anon_12343",
+      "func": "mem.alignForward__anon_1329",
       "noreturn": false
      },
      "args": [

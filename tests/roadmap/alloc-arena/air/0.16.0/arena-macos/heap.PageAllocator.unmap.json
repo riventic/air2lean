@@ -211,7 +211,7 @@
      "ty": 5,
      "callee": {
       "ty": 7,
-      "func": "mem.alignForward__anon_15480",
+      "func": "mem.alignForward__anon_1605",
       "noreturn": false
      },
      "args": [

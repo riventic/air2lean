@@ -340,7 +340,7 @@
      "ty": 16,
      "callee": {
       "ty": 17,
-      "func": "mem.Allocator.alloc__anon_239",
+      "func": "mem.Allocator.alloc__anon_8378",
       "noreturn": false
      },
      "args": [
@@ -831,7 +831,7 @@
    "ty": 2,
    "callee": {
     "ty": 25,
-    "func": "mem.Allocator.free__anon_249",
+    "func": "mem.Allocator.free__anon_1314",
     "noreturn": false
    },
    "args": [

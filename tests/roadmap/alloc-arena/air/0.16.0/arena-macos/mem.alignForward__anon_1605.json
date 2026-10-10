@@ -85,105 +85,143 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.Alignment.fromByteUnits",
+ "name": "mem.alignForward__anon_1605",
  "params": [
+  0,
   0
  ],
- "ret": 1,
+ "ret": 0,
  "body": [
   {
    "id": 0,
    "tag": "arg",
    "ty": 0,
-   "param": 0
+   "param": 1
   },
   {
    "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 2,
    "tag": "dbg_stmt",
-   "ty": 2,
+   "ty": 1,
    "line": 2
   },
   {
-   "id": 3,
+   "id": 4,
    "tag": "call",
-   "ty": 3,
+   "ty": 2,
    "callee": {
-    "ty": 4,
-    "func": "math.isPowerOfTwo__anon_6874",
+    "ty": 3,
+    "func": "mem.isValidAlignGeneric__anon_6879",
     "noreturn": false
    },
    "args": [
     {
-     "inst": 0
+     "inst": 1
     }
    ]
   },
   {
-   "id": 4,
+   "id": 5,
    "tag": "dbg_stmt",
-   "ty": 2,
+   "ty": 1,
    "line": 2
   },
   {
-   "id": 5,
+   "id": 6,
    "tag": "call",
-   "ty": 2,
+   "ty": 1,
    "callee": {
-    "ty": 5,
+    "ty": 4,
     "func": "debug.assert",
     "noreturn": false
    },
    "args": [
     {
-     "inst": 3
+     "inst": 4
     }
    ]
-  },
-  {
-   "id": 6,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 3
   },
   {
    "id": 7,
-   "tag": "ctz",
-   "ty": 6,
-   "args": [
-    {
-     "inst": 0
-    }
-   ]
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
   },
   {
    "id": 8,
-   "tag": "dbg_stmt",
-   "ty": 2,
-   "line": 3
-  },
-  {
-   "id": 9,
-   "tag": "intcast_safe",
-   "ty": 1,
+   "tag": "sub_safe",
+   "ty": 0,
    "args": [
     {
-     "inst": 7
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "1"
     }
    ]
   },
   {
-   "id": 10,
+   "id": 9,
    "tag": "dbg_stmt",
-   "ty": 2,
+   "ty": 1,
    "line": 3
   },
   {
-   "id": 11,
-   "tag": "ret_safe",
-   "ty": 7,
+   "id": 10,
+   "tag": "add_safe",
+   "ty": 0,
    "args": [
     {
-     "inst": 9
+     "inst": 0
+    },
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 14,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 5,
+    "func": "mem.alignBackward__anon_6828",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 10
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3
+  },
+  {
+   "id": 16,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 14
     }
    ]
   }
@@ -195,44 +233,6 @@
    "bits": 64,
    "abi_size": 8,
    "abi_align": 8
-  },
-  {
-   "k": "enum",
-   "name": "mem.Alignment",
-   "tag": 8,
-   "exhaustive": false,
-   "fields": [
-    {
-     "name": "1",
-     "value": "0"
-    },
-    {
-     "name": "2",
-     "value": "1"
-    },
-    {
-     "name": "4",
-     "value": "2"
-    },
-    {
-     "name": "8",
-     "value": "3"
-    },
-    {
-     "name": "16",
-     "value": "4"
-    },
-    {
-     "name": "32",
-     "value": "5"
-    },
-    {
-     "name": "64",
-     "value": "6"
-    }
-   ],
-   "abi_size": 1,
-   "abi_align": 1
   },
   {
    "k": "void",
@@ -253,21 +253,11 @@
    "name": "fn (bool) void"
   },
   {
-   "k": "int",
-   "signed": false,
-   "bits": 7,
-   "abi_size": 1,
-   "abi_align": 1
+   "k": "other",
+   "name": "fn (usize, usize) usize"
   },
   {
    "k": "noreturn"
-  },
-  {
-   "k": "int",
-   "signed": false,
-   "bits": 6,
-   "abi_size": 1,
-   "abi_align": 1
   }
  ]
 }

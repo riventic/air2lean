@@ -462,7 +462,7 @@
    "ty": 2,
    "callee": {
     "ty": 16,
-    "func": "mem.alignForward__anon_12343",
+    "func": "mem.alignForward__anon_1329",
     "noreturn": false
    },
    "args": [
@@ -524,7 +524,7 @@
    "ty": 2,
    "callee": {
     "ty": 16,
-    "func": "mem.alignForward__anon_12343",
+    "func": "mem.alignForward__anon_1329",
     "noreturn": false
    },
    "args": [
