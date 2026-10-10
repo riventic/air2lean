@@ -39,7 +39,7 @@
  "src": {
   "file": "arena.zig",
   "module": "arena",
-  "decl_line": 64
+  "decl_line": 77
  },
  "params": [],
  "ret": 0,

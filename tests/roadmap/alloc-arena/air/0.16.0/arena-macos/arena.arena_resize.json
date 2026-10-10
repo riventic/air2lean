@@ -540,7 +540,7 @@
    "ty": 1,
    "callee": {
     "ty": 21,
-    "func": "mem.Allocator.resize__anon_21236",
+    "func": "mem.Allocator.resize__anon_21237",
     "module": "std",
     "instance_key": "ec6bca265858c0d92c8adc9b771d4dbd6b6c75eedea6376de74e48a0d5adca0b",
     "noreturn": false

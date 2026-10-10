@@ -3,7 +3,8 @@
 # its child allocators (FixedBufferAllocator, page_allocator) down to posix.mmap/munmap/mremap
 # (`--allocator-model translated`, docs/alloc-arena.md). Checks: the retained translations are the
 # fresh ones; they elaborate; the one-thread results equal the native ones (Eval.lean); obstructions
-# O-A and O-E are kernel-checked (ArenaObstruction.lean); the admissions fail closed (test_cli.py).
+# O-A and O-E are kernel-checked (ArenaObstruction.lean); an alloc that reserves nothing is rejected
+# (mutant.sh); the admissions fail closed (test_cli.py).
 # Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Conc`; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig against expected.txt.
 set -euo pipefail
@@ -52,6 +53,7 @@ text = open(sys.argv[1]).read()
 used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
 assert text.strip() and used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
 EOF
+bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   cp "$here/arena.zig" "$here/native.zig" "$work/"

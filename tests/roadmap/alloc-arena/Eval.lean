@@ -36,6 +36,9 @@ open AllocArena.ArenaLinux
   ["ok 229", "ok 229", "ok 7001", "ok 1"]
 #guard [first (arena_page 10) dispatch (mem0 .fresh), first (arena_page 20000) dispatch (mem0 .fresh)] =
   ["ok 12", "ok 20002"]
+-- Two live allocations do not overlap (`mutant.sh` breaks this).
+#guard [first (arena_two 1) dispatch (mem0 .fresh), first (arena_two 100) dispatch (mem0 .fresh)] =
+  ["ok 21", "ok 21"]
 -- `@returnAddress` reads the explicit oracle; any values give the same results.
 #guard first (arena_reset 10 true) dispatch { (mem0 .fresh) with arbitrary := #[7, 9, 11] } = "ok 229"
 end Linux
