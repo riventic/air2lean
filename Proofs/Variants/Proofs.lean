@@ -164,6 +164,8 @@ theorem scale_spec (s : Shape) (k : BitVec 32) (h : scaleFits s k) :
       simp [Shape.setField_rect]
     simp [zig_unfold, Shape.tag, Shape.get_rect, Shape.setTag_rect, hd, hw, scaleSpec,
       Nat.not_le.mpr h.1, Nat.not_le.mpr h.2]
+    -- Zig 0.14.1 writes the fields before the retag: unfold the field writes there.
+    all_goals simp [Shape.setField_rect]
   | square a =>
     simp only [scaleFits] at h
     simp [zig_unfold, Shape.tag, Shape.get_square, Shape.setTag_square, Shape.set_square, hd,

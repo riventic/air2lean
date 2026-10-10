@@ -107,14 +107,25 @@ def export_air(zig_air, target, out):
 TRANSLATABLE = ("x86_64-linux", "aarch64-macos")
 
 
+def without_cc(value):
+    """`value` without calling conventions (`export.cc`, an extern reference's `cc`): the target's
+    C ABI name (x86_64_sysv, aarch64_aapcs), compared only between a call and its export."""
+    if isinstance(value, dict):
+        return {k: without_cc(v) for k, v in value.items() if k != "cc"}
+    if isinstance(value, list):
+        return [without_cc(v) for v in value]
+    return value
+
+
 def air_differences(ref, other):
-    """Names of exported functions whose AIR differs from `ref` in anything but `profile`."""
+    """Names of exported functions whose AIR differs from `ref` in anything but `profile` and
+    calling-convention names."""
     bad = []
     for p in sorted(ref.glob("*.json")):
         a, b = json.loads(p.read_text()), json.loads((other / p.name).read_text())
         a.pop("profile", None)
         b.pop("profile", None)
-        if a != b:
+        if without_cc(a) != without_cc(b):
             bad.append(p.name)
     return bad
 
