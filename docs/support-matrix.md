@@ -3,7 +3,7 @@
 This page is the one current support matrix. The marked region below is generated
 from committed sources; do not edit it by hand:
 
-- Zig versions: `supportedVersions` in `Air2Lean/Air/Normalize.lean`, the exporter
+- Zig versions: `ZigVersion.all` in `Air2Lean/Air/Dialect.lean`, the exporter
   pins in `zig-patch/versions.toml` and the default `AIR2LEAN_ZIG_VERSION` of the
   pipeline scripts;
 - examples: `examples/*/zig-versions` through `scripts/example-selection.sh`, and
@@ -41,10 +41,10 @@ history (M0–T5) as historical scope; current open work is the register below.
 
 | Zig | Default | Status | Translator | Exporter pin | Coverage inventory | CI |
 |---|---|---|---|---|---|---|
-| 0.17.0 | no | in-qualification | `supportedVersions` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
-| 0.16.0 | yes | qualified | `supportedVersions` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
-| 0.15.2 | no | qualified | `supportedVersions` | `zig-patch/versions.toml` | `coverage/0.15.2.json` | full job (pipeline, diff test, proofs) |
-| 0.14.1 | no | qualified | `supportedVersions` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (translation and proofs; no diff harness) |
+| 0.17.0 | no | in-qualification | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
+| 0.16.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
+| 0.15.2 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.15.2.json` | full job (pipeline, diff test, proofs) |
+| 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (translation and proofs; no diff harness) |
 
 ## Examples by version
 

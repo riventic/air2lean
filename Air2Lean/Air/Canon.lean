@@ -84,15 +84,24 @@ def tagsOnly017 : List String :=
 def tagsRemoved017 : List String :=
   ["bitcast", "intcast", "intcast_safe", "struct_field_val", "bool_and", "bool_or"]
 
-/-- Why `tag` cannot occur in an AIR file of `zigVersion`, if it cannot. -/
-def versionTagReason? (zigVersion tag : String) : Option String :=
-  if zigVersion == "0.17.0" then
+/-- The tag spelling of a `zig_version`. A version outside the registry, which `normalize`
+rejects later, reads as the 0.16.0 spelling. -/
+def airTagsOf (zigVersion : String) : ZigVersion.AirTags :=
+  ((ZigVersion.ofString? zigVersion).map (·.airTags)).getD .base
+
+/-- Why `tag` cannot occur in an AIR file of the tag spelling `tags`, if it cannot. -/
+def airTagReason? (tags : ZigVersion.AirTags) (zigVersion tag : String) : Option String :=
+  if tags == .v017 then
     if tagsRemoved017.contains tag then
       some s!"is not a Zig 0.17.0 AIR tag (removed or renamed in 0.17.0)"
     else none
   else if tagsOnly017.contains tag then
     some s!"is not a Zig {zigVersion} AIR tag (introduced in 0.17.0)"
   else none
+
+/-- Why `tag` cannot occur in an AIR file of `zigVersion`, if it cannot. -/
+def versionTagReason? (zigVersion tag : String) : Option String :=
+  airTagReason? (airTagsOf zigVersion) zigVersion tag
 
 /-- Every instruction of `body`, nested bodies included, in body order. -/
 partial def flatten (body : Array RawInst) : Array RawInst :=
@@ -159,10 +168,11 @@ def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
 
 /-- `versionTags` (module doc). -/
 def versionTags (f : RawFunc) : Except String RawFunc := do
+  let tags := airTagsOf f.zigVersion
   for i in flatten f.body do
-    if let some reason := versionTagReason? f.zigVersion i.tag then
+    if let some reason := airTagReason? tags f.zigVersion i.tag then
       throw s!"{f.name}: inst {i.id}: tag '{i.tag}' {reason}"
-  if f.zigVersion != "0.17.0" then return f
+  if tags != .v017 then return f
   let f := laneElemPtrs f
   let boolTyped (ty : Option TyId) : Bool :=
     match ty.bind (f.types[·]?) with

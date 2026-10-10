@@ -15,12 +15,11 @@ Outside the certificate fragment:
 
 /-- The decoded canonical AIR of `recursion.fact`. -/
 def air_fact : Func :=
-{ zigVersion := "0.15.2", name := "recursion.fact",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.fact",
   params := #[0], ret := 0,
   types := #[(.int false 32), .void, .bool, .noreturn, (.other "fn (u32) callconv(.c) u32")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨10, 1, (.line 2)⟩,
     ⟨1, 1, (.block #[⟨2, 2, (.cmp .eq (.inst 0) (.int 0 (0 : Int)))⟩,
@@ -37,12 +36,11 @@ def air_fact : Func :=
 
 /-- The decoded canonical AIR of `recursion.gcd`. -/
 def air_gcd : Func :=
-{ zigVersion := "0.15.2", name := "recursion.gcd",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.gcd",
   params := #[0, 0], ret := 0,
   types := #[(.int false 32), .void, .bool, .noreturn, (.other "fn () noreturn"), (.other "fn (u32, u32) callconv(.c) u32")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 0, (.arg 1)⟩,
     ⟨16, 1, (.line 2)⟩,
@@ -61,12 +59,11 @@ def air_gcd : Func :=
 
 /-- The decoded canonical AIR of `recursion.isEven`. -/
 def air_isEven : Func :=
-{ zigVersion := "0.15.2", name := "recursion.isEven",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.isEven",
   params := #[0], ret := 1,
   types := #[(.int false 32), .bool, .void, .noreturn, (.other "fn (u32) callconv(.c) bool")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨9, 2, (.line 2)⟩,
     ⟨1, 2, (.block #[⟨2, 1, (.cmp .eq (.inst 0) (.int 0 (0 : Int)))⟩,
@@ -81,12 +78,11 @@ def air_isEven : Func :=
 
 /-- The decoded canonical AIR of `recursion.isOdd`. -/
 def air_isOdd : Func :=
-{ zigVersion := "0.15.2", name := "recursion.isOdd",
+{ dialect := { version := Air2Lean.ZigVersion.v0_15_2, arch := "", ptrBytes := 8, endian := Air2Lean.Endian.little, errorSetBits := 16, backend := "unverified", buildMode := "unverified" }, name := "recursion.isOdd",
   params := #[0], ret := 1,
   types := #[(.int false 32), .bool, .void, .noreturn, (.other "fn (u32) callconv(.c) bool")],
   layouts := #[{ size := (some 4), align := (some 4), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 1), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := (some 0), align := (some 1), offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }, { size := none, align := none, offsets := #[], ptrAlign := none, sentinel := false, sentinelByte := none, isVolatile := false, allowzero := false, hostSize := 0, bitOffset := 0, packedLanes := false, vectorIndex := none, runtimeLane := false, vectorIndexExported := false }],
   globals := #[],
-  errorSetBits := 16,
   body := #[⟨0, 0, (.arg 0)⟩,
     ⟨9, 2, (.line 2)⟩,
     ⟨1, 2, (.block #[⟨2, 1, (.cmp .eq (.inst 0) (.int 0 (0 : Int)))⟩,

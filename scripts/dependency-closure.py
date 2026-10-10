@@ -89,7 +89,7 @@ def std_models(text=None):
     start = text.index('def stdModels')
     end = text.find('\n\n', start)
     table = text[start:] if end < 0 else text[start:end]
-    helpers = {name: tuple(re.findall(r'\("(\d+\.\d+\.\d+)",', body))
+    helpers = {name: tuple('.'.join(v) for v in re.findall(r'\(\.v(\d+)_(\d+)_(\d+),', body))
                for name, body in REVIEW_HELPER.findall(text)}
 
     def reviewed(kind, expr):
@@ -106,7 +106,7 @@ def std_models(text=None):
         versions = helpers[m.group(2)]
         for restrict in (m.group(1), m.group(3)):
             if restrict:
-                keep = re.findall(r'"([^"]+)"', restrict)
+                keep = ['.'.join(v) for v in re.findall(r'\.v(\d+)_(\d+)_(\d+)', restrict)]
                 versions = tuple(v for v in versions if v in keep)
         return versions
     models = {}

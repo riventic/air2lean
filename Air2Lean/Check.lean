@@ -185,7 +185,8 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     if l.isLanePtr && !l.laneBitPtr then
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
-        profile of Zig {String.intercalate ", " lanePtrVersions} for the LLVM backend (stage2_llvm) on x86_64 or aarch64"
+        profile of Zig {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
+        ({Target.llvmBackend}) on {" or ".intercalate Dialect.lanePtrArchs}"
     if nullablePtrTy types layouts id && l.isVolatile then
       throw s!"{fnName}: near line {line}: volatile nullable pointers are outside the qualified pointer fragment"
     if nullablePtrTy types layouts id && (size == "slice" || l.hostSize != 0) then
@@ -435,12 +436,6 @@ def unionOffsets (types : Array Ty) (layouts : Array Layout) (tag : TyId) (field
 
 /-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
 
-/-- Up to 0.16.0, `@bitCast` reinterprets the in-memory representation. Zig 0.17.0 changed it
-to the logical bit order; the representation-cast and optional-pointer cast rules below apply
-to the listed versions only. -/
-def memoryBitCastVersion (zigVersion : String) : Bool :=
-  #["0.14.1", "0.15.2", "0.16.0"].contains zigVersion
-
 /-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array without a sentinel,
 an `extern` struct, an `extern` union. -/
 def reprAggregate (types : Array Ty) (id : TyId) : Bool :=
@@ -482,11 +477,13 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId) 
     pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
   | _ => none
 
-/-- A ≤0.16 `@bitCast` from `src` to `dst` that the representation cast (`Zig.reprCast`)
-translates: different types, an array, `extern` struct or `extern` union on at least one side.
-The checker then requires both sides to have a `reprBitSize` and equal ones. -/
-def reprCastApplies (zigVersion : String) (types : Array Ty) (src dst : TyId) : Bool :=
-  memoryBitCastVersion zigVersion && src != dst &&
+/-- A ≤0.16 `@bitCast` (`ZigVersion.BitCast.memory`: up to 0.16.0 `@bitCast` reinterprets the
+in-memory representation; 0.17.0 changed it to the logical bit order) from `src` to `dst` that the
+representation cast (`Zig.reprCast`) translates: different types, an array, `extern` struct or
+`extern` union on at least one side. The checker then requires both sides to have a
+`reprBitSize` and equal ones. -/
+def reprCastApplies (bitCast : ZigVersion.BitCast) (types : Array Ty) (src dst : TyId) : Bool :=
+  bitCast == .memory && src != dst &&
     (reprAggregate types src || reprAggregate types dst)
 
 /-- The type `id` can be in memory: the model encodes it, with the exporter's size and alignment. -/
@@ -553,14 +550,14 @@ structure CheckCtx where
   /-- Internal summaries populated by `check` only after all nested IDs are unique.
   Bare/public checker contexts default to the uncached path. -/
   tryErrorExits : Std.HashMap InstId Bool := {}
-  /-- The function's `zig_version`: selects the `@bitCast` semantics. Up to 0.16.0 it reinterprets
-  memory (`memoryBitCastVersion`); from 0.17.0 it uses the logical bit order
-  (`Air2Lean/BitCast.lean`). Empty in bare contexts, which then reject representation casts. -/
-  zigVersion : String := ""
+  /-- The function's `@bitCast` semantics (`Dialect.bitCast`). Up to 0.16.0 it reinterprets
+  memory (`reprCastApplies`); from 0.17.0 it uses the logical bit order
+  (`Air2Lean/BitCast.lean`). `none` in bare contexts, which then reject representation casts. -/
+  bitCast : Option ZigVersion.BitCast := none
   /-- `--device-contract` (L13): integer volatile loads and stores, and the declared
   `asm volatile`, are device events. -/
   device : Option DeviceContract := none
-  /-- `Func.targetArch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
+  /-- `Dialect.arch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`). -/
   targetArch : String := ""
   /-- The sentinel slices that a Sema `sentinelMismatch` check reads (`sentinelCheckedSlices`). -/
   sentinelChecked : Array InstId := #[]
@@ -1234,7 +1231,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- (`Air2Lean/BitCast.lean`); a shape the model lacks is rejected, never translated with the
     -- ≤0.16 memory rules below.
     if let some aty := sourceTy then
-      if logicalBitCastApplies cx.zigVersion cx.types aty ty then
+      if cx.bitCast.any (logicalBitCastApplies · cx.types aty ty) then
         match logicalBitCastShapes cx.types aty ty with
         | .ok _ => return line
         | .error e => cx.fail line e
@@ -1255,7 +1252,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
     -- (`?*T`) is `Option Zig.Ptr` in the model, null = `none` = address 0: a bitcast to another
     -- optional pointer (a `@constCast`) is a no-op, and one from a pointer is Lean's coercion
-    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Up to 0.16.0 (`memoryBitCastVersion`) three more
+    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Up to 0.16.0 (`BitCast.memory`) three more
     -- casts have explicit rules (`ZigLean/Mem/Repr.lean`): `?*T` → `*U` unwraps and requires
     -- non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` gives 0 for null (`Zig.optPtrAddr`), and
     -- `usize` → `?*T` gives null for 0 (`Zig.optPtrFromAddr`). Any other bitcast to or from an
@@ -1270,7 +1267,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
       let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
-      let memCast := memoryBitCastVersion cx.zigVersion
+      let memCast := cx.bitCast == some .memory
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
       -- A nullable pointer is never optional, so at most one side is the optional pointer.
       if (isOptPtr ty && nullable aty) || (isOptPtr aty && nullable ty) then
@@ -1288,7 +1285,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- `Zig.PackedU`; 0.16.0 builds a packed union from its field this way). Up to 0.16.0 an
       -- array, `extern` struct or `extern` union is a representation cast (`Zig.reprCast`):
       -- encode, then decode the other type from the same bytes, padding bytes undefined.
-      if reprCastApplies cx.zigVersion cx.types aty ty then
+      if cx.bitCast.any (reprCastApplies · cx.types aty ty) then
         let side (t : TyId) : Bool := match cx.types[t]? with
           | some (.int ..) | some (.float _) | some .bool | some (.struct _ "packed" _) => true
           | _ => reprAggregate cx.types t
@@ -1986,18 +1983,13 @@ private partial def llvmPayloadOffsetScan (f : Func) (id off fuel : Nat) : Optio
   | .union .. => llvmPayloadTypeScan f id remaining
   | _ => return (remaining, false)
 
-/-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
-instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`
-(observed in 0.16.0). -/
-def euPayloadMisplacedBackends : List String := ["stage2_llvm", "stage2_wasm"]
-
 /-- Fail closed for the misplaced `eu_payload` constants of the LLVM and wasm backends
-(`euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
+(`Dialect.euPayloadMisplacedBackends`): a pointer constant on such a profile cannot address (or end) an
 affected payload of its global. Other backends lower these constants with the payload offset
 that the model uses. -/
 private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) :
     Except String Unit := do
-  unless euPayloadMisplacedBackends.contains f.backend do return
+  unless f.dialect.misplacesEuPayload do return
   let affected : Bool := match llvmPayloadTypeScan f global.ty 1024 with
     | some (_, false) => false
     | _ => ((llvmPayloadOffsetScan f global.ty off 1024).map (·.2)).getD true
@@ -2005,7 +1997,7 @@ private def checkLlvmPayloadConstant (f : Func) (g off : Nat) (global : Global) 
     throw s!"{f.name}: a pointer constant at offset {off} of global {g} may address an \
       alignment-1 error-union payload, which this backend lowers at the error code \
       (codegen/llvm.zig and codegen/wasm/CodeGen.zig lowerPtr eu_payload); such constants are \
-      outside the {f.backend} profile"
+      outside the {f.dialect.backend} profile"
 
 /-- A constant pointer stays within its global or one past its end. -/
 private def checkGlobalOffset (f : Func) (g off : Nat) (global : Global) : Except String Unit := do
@@ -2071,7 +2063,7 @@ private partial def checkGlobalAliasConstants (f : Func) (v : Val) (fuel : Nat :
 included. A profile limit, so it runs with the constant checks, not structural validation. -/
 private partial def checkLlvmPayloadConstants (f : Func) (v : Val) (fuel : Nat := 256) :
     Except String Unit := do
-  unless euPayloadMisplacedBackends.contains f.backend do return
+  unless f.dialect.misplacesEuPayload do return
   if fuel == 0 then throw s!"{f.name}: pointer constant traversal exceeds 256 levels"
   match v with
   | .ptrConst _ g off =>
@@ -2540,7 +2532,7 @@ def checkBodiesEnd (f : Func) : Except String Unit := do
 `--device-contract` (`CheckCtx.device`). -/
 def check (f : Func) (device : Option DeviceContract := none) : Except String Unit := do
   validateTypeGraph f.name f.types
-  if f.bigEndian then checkBigEndian f f.allInsts
+  if f.dialect.bigEndian then checkBigEndian f f.allInsts
   for p in f.params do
     checkTy f.name f.types f.layouts 0 p
     checkBitPtrParam f p
@@ -2608,7 +2600,7 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
                          errBits := f.errorSetBits,
                          instTys := insts.map fun i => (i.id, i.ty), places, tryErrorExits,
                          localRoots, localPaths := localPlacePaths f.types f.layouts insts,
-                         zigVersion := f.zigVersion, device, targetArch := f.targetArch,
+                         bitCast := some f.dialect.bitCast, device, targetArch := f.dialect.arch,
                          sentinelChecked := sentinelCheckedSlices insts }
   checkDispatchScopes cx f.body
   let _ ← checkInsts cx 0 f.body
@@ -3151,8 +3143,8 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
     if sameValue then require (compatibleType f f child v) "futex pointee/value"
   if let some model := stdModel? callee then
     -- A rejected row reports its own reason (`checkProgram`); a modelled one needs a review.
-    if modelledStdFn callee && !model.qualifies f.zigVersion then
-      fail s!"{model.symbol} qualified Zig {", ".intercalate model.zigVersions.toList}; no reviewed std source for Zig {f.zigVersion}"
+    if modelledStdFn callee && !model.qualifies f.dialect.version then
+      fail s!"{model.symbol} qualified Zig {", ".intercalate (model.zigVersions.toList.map toString)}; no reviewed std source for Zig {f.dialect.version}"
   if let some fn := allocFn? callee then
     -- `ZigLean/Mem/Width.lean` parameterizes create/alloc/alignedAlloc/destroy/free.
     if usizeBits != 64 && !(fn == .create || fn == .alloc || fn == .alignedAlloc ||
@@ -3290,7 +3282,7 @@ inductive SpawnSemantics where
 SpawnConfig requesting 1 MiB or the default 16 MiB and a null custom allocator. Other sizes, runtime configs
 and allocator-specific semantics remain outside this model. -/
 private def checkFallibleSpawnCall (f : Func) (kind : ThreadFn) (args : Array Val) : Except String Unit := do
-  unless #["0.14.1", "0.15.2", "0.16.0", "0.17.0"].contains f.zigVersion do
+  unless f.dialect.version.spawnConfigAudited do
     throw s!"{f.name}: fallible spawn requires an audited Zig version"
   if kind == .spawn then
     let some (Val.agg ty fields) := (args[0]? : Option Val)
@@ -3308,8 +3300,9 @@ private def checkFallibleSpawnCall (f : Func) (kind : ThreadFn) (args : Array Va
     let .optNull _ := fields[1]!
       | throw s!"{f.name}: fallible Thread.spawn custom allocators are outside the model"
   else
-    unless f.zigVersion == "0.16.0" || f.zigVersion == "0.17.0" do
-      throw s!"{f.name}: fallible Io.Group requires Zig 0.16.0 or 0.17.0"
+    unless f.dialect.version.ioGroup do
+      throw s!"{f.name}: fallible Io.Group requires Zig \
+        {" or ".intercalate ((ZigVersion.all.filter (·.ioGroup)).reverse.map toString)}"
 
 /-- The first unsupported configuration of every spawn call under the fallible policy. -/
 def fallibleSpawnIssues (funcs : Array Func) : Array ProgramIssue := Id.run do
@@ -3809,9 +3802,9 @@ def collectFunctionChecksDetailed (file : String) (f : Func) (initial : Diagnost
     places
     localRoots
     localPaths := localPlacePaths f.types f.layouts insts
-    zigVersion := f.zigVersion
+    bitCast := some f.dialect.bitCast
     device
-    targetArch := f.targetArch
+    targetArch := f.dialect.arch
     sentinelChecked := sentinelCheckedSlices insts }
   return { index, structureValid := true, log := (collectInstChecks file f cx f.body 0 log).2 }
 

@@ -22,6 +22,10 @@ private def threadFns : Array ThreadFn :=
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
     .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
+/-- `f` as a function of Zig `version`. -/
+private def atVersion (version : ZigVersion) (f : Func) : Func :=
+  { f with dialect := { f.dialect with version } }
+
 /-- A call of `callee` with the single `u8` argument of `f`, returning `u8`. -/
 private def caller (f : Func) (name callee : String) : Func :=
   { f with name, body := #[{id := 0, ty := 0, op := .arg 0},
@@ -49,9 +53,9 @@ def main : IO Unit := do
       require (m.reviewed.all fun r => r.sha256.length == 64 && !r.file.isEmpty) s!"{m.symbol}: malformed std review"
     -- A Zig version qualifies exactly when the row has a reviewed std source for it (the 0.17.0
     -- audit, docs/std-models.md); an unreviewed release is never qualified.
-    require (m.qualifies "0.17.0" == m.reviewed.any (·.zigVersion == "0.17.0"))
-      s!"{m.symbol}: 0.17.0 qualification without its reviewed std source"
-    require (!m.qualifies "0.18.0") s!"{m.symbol}: qualified for unreviewed Zig 0.18.0"
+    for v in ZigVersion.all do
+      require (m.qualifies v == m.reviewed.any (·.zigVersion == v))
+        s!"{m.symbol}: {v} qualification without its reviewed std source"
     -- The typed projections agree with the row, including anonymous instances.
     for name in #[m.symbol, m.symbol ++ "__anon_7"] do
       require ((stdModel? name).map (·.symbol) == some m.symbol) s!"{name}: lookup"
@@ -78,7 +82,7 @@ def main : IO Unit := do
   require ((rejectedThreadFn? "Io.Select(union).async__anon_9").isSome) "Select rejection"
   require ((rejectedThreadFn? "Io.concurrent__anon_3").isSome) "Io.concurrent rejection"
   require ((stdModel? "Io.Futurex(u32).await").isNone) "generic prefix is exact"
-  require ((stdModel? "Io.async").map (·.zigVersions) == some #["0.16.0"]) "futures are 0.16.0 only"
+  require ((stdModel? "Io.async").map (·.zigVersions) == some #[.v0_16_0]) "futures are 0.16.0 only"
 
   let raw ← get <| Raw.parseFile (← IO.FS.readFile "tests/roadmap/models/client.json")
   let f ← get <| normalize raw
@@ -87,42 +91,43 @@ def main : IO Unit := do
     "model callee 'mem.Allocator.create__anon_3' has an incompatible allocator argument signature"
   expectError (checkProgram #[caller f "client" "Thread.join"]) "has an incompatible Thread/void signature"
   -- Version qualification is table data, checked before the typed signature.
-  expectError (checkProgram #[{ caller f "client" "mem.Allocator.allocSentinel__anon_1" with zigVersion := "0.15.2" }])
+  expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "mem.Allocator.allocSentinel__anon_1")])
     "mem.Allocator.allocSentinel qualified Zig 0.16.0"
   -- A row qualifies exactly its reviewed versions: a newer Zig is listed per row.
-  let qualifies (symbol version : String) : Bool := ((stdModel? symbol).map (·.qualifies version)).getD false
-  for v in #["0.14.1", "0.15.2", "0.16.0"] do
+  let qualifies (symbol : String) (version : ZigVersion) : Bool :=
+    ((stdModel? symbol).map (·.qualifies version)).getD false
+  for v in [ZigVersion.v0_14_1, .v0_15_2, .v0_16_0] do
     require (qualifies "mem.Allocator.dupe" v) s!"{v}: base qualification"
   -- `std.Thread.Futex` is removed in 0.16.0: reviewed for 0.14.1 and 0.15.2 only.
-  for v in #["0.14.1", "0.15.2"] do
+  for v in [ZigVersion.v0_14_1, .v0_15_2] do
     require (qualifies "Thread.Futex.wait" v) s!"{v}: Thread.Futex qualification"
-  require (!qualifies "Thread.Futex.wait" "0.16.0") "Thread.Futex.wait: not qualified for 0.16.0"
+  require (!qualifies "Thread.Futex.wait" .v0_16_0) "Thread.Futex.wait: not qualified for 0.16.0"
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
-    require (qualifies symbol "0.17.0") s!"{symbol}: audited for 0.17.0"
+    require (qualifies symbol .v0_17_0) s!"{symbol}: audited for 0.17.0"
   for symbol in #["Thread.Futex.wait", "time.Timer.read"] do
-    require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
+    require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
   -- A rejection row qualifies no version; it is rejected in every version.
-  require (!qualifies "Io.futexWaitTimeout" "0.17.0" && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
+  require (!qualifies "Io.futexWaitTimeout" .v0_17_0 && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
     "a rejection holds in every version"
   -- C07 detach and the C08 future API are audited for 0.16.0 only.
   for symbol in #["Thread.detach", "Io.async", "Io.checkCancel"] do
-    require (!qualifies symbol "0.17.0") s!"{symbol}: not qualified for 0.17.0"
-  expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.17.0" }])
+    require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
+  expectError (checkProgram #[atVersion .v0_17_0 (caller f "client" "Thread.Futex.wait")])
     "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2"
-  expectError (checkProgram #[{ caller f "client" "mem.Allocator.realloc__anon_1" with zigVersion := "0.15.2" }])
+  expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "mem.Allocator.realloc__anon_1")])
     "mem.Allocator.realloc qualified Zig 0.16.0"
-  expectError (checkProgram #[{ caller f "client" "Thread.detach" with zigVersion := "0.15.2" }])
+  expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "Thread.detach")])
     "Thread.detach qualified Zig 0.16.0"
   expectError (checkProgram #[caller f "client" "Thread.detach"]) "has an incompatible Thread/void signature"
-  expectError (checkProgram #[{ caller f "client" "Io.Future(u8).await" with zigVersion := "0.15.2" }])
+  expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "Io.Future(u8).await")])
     "Io.Future.await qualified Zig 0.16.0"
   expectError (checkProgram #[caller f "client" "Io.concurrent__anon_1"])
     "Io.concurrent is not a qualified async API"
   -- An empty review list qualifies nothing (it never means "every audited version").
-  require (!({ symbol := "mem.Allocator.create", kind := .alloc .create } : StdModel).qualifies "0.16.0")
+  require (!({ symbol := "mem.Allocator.create", kind := .alloc .create } : StdModel).qualifies .v0_16_0)
     "empty review list qualified a version"
-  expectError (checkProgram #[{ caller f "client" "Thread.Futex.wait" with zigVersion := "0.16.0" }])
+  expectError (checkProgram #[atVersion .v0_16_0 (caller f "client" "Thread.Futex.wait")])
     "no reviewed std source for Zig 0.16.0"
   expectError (checkProgram #[caller f "client" "Thread.spinLoopHint"]) "is not a std declaration"
   -- A translated function cannot reuse a built-in std model name.

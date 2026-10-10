@@ -376,7 +376,7 @@ def checkDependencies (models : Array ModelBinding) : Except String Unit := do
       | some std =>
         if let .rejected reason := std.kind then
           throw s!"model '{m.symbol}': semantic dependency '{d}' is outside the subset: {reason}"
-        unless std.qualifies m.profile.zigVersion do
+        unless (ZigVersion.ofString? m.profile.zigVersion).any std.qualifies do
           throw s!"model '{m.symbol}': semantic dependency '{d}' is not qualified for Zig {m.profile.zigVersion}"
       | none =>
         unless identifier d do
@@ -405,7 +405,7 @@ def check (models : Array ModelBinding) (profile : BuildProfile) (funcs : Array 
   if models.isEmpty then return
   unless profile.pointerBits == 64 do
     throw "model registry: external models are qualified for the 64-bit pointer model only"
-  unless funcs.all (·.zigVersion == profile.zigVersion) do
+  unless funcs.all (·.dialect.version.toString == profile.zigVersion) do
     throw "model registry: function Zig version differs from checked profile"
   let completedShapes ← funcs.mapM fun f => preflightShapes f.types f.layouts
   let calls := callIndex funcs

@@ -8,7 +8,7 @@ private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)
 
 private def fixture (name : String) (op : Op) (ret : TyId := 0) : Func :=
-  { zigVersion := "0.16.0", name, params := #[], ret,
+  { dialect := .ofVersion .v0_16_0, name, params := #[], ret,
     types := #[.void, .errorSet (some #["SystemCannotYield"]), .errorUnion 1 0,
       .noreturn, .int false 8, .errorSet (some #["Other"]), .errorUnion 5 0],
     layouts := Array.replicate 7 {}, globals := #[],
@@ -26,12 +26,13 @@ private def rejected (f : Func) (part : String) : IO Unit := do
 
 def main (args : List String) : IO Unit := do
   let output := args.headD "/tmp/air2lean-progress-pipeline.lean"
-  for version in supportedVersions do
-    let spin := { (fixture "spin" (.asm "pause" true #[] #[] #[])) with zigVersion := version }
+  for version in ZigVersion.all do
+    let spin := { (fixture "spin" (.asm "pause" true #[] #[] #[])) with dialect := .ofVersion version }
     -- `isb` is the aarch64 spin hint only (Air2Lean/AsmAllowlist.lean).
     let arm := { (fixture "armSpin" (.asm "isb" true #[] #[] #[])) with
-      zigVersion := version, targetArch := "aarch64" }
-    let yielding := { (fixture "yielding" (.call (.func "Thread.yield" false none) #[]) 2) with zigVersion := version }
+      dialect := { version, arch := "aarch64" } }
+    let yielding := { (fixture "yielding" (.call (.func "Thread.yield" false none) #[]) 2) with
+      dialect := .ofVersion version }
     accepted spin
     accepted arm
     accepted yielding
@@ -56,8 +57,8 @@ def main (args : List String) : IO Unit := do
     fixture "yielding" (.call (.func "Thread.yield" false none) #[]) 2]
   IO.FS.writeFile output (emit fs "ProgressPipeline" "" .ieee)
   if let some directory := (args.drop 1).head? then
-    for version in supportedVersions do
-      let versioned := fs.map fun f => { f with zigVersion := version }
+    for version in ZigVersion.all do
+      let versioned := fs.map fun f => { f with dialect := .ofVersion version }
       IO.FS.writeFile (System.FilePath.mk directory / s!"ProgressPipeline-{version}.lean")
         (emit versioned "ProgressPipeline" "" .ieee)
   IO.println "Progress pipeline regressions passed"

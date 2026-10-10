@@ -23,7 +23,7 @@ Every schema-12 function has a mandatory `profile` object:
 
 | Field | Accepted value or meaning |
 | --- | --- |
-| `name` | `"abi64-le-v1"` (the exporter's profile name for every target, also a 32-bit one; the translator names a big-endian profile `"abi64-be-v1"`) |
+| `name` | The model profile of the byte order: `"abi64-le-v1"` for a little-endian target (also a 32-bit one), `"abi64-be-v1"` for a big-endian one; the exporter writes it and a name that differs from `endian`'s is rejected |
 | `target_triple` | Zig's `arch-os-abi` triple; currently restricted to `x86_64-linux-<abi>`, `aarch64-macos-<abi>`, `s390x-linux-<abi>`, `wasm32-freestanding-<abi>` and `wasm32-wasi-<abi>` (OS and ABI version suffixes are retained) |
 | `pointer_bits` | `64` for x86_64/aarch64/s390x, `32` for wasm32; any other width, or a width that differs from the triple's, is rejected |
 | `endian` | The triple's byte order: `"little"` for x86_64/aarch64/wasm32, `"big"` for s390x; any other value or a mismatch is rejected |
