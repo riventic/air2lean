@@ -140,10 +140,7 @@ theorem alignUp_eq_sub {A K : Nat} (hK : 0 < K) : alignUp A K = (A + K - 1) - (A
 
 theorem alignUp_bounds {A K : Nat} (hK : 0 < K) : A ≤ alignUp A K ∧ alignUp A K < A + K := by
   have := alignUp_eq_sub (A := A) hK
-  have := Nat.mod_lt (A + K - 1) hK
-  have h3 : (A + K - 1) % K ≤ K - 1 := by omega
-  -- A ≤ (A+K-1) - r  since r ≡ (A+K-1) and the result is a multiple of K ≥ A
-  refine ⟨le_alignUp A K, by omega⟩
+  exact ⟨le_alignUp A K, by omega⟩
 
 theorem rem_one (x : BitVec 64) : Zig.rem false x 1 = pure 0 := by
   simp [Zig.rem]
@@ -185,6 +182,11 @@ theorem align_sub {k A : Nat} (hk : k < 64) (hfit : A + 2 ^ k ≤ 2 ^ 64) :
     Nat.mod_eq_of_lt (by have := (alignUp_bounds (A := A) hpos).2; unfold drop; omega)]
   rfl
 
+theorem mapping_owns {p : Ptr} {b : BlockId} {A lo : Nat} {bs : Array Byte} (hb : p.block = some b) :
+    ∀ h, mapping P p A lo bs h → OwnsIn b A h := fun h hm => by
+  obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hm
+  rw [hb] at hb'; cases hb'; exact ho
+
 /-- `std.mem.alignPointerOffset` of a page-aligned mapping start to `2 ^ k > 4096`: no overflow
 (the mapping ends in the address space), the offset `drop A (2 ^ k)`. -/
 theorem alignPointerOffset_big {k : Nat} (hk : k < 64) (hk12 : 12 < k) {p : Ptr} {A : Nat}
@@ -199,13 +201,10 @@ theorem alignPointerOffset_big {k : Nat} (hk : k < 64) (hk12 : 12 < k) {p : Ptr}
   gen_norm
   rw [debug_assert_true, le_big hk hk12]
   gen_norm
-  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b ∧ ∀ h, mapping P p A 0 bs h → OwnsIn b A h)
-    (fun h hp => ?_) fun ⟨b, hb, hown⟩ => ?_
-  · obtain ⟨b, hb, -⟩ := PageSpec.mapping_block hp
-    exact ⟨b, hb, fun h' hp' => by
-      obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hp'
-      rw [hb] at hb'; cases hb'; exact ho⟩
-  refine TotalTriple.bind (ptrAddr_owned hb hown) fun x => TotalTriple.lift fun hx => ?_
+  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b)
+    (fun h hp => let ⟨b, hb, _⟩ := PageSpec.mapping_block hp; ⟨b, hb⟩) fun ⟨b, hb⟩ => ?_
+  refine TotalTriple.bind (ptrAddr_owned hb (mapping_owns hb)) fun x =>
+    TotalTriple.lift fun hx => ?_
   subst hx
   rw [h0, sub_pow_one hk]
   gen_norm
@@ -261,13 +260,9 @@ theorem alignPointer_gen {p : Ptr} {A : Nat} {bs : Array Byte} {k : Nat} (hk : k
   have he : p.elem 1 (BitVec.ofNat 64 (drop A (2 ^ k))) = p.add (drop A (2 ^ k)) := by
     simp [Ptr.elem, Nat.mod_eq_of_lt hdl]
   simp only [Option.elim_some, he]
-  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b ∧ ∀ h, mapping P p A 0 bs h → OwnsIn b A h)
-    (fun h hp => ?_) fun ⟨b, hb', hown⟩ => ?_
-  · obtain ⟨b, hb', -⟩ := PageSpec.mapping_block hp
-    exact ⟨b, hb', fun h' hp' => by
-      obtain ⟨b', hb'', ho⟩ := PageSpec.mapping_block hp'
-      rw [hb'] at hb''; cases hb''; exact ho⟩
-  refine TotalTriple.bind (ptrAddr_owned (q := p.add (drop A (2 ^ k))) hb' hown) fun x =>
+  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b)
+    (fun h hp => let ⟨b, hb, _⟩ := PageSpec.mapping_block hp; ⟨b, hb⟩) fun ⟨b, hb'⟩ => ?_
+  refine TotalTriple.bind (ptrAddr_owned (q := p.add (drop A (2 ^ k))) hb' (mapping_owns hb')) fun x =>
     TotalTriple.lift fun hx => ?_
   subst hx
   have hP : (A + drop A (2 ^ k)) % 4096 = 0 :=
@@ -333,6 +328,13 @@ theorem subSat_pow {k : Nat} (hk : k < 64) :
     simp only [show (4096 : BitVec 64).toNat = 4096 from rfl]; omega
   rw [e]; show _ = (2 ^ k - 4096) % 2 ^ 64; omega
 
+/-- The extra bytes `2 ^ k -| P` are a page multiple. -/
+theorem extra_mod (k : Nat) : (2 ^ k - P) % P = 0 := by
+  show (2 ^ k - 4096) % 4096 = 0
+  by_cases hk12 : k ≤ 12
+  · have := two_pow_le hk12; rw [show 2 ^ k - 4096 = 0 by omega]
+  · have := Nat.mod_eq_zero_of_dvd (Nat.pow_dvd_pow 2 (by omega : 12 ≤ k)); omega
+
 /-- The page check of the derived hint address passes for a page-aligned hint. -/
 theorem hint_check {v L G m : BitVec 64} (hv : v &&& 4095 = 0) (hL : L &&& 4095 = 0)
     (hG : G &&& 4095 = 0) : Zig.subWrap (Zig.subWrap v L &&& ~~~m) G &&& 4095 = 0 :=
@@ -358,11 +360,6 @@ theorem drop_facts {A k : Nat} (hA : A % P = 0) :
       (Nat.dvd_of_mod_eq_zero (by simpa using hA)))
   · obtain ⟨h1, h2, h3⟩ := drop_bounds (k := k) (by omega) hA
     exact ⟨h1, by omega, h3⟩
-
-theorem mapping_owns {p : Ptr} {b : BlockId} {A lo : Nat} {bs : Array Byte} (hb : p.block = some b) :
-    ∀ h, mapping P p A lo bs h → OwnsIn b A h := fun h hm => by
-  obtain ⟨b', hb', ho⟩ := PageSpec.mapping_block hm
-  rw [hb] at hb'; cases hb'; exact ho
 
 theorem addr_diff {p : Ptr} {A d : Nat} (h0 : p.off = 0) :
     Zig.subWrap (BitVec.ofInt 64 ((A : Int) + (p.add d).off)) (BitVec.ofInt 64 ((A : Int) + p.off)) =
@@ -518,7 +515,7 @@ theorem hintKn_some {b : BlockId} {A : Nat} {h : Ptr} {r : Res}
     HintKn (some h) r := by
   unfold HintKn FAssn.ex; exact ⟨b, A, hr⟩
 
-/-- The page allocator's invariant for every entry: alignments up to a page. -/
+/-- The page allocator's invariant for every entry, for every alignment. -/
 def ainv : FAllocInv := inv own
 
 theorem hintKn_heap (e : Option Ptr) (r : Res) (h : HintKn e r) : r.heap = FHeap.empty := by
@@ -605,12 +602,7 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
     have hL4 : BitVec.ofNat 64 (alignUp len.toNat P) &&& 4095 = 0 := by
       rw [and4095, hL]; exact hLm
     have hG4 : BitVec.ofNat 64 (2 ^ k - P) &&& 4095 = 0 := by
-      rw [and4095, hG]
-      by_cases hk12 : k ≤ 12
-      · rw [show 2 ^ k - P = 0 by have := two_pow_le hk12; show 2 ^ k - 4096 = 0; omega]
-      · have : 2 ^ 12 ∣ 2 ^ k := Nat.pow_dvd_pow 2 (by omega)
-        have := Nat.mod_eq_zero_of_dvd this
-        show (2 ^ k - 4096) % 4096 = 0; omega
+      rw [and4095, hG]; exact extra_mod k
     have hc := hint_check (m := BitVec.ofNat 64 (2 ^ k) - 1) hv hL4 hG4
     simp only [hc, ↓reduceIte]
     refine CTriple.bind (CTriple.liftMem (optPtrFromAddr_frame _)) fun x => ?_
@@ -642,13 +634,9 @@ theorem alloc_ct (c : Ptr) (len : BitVec 64) (k : Nat) (ra : BitVec 64) (hlen : 
       refine CTriple.ex fun A => CTriple.lift fun ⟨hso, hsl, hAb⟩ => ?_
       rw [hM] at hAb ⊢
       have hMm : (alignUp len.toNat P + (2 ^ k - P)) % P = 0 := by
-        by_cases hk12 : k ≤ 12
-        · rw [show 2 ^ k - P = 0 by have := two_pow_le hk12; show 2 ^ k - 4096 = 0; omega]
-          simpa using hLm
-        · have : 2 ^ 12 ∣ 2 ^ k := Nat.pow_dvd_pow 2 (by omega)
-          have := Nat.mod_eq_zero_of_dvd this
-          have hLm' : alignUp len.toNat P % 4096 = 0 := hLm
-          show (alignUp len.toNat P + (2 ^ k - 4096)) % 4096 = 0; omega
+        have h1 : (2 ^ k - 4096) % 4096 = 0 := extra_mod k
+        have h2 : alignUp len.toNat P % 4096 = 0 := hLm
+        show (alignUp len.toNat P + (2 ^ k - 4096)) % 4096 = 0; omega
       rw [P_eq, alignUp_of_mod (by decide) hMm] at hAb
       have hAb' : A + (alignUp len.toNat P + (2 ^ k - P)) ≤ 2 ^ 47 := hAb
       refine CTriple.of_pure (φ := ∃ b, s.ptr.block = some b ∧ A % P = 0) (fun r hr => by

@@ -726,7 +726,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   exactly `length` zero bytes at a page-aligned address above every earlier block. A mapping
   that would end above the target's user address space (`Os.Target.addrLimit`: `2^47` on
   x86_64-linux, at least `TASK_SIZE_MAX`; `MACH_VM_MAX_ADDRESS = 0x7FFFFE000000` on
-  aarch64-macos) fails with `error.OutOfMemory`, as the kernel's does. The
+  aarch64-macos) fails with `error.OutOfMemory`, as the kernel's does; assumed: no hint above
+  `addrLimit` (5-level-paging Linux maps there for one), and a run never exhausts the fresh
+  addresses below it (the kernel would reuse unmapped ranges). The
   kernel fails such a mapping only with `ENOMEM` (no other `MMapError` member). Other argument
   combinations are outside the model (`.unspecified`); `length = 0` is `.illegal`. `munmap` of
   the whole live range of one mapping ends it, of a page-aligned prefix moves its first live

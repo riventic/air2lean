@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-3245 theorems in 184 files.
+3246 theorems in 184 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -54,7 +54,7 @@ premise was derived. This index covers the committed generated modules.
 | [SEM-06](premises.md#sem-06) | 44 | Canonical AIR fragment semantics |
 | [EXT-01](premises.md#ext-01) | 30 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 0 | Assumed contracts and project axioms |
-| [TRU-01](premises.md#tru-01) | 3245 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 3246 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1498 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1498 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 84 | Reviewed opaque, extern and runtime-redirection policy |
@@ -2528,6 +2528,7 @@ File premises: ALC-01, ALC-03, ALC-05, THR-01, THR-02, THR-08, ORD-01, ORD-02, O
 | `AllocTranslated.PageAlloc.divTrunc_one` | SEM-01, TRU-01 |
 | `AllocTranslated.PageAlloc.align_add` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `AllocTranslated.PageAlloc.align_sub` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageAlloc.mapping_owns` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
 | `AllocTranslated.PageAlloc.alignPointerOffset_big` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
 | `AllocTranslated.PageAlloc.drop_bounds` | SEM-01, SEM-02, TRU-01, OSM-01 |
 | `AllocTranslated.PageAlloc.drop_small` | SEM-01, SEM-02, TRU-01, OSM-01 |
@@ -2538,10 +2539,10 @@ File premises: ALC-01, ALC-03, ALC-05, THR-01, THR-02, THR-08, ORD-01, ORD-02, O
 | `AllocTranslated.PageAlloc.addr64_total` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `AllocTranslated.PageAlloc.tame_addr64` | SEM-01, SEM-02, SEM-03, TRU-01 |
 | `AllocTranslated.PageAlloc.subSat_pow` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
+| `AllocTranslated.PageAlloc.extra_mod` | TRU-01 |
 | `AllocTranslated.PageAlloc.hint_check` | SEM-01, TRU-01 |
 | `AllocTranslated.PageAlloc.tame_alignPointer` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01 |
 | `AllocTranslated.PageAlloc.drop_facts` | SEM-01, SEM-02, TRU-01, OSM-01 |
-| `AllocTranslated.PageAlloc.mapping_owns` | SEM-01, SEM-02, SEM-03, SEM-04, TRU-01, OSM-01 |
 | `AllocTranslated.PageAlloc.addr_diff` | SEM-01, SEM-02, TRU-01 |
 | `AllocTranslated.PageAlloc.divExact_one` | SEM-01, TRU-01 |
 | `AllocTranslated.PageAlloc.sub_ofNat` | SEM-01, TRU-01 |

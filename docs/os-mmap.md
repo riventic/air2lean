@@ -28,13 +28,15 @@ encodings:
 | `Os.Target.linux` (x86_64-linux) | 4096 | `2^47` | `3` | `0x22` | yes |
 | `Os.Target.macos` (aarch64-macos) | 16384 | `0x7FFFFE000000` | `3` | `0x1002` | no (`posix.MREMAP == void`) |
 
-`addrLimit` is at least the kernel's own bound, so every mapping the kernel makes is one the
-model can make. On x86_64-linux user space ends at `TASK_SIZE_MAX`, a page below `2^47`
-(4-level paging; with 5-level paging the kernel maps above 47 bits only for a hint there, and
+`addrLimit` is at least the kernel's own bound for a call without a hint above it (the premise
+assumes no such hint), so every such mapping the kernel makes is one the model can make. On
+x86_64-linux user space ends at `TASK_SIZE_MAX`, a page below `2^47` (4-level paging; with 5-level paging the kernel maps above 47 bits only for a hint there, and
 the hint is ignored here). On aarch64-macos it ends at `MACH_VM_MAX_ADDRESS`
 (`0x00007FFFFE000000`, 128 TiB - 32 MiB, `mach/arm/vm_param.h` of the macOS SDK). Both are far
 below `2^64 - 2^63`, so adding any alignment `2^k - 1` (`k < 64`) to an address inside a mapping
-does not overflow.
+does not overflow. Addresses are fresh (below), so the bound also makes the model's address
+space finite: after about `addrLimit / (2 * page)` mappings every further one fails, where the
+kernel would reuse unmapped ranges. The premise assumes a run never gets there.
 
 `Os.noFd` is `-1`, `Os.mremapMayMove` is `MREMAP{ .MAYMOVE = true }` (`1`).
 

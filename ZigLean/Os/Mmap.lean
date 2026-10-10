@@ -64,7 +64,9 @@ undefined (the kernel keeps the stale tail of the last page), the rest are zero.
 **Address space.** No mapping ends above `Os.Target.addrLimit`: `2 ^ 47` on `x86_64-linux`
 (4-level paging; with 5-level paging Linux still maps above 47 bits only for a hint there), and
 `MACH_VM_MAX_ADDRESS` on `aarch64-macos` (`0x7FFFFE000000`, `mach/arm/vm_param.h`). Each is at
-least the kernel's own bound, so every mapping the kernel makes is one the model can make.
+least the kernel's own bound for a call without a hint above it; the premise assumes no such
+hint. Addresses are fresh, so the bound also makes the model's address space finite: the premise
+assumes a run never exhausts it (the kernel would reuse unmapped ranges instead of failing).
 -/
 
 namespace Zig

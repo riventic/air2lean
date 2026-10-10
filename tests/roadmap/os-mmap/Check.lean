@@ -172,6 +172,11 @@ def remap (s : Slice) (n : Nat) (flags : BitVec 32 := mremapMayMove) : MemM (Exc
   let m0 : Mem := { allocPolicy := { fails := fun i _ => i == 1 } }
   let c := do let s ← mapOk 4096; remap s 8192
   value c m0 == .error "OutOfMemory" && ((final c m0).blocks[0]!).bytes.size == 4096
+-- A growth in place that ends exactly at `addrLimit` succeeds.
+#guard
+  let m0 : Mem := { nextAddr := 2 ^ 47 - 8192 }
+  let c := do let s ← mapOk 4096; remap s 8192 0
+  tag (run c m0) == "ok" && ((final c m0).blocks[0]!).bytes.size == 8192
 -- A growth or move past `addrLimit`: `error.OutOfMemory`, the mapping unchanged.
 #guard
   let m0 : Mem := { nextAddr := 2 ^ 47 - 4096 }
