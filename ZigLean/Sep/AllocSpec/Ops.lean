@@ -80,29 +80,78 @@ theorem checkAlign_owned {P : Assn} {q : Ptr} {b : BlockId} {A al : Nat} (hqb : 
   rw [if_neg (by simp [hal])]
   exact TotalTriple.ret (Q := fun _ => P) ()
 
-/-- `h` owns a cell of block `b`, whose bytes number `S`. -/
-def OwnsSz (b : BlockId) (S : Nat) (h : Heap) : Prop :=
-  ∃ o c, h (b, o) = some c ∧ c.size = S
+/-- `h` owns the cell at offset `j` of block `b`. -/
+def OwnsAt (b : BlockId) (j : Nat) (h : Heap) : Prop := ∃ c, h (b, j) = some c
 
-theorem OwnsSz.block {m : Mem} {b : BlockId} {S : Nat} {h hF : Heap} (ho : OwnsSz b S h)
-    (hm : m.heap = h ∪ hF) : ∃ blk, m.blocks[b]? = some blk ∧ blk.bytes.size = S := by
-  obtain ⟨o, c, hc, hS⟩ := ho
-  have : m.heap (b, o) = some c := by rw [hm]; simp [hc]
-  obtain ⟨blk, hblk, -, ho, hcb⟩ := Mem.heap_some this
-  subst hcb
-  exact ⟨blk, hblk, hS⟩
+/-- A nonempty `bytesAt` owns the cell of its last byte. -/
+theorem bytesAt_ownsAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {h : Heap}
+    (hb : bytesAt p A S K bs h) (hpos : 0 < bs.size) :
+    ∃ b, p.block = some b ∧ 0 ≤ p.off ∧ OwnsAt b (p.off.toNat + (bs.size - 1)) h := by
+  obtain ⟨b, hpb, h0, hl⟩ := hb
+  refine ⟨b, hpb, h0, ⟨bs[bs.size - 1]!, A, S, K⟩, ?_⟩
+  rw [hl]; simp only [true_and]; rw [if_pos ⟨by omega, by omega⟩]; congr 3; omega
 
-/-- Pointer formation (`ptrProject`, MM-3) of a byte offset that stays in `[0, S]` of a block of
-which the precondition owns a cell: the offset pointer, no effect. -/
-theorem ptrProject_owned {P : Assn} {q : Ptr} {b : BlockId} {S : Nat} {k : Int}
-    (hqb : q.block = some b) (hown : ∀ h, P h → OwnsSz b S h) (h0 : 0 ≤ q.off) (h1 : q.off ≤ S)
-    (h2 : 0 ≤ q.off + k) (h3 : q.off + k ≤ S) :
+theorem OwnsAt.union_left {b : BlockId} {j : Nat} {h₁ h₂ : Heap} (h : OwnsAt b j h₁) :
+    OwnsAt b j (h₁ ∪ h₂) := by
+  obtain ⟨c, hc⟩ := h; exact ⟨c, by simp [hc]⟩
+
+theorem OwnsAt.union_right {b : BlockId} {j : Nat} {h₁ h₂ : Heap} (h : OwnsAt b j h₂)
+    (hd : Heap.Disjoint h₁ h₂) : OwnsAt b j (h₁ ∪ h₂) := by
+  rw [Heap.union_comm hd]; exact h.union_left
+
+/-- Pointer formation (`ptrProject`, MM-3) of a byte offset `k ≥ 0` from `q`, when the
+precondition owns a cell of `q`'s block at an offset at or past `q.off + k - 1`: the block reaches
+`q + k`, so both are in bounds and the offset pointer is formed, with no effect. -/
+theorem ptrProject_ownsAt {P : Assn} {q : Ptr} {b : BlockId} {j : Nat} {k : Int}
+    (hqb : q.block = some b) (h0 : 0 ≤ q.off) (hk : 0 ≤ k) (hj : q.off + k ≤ (j : Int) + 1)
+    (hown : ∀ h, P h → OwnsAt b j h) :
     TotalTriple P (ptrProject q (·.add k)) (fun r => ⌜r = q.add k⌝ ∗ P) := by
   intro m hP hF hd hm hp hst
-  obtain ⟨blk, hblk, hS⟩ := (hown hP hp).block hm
+  obtain ⟨c, hc⟩ := hown hP hp
+  have : m.heap (b, j) = some c := by rw [hm]; simp [hc]
+  obtain ⟨blk, hblk, -, hjs, -⟩ := Mem.heap_some this
   refine ⟨_, m, hP, ptrProject_add_run (inBounds_of hqb hblk h0 (by omega))
     (inBounds_of (p := q.add k) hqb hblk (by simp [Ptr.add]; omega) (by simp [Ptr.add]; omega)),
     hd, hm, sep_lift.mpr ⟨rfl, hp⟩, hst⟩
+
+/-- `ptrProject_ownsAt` for an item pointer `q.elem size i`. -/
+theorem ptrProject_elem_ownsAt {P : Assn} {q : Ptr} {b : BlockId} {j size : Nat} {i : BitVec 64}
+    (hqb : q.block = some b) (h0 : 0 ≤ q.off) (hj : q.off + ((size * i.toNat : Nat) : Int) ≤ (j : Int) + 1)
+    (hown : ∀ h, P h → OwnsAt b j h) :
+    TotalTriple P (ptrProject q (·.elem size i)) (fun r => ⌜r = q.elem size i⌝ ∗ P) := by
+  have e : (fun x : Ptr => x.elem size i) = (·.add ((size * i.toNat : Nat) : Int)) := by
+    funext x; exact Ptr.elem_eq x size i
+  rw [e, Ptr.elem_eq]
+  exact ptrProject_ownsAt hqb h0 (by omega) hj hown
+
+/-- The model's bounds check of a slicing that is in bounds: no effect. -/
+theorem checkSliceEnd_ok {srcLen start len : BitVec 64} {extra : Nat}
+    (h : start.toNat + len.toNat + extra ≤ srcLen.toNat) : checkSliceEnd srcLen start len extra = pure () := by
+  simp [checkSliceEnd, h]
+
+theorem checkSentinelIndex_ok {s : Slice} {i : BitVec 64} (h : i.toNat ≤ s.len.toNat) :
+    checkSentinelIndex s i = pure () := by
+  simp [checkSentinelIndex, h]
+
+/-- `@memcpy` with equal counts whose ranges the precondition shows apart is `@memmove`. -/
+theorem TotalTriple.memcpy_of {P : Assn} {Q : Unit → Assn} {size da sa : Nat} {d s : Ptr}
+    {n : BitVec 64}
+    (hsep : ∀ (m : Mem) (h hF : Heap), m.heap = h ∪ hF → P h → d.overlaps s (n.toNat * size) = false)
+    (ht : TotalTriple P (memmove size da sa d s n) Q) : TotalTriple P (memcpy size da sa d s n n) Q := by
+  intro m hP hF hd hm hp hst
+  have := hsep m hP hF hm hp
+  unfold memcpy
+  rw [if_neg (by simp [this])]
+  exact ht m hP hF hd hm hp hst
+
+/-- Two cells of one block in a part of the memory's heap record the block's address. -/
+theorem cell_addr_eq {m : Mem} {h hF : Heap} (hm : m.heap = h ∪ hF) {b : BlockId} {x y : Nat}
+    {c₁ c₂ : Cell} (h₁ : h (b, x) = some c₁) (h₂ : h (b, y) = some c₂) : c₁.addr = c₂.addr := by
+  have e₁ : m.heap (b, x) = some c₁ := by rw [hm]; simp [h₁]
+  have e₂ : m.heap (b, y) = some c₂ := by rw [hm]; simp [h₂]
+  obtain ⟨blk, hb, -, -, rfl⟩ := Mem.heap_some e₁
+  obtain ⟨blk', hb', -, -, rfl⟩ := Mem.heap_some e₂
+  rw [hb] at hb'; cases hb'; rfl
 
 /-- `ptrLe x y` for `x`, `y` in blocks of which the precondition owns cells. -/
 theorem ptrLe_owned {P : Assn} {x y : Ptr} {b₁ b₂ : BlockId} {A₁ A₂ : Nat}
@@ -298,5 +347,17 @@ theorem free_whole {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {R : 
   obtain ⟨m', hrun, hm', hst', -⟩ := free_run hb hm₁ (Heap.disjoint_union_right.mpr ⟨hd₁₂, hd₁F⟩)
     hS h0 hpos hst
   exact ⟨(), m', h₂, hrun, hd₂F, by rw [hm', Heap.empty_union], hr, hst'⟩
+
+/-- `ptrProject_elem_ownsAt` for an item pointer into a nonempty region, at most one past it. -/
+theorem ptrProject_elem_region {p : Ptr} {A S : Nat} {K : BlockKind} {a size : Nat}
+    {bs : Array Byte} {i : BitVec 64} (hpos : 0 < bs.size) (hi : size * i.toNat ≤ bs.size) :
+    TotalTriple (regionIn p A S K a bs) (ptrProject p (·.elem size i))
+      (fun r => ⌜r = p.elem size i⌝ ∗ regionIn p A S K a bs) := by
+  refine TotalTriple.of_pure (φ := ∃ b, p.block = some b ∧ 0 ≤ p.off)
+    (fun h hr => let ⟨b, hb, h0, _⟩ := bytesAt_ownsAt hr.2.2 hpos; ⟨b, hb, h0⟩)
+    fun ⟨b, hb, h0⟩ => ptrProject_elem_ownsAt (j := p.off.toNat + (bs.size - 1)) hb h0
+      (by push_cast; omega) fun h hr => ?_
+  obtain ⟨b', hb', -, ho⟩ := bytesAt_ownsAt hr.2.2 hpos
+  rw [hb] at hb'; cases hb'; exact ho
 
 end Zig
