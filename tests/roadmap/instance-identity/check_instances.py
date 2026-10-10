@@ -24,7 +24,8 @@ import re
 import runpy
 import sys
 
-INSTANCE = re.compile(r"(.*)__anon_([0-9]+)\Z")
+# Zig 0.17.0 names a generic instance `<fn>__func_<n>` (Air2Lean/Air/Anon.lean `funcInstances017`).
+INSTANCE = re.compile(r"(.*)__(?:anon|func)_([0-9]+)\Z")
 KEY = re.compile(r"[0-9a-f]{64}\Z")
 NORMALIZE = runpy.run_path(str(Path(__file__).resolve().parents[3] / "scripts" / "normalize-air.py"))["normalize"]
 
