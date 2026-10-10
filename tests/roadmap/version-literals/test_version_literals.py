@@ -50,6 +50,14 @@ class VersionLiterals(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn('Air2Lean/Extra.lean:2: Zig version literal "0.17.0"', result.stderr)
 
+    def test_literal_inside_interpolation_fails(self):
+        self.write('Air2Lean/Extra.lean',
+                   'def msg (v : String) : String := s!"Zig {", ".intercalate [v]}: \\\n'
+                   '  {if v == "0.17.0" then "new" else "old"}"\n')
+        result = run(self.tmp)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Air2Lean/Extra.lean:2: Zig version literal "0.17.0"', result.stderr)
+
     def test_comments_and_prose_are_not_keys(self):
         self.write('Air2Lean/Extra.lean',
                    '/-! Zig "0.17.0" in a module doc. /- nested "0.16.0" -/ -/\n'

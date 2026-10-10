@@ -20,53 +20,74 @@ REGISTRY = "Air2Lean/Air/Dialect.lean"
 # A literal that is a version (`"0.17.0"`, `"0.17"`): a comparison or a version list. Messages
 # and paths that mention a version (`"… Zig 0.17.0's …"`, `"air/0.16.0/…"`) are prose, not keys.
 VERSION = re.compile(r"\d+\.\d+(\.\d+)?")
-# The registry's spelling of each version: `| v0_17_0 => "0.17.0"`.
 # A character literal that may hold a double quote (`'"'`, `'\\"'`), not a string delimiter.
 CHAR_LITERAL = re.compile(r"'(?:\\.|\")'")
+# The registry's spelling of each version: `| v0_17_0 => "0.17.0"`.
 REGISTRY_ENTRY = re.compile(r'\|\s*\.?v(\d+)_(\d+)_(\d+)\s*=>\s*"(\d+\.\d+\.\d+)"')
 
 
 def string_literals(text):
-    """Yield (line, literal body) of every string literal outside comments. Lean comments are
-    `--` to end of line and nestable `/- … -/` blocks (doc comments included); `s!"…"`
-    interpolations are scanned as part of the literal, which is conservative."""
-    i, line, depth, n = 0, 1, 0, len(text)
-    while i < n:
-        c = text[i]
-        if c == "\n":
-            line += 1
-        if depth:
+    """(line, literal body) of every string literal outside comments, in line order. Lean
+    comments are `--` to end of line and nestable `/- … -/` blocks (doc comments included). The
+    `{…}` interpolations of an `s!`/`m!`/`f!` literal are code: their own literals are listed
+    too, and the outer literal's body keeps only the braces."""
+    n = len(text)
+    found = []
+
+    def code(i, line, interpolation):
+        """Scan code from `i`; inside an interpolation, up to and past its closing brace."""
+        depth = braces = 0
+        while i < n:
+            c = text[i]
+            if depth:
+                if text.startswith("/-", i):
+                    depth, i = depth + 1, i + 2
+                elif text.startswith("-/", i):
+                    depth, i = depth - 1, i + 2
+                else:
+                    line, i = line + (c == "\n"), i + 1
+                continue
             if text.startswith("/-", i):
-                depth, i = depth + 1, i + 2
+                depth, i = 1, i + 2
                 continue
-            if text.startswith("-/", i):
-                depth, i = depth - 1, i + 2
+            if text.startswith("--", i):
+                j = text.find("\n", i)
+                i = n if j < 0 else j
                 continue
-            i += 1
-            continue
-        if text.startswith("/-", i):
-            depth, i = 1, i + 2
-            continue
-        if text.startswith("--", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-            continue
-        char = CHAR_LITERAL.match(text, i)
-        if char:  # '"' or an escaped character such as '\"'
-            i = char.end()
-            continue
-        if c == '"':
-            start, j = line, i + 1
-            while j < n and text[j] != '"':
-                if text[j] == "\\":
-                    j += 1  # the escaped character, possibly a line continuation
-                if j < n and text[j] == "\n":
-                    line += 1
-                j += 1
-            yield start, text[i + 1:j]
-            i = j + 1
-            continue
-        i += 1
+            char = CHAR_LITERAL.match(text, i)
+            if char:  # '"' or an escaped character such as '\"'
+                i = char.end()
+                continue
+            if c == '"':
+                i, line = literal(i + 1, line, text[i - 2:i] in ("s!", "m!", "f!"))
+                continue
+            if interpolation and c == "{":
+                braces += 1
+            elif interpolation and c == "}":
+                if not braces:
+                    return i + 1, line
+                braces -= 1
+            line, i = line + (c == "\n"), i + 1
+        return i, line
+
+    def literal(i, line, interpolated):
+        """Scan a string literal whose opening quote precedes `i`; return past its closing one."""
+        start, body = line, []
+        while i < n and text[i] != '"':
+            if text[i] == "\\":
+                body.append(text[i:i + 2])  # the escaped character, possibly a line continuation
+                line, i = line + (text[i + 1:i + 2] == "\n"), i + 2
+            elif interpolated and text[i] == "{":
+                body.append("{}")
+                i, line = code(i + 1, line, True)
+            else:
+                body.append(text[i])
+                line, i = line + (text[i] == "\n"), i + 1
+        found.append((start, "".join(body)))
+        return i + 1, line
+
+    code(0, 1, False)
+    return sorted(found, key=lambda entry: entry[0])
 
 
 def violations(root):

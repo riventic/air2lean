@@ -83,7 +83,7 @@ def preflight (funcs : Array Func) (profiles : Array BuildProfile) : Except Stri
   let profile ← BuildProfile.checkProgram profiles (some BuildProfile.currentName)
   let version? := ZigVersion.ofString? profile.zigVersion
   require (profile.schema == 12 && version? == some .v0_16_0 &&
-    profile.targetTriple == "x86_64-linux.5.10...6.19-musl" && profile.backend == "stage2_llvm" &&
+    profile.targetTriple == "x86_64-linux.5.10...6.19-musl" && profile.backend == Target.llvmBackend &&
     profile.buildMode == "ReleaseSafe" && profile.cpu == "x86_64" && profile.errorTracing == some false)
     "outside retained source profile"
   let names := funcs.map (·.name)

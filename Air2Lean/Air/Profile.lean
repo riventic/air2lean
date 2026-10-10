@@ -221,7 +221,7 @@ def toJson (p : BuildProfile) : Json :=
     ("error_layout", .str p.errorLayout), ("error_tracing", Lean.toJson p.errorTracing), ("export_stage", .str p.exportStage)]
 
 /-- The (build mode, backend) pairs that `assurance/build-modes.json` qualifies. -/
-def qualifiedBuilds : List (String × String) := [("ReleaseSafe", "stage2_llvm")]
+def qualifiedBuilds : List (String × String) := [("ReleaseSafe", Target.llvmBackend)]
 
 def qualified (p : BuildProfile) : Bool := qualifiedBuilds.contains (p.buildMode, p.backend)
 
@@ -271,11 +271,12 @@ def checkProgram (profiles : Array BuildProfile) (expected : Option String := no
 end BuildProfile
 
 /-- The dialect of a program of Zig `version` (the raw record's parsed `zig_version`,
-`Raw.RawFunc.version?`) under profile `p`: the only reader of its target triple and build mode.
-The target facts are those that `BuildProfile.collect` validated against `Target.qualified`; the
-diagnostics path also inspects a body under the placeholder profile of an invalid one (its
-violations already reported), whose recorded facts are kept as they are. A legacy profile
-(`unverified` triple) has no target architecture: the unverified 64-bit little-endian reference
+`Raw.RawFunc.version?`) under profile `p`. The normalizer, checker and emitter read the target
+and build facts here, not from the profile (admission and the timed preflight read the profile
+itself). The target facts are those that `BuildProfile.collect` validated against
+`Target.qualified`; the diagnostics path also inspects a body under the placeholder profile of an
+invalid one (its violations already reported), whose recorded facts are kept as they are. A legacy
+profile (`unverified` triple) has no target architecture: the unverified 64-bit little-endian reference
 model. -/
 def Dialect.ofProfile (version : ZigVersion) (p : BuildProfile) : Dialect :=
   { version
