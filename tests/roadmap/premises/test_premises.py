@@ -364,8 +364,10 @@ class CompiledTests(unittest.TestCase):
         nodes = [self.node("wrap_spec", "Proofs.Asm.Proofs", "theorem", deps),
                  self.node("Asm.wrap", "Proofs.Asm.Gen", deps=["Asm.airAsm_17", "Zig.Result"]),
                  self.node("Asm.airAsm_17", "Proofs.Asm.Gen", "opaque"),
-                 self.node("Zig.Result", "ZigLean.Basic", deps=["Zig.Inner"]),
+                 self.node("Zig.Result", "ZigLean.Basic", "inductive", deps=["Zig.Inner"]),
                  self.node("Zig.Inner", "ZigLean.Sched"),
+                 self.node("Zig.unfolds", "ZigLean.Basic", deps=["Zig.Inner"]),
+                 self.node("Zig.lemma2", "ZigLean.Basic", "theorem", deps=["Zig.Inner"]),
                  self.node("Zig.now", "ZigLean.Timer"),
                  self.node("Nat.add", "Init.Prelude"),
                  self.node("Zig.lemma", "ZigLean.Basic", "theorem")]
@@ -378,8 +380,14 @@ class CompiledTests(unittest.TestCase):
         self.assertEqual(result["status"], "pass")
         self.assertEqual(result["runtime_theorems_skipped"], 1)
         theorem = result["theorems"][0]
-        # Zig.Result's body reaches ZigLean.Sched, but runtime bodies are not followed.
+        # Zig.Result is a runtime type and Zig.lemma2 a runtime lemma: neither is unfolded, so
+        # ZigLean.Sched behind them is not a premise.
         self.assertEqual(theorem["premises"], ["PRF-01", "ASM-01", "SEM-01", "TRU-01", "TRU-02"])
+        for dep in ("Zig.lemma2", "Zig.unfolds"):
+            with self.subTest(dep=dep):
+                theorem = premises.compiled(self.report(dep), self.fixture.root, self.config, None)["theorems"][0]
+                # A runtime definition's meaning includes the runtime definitions it unfolds to.
+                self.assertEqual("THR-01" in theorem["premises"], dep == "Zig.unfolds")
 
     def test_compiled_unmapped_module_and_axiom(self):
         result = premises.compiled(self.report("Zig.now", ["Fixture.extra"]), self.fixture.root, self.config, None)
@@ -451,6 +459,75 @@ class CompiledTests(unittest.TestCase):
         report["nodes"][1]["dependencies"].append("Missing.decl")
         with self.assertRaises(ValueError):
             premises.compiled(report, self.fixture.root, self.config, None)
+
+
+class KernelIndexTests(unittest.TestCase):
+    """(b): the index resolves dependencies from elaborated constants (CompiledAudits)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.fixture = Fixture(Path(self.temp.name))
+        self.fixture.write()
+        self.root = self.fixture.root
+
+        def node(name, module, kind="definition", deps=()):
+            return {"name": name, "module": module, "kind": kind, "dependencies": list(deps)}
+        # The source resolver reaches Asm.wrap (and its asm opaque) from `wrap_spec`'s text; this
+        # graph says the elaborated proof reaches only Asm.plain (a constructed difference).
+        nodes = [node("wrap_spec", "Proofs.Asm.Proofs", "theorem", ["Asm.plain"]),
+                 node("plain_spec", "Proofs.Asm.Proofs", "theorem", ["Asm.plain"]),
+                 node("pure_fact", "Proofs.Asm.Proofs", "theorem"),
+                 node("via_helper", "Proofs.Asm.Proofs", "theorem", ["plain_spec"]),
+                 node("run_id", "Proofs.Conc.Proofs", "theorem", ["Zig.Sched.run"]),
+                 node("Asm.plain", "Proofs.Asm.Gen", deps=["Zig.add"]),
+                 node("Zig.add", "ZigLean.Basic"), node("Zig.Sched.run", "ZigLean.Sched")]
+        self.report = self.root / "assurance.json"
+        self.report.write_text(json.dumps({"schema_version": 1, "status": "pass", "nodes": nodes,
+                                           "theorems": [{"name": n["name"], "module": n["module"], "axioms": []}
+                                                        for n in nodes if n["kind"] == "theorem"]}))
+        self.config = premises.load_config(self.root / "assurance/premises.json")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def audits(self):
+        return premises.CompiledAudits(self.root, self.config, [self.report], None)
+
+    def test_kernel_rows_and_source_fallback(self):
+        errors, entries = premises.check(self.root, write=True, audits=self.audits())
+        self.assertEqual(errors, [])
+        rows = {e["theorem"]: e for e in entries}
+        self.assertEqual(rows["wrap_spec"]["derived"], "kernel")
+        self.assertNotIn("ASM-01", rows["wrap_spec"]["premises"])
+        example = next(name for name in rows if name.startswith("example@"))
+        self.assertEqual(rows[example]["derived"], "source")
+        text = (self.root / "docs/premise-index.md").read_text()
+        self.assertIn(f"| `{example}`{premises.SOURCE_MARK} |", text)
+        # Without audits the committed kernel rows are kept, and the index is current.
+        self.assertEqual(premises.check(self.root)[0], [])
+        self.assertEqual(premises.check(self.root, audits=self.audits())[0], [])
+
+    def test_theorem_without_constant_fails(self):
+        report = json.loads(self.report.read_text())
+        report["theorems"] = [t for t in report["theorems"] if t["name"] != "pure_fact"]
+        self.report.write_text(json.dumps(report))
+        errors, _ = premises.check(self.root, write=True, audits=self.audits())
+        self.assertTrue(any("theorem pure_fact has no constant in the compiled audits" in e for e in errors), errors)
+
+    def test_light_check_needs_new_theorems_indexed(self):
+        premises.check(self.root, write=True, audits=self.audits())
+        path = self.root / "Proofs/Conc/Proofs.lean"
+        path.write_text(path.read_text() + "theorem run_zero : Sched.run 0 = 0 := rfl\n")
+        errors, _ = premises.check(self.root)
+        self.assertTrue(any("run_zero is not in the index" in e for e in errors), errors)
+
+    def test_when_defined_block_needs_its_name(self):
+        path = self.root / "Proofs/Conc/Proofs.lean"
+        path.write_text(path.read_text() + "when_defined Zig.Sched.later\ntheorem later_ok : True := trivial\nend_when\n")
+        repo = premises.load_repository(self.root, self.config)
+        names = {d.name for d in repo.files["Proofs/Conc/Proofs.lean"].decls}
+        self.assertIn("run_id", names)
+        self.assertNotIn("later_ok", names)
 
 
 class RepositoryTests(unittest.TestCase):

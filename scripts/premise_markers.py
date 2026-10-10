@@ -64,12 +64,16 @@ def module_path(root: Path, module: str) -> Path:
 class GeneratedMarkers:
     """The markers of generated modules, read once per module."""
 
-    def __init__(self, root: Path):
-        self.root, self.errors, self.by_module = root, [], {}
+    def __init__(self, root: Path, paths: dict[str, Path] | None = None):
+        """`paths`: the source of a module compiled under another name (a theorem-universe unit)."""
+        self.root, self.errors, self.by_module, self.paths = root, [], {}, paths or {}
+
+    def path(self, module: str) -> Path:
+        return self.paths.get(module) or module_path(self.root, module)
 
     def of(self, module: str, name: str) -> dict:
         if module not in self.by_module:
-            path = module_path(self.root, module)
+            path = self.path(module)
             named, errors = definitions(path.read_text(), str(path.relative_to(self.root))) \
                 if path.is_file() else ({}, [])
             self.errors += errors

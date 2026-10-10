@@ -107,8 +107,8 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
   [THR-08](../../docs/premises.md#thr-08): the interleaving scheduler, the futex model and the
   protocol rules `lock_spec` is built on.
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
-  [ORD-04](../../docs/premises.md#ord-04): the RC11 approximation, no load buffering and weak
-  CAS failure for the atomics of the lock.
+  [ORD-03](../../docs/premises.md#ord-03): the RC11 approximation, no load buffering and
+  `seq_cst` read as `acq_rel` for the atomics of the lock.
 - [SEM-01](../../docs/premises.md#sem-01), [SEM-02](../../docs/premises.md#sem-02),
   [SEM-03](../../docs/premises.md#sem-03): value/safety semantics, block memory, partial
   correctness.

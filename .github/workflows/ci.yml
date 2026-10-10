@@ -445,14 +445,14 @@ jobs:
 
       # docs/architecture-audit/trust-chain.md: every counterexample must stay fixed (schema table
       # and admission, module identity, unchecked memcpy, volatile asm, claim binding, emitter
-      # placeholders).
+      # placeholders, safety-merged tags, retranslation binding of generated modules).
       - name: Trust-chain audit counterexamples (fixed cases)
         if: ${{ !matrix.mutate }}
         run: |
           python3 -B tests/roadmap/architecture-audit/trust-chain/check.py --require-fixed \
             addrspace comptime-field build-mode legacy-default unknown-key missing-flag \
             std-name-spoof std-type-spoof unchecked-memcpy volatile-asm claims-unbound \
-            reduce-bool-handedit
+            reduce-bool-handedit merged-tags generated-binding
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
@@ -1409,7 +1409,8 @@ jobs:
       # stays fixed: kernel bypass (S1), spoofed heads (S2), vacuous or circular hypotheses (S3),
       # ground instances (S4), roots outside the subject (S5), non-returning programs (S6), total
       # asm opaques (S7), receipt schema skew (F1), unaudited theorem files (F2), untyped host
-      # differences and unpinned exclusions (F3), stale evidence (H1).
+      # differences and unpinned exclusions (F3), unaccounted hypothesis definitions and goal
+      # premise IDs (F4), stale evidence (H1), unbound mutation kills (H3), escape hatches (H4).
       - name: Architecture-audit claim fixtures
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         env:
@@ -1417,13 +1418,16 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           lake build ZigLean AssuranceTools Proofs.Asm.Gen ZigLean.Witness
-          tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,H1
+          tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S1,S2,S3,S4,S5,S6,S7,F1,F2,F3,F4,H1,H3,H4
 
-      # Same premise tables over the kernel dependency graph of the audited translation.
-      # --strict: the committed source index must cover every kernel-derived premise (D03).
+      # The committed premise index is derived from the kernel graph of the shipped audit and the
+      # theorem-universe audit (elaborated constants, not source tokens): rederive and compare it.
+      # --strict: the index must cover every kernel-derived premise of the shipped audit (D03).
       - name: Map audited theorems to premise IDs
         if: ${{ matrix.full && matrix.zig == '0.16.0' }}
         run: |
+          python3 -B scripts/premises.py check --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
+            --universe "$RUNNER_TEMP/theorem-universe"
           python3 -B scripts/premises.py compiled --assurance "$RUNNER_TEMP/air2lean-assumptions.json" \
             --output "$RUNNER_TEMP/air2lean-premises.json" --strict
 

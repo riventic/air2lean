@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assumptions import STANDARD_AXIOMS, write_report  # noqa: E402
-from premise_markers import GeneratedMarkers, markers as premise_markers, module_path as generated_path  # noqa: E402
+from premise_markers import GeneratedMarkers, markers as premise_markers  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path("assurance/premises.json")
@@ -36,7 +36,9 @@ CMD_KW = DECL_KW | {"namespace", "section", "end", "open", "variable", "universe
                     "register_simp_attr", "initialize", "builtin_initialize", "deriving", "export",
                     "declare_syntax_cat", "add_decl_doc", "termination_by",
                     # Proofs/Threadsync/Lock.lean's block for one OS's translation.
-                    "if_decl", "end_if"}
+                    "if_decl", "end_if",
+                    # ZigLean/VersionGate.lean: a block that elaborates only when the translation defines X.
+                    "when_defined", "end_when"}
 MODIFIERS = r"(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local)\s+)*"
 ATTRS = r"(?:@\[[^\]]*\]\s*)*"
 COMMAND_RE = re.compile(r"^" + ATTRS + MODIFIERS + r"([#A-Za-z_][A-Za-z_0-9]*)")
@@ -325,11 +327,11 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             scopes.append(["namespace", rest.split()[0].split("."), [], []])
         elif keyword in {"section", "mutual"}:
             scopes.append([keyword, [], [], []])
-        elif keyword == "if_decl":
+        elif keyword in {"if_decl", "when_defined"}:
             scopes.append([keyword, [], [], [], rest.split()[0]])
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
-        elif keyword in {"end", "end_if"}:
+        elif keyword in {"end", "end_if", "end_when"}:
             if scopes:
                 scopes.pop()
         elif keyword == "open":
@@ -354,7 +356,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 full = name[len("_root_."):]
             else:
                 full = ".".join([*namespaces, name]) if name else ""
-            conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
+            conditions = tuple(s[4] for s in scopes if s[0] in {"if_decl", "when_defined"})
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
             decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
@@ -676,20 +678,23 @@ class CompiledAudits:
 
     def __init__(self, root: Path, config: dict, reports: list[Path], universe: Path | None):
         self.modules: dict[str, str] = {}   # indexed file -> module it was compiled as
+        self.gated: set[str] = set()         # files audited only by their gate (generated imports)
         self.theorems: dict[tuple[str, str], tuple[KernelPremises, dict]] = {}
-        paths = list(reports)
+        files = list(reports)
         if universe is not None:
             record = json.loads((universe / "universe.json").read_text())
             if record.get("status") != "pass":
                 raise ValueError(f"{universe}: theorem universe audit did not pass")
             self.modules.update({u["file"]: u["module"] for u in record["units"]})
-            paths += [Path(a["report"]) for a in record["audits"] if a["status"] == "pass"]
-        for path in paths:
+            self.gated = {u["file"] for u in record["units"] if u["gate"]}
+            files += [Path(a["report"]) for a in record["audits"] if a["status"] == "pass"]
+        sources = {module: root / file for file, module in self.modules.items()}
+        for path in files:
             report = json.loads(path.read_text())
             if report.get("schema_version") != 1 or report.get("status") != "pass":
                 raise ValueError(f"{path}: not a passing schema-1 assumption report")
             # Bundled universe audits never share a declaration name, so each report keeps its graph.
-            kernel = KernelPremises({n["name"]: n for n in report["nodes"]}, root, config)
+            kernel = KernelPremises({n["name"]: n for n in report["nodes"]}, root, config, sources)
             for theorem in report["theorems"]:
                 self.theorems[(theorem["module"], kernel.user(theorem["name"]))] = (kernel, theorem)
 
@@ -721,24 +726,41 @@ def build_index(repo: Repository, audits: CompiledAudits | None = None) -> tuple
             if theorem.name in names:
                 errors.append(f"{rel}:{theorem.line}: duplicate theorem {theorem.name}")
             names.add(theorem.name)
-            try:
-                via = derive(repo, theorem)
-            except ValueError as error:
-                errors.append(str(error))
+            found = audits.derive(lean, theorem) if audits is not None else None
+            if found is not None:
+                via, kernel_errors = found
+                errors += kernel_errors
+            elif audits is not None and theorem.kind != "example" and rel not in audits.gated:
+                errors.append(f"{rel}:{theorem.line}: theorem {theorem.name} has no constant in the compiled audits")
                 continue
+            else:
+                try:
+                    via = derive(repo, theorem)
+                except ValueError as error:
+                    errors.append(str(error))
+                    continue
             if not via:
                 errors.append(f"{rel}:{theorem.line}: theorem {theorem.name} lacks a premise mapping")
             entries.append({"file": rel, "theorem": theorem.name, "line": theorem.line,
-                            "premises": sorted(via, key=premise_key), "via": via})
+                            "premises": sorted(via, key=premise_key), "via": via,
+                            "derived": "kernel" if found is not None else "source"})
     return entries, errors
 
 
+SOURCE_MARK = "†"
+ROW_RE = re.compile(r"^\| `(?P<theorem>[^`]+)`(?P<mark>" + SOURCE_MARK + r"?) \| (?P<premises>[^|]*) \|$")
+
+
 def render_index(entries: list[dict], premises: dict) -> str:
-    lines = ["<!-- Generated by `python3 scripts/premises.py write`; do not edit. -->",
+    lines = ["<!-- Generated by `python3 scripts/premises.py write --assurance ... --universe ...`; do not edit. -->",
              "# Theorem premise index", "",
              "Each row lists the premise IDs that a theorem uses. Their meanings are in",
              "[premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each",
              "premise was derived. This index covers the committed generated modules.", "",
+             "A theorem's dependencies are its elaborated constant's kernel graph (the shipped",
+             "assumption audit and the theorem-universe audit). A row marked " + SOURCE_MARK + " has no constant",
+             "in those audits (an `example`, or a file audited only by its gate against a generated",
+             "module): its dependencies come from the source resolver.", "",
              f"{len(entries)} theorems in {len({e['file'] for e in entries})} files.", "",
              "| Premise | Theorems | Title |", "|---|---|---|"]
     for pid in sorted(premises, key=premise_key):
@@ -751,8 +773,36 @@ def render_index(entries: list[dict], premises: dict) -> str:
             union = sorted({p for e in entries if e["file"] == current for p in e["premises"]}, key=premise_key)
             lines += ["", f"## `{current}`", "", f"File premises: {', '.join(union)}", "",
                       "| Theorem | Premises |", "|---|---|"]
-        lines.append(f"| `{entry['theorem']}` | {', '.join(entry['premises'])} |")
+        mark = SOURCE_MARK if entry["derived"] == "source" else ""
+        lines.append(f"| `{entry['theorem']}`{mark} | {', '.join(entry['premises'])} |")
     return "\n".join(lines) + "\n"
+
+
+def committed_rows(text: str) -> dict[tuple[str, str], tuple[str, list[str]]]:
+    """(file, theorem) -> (derivation, premises) of a rendered index."""
+    rows, current = {}, None
+    for line in text.splitlines():
+        if line.startswith("## `"):
+            current = line[4:-1]
+        elif current and (match := ROW_RE.match(line)):
+            rows[(current, match["theorem"])] = ("source" if match["mark"] else "kernel",
+                                                 [p for p in match["premises"].split(", ") if p])
+    return rows
+
+
+def with_committed(entries: list[dict], rows: dict) -> tuple[list[dict], list[str]]:
+    """Without compiled audits, a kernel-derived committed row cannot be recomputed: keep its
+    premises. A source row (and any theorem the index lacks) is derived again from source."""
+    errors = []
+    for entry in entries:
+        derived, premises = rows.get((entry["file"], entry["theorem"]), ("source", None))
+        if derived == "kernel":
+            entry.update(derived="kernel", premises=premises,
+                         via={p: ["kernel graph (recorded in the committed index)"] for p in premises})
+        elif premises is None:
+            errors.append(f"{entry['file']}: {entry['theorem']} is not in the index; regenerate it with "
+                          "`premises.py write --assurance ... --universe ...`")
+    return entries, errors
 
 
 def runtime_errors(repo: Repository) -> list[str]:
@@ -768,7 +818,10 @@ def runtime_errors(repo: Repository) -> list[str]:
     return errors
 
 
-def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]]:
+def check(root: Path = ROOT, write: bool = False, audits: CompiledAudits | None = None) -> tuple[list[str], list[dict]]:
+    """Verify (or `write`) the index. With `audits` every row is derived again, from the kernel
+    graph where the theorem has a constant; without them, kernel rows keep their committed
+    premises and only source rows are derived again."""
     config = load_config(root / CONFIG)
     premises, reports, errors = load_catalog(root / config["catalog"])
     referenced = set()
@@ -786,8 +839,12 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
                       "(and optionally abi64-be-v1)")
     repo = load_repository(root, config)
     errors += repo.errors + runtime_errors(repo)
-    entries, index_errors = build_index(repo)
+    entries, index_errors = build_index(repo, audits)
     errors += index_errors
+    index = root / config["index"]
+    if audits is None and index.is_file():
+        entries, missing = with_committed(entries, committed_rows(index.read_text()))
+        errors += [] if write else missing
     for entry in entries:
         for pid in entry["premises"]:
             if pid not in premises:
@@ -795,7 +852,6 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
     if not entries:
         errors.append("no theorems found; nothing was indexed")
     rendered = render_index(entries, premises)
-    index = root / config["index"]
     if write:
         index.write_text(rendered)
     elif not index.is_file() or index.read_text() != rendered:
@@ -809,9 +865,9 @@ class KernelPremises:
     """Premise derivation over the kernel dependency graph of scripts/assumptions.py reports:
     the same tables as the source index, applied to elaborated constants instead of tokens."""
 
-    def __init__(self, nodes: dict, root: Path, config: dict):
+    def __init__(self, nodes: dict, root: Path, config: dict, paths: dict[str, Path] | None = None):
         self.nodes, self.root, self.config = nodes, root, config
-        self.markers = GeneratedMarkers(root)
+        self.markers = GeneratedMarkers(root, paths)
         self.profiles: dict[str, tuple[list[str], str]] = {}
 
     def user(self, name: str) -> str:
@@ -822,7 +878,7 @@ class KernelPremises:
 
     def profile(self, module: str) -> tuple[list[str], str]:
         if module not in self.profiles:
-            path = generated_path(self.root, module)
+            path = self.markers.path(module)
             if path.is_file():
                 header = profile_header(path.read_text())
                 self.profiles[module] = profile_premises(self.config, LeanFile(path, module, module, [], header))
@@ -850,6 +906,10 @@ class KernelPremises:
             if is_runtime(module):
                 modules.add(module)
                 names.add(self.user(name))
+                # A runtime definition's meaning includes the runtime definitions it unfolds to
+                # (a store's race check against the thread state); a runtime lemma's proof does not.
+                if node["kind"] in {"definition", "opaque"}:
+                    pending.extend(node["dependencies"])
                 continue
             if module.split(".")[0] in EXTERNAL_IMPORTS:
                 continue
@@ -880,6 +940,7 @@ class KernelPremises:
             profile, reason = self.profile(module)
             for premise in [*config["generated_premises"], *profile]:
                 via.setdefault(premise, []).append(f"generated {module} ({reason})")
+        self.reached = {"names": names, "runtime": modules, "generated": generated}  # last derivation
         return close(config, via), errors
 
 
@@ -921,12 +982,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("check", help="verify the committed index and premise mappings (default)")
-    sub.add_parser("write", help="regenerate the committed index")
-    explain = sub.add_parser("explain", help="show why a theorem has each premise")
+    indexed = [sub.add_parser("check", help="verify the committed index and premise mappings (default)"),
+               sub.add_parser("write", help="regenerate the committed index"),
+               explain := sub.add_parser("explain", help="show why a theorem has each premise"),
+               dump := sub.add_parser("json", help="write the index as JSON")]
     explain.add_argument("theorem")
-    dump = sub.add_parser("json", help="write the source-derived index as JSON")
     dump.add_argument("--output", type=Path, required=True)
+    for command in indexed:
+        command.add_argument("--assurance", type=Path, action="append", default=[],
+                             help="all-shipped-modules scripts/assumptions.py report (kernel graph)")
+        command.add_argument("--universe", type=Path,
+                             help="scripts/theorem_universe.py audit output directory (kernel graph)")
     graph = sub.add_parser("compiled", help="derive premises from a scripts/assumptions.py report")
     graph.add_argument("--assurance", type=Path, required=True)
     graph.add_argument("--output", type=Path, required=True)
@@ -945,7 +1011,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"premises {report['status']}: {report['theorem_count']} compiled theorems, "
                   f"{report['source_gap_count']} with source-index gaps; report: {args.output}", file=sys.stderr)
             return 1 if report["errors"] or (args.strict and report["source_gap_count"]) else 0
-        errors, entries = check(root, write=command == "write")
+        config = load_config(root / CONFIG)
+        audit_args = (getattr(args, "assurance", []), getattr(args, "universe", None))
+        audits = CompiledAudits(root, config, *audit_args) if audit_args[0] or audit_args[1] else None
+        errors, entries = check(root, write=command == "write", audits=audits)
     except (OSError, ValueError, KeyError, re.error) as error:
         print(f"premise error: {error}", file=sys.stderr)
         return 2
